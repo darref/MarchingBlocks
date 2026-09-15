@@ -8,15 +8,19 @@ extends Node2D
 ## de la grotte 1. `Monde.resoudre()` rend un « transforme » puis un « active », qui portent leur grille
 ## et leur case — exactement ce que le jeu lira. Rien ici ne recalcule une règle.
 ##
-## TOUCHES
-##   flèches          marcher (surface : quatre directions ; grotte : gauche, droite)
-##   Espace           descendre par une entrée (à une case au plus) ; remonter par sa bouche
+## CE QUI SE JOUE — les actions viennent de CLIENT/entrees.gd, donc clavier OU manette, indifféremment
+##   ZQSD ou flèches, stick gauche ou croix   marcher (surface : quatre directions ; grotte : gauche, droite)
+##   Maj, ou B, ou gâchette droite            courir
+##   Espace ou A                              descendre par une entrée (à une case au plus) ; remonter
+##
+## CE QUI DÉBOGUE — clavier seulement, ces touches ne sont pas du jeu
 ##   R                poser le rai rouge dans la grotte 1 ; R encore : tout remettre en place
 ##   F3               imprimer l'état
 ##   F11, Alt+Entrée  plein écran (autoload CLIENT/fenetre.gd)
 
 const MiseEnPage := preload("res://CLIENT/mise_en_page.gd")
 const EcranPartage := preload("res://CLIENT/ecran_partage.gd")
+const Entrees := preload("res://CLIENT/entrees.gd")
 const Monde := preload("res://CORE/monde.gd")
 const Direction := preload("res://CORE/direction.gd")
 const Couleur := preload("res://CORE/couleur.gd")
@@ -27,6 +31,7 @@ const CARTE := Vector2i(48, 30)
 const HAUTEUR_GROTTE := 10
 const LIGNE_DU_SOL := 8  # la rangée où l'on marche ; la 9 est la roche du sol
 const VITESSE := 5.0  # cases par seconde
+const COURSE := 2.0  # PROPOSÉ — ce que « courir » multiplie, à régler à l'essai
 const PORTEE_ENTREE := 1.0  # en cases, pour descendre ou remonter
 ## PROPOSÉ — combien de temps chaque événement est montré (charte §3, question ouverte).
 const DUREES := {"transforme": 0.6, "detruit": 0.5, "active": 0.4, "desactive": 0.4}
@@ -98,9 +103,12 @@ func _ready() -> void:
 	_coupe = _calque(ecran.grotte, _dessiner_coupe)
 	_camera_grotte = _camera(ecran.grotte)
 
+	Entrees.installer()  # idempotente : l'autoload l'a déjà fait, sauf en --script (la mesure)
 	print("GREYBOX — écran partagé")
-	print("  flèches : marcher   Espace : descendre / remonter   R : rai rouge dans la grotte 1 (R : remettre)")
-	print("  F3 : état   F11 ou Alt+Entrée : plein écran")
+	print("  ZQSD ou stick : marcher   Maj ou B : courir   Espace ou A : descendre / remonter")
+	print("  R : rai rouge dans la grotte 1 (R : remettre)   F3 : état   F11 ou Alt+Entrée : plein écran")
+	var branchees: Array = Entrees.manettes()
+	print("  manettes : %s" % ("aucune branchée" if branchees.is_empty() else ", ".join(PackedStringArray(branchees))))
 	_options()
 
 
@@ -138,11 +146,14 @@ func _capturer_si_demande(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_capturer_si_demande(delta)
-	var dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	var dir := Entrees.deplacement()
+	var vitesse := VITESSE * (COURSE if Entrees.court() else 1.0)
+	if Entrees.agit():
+		_passer_entree()
 	if sous_terre:
-		colonne = clampf(colonne + dir.x * VITESSE * delta, 0.5, chemins[grotte].size() - 0.5)
+		colonne = clampf(colonne + dir.x * vitesse * delta, 0.5, chemins[grotte].size() - 0.5)
 	else:
-		pos_surface = (pos_surface + dir * VITESSE * delta).clamp(Vector2(0.5, 0.5), Vector2(CARTE) - Vector2(0.5, 0.5))
+		pos_surface = (pos_surface + dir * vitesse * delta).clamp(Vector2(0.5, 0.5), Vector2(CARTE) - Vector2(0.5, 0.5))
 
 	var proche_de := MiseEnPage.entree_la_plus_proche(pos_surface, entrees_cases)
 	mep.avancer(delta, sous_terre, proche_de["distance"])
@@ -163,8 +174,6 @@ func _unhandled_input(event: InputEvent) -> void:
 	if touche == null or not touche.pressed or touche.echo:
 		return
 	match touche.keycode:
-		KEY_SPACE:
-			_passer_entree()
 		KEY_R:
 			_rai()
 		KEY_F3:

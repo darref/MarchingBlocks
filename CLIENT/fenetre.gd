@@ -63,11 +63,9 @@ func _recaler() -> void:
 		fenetre.size = voulue
 
 
+## ⚠ `exact_match` : sans lui, Entrée toute seule déclencherait l'action liée à Alt+Entrée.
 func _unhandled_input(event: InputEvent) -> void:
-	var touche := event as InputEventKey
-	if touche == null or not touche.pressed or touche.echo:
-		return
-	if touche.keycode == KEY_F11 or (touche.keycode == KEY_ENTER and touche.alt_pressed):
+	if InputMap.has_action("plein_ecran") and event.is_action_pressed("plein_ecran", false, true):
 		basculer_plein_ecran()
 		get_viewport().set_input_as_handled()
 

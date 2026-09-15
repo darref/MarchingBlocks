@@ -459,6 +459,7 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   CORE/traceur.gd      le trajet d'un faisceau
   CORE/resolution.gd   le point fixe, les transformations en bloc, les événements
   CORE/monde.gd        l'état (grilles, objets), la seule porte pour le changer
+  CLIENT/entrees.gd        autoload : la carte des entrées, clavier ET manette
   CLIENT/mise_en_page.gd   le séparateur, le balayage, les événements montrés, la fenêtre 2:1 — PUR
   CLIENT/ecran_partage.gd  les deux vues rendues à pleine taille, rognées à l'affichage
   CLIENT/fenetre.gd        autoload : la fenêtre recalée en 2:1, le plein écran
@@ -478,6 +479,36 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   ou 1. ⚠ Le headless ne rend rien : `mesure_balayage.gd` et le greybox se lancent AVEC fenêtre. La règle du §6 de River Stones s'applique telle quelle : un test vert ne prouve rien
   tant qu'on ne l'a pas vu échouer, et toute propriété structurelle se garde par un scénario
   CONSTRUIT, jamais espéré.
+
+### Les entrées — DÉCIDÉ : clavier ET manette, toujours les deux
+
+**DÉCIDÉ (16 septembre 2026)** — le jeu se joue ENTIÈREMENT au clavier (ZQSD, Maj, Espace) ou
+ENTIÈREMENT à la manette, et Jordan teste indifféremment avec l'un ou l'autre.
+
+- ⚠ **La carte des entrées vit dans `CLIENT/entrees.gd`, PAS dans `project.godot`.** Une seule
+  autorité, et celle-là garde ses commentaires — `project.godot` les perd au premier enregistrement.
+  L'InputMap est rempli au démarrage par un autoload, chargé AVANT `fenetre.gd`, qui s'en sert.
+- ⚠ **On lie des POSITIONS de touches (`physical_keycode`), jamais des lettres gravées.** Godot nomme
+  les positions d'après un clavier américain : W, A, S, D. Sur un clavier français, ces positions SONT
+  Z, Q, S, D. Une seule ligne sert donc ZQSD ici et WASD ailleurs, et personne ne reconfigure rien.
+- **MESURÉ (test) — toute action de JEU a au moins une touche ET au moins un bouton ou un axe.** La
+  promesse « les deux périphériques » est ainsi STRUCTURELLE : on ne peut pas ajouter une action
+  jouable à un seul périphérique sans faire rougir `DEV_TOOLS/test_entrees.gd`. Le même test garde les
+  positions contre les lettres, l'absence de liaison partagée entre deux actions, et l'effacement des
+  liaisons PÉRIMÉES quand on réinstalle la carte — 73 vérifications, cinq mutations délibérées, toutes
+  rouges.
+  - ⚠ **Une sixième n'a PAS rougi, et c'est écrit ici** : remplacer `ZONE_MORTE` par le défaut de Godot
+    ne change rien, puisque c'est la même valeur (0,2) — cette vérification ne garde donc que contre une
+    valeur aberrante. De même, réinstaller ne peut pas DOUBLER une liaison (Godot ignore un événement
+    déjà présent dans une action) : le vrai risque est la liaison périmée, et c'est elle qu'on teste.
+- **Les actions SYSTÈME (le plein écran) restent au clavier**, et c'est voulu : pas de bascule par un
+  pouce égaré sur une manette posée.
+- **PROPOSÉ — la carte de départ**, zone morte 0,2 (qui est aussi le défaut de Godot) : marcher (ZQSD ou flèches, stick gauche ou croix),
+  courir (Maj, B ou gâchette droite — maintenu, pas basculé), agir (Espace ou A) pour descendre par une
+  entrée et remonter, et plus tard prendre et parler.
+- **OUVERT — orienter un miroir** (§4) n'a pas encore d'entrée : il y faudra deux sens, peut-être deux
+  crans, et le « regard croisé » qui vise un miroir de l'AUTRE vue. À trancher quand les miroirs
+  deviendront jouables (§8, étape 3).
 
 ## 7. Langue — héritée
 

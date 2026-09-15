@@ -18,6 +18,7 @@ config/icon="res://MARQUE/embleme.png"
 
 [autoload]
 
+Entrees="*res://CLIENT/entrees.gd"
 Fenetre="*res://CLIENT/fenetre.gd"
 
 [display]
