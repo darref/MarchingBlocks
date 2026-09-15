@@ -1,0 +1,2 @@
+# Normalise les fins de ligne des fichiers texte.
+* text=auto eol=lf
