@@ -3,11 +3,14 @@
 Même rôle que la charte de River Stones : porter les décisions transverses, celles qui doivent
 survivre à une session et à quelqu'un qui arrive six mois plus tard avec une bonne idée.
 
+⚠ **CONSIGNE EN ATTENTE — lire `PROCHAINE_SESSION.md` avant toute chose.** À supprimer, avec le
+fichier, une fois la tâche commitée et poussée.
+
 ⚠ **Le projet naît, donc tout n'a pas le même poids.** Chaque décision porte son statut :
 
 - **DÉCIDÉ** — voulu par Jordan, ne se rediscute pas sans lui ;
 - **PROPOSÉ** — réflexion à valider, avec sa raison ; on peut la jeter, pas l'ignorer ;
-- **MESURÉ** — vérifié par un calcul ou une capture, donc vrai quoi qu'on en pense ;
+- **MESURÉ** — vérifié par un calcul, un test ou une capture, donc vrai quoi qu'on en pense ;
 - **OUVERT** — question posée, pas encore tranchée.
 
 Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — au greybox de préférence, jamais par ancienneté.
@@ -40,6 +43,11 @@ Ce que le lore impose au jeu, et qui n'est pas de la couleur :
 **DÉCIDÉ** — la surface se joue vue de dessus (à la *A Link to the Past*), les grottes se jouent vues
 de côté, et **se déplacer dans une grotte fait défiler la vue de dessus**.
 
+**DÉCIDÉ — une ENTRÉE est le seul lien entre les deux vues.** Le joueur y passe, l'onde d'un nœud
+y passe et nulle part ailleurs (§5). **PROPOSÉ, et c'est ce que fait déjà le moteur :** la lumière
+aussi (§4). Une seule porte entre deux mondes, c'est une seule chose à lire pour le joueur et une
+seule chose à valider pour le code.
+
 **PROPOSÉ — une grotte est un CHEMIN sur la grille de surface, et sa vue de côté en est la coupe
 DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une case de surface :
 
@@ -52,8 +60,10 @@ DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une ca
   une seconde description du même lieu, et deux descriptions d'un même lieu divergent au premier
   réglage (charte de River Stones, §8, corollaire général). La table est la seule vérité : la
   longueur de la vue de côté s'en DÉDUIT, elle ne s'écrit pas à côté.
-- **Un coude du chemin est invisible de côté** : la coupe est déroulée. C'est assumé, et ça vaut pour
-  la lumière aussi — un rayon horizontal dans la grotte suit la coupe, coudes compris.
+- ⚠ **Cette table sert au DÉFILEMENT, jamais au passage.** Elle dit où placer la caméra de surface
+  quand on marche dans la grotte ; ce qui traverse d'une vue à l'autre passe par une entrée, et par
+  elle seule.
+- **Un coude du chemin est invisible de côté** : la coupe est déroulée, et c'est assumé.
 - **Le joueur n'existe que dans UN monde à la fois.** L'autre vue montre sa PROJECTION (un repère),
   jamais un second corps. Deux corps synchronisés seraient deux autorités sur une position.
 - **OUVERT — les segments en diagonale.** Pour la v0, les chemins sont faits de segments droits
@@ -65,49 +75,95 @@ DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une ca
 
 ## 3. L'écran partagé — UNE seule valeur
 
-**DÉCIDÉ** — trois situations :
+**DÉCIDÉ** — les situations :
 
-- en surface, loin de toute entrée : la vue de dessus seule ;
 - en surface, **assez près d'une entrée** : vue de dessus sur 3/4 de la largeur, grotte sur 1/4 ;
-- **dans une grotte, quelle que soit la profondeur** : grotte sur 3/4, vue de dessus sur 1/4.
+- dans une grotte : grotte sur 3/4, vue de dessus sur 1/4 ;
+- **DÉCIDÉ le 15 septembre 2026 — chaque vue passe en PLEIN ÉCRAN quand il n'y a aucune raison de voir
+  l'autre**, la surface comme la grotte ;
+- **DÉCIDÉ — la démarcation BALAIE** l'écran, de gauche à droite ou de droite à gauche, à chaque
+  changement : les deux vues s'agrandissent et rétrécissent en temps réel, de façon fluide, à haut FPS.
+
+⚠ **OUVERT — deux consignes se contredisent en un point.** La première disait « dans la grotte,
+quelle que soit la profondeur » on voit la surface ; la seconde autorise la grotte en plein écran.
+Qu'est-ce qu'une « raison de voir l'autre vue » quand on est sous terre ? Proposition : la même qu'en
+surface, symétrique — la proximité d'une entrée. **Le balayage n'en dépend pas, seul son déclencheur.**
 
 **PROPOSÉ — la surface est toujours À GAUCHE, la grotte toujours À DROITE, et toute la mise en page
 est la position d'un SÉPARATEUR.** En pixels de la résolution de base :
 
 ```
   x = 320   surface seule            ████████████████████████████████
-  x = 240   près d'une entrée        ████████████████████████│░░░░░░░░
-  x =  80   dans la grotte           ████████│░░░░░░░░░░░░░░░░░░░░░░░░
+  x = 240   surface + grotte         ████████████████████████│░░░░░░░░
+  x =  80   grotte + surface         ████████│░░░░░░░░░░░░░░░░░░░░░░░░
+  x =   0   grotte seule             ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
              surface ←┘ └→ grotte
 ```
 
-Passer une entrée ne permute rien : **le séparateur glisse**. Le joueur ne perd jamais où est quel
-monde, et il n'y a qu'un nombre à animer — pas une disposition à inverser avec sa moitié qu'on
-oublierait.
+Passer d'une situation à l'autre ne permute rien : **le séparateur glisse**. Le joueur ne perd jamais
+où est quel monde, et il n'y a qu'un nombre à animer — pas une disposition à inverser avec sa moitié
+qu'on oublierait. Le plein écran d'une vue n'est pas un mode à part : c'est le séparateur poussé au
+bord.
 
 - ⚠ **HYSTÉRÉSIS OBLIGATOIRE.** La bande apparaît à R cases d'une entrée et ne disparaît qu'à R + une
-  marge. Sans ça, un joueur qui marche le long du seuil fait clignoter l'écran. Rayons en CASES,
-  jamais en pixels.
-- **Près d'une entrée, la bande montre la coupe à la colonne la plus proche** du joueur ; s'il y a
-  plusieurs entrées, la plus proche gagne.
-- **Rendu** — deux `SubViewport` de 320×180, chacun avec son propre monde 2D, **simulés en
-  permanence tous les deux** ; l'affichage ne fait que ROGNER. Chaque caméra centre le joueur (ou sa
-  projection) dans la partie VISIBLE de sa vue : quand le séparateur glisse, les caméras glissent
-  avec lui sans une ligne de plus.
+  marge. Sans ça, un joueur qui marche le long du seuil fait balayer l'écran en boucle. Rayons en
+  CASES, jamais en pixels.
+- **Près d'une entrée, la bande montre l'autre vue à la bouche de cette entrée** ; s'il y en a
+  plusieurs, la plus proche gagne.
 
-### La résolution — PROPOSÉ : 320×180, cases de 16 pixels
+### Le balayage — PROPOSÉ
 
-- **Agrandissement entier partout** : 720p (×4), 1080p (×6), 1440p (×8), 4K (×12). Un pixel art
-  agrandi d'un facteur non entier se déforme — c'est le réglage qui décide si le jeu a l'air d'un
-  jeu SNES ou d'une capture floue. 480×270, l'autre candidat courant, tombe à ×5,33 en 1440p.
-- **Et en écran partagé, la vue principale fait 240×180, soit 15 × 11 cases** — le cadrage même de
-  *A Link to the Past* (16 × 14 cases en 256×224). La référence graphique et la mise en page tombent
-  d'accord sans qu'on ait eu à les accorder.
-- ⚠ **OUVERT — la bande de 1/4 fait 80 pixels, soit CINQ cases de large.** Elle est en portrait : ça
-  va très bien à une coupe de grotte (on y voit la profondeur, c'est un puits de lumière), c'est
-  serré pour la surface quand la grotte court d'est en ouest. La question se tranche au greybox et
-  nulle part ailleurs : **voit-on, depuis la grotte, le miroir de surface qui est au-dessus de
-  soi ?** Si non, repli en 480×270 (bande de 7,5 cases), en payant le 1440p.
+- **Un seul nombre animé, et interruptible.** Si la cible change en plein mouvement, on repart de la
+  position COURANTE vers la nouvelle, jamais d'un saut.
+- ⚠ **On ne redimensionne JAMAIS un `SubViewport` pendant le balayage.** Changer sa taille réalloue sa
+  cible de rendu, à chaque image. Les deux vues rendent à pleine taille, simulées en permanence, et
+  l'affichage ne fait que ROGNER.
+- **Une vue entièrement cachée cesse de se rendre**, mais continue d'être simulée : le plein écran
+  d'une vue rend l'autre gratuite à l'écran.
+- **La position se quantifie au pixel de base** : l'agrandissement entier garde le trait net, et à la
+  vitesse d'un balayage le pas ne se voit pas.
+- **Chaque caméra centre le joueur (ou sa projection) dans la partie VISIBLE de sa vue** : quand le
+  séparateur glisse, les caméras glissent avec lui sans une ligne de plus.
+
+### La fenêtre — DÉCIDÉ : toujours en 2:1
+
+Pour que le partage tienne correctement quand il est là :
+
+- **plein écran** : bandes noires en haut et en bas pour garder le 2:1 ;
+- **fenêtré** : redimensionnable, avec une taille minimale, et le 2:1 conservé pendant tout le
+  redimensionnement.
+
+### La résolution — PROPOSÉ : 320×160, cases de 16 pixels (remplace 320×180)
+
+**MESURÉ (calcul) — c'est la seule base 2:1 raisonnable dont la pleine largeur s'agrandit d'un facteur
+ENTIER sur tous les écrans courants**, parce que 320 divise 1280, 1920, 2560 et 3840 :
+
+```
+  écran             agrandissement   image 2:1      bandes haut et bas
+  1280×720          ×4               1280×640       40 px
+  1920×1080         ×6               1920×960       60 px
+  2560×1440         ×8               2560×1280      80 px
+  3840×2160         ×12              3840×1920      120 px
+  1920×1200 (16:10) ×6               1920×960       120 px
+
+  les autres bases 2:1 cassent :  360×180 → ×5,33 en 1080p
+                                  480×240 → ×5,33 en 1440p
+                                  384×192 → ×6,67 en 1440p
+```
+
+Un pixel art agrandi d'un facteur non entier se déforme : c'est ce réglage qui décide si le jeu a
+l'air d'un jeu SNES ou d'une capture floue. 640×320 marcherait aussi, mais 40 × 20 cases, c'est une
+carte, pas *A Link to the Past*.
+
+- En écran partagé, la vue principale fait **240×160, soit 15 × 10 cases**. ⚠ Le 2:1 coûte quatre
+  cases de hauteur par rapport à ALTTP (16 × 14) : c'est le prix du partage, et il est assumé.
+- ⚠ **OUVERT — la bande de 1/4 fait 80 pixels, soit CINQ cases de large** sur dix de haut. Elle est en
+  portrait : ça va très bien à une coupe de grotte (on y voit la profondeur, c'est un puits de
+  lumière), c'est serré pour la surface quand la grotte court d'est en ouest. La question se tranche
+  au greybox et nulle part ailleurs : **voit-on, depuis la grotte, le miroir de surface qui est
+  au-dessus de soi ?**
+- ⚠ **`project.godot` est encore en 320×180** : l'appliquer est la première tâche de
+  `PROCHAINE_SESSION.md`.
 
 **PROPOSÉ — rendu `gl_compatibility`.** Un jeu 2D n'a besoin de rien de Forward+, et ce rendu ouvre
 le web, le mobile et les machines modestes — les portes que River Stones a payées cher (§10 de sa
@@ -118,15 +174,28 @@ enregistrement. La raison de chaque réglage de projet vit ICI.
 
 ---
 
-## 4. La lumière et les miroirs
+## 4. La lumière, les miroirs et les activables
 
-**DÉCIDÉ** — les premières énigmes consistent à orienter des miroirs, **huit orientations
-possibles**, grâce à des pouvoirs acquis au fil de l'avancée.
+**DÉCIDÉ** — on commence par :
+
+- des **miroirs**, **huit orientations**, orientés grâce à des pouvoirs acquis au fil de l'avancée ;
+- des **vitres** ;
+- des **lasers**, qui peuvent **détruire** des choses — parfois les miroirs eux-mêmes, les cristaux
+  activables, ou les **yeux sacrés**, faits de technologie antique. **Une vitre peut devenir un
+  laser**, et **une boucle peut en devenir un** ;
+- une **lumière de différentes couleurs**, qui agit sur des objets de type **Activable** selon sa
+  couleur : un rouge fait fondre un pilier de glace, un bleu éteint une colonne de feu, un violet sur
+  un œil jaune ne fait rien ;
+- un type d'activable qui **dépend de l'état activé d'autres activables, toujours directement**.
+
+On construit le reste au fur et à mesure, et **la voie doit l'accueillir sans revenir en arrière** —
+c'est la contrainte qui a décidé de toute la forme du moteur, ci-dessous.
 
 ### MESURÉ — ce que « huit orientations » doit vouloir dire
 
 Un miroir est une ligne à deux faces. Un rayon de direction φ qui frappe un miroir d'angle θ repart
-en `2θ − φ`. Les rayons vont dans huit directions (multiples de 45°). Calculé sur tous les cas :
+en `2θ − φ`. Les rayons vont dans huit directions (multiples de 45°). Calculé sur tous les cas, et
+refait par `test_lumiere.gd` contre une réflexion vectorielle indépendante :
 
 ```
   miroir par pas de 45°   (4 orientations)  : les AXES restent des axes,
@@ -138,8 +207,9 @@ en `2θ − φ`. Les rayons vont dans huit directions (multiples de 45°). Calcu
 ```
 
 **Donc « huit orientations » = huit positions sur un demi-tour, par pas de 22,5°.** C'est la seule
-lecture où les huit directions communiquent. Bonus gratuit : en pixel art ces lignes sont 0, 2:1,
-1:1 et 1:2 — les quatre traits les plus propres qu'une grille de pixels sache dessiner.
+lecture où les huit directions communiquent — et dans ces unités la réflexion s'écrit
+`orientation − direction`, en entiers, sans un flottant. Bonus gratuit : en pixel art ces lignes
+sont 0, 2:1, 1:1 et 1:2, les quatre traits les plus propres qu'une grille de pixels sache dessiner.
 
 ### PROPOSÉ — la progression des pouvoirs sort du calcul
 
@@ -151,18 +221,115 @@ lecture où les huit directions communiquent. Bonus gratuit : en pixel art ces l
 4. **Regard croisé** — orienter un miroir de l'AUTRE vue, à travers la bande. ⚠ C'est ce pouvoir qui
    fait de l'écran partagé une MÉCANIQUE : sans lui, la bande n'est qu'une mini-carte.
 
-### Un seul traceur, deux grilles, des portails — PROPOSÉ
+### Le moteur — construit dans `CORE/`, gardé par `DEV_TOOLS/test_lumiere.gd`
 
-- **Le trajet de la lumière est une FONCTION de l'état** (miroirs, zones, portes), recalculée quand
-  l'état change. Il n'est jamais simulé : pas de photon qui avance, pas d'ordre de mise à jour.
-- **Les puits sont des portails** : un rayon de surface qui entre dans la case d'un puits ressort
-  vers le BAS dans la grotte, à la colonne que la table du §2 associe à cette case. Le même traceur
-  sert aux deux vues — une seconde implémentation pour la vue de côté divergerait (§6).
-- **OUVERT, à trancher avant la première énigme** (valeurs par défaut entre parenthèses) :
-  - le rayon rasant (arrêté par la tranche du miroir) ;
-  - le rayon diagonal qui passe entre deux coins de mur (arrêté si l'un des deux est plein —
-    ce qu'on voit doit être vrai) ;
-  - les boucles (détectées par couple case × direction déjà visité ; le rayon s'y arrête).
+**Le catalogue est écrit en DONNÉES** (`catalogue.gd`). Le traceur et la résolution ne connaissent
+AUCUN objet par son nom : ils lisent une optique (miroir, vitre, bloque, traverse, traverse si
+actif, portail), une émission, des réactions par couleur, un drapeau « destructible », un drapeau
+« dépend ». **Ajouter un activable, c'est ajouter une entrée**, jamais du code — c'est ce qui rend
+le « au fur et à mesure » gratuit. Aujourd'hui : rai de ciel, miroir, vitre, pilier de glace et
+flaque, colonne de feu et colonne éteinte, œil sacré, cristal, porte antique, entrée.
+
+**Le trajet de la lumière est une FONCTION de l'état**, recalculée quand l'état change. Pas de
+photon qui avance, pas d'ordre de mise à jour.
+
+**PROPOSÉ — la couleur est faite de trois bits** (rouge, vert, bleu : huit couleurs, le jaune est
+rouge + vert, le violet rouge + bleu). Une vitre ne garde que ce qu'elle laisse passer — un ET —
+donc un bleu ne traverse pas une vitre rouge, et deux vitres se composent toutes seules (jaune puis
+cyan donne vert). Aucune table à écrire, et une logique que le joueur devine.
+
+**PROPOSÉ — une cible réagit à la couleur EXACTE, faisceau par faisceau.** Un blanc ne fait pas
+fondre la glace ; un rouge et un bleu sur la même cible ne s'additionnent pas en violet. Ce qu'on voit
+est vrai : un trait rouge touche la glace, la glace fond. ⚠ C'est la décision la plus susceptible de
+changer, donc elle est ISOLÉE : `Couleur.convient()`, une ligne, et un test qui rougit si on la
+touche.
+
+**⚠ DEUX FAMILLES D'EFFETS, ET LA RÈGLE QUI GARANTIT QU'UNE RÉSOLUTION SE TERMINE.**
+
+- ce qui est **MAINTENU** — un œil actif tant qu'on l'éclaire, un cristal qui relaie, une porte
+  antique ouverte tant que ses yeux le sont. État DÉRIVÉ : jamais sauvegardé, recalculé depuis zéro ;
+- ce qui est **IRRÉVERSIBLE** — la glace fond, le feu s'éteint, le laser détruit. État STOCKÉ.
+
+**Ce qui est maintenu ne peut qu'AJOUTER de la lumière** (émettre, laisser passer) ; tout ce qui en
+retire est irréversible. Le catalogue ne sait pas écrire l'inverse — il n'existe ni « bloque si
+actif », ni « émet si inactif », ni condition « aucun » — et `Catalogue.verifier()` refuse qu'on
+essaie. Il en découle deux boucles, qui s'arrêtent chacune pour une raison qu'on peut énoncer :
+
+1. à état stocké fixé, on part de « rien n'est actif » : les actifs ne font que croître, donc on
+   atteint le **plus petit point fixe**, unique. C'est ce qui fait qu'**un cristal qui ne s'éclaire
+   que lui-même reste éteint** et qu'**un montage n'a pas de mémoire** : retirer la lumière qui
+   l'allumait l'éteint, boucle ou pas ;
+2. sur ce point fixe, on récolte les transformations, on les applique EN BLOC, et l'on recommence ;
+   chaque objet descend un graphe de transformations sans cycle, ou disparaît.
+
+⚠ Et **« irréversible » veut dire « pendant une résolution »**, pas « pour toujours ». Entre deux
+résolutions, le JOUEUR peut changer l'état stocké — tourner un miroir, refaire un nœud. Ce sont des
+gestes, pas des effets de lumière, et la garantie ne les concerne pas.
+
+**Les conflits ont UNE règle chacun, écrite dans le code** — jamais l'ordre des sources :
+
+- **la destruction l'emporte** sur une transformation ; un laser et un rouge sur le même pilier de
+  glace le détruisent, dans les deux ordres ;
+- **un objet n'a qu'UN destin** (au plus un « devient » par type) — sinon le premier faisceau tracé
+  trancherait ;
+- **un laser sur un destructible le détruit avant de l'allumer** : un cristal frappé par un laser de
+  sa propre couleur disparaît, il ne s'allume jamais.
+
+**Destructible est un défaut par type, surchargeable objet par objet** — « parfois les miroirs
+eux-mêmes ». PROPOSÉ : miroirs non destructibles par défaut, cristaux et yeux sacrés destructibles.
+
+**« Toujours directement » — lecture à confirmer :** un dépendant ne lit que des activables allumés
+par la LUMIÈRE, jamais un autre dépendant. Pas de chaîne de portes, donc pas de cycle, et une seule
+passe suffit à les évaluer. `Monde.valider()` le garde au chargement d'une énigme. Si l'intention
+était autre, c'est une ligne de `valider()` à retirer.
+
+**Les rencontres de la lumière avec une entrée** : un faisceau qui entre dans une ENTRÉE ressort dans
+l'autre vue, à sa bouche d'arrivée. La bouche est VIDE (validé) : on y apparaît, on n'y traite rien,
+sinon deux entrées face à face se renverraient le faisceau à l'infini.
+
+**Trois cas limites tranchés par défaut, chacun gardé par un test :**
+
+- le **rayon rasant** (parallèle au miroir) est arrêté par la tranche ;
+- une **diagonale** ne passe pas entre deux coins si l'un des deux est un mur — un trait qui frôle un
+  coin a l'air de le traverser, et ce qu'on voit doit être vrai ;
+- une **boucle** n'est pas une erreur, c'est une information : le traceur la termine et la SIGNALE,
+  avec l'endroit où elle se referme (`fin = BOUCLE`, `boucle_depuis`). **DÉCIDÉ : ce qu'elle
+  devient appartient à la trame de chaque énigme** — laser, piège ou rien.
+
+### MESURÉ — le test a su échouer
+
+246 vérifications, vertes. Six défauts réintroduits exprès, un par un, **chacun a rougi** :
+
+```
+  mutation                                           rougit
+  point fixe parti des actifs précédents             2   le cristal auto-entretenu reste allumé
+  destruction sans écrasement                        1   flaque dans un ordre, détruit dans l'autre
+  couleur par inclusion au lieu d'exacte             2   le blanc fait fondre la glace
+  diagonale arrêtée seulement si les deux coins      1
+  détection de cycle retirée du catalogue            1
+  propriétés d'objet non vérifiées                   2   « orientaton » posée en silence
+```
+
+⚠ La deuxième ne rougit que dans UN des deux ordres de pose : c'est exactement le §6 de River Stones —
+un test d'indépendance à l'ordre qui ne construit pas les deux ordres ne voit rien.
+
+### Où se branche la suite — sans revenir sur ce qui existe
+
+- **un activable, un obstacle** → une entrée du catalogue, et son test ;
+- **la boucle qui devient laser** → une règle qui lit `fin == BOUCLE` et `boucle_depuis` : le traceur
+  fournit déjà tout ce qu'il faut ;
+- **un nœud défait par la lumière** → un type avec « devient » ; **le refaire** → un geste qui modifie
+  l'état stocké, comme `Monde.tourner()` ;
+- **l'onde** → une suite de modifications d'état stocké, datées, chacune suivie de `resoudre()`. La
+  résolution reste instantanée ; c'est l'onde qui porte le temps ;
+- **les pouvoirs** → le JEU décide combien de crans `tourner()` a le droit de faire. Le monde ne
+  connaît pas le joueur ;
+- **la force du ciel** → un émetteur, ou un geste ; un nœud inextricable est simplement un type qui ne
+  réagit à aucune lumière ordinaire.
+
+⚠ **Ce qui ne rentre PAS : un effet maintenu qui RETIRERAIT de la lumière.** Si une énigme en réclame
+un, il ne se glisse pas dans le catalogue — il se rediscute, parce que c'est la garantie de
+terminaison qui est en jeu, et avec elle l'absence d'ordre de mise à jour.
 
 ---
 
@@ -172,10 +339,18 @@ lecture où les huit directions communiquent. Bonus gratuit : en pixel art ces l
 zone en **vivante** (défait) ou en **intriquée** (refait). Les nœuds inextricables ne cèdent qu'à la
 force du ciel.
 
+**DÉCIDÉ — l'onde passe d'une vue à l'autre par son seul moyen : une entrée.** Un nœud défait dans la
+grotte ne ranime la surface qu'à travers une entrée, jamais à travers le sol. On voit alors l'onde
+courir dans les deux vues à la fois — et elle dit au joueur, au passage, où sont les entrées.
+
+**DÉCIDÉ — à quoi sert de refaire un nœud dépend de la trame, et ce sera rarement la même chose.**
+Conséquence pour le code : **aucun effet de l'état intriqué n'est câblé**. Ce que fait une zone
+intriquée est une donnée de l'énigme, exactement comme « devient » dans le catalogue.
+
 ### PROPOSÉ — l'état appartient aux NŒUDS, l'onde n'est que le moment où une case l'apprend
 
 Une case bascule à l'instant `t0 + d / v` : `t0` le geste, `d` sa distance en cases au nœud (parcours
-en largeur dans sa zone), `v` la vitesse de l'onde. Trois conséquences :
+en largeur dans sa zone, entrées comprises), `v` la vitesse de l'onde. Trois conséquences :
 
 - **la sauvegarde ne contient que les nœuds** (état + instant du dernier geste) : aucun historique
   par case, rien à réconcilier ;
@@ -186,7 +361,8 @@ en largeur dans sa zone), `v` la vitesse de l'onde. Trois conséquences :
 
 ⚠ **L'EFFET DE JEU ARRIVE AVEC L'ONDE, PAS AU CLIC.** Si une case vivante laisse passer la lumière,
 elle ne la laisse passer qu'une fois l'onde arrivée sur elle. Ce qu'on voit est vrai — c'est la leçon
-des deux horloges de River Stones (§8), et c'est la lisibilité d'*A Link to the Past*.
+des deux horloges de River Stones (§8), et c'est la lisibilité d'*A Link to the Past*. Dans le moteur,
+c'est une modification d'état stocké par front d'onde, suivie d'une résolution (§4).
 
 ### PROPOSÉ — le rendu : *A Link to the Past* l'a déjà fait
 
@@ -195,37 +371,40 @@ exactement « vivante / intriquée ». Un shader de tuiles lit une texture d'ét
 le front de l'onde ; les changements de FORME (lianes, racines, nœuds visibles) vivent sur un calque
 à part. Un seul jeu de tuiles à dessiner, pas deux.
 
-⚠ **REFAIRE UN NŒUD DOIT SERVIR, SINON PERSONNE NE LE FERA.** L'état intriqué doit donner quelque
-chose : des racines qui font plateforme dans la grotte, des lianes qui arrêtent un rayon mal dirigé,
-une eau qui cesse de couler. Toute énigme qui enseigne « refaire » doit L'EXIGER.
-
-- **OUVERT — l'onde traverse-t-elle les vues ?** Proposition : oui, par la table du §2. Un nœud
-  défait dans la grotte ranime la surface au-dessus du chemin, et on voit l'onde courir dans les deux
-  vues à la fois — c'est l'usage le plus fort de l'écran partagé. À confirmer.
 - **OUVERT — la force du ciel.** Ce qu'elle est et comment on l'obtient. Aucune énigme du début n'en
   dépend ; seul le type de nœud doit exister.
 
 ---
 
-## 6. Architecture — héritée de River Stones — PROPOSÉ
+## 6. Architecture — héritée de River Stones
 
 **Une seule autorité sur les règles.** Les règles d'une énigme vivent dans `CORE/`, sans `Node`, sans
-rendu, sans horloge : la grille, la table des grottes, le traceur de lumière, les nœuds et leurs
-zones, les pouvoirs. Tout y est **déterministe et testable sans écran**. `CLIENT/` affiche les deux
-vues, la bande, les ondes, et ne recalcule JAMAIS une règle.
+rendu, sans horloge. Tout y est **déterministe et testable sans écran**. `CLIENT/` affiche les deux
+vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : il lit
+`Monde.faisceaux`, `Monde.actifs` et les événements rendus par `resoudre()`.
 
 ```
-  CORE/        règles et état du monde — aucun Node
-  CLIENT/      les deux vues, le séparateur, l'entrée joueur, l'animation
-  DEV_TOOLS/   tests et outils (en français)
-  MARQUE/      titre.png, embleme.png — images générées, à redessiner en vectoriel avant la boutique
+  CORE/couleur.gd      les huit couleurs, le filtre, et la seule règle de correspondance
+  CORE/direction.gd    les huit directions et la seule formule de réflexion
+  CORE/catalogue.gd    tout ce qui se pose, en données — et ce qu'il refuse d'écrire
+  CORE/traceur.gd      le trajet d'un faisceau
+  CORE/resolution.gd   le point fixe, les transformations en bloc, les événements
+  CORE/monde.gd        l'état (grilles, objets), la seule porte pour le changer
+  CLIENT/              (à venir) les deux vues, le séparateur, l'entrée joueur, l'animation
+  DEV_TOOLS/           tests et outils (en français)
+  MARQUE/              titre.png, embleme.png — images générées, à redessiner en vectoriel
 ```
 
-- **Une sauvegarde tient en quelques octets** : orientation des miroirs, état des nœuds, pouvoirs,
+- **Deux sortes d'état** : STOCKÉ (grilles, objets — on le sauvegarde) et DÉRIVÉ (actifs, faisceaux —
+  jamais). Un état dérivé qu'on sauvegarde est un état qui finit par mentir.
+- **Une sauvegarde tient en quelques octets** : orientation des miroirs, état des objets, pouvoirs,
   position. C'est la version énigme du « une graine et quatre entiers par tour ».
-- **Tests** — la règle du §6 de River Stones s'applique telle quelle : un test vert ne prouve rien
-  tant qu'on ne l'a pas vu échouer, et toute propriété structurelle (familles de miroirs, portails,
-  zones) se garde par un scénario CONSTRUIT, jamais espéré.
+- **Pas de `class_name` dans `CORE/`** : les tests tournent en `--script`, avant que l'éditeur ait
+  indexé les classes globales. On `preload`, comme River Stones.
+- **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_lumiere.gd`, code de
+  sortie 0 ou 1. La règle du §6 de River Stones s'applique telle quelle : un test vert ne prouve rien
+  tant qu'on ne l'a pas vu échouer, et toute propriété structurelle se garde par un scénario
+  CONSTRUIT, jamais espéré.
 
 ## 7. Langue — héritée
 
@@ -233,13 +412,18 @@ La langue du jeu est l'**anglais américain** : toute chaîne qu'un joueur peut 
 dur dans le code. Restent en français les commentaires, la documentation, les `print()` et tout
 `DEV_TOOLS/`. En cas de doute : *un joueur peut-il la lire à l'écran ?*
 
-## 8. Ordre de travail — PROPOSÉ
+## 8. Ordre de travail
 
 Le risque n'est pas la durée, c'est la **lisibilité à deux vues** : dessiner un beau monde et
 découvrir qu'on ne comprend pas ce qu'on voit dans la bande.
 
-1. **Greybox de l'écran partagé** — deux grilles de couleurs unies, une grotte, une entrée, la table
-   de colonnes, le séparateur animé. Tranche la question des cinq cases (§3).
-2. **Le traceur dans `CORE/`**, avec ses tests : familles à 45°, connexion à 22,5°, boucles, portail.
-3. **Un nœud et son onde.**
-4. **Le pixel art, seulement ensuite.**
+1. ~~**Le moteur de lumière dans `CORE/`**, avec ses tests~~ — fait : miroirs, vitres, lasers,
+   couleurs, activables, dépendants, entrées (§4).
+2. **L'écran partagé** — ⚠ consigne détaillée dans `PROCHAINE_SESSION.md` : fenêtre 2:1, plein écran à
+   bandes noires, fenêtré redimensionnable, balayage animé de la démarcation, plein écran de chaque
+   vue. Tranche la question des cinq cases (§3).
+3. **Les faisceaux de `Monde.faisceaux` dessinés dans les deux vues**, et une première énigme jouable —
+   deux miroirs, une vitre, un pilier de glace, un œil : le joueur tourne, la lumière suit. C'est là
+   que les cas limites du §4 se jugent à l'œil.
+4. **Un nœud et son onde** (§5).
+5. **Le pixel art, seulement ensuite.**
