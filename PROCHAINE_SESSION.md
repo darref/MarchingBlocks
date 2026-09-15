@@ -1,4 +1,4 @@
-# Consigne pour la prochaine session — laissée le 15 septembre 2026
+# Consigne pour la prochaine session — laissée les 15 et 16 septembre 2026
 
 Lis d'abord `CLAUDE.md` : le §3 (l'écran partagé) est le sujet, le §4 décrit le moteur déjà construit.
 
@@ -10,6 +10,8 @@ charte ; ce qui est une commande à exécuter meurt ici.
 
 ## La tâche — demande de Jordan, mot pour mot
 
+Le 15 septembre :
+
 > qu il fasse l'animation balayage de gauche a droite ou de droite a gauche de la demarquation entre
 > les deux vues , a chaque fois que ça se produit , ( agrandissement , retrecissement , de chacun des
 > 2 viewport , en temps réel , optimisé haut FPS et fluide , et les deux vues plein ecran chacune de
@@ -18,12 +20,21 @@ charte ; ce qui est une commande à exécuter meurt ici.
 > haut et en bas pour garder le 2:1. fenetré redimensionable mais avec clamp minimal , et 2:1 conservé
 > pendant tout redimensionnement. et ensuite push commit
 
+Précisé le 16 septembre — ⚠ **c'est cette version qui fait foi** pour ce qu'on voit :
+
+> dans la grotte on voit toujours la surface aussi , mais dans la surface on ne voit la grotte que soit
+> quand on est proche de l entrée , soit quand ne resolution de noeud ou un autre type d evenement de
+> resolution dynamique est en train d 'etre montré au joueur.
+
 Soit, en clair :
 
 1. **la démarcation entre les deux vues BALAIE** (gauche → droite ou droite → gauche) à chaque
    changement de mise en page — les deux vues s'agrandissent et rétrécissent en temps réel, de façon
    fluide, à haut FPS ;
-2. **chaque vue passe en plein écran** quand il n'y a aucune raison de voir l'autre ;
+2. **dans une grotte, on voit TOUJOURS les deux** (grotte 3/4, surface 1/4). **En surface, la surface
+   seule en plein écran**, sauf quand on est proche d'une entrée ou qu'un événement de résolution
+   dynamique (un nœud, ou autre) est montré au joueur : la grotte revient alors sur 1/4. ⚠ La grotte
+   n'est JAMAIS seule à l'écran — « les deux vues plein écran » de la première demande est remplacé ;
 3. **la fenêtre est TOUJOURS en 2:1** ;
 4. **plein écran** : bandes noires en haut et en bas pour garder le 2:1 ;
 5. **fenêtré** : redimensionnable, taille minimale imposée, 2:1 conservé pendant tout le
@@ -45,7 +56,7 @@ RollingStones, sur la même machine.
 - ⚠ **NE JAMAIS TUER UN PROCESSUS PAR NOM D'IMAGE** (`taskkill /IM`, `Stop-Process -Name`). Jordan garde
   son propre Godot ouvert en permanence : ne tuer que le PID qu'on a lancé soi-même.
 - **Tests** : `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_lumiere.gd` → code 0,
-  « TOUT PASSE — 246 vérifications ». Ils doivent le rester.
+  « TOUT PASSE — 248 vérifications ». Ils doivent le rester.
 - **Le mode headless ne rend RIEN.** Tout ce qui se voit — le balayage, les bandes noires, le
   redimensionnement — se vérifie en lançant AVEC fenêtre, et le redimensionnement à la souris ne se
   juge qu'avec Jordan. Ne jamais déclarer « fluide » ce qu'on n'a pas vu.
@@ -64,7 +75,9 @@ RollingStones, sur la même machine.
 
 2. **La logique de mise en page, PURE et testée** — un script sans `Node`, par exemple
    `CLIENT/mise_en_page.gd` :
-   - la cible du séparateur selon la situation (320 / 240 / 80 / 0 pixels de base) ;
+   - la cible du séparateur : **320, 240 ou 80** pixels de base, à partir de trois entrées — le joueur
+     est-il sous terre, est-il près d'une entrée (avec hystérésis), un événement de grotte est-il en
+     train d'être montré (avec son maintien) ;
    - l'avancée du balayage d'une image à l'autre, **interruptible** ;
    - la taille 2:1 d'une fenêtre demandée, avec plancher.
 
@@ -72,8 +85,11 @@ RollingStones, sur la même machine.
    (règle §6 de River Stones, reprise au §6 de la charte).
 
 3. **La scène greybox de l'écran partagé** : deux `SubViewport` de 320×160, une grille de couleur unie
-   par vue, la composition, le trait de démarcation, et une touche de mise au point qui fait défiler
-   les quatre situations — en attendant qu'il existe un joueur et des entrées pour les déclencher.
+   par vue, la composition, le trait de démarcation, et des touches de mise au point pour descendre ou
+   remonter, s'approcher d'une entrée, et déclencher un événement de grotte.
+   ⚠ **Pour l'événement, utilise le VRAI moteur plutôt qu'un faux** : un `Monde` à deux grilles, un rai
+   et un pilier de glace dans la grille de la grotte, et une touche qui pose le rai. `resoudre()` rend
+   alors un vrai « transforme » qui porte `grille` et `case` — exactement ce que le jeu lira.
 
 4. **La fenêtre 2:1 pendant le redimensionnement.**
 
@@ -92,9 +108,8 @@ RollingStones, sur la même machine.
   cible de rendu, à chaque image : c'est exactement ce qui fait tomber le FPS. Les deux vues rendent à
   pleine taille, et l'affichage ne fait que ROGNER — par une découpe, ou par un shader plein écran qui
   lit les deux textures et une seule valeur de séparation.
-- **Une vue entièrement cachée cesse de se rendre** (`render_target_update_mode` désactivé) mais
-  continue d'être simulée. C'est ce qui rend le plein écran d'une vue gratuit : l'autre ne coûte plus
-  rien à l'écran.
+- **La grotte entièrement cachée (surface en plein écran) cesse de se rendre** (`render_target_update_mode`
+  désactivé) mais continue d'être simulée. C'est ce qui rend le plein écran de la surface gratuit.
 - **Le balayage est interruptible.** Si la cible change en plein mouvement, on repart de la position
   COURANTE vers la nouvelle cible, jamais d'un saut. Deux `Tween` qui se disputent la même valeur
   donnent une saccade : soit on tue le précédent, soit on anime à la main dans `_process` avec `delta`,
@@ -116,13 +131,13 @@ RollingStones, sur la même machine.
 
 ## Questions à poser à Jordan — sans bloquer le reste
 
-1. ⚠ **Qu'est-ce qu'une « raison de voir l'autre vue » quand on est dans la grotte ?** La consigne
-   précédente disait « dans la grotte, quelle que soit la profondeur » on voit la surface ; celle-ci
-   autorise la grotte en plein écran. Proposition : la même raison qu'en surface, symétrique — la
-   proximité d'une entrée. **Le balayage ne dépend pas de la réponse**, seul son déclencheur en dépend :
-   tout le reste peut se construire avant.
-2. **En fenêtré** : bandes internes (a), crans (b) ou fractionnaire (c) ?
-3. **Le toucher du balayage** : durée et courbe. Proposer environ 0,3 s, départ et arrivée adoucis, et
+1. **Combien de temps la bande reste-t-elle ouverte après un événement ?** Proposer : la durée de son
+   animation, plus un maintien d'une demi-seconde environ.
+2. **Plusieurs événements dans des grottes différentes au même moment** : laquelle montre-t-on ?
+3. **Sous terre, un événement de SURFACE** change-t-il la mise en page, ou la surface à 1/4 suffit-elle ?
+   Par défaut, rien ne bouge.
+4. **En fenêtré** : bandes internes (a), crans (b) ou fractionnaire (c) ?
+5. **Le toucher du balayage** : durée et courbe. Proposer environ 0,3 s, départ et arrivée adoucis, et
    régler à l'œil avec lui.
-4. **La démarcation se voit-elle ?** Un trait d'un ou deux pixels de base, à l'or du logo, ou rien
+6. **La démarcation se voit-elle ?** Un trait d'un ou deux pixels de base, à l'or du logo, ou rien
    qu'une coupure nette ?

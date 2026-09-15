@@ -34,6 +34,9 @@ const Traceur := preload("res://CORE/traceur.gd")
 ## Résout `monde` sur place et rend les événements, dans l'ordre où le client doit les animer :
 ##   {"type": "transforme", "id", "de", "vers"}   {"type": "detruit", "id", "objet"}
 ##   {"type": "active", "id"}                      {"type": "desactive", "id"}
+## ⚠ Tous portent aussi `grille` et `case`. C'est ce qui permet au client d'ouvrir la bande sur la
+## grotte où l'événement se produit (charte §3) — et un objet DÉTRUIT n'est plus dans le monde : sans
+## ces deux champs, plus rien ne pourrait dire où il était.
 static func resoudre(monde) -> Array:
 	var evenements: Array = []
 	var avant: Dictionary = monde.actifs
@@ -52,12 +55,14 @@ static func resoudre(monde) -> Array:
 		for id in ids:
 			var de: String = monde.objets[id]["type"]
 			var vers: String = destins[id]
+			var grille: int = monde.objets[id]["grille"]
+			var pos: Vector2i = monde.objets[id]["case"]
 			if vers == "":
 				monde.retirer(id)
-				evenements.append({"type": "detruit", "id": id, "objet": de})
+				evenements.append({"type": "detruit", "id": id, "grille": grille, "case": pos, "objet": de})
 			else:
 				monde.transformer(id, vers)
-				evenements.append({"type": "transforme", "id": id, "de": de, "vers": vers})
+				evenements.append({"type": "transforme", "id": id, "grille": grille, "case": pos, "de": de, "vers": vers})
 
 	var concernes: Array = avant.keys()
 	for id in actifs:
@@ -65,10 +70,13 @@ static func resoudre(monde) -> Array:
 			concernes.append(id)
 	concernes.sort()
 	for id in concernes:
+		if not monde.objets.has(id):
+			continue  # détruit pendant cette résolution : son événement « detruit » a déjà tout dit
+		var objet: Dictionary = monde.objets[id]
 		if actifs.has(id) and not avant.has(id):
-			evenements.append({"type": "active", "id": id})
-		elif avant.has(id) and not actifs.has(id) and monde.objets.has(id):
-			evenements.append({"type": "desactive", "id": id})
+			evenements.append({"type": "active", "id": id, "grille": objet["grille"], "case": objet["case"]})
+		elif avant.has(id) and not actifs.has(id):
+			evenements.append({"type": "desactive", "id": id, "grille": objet["grille"], "case": objet["case"]})
 
 	monde.actifs = actifs
 	monde.faisceaux = faisceaux

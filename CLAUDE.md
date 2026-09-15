@@ -75,41 +75,52 @@ DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une ca
 
 ## 3. L'écran partagé — UNE seule valeur
 
-**DÉCIDÉ** — les situations :
+**DÉCIDÉ** (version du 16 septembre 2026, qui remplace les précédentes) — ce qu'on voit :
 
-- en surface, **assez près d'une entrée** : vue de dessus sur 3/4 de la largeur, grotte sur 1/4 ;
-- dans une grotte : grotte sur 3/4, vue de dessus sur 1/4 ;
-- **DÉCIDÉ le 15 septembre 2026 — chaque vue passe en PLEIN ÉCRAN quand il n'y a aucune raison de voir
-  l'autre**, la surface comme la grotte ;
-- **DÉCIDÉ — la démarcation BALAIE** l'écran, de gauche à droite ou de droite à gauche, à chaque
-  changement : les deux vues s'agrandissent et rétrécissent en temps réel, de façon fluide, à haut FPS.
+- **dans une grotte, TOUJOURS les deux** : grotte sur 3/4 de la largeur, vue de dessus sur 1/4, quelle
+  que soit la profondeur. La grotte n'est jamais seule à l'écran ;
+- **en surface, la vue de dessus seule, en plein écran**, SAUF dans deux cas où la grotte revient sur
+  1/4 :
+  - quand on est **proche d'une entrée** ;
+  - quand **une résolution dynamique est en train d'être montrée au joueur** — la résolution d'un
+    nœud, ou tout autre événement de résolution qui se produit dans une grotte ;
+- **la démarcation BALAIE** l'écran, de gauche à droite ou de droite à gauche, à chaque changement :
+  les deux vues s'agrandissent et rétrécissent en temps réel, de façon fluide, à haut FPS.
 
-⚠ **OUVERT — deux consignes se contredisent en un point.** La première disait « dans la grotte,
-quelle que soit la profondeur » on voit la surface ; la seconde autorise la grotte en plein écran.
-Qu'est-ce qu'une « raison de voir l'autre vue » quand on est sous terre ? Proposition : la même qu'en
-surface, symétrique — la proximité d'une entrée. **Le balayage n'en dépend pas, seul son déclencheur.**
+⚠ **L'asymétrie est le sujet.** On descend pour réparer ce qu'on voit d'en haut : sous terre, la
+surface reste donc toujours sous les yeux. En haut, la grotte ne s'impose que quand elle a quelque
+chose à dire — on s'en approche, ou elle change.
 
 **PROPOSÉ — la surface est toujours À GAUCHE, la grotte toujours À DROITE, et toute la mise en page
-est la position d'un SÉPARATEUR.** En pixels de la résolution de base :
+est la position d'un SÉPARATEUR.** Trois positions, en pixels de la résolution de base :
 
 ```
-  x = 320   surface seule            ████████████████████████████████
-  x = 240   surface + grotte         ████████████████████████│░░░░░░░░
-  x =  80   grotte + surface         ████████│░░░░░░░░░░░░░░░░░░░░░░░░
-  x =   0   grotte seule             ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+  x = 320   surface seule                      ████████████████████████████████
+  x = 240   surface, près d'une entrée         ████████████████████████│░░░░░░░░
+            ou pendant un événement de grotte
+  x =  80   dans une grotte                    ████████│░░░░░░░░░░░░░░░░░░░░░░░░
              surface ←┘ └→ grotte
 ```
 
 Passer d'une situation à l'autre ne permute rien : **le séparateur glisse**. Le joueur ne perd jamais
 où est quel monde, et il n'y a qu'un nombre à animer — pas une disposition à inverser avec sa moitié
-qu'on oublierait. Le plein écran d'une vue n'est pas un mode à part : c'est le séparateur poussé au
-bord.
+qu'on oublierait. Le plein écran de la surface n'est pas un mode à part : c'est le séparateur poussé
+au bord.
 
 - ⚠ **HYSTÉRÉSIS OBLIGATOIRE.** La bande apparaît à R cases d'une entrée et ne disparaît qu'à R + une
   marge. Sans ça, un joueur qui marche le long du seuil fait balayer l'écran en boucle. Rayons en
   CASES, jamais en pixels.
-- **Près d'une entrée, la bande montre l'autre vue à la bouche de cette entrée** ; s'il y en a
+- **Près d'une entrée, la bande montre la grotte à la bouche de cette entrée** ; s'il y en a
   plusieurs, la plus proche gagne.
+- **Pendant un événement, la bande montre la grotte LÀ OÙ il se produit.** ⚠ C'est ce qui a imposé que
+  chaque événement rendu par `resoudre()` porte sa `grille` et sa `case` : un objet DÉTRUIT n'est plus
+  dans le monde, et sans ça plus rien ne pourrait dire où il était.
+- **PROPOSÉ — la bande reste ouverte le temps que l'événement soit montré**, plus un court maintien,
+  puis se referme ; un événement qui arrive pendant la fermeture la rouvre depuis sa position
+  courante, sans saut.
+- **OUVERT** — plusieurs événements dans des grottes différentes au même moment : laquelle montre-t-on ?
+  Et sous terre, un événement de SURFACE change-t-il la mise en page ? Rien n'est décidé ; par
+  défaut, rien ne bouge.
 
 ### Le balayage — PROPOSÉ
 
@@ -420,8 +431,8 @@ découvrir qu'on ne comprend pas ce qu'on voit dans la bande.
 1. ~~**Le moteur de lumière dans `CORE/`**, avec ses tests~~ — fait : miroirs, vitres, lasers,
    couleurs, activables, dépendants, entrées (§4).
 2. **L'écran partagé** — ⚠ consigne détaillée dans `PROCHAINE_SESSION.md` : fenêtre 2:1, plein écran à
-   bandes noires, fenêtré redimensionnable, balayage animé de la démarcation, plein écran de chaque
-   vue. Tranche la question des cinq cases (§3).
+   bandes noires, fenêtré redimensionnable, balayage animé de la démarcation, surface seule quand la
+   grotte n'a rien à dire, les deux vues toujours sous terre. Tranche la question des cinq cases (§3).
 3. **Les faisceaux de `Monde.faisceaux` dessinés dans les deux vues**, et une première énigme jouable —
    deux miroirs, une vitre, un pilier de glace, un œil : le joueur tourne, la lumière suit. C'est là
    que les cas limites du §4 se jugent à l'œil.

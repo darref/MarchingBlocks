@@ -298,6 +298,8 @@ func test_laser_detruit() -> void:
 	var evenements: Array = m.resoudre()
 	var f := _faisceau_de(m, rai)
 	_verifier(_type_en(m, 5, 4) == "" and evenements[0]["type"] == "detruit", "le miroir destructible doit disparaître")
+	_verifier(evenements[0].get("grille", -1) == 0 and evenements[0].get("case", Vector2i(-1, -1)) == Vector2i(5, 4),
+		"⚠ un objet DÉTRUIT n'est plus dans le monde : seul son événement peut encore dire où il était")
 	_verifier(f["fin"] == "SORTIE" and f["pas"][-1]["case"] == Vector2i(8, 4) and f["pas"][-1]["laser"],
 		"le laser doit poursuivre vers l'est à travers la place du miroir")
 
@@ -429,8 +431,10 @@ func test_entree_et_boucle() -> void:
 	m.poser("ENTREE", 0, Vector2i(4, 4), {"vers_grille": 1, "vers_case": Vector2i(4, 0), "vers_direction": Direction.S})
 	var oeil: int = m.poser("OEIL_SACRE", 1, Vector2i(4, 5), {"couleur": Couleur.BLANC})
 	_verifier(m.valider().is_empty(), "le montage doit être valide : %s" % str(m.valider()))
-	m.resoudre()
+	var evenements: Array = m.resoudre()
 	_verifier(m.actifs.has(oeil), "l'œil de la grotte doit être allumé par le rai de surface")
+	_verifier(evenements.size() == 1 and evenements[0].get("grille", -1) == 1 and evenements[0].get("case", Vector2i(-1, -1)) == Vector2i(4, 5),
+		"l'allumage doit dire qu'il a lieu dans la grotte — c'est ce qui ouvre la bande en surface (charte §3)")
 	_verifier(_faisceau_de(m, rai)["pas"][-1]["grille"] == 1, "le faisceau doit finir dans la grille 1")
 
 	_titre("une boucle se referme, se termine, et dit où elle commence")
