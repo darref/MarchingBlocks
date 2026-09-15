@@ -3,9 +3,6 @@
 Même rôle que la charte de River Stones : porter les décisions transverses, celles qui doivent
 survivre à une session et à quelqu'un qui arrive six mois plus tard avec une bonne idée.
 
-⚠ **CONSIGNE EN ATTENTE — lire `PROCHAINE_SESSION.md` avant toute chose.** À supprimer, avec le
-fichier, une fois la tâche commitée et poussée.
-
 ⚠ **Le projet naît, donc tout n'a pas le même poids.** Chaque décision porte son statut :
 
 - **DÉCIDÉ** — voulu par Jordan, ne se rediscute pas sans lui ;
@@ -115,26 +112,63 @@ au bord.
 - **Pendant un événement, la bande montre la grotte LÀ OÙ il se produit.** ⚠ C'est ce qui a imposé que
   chaque événement rendu par `resoudre()` porte sa `grille` et sa `case` : un objet DÉTRUIT n'est plus
   dans le monde, et sans ça plus rien ne pourrait dire où il était.
-- **PROPOSÉ — la bande reste ouverte le temps que l'événement soit montré**, plus un court maintien,
+- **PROPOSÉ — pendant un événement près d'une entrée, l'événement l'emporte sur la bouche** ; la bande
+  revient à la bouche quand il est fini. Pendant la fermeture, la bande garde ce qu'elle montrait.
+- **PROPOSÉ — la bande reste ouverte le temps que l'événement soit montré, plus un MAINTIEN de 0,5 s**,
   puis se referme ; un événement qui arrive pendant la fermeture la rouvre depuis sa position
   courante, sans saut.
-- **OUVERT** — plusieurs événements dans des grottes différentes au même moment : laquelle montre-t-on ?
-  Et sous terre, un événement de SURFACE change-t-il la mise en page ? Rien n'est décidé ; par
-  défaut, rien ne bouge.
+  - ⚠ **L'horloge d'un événement ne tourne que bande OUVERTE.** Le balayage d'ouverture ne mange pas
+    le temps que le joueur doit le voir : sinon, sur 0,6 s de fonte, il en raterait la moitié.
+  - **Les événements passent en FILE, dans l'ordre de `resoudre()`** — la fonte, PUIS l'allumage —
+    chacun sa durée (greybox : 0,6 s pour une transformation, 0,4 s pour un allumage). D'une grotte à
+    l'autre, la bande coupe sans se refermer.
+- **OUVERT** — plusieurs événements dans des grottes différentes au même moment : la file ci-dessus est
+  un défaut, pas une décision. Et sous terre, un événement de SURFACE change-t-il la mise en page ?
+  Par défaut, rien ne bouge : sous terre la mise en page ignore les événements, et **descendre vide la
+  file** (on a choisi de regarder la grotte où l'on est).
+- **MESURÉ (test)** — tout ce qui précède est une fonction pure de `CLIENT/mise_en_page.gd`, gardée par
+  `DEV_TOOLS/test_mise_en_page.gd` (48 vérifications, dix mutations qui rougissent toutes).
 
 ### Le balayage — PROPOSÉ
 
 - **Un seul nombre animé, et interruptible.** Si la cible change en plein mouvement, on repart de la
   position COURANTE vers la nouvelle, jamais d'un saut.
+  - **MESURÉ (test) — chaque trajet est une courbe d'Hermite** qui part de la position ET de la vitesse
+    courantes, et arrive à vitesse nulle en `DUREE_BALAYAGE` (PROPOSÉ : 0,3 s, départ et arrivée
+    adoucis). Changer de cible ne fait ni saut de position ni à-coup de vitesse, et n'alloue rien.
+  - ⚠ **Un élan fort vers une cible toute proche la dépasserait** : la courbe ne reste monotone que si
+    élan × durée ≤ 3 × écart. L'élan est plafonné là, et le séparateur ne dépasse jamais sa cible.
+  - **La position est une FONCTION du temps écoulé, pas une intégration** : à 30 ou à 240 images par
+    seconde, le séparateur est au même endroit au même instant.
 - ⚠ **On ne redimensionne JAMAIS un `SubViewport` pendant le balayage.** Changer sa taille réalloue sa
   cible de rendu, à chaque image. Les deux vues rendent à pleine taille, simulées en permanence, et
-  l'affichage ne fait que ROGNER.
+  l'affichage ne fait que ROGNER (`CLIENT/ecran_partage.gd` : deux rectangles de texture).
 - **Une vue entièrement cachée cesse de se rendre**, mais continue d'être simulée : le plein écran
-  d'une vue rend l'autre gratuite à l'écran.
+  d'une vue rend l'autre gratuite à l'écran. ⚠ Elle se remet à rendre dès que la CIBLE la montre, sans
+  attendre son premier pixel visible : sinon sa première colonne serait une image périmée.
 - **La position se quantifie au pixel de base** : l'agrandissement entier garde le trait net, et à la
   vitesse d'un balayage le pas ne se voit pas.
 - **Chaque caméra centre le joueur (ou sa projection) dans la partie VISIBLE de sa vue** : quand le
   séparateur glisse, les caméras glissent avec lui sans une ligne de plus.
+- **PROPOSÉ — la démarcation est un trait d'un pixel de base, à l'or du logo (`#EBBB69`)**, posé sur la
+  première colonne de la grotte : séparateur au bord, il sort de l'écran de lui-même.
+
+**MESURÉ — le balayage ne coûte rien ; redimensionner les vues coûte trois fois l'image.**
+`DEV_TOOLS/mesure_balayage.gd`, greybox en 1280×640 sans vsync, RTX 2060, minimum de cinq passes
+entrelacées, deux séries le 16 septembre 2026 :
+
+```
+  situation                            ms par image        par rapport à la bande fixe
+  surface seule (grotte non rendue)    0,578 / 0,564        −11 % / −13 %
+  bande fixe (240)                     0,651 / 0,649          0
+  sous terre fixe (80)                 0,665 / 0,656         +2 % / +1 %
+  balayage continu                     0,662 / 0,650         +2 % / +0 %
+  balayage en redimensionnant les vues 2,174 / 2,254       +234 % / +247 %
+```
+
+Le balayage tombe dans le bruit des deux positions fixes ; l'interdit du redimensionnement épargne plus
+des deux tiers de l'image. ⚠ Ce sont des temps d'image, pas une impression : le TOUCHER du balayage
+(durée, courbe) ne se juge qu'à l'œil, avec Jordan.
 
 ### La fenêtre — DÉCIDÉ : toujours en 2:1
 
@@ -143,6 +177,28 @@ Pour que le partage tienne correctement quand il est là :
 - **plein écran** : bandes noires en haut et en bas pour garder le 2:1 ;
 - **fenêtré** : redimensionnable, avec une taille minimale, et le 2:1 conservé pendant tout le
   redimensionnement.
+
+Comment c'est tenu — `CLIENT/fenetre.gd`, en autoload, et F11 ou Alt+Entrée pour le plein écran :
+
+- **le CONTENU** reste en 2:1 par l'étirement `viewport`, l'aspect `keep` et l'agrandissement entier de
+  `project.godot`. **MESURÉ (capture)** : plein écran sur 1920×1080, image ×6 nette, bandes noires de
+  60 px en haut et en bas (Godot ajoute deux pixels à sa fenêtre plein écran sous Windows : client
+  1920×1082) ;
+- **la FENÊTRE** reste en 2:1 par recalage : la dimension qu'on a le plus tirée commande (une case de
+  hauteur vaut deux de largeur), plancher **640×320** (PROPOSÉ : deux fois la base), plafond l'écran.
+  **MESURÉ (capture)** : fenêtre forcée par `SetWindowPos` à 1000×700 → client 984×492 ; à 1500×640 →
+  1484×742 ; à 500×300 → 640×320 ;
+- ⚠ **MESURÉ — `size_changed` ne sert à rien ici.** Avec l'étirement `viewport`, le viewport racine
+  garde sa taille de base quand la fenêtre change : branché sur ce signal, le recalage n'a jamais eu
+  lieu. On lit `Window.size` à chaque image ;
+- **une fenêtre maximisée n'est pas recalée** : l'écran impose sa taille, l'aspect pose les bandes ;
+- **OUVERT — le recalage pendant le glisser à la souris tremble-t-il ?** Windows pilote le
+  redimensionnement, Godot ne corrige qu'après coup. Si ça tremble, `RECALER_PENDANT_LE_GLISSER = false`
+  recale au relâchement. Ne se juge qu'avec Jordan ;
+- **OUVERT — les bandes internes en fenêtré.** Une fenêtre 2:1 qui n'est pas un multiple de 320×160
+  garde une fine bande tout autour (1000×500 → image ×3 de 960×480). Défaut en place : (a)
+  agrandissement entier partout, en acceptant ces bandes. Les autres issues : (b) tailles calées sur
+  les multiples, par crans ; (c) agrandissement fractionnaire en fenêtré seulement.
 
 ### La résolution — PROPOSÉ : 320×160, cases de 16 pixels (remplace 320×180)
 
@@ -172,9 +228,11 @@ carte, pas *A Link to the Past*.
   portrait : ça va très bien à une coupe de grotte (on y voit la profondeur, c'est un puits de
   lumière), c'est serré pour la surface quand la grotte court d'est en ouest. La question se tranche
   au greybox et nulle part ailleurs : **voit-on, depuis la grotte, le miroir de surface qui est
-  au-dessus de soi ?**
-- ⚠ **`project.godot` est encore en 320×180** : l'appliquer est la première tâche de
-  `PROCHAINE_SESSION.md`.
+  au-dessus de soi ?** Premier indice du greybox : la bande ouverte sur un pilier qui fond ne montre
+  pas l'œil qu'il libère, trois cases plus loin — c'est la file d'événements qui y amène la caméra, à
+  son tour.
+- **`project.godot` est en 320×160** depuis le 16 septembre 2026, fenêtre de départ 1280×640 ; sa scène
+  principale est pour l'instant le greybox de l'écran partagé (`DEV_TOOLS/greybox_ecran_partage.tscn`).
 
 **PROPOSÉ — rendu `gl_compatibility`.** Un jeu 2D n'a besoin de rien de Forward+, et ce rendu ouvre
 le web, le mobile et les machines modestes — les portes que River Stones a payées cher (§10 de sa
@@ -401,8 +459,11 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   CORE/traceur.gd      le trajet d'un faisceau
   CORE/resolution.gd   le point fixe, les transformations en bloc, les événements
   CORE/monde.gd        l'état (grilles, objets), la seule porte pour le changer
-  CLIENT/              (à venir) les deux vues, le séparateur, l'entrée joueur, l'animation
-  DEV_TOOLS/           tests et outils (en français)
+  CLIENT/mise_en_page.gd   le séparateur, le balayage, les événements montrés, la fenêtre 2:1 — PUR
+  CLIENT/ecran_partage.gd  les deux vues rendues à pleine taille, rognées à l'affichage
+  CLIENT/fenetre.gd        autoload : la fenêtre recalée en 2:1, le plein écran
+  CLIENT/              (à venir) les faisceaux dessinés, l'entrée joueur, l'animation
+  DEV_TOOLS/           tests et outils (en français), dont le greybox de l'écran partagé et sa mesure
   MARQUE/              titre.png, embleme.png — images générées, à redessiner en vectoriel
 ```
 
@@ -412,8 +473,9 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   position. C'est la version énigme du « une graine et quatre entiers par tour ».
 - **Pas de `class_name` dans `CORE/`** : les tests tournent en `--script`, avant que l'éditeur ait
   indexé les classes globales. On `preload`, comme River Stones.
-- **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_lumiere.gd`, code de
-  sortie 0 ou 1. La règle du §6 de River Stones s'applique telle quelle : un test vert ne prouve rien
+- **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_lumiere.gd` (le moteur,
+  248 vérifications) et `res://DEV_TOOLS/test_mise_en_page.gd` (l'écran partagé, 48), code de sortie 0
+  ou 1. ⚠ Le headless ne rend rien : `mesure_balayage.gd` et le greybox se lancent AVEC fenêtre. La règle du §6 de River Stones s'applique telle quelle : un test vert ne prouve rien
   tant qu'on ne l'a pas vu échouer, et toute propriété structurelle se garde par un scénario
   CONSTRUIT, jamais espéré.
 
@@ -430,9 +492,10 @@ découvrir qu'on ne comprend pas ce qu'on voit dans la bande.
 
 1. ~~**Le moteur de lumière dans `CORE/`**, avec ses tests~~ — fait : miroirs, vitres, lasers,
    couleurs, activables, dépendants, entrées (§4).
-2. **L'écran partagé** — ⚠ consigne détaillée dans `PROCHAINE_SESSION.md` : fenêtre 2:1, plein écran à
-   bandes noires, fenêtré redimensionnable, balayage animé de la démarcation, surface seule quand la
-   grotte n'a rien à dire, les deux vues toujours sous terre. Tranche la question des cinq cases (§3).
+2. ~~**L'écran partagé**~~ — fait (§3) : fenêtre 2:1, plein écran à bandes noires, fenêtré recalé,
+   balayage interruptible et mesuré, surface seule quand la grotte n'a rien à dire, les deux vues
+   toujours sous terre. ⚠ **Reste à JUGER avec Jordan, dans le greybox** : le toucher du balayage, le
+   trait de démarcation, le glisser de la fenêtre à la souris, et la question des cinq cases.
 3. **Les faisceaux de `Monde.faisceaux` dessinés dans les deux vues**, et une première énigme jouable —
    deux miroirs, une vitre, un pilier de glace, un œil : le joueur tourne, la lumière suit. C'est là
    que les cas limites du §4 se jugent à l'œil.
