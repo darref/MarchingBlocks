@@ -10,8 +10,15 @@ extends RefCounted
 ##   calque « sol »    — le terrain. Chaque tuile porte `mur` (bool) : ce qui arrête la lumière.
 ##                       ⚠ UNE CASE NON PEINTE EST UN MUR. Le vide est plein : on ne peut pas oublier
 ##                       de peindre le bord du monde, et une carte à trous ne laisse pas fuir la lumière.
-##   calque « objets » — les objets du catalogue, par la donnée `objet` (le nom du type, "" sinon).
+##   calque « objets » — les objets SANS propriété, par la donnée `objet` (le nom du type, "" sinon).
+##   les marqueurs     — les objets AVEC propriétés (CLIENT/marqueur.gd), un nœud chacun.
 ##   une grotte        — son CHEMIN (départ + segments droits, charte §2) et sa coupe peinte.
+##
+## ⚠ POURQUOI DEUX CANAUX. Une tuile ne porte qu'un dessin ; l'orientation d'un miroir, la couleur d'un
+## cristal et surtout la liste `depend_de` d'une porte antique sont des PROPRIÉTÉS. Et `depend_de` cite
+## d'autres objets par leurs identifiants, distribués à la pose : aucune tuile ne peut l'écrire, et une
+## liste de nombres saisie à la main serait fausse au premier objet ajouté. Les marqueurs citent donc des
+## NOMS, et ce fichier les résout en identifiants une fois tout posé.
 ##
 ## ⚠ UNE ENTRÉE NE DIT PAS OÙ ELLE MÈNE : ON LE DÉDUIT. On cherche sa case dans le chemin de chaque
 ## grotte — celle qui passe dessous est la sienne, et la colonne est l'indice dans la table. La bouche
@@ -36,7 +43,7 @@ const SURFACE := 0
 ##                   "objets": TileMapLayer}] — les grilles sont numérotées 1, 2, … dans cet ordre
 ## Rend {"monde", "chemins", "entrees", "erreurs"}. ⚠ `erreurs` non vide veut dire que la CARTE est
 ## fautive : on rend quand même ce qu'on a pu construire, pour que l'éditeur montre le reste.
-static func construire(sol, objets, grottes: Array, props = null) -> Dictionary:
+static func construire(sol, objets, grottes: Array, props = null, marqueurs = null) -> Dictionary:
 	var erreurs: Array = []
 	var monde = Monde.new()
 
@@ -71,9 +78,16 @@ static func construire(sol, objets, grottes: Array, props = null) -> Dictionary:
 
 	# 4. Les objets, une fois les grilles là.
 	var entrees: Array = []
+	var noms := {}          # nom de marqueur -> identifiant dans le monde
+	var a_resoudre: Array = []  # [identifiant, nom, [noms cités]] — voir l'étape 5
 	_poser_objets(monde, SURFACE, objets, chemins, entrees, erreurs)
+	_poser_marqueurs(monde, SURFACE, marqueurs, chemins, entrees, noms, a_resoudre, erreurs)
 	for id in chemins:
 		_poser_objets(monde, id, grottes[id - 1].get("objets"), chemins, entrees, erreurs)
+		_poser_marqueurs(monde, id, grottes[id - 1].get("marqueurs"), chemins, entrees, noms, a_resoudre, erreurs)
+
+	# 5. Les dépendances, une fois TOUT posé : un marqueur peut dépendre d'un autre posé après lui.
+	_resoudre_dependances(monde, noms, a_resoudre, erreurs)
 
 	for erreur in monde.valider():
 		erreurs.append("monde : " + erreur)
@@ -160,6 +174,85 @@ static func _poser_objets(monde, grille: int, calque, chemins: Dictionary, entre
 			_poser_entree(monde, grille, pos, chemins, entrees, erreurs)
 		elif monde.poser(type, grille, pos) == -1:
 			erreurs.append("grille %d, case %s : %s n'a pas pu être posé (case occupée ou murée)" % [grille, pos, type])
+
+
+## Les marqueurs d'une grille. ⚠ L'ORDRE DE POSE NE DÉPEND PAS DE L'ORDRE DE L'ARBRE : on trie par case,
+## comme les tuiles. Les identifiants du monde sont distribués à la pose ; les faire dépendre de l'ordre
+## où le peintre a créé ses nœuds rendrait deux cartes identiques différentes au premier glisser-déposer.
+static func _poser_marqueurs(monde, grille: int, liste, chemins: Dictionary, entrees: Array,
+		noms: Dictionary, a_resoudre: Array, erreurs: Array) -> void:
+	if liste == null:
+		return
+	var tries: Array = (liste as Array).duplicate()
+	tries.sort_custom(func(a, b):
+		if a["case"].y != b["case"].y:
+			return a["case"].y < b["case"].y
+		return a["case"].x < b["case"].x)
+
+	for m in tries:
+		var nom: String = m["nom"]
+		var type: String = m["type"]
+		var pos: Vector2i = m["case"]
+		if type == "":
+			erreurs.append("marqueur « %s » (grille %d, case %s) : sans type — voir CORE/catalogue.gd" % [nom, grille, pos])
+			continue
+		if not Catalogue.TYPES.has(type):
+			erreurs.append("marqueur « %s » (grille %d, case %s) : type inconnu « %s »" % [nom, grille, pos, type])
+			continue
+		if noms.has(nom):
+			erreurs.append("marqueur « %s » : ce nom sert déjà — une dépendance ne saurait lequel désigner" % nom)
+			continue
+
+		if type == "ENTREE":
+			_poser_entree(monde, grille, pos, chemins, entrees, erreurs)
+			continue
+
+		# ⚠ `depend_de` porte des NOMS, le monde attend des IDENTIFIANTS : on le VIDE avant de poser, et
+		# l'étape 5 le remplit.
+		#
+		# ⚠ ET CE VIDAGE A L'AIR INUTILE — il ne l'est pas, et je me suis fait prendre. Sur une carte
+		# saine, l'étape 5 écrase de toute façon : le retirer ne fait rougir aucun test. Mais sur une
+		# valeur MAL FORMÉE (une chaîne au lieu d'une liste, ce que la peinture à la main produit), il n'y
+		# a rien à écraser : `Monde.valider()` lit alors une chaîne là où il attend un tableau, et le
+		# chargeur PLANTE au lieu de signaler. Un garde-fou qui semble mort peut n'être qu'un garde-fou
+		# dont les tests ne voient jamais le cas — voir `test_depend_de_mal_forme()`.
+		var props: Dictionary = (m["proprietes"] as Dictionary).duplicate(true)
+		var cites: Array = []
+		if props.has("depend_de"):
+			var brut = props["depend_de"]
+			if brut is Array:
+				cites = brut
+			else:
+				erreurs.append("marqueur « %s » : « depend_de » doit être une liste de noms, pas %s"
+					% [nom, type_string(typeof(brut))])
+			props["depend_de"] = []
+
+		var identifiant: int = monde.poser(type, grille, pos, props)
+		if identifiant == -1:
+			erreurs.append("marqueur « %s » (grille %d, case %s) : %s n'a pas pu être posé — case murée, occupée, hors grille, ou propriété inconnue" % [nom, grille, pos, type])
+			continue
+		noms[nom] = identifiant
+		if not cites.is_empty():
+			a_resoudre.append([identifiant, nom, cites])
+
+
+## Les noms cités par `depend_de` deviennent des identifiants. ⚠ C'est ici, et nulle part ailleurs, que
+## le peintre est protégé du décalage des identifiants : il écrit « OeilNord », jamais un nombre.
+static func _resoudre_dependances(monde, noms: Dictionary, a_resoudre: Array, erreurs: Array) -> void:
+	for entree in a_resoudre:
+		var identifiant: int = entree[0]
+		var nom: String = entree[1]
+		var ids: Array = []
+		for cite in entree[2]:
+			var vise := str(cite)
+			if not noms.has(vise):
+				erreurs.append("marqueur « %s » : dépend de « %s », qui n'est le nom d'aucun marqueur" % [nom, vise])
+				continue
+			if noms[vise] == identifiant:
+				erreurs.append("marqueur « %s » : dépend de lui-même" % nom)
+				continue
+			ids.append(noms[vise])
+		monde.objets[identifiant]["depend_de"] = ids
 
 
 static func _poser_entree(monde, grille: int, pos: Vector2i, chemins: Dictionary, entrees: Array, erreurs: Array) -> void:

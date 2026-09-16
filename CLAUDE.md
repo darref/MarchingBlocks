@@ -606,6 +606,24 @@ premier mur déplacé.
       se confondent avec des rectangles de tuiles. On agrandit la capture avec une grille de 32 px : si
       les taches tombent sur les cases, c'est un défaut ; sinon, c'est la texture. ⚠ Ne jamais trancher
       ce genre de doute à l'œil nu sur une image réduite.
+    - ⚠ **LA RÈGLE DES CALQUES, ET ELLE PASSE AVANT LA PEINTURE.** Better Terrain ne résout les voisinages
+      qu'À L'INTÉRIEUR d'un calque : la pile de calques et la façon de peindre se commandent donc l'une
+      l'autre. La règle a DEUX branches, et c'est l'ART qui tranche, pas le goût :
+      - **Art de transition OPAQUE → MÊME calque.** Deux matières dont la bordure est dessinée en entier
+        (la terre sur l'herbe, l'eau sur ses berges) se fondent sur un seul plan, et Better Terrain fait
+        le reste.
+      - **Art de transition TRANSPARENT → calque SÉPARÉ, au-dessus.** Les trois ensembles d'herbe et ceux
+        de sable et de gravier ont des bordures ajourées : ce qu'on voit par leurs trous, c'est le calque
+        du DESSOUS. Leur transparence n'est pas décorative, elle est PORTANTE.
+      - ⚠ **MESURÉ, et à mes dépens** : j'avais cru simplifier en fondant les deux herbes sur un seul
+        calque — « le trou n'est pas rien, c'est l'autre herbe ». La capture a répondu : clairières en
+        escalier, et blocs sombres le long du lac, là où la transparence ne révélait plus que le vide. La
+        nappe n'était pas de l'accrétion, elle était imposée par le lot.
+      - Un calque de plus se justifie aussi quand l'AUTORITÉ diffère : les objets du catalogue, que
+        `CLIENT/niveau.gd` lit comme des règles et non comme du décor.
+      - ⚠ **UN MOT, UNE CHOSE.** Le rôle « herbe » (la tuile) et le terrain « herbe » (Better Terrain)
+        doivent désigner la MÊME matière. Ils ont un temps désigné l'herbe claire d'un côté et la sombre
+        de l'autre : de quoi peindre l'inverse de ce qu'on croit, sans qu'aucune erreur ne le signale.
     - **DÉCIDÉ (Jordan, 16 septembre 2026) — l'auto-tuilage passe à BETTER TERRAIN**, le système natif
       est abandonné. Raison mesurée : le natif exige un match EXACT et n'a que deux modes exclusifs
       (coins OU côtés) ; un lot acheté n'a jamais toutes les pièces, et il retombe alors sur la tuile
@@ -640,6 +658,22 @@ premier mur déplacé.
       comme une piscine. Les issues restantes : assumer un plan d'eau anguleux ; peindre la rive à la main
       dans l'éditeur (le TileSet expose toutes les cases) ; ou prendre un lot d'eau qui fournisse un jeu
       complet de raccords. ⚠ Décision de Jordan, pas une quatrième tentative à l'aveugle.
+      - **DÉCIDÉ (Jordan, 16 septembre 2026) — on repeint la zone de départ À LA MAIN**, et les
+        générateurs redeviennent ce qu'ils auraient dû rester : une première passe, pas une autorité.
+    - ⚠ **CE QU'EST UN LOT « COMPLET », ET ÇA SE COMPTE AVANT D'ACHETER.** Deux lots achetés, deux échecs,
+      la même cause : ils livrent un **cadre de 4 × 4 (16 tuiles)**, parfois plus quatre coins rentrants.
+      Ça ne borde qu'une tache **convexe**. Un contour organique réclame le **jeu blob de 47 tuiles** —
+      les 256 voisinages à huit voisins, dédoublonnés. Notre lot d'eau n'a AUCUN coin rentrant
+      (`rentrants: (-1, -1)` dans `faire_surface.gd`) : la rive en escalier était perdue d'avance, et
+      aucun réglage ne pouvait la sauver. Ce qu'il faut chercher, par ordre de fiabilité :
+      1. **format autotile RPG Maker A2/A4** — des blocs de 2 × 3 « mini-tuiles » qui se déplient
+         mathématiquement en 47 cas, donc **complets par construction** ;
+      2. les mots **« 47-tile »**, **« blob »**, **« complete autotile »**, **« Godot terrain ready »** ;
+      3. **des coins RENTRANTS visibles** sur l'aperçu — un carré 4 × 4 nu est le lot qui échoue ;
+      4. **des transitions par PAIRE de matières**, pas seulement matière-contre-rien. Notre lot avait
+         raison là-dessus (deux jeux de terre, un par herbe) ; c'est moi qui n'en avais déclaré qu'un,
+         et la couverture est passée de 12/36 à 36/36 le jour où j'ai déclaré le second.
+      ⚠ **Sur l'aperçu d'une boutique : 4 × 4 seul = incomplet ; bloc 2 × 3 ou 47 tuiles = complet.**
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol
@@ -651,9 +685,73 @@ premier mur déplacé.
 - **La zone de départ est une première passe générée** (`DEV_TOOLS/faire_zone.gd`), faite pour être
   repeinte à la main. L'outil valide sa sortie par le chargeur avant d'écrire — un outil qui ne sait pas
   produire une carte valide n'a pas à la sauvegarder — et refuse d'écraser une zone existante.
-- **OUVERT — les objets du catalogue ne sont pas encore peignables**, seules les entrées le sont.
-  Miroirs, vitres et cristaux viendront avec la première énigme (§8, étape 3), et poseront leur propre
-  question : l'orientation d'un miroir, est-ce huit tuiles, ou une tuile et une propriété ?
+### Poser les objets à la main — DÉCIDÉ (Jordan, 16 septembre 2026) : des MARQUEURS, pas des tuiles
+
+La question était ouverte — « l'orientation d'un miroir, est-ce huit tuiles, ou une tuile et une
+propriété ? ». **Elle est tranchée, et ce n'est pas par goût : c'est `depend_de` qui décide.**
+
+Une `PORTE_ANTIQUE` dépend d'autres objets, et `CORE/monde.gd` attend la liste de leurs IDENTIFIANTS.
+Or ces identifiants sont distribués à la pose, à la file (`_prochain_id`) : ajouter un cristal ailleurs
+sur la carte les décale tous. ⚠ **Aucune tuile ne peut porter ça, et une liste de nombres écrite à la
+main serait fausse au premier objet ajouté, sans que rien ne le signale.** D'où la règle :
+
+- **ce qui n'a AUCUNE propriété se peint au pinceau** sur le calque `Objets` — aujourd'hui l'entrée
+  seule, dont la destination est DÉDUITE et non écrite ;
+- **ce qui porte des propriétés est un MARQUEUR** (`CLIENT/marqueur.gd`) : un nœud sous `Marqueurs`,
+  avec son `type`, sa `cellule` et ses `proprietes` dans l'inspecteur. Miroirs, vitres, cristaux, yeux,
+  portes, rais de ciel.
+- ⚠ **LE NOM DU NŒUD EST L'IDENTITÉ**, et `depend_de` cite des NOMS. Godot interdit déjà à deux frères
+  de porter le même nom : l'unicité est gratuite et lisible dans l'arbre. `CLIENT/niveau.gd` résout les
+  noms en identifiants **une fois TOUT posé** — étape 5, et c'est le seul endroit qui écrit `depend_de`.
+- ⚠ **LA CASE EST LA VÉRITÉ, LA POSITION EN EST DÉDUITE.** On règle `cellule` ; le nœud se place seul.
+  Lire la case depuis les pixels donnerait deux descriptions d'un même lieu, et un objet à cheval sur
+  deux cases au premier glissement de souris.
+- **Une seule autorité sur les propriétés** : `Monde.poser()` refuse une propriété mal orthographiée,
+  et `CLIENT/niveau.gd` ne fait que nommer le marqueur fautif. `_get_configuration_warnings()` le dit
+  en plus DANS l'éditeur, avant même de lancer.
+- **MESURÉ (test)** — `DEV_TOOLS/test_niveau.gd`, 60 vérifications.
+
+⚠ **DEUX MUTATIONS N'ONT PAS ROUGI, ET C'EST LA LEÇON LA PLUS CHÈRE DE LA SESSION.**
+
+```
+  mutation                                      rougit   ce qu'elle a appris
+  tri des marqueurs par case retiré               oui
+  résolution des dépendances sautée               oui
+  unicité des noms non vérifiée                   oui
+  depend_de non vidé avant la pose                NON    les tests ne lui donnaient que du BIEN FORMÉ
+  dépendances résolues avant les grottes          NON    aucun test ne traversait les deux vues
+```
+
+**Les deux silences disaient la même chose : mes tests n'allaient pas assez loin. Aucun ne disait que le
+code était inutile.**
+
+- **La seconde** : aucun test ne faisait dépendre un objet d'une AUTRE vue, alors que c'est la phrase
+  même du jeu (§2) — on descend pour réparer ce qu'on voit d'en haut. Un œil au fond d'une grotte qui
+  ouvre une porte en surface est la première énigme plausible, et rien ne la gardait.
+  `test_dependance_entre_deux_vues()` existe pour ça.
+- **La première, et elle m'a eu** : j'en ai conclu « code mort » et je l'ai RETIRÉ. Un test de fumée l'a
+  démenti dans l'heure — sur une carte saine l'étape 5 écrase de toute façon, donc rien ne rougit ; sur
+  une valeur MAL FORMÉE (une chaîne au lieu d'une liste, ce que la peinture à la main produit), il n'y a
+  rien à écraser, `Monde.valider()` lit une chaîne là où il attend un tableau, et **le chargeur plante
+  au lieu de signaler**. `test_depend_de_mal_forme()` garde le vidage désormais.
+
+⚠ **LA RÈGLE QUI EN SORT, ET ELLE CORRIGE UNE LECTURE TROP RAPIDE DU §6 DE RIVER STONES.** « Un test
+qu'on n'a pas vu rougir ne garde rien » reste vrai. Mais une mutation muette a DEUX lectures — le code
+est inutile, ou **le test est trop étroit** — et on ne choisit pas la première parce qu'elle est plus
+commode. ⚠ Le départage se fait en donnant au code ce que les tests ne lui donnent jamais : ici, une
+carte FAUTIVE, qui est exactement ce qu'on peint à la main.
+
+### Peindre à la main — l'outillage
+
+- **`DEV_TOOLS/verifier_zone.gd`** — charge une zone, appelle `construire()`, imprime les erreurs en
+  français avec leurs coordonnées. Code de sortie 0 ou 1, sans fenêtre, en deux secondes.
+  ⚠ **Il n'imprime pas que « oui » ou « non »** : il montre ce qu'il a VU — les grilles, les chemins, et
+  pour chaque entrée la grotte, la colonne et la bouche qu'il en a DÉDUITES. Une entrée peut être
+  parfaitement valide et mener ailleurs qu'on ne croit ; c'est la seule faute qu'aucune erreur ne dira.
+- **`CLIENT/grotte.gd` est `@tool`** et dessine son chemin sur la grille de surface pendant qu'on peint.
+  Sans lui on posait les entrées à l'aveugle. ⚠ Il appelle `Niveau.chemin()`, la MÊME fonction que le
+  chargeur : un gizmo qui recalculerait le trajet à sa façon finirait par mentir. Tous les nœuds d'une
+  zone étant à l'origine, une case dessinée en `case × 32` tombe pile sur la grille.
 
 ### Les entrées — DÉCIDÉ : clavier ET manette, toujours les deux
 

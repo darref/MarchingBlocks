@@ -38,6 +38,16 @@ func _initialize() -> void:
 	test_ordre_de_peinture_indifferent()
 	test_projection_le_long_du_chemin()
 	test_les_murs_ont_leur_collision()
+	test_marqueur_pose_ses_proprietes()
+	test_dependances_par_noms()
+	test_dependance_vers_un_nom_inconnu()
+	test_deux_marqueurs_de_meme_nom()
+	test_marqueur_type_inconnu()
+	test_marqueur_propriete_inconnue()
+	test_marqueur_sur_un_mur()
+	test_ordre_des_marqueurs_indifferent()
+	test_dependance_entre_deux_vues()
+	test_depend_de_mal_forme()
 
 	print("")
 	if echecs == 0:
@@ -270,6 +280,167 @@ func test_les_murs_ont_leur_collision() -> void:
 		_verifier(polygones == (1 if mur else 0), "« %s » : mur=%s, mais %d polygone(s) de collision" % [
 			donnees.get_custom_data("nom"), mur, polygones])
 	_verifier(murs >= 5, "le lot doit contenir des murs — %d trouvé(s)" % murs)
+
+
+# --- les marqueurs : les objets du catalogue posés à la main ------------------------------------------
+#
+# ⚠ Ces tests ne construisent AUCUN nœud : ils passent à `construire()` les dictionnaires que
+# `CLIENT/marqueur.gd` produit. C'est la même frontière que pour les calques — le chargeur reste testable
+# sans scène, et un marqueur n'est qu'un nom, un type, une case et des propriétés.
+
+func _marqueur(nom: String, type: String, ou: Vector2i, proprietes: Dictionary = {}) -> Dictionary:
+	return {"nom": nom, "type": type, "case": ou, "proprietes": proprietes}
+
+
+func test_marqueur_pose_ses_proprietes() -> void:
+	_titre("un marqueur pose son objet AVEC ses propriétés")
+	var marqueurs := [_marqueur("MiroirA", "MIROIR", Vector2i(3, 2), {"orientation": 5})]
+	var resultat := Niveau.construire(_surface(8, 6), null, [], null, marqueurs)
+	_verifier(resultat["erreurs"].is_empty(), "rien à signaler : %s" % str(resultat["erreurs"]))
+	var monde = resultat["monde"]
+	var id: int = monde.objet_en(0, Vector2i(3, 2))
+	_verifier(id != -1, "le miroir doit être posé sur sa case")
+	if id == -1:
+		return
+	_verifier(monde.objets[id]["type"] == "MIROIR", "type MIROIR attendu : %s" % str(monde.objets[id]))
+	_verifier(monde.objets[id]["orientation"] == 5,
+		"l'orientation réglée dans l'éditeur doit arriver dans le monde : %s" % str(monde.objets[id]))
+
+
+## ⚠ LE TEST QUI JUSTIFIE TOUTE LA FORME « MARQUEUR ». Les identifiants de `CORE/monde.gd` sont distribués
+## à la pose : le peintre ne peut pas les écrire. Il cite des NOMS, et c'est ici qu'on vérifie qu'ils
+## deviennent les bons identifiants — y compris vers un marqueur posé APRÈS celui qui le cite.
+func test_dependances_par_noms() -> void:
+	_titre("une porte antique cite ses yeux par leurs NOMS, jamais par des identifiants")
+	var marqueurs := [
+		_marqueur("Porte", "PORTE_ANTIQUE", Vector2i(4, 2), {"depend_de": ["OeilNord", "OeilSud"], "mode": "tous"}),
+		_marqueur("OeilNord", "OEIL_SACRE", Vector2i(1, 1), {"couleur": Couleur.JAUNE}),
+		_marqueur("OeilSud", "OEIL_SACRE", Vector2i(1, 4), {"couleur": Couleur.JAUNE}),
+	]
+	var resultat := Niveau.construire(_surface(8, 6), null, [], null, marqueurs)
+	_verifier(resultat["erreurs"].is_empty(), "rien à signaler : %s" % str(resultat["erreurs"]))
+	var monde = resultat["monde"]
+	var porte: int = monde.objet_en(0, Vector2i(4, 2))
+	var nord: int = monde.objet_en(0, Vector2i(1, 1))
+	var sud: int = monde.objet_en(0, Vector2i(1, 4))
+	_verifier(porte != -1 and nord != -1 and sud != -1, "les trois marqueurs doivent être posés")
+	if porte == -1 or nord == -1 or sud == -1:
+		return
+	var liste: Array = monde.objets[porte]["depend_de"]
+	_verifier(liste.size() == 2 and nord in liste and sud in liste,
+		"depend_de doit porter les identifiants des deux yeux : %s (nord=%d, sud=%d)" % [str(liste), nord, sud])
+
+
+func test_dependance_vers_un_nom_inconnu() -> void:
+	_titre("une dépendance vers un nom qui n'existe pas est signalée")
+	var marqueurs := [
+		_marqueur("Porte", "PORTE_ANTIQUE", Vector2i(4, 2), {"depend_de": ["OeilFantome"], "mode": "tous"}),
+	]
+	var erreurs: Array = Niveau.construire(_surface(8, 6), null, [], null, marqueurs)["erreurs"]
+	_verifier(_contient(erreurs, "OeilFantome"), "erreur attendue, obtenu %s" % str(erreurs))
+
+
+func test_deux_marqueurs_de_meme_nom() -> void:
+	_titre("deux marqueurs de même nom : une dépendance ne saurait lequel désigner")
+	var marqueurs := [
+		_marqueur("Oeil", "OEIL_SACRE", Vector2i(1, 1), {"couleur": Couleur.JAUNE}),
+		_marqueur("Oeil", "OEIL_SACRE", Vector2i(1, 4), {"couleur": Couleur.JAUNE}),
+	]
+	var erreurs: Array = Niveau.construire(_surface(8, 6), null, [], null, marqueurs)["erreurs"]
+	_verifier(_contient(erreurs, "ce nom sert déjà"), "erreur attendue, obtenu %s" % str(erreurs))
+
+
+func test_marqueur_type_inconnu() -> void:
+	_titre("un marqueur d'un type que le catalogue ne connaît pas est signalé")
+	var marqueurs := [_marqueur("Chose", "MIROITE", Vector2i(3, 2), {})]
+	var erreurs: Array = Niveau.construire(_surface(8, 6), null, [], null, marqueurs)["erreurs"]
+	_verifier(_contient(erreurs, "type inconnu"), "erreur attendue, obtenu %s" % str(erreurs))
+
+
+## ⚠ C'est `CORE/monde.gd` qui refuse — une seule autorité sur ce qu'est une propriété. Ici on vérifie
+## seulement que le refus REMONTE avec le nom du marqueur, au lieu d'être avalé.
+func test_marqueur_propriete_inconnue() -> void:
+	_titre("une propriété mal orthographiée est refusée, jamais posée en silence")
+	var marqueurs := [_marqueur("MiroirA", "MIROIR", Vector2i(3, 2), {"orientaton": 5})]
+	var resultat := Niveau.construire(_surface(8, 6), null, [], null, marqueurs)
+	_verifier(_contient(resultat["erreurs"], "MiroirA"), "erreur nommant le marqueur attendue, obtenu %s" % str(resultat["erreurs"]))
+	_verifier(resultat["monde"].objet_en(0, Vector2i(3, 2)) == -1, "rien ne doit avoir été posé")
+
+
+func test_marqueur_sur_un_mur() -> void:
+	_titre("un marqueur posé sur une case murée est signalé")
+	var sol := _surface(8, 6)
+	sol.set_cell(Vector2i(3, 2), 0, Vector2i(MUR, 0))
+	var marqueurs := [_marqueur("MiroirA", "MIROIR", Vector2i(3, 2), {"orientation": 0})]
+	var erreurs: Array = Niveau.construire(sol, null, [], null, marqueurs)["erreurs"]
+	_verifier(_contient(erreurs, "MiroirA"), "erreur attendue, obtenu %s" % str(erreurs))
+
+
+## ⚠ LA MÊME RÈGLE QUE POUR LES TUILES (§6 de River Stones) : une propriété d'indépendance à l'ordre se
+## garde par un scénario qui CONSTRUIT les deux ordres. Les identifiants sont distribués à la pose ; sans
+## le tri par case de `_poser_marqueurs`, glisser un nœud dans l'arbre changerait le monde en silence.
+func test_ordre_des_marqueurs_indifferent() -> void:
+	_titre("l'ordre des marqueurs dans l'arbre ne change pas le monde")
+	var porte := _marqueur("Porte", "PORTE_ANTIQUE", Vector2i(4, 2), {"depend_de": ["OeilNord"], "mode": "tous"})
+	var oeil := _marqueur("OeilNord", "OEIL_SACRE", Vector2i(1, 1), {"couleur": Couleur.JAUNE})
+	var miroir := _marqueur("MiroirA", "MIROIR", Vector2i(6, 4), {"orientation": 3})
+
+	var a := Niveau.construire(_surface(8, 6), null, [], null, [porte, oeil, miroir])
+	var b := Niveau.construire(_surface(8, 6), null, [], null, [miroir, oeil, porte])
+	_verifier(a["erreurs"].is_empty() and b["erreurs"].is_empty(),
+		"les deux cartes doivent être saines : %s / %s" % [str(a["erreurs"]), str(b["erreurs"])])
+	_verifier(a["monde"].empreinte() == b["monde"].empreinte(),
+		"les deux mondes doivent être identiques quel que soit l'ordre de l'arbre")
+
+
+## ⚠ CE TEST EST NÉ D'UNE MUTATION QUI N'A PAS ROUGI, et c'est pour ça qu'il est écrit ici plutôt que
+## deviné. Résoudre les dépendances trop tôt — après la surface, avant les grottes — passait inaperçu
+## tant qu'aucune dépendance ne traversait les deux vues. Or c'est exactement ce que le jeu raconte
+## (charte §2) : on descend pour réparer ce qu'on voit d'en haut. Un œil au fond d'une grotte qui ouvre
+## une porte en surface est la première énigme plausible, et rien ne la gardait.
+func test_dependance_entre_deux_vues() -> void:
+	_titre("une porte de SURFACE dépend d'un œil posé dans une GROTTE")
+	var grottes := [{
+		"depart": Vector2i(3, 2), "segments": [Vector2i(6, 0)],
+		"coupe": _grotte(7, 6, 2), "objets": null,
+		"marqueurs": [_marqueur("OeilProfond", "OEIL_SACRE", Vector2i(5, 3), {"couleur": Couleur.JAUNE})],
+	}]
+	var marqueurs := [
+		_marqueur("PorteHaute", "PORTE_ANTIQUE", Vector2i(9, 6), {"depend_de": ["OeilProfond"], "mode": "tous"}),
+	]
+	var resultat := Niveau.construire(_surface(12, 8), null, grottes, null, marqueurs)
+	_verifier(resultat["erreurs"].is_empty(), "rien à signaler : %s" % str(resultat["erreurs"]))
+	var monde = resultat["monde"]
+	var porte: int = monde.objet_en(0, Vector2i(9, 6))
+	var oeil: int = monde.objet_en(1, Vector2i(5, 3))
+	_verifier(porte != -1, "la porte doit être posée en surface")
+	_verifier(oeil != -1, "l'œil doit être posé dans la grotte")
+	if porte == -1 or oeil == -1:
+		return
+	_verifier(monde.objets[porte]["depend_de"] == [oeil],
+		"la porte doit citer l'œil de la grotte : %s (œil = %d)" % [str(monde.objets[porte]["depend_de"]), oeil])
+
+
+## ⚠ CE TEST GARDE UN GARDE-FOU QUE J'AVAIS RETIRÉ EN LE CROYANT MORT. Vider `depend_de` avant la pose
+## ne change rien sur une carte saine — l'étape 5 écrase de toute façon, donc la mutation ne rougissait
+## pas. Mais sur une valeur mal formée il n'y a rien à écraser, et `Monde.valider()` plantait en lisant
+## une chaîne là où il attend un tableau. Un garde-fou qui semble mort peut n'être qu'un garde-fou dont
+## les tests ne voient jamais le cas : ici, une carte FAUTIVE, qui est précisément ce qu'on peint à la main.
+func test_depend_de_mal_forme() -> void:
+	_titre("un « depend_de » qui n'est pas une liste est signalé, et ne fait pas planter le chargeur")
+	var marqueurs := [
+		_marqueur("Porte", "PORTE_ANTIQUE", Vector2i(4, 2), {"depend_de": "OeilNord", "mode": "tous"}),
+	]
+	var resultat := Niveau.construire(_surface(8, 6), null, [], null, marqueurs)
+	_verifier(_contient(resultat["erreurs"], "doit être une liste"),
+		"erreur attendue, obtenu %s" % str(resultat["erreurs"]))
+	var monde = resultat["monde"]
+	var porte: int = monde.objet_en(0, Vector2i(4, 2))
+	_verifier(porte != -1, "la porte doit tout de même être posée, pour que le reste de la carte se lise")
+	if porte == -1:
+		return
+	_verifier(monde.objets[porte]["depend_de"] is Array,
+		"depend_de doit rester un TABLEAU quoi qu'on ait peint : %s" % str(monde.objets[porte]["depend_de"]))
 
 
 func _contient(erreurs: Array, morceau: String) -> bool:
