@@ -103,15 +103,26 @@ const TERRAINS := [
 	{"nom": "eau", "couleur": "#1d9488", "dans": []},
 ]
 
-## Les tuiles PLEINES d'un terrain : [terrain, planche, case]. Tous leurs voisinages sont eux-mêmes.
+## Les tuiles PLEINES d'un terrain : [terrain, planche, [cases…]]. Tous leurs voisinages sont eux-mêmes.
+##
+## ⚠ PLUSIEURS CASES PAR MATIÈRE, et c'est encore une chose que le natif ne sait pas faire : Better
+## Terrain tire au sort parmi les tuiles équivalentes, pondéré par `TileData.probability`. Un sol fait
+## d'une seule tuile répétée se voit à l'œil dès qu'on recule — le damier saute aux yeux. La variation le
+## casse sans qu'on dessine quoi que ce soit. La PREMIÈRE case reste dominante, les autres l'assaisonnent.
+##
+## ⚠ Ces cases ont été trouvées par MESURE (opaques, sans couture, sans contraste), pas choisies à l'œil.
 const PLEINES := [
-	["herbe", "sol", Vector2i(1, 21)],
-	["herbe_claire", "sol", Vector2i(10, 6)],
-	["terre", "sol", Vector2i(1, 15)],
-	["sable", "sol", Vector2i(1, 27)],
-	["gravier", "sol", Vector2i(24, 2)],
-	["eau", "eau", Vector2i(9, 3)],
+	["herbe", "sol", [Vector2i(1, 21), Vector2i(2, 21), Vector2i(1, 22), Vector2i(2, 22)]],
+	["herbe_claire", "sol", [Vector2i(10, 6), Vector2i(1, 9), Vector2i(2, 9), Vector2i(1, 10), Vector2i(2, 10)]],
+	["terre", "sol", [Vector2i(1, 15), Vector2i(2, 15), Vector2i(1, 16), Vector2i(2, 16)]],
+	["sable", "sol", [Vector2i(1, 27), Vector2i(2, 27), Vector2i(1, 28), Vector2i(2, 28)]],
+	# ⚠ Le gravier n'a qu'une case : sa voisine (25, 2) est la « falaise », un MUR. Une variante doit
+	# partager le `mur` de sa référence, sinon on sèmerait des murs invisibles dans une allée.
+	["gravier", "sol", [Vector2i(24, 2)]],
+	["eau", "eau", [Vector2i(9, 3), Vector2i(10, 3), Vector2i(9, 4), Vector2i(10, 4)]],
 ]
+## Le poids d'une variante face à la case de référence, qui vaut 1.
+const POIDS_VARIANTE := 0.4
 
 ## LES ENSEMBLES DE TRANSITION. Toujours la même géométrie : un cadre de 4 × 4 dont l'intérieur est la
 ## matière, puis un bloc de 2 × 2 pour les coins RENTRANTS (rentrants = (-1,-1) quand la planche n'en a
@@ -273,13 +284,33 @@ func _declarer_terrains() -> void:
 		_indices[t["nom"]] = _bt.terrain_count(_jeu) - 1
 
 	var posees := 0
+	var variantes := 0
 	for p in PLEINES:
 		var terrain: int = _indices[p[0]]
 		var tous := {}
 		for cle in VOISINS:
 			tous[cle] = terrain
-		if _poser(p[1], p[2], terrain, tous):
+		var cases: Array = p[2]
+		var mur_de_reference := false
+		for i in cases.size():
+			if not _poser(p[1], cases[i], terrain, tous):
+				continue
 			posees += 1
+			var donnees := (_sources[p[1]]["source"] as TileSetAtlasSource).get_tile_data(cases[i], 0)
+			if i == 0:
+				mur_de_reference = donnees.get_custom_data("mur")
+				continue
+			# ⚠ Une variante partage le `mur` de sa référence — sinon on sèmerait de l'eau où l'on marche,
+			# ou des murs invisibles dans une allée — et pèse moins qu'elle, pour rester un assaisonnement.
+			donnees.set_custom_data("mur", mur_de_reference)
+			if mur_de_reference and donnees.get_collision_polygons_count(0) == 0:
+				var demi := COTE / 2.0
+				donnees.add_collision_polygon(0)
+				donnees.set_collision_polygon_points(0, 0, PackedVector2Array([
+					Vector2(-demi, -demi), Vector2(demi, -demi), Vector2(demi, demi), Vector2(-demi, demi)]))
+			donnees.probability = POIDS_VARIANTE
+			variantes += 1
+	print("  variantes pondérées : %d (poids %.1f contre 1 pour la référence)" % [variantes, POIDS_VARIANTE])
 
 	for e in ENSEMBLES:
 		var dedans: int = _indices[e["terrain"]]

@@ -617,6 +617,12 @@ premier mur déplacé.
         survivent à l'aller-retour sur disque (vérifié en ligne de commande).
       - **Peindre se fait en DEUX temps** : `set_cells()` pose, `update_terrain_cells()` résout. Poser ne
         raccorde rien, et raccorder sans avoir posé ne voit rien.
+      - **Les VARIANTES PONDÉRÉES** (`TileData.probability`) : plusieurs cases pleines par matière, tirées
+        au sort, la référence restant dominante. Un sol fait d'une seule tuile répétée montre son damier
+        dès qu'on recule. ⚠ **Mais une variante ne CRÉE pas de la variété, elle la RÉVÈLE si le lot en a** :
+        très visible sur l'herbe (cinq cases distinctes), invisible sur le sable (les cases du lot y sont
+        le même dessin répété). ⚠ Et une variante doit partager le `mur` de sa référence, sinon on sème de
+        l'eau où l'on marche, ou des murs invisibles dans une allée.
       - ⚠ **Les SYMÉTRIES : essayées, retirées.** Retourner une bordure multiplierait la couverture, mais
         les motifs de ce lot ont un haut et un bas — la berge est éclairée par le dessus. Pivotés, ils
         donnent des blocs de roche qui flottent dans l'herbe. À ne garder que pour un motif sans
