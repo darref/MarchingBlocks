@@ -137,6 +137,12 @@ func _options() -> void:
 			colonne = 8.5
 		elif option == "--rai":
 			_rai()
+		elif option.begins_with("--ou="):
+			# Se poser n'importe où sur la carte : sans ça, on ne peut vérifier que le coin où le joueur
+			# commence, et une zone de 64 × 40 tient en seize écrans.
+			var coords := option.get_slice("=", 1).split(",")
+			if coords.size() == 2:
+				pos_surface = Vector2(float(coords[0]), float(coords[1]))
 		elif option.begins_with("--pousser="):
 			_pousser = option.get_slice("=", 1)
 		elif option.begins_with("--capture="):

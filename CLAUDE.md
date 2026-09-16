@@ -569,10 +569,21 @@ premier mur déplacé.
       pour les coins RENTRANTS — donc chaque coin se déduit de la position de la case dans le cadre. Une
       table de seize lignes saisie à la main est exactement l'endroit où l'on se trompe d'une case sans
       jamais s'en apercevoir. Ajouter une matière, c'est ajouter une ligne à `TRANSITIONS`.
-    - ⚠ **OUVERT — le gravier, le sable et les rives du lac ne sont pas encore des terrains.** Leurs
-      ensembles sont des RECOUVREMENTS : le fond de leur cadre est transparent, donc ils se peignent sur
-      un calque AU-DESSUS de l'herbe, jamais à sa place. Il leur faut un second jeu de terrains sur le
-      calque des décors — même géométrie, même calcul, mais une couche de plus à tenir.
+    - **Un SECOND jeu de terrains, pour les RECOUVREMENTS** (gravier, sable). Ces ensembles-là ont le
+      fond transparent : ils ne remplacent pas l'herbe, ils se posent par-dessus, et c'est le calque du
+      dessous qui se voit sur leurs bords. Leur fond n'est donc pas un terrain mais « rien » (-1), et ils
+      vivent sur un calque `Recouvrement`, entre le sol et les décors — que le chargeur ne lit pas,
+      puisqu'on marche dessus. Les plages et les plaques d'entrée en sortent, sans un seul angle droit.
+    - ⚠ **LE PIÈGE, ET IL COÛTE DEUX PASSES SI ON NE LE CONNAÎT PAS : le terrain PROPRE d'une tuile est
+      la MATIÈRE à laquelle elle appartient, jamais la valeur d'un de ses coins.** Quand on peint un
+      terrain, Godot ne retient comme candidates que les tuiles dont le terrain propre est celui qu'on
+      peint. Une tuile de bord déclarée « rien » disparaît donc des candidates : la moitié des bords
+      manque, le raccord retombe sur des tuiles approchantes, et le rivage devient un peigne de dents
+      carrées parfaitement régulières. ⚠ **Aucune erreur n'est signalée** — c'est la planche
+      `ART/planche_terrains.png`, qui dessine les quatre coins déclarés de chaque tuile, qui l'a montré.
+    - ⚠ **OUVERT — la rive du LAC elle-même.** L'eau reste un aplat opaque posé sur le sol : elle
+      rencontre le sable par une arête droite. Ses ensembles à elle sont des cadres opaques (de la terre
+      percée d'un trou d'eau), donc une troisième façon de faire, à traiter à part.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol

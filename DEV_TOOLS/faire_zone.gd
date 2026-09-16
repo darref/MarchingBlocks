@@ -142,9 +142,12 @@ func _batir() -> Node2D:
 	racine.add_child(surface)
 	var decor := _calque("Decor", surface, _surface)  # d'abord : il se dessine sous le reste
 	var sol := _calque("Sol", surface, _surface)
+	# ⚠ Le RECOUVREMENT se pose entre le sol et les décors : ses ensembles ont l'extérieur transparent,
+	# donc leurs bords laissent voir l'herbe du dessous. Le chargeur ne le lit pas — on marche dessus.
+	var recouvrement := _calque("Recouvrement", surface, _surface)
 	var props := _calque("Props", surface, _surface)
 	var objets := _calque("Objets", surface, _surface)
-	_peindre_surface(sol, props, objets, decor)
+	_peindre_surface(sol, recouvrement, props, objets, decor)
 
 	var grottes := Node2D.new()
 	grottes.name = "Grottes"
@@ -213,7 +216,7 @@ func _peindre_pourtour(decor: TileMapLayer, jeu: Rect2i, marge: Vector2i, nom: S
 				_poser(decor, Vector2i(x, y), nom, noms)
 
 
-func _peindre_surface(sol: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
+func _peindre_surface(sol: TileMapLayer, recouvrement: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
 	_peindre_pourtour(decor, Rect2i(0, 0, LARGEUR, HAUTEUR), MARGE_SURFACE, "falaise", _noms_surface)
 	for y in HAUTEUR:
 		for x in LARGEUR:
@@ -236,15 +239,37 @@ func _peindre_surface(sol: TileMapLayer, props: TileMapLayer, objets: TileMapLay
 				_poser(props, Vector2i(x, y), "rocher", _noms_surface)
 				_pris[Vector2i(x, y)] = true
 
-	# Les entrées : le trou de 2 × 2 sur le sol, le marqueur sur le calque des objets.
+	# La plage : du sable RACCORDÉ autour du lac, sur le recouvrement — l'herbe reste dessous et se voit
+	# sur ses bords. Le terrain 1 du jeu 1, c'est « sable » (faire_surface.gd).
+	var sable: Array[Vector2i] = []
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			if _est_plage(x, y):
+				sable.append(Vector2i(x, y))
+				_pris[Vector2i(x, y)] = true
+	recouvrement.set_cells_terrain_connect(sable, 1, 1, false)
+
+	# Les entrées : une plaque de gravier ARRONDIE et raccordée, le trou par-dessus, puis le marqueur.
+	# ⚠ Le trou passe sur les props, au-dessus du gravier : posé dessous, il disparaîtrait.
+	var gravier: Array[Vector2i] = []
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
-		for dy in range(-1, 2):
-			for dx in range(-2, 3):
-				_poser(sol, case + Vector2i(dx, dy), "dalle", _noms_surface)
-				_pris[case + Vector2i(dx, dy)] = true
-		_poser_bloc(sol, case + Vector2i(0, -1), "trou", Vector2i(2, 2), _noms_surface)
+		for dy in range(-2, 3):
+			for dx in range(-3, 4):
+				if absi(dx) + absi(dy) * 2 <= 5:
+					gravier.append(case + Vector2i(dx, dy))
+					_pris[case + Vector2i(dx, dy)] = true
+	recouvrement.set_cells_terrain_connect(gravier, 1, 0, false)
+	for grotte in GROTTES:
+		var case: Vector2i = grotte["entree"]
+		# ⚠ Du noir SOUS le trou, sur le recouvrement lui-même : les tuiles de trou ont le centre
+		# transparent, et sans ce fond on verrait le gravier à travers le puits.
+		for dy in 2:
+			for dx in 2:
+				_poser(recouvrement, case + Vector2i(dx, dy - 1), "vide", _noms_surface)
+		_poser_bloc(props, case + Vector2i(0, -1), "trou", Vector2i(2, 2), _noms_surface)
 		_poser(objets, case, "entree", _noms_surface)
+	print("  recouvrements raccordés : %d cases de sable, %d de gravier" % [sable.size(), gravier.size()])
 
 	for bosquet in BOSQUETS:
 		_planter(props, bosquet)
@@ -295,10 +320,8 @@ func _terrain(x: int, y: int) -> String:
 		return "eau_profonde"
 	if LAC.has_point(pos):
 		return "eau"
-	if LAC.grow(1).has_point(pos):
-		return "rive"
-	if LAC.grow(2).has_point(pos):
-		return "sable"
+	# ⚠ La plage n'est PLUS du terrain : c'est un recouvrement de sable posé par-dessus l'herbe, qui
+	# reste donc de l'herbe ici. Sans ça, ses bords seraient des marches au lieu d'un rivage.
 	for route in ROUTES:
 		if route.has_point(pos):
 			return "terre"
@@ -315,6 +338,15 @@ func _terrain(x: int, y: int) -> String:
 ## ⚠ LE GRAIN EST UNE FONCTION DE LA CASE, PAS UN TIRAGE. `_libre()` interroge `_terrain()` longtemps
 ## après que la carte a été peinte : un tirage au hasard lui répondrait autre chose qu'à la peinture, et
 ## des arbres pousseraient dans l'eau. Une case doit donner la même réponse chaque fois qu'on la pose.
+## La bande de sable autour du lac : dans son pourtour élargi, mais pas dans l'eau.
+## ⚠ QUATRE cases d'épaisseur, pas deux. Une bande de deux n'a aucune case INTÉRIEURE : chacune est un
+## cas limite, et le raccord n'a plus que des tuiles de bord à poser — d'où le peigne de dents carrées
+## qu'on a vu sur la première plage.
+func _est_plage(x: int, y: int) -> bool:
+	var pos := Vector2i(x, y)
+	return LAC.grow(4).has_point(pos) and not LAC.has_point(pos)
+
+
 func _grain(x: int, y: int) -> float:
 	var h := (x * 73856093) ^ (y * 19349663) ^ GRAINE
 	return float(absi(h) % 1000) / 1000.0

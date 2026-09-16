@@ -40,7 +40,9 @@ const TUILES := [
 	["eau", "eau", Vector2i(9, 3), true, ""],
 	["eau_profonde", "eau", Vector2i(13, 3), true, ""],
 	["rive", "eau", Vector2i(17, 2), false, ""],
-	["entree", "sol", Vector2i(25, 5), false, "ENTREE"],
+	# ⚠ « entree » ne vient PAS du lot : la case qu'il occupait appartient au bloc de coins rentrants du
+	# gravier, et une tuile n'appartient qu'à un seul terrain. C'est un marqueur que nous dessinons, posé
+	# sur le calque des objets ; le TROU, lui, reste le décor visible (bloc de 2 × 2, plus bas).
 	["buisson", "deco", Vector2i(5, 1), true, ""],
 	["rocher", "deco", Vector2i(1, 6), true, ""],
 	["cailloux", "deco", Vector2i(3, 4), false, ""],
@@ -84,10 +86,29 @@ const CANDIDATS := [
 ## exactement le genre d'endroit où l'on se trompe d'une case sans jamais s'en apercevoir.
 const TERRAINS := ["herbe", "terre"]
 
-## [fond, dessus, coin haut-gauche du cadre 4×4, coin haut-gauche des coins rentrants 2×2]
+## [fond, dessus, planche, coin haut-gauche du cadre 4×4, coin haut-gauche des coins rentrants 2×2]
 const TRANSITIONS := [
 	[0, 1, "sol", Vector2i(1, 1), Vector2i(3, 5)],
 ]
+
+## ⚠ LE SECOND JEU : LES RECOUVREMENTS. Ces ensembles-là ont l'extérieur TRANSPARENT — ils ne remplacent
+## pas l'herbe, ils se posent par-dessus, et c'est le calque du dessous qui se voit sur leurs bords. Leur
+## fond n'est donc pas un terrain mais « rien » (-1), et ils vivent sur leur propre calque.
+const TERRAINS_RECOUVREMENT := ["gravier", "sable"]
+const RIEN := -1
+const RECOUVREMENTS := [
+	[0, "sol", Vector2i(23, 1), Vector2i(25, 5)],
+	[1, "sol", Vector2i(27, 1), Vector2i(29, 5)],
+]
+
+## Ce que nous dessinons nous-mêmes, faute de l'avoir dans un lot.
+const DESSINEES := "res://ART/surface_dessinees.png"
+## ⚠ « vide » est le fond noir d'un trou d'entrée. Les tuiles de trou du lot ont le centre TRANSPARENT :
+## posées sur du gravier, elles laissent voir le gravier, et le puits disparaît. Il faut du sombre
+## dessous, et aucun lot ne fournit d'aplat noir — celui-ci est donc à nous, comme l'air des grottes.
+const DESSINS := ["entree", "vide"]
+const OR := Color("#ebbb69")
+const NOIR := Color("#0d0a12")
 
 ## Les tuiles UNIES, qui n'ont qu'un seul terrain aux quatre coins : [nom du rôle, terrain].
 const UNIES := [["herbe", 0], ["herbe_sombre", 0], ["terre", 1]]
@@ -98,6 +119,7 @@ var _ordre: Array = []  # les noms déclarés, dans l'ordre — c'est la légend
 
 
 func _initialize() -> void:
+	_dessiner_les_notres()
 	_jeu = TileSet.new()
 	_jeu.tile_size = Vector2i(COTE, COTE)
 	for nom in ["nom", "mur", "objet"]:
@@ -108,10 +130,12 @@ func _initialize() -> void:
 	_jeu.add_physics_layer()
 	_jeu.set_physics_layer_collision_layer(0, 1)
 
-	for cle in PLANCHES:
-		var texture: Texture2D = load(PLANCHES[cle]) if ResourceLoader.exists(PLANCHES[cle]) else null
+	var toutes := PLANCHES.duplicate()
+	toutes["dessinees"] = DESSINEES
+	for cle in toutes:
+		var texture: Texture2D = load(toutes[cle]) if ResourceLoader.exists(toutes[cle]) else null
 		if texture == null:
-			print("ÉCHEC — planche introuvable ou non importée : %s" % PLANCHES[cle])
+			print("ÉCHEC — planche introuvable ou non importée : %s" % toutes[cle])
 			print("       lance « godot --headless --path D:/UnderMend --import » puis recommence.")
 			quit(1)
 			return
@@ -122,6 +146,9 @@ func _initialize() -> void:
 		_jeu.add_source(source, id)  # ⚠ avant de créer la moindre tuile : sinon les données sont refusées
 		_sources[cle] = {"id": id, "source": source, "texture": texture}
 
+	for i in DESSINS.size():
+		# ⚠ Seul « entree » porte l'objet : « vide » n'est qu'un aplat noir, pas une porte.
+		_declarer("dessinees", Vector2i(i, 0), DESSINS[i], false, "ENTREE" if DESSINS[i] == "entree" else "")
 	for t in TUILES:
 		_declarer(t[1], t[2], t[0], t[3], t[4])
 	for b in BLOCS:
@@ -146,6 +173,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 	print("tileset de surface écrit : %s — %d tuiles nommées" % [SORTIE, _ordre.size()])
+	_ecrire_planche_terrains()
 	_ecrire_planche()
 	quit(0)
 
@@ -173,7 +201,25 @@ func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: S
 
 ## La planche de contrôle : chaque rôle déclaré, dans l'ordre, sur un damier. Le fond en damier montre
 ## ce qui est transparent — une décoration posée sur la mauvaise case s'y voit immédiatement.
-## Le terrain, ses tuiles unies, et ses transitions calculées. À appeler APRÈS que toutes les tuiles
+## Le marqueur d'entrée : un anneau d'or sur fond transparent. Discret, et surtout à NOUS — il ne prend
+## la place d'aucune case d'un ensemble de transition.
+func _dessiner_les_notres() -> void:
+	var image := Image.create_empty(DESSINS.size() * COTE, COTE, false, Image.FORMAT_RGBA8)
+	image.fill(Color(0, 0, 0, 0))
+	for k in range(4, COTE - 4):
+		for e in [4, 5, COTE - 6, COTE - 5]:
+			image.set_pixelv(Vector2i(k, e), OR)
+			image.set_pixelv(Vector2i(e, k), OR)
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 20260916
+	image.fill_rect(Rect2i(COTE, 0, COTE, COTE), NOIR)
+	for n in 10:  # un grain à peine visible, pour que le noir ne soit pas plat
+		image.set_pixelv(Vector2i(COTE + hasard.randi_range(0, COTE - 1), hasard.randi_range(0, COTE - 1)), NOIR.lightened(0.07))
+	var erreur := image.save_png(DESSINEES)
+	print("tuiles dessinées : %s (%s)" % [DESSINEES, "écrite" if erreur == OK else "ÉCHEC"])
+
+
+## Les terrains, leurs tuiles unies et leurs transitions calculées. À appeler APRÈS que toutes les tuiles
 ## existent : on ne pose pas un coin sur une case qui n'est pas encore déclarée.
 func _declarer_terrains() -> void:
 	_jeu.add_terrain_set(0)
@@ -181,6 +227,11 @@ func _declarer_terrains() -> void:
 	for i in TERRAINS.size():
 		_jeu.add_terrain(0, i)
 		_jeu.set_terrain_name(0, i, TERRAINS[i])
+	_jeu.add_terrain_set(1)
+	_jeu.set_terrain_set_mode(1, TileSet.TERRAIN_MODE_MATCH_CORNERS)
+	for i in TERRAINS_RECOUVREMENT.size():
+		_jeu.add_terrain(1, i)
+		_jeu.set_terrain_name(1, i, TERRAINS_RECOUVREMENT[i])
 
 	var posees := 0
 	for u in UNIES:
@@ -188,19 +239,32 @@ func _declarer_terrains() -> void:
 		if ou.is_empty():
 			print("  ⚠ terrain : le rôle « %s » est introuvable" % u[0])
 			continue
-		_poser_coins(ou["planche"], ou["case"], u[1], u[1], u[1], u[1])
+		_poser_coins(ou["planche"], ou["case"], 0, u[1], u[1], u[1], u[1], u[1])
 		posees += 1
 
+	var travaux: Array = []
 	for t in TRANSITIONS:
-		var fond: int = t[0]
-		var dessus: int = t[1]
-		var planche: String = t[2]
-		var cadre: Vector2i = t[3]
-		var rentrants: Vector2i = t[4]
+		travaux.append([0, t[0], t[1], t[2], t[3], t[4]])
+	for r in RECOUVREMENTS:
+		# ⚠ Le fond d'un recouvrement est RIEN : ses bords laissent voir le calque du dessous.
+		travaux.append([1, RIEN, r[0], r[1], r[2], r[3]])
+
+	for t in travaux:
+		var jeu_terrain: int = t[0]
+		var fond: int = t[1]
+		var dessus: int = t[2]
+		var planche: String = t[3]
+		var cadre: Vector2i = t[4]
+		var rentrants: Vector2i = t[5]
 		# Le CADRE : une case du bord n'a « dessus » que du côté de l'intérieur.
+		# ⚠ Le terrain PROPRE de chaque tuile est « dessus » — la matière à laquelle elle appartient — et
+		# jamais la valeur d'un de ses coins. Quand on peint un terrain, Godot ne retient comme candidates
+		# que les tuiles dont le terrain propre est celui qu'on peint : une tuile de bord déclarée « rien »
+		# disparaît des candidates, la moitié des bords manque, et le raccord retombe sur des tuiles
+		# approchantes en alternance. C'est exactement le peigne de dents carrées qu'on a vu sur la plage.
 		for fy in 4:
 			for fx in 4:
-				_poser_coins(planche, cadre + Vector2i(fx, fy),
+				_poser_coins(planche, cadre + Vector2i(fx, fy), jeu_terrain, dessus,
 					dessus if fx >= 1 and fy >= 1 else fond,
 					dessus if fx <= 2 and fy >= 1 else fond,
 					dessus if fx >= 1 and fy <= 2 else fond,
@@ -209,7 +273,7 @@ func _declarer_terrains() -> void:
 		# Les COINS RENTRANTS : le fond ne mord qu'un seul coin, celui tourné vers le centre du bloc.
 		for cy in 2:
 			for cx in 2:
-				_poser_coins(planche, rentrants + Vector2i(cx, cy),
+				_poser_coins(planche, rentrants + Vector2i(cx, cy), jeu_terrain, dessus,
 					fond if cx == 1 and cy == 1 else dessus,
 					fond if cx == 0 and cy == 1 else dessus,
 					fond if cx == 1 and cy == 0 else dessus,
@@ -219,18 +283,71 @@ func _declarer_terrains() -> void:
 
 
 ## Les quatre coins d'une case, dans l'ordre haut-gauche, haut-droit, bas-gauche, bas-droit.
-func _poser_coins(planche: String, case: Vector2i, tl: int, tr: int, bl: int, br: int) -> void:
+## `centre` est le terrain PROPRE de la tuile : la matière à laquelle elle appartient. C'est lui qui la
+## rend candidate quand on peint cette matière ; les quatre coins disent ensuite comment elle se raccorde.
+func _poser_coins(planche: String, case: Vector2i, jeu_terrain: int, centre: int, tl: int, tr: int, bl: int, br: int) -> void:
 	var source: TileSetAtlasSource = _sources[planche]["source"]
 	if source.get_tile_at_coords(case) == Vector2i(-1, -1):
 		print("  ⚠ terrain : la case %s de %s n'existe pas" % [case, planche])
 		return
 	var donnees := source.get_tile_data(case, 0)
-	donnees.set_terrain_set(0)
-	donnees.set_terrain(br)  # en mode coins, c'est le raccord qui décide ; le terrain reste indicatif
+	donnees.set_terrain_set(jeu_terrain)
+	donnees.set_terrain(centre)
 	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER, tl)
 	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER, tr)
 	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER, bl)
 	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER, br)
+
+
+## ⚠ LA PLANCHE DES TERRAINS — celle qui dit ce que j'ai DÉCLARÉ, pas ce que je crois avoir déclaré.
+## Chaque tuile raccordable y est dessinée avec quatre pastilles, une par coin, de la couleur du terrain
+## que je lui ai donné. Si une pastille ne correspond pas à ce que montre le dessin de la tuile, la règle
+## est fausse — et c'est la seule façon de le voir autrement qu'en peignant une carte entière.
+func _ecrire_planche_terrains() -> void:
+	var couleurs := [Color(0.45, 0.45, 0.5)]  # l'indice -1 (rien) tient la première place
+	for i in TERRAINS.size():
+		couleurs.append(_jeu.get_terrain_color(0, i))
+	var couleurs_r := [Color(0.45, 0.45, 0.5)]
+	for i in TERRAINS_RECOUVREMENT.size():
+		couleurs_r.append(_jeu.get_terrain_color(1, i))
+
+	var cases: Array = []
+	for cle in _sources:
+		var source: TileSetAtlasSource = _sources[cle]["source"]
+		for k in source.get_tiles_count():
+			var case := source.get_tile_id(k)
+			var donnees := source.get_tile_data(case, 0)
+			if donnees.get_terrain_set() >= 0:
+				cases.append({"planche": cle, "case": case, "donnees": donnees})
+	if cases.is_empty():
+		return
+
+	var lignes := ceili(float(cases.size()) / PAR_LIGNE)
+	var image := Image.create_empty(PAR_LIGNE * (COTE + 2), lignes * (COTE + 2), false, Image.FORMAT_RGBA8)
+	for y in image.get_height():
+		for x in image.get_width():
+			image.set_pixel(x, y, Color(0.1, 0.1, 0.12) if (x / 8 + y / 8) % 2 == 0 else Color(0.18, 0.18, 0.22))
+	var coins := [
+		[TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER, Vector2i(2, 2)],
+		[TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER, Vector2i(COTE - 8, 2)],
+		[TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER, Vector2i(2, COTE - 8)],
+		[TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER, Vector2i(COTE - 8, COTE - 8)],
+	]
+	for i in cases.size():
+		var e: Dictionary = cases[i]
+		var donnees: TileData = e["donnees"]
+		var atlas: Image = (_sources[e["planche"]]["texture"] as Texture2D).get_image()
+		var coin := Vector2i(i % PAR_LIGNE, i / PAR_LIGNE) * (COTE + 2) + Vector2i(1, 1)
+		image.blend_rect(atlas, Rect2i((e["case"] as Vector2i) * COTE, Vector2i(COTE, COTE)), coin)
+		var palette: Array = couleurs if donnees.get_terrain_set() == 0 else couleurs_r
+		for c in coins:
+			var terrain: int = donnees.get_terrain_peering_bit(c[0])
+			image.fill_rect(Rect2i(coin + (c[1] as Vector2i), Vector2i(6, 6)), palette[terrain + 1])
+	image.resize(image.get_width() * 2, image.get_height() * 2, Image.INTERPOLATE_NEAREST)
+	image.save_png("res://ART/planche_terrains.png")
+	print("planche des terrains : res://ART/planche_terrains.png — %d tuiles raccordables, %d par ligne" % [cases.size(), PAR_LIGNE])
+	print("    pastilles : gris = rien ; jeu 0 = %s ; jeu 1 = %s" % [
+		" / ".join(PackedStringArray(TERRAINS)), " / ".join(PackedStringArray(TERRAINS_RECOUVREMENT))])
 
 
 func _trouver(nom: String) -> Dictionary:
