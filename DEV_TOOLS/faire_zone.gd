@@ -167,16 +167,23 @@ func _batir() -> Node2D:
 	surface.name = "Surface"
 	racine.add_child(surface)
 	var decor := _calque("Decor", surface, _surface)  # d'abord : il se dessine sous le reste
+	# ⚠ LA RÈGLE DES CALQUES (charte §6) : même calque quand l'art de transition est OPAQUE, calque séparé
+	# quand il est AJOURÉ. Le sol porte donc ce dont les bordures sont dessinées en entier — herbe sombre,
+	# terre, eau, falaise — et l'herbe claire, dont les bordures sont ajourées, vient au-dessus.
 	var sol := _calque("Sol", surface, _surface)
-	# ⚠ La NAPPE d'herbe claire recouvre le sol, qui est en herbe SOMBRE : ce qu'on ne peint pas dans la
-	# nappe devient une clairière sombre, aux bords organiques. C'est le seul emploi correct de ces
-	# ensembles-là, dont la matière est à l'extérieur du cadre et le trou au centre.
 	var nappe := _calque("Nappe", surface, _surface)
 	# ⚠ Le RECOUVREMENT se pose entre le sol et les décors : ses ensembles ont l'extérieur transparent,
 	# donc leurs bords laissent voir l'herbe du dessous. Le chargeur ne le lit pas — on marche dessus.
 	var recouvrement := _calque("Recouvrement", surface, _surface)
 	var props := _calque("Props", surface, _surface)
 	var objets := _calque("Objets", surface, _surface)
+	# ⚠ LE NŒUD DES MARQUEURS EST CRÉÉ VIDE, ET C'EST EXPRÈS. Les objets du catalogue sont des nœuds et
+	# non des tuiles (charte §6) ; `CLIENT/zone.gd` cherche ce nom EXACT et rend une liste vide s'il ne le
+	# trouve pas — sans erreur. Une zone livrée sans ce nœud obligerait donc à le créer à la main, et une
+	# faute de frappe y serait silencieuse.
+	var marqueurs := Node2D.new()
+	marqueurs.name = "Marqueurs"
+	surface.add_child(marqueurs)
 	_peindre_surface(sol, nappe, recouvrement, props, objets, decor)
 
 	var grottes := Node2D.new()
@@ -198,6 +205,10 @@ func _batir() -> Node2D:
 		var coupe := _calque("Coupe", noeud, _coupe)
 		_calque("Props", noeud, _coupe)
 		_calque("Objets", noeud, _coupe)
+		# ⚠ Même raison qu'en surface : une grotte peut porter ses propres miroirs et ses propres yeux.
+		var marqueurs_grotte := Node2D.new()
+		marqueurs_grotte.name = "Marqueurs"
+		noeud.add_child(marqueurs_grotte)
 		_peindre_grotte(coupe, decor_grotte, table.size(), table.find(description["entree"]))
 
 	_adopter(racine, racine)
@@ -261,22 +272,20 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 			if t == "eau" or t == "eau_profonde":
 				lac.append(Vector2i(x, y))
 	_raccorder(sol, lac, "eau")
-	# Le raccord pose de l'eau unie partout : on repose ensuite le fond, là où le lac est profond.
-	for y in HAUTEUR:
-		for x in LARGEUR:
-			if _terrain(x, y) == "eau_profonde":
-				_poser(sol, Vector2i(x, y), "eau_profonde", _noms_surface)
-	print("  lac raccordé : %d cases" % lac.size())
+	# ⚠ ON NE REPEINT PLUS LE FOND DU LAC. Reposer « eau_profonde » par-dessus le raccord remplaçait 58
+	# tuiles par une tuile SANS terrain : autant de trous dans le voisinage, et Better Terrain ne savait
+	# plus raccorder autour. Mesuré, pas supposé. La profondeur reviendra quand la planche aura livré ses
+	# tuiles de transition eau / eau profonde — une matière de plus, pas un repeint par-dessus.
 
-	# La nappe d'herbe claire, partout SAUF dans les taches : celles-ci deviennent des clairières sombres,
-	# et le raccord leur donne des bords irréguliers au lieu de l'escalier d'une tache posée case par case.
+	# ⚠ LA NAPPE D'HERBE CLAIRE, partout SAUF dans les taches : ce qu'on ne peint pas devient une clairière
+	# sombre, et c'est le SOL qu'on y voit. Ses bordures étant ajourées, elle ne peut pas vivre sur le même
+	# calque que ce qu'elle révèle — essayé, et la capture a rendu des escaliers et des trous.
 	var claire: Array[Vector2i] = []
 	for y in HAUTEUR:
 		for x in LARGEUR:
 			if _terrain(x, y) == "herbe_sombre" and not _est_tache(x, y):
 				claire.append(Vector2i(x, y))
-	_raccorder(nappe, claire, "herbe_claire")
-	print("  nappe d'herbe claire : %d cases, %d clairières" % [claire.size(), _compter_taches()])
+	_raccorder(nappe, claire, "herbe")
 
 	# ⚠ LES CHEMINS SONT RACCORDÉS, PAS POSÉS CASE PAR CASE. `set_cells_terrain_connect()` choisit, pour
 	# chaque case, la tuile dont les quatre coins s'accordent au voisinage : une route cesse d'être un
@@ -307,22 +316,31 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 
 	# Les entrées : une plaque de gravier ARRONDIE et raccordée, le trou par-dessus, puis le marqueur.
 	# ⚠ Le trou passe sur les props, au-dessus du gravier : posé dessous, il disparaîtrait.
+	# ⚠ Les quatre cases du trou sont EXCLUES de la plaque : y poser du gravier puis le recouvrir de noir
+	# faisait douze tuiles sans terrain au milieu du raccord. Une case simplement VIDE, elle, ne gêne pas —
+	# Better Terrain sait ce qu'est le vide ; il ne sait pas quoi faire d'une tuile qui n'est rien.
+	var trous := {}
+	for grotte in GROTTES:
+		for dy in 2:
+			for dx in 2:
+				trous[(grotte["entree"] as Vector2i) + Vector2i(dx, dy - 1)] = true
 	var gravier: Array[Vector2i] = []
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
 		for dy in range(-2, 3):
 			for dx in range(-3, 4):
-				if absi(dx) + absi(dy) * 2 <= 5:
-					gravier.append(case + Vector2i(dx, dy))
-					_pris[case + Vector2i(dx, dy)] = true
+				var ou: Vector2i = case + Vector2i(dx, dy)
+				_pris[ou] = true
+				if absi(dx) + absi(dy) * 2 <= 5 and not trous.has(ou):
+					gravier.append(ou)
 	_raccorder(recouvrement, gravier, "gravier")
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
-		# ⚠ Du noir SOUS le trou, sur le recouvrement lui-même : les tuiles de trou ont le centre
-		# transparent, et sans ce fond on verrait le gravier à travers le puits.
+		# ⚠ Le noir va SOUS tout, sur le sol : les tuiles de trou ont le centre transparent, et le gravier
+		# s'écarte de ces quatre cases (voir plus haut). On voit donc le puits, et aucun raccord n'est crevé.
 		for dy in 2:
 			for dx in 2:
-				_poser(recouvrement, case + Vector2i(dx, dy - 1), "vide", _noms_surface)
+				_poser(sol, case + Vector2i(dx, dy - 1), "vide", _noms_surface)
 		_poser_bloc(props, case + Vector2i(0, -1), "trou", Vector2i(2, 2), _noms_surface)
 		_poser(objets, case, "entree", _noms_surface)
 	print("  recouvrements raccordés : %d cases de sable, %d de gravier" % [sable.size(), gravier.size()])
@@ -390,8 +408,8 @@ func _terrain(x: int, y: int) -> String:
 	for route in ROUTES:
 		if route.has_point(pos):
 			return "terre"
-	# ⚠ Le sol est en herbe SOMBRE partout : c'est la nappe d'herbe claire, posée par-dessus, qui décide
-	# de ce qu'on voit. Les taches ne sont plus peintes ici — elles sont les TROUS de cette nappe.
+	# ⚠ Le SOL est en herbe sombre : c'est la nappe d'herbe claire, posée au-dessus, qui décide de ce qu'on
+	# voit. Les taches ne sont pas peintes ici — elles sont les trous de cette nappe (voir `_peindre_surface`).
 	return "herbe_sombre"
 
 
@@ -405,13 +423,6 @@ func _est_tache(x: int, y: int) -> bool:
 	return false
 
 
-func _compter_taches() -> int:
-	var n := 0
-	for y in HAUTEUR:
-		for x in LARGEUR:
-			if _terrain(x, y) == "herbe_sombre" and _est_tache(x, y):
-				n += 1
-	return n
 
 
 ## ⚠ LE GRAIN EST UNE FONCTION DE LA CASE, PAS UN TIRAGE. `_libre()` interroge `_terrain()` longtemps

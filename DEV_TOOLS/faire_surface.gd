@@ -95,8 +95,11 @@ const CANDIDATS := [
 ## font partie, puisqu'ils la citent par son indice.
 const TERRAINS := [
 	{"nom": "sol", "couleur": "#8a7b5a", "categorie": true},
-	{"nom": "herbe", "couleur": "#59842c", "dans": ["sol"]},
-	{"nom": "herbe_claire", "couleur": "#7b9729", "dans": ["sol"]},
+	# ⚠ UN MOT, UNE CHOSE. Le rôle « herbe » désigne la tuile d'herbe CLAIRE ; le terrain porte donc le
+	# même nom pour la même matière. Avoir appelé « herbe » la claire côté tuiles et la sombre côté
+	# terrains, c'était préparer une carte peinte à l'envers sans qu'aucune erreur ne le signale.
+	{"nom": "herbe", "couleur": "#7b9729", "dans": ["sol"]},
+	{"nom": "herbe_sombre", "couleur": "#59842c", "dans": ["sol"]},
 	{"nom": "terre", "couleur": "#81502f", "dans": ["sol"]},
 	{"nom": "sable", "couleur": "#d7b876", "dans": ["sol"]},
 	{"nom": "gravier", "couleur": "#a89a8b", "dans": ["sol"]},
@@ -112,8 +115,8 @@ const TERRAINS := [
 ##
 ## ⚠ Ces cases ont été trouvées par MESURE (opaques, sans couture, sans contraste), pas choisies à l'œil.
 const PLEINES := [
-	["herbe", "sol", [Vector2i(1, 21), Vector2i(2, 21), Vector2i(1, 22), Vector2i(2, 22)]],
-	["herbe_claire", "sol", [Vector2i(10, 6), Vector2i(1, 9), Vector2i(2, 9), Vector2i(1, 10), Vector2i(2, 10)]],
+	["herbe", "sol", [Vector2i(10, 6), Vector2i(1, 9), Vector2i(2, 9), Vector2i(1, 10), Vector2i(2, 10)]],
+	["herbe_sombre", "sol", [Vector2i(1, 21), Vector2i(2, 21), Vector2i(1, 22), Vector2i(2, 22)]],
 	["terre", "sol", [Vector2i(1, 15), Vector2i(2, 15), Vector2i(1, 16), Vector2i(2, 16)]],
 	["sable", "sol", [Vector2i(1, 27), Vector2i(2, 27), Vector2i(1, 28), Vector2i(2, 28)]],
 	# ⚠ Le gravier n'a qu'une case : sa voisine (25, 2) est la « falaise », un MUR. Une variante doit
@@ -124,16 +127,29 @@ const PLEINES := [
 ## Le poids d'une variante face à la case de référence, qui vaut 1.
 const POIDS_VARIANTE := 0.4
 
-## LES ENSEMBLES DE TRANSITION. Toujours la même géométrie : un cadre de 4 × 4 dont l'intérieur est la
-## matière, puis un bloc de 2 × 2 pour les coins RENTRANTS (rentrants = (-1,-1) quand la planche n'en a
-## pas). ⚠ `nappe` inverse le rapport : la matière est DEHORS et le trou au centre — c'est le cas des
-## trois ensembles d'herbe, qui découpent des clairières au lieu de poser des taches.
-## `fond` est le nom du terrain (ou de la CATÉGORIE) qui entoure la matière ; "" veut dire « rien ».
+## LES ENSEMBLES DE TRANSITION. Toujours la même géométrie : un cadre de 4 × 4, puis un bloc de 2 × 2
+## pour les coins RENTRANTS (rentrants = (-1,-1) quand la planche n'en a pas).
+##
+## `terrain` est la matière de la tuile, `fond` ce qu'elle rencontre — le nom d'un terrain, d'une
+## CATÉGORIE, ou "" pour « rien » (une bordure transparente, qui se pose donc sur un autre calque).
+##
+## ⚠ `matiere_dehors` dit que la matière est à l'EXTÉRIEUR du cadre et le fond au centre. C'est le cas
+## des trois ensembles d'herbe : je les avais pris pour des découpeurs de trous, et j'inventais un calque
+## de nappe pour les employer. Leur « trou » n'est pas « rien », c'est L'AUTRE HERBE — déclarés comme une
+## transition herbe claire ↔ herbe sombre sur UN SEUL calque, ils redeviennent ce qu'ils sont.
 const ENSEMBLES := [
+	# ⚠ DEUX ensembles de terre, un par herbe. Le lot en range un qui borde l'herbe claire et un qui borde
+	# la sombre ; n'avoir déclaré que le premier laissait 24 cases de frontière sur 36 sans tuile dès
+	# qu'une route traversait une clairière — mesuré par DEV_TOOLS, pas deviné. Une matière ne se borde
+	# pas « en général » : elle se borde CONTRE quelque chose, et le lot le sait avant nous.
 	{"terrain": "terre", "fond": "herbe", "planche": "sol", "cadre": Vector2i(1, 1), "rentrants": Vector2i(3, 5)},
+	{"terrain": "terre", "fond": "herbe_sombre", "planche": "sol", "cadre": Vector2i(5, 1), "rentrants": Vector2i(7, 5)},
 	{"terrain": "gravier", "fond": "", "planche": "sol", "cadre": Vector2i(23, 1), "rentrants": Vector2i(25, 5)},
 	{"terrain": "sable", "fond": "", "planche": "sol", "cadre": Vector2i(27, 1), "rentrants": Vector2i(29, 5)},
-	{"terrain": "herbe_claire", "fond": "", "planche": "sol", "cadre": Vector2i(10, 1), "rentrants": Vector2i(12, 5), "nappe": true},
+	# ⚠ Son fond est « rien », et ce n'est pas un aveu d'ignorance : ses bordures sont AJOURÉES, donc ce
+	# qu'on voit par leurs trous est le calque du DESSOUS. Essayé de la déclarer contre « herbe_sombre »
+	# sur un seul calque : clairières en escalier et blocs sombres au bord du lac (charte §6).
+	{"terrain": "herbe", "fond": "", "planche": "sol", "cadre": Vector2i(10, 1), "rentrants": Vector2i(12, 5), "matiere_dehors": true},
 	# ⚠ L'eau borde la CATÉGORIE « sol » : herbe, terre, sable ou gravier, indifféremment. C'est ce que
 	# le natif ne savait pas dire, et c'est ce qui manquait au rivage.
 	{"terrain": "eau", "fond": "sol", "planche": "eau", "cadre": Vector2i(0, 7), "rentrants": Vector2i(-1, -1)},
@@ -238,7 +254,10 @@ func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: S
 		donnees.add_collision_polygon(0)
 		donnees.set_collision_polygon_points(0, 0, PackedVector2Array([
 			Vector2(-demi, -demi), Vector2(demi, -demi), Vector2(demi, demi), Vector2(-demi, demi)]))
-	_ordre.append({"nom": nom, "planche": planche, "case": case, "mur": mur})
+	# ⚠ `objet` va dans la légende : c'est la donnée qui décide si une tuile peinte devient un objet du
+	# jeu (aujourd'hui l'entrée, et elle seule). L'oublier ici rendait la colonne vide pour TOUT le lot,
+	# y compris pour « entree » — une légende qui ment par omission sur la seule tuile qui compte.
+	_ordre.append({"nom": nom, "planche": planche, "case": case, "mur": mur, "objet": objet})
 
 
 ## Les cases du lot qu'aucun rôle n'a prises : déclarées sans nom et TRAVERSABLES, pour qu'on puisse les
@@ -315,10 +334,10 @@ func _declarer_terrains() -> void:
 	for e in ENSEMBLES:
 		var dedans: int = _indices[e["terrain"]]
 		var dehors: int = _indices[e["fond"]] if e["fond"] != "" else RIEN
-		var nappe: bool = e.get("nappe", false)
-		# ⚠ Une NAPPE a sa matière DEHORS : on échange simplement les deux rôles, la géométrie ne bouge pas.
-		var interieur: int = dehors if nappe else dedans
-		var exterieur: int = dedans if nappe else dehors
+		var matiere_dehors: bool = e.get("matiere_dehors", false)
+		# ⚠ Matière à l'extérieur : on échange les deux rôles, la géométrie calculée ne bouge pas d'un iota.
+		var interieur: int = dehors if matiere_dehors else dedans
+		var exterieur: int = dedans if matiere_dehors else dehors
 		var cadre: Vector2i = e["cadre"]
 		for fy in 4:
 			for fx in 4:
@@ -431,6 +450,44 @@ func _ecrire_planche() -> void:
 			ligne = ""
 	if ligne != "":
 		print("    " + ligne)
+	_ecrire_legende()
+
+
+## ⚠ LA LÉGENDE EST UN FICHIER TEXTE, ET CE N'EST PAS UN PIS-ALLER. On ne peut pas écrire les noms DANS
+## l'image : `Image` ne sait pas dessiner du texte, et aucune police ne se rend en headless. Or une
+## planche qui montre trente-quatre cases sans dire laquelle s'appelle comment oblige à les compter à la
+## main — c'est exactement l'endroit où l'on se trompe d'une case sans s'en apercevoir. Le texte porte en
+## plus ce que l'image ne peut pas : la case d'atlas et sa planche, pour retrouver la tuile dans l'éditeur.
+func _ecrire_legende() -> void:
+	var lignes: Array = []
+	lignes.append("LÉGENDE DE %s" % PLANCHE)
+	lignes.append("Ligne et colonne dans l'image ; « mur » porte un liseré rouge et arrête le joueur.")
+	lignes.append("")
+	lignes.append("%-4s %-18s %-8s %-10s %-5s %s" % ["#", "nom", "planche", "case", "mur", "objet"])
+	for i in _ordre.size():
+		var e: Dictionary = _ordre[i]
+		lignes.append("%-4s %-18s %-8s %-10s %-5s %s" % [
+			"%d,%d" % [i / PAR_LIGNE, i % PAR_LIGNE],
+			e["nom"], e["planche"], str(e["case"]),
+			"MUR" if e["mur"] else "", e.get("objet", "")])
+	lignes.append("")
+	lignes.append("BLOCS RECONSTITUÉS (sous la grille, de gauche à droite) — se peignent case par case :")
+	for b in BLOCS:
+		lignes.append("  %-18s %-8s coin %-10s taille %s   rangées murées : %s"
+			% [b[0], b[1], str(b[2]), str(b[3]), str(b[4])])
+	lignes.append("")
+	lignes.append("CANDIDATS (dernière grille) — des cases dont je ne suis pas sûr, JAMAIS déclarées :")
+	for c in CANDIDATS:
+		lignes.append("  %-8s %s" % [c[0], str(c[1])])
+
+	var chemin := PLANCHE.get_basename() + ".txt"
+	var fichier := FileAccess.open(chemin, FileAccess.WRITE)
+	if fichier == null:
+		print("  ⚠ légende non écrite : %s" % chemin)
+		return
+	fichier.store_string("\n".join(lignes) + "\n")
+	fichier.close()
+	print("  légende : %s" % chemin)
 
 
 func _hauteur_des_blocs() -> int:
