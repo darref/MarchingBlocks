@@ -175,6 +175,12 @@ func _ecrire_tileset(texture: Texture2D) -> void:
 		jeu.set_custom_data_layer_name(indice, nom)
 		jeu.set_custom_data_layer_type(indice, TYPE_BOOL if nom == "mur" else TYPE_STRING)
 
+	# ⚠ LA COLLISION EST DÉDUITE DE `mur`, jamais posée tuile par tuile. Autrement une tuile finirait
+	# par arrêter la lumière sans arrêter les pieds (ou l'inverse), et ça ne se verrait qu'en jouant.
+	# Une seule couche physique, le carré plein : `DEV_TOOLS/test_niveau.gd` vérifie la correspondance.
+	jeu.add_physics_layer()
+	jeu.set_physics_layer_collision_layer(0, 1)
+
 	var source := TileSetAtlasSource.new()
 	source.texture = texture
 	source.texture_region_size = Vector2i(COTE, COTE)
@@ -188,6 +194,11 @@ func _ecrire_tileset(texture: Texture2D) -> void:
 		donnees.set_custom_data("nom", TUILES[i]["nom"])
 		donnees.set_custom_data("mur", TUILES[i]["mur"])
 		donnees.set_custom_data("objet", TUILES[i].get("objet", ""))
+		if TUILES[i]["mur"]:
+			var demi := COTE / 2.0
+			donnees.add_collision_polygon(0)
+			donnees.set_collision_polygon_points(0, 0, PackedVector2Array([
+				Vector2(-demi, -demi), Vector2(demi, -demi), Vector2(demi, demi), Vector2(-demi, demi)]))
 
 	var erreur := ResourceSaver.save(jeu, TILESET)
 	if erreur != OK:

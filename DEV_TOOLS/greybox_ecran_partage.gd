@@ -36,6 +36,7 @@ const VITESSE := 5.0  # cases par seconde
 const COURSE := 2.0  # PROPOSÉ — ce que « courir » multiplie, à régler à l'essai
 const PORTEE_ENTREE := 1.0  # en cases, pour descendre ou remonter
 const LIGNE_DU_SOL := 8  # la rangée où l'on marche dans une coupe de dix cases
+const TAILLE_JOUEUR := 10.0  # en pixels — plus petit qu'une case, il passe partout où une case est libre
 ## PROPOSÉ — combien de temps chaque événement est montré (charte §3, question ouverte).
 const DUREES := {"transforme": 0.6, "detruit": 0.5, "active": 0.4, "desactive": 0.4}
 ## L'énigme de démonstration, en colonnes de la grotte 1.
@@ -66,6 +67,8 @@ var _en_attente: Array = []  # les événements rendus, pas encore montrés en e
 
 var _marque: Node2D
 var _dessus: Node2D  # objets et faisceaux, par-dessus les tuiles de la grotte
+var _corps_surface: CharacterBody2D
+var _corps_grotte: CharacterBody2D
 var _camera_surface: Camera2D
 var _camera_grotte: Camera2D
 var _noeuds_grottes := {}  # id -> le nœud de la grotte dans la vue
@@ -100,6 +103,9 @@ func _ready() -> void:
 	_camera_surface = _camera(ecran.surface)
 	_dessus = _calque(ecran.grotte, _dessiner_dessus)
 	_camera_grotte = _camera(ecran.grotte)
+	_corps_surface = _corps(ecran.surface, pos_surface * CASE)
+	_corps_grotte = _corps(ecran.grotte, Vector2(colonne * CASE, LIGNE_DU_SOL * CASE + CASE / 2.0))
+	_seules_les_collisions_de(grotte)
 
 	print("GREYBOX — zone peinte, écran partagé")
 	print("  ZQSD ou stick : marcher   Maj ou B : courir   Espace ou A : descendre / remonter")
@@ -114,6 +120,7 @@ func _ready() -> void:
 var _capture := ""
 var _capture_a := 0.0
 var _horloge := 0.0
+var _pousser := ""  # une action maintenue depuis la ligne de commande : vérifier une collision sans clavier
 
 ## Pour les vérifications sans clavier : après `--`, `--pres` (à une case d'une entrée), `--sous-terre`,
 ## `--rai`, et `--capture=chemin.png@secondes` qui enregistre l'image de BASE (320×160) à cet instant.
@@ -127,6 +134,8 @@ func _options() -> void:
 			colonne = 8.5
 		elif option == "--rai":
 			_rai()
+		elif option.begins_with("--pousser="):
+			_pousser = option.get_slice("=", 1)
 		elif option.begins_with("--capture="):
 			var valeur := option.get_slice("=", 1)
 			_capture = valeur.get_slice("@", 0)
@@ -139,22 +148,33 @@ func _capturer_si_demande(delta: float) -> void:
 	_horloge += delta
 	if _horloge >= _capture_a:
 		get_viewport().get_texture().get_image().save_png(_capture)
-		print("capture de base : %s à %.2f s, séparateur %d" % [_capture, _horloge, mep.pixel()])
+		print("capture de base : %s à %.2f s, séparateur %d — corps surface %s, corps grotte x=%.1f (colonne %.2f)" % [
+			_capture, _horloge, mep.pixel(), _corps_surface.position, _corps_grotte.position.x, colonne])
 		_capture = ""
+
+
+## ⚠ Le déplacement vit ici, et pas dans `_process` : `move_and_slide()` ne parle au moteur physique
+## qu'au pas fixe. Les murs qui l'arrêtent sont les collisions des tuiles, déduites de `mur` — le joueur
+## et la lumière butent donc exactement sur la même chose.
+func _physics_process(_delta: float) -> void:
+	if _pousser != "":
+		Input.action_press(_pousser)  # ⚠ outil de vérification, jamais du jeu : pousser sans clavier
+	var dir := Entrees.deplacement()
+	var vitesse := VITESSE * CASE * (COURSE if Entrees.court() else 1.0)
+	if Entrees.agit():
+		_passer_entree()
+	if sous_terre:
+		_corps_grotte.velocity = Vector2(dir.x * vitesse, 0.0)
+		_corps_grotte.move_and_slide()
+		colonne = _corps_grotte.position.x / CASE
+	else:
+		_corps_surface.velocity = dir * vitesse
+		_corps_surface.move_and_slide()
+		pos_surface = _corps_surface.position / CASE
 
 
 func _process(delta: float) -> void:
 	_capturer_si_demande(delta)
-	var dir := Entrees.deplacement()
-	var vitesse := VITESSE * (COURSE if Entrees.court() else 1.0)
-	if Entrees.agit():
-		_passer_entree()
-	if sous_terre:
-		colonne = clampf(colonne + dir.x * vitesse * delta, 0.5, (chemins[grotte] as Array).size() - 0.5)
-	else:
-		var carte := Vector2(monde.grilles[SURFACE]["largeur"], monde.grilles[SURFACE]["hauteur"])
-		pos_surface = (pos_surface + dir * vitesse * delta).clamp(Vector2(0.5, 0.5), carte - Vector2(0.5, 0.5))
-
 	var proche_de := MiseEnPage.entree_la_plus_proche(pos_surface, entrees_cases)
 	mep.avancer(delta, sous_terre, proche_de["distance"])
 	ecran.afficher(mep.pixel(), roundi(mep.balayage.cible))
@@ -219,6 +239,7 @@ func _passer_entree() -> void:
 			if e["grotte"] == grotte and absf(e["colonne"] + 0.5 - colonne) <= PORTEE_ENTREE:
 				sous_terre = false
 				pos_surface = Vector2(e["case"]) + Vector2(0.5, 1.5)
+				_corps_surface.position = pos_surface * CASE
 				print("remonté par l'entrée ", e["case"])
 				return
 		print("aucune bouche à portée")
@@ -231,6 +252,8 @@ func _passer_entree() -> void:
 	sous_terre = true
 	grotte = e["grotte"]
 	colonne = e["colonne"] + 0.5
+	_corps_grotte.position = Vector2(colonne * CASE, LIGNE_DU_SOL * CASE + CASE / 2.0)
+	_seules_les_collisions_de(grotte)
 	print("descendu dans la grotte %d, colonne %d" % [grotte, e["colonne"]])
 
 
@@ -282,6 +305,30 @@ func _camera(vue: SubViewport) -> Camera2D:
 	vue.add_child(camera)
 	camera.make_current()
 	return camera
+
+
+## Un corps invisible : il ne sert qu'à se cogner. Ce qu'on VOIT est dessiné par-dessus, à la position
+## que le corps a fini par atteindre — une seule autorité sur la position, et c'est la physique.
+func _corps(vue: SubViewport, depart: Vector2) -> CharacterBody2D:
+	var corps := CharacterBody2D.new()
+	var forme := CollisionShape2D.new()
+	var rectangle := RectangleShape2D.new()
+	rectangle.size = Vector2(TAILLE_JOUEUR, TAILLE_JOUEUR)
+	forme.shape = rectangle
+	corps.add_child(forme)
+	corps.position = depart
+	vue.add_child(corps)
+	return corps
+
+
+## ⚠ TOUTES LES GROTTES OCCUPENT LE MÊME ESPACE dans leur vue : cachée, une grotte garde des roches
+## solides, et le joueur se cognerait à une paroi qu'il ne voit pas. On n'active donc la collision que
+## sur celle où il se trouve.
+func _seules_les_collisions_de(id: int) -> void:
+	for autre in _noeuds_grottes:
+		for calque in _noeuds_grottes[autre].get_children():
+			if calque is TileMapLayer:
+				calque.collision_enabled = (autre == id)
 
 
 func _dessiner_marque() -> void:

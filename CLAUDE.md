@@ -71,6 +71,27 @@ DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une ca
   colonne par pas diagonal garde les deux grilles alignées, mais le repère de surface y va alors
   √2 fois plus vite que le joueur. À trancher le jour où une grotte en réclame une.
 
+### Les grottes entre elles — PROPOSÉ (question de Jordan, 16 septembre 2026)
+
+**PROPOSÉ — deux grottes ne se voient JAMAIS, et ce n'est pas une limite technique : leur position
+relative N'EXISTE PAS.** Une coupe est DÉROULÉE : ses colonnes suivent un chemin qui tourne. Deux
+grottes qui se croisent sur la carte de dessus n'ont aucun repère commun, et dessiner l'une dans la vue
+de l'autre demanderait de répondre à « à quelle distance, dans quelle direction ? » — une question sans
+réponse, puisque la distance dépend du chemin parcouru, pas de la géométrie.
+
+**Ce qu'on fait quand on VEUT voir deux galeries à la fois : c'est UNE grotte.** Une coupe a dix
+rangées ; deux tunnels superposés y tiennent, et ce n'est que de la peinture — pas une mécanique de
+plus. Une salle où deux boyaux se rejoignent est une grotte dont la coupe est creusée plus haut à cet
+endroit.
+
+- ⚠ **Conséquence** : deux grottes ne passent jamais sous la même case de surface (le chargeur le refuse
+  déjà, §6), et le pourtour de roche d'une coupe se remplit sans se soucier des voisines.
+- **PROPOSÉ — on remplit ce que la caméra peut voir.** Au-delà du jeu, un calque « Decor » porte de la
+  roche (une falaise en surface) sur la largeur que la caméra peut atteindre : huit colonnes de chaque
+  côté d'une coupe, dix cases autour de la surface. ⚠ **Ce calque n'est PAS le monde** : `CLIENT/niveau.gd`
+  ne le lit jamais. Il remplit l'œil et arrête les pieds ; le moteur, lui, tient déjà pour plein tout ce
+  qui est hors grille. Remplir la grille elle-même casserait « une colonne par case de surface ».
+
 ---
 
 ## 3. L'écran partagé — UNE seule valeur
@@ -501,6 +522,11 @@ premier mur déplacé.
   son `nom`** : le jour où un lot acheté remplace le lot temporaire, seules les positions changent.
 - ⚠ **Une case non peinte est un MUR.** Le vide est plein : on ne peut pas oublier de fermer le bord du
   monde, et une carte à trous ne laisse pas fuir la lumière.
+- ⚠ **La COLLISION est déduite de `mur`, jamais posée tuile par tuile.** `mur` dit ce qui arrête la
+  lumière, la collision dit ce qui arrête les pieds : ce sont deux descriptions d'un même fait, donc
+  elles sont générées ensemble (une couche physique, le carré plein) et vérifiées ensemble par un test
+  qui lit le lot RÉELLEMENT livré. Les séparer donnerait un mur qui arrête la lumière et laisse passer
+  le joueur — et ça ne se verrait qu'en jouant.
 - ⚠ **Une entrée ne dit pas où elle mène : ON LE DÉDUIT.** La case peinte est cherchée dans le chemin de
   chaque grotte — celle qui passe dessous est la sienne, la colonne est l'indice dans la table, et la
   bouche est la première case non murée de cette colonne, en descendant. Le peintre creuse un puits, la

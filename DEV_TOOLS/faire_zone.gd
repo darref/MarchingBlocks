@@ -28,6 +28,13 @@ const LARGEUR := 64
 const HAUTEUR := 40
 const HAUTEUR_GROTTE := 10  # dix cases : exactement la hauteur d'une vue (charte §3)
 
+## ⚠ CE QUE LA CAMÉRA VOIT AU-DELÀ DU JEU, en cases — donc ce qu'il faut remplir pour qu'on ne voie
+## jamais le vide. Une vue de grotte fait au plus 240 px de large (sous terre), soit 15 cases, et le
+## joueur y est centré : elle porte à 7,5 cases de lui, d'où huit colonnes de roche de chaque côté. La
+## surface peut aller jusqu'à 320 px, soit 20 cases de large et 10 de haut.
+const MARGE_GROTTE := Vector2i(8, 2)
+const MARGE_SURFACE := Vector2i(10, 6)
+
 ## Les routes de terre, en rectangles de cases.
 const ROUTES := [
 	Rect2i(1, 20, 62, 1),
@@ -117,9 +124,10 @@ func _batir() -> Node2D:
 	var surface := Node2D.new()
 	surface.name = "Surface"
 	racine.add_child(surface)
+	var decor := _calque("Decor", surface)  # d'abord : il se dessine sous le reste
 	var sol := _calque("Sol", surface)
 	var objets := _calque("Objets", surface)
-	_peindre_surface(sol, objets)
+	_peindre_surface(sol, objets, decor)
 
 	var grottes := Node2D.new()
 	grottes.name = "Grottes"
@@ -136,9 +144,10 @@ func _batir() -> Node2D:
 		noeud.set("segments", segments)
 		grottes.add_child(noeud)
 		var table: Array = Niveau.chemin(description["depart"], description["segments"])
+		var decor_grotte := _calque("Decor", noeud)
 		var coupe := _calque("Coupe", noeud)
 		_calque("Objets", noeud)
-		_peindre_grotte(coupe, table.size(), table.find(description["entree"]))
+		_peindre_grotte(coupe, decor_grotte, table.size(), table.find(description["entree"]))
 
 	_adopter(racine, racine)
 	return racine
@@ -165,7 +174,8 @@ func _poser(calque: TileMapLayer, pos: Vector2i, nom: String) -> void:
 	calque.set_cell(pos, 0, _tuiles[nom])
 
 
-func _peindre_surface(sol: TileMapLayer, objets: TileMapLayer) -> void:
+func _peindre_surface(sol: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
+	_peindre_pourtour(decor, Rect2i(0, 0, LARGEUR, HAUTEUR), MARGE_SURFACE, "falaise")
 	for y in HAUTEUR:
 		for x in LARGEUR:
 			_poser(sol, Vector2i(x, y), _terrain(x, y))
@@ -200,7 +210,21 @@ func _terrain(x: int, y: int) -> String:
 
 
 ## Une coupe simple : de la roche en haut, l'air au milieu, le sol en bas, et un puits sous l'entrée.
-func _peindre_grotte(coupe: TileMapLayer, longueur: int, colonne_puits: int) -> void:
+## ⚠ LE POURTOUR N'EST PAS LE MONDE. Ce que peint `_peindre_pourtour` va dans un calque « Decor » que
+## `CLIENT/niveau.gd` ne lit JAMAIS : il remplit l'œil et arrête les pieds, rien de plus. La grille,
+## elle, s'arrête à la longueur du chemin — et pour le moteur, hors grille vaut déjà plein
+## (`CORE/monde.gd`, `est_mur`). Remplir la grille elle-même casserait la règle « une colonne par case
+## de surface » (charte §2).
+func _peindre_pourtour(decor: TileMapLayer, jeu: Rect2i, marge: Vector2i, nom: String) -> void:
+	var dehors := Rect2i(jeu.position - marge, jeu.size + marge * 2)
+	for y in range(dehors.position.y, dehors.end.y):
+		for x in range(dehors.position.x, dehors.end.x):
+			if not jeu.has_point(Vector2i(x, y)):
+				_poser(decor, Vector2i(x, y), nom)
+
+
+func _peindre_grotte(coupe: TileMapLayer, decor: TileMapLayer, longueur: int, colonne_puits: int) -> void:
+	_peindre_pourtour(decor, Rect2i(0, 0, longueur, HAUTEUR_GROTTE), MARGE_GROTTE, "roche_pleine")
 	for x in longueur:
 		_poser(coupe, Vector2i(x, 0), "roche_pleine")
 		_poser(coupe, Vector2i(x, 1), "plafond")

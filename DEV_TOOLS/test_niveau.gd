@@ -37,6 +37,7 @@ func _initialize() -> void:
 	test_segment_diagonal_refuse()
 	test_ordre_de_peinture_indifferent()
 	test_projection_le_long_du_chemin()
+	test_les_murs_ont_leur_collision()
 
 	print("")
 	if echecs == 0:
@@ -244,6 +245,31 @@ func test_projection_le_long_du_chemin() -> void:
 	_verifier(Niveau.case_de_surface(chemins, 1, 4.5) == Vector2(5.5, 4.5), "colonne 4 → (5.5, 4.5), après le coude")
 	var milieu := Niveau.case_de_surface(chemins, 1, 3.0)
 	_verifier(milieu.x == 5.5 and absf(milieu.y - 3.0) < 0.01, "entre deux colonnes, la caméra glisse : %s" % str(milieu))
+
+
+## ⚠ CE TEST LIE LES DEUX DESCRIPTIONS D'UN MÊME FAIT. `mur` dit ce qui arrête la lumière, la collision
+## dit ce qui arrête les pieds : si les deux se séparent, une tuile laisse passer l'un et pas l'autre, et
+## ça ne se voit qu'en jouant. Elles sont donc générées ensemble, et vérifiées ensemble ici — sur le lot
+## RÉELLEMENT livré, pas sur un jeu d'essai.
+##
+## Vu échouer : lot généré avant que la collision soit déduite de `mur` (aucun polygone nulle part).
+func test_les_murs_ont_leur_collision() -> void:
+	_titre("dans le lot livré, toute tuile « mur » porte sa collision — et aucune autre")
+	var jeu: TileSet = load("res://ART/tuiles.tres")
+	_verifier(jeu != null and jeu.get_physics_layers_count() >= 1, "le lot doit porter une couche physique")
+	if jeu == null or jeu.get_physics_layers_count() < 1:
+		return
+	var source := jeu.get_source(0) as TileSetAtlasSource
+	var murs := 0
+	for i in source.get_tiles_count():
+		var donnees := source.get_tile_data(source.get_tile_id(i), 0)
+		var mur: bool = donnees.get_custom_data("mur")
+		var polygones: int = donnees.get_collision_polygons_count(0)
+		if mur:
+			murs += 1
+		_verifier(polygones == (1 if mur else 0), "« %s » : mur=%s, mais %d polygone(s) de collision" % [
+			donnees.get_custom_data("nom"), mur, polygones])
+	_verifier(murs >= 5, "le lot doit contenir des murs — %d trouvé(s)" % murs)
 
 
 func _contient(erreurs: Array, morceau: String) -> bool:
