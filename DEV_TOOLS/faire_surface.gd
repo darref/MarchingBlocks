@@ -102,11 +102,20 @@ const TRANSITIONS := [
 ## ⚠ LE SECOND JEU : LES RECOUVREMENTS. Ces ensembles-là ont l'extérieur TRANSPARENT — ils ne remplacent
 ## pas l'herbe, ils se posent par-dessus, et c'est le calque du dessous qui se voit sur leurs bords. Leur
 ## fond n'est donc pas un terrain mais « rien » (-1), et ils vivent sur leur propre calque.
-const TERRAINS_RECOUVREMENT := ["gravier", "sable"]
+const TERRAINS_RECOUVREMENT := ["gravier", "sable", "herbe_claire"]
 const RIEN := -1
+## [terrain, planche, cadre 4×4, coins rentrants 2×2] — la matière est À L'INTÉRIEUR du cadre.
 const RECOUVREMENTS := [
 	[0, "sol", Vector2i(23, 1), Vector2i(25, 5)],
 	[1, "sol", Vector2i(27, 1), Vector2i(29, 5)],
+]
+
+## ⚠ LES ENSEMBLES D'HERBE SONT DES DÉCOUPEURS DE TROUS : leur matière est à l'EXTÉRIEUR du cadre et le
+## trou au centre — l'inverse du sable. On ne s'en sert donc pas pour poser des taches, mais pour peindre
+## une NAPPE partout : ce qu'on ne peint pas devient une clairière, et c'est le calque du dessous qui s'y
+## voit. Même géométrie calculée, fond et dessus échangés.
+const NAPPES := [
+	[2, "sol", Vector2i(10, 1), Vector2i(12, 5)],
 ]
 
 ## Ce que nous dessinons nous-mêmes, faute de l'avoir dans un lot.
@@ -120,6 +129,15 @@ const NOIR := Color("#0d0a12")
 
 ## Les tuiles UNIES, qui n'ont qu'un seul terrain aux quatre coins : [nom du rôle, terrain].
 const UNIES := [["herbe", 0], ["herbe_sombre", 0], ["terre", 1]]
+
+## ⚠ UNE NAPPE A BESOIN DE SA TUILE PLEINE, et ces ensembles-là n'en contiennent pas : leurs seize cases
+## sont toutes des bords ou des coins, puisque leur centre est le TROU. Sans une case unie à quatre coins
+## de matière, Godot n'a rien à poser au milieu de la nappe et recycle des tuiles de bord — on voit alors
+## des rectangles plus clairs alignés sur la grille. La case unie est juste sous l'ensemble.
+## [terrain du jeu 1, planche, case]
+const UNIES_RECOUVREMENT := [
+	[2, "sol", Vector2i(10, 6)],
+]
 
 var _jeu: TileSet
 var _sources := {}
@@ -249,21 +267,30 @@ func _declarer_terrains() -> void:
 			continue
 		_poser_coins(ou["planche"], ou["case"], 0, u[1], u[1], u[1], u[1], u[1])
 		posees += 1
+	for u in UNIES_RECOUVREMENT:
+		_poser_coins(u[1], u[2], 1, u[0], u[0], u[0], u[0], u[0])
+		posees += 1
 
+	# [jeu, terrain PROPRE des tuiles, fond, dessus, planche, cadre, coins rentrants]
 	var travaux: Array = []
 	for t in TRANSITIONS:
-		travaux.append([0, t[0], t[1], t[2], t[3], t[4]])
+		travaux.append([0, t[1], t[0], t[1], t[2], t[3], t[4]])
 	for r in RECOUVREMENTS:
 		# ⚠ Le fond d'un recouvrement est RIEN : ses bords laissent voir le calque du dessous.
-		travaux.append([1, RIEN, r[0], r[1], r[2], r[3]])
+		travaux.append([1, r[0], RIEN, r[0], r[1], r[2], r[3]])
+	for n in NAPPES:
+		# ⚠ Une nappe est l'inverse : la matière est le FOND, et c'est le trou qui est au centre du cadre.
+		# Son terrain propre reste la matière — sans quoi elle ne serait candidate à rien.
+		travaux.append([1, n[0], n[0], RIEN, n[1], n[2], n[3]])
 
 	for t in travaux:
 		var jeu_terrain: int = t[0]
-		var fond: int = t[1]
-		var dessus: int = t[2]
-		var planche: String = t[3]
-		var cadre: Vector2i = t[4]
-		var rentrants: Vector2i = t[5]
+		var centre: int = t[1]
+		var fond: int = t[2]
+		var dessus: int = t[3]
+		var planche: String = t[4]
+		var cadre: Vector2i = t[5]
+		var rentrants: Vector2i = t[6]
 		# Le CADRE : une case du bord n'a « dessus » que du côté de l'intérieur.
 		# ⚠ Le terrain PROPRE de chaque tuile est « dessus » — la matière à laquelle elle appartient — et
 		# jamais la valeur d'un de ses coins. Quand on peint un terrain, Godot ne retient comme candidates
@@ -272,7 +299,7 @@ func _declarer_terrains() -> void:
 		# approchantes en alternance. C'est exactement le peigne de dents carrées qu'on a vu sur la plage.
 		for fy in 4:
 			for fx in 4:
-				_poser_coins(planche, cadre + Vector2i(fx, fy), jeu_terrain, dessus,
+				_poser_coins(planche, cadre + Vector2i(fx, fy), jeu_terrain, centre,
 					dessus if fx >= 1 and fy >= 1 else fond,
 					dessus if fx <= 2 and fy >= 1 else fond,
 					dessus if fx >= 1 and fy <= 2 else fond,
@@ -281,7 +308,7 @@ func _declarer_terrains() -> void:
 		# Les COINS RENTRANTS : le fond ne mord qu'un seul coin, celui tourné vers le centre du bloc.
 		for cy in 2:
 			for cx in 2:
-				_poser_coins(planche, rentrants + Vector2i(cx, cy), jeu_terrain, dessus,
+				_poser_coins(planche, rentrants + Vector2i(cx, cy), jeu_terrain, centre,
 					fond if cx == 1 and cy == 1 else dessus,
 					fond if cx == 0 and cy == 1 else dessus,
 					fond if cx == 1 and cy == 0 else dessus,
@@ -294,6 +321,11 @@ func _declarer_terrains() -> void:
 ## `centre` est le terrain PROPRE de la tuile : la matière à laquelle elle appartient. C'est lui qui la
 ## rend candidate quand on peint cette matière ; les quatre coins disent ensuite comment elle se raccorde.
 func _poser_coins(planche: String, case: Vector2i, jeu_terrain: int, centre: int, tl: int, tr: int, bl: int, br: int) -> void:
+	# ⚠ Une tuile dont les QUATRE coins valent « rien » ne porte aucune information : c'est le trou d'une
+	# nappe, entièrement transparent, donc une case qui n'existe pas dans l'atlas. On la saute sans bruit
+	# — la réclamer reviendrait à exiger une tuile pour représenter l'absence de tuile.
+	if tl == RIEN and tr == RIEN and bl == RIEN and br == RIEN:
+		return
 	var source: TileSetAtlasSource = _sources[planche]["source"]
 	if source.get_tile_at_coords(case) == Vector2i(-1, -1):
 		print("  ⚠ terrain : la case %s de %s n'existe pas" % [case, planche])

@@ -590,6 +590,22 @@ premier mur déplacé.
       manque, le raccord retombe sur des tuiles approchantes, et le rivage devient un peigne de dents
       carrées parfaitement régulières. ⚠ **Aucune erreur n'est signalée** — c'est la planche
       `ART/planche_terrains.png`, qui dessine les quatre coins déclarés de chaque tuile, qui l'a montré.
+    - ⚠ **TROIS FAÇONS D'ÊTRE UN ENSEMBLE, et confondre les deux dernières coûte une manche.** Un
+      ensemble OPAQUE (terre sur herbe) remplace la matière du dessous. Un RECOUVREMENT (gravier, sable)
+      a le fond transparent et se pose par-dessus. Une NAPPE (les trois verts du haut) a sa matière à
+      l'EXTÉRIEUR du cadre et le TROU au centre : ce n'est pas une tache à poser, c'est une nappe à
+      peindre partout, dont ce qu'on ne peint pas devient une clairière. D'où la carte actuelle : sol en
+      herbe sombre, nappe d'herbe claire par-dessus, taches = trous.
+    - ⚠ **Une nappe a besoin de sa tuile PLEINE**, et ces ensembles-là n'en contiennent pas — leurs seize
+      cases sont toutes des bords, puisque leur centre est le trou. Sans une case unie à quatre coins de
+      matière, Godot n'a rien à poser au milieu et recycle des tuiles de bord : apparaissent alors des
+      rectangles alignés sur la grille. La case unie est juste sous l'ensemble, dans la planche.
+    - ⚠ **Une tuile dont les quatre coins valent « rien » n'existe pas** : c'est le trou, entièrement
+      transparent. On la saute — exiger une tuile pour représenter l'absence de tuile n'a pas de sens.
+    - **MESURÉ (agrandissement quadrillé)** — à petite taille, un contour organique et le grain d'un lot
+      se confondent avec des rectangles de tuiles. On agrandit la capture avec une grille de 32 px : si
+      les taches tombent sur les cases, c'est un défaut ; sinon, c'est la texture. ⚠ Ne jamais trancher
+      ce genre de doute à l'œil nu sur une image réduite.
     - ⚠ **OUVERT — la rive du LAC elle-même.** L'eau reste un aplat opaque posé sur le sol : elle
       rencontre le sable par une arête droite. Ses ensembles à elle sont des cadres opaques (de la terre
       percée d'un trou d'eau), donc une troisième façon de faire, à traiter à part.

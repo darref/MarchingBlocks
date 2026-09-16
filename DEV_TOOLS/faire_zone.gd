@@ -142,12 +142,16 @@ func _batir() -> Node2D:
 	racine.add_child(surface)
 	var decor := _calque("Decor", surface, _surface)  # d'abord : il se dessine sous le reste
 	var sol := _calque("Sol", surface, _surface)
+	# ⚠ La NAPPE d'herbe claire recouvre le sol, qui est en herbe SOMBRE : ce qu'on ne peint pas dans la
+	# nappe devient une clairière sombre, aux bords organiques. C'est le seul emploi correct de ces
+	# ensembles-là, dont la matière est à l'extérieur du cadre et le trou au centre.
+	var nappe := _calque("Nappe", surface, _surface)
 	# ⚠ Le RECOUVREMENT se pose entre le sol et les décors : ses ensembles ont l'extérieur transparent,
 	# donc leurs bords laissent voir l'herbe du dessous. Le chargeur ne le lit pas — on marche dessus.
 	var recouvrement := _calque("Recouvrement", surface, _surface)
 	var props := _calque("Props", surface, _surface)
 	var objets := _calque("Objets", surface, _surface)
-	_peindre_surface(sol, recouvrement, props, objets, decor)
+	_peindre_surface(sol, nappe, recouvrement, props, objets, decor)
 
 	var grottes := Node2D.new()
 	grottes.name = "Grottes"
@@ -216,11 +220,21 @@ func _peindre_pourtour(decor: TileMapLayer, jeu: Rect2i, marge: Vector2i, nom: S
 				_poser(decor, Vector2i(x, y), nom, noms)
 
 
-func _peindre_surface(sol: TileMapLayer, recouvrement: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
+func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
 	_peindre_pourtour(decor, Rect2i(0, 0, LARGEUR, HAUTEUR), MARGE_SURFACE, "falaise", _noms_surface)
 	for y in HAUTEUR:
 		for x in LARGEUR:
 			_poser(sol, Vector2i(x, y), _terrain(x, y), _noms_surface)
+
+	# La nappe d'herbe claire, partout SAUF dans les taches : celles-ci deviennent des clairières sombres,
+	# et le raccord leur donne des bords irréguliers au lieu de l'escalier d'une tache posée case par case.
+	var claire: Array[Vector2i] = []
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			if _terrain(x, y) == "herbe_sombre" and not _est_tache(x, y):
+				claire.append(Vector2i(x, y))
+	nappe.set_cells_terrain_connect(claire, 1, 2, false)
+	print("  nappe d'herbe claire : %d cases, %d clairières" % [claire.size(), _compter_taches()])
 
 	# ⚠ LES CHEMINS SONT RACCORDÉS, PAS POSÉS CASE PAR CASE. `set_cells_terrain_connect()` choisit, pour
 	# chaque case, la tuile dont les quatre coins s'accordent au voisinage : une route cesse d'être un
@@ -334,14 +348,28 @@ func _terrain(x: int, y: int) -> String:
 	for route in ROUTES:
 		if route.has_point(pos):
 			return "terre"
+	# ⚠ Le sol est en herbe SOMBRE partout : c'est la nappe d'herbe claire, posée par-dessus, qui décide
+	# de ce qu'on voit. Les taches ne sont plus peintes ici — elles sont les TROUS de cette nappe.
+	return "herbe_sombre"
+
+
+## Une tache d'herbe sombre : un trou dans la nappe claire. ⚠ Son bord est adouci par le grain de la
+## case, pas par un tirage — une tache doit avoir la même forme à chaque exécution.
+func _est_tache(x: int, y: int) -> bool:
+	var pos := Vector2i(x, y)
 	for tache in TACHES:
-		var centre: Vector2i = tache[0]
-		var rayon: float = tache[1]
-		# ⚠ Le bord est adouci par le grain de la case, pas par un tirage : une tache doit avoir la même
-		# forme à chaque exécution, et un contour irrégulier plutôt qu'un disque parfait.
-		if Vector2(pos - centre).length() < rayon + _grain(x, y) * 1.5:
-			return "herbe_sombre"
-	return "herbe"
+		if Vector2(pos - (tache[0] as Vector2i)).length() < float(tache[1]) + _grain(x, y) * 1.5:
+			return true
+	return false
+
+
+func _compter_taches() -> int:
+	var n := 0
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			if _terrain(x, y) == "herbe_sombre" and _est_tache(x, y):
+				n += 1
+	return n
 
 
 ## ⚠ LE GRAIN EST UNE FONCTION DE LA CASE, PAS UN TIRAGE. `_libre()` interroge `_terrain()` longtemps
