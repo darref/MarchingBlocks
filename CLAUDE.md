@@ -559,6 +559,20 @@ premier mur déplacé.
     plateforme arrivait coiffé d'herbe.
   - Les tuiles de FOND ne sont pas choisies à l'œil : un outil repère celles qui sont opaques, peu
     contrastées et se raccordent à elles-mêmes bord à bord. C'est mesurable, donc c'est mesuré.
+  - **MESURÉ (vu à l'image) — l'auto-tuilage natif est branché, et ce ne sont PAS les bitmasks de Godot 3.**
+    Godot 4 a des TERRAINS : chaque tuile déclare ce que valent ses quatre COINS, et
+    `set_cells_terrain_connect()` choisit ensuite la tuile qui se raccorde. Les chemins de terre ont donc
+    des bords organiques au lieu d'escaliers, et n'ont plus à être rectangulaires. Mode
+    `TERRAIN_MODE_MATCH_CORNERS` : ce lot décrit ses transitions par coins, pas par côtés.
+    - ⚠ **Les seize cas ne sont pas saisis à la main, ils sont CALCULÉS.** Le lot range toutes ses
+      transitions de la même façon — un cadre de 4 × 4 dont l'intérieur est plein, puis un bloc de 2 × 2
+      pour les coins RENTRANTS — donc chaque coin se déduit de la position de la case dans le cadre. Une
+      table de seize lignes saisie à la main est exactement l'endroit où l'on se trompe d'une case sans
+      jamais s'en apercevoir. Ajouter une matière, c'est ajouter une ligne à `TRANSITIONS`.
+    - ⚠ **OUVERT — le gravier, le sable et les rives du lac ne sont pas encore des terrains.** Leurs
+      ensembles sont des RECOUVREMENTS : le fond de leur cadre est transparent, donc ils se peignent sur
+      un calque AU-DESSUS de l'herbe, jamais à sa place. Il leur faut un second jeu de terrains sur le
+      calque des décors — même géométrie, même calcul, mais une couche de plus à tenir.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol

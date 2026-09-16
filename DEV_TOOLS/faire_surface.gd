@@ -73,6 +73,25 @@ const CANDIDATS := [
 	["deco", Vector2i(7, 9)], ["deco", Vector2i(9, 9)], ["deco", Vector2i(10, 9)],
 ]
 
+## ⚠ L'AUTO-TUILAGE NATIF. Godot 4 n'a plus les bitmasks de Godot 3 : il a des TERRAINS. Chaque tuile
+## déclare ce que valent ses quatre COINS, et `set_cells_terrain_connect()` choisit ensuite la tuile qui
+## se raccorde. C'est ce qui supprime l'escalier entre deux matières et permet un chemin de terre qui
+## n'est pas un rectangle.
+##
+## ⚠ ON NE TAPE PAS SEIZE CAS À LA MAIN, ON LES CALCULE. Le lot range toutes ses transitions de la même
+## façon : un CADRE de 4 × 4 dont l'intérieur est plein, puis un bloc de 2 × 2 pour les coins RENTRANTS.
+## Cette géométrie se déduit de la position de la case dans le cadre. Une table saisie à la main est
+## exactement le genre d'endroit où l'on se trompe d'une case sans jamais s'en apercevoir.
+const TERRAINS := ["herbe", "terre"]
+
+## [fond, dessus, coin haut-gauche du cadre 4×4, coin haut-gauche des coins rentrants 2×2]
+const TRANSITIONS := [
+	[0, 1, "sol", Vector2i(1, 1), Vector2i(3, 5)],
+]
+
+## Les tuiles UNIES, qui n'ont qu'un seul terrain aux quatre coins : [nom du rôle, terrain].
+const UNIES := [["herbe", 0], ["herbe_sombre", 0], ["terre", 1]]
+
 var _jeu: TileSet
 var _sources := {}
 var _ordre: Array = []  # les noms déclarés, dans l'ordre — c'est la légende de la planche
@@ -119,6 +138,8 @@ func _initialize() -> void:
 	for cle in PLANCHES:
 		_declarer_le_reste(cle)
 
+	_declarer_terrains()
+
 	var erreur := ResourceSaver.save(_jeu, SORTIE)
 	if erreur != OK:
 		print("ÉCHEC — écriture de %s (%d)" % [SORTIE, erreur])
@@ -152,6 +173,73 @@ func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: S
 
 ## La planche de contrôle : chaque rôle déclaré, dans l'ordre, sur un damier. Le fond en damier montre
 ## ce qui est transparent — une décoration posée sur la mauvaise case s'y voit immédiatement.
+## Le terrain, ses tuiles unies, et ses transitions calculées. À appeler APRÈS que toutes les tuiles
+## existent : on ne pose pas un coin sur une case qui n'est pas encore déclarée.
+func _declarer_terrains() -> void:
+	_jeu.add_terrain_set(0)
+	_jeu.set_terrain_set_mode(0, TileSet.TERRAIN_MODE_MATCH_CORNERS)
+	for i in TERRAINS.size():
+		_jeu.add_terrain(0, i)
+		_jeu.set_terrain_name(0, i, TERRAINS[i])
+
+	var posees := 0
+	for u in UNIES:
+		var ou: Dictionary = _trouver(u[0])
+		if ou.is_empty():
+			print("  ⚠ terrain : le rôle « %s » est introuvable" % u[0])
+			continue
+		_poser_coins(ou["planche"], ou["case"], u[1], u[1], u[1], u[1])
+		posees += 1
+
+	for t in TRANSITIONS:
+		var fond: int = t[0]
+		var dessus: int = t[1]
+		var planche: String = t[2]
+		var cadre: Vector2i = t[3]
+		var rentrants: Vector2i = t[4]
+		# Le CADRE : une case du bord n'a « dessus » que du côté de l'intérieur.
+		for fy in 4:
+			for fx in 4:
+				_poser_coins(planche, cadre + Vector2i(fx, fy),
+					dessus if fx >= 1 and fy >= 1 else fond,
+					dessus if fx <= 2 and fy >= 1 else fond,
+					dessus if fx >= 1 and fy <= 2 else fond,
+					dessus if fx <= 2 and fy <= 2 else fond)
+				posees += 1
+		# Les COINS RENTRANTS : le fond ne mord qu'un seul coin, celui tourné vers le centre du bloc.
+		for cy in 2:
+			for cx in 2:
+				_poser_coins(planche, rentrants + Vector2i(cx, cy),
+					fond if cx == 1 and cy == 1 else dessus,
+					fond if cx == 0 and cy == 1 else dessus,
+					fond if cx == 1 and cy == 0 else dessus,
+					fond if cx == 0 and cy == 0 else dessus)
+				posees += 1
+	print("  terrain « %s » : %d tuiles raccordables (mode coins)" % [" / ".join(PackedStringArray(TERRAINS)), posees])
+
+
+## Les quatre coins d'une case, dans l'ordre haut-gauche, haut-droit, bas-gauche, bas-droit.
+func _poser_coins(planche: String, case: Vector2i, tl: int, tr: int, bl: int, br: int) -> void:
+	var source: TileSetAtlasSource = _sources[planche]["source"]
+	if source.get_tile_at_coords(case) == Vector2i(-1, -1):
+		print("  ⚠ terrain : la case %s de %s n'existe pas" % [case, planche])
+		return
+	var donnees := source.get_tile_data(case, 0)
+	donnees.set_terrain_set(0)
+	donnees.set_terrain(br)  # en mode coins, c'est le raccord qui décide ; le terrain reste indicatif
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_LEFT_CORNER, tl)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_RIGHT_CORNER, tr)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER, bl)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER, br)
+
+
+func _trouver(nom: String) -> Dictionary:
+	for e in _ordre:
+		if e["nom"] == nom:
+			return e
+	return {}
+
+
 ## Les cases du lot qu'aucun rôle n'a prises : déclarées sans nom et TRAVERSABLES, pour qu'on puisse les
 ## peindre. Une case entièrement transparente est ignorée — ce n'est pas une tuile, c'est un trou.
 func _declarer_le_reste(planche: String) -> void:

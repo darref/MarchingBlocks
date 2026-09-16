@@ -219,6 +219,17 @@ func _peindre_surface(sol: TileMapLayer, props: TileMapLayer, objets: TileMapLay
 		for x in LARGEUR:
 			_poser(sol, Vector2i(x, y), _terrain(x, y), _noms_surface)
 
+	# ⚠ LES CHEMINS SONT RACCORDÉS, PAS POSÉS CASE PAR CASE. `set_cells_terrain_connect()` choisit, pour
+	# chaque case, la tuile dont les quatre coins s'accordent au voisinage : une route cesse d'être un
+	# rectangle à escaliers et prend des bords organiques. Le terrain 1 est « terre » (faire_surface.gd).
+	var chemin_cases: Array[Vector2i] = []
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			if _terrain(x, y) == "terre":
+				chemin_cases.append(Vector2i(x, y))
+	sol.set_cells_terrain_connect(chemin_cases, 0, 1, false)
+	print("  chemins raccordés : %d cases" % chemin_cases.size())
+
 	for rocher in ROCHERS:
 		for y in range(rocher.position.y, rocher.end.y):
 			for x in range(rocher.position.x, rocher.end.x):
