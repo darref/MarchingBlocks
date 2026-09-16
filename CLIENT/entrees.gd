@@ -4,7 +4,8 @@ extends Node
 ## ⚠ UNE SEULE AUTORITÉ, ET C'EST CE FICHIER. La carte des entrées ne va PAS dans project.godot : deux
 ## descriptions d'une même chose divergent au premier réglage, et project.godot ne garde aucun
 ## commentaire — or chaque ligne ci-dessous a une raison. L'InputMap est rempli au démarrage, en
-## autoload, avant toute scène et avant `fenetre.gd` qui s'en sert.
+## autoload, avant toute scène. ⚠ L'ORDRE des autoloads, lui, ne se garantit pas : l'éditeur le réécrit
+## en enregistrant project.godot, donc `fenetre.gd` vérifie que l'action existe avant de s'en servir.
 ##
 ## ⚠ POSITIONS DE TOUCHES, PAS LETTRES GRAVÉES. `physical_keycode` désigne la POSITION de la touche,
 ## nommée d'après un clavier américain : W, A, S, D. Sur un clavier français, ces quatre positions SONT

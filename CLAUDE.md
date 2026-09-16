@@ -60,6 +60,9 @@ DÉROULÉE.** Chaque colonne de la vue de côté correspond à exactement une ca
 - ⚠ **Cette table sert au DÉFILEMENT, jamais au passage.** Elle dit où placer la caméra de surface
   quand on marche dans la grotte ; ce qui traverse d'une vue à l'autre passe par une entrée, et par
   elle seule.
+- **Où vit la table** : sur le nœud de la grotte (`CLIENT/grotte.gd`) — une case de départ et des
+  segments DROITS, réglables dans l'inspecteur. La coupe peinte doit faire exactement sa longueur, et
+  `CLIENT/niveau.gd` le vérifie plutôt que de deviner (§6, « Les niveaux peints »).
 - **Un coude du chemin est invisible de côté** : la coupe est déroulée, et c'est assumé.
 - **Le joueur n'existe que dans UN monde à la fois.** L'autre vue montre sa PROJECTION (un repère),
   jamais un second corps. Deux corps synchronisés seraient deux autorités sur une position.
@@ -463,7 +466,12 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   CLIENT/mise_en_page.gd   le séparateur, le balayage, les événements montrés, la fenêtre 2:1 — PUR
   CLIENT/ecran_partage.gd  les deux vues rendues à pleine taille, rognées à l'affichage
   CLIENT/fenetre.gd        autoload : la fenêtre recalée en 2:1, le plein écran
+  CLIENT/niveau.gd         la carte peinte → les grilles et les objets de CORE — PUR (pas un Node)
+  CLIENT/zone.gd           la scène d'une zone peinte : surface, grottes, et rien d'autre
+  CLIENT/grotte.gd         une grotte peinte : son chemin de surface et sa coupe
   CLIENT/              (à venir) les faisceaux dessinés, l'entrée joueur, l'animation
+  ART/                 le lot de tuiles temporaire, GÉNÉRÉ (tuiles.png, tuiles.tres)
+  NIVEAUX/             les zones peintes (zone_depart.tscn)
   DEV_TOOLS/           tests et outils (en français), dont le greybox de l'écran partagé et sa mesure
   MARQUE/              titre.png, embleme.png — images générées, à redessiner en vectoriel
 ```
@@ -480,6 +488,42 @@ vues, la bande, les faisceaux et les ondes, et ne recalcule JAMAIS une règle : 
   tant qu'on ne l'a pas vu échouer, et toute propriété structurelle se garde par un scénario
   CONSTRUIT, jamais espéré.
 
+### Les niveaux peints — DÉCIDÉ : la carte est la vérité
+
+**DÉCIDÉ (16 septembre 2026)** — on peint dans l'éditeur, et `CLIENT/niveau.gd` DÉDUIT de ce qui est
+peint les grilles et les objets de `CORE`. Jamais l'inverse, et jamais les deux à la fois : une carte
+peinte à côté d'un monde écrit en code, ce sont deux descriptions du même lieu, et elles divergent au
+premier mur déplacé.
+
+- **Le contrat d'une tuile**, et il tient en trois données personnalisées : `nom` (String), `mur`
+  (bool) — ce qui arrête la lumière et le joueur — et `objet` (String) — un type du catalogue posé par
+  cette tuile, sinon "". ⚠ **On ne cherche JAMAIS une tuile par sa position dans l'atlas, toujours par
+  son `nom`** : le jour où un lot acheté remplace le lot temporaire, seules les positions changent.
+- ⚠ **Une case non peinte est un MUR.** Le vide est plein : on ne peut pas oublier de fermer le bord du
+  monde, et une carte à trous ne laisse pas fuir la lumière.
+- ⚠ **Une entrée ne dit pas où elle mène : ON LE DÉDUIT.** La case peinte est cherchée dans le chemin de
+  chaque grotte — celle qui passe dessous est la sienne, la colonne est l'indice dans la table, et la
+  bouche est la première case non murée de cette colonne, en descendant. Le peintre creuse un puits, la
+  lumière tombe où il l'a creusé. Deux grottes sous la même case rendraient une entrée ambiguë : c'est
+  une erreur signalée.
+- **La coupe d'une grotte doit faire exactement la longueur de son chemin**, et c'est vérifié, pas
+  deviné : la table reste la seule vérité (§2). Le chemin vit sur le nœud de la grotte — case de départ
+  et segments DROITS — et se règle dans l'inspecteur.
+- **MESURÉ (test)** — `DEV_TOOLS/test_niveau.gd` peint ses cartes en code, saines et fautives :
+  23 vérifications, sept mutations délibérées, toutes rouges — y compris l'indépendance à l'ORDRE de
+  peinture, gardée par un scénario qui construit les deux ordres.
+- **Le lot de tuiles est GÉNÉRÉ** (`DEV_TOOLS/faire_tuiles.gd`) : quatorze couleurs, des aplats propres,
+  et l'aveu qu'il est temporaire. ⚠ **C'est aussi un critère d'ACHAT pour le lot final** : le monde
+  vivant et le monde intriqué doivent être la même carte repeinte par permutation de palette (§5), ce
+  qui exige une palette restreinte et PARTAGÉE. Un lot qui ne s'y plie pas coûtera deux jeux de tuiles
+  au lieu d'un, à chaque décor.
+- **La zone de départ est une première passe générée** (`DEV_TOOLS/faire_zone.gd`), faite pour être
+  repeinte à la main. L'outil valide sa sortie par le chargeur avant d'écrire — un outil qui ne sait pas
+  produire une carte valide n'a pas à la sauvegarder — et refuse d'écraser une zone existante.
+- **OUVERT — les objets du catalogue ne sont pas encore peignables**, seules les entrées le sont.
+  Miroirs, vitres et cristaux viendront avec la première énigme (§8, étape 3), et poseront leur propre
+  question : l'orientation d'un miroir, est-ce huit tuiles, ou une tuile et une propriété ?
+
 ### Les entrées — DÉCIDÉ : clavier ET manette, toujours les deux
 
 **DÉCIDÉ (16 septembre 2026)** — le jeu se joue ENTIÈREMENT au clavier (ZQSD, Maj, Espace) ou
@@ -487,7 +531,9 @@ ENTIÈREMENT à la manette, et Jordan teste indifféremment avec l'un ou l'autre
 
 - ⚠ **La carte des entrées vit dans `CLIENT/entrees.gd`, PAS dans `project.godot`.** Une seule
   autorité, et celle-là garde ses commentaires — `project.godot` les perd au premier enregistrement.
-  L'InputMap est rempli au démarrage par un autoload, chargé AVANT `fenetre.gd`, qui s'en sert.
+  L'InputMap est rempli au démarrage par un autoload. ⚠ **L'ORDRE des autoloads ne se garantit pas** —
+  l'éditeur le réécrit quand il enregistre `project.godot` — donc `fenetre.gd` vérifie que l'action
+  existe avant de s'en servir, au lieu de compter sur qui se charge en premier.
 - ⚠ **On lie des POSITIONS de touches (`physical_keycode`), jamais des lettres gravées.** Godot nomme
   les positions d'après un clavier américain : W, A, S, D. Sur un clavier français, ces positions SONT
   Z, Q, S, D. Une seule ligne sert donc ZQSD ici et WASD ailleurs, et personne ne reconfigure rien.

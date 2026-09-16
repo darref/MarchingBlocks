@@ -18,17 +18,17 @@ config/icon="res://MARQUE/embleme.png"
 
 [autoload]
 
-Entrees="*res://CLIENT/entrees.gd"
 Fenetre="*res://CLIENT/fenetre.gd"
+Entrees="*res://CLIENT/entrees.gd"
 
 [display]
 
 window/size/viewport_width=320
 window/size/viewport_height=160
+window/size/mode=3
 window/size/window_width_override=1280
 window/size/window_height_override=640
 window/stretch/mode="viewport"
-window/stretch/aspect="keep"
 window/stretch/scale_mode="integer"
 
 [rendering]
