@@ -36,7 +36,7 @@ const SURFACE := 0
 ##                   "objets": TileMapLayer}] — les grilles sont numérotées 1, 2, … dans cet ordre
 ## Rend {"monde", "chemins", "entrees", "erreurs"}. ⚠ `erreurs` non vide veut dire que la CARTE est
 ## fautive : on rend quand même ce qu'on a pu construire, pour que l'éditeur montre le reste.
-static func construire(sol, objets, grottes: Array) -> Dictionary:
+static func construire(sol, objets, grottes: Array, props = null) -> Dictionary:
 	var erreurs: Array = []
 	var monde = Monde.new()
 
@@ -57,7 +57,7 @@ static func construire(sol, objets, grottes: Array) -> Dictionary:
 	# 2. La surface.
 	var taille := _taille(sol, erreurs, "le sol de la surface")
 	monde.ajouter_grille(SURFACE, taille.x, taille.y)
-	_poser_murs(monde, SURFACE, sol, taille)
+	_poser_murs(monde, SURFACE, sol, taille, props)
 
 	# 3. Les grottes : la coupe doit faire exactement la longueur du chemin.
 	for id in chemins:
@@ -67,7 +67,7 @@ static func construire(sol, objets, grottes: Array) -> Dictionary:
 		if mesure.x != attendue:
 			erreurs.append("grotte %d : la coupe fait %d colonnes, son chemin %d — la table est la vérité (charte §2)" % [id, mesure.x, attendue])
 		monde.ajouter_grille(id, attendue, mesure.y)
-		_poser_murs(monde, id, coupe, Vector2i(attendue, mesure.y))
+		_poser_murs(monde, id, coupe, Vector2i(attendue, mesure.y), grottes[id - 1].get("props"))
 
 	# 4. Les objets, une fois les grilles là.
 	var entrees: Array = []
@@ -123,14 +123,22 @@ static func _taille(calque, erreurs: Array, quoi: String) -> Vector2i:
 	return Vector2i(maxi(rect.end.x, 1), maxi(rect.end.y, 1))
 
 
-static func _poser_murs(monde, grille: int, calque, taille: Vector2i) -> void:
+## ⚠ UN DÉCOR QUI BLOQUE AJOUTE UN MUR. Un arbre, un rocher posé par-dessus le terrain arrête les pieds ;
+## il doit donc arrêter la lumière, et c'est la MÊME donnée `mur` qui le dit. Sans cette ligne, le calque
+## des décors n'existerait que pour la physique, et on aurait deux mondes : celui qu'on traverse et celui
+## que la lumière traverse.
+static func _poser_murs(monde, grille: int, calque, taille: Vector2i, dessus = null) -> void:
 	if calque == null:
 		return
 	for y in taille.y:
 		for x in taille.x:
 			var pos := Vector2i(x, y)
 			var donnees = calque.get_cell_tile_data(pos)
-			if donnees == null or donnees.get_custom_data("mur"):
+			var mur: bool = donnees == null or donnees.get_custom_data("mur")
+			if not mur and dessus != null:
+				var par_dessus = dessus.get_cell_tile_data(pos)
+				mur = par_dessus != null and par_dessus.get_custom_data("mur")
+			if mur:
 				monde.poser_mur(grille, pos)
 
 

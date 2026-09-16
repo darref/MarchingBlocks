@@ -16,6 +16,10 @@ export_credentials.cfg
 data_*/
 mono_crash.*.json
 
+# Les lots de tuiles achetés entrent au dépôt (le projet les référence par res://), mais pas leurs
+# archives Unity : plusieurs mégaoctets qu'aucun Godot ne lira jamais.
+*.unitypackage
+
 # Android et exports
 /android/
 /build/

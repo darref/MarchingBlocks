@@ -31,4 +31,5 @@ func grottes() -> Array:
 ## Rend {"monde", "chemins", "entrees", "erreurs"} — voir `CLIENT/niveau.gd`. ⚠ `erreurs` non vide veut
 ## dire que la CARTE est fautive : à afficher, jamais à taire.
 func construire() -> Dictionary:
-	return Niveau.construire(get_node_or_null("Surface/Sol"), get_node_or_null("Surface/Objets"), grottes())
+	return Niveau.construire(get_node_or_null("Surface/Sol"), get_node_or_null("Surface/Objets"), grottes(),
+		get_node_or_null("Surface/Props"))

@@ -24,4 +24,5 @@ func description() -> Dictionary:
 		"segments": segments,
 		"coupe": get_node_or_null("Coupe"),
 		"objets": get_node_or_null("Objets"),
+		"props": get_node_or_null("Props"),
 	}

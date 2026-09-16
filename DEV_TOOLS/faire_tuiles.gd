@@ -28,7 +28,9 @@ extends SceneTree
 ##   godot --headless --path D:/UnderMend --import
 ##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/faire_tuiles.gd
 
-const COTE := 16
+## ⚠ 32 depuis le 16 septembre 2026 : le lot acheté pour la surface est en 32×32, et une seule taille de
+## case vaut pour tout le jeu. Ce lot-ci ne sert plus qu'aux GROTTES, en attendant un lot de côté.
+const COTE := 32
 const COLONNES := 8
 const DOSSIER := "res://ART"
 const IMAGE := DOSSIER + "/tuiles.png"
@@ -118,45 +120,48 @@ func _peindre(image: Image, origine: Vector2i, tuile: Dictionary, graine: int) -
 	var encre: Color = PALETTE[tuile["encre"]]
 	image.fill_rect(Rect2i(origine, Vector2i(COTE, COTE)), fond)
 
+	# ⚠ Tous les motifs se mesurent en UNITÉS de COTE/16, jamais en pixels fixes : le jour où la taille
+	# de case a doublé, les dessins ont suivi au lieu de se tasser dans un coin.
+	var u := COTE / 16
 	match tuile["motif"]:
 		"uni":
 			pass
 		"taches":
-			for n in 10:
-				var p := origine + Vector2i(hasard.randi_range(0, COTE - 2), hasard.randi_range(0, COTE - 2))
-				image.fill_rect(Rect2i(p, Vector2i(2, 1)), encre)
+			for n in 10 * u:
+				var p := origine + Vector2i(hasard.randi_range(0, COTE - 2 * u), hasard.randi_range(0, COTE - u))
+				image.fill_rect(Rect2i(p, Vector2i(2 * u, u)), encre)
 		"points":
-			for n in 5:
-				var p := origine + Vector2i(hasard.randi_range(1, COTE - 2), hasard.randi_range(1, COTE - 2))
-				image.set_pixelv(p, encre)
+			for n in 5 * u:
+				var p := origine + Vector2i(hasard.randi_range(u, COTE - 2 * u), hasard.randi_range(u, COTE - 2 * u))
+				image.fill_rect(Rect2i(p, Vector2i(u, u)), encre)
 		"touffes":
-			for n in 7:
-				var x := hasard.randi_range(1, COTE - 2)
-				var h := hasard.randi_range(3, 6)
-				image.fill_rect(Rect2i(origine + Vector2i(x, COTE - h - 1), Vector2i(1, h)), encre)
+			for n in 7 * u:
+				var x := hasard.randi_range(u, COTE - 2 * u)
+				var h := hasard.randi_range(3 * u, 6 * u)
+				image.fill_rect(Rect2i(origine + Vector2i(x, COTE - h - u), Vector2i(u, h)), encre)
 		"cadre":
-			for k in COTE:
-				image.set_pixelv(origine + Vector2i(k, 0), encre)
-				image.set_pixelv(origine + Vector2i(k, COTE - 1), encre)
-				image.set_pixelv(origine + Vector2i(0, k), encre)
-				image.set_pixelv(origine + Vector2i(COTE - 1, k), encre)
+			image.fill_rect(Rect2i(origine, Vector2i(COTE, u)), encre)
+			image.fill_rect(Rect2i(origine + Vector2i(0, COTE - u), Vector2i(COTE, u)), encre)
+			image.fill_rect(Rect2i(origine, Vector2i(u, COTE)), encre)
+			image.fill_rect(Rect2i(origine + Vector2i(COTE - u, 0), Vector2i(u, COTE)), encre)
 		"blocs":
+			var hauteur := COTE / 4
 			for ligne in 4:
 				var decalage := 0 if ligne % 2 == 0 else COTE / 2
-				image.fill_rect(Rect2i(origine + Vector2i(0, ligne * 4), Vector2i(COTE, 1)), encre)
-				image.fill_rect(Rect2i(origine + Vector2i(decalage, ligne * 4), Vector2i(1, 4)), encre)
+				image.fill_rect(Rect2i(origine + Vector2i(0, ligne * hauteur), Vector2i(COTE, u)), encre)
+				image.fill_rect(Rect2i(origine + Vector2i(decalage, ligne * hauteur), Vector2i(u, hauteur)), encre)
 		"vagues":
 			for ligne in 4:
-				var x := hasard.randi_range(1, 6)
-				image.fill_rect(Rect2i(origine + Vector2i(x, ligne * 4 + 2), Vector2i(6, 1)), encre)
+				var x := hasard.randi_range(u, 6 * u)
+				image.fill_rect(Rect2i(origine + Vector2i(x, ligne * (COTE / 4) + 2 * u), Vector2i(6 * u, u)), encre)
 		"bord_haut":
-			image.fill_rect(Rect2i(origine, Vector2i(COTE, 3)), encre)
+			image.fill_rect(Rect2i(origine, Vector2i(COTE, 3 * u)), encre)
 		"bord_bas":
-			image.fill_rect(Rect2i(origine + Vector2i(0, COTE - 3), Vector2i(COTE, 3)), encre)
+			image.fill_rect(Rect2i(origine + Vector2i(0, COTE - 3 * u), Vector2i(COTE, 3 * u)), encre)
 		"cailloux":
-			for n in 6:
-				var p := origine + Vector2i(hasard.randi_range(0, COTE - 3), hasard.randi_range(COTE - 5, COTE - 2))
-				image.fill_rect(Rect2i(p, Vector2i(2, 2)), encre)
+			for n in 6 * u:
+				var p := origine + Vector2i(hasard.randi_range(0, COTE - 3 * u), hasard.randi_range(COTE - 5 * u, COTE - 2 * u))
+				image.fill_rect(Rect2i(p, Vector2i(2 * u, 2 * u)), encre)
 		"halo":
 			# un puits de lumière : l'or s'éteint vers le bas, et c'est le seul dégradé du lot
 			for y in COTE:

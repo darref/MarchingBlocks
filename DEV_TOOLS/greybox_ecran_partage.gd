@@ -36,7 +36,7 @@ const VITESSE := 5.0  # cases par seconde
 const COURSE := 2.0  # PROPOSÉ — ce que « courir » multiplie, à régler à l'essai
 const PORTEE_ENTREE := 1.0  # en cases, pour descendre ou remonter
 const LIGNE_DU_SOL := 8  # la rangée où l'on marche dans une coupe de dix cases
-const TAILLE_JOUEUR := 10.0  # en pixels — plus petit qu'une case, il passe partout où une case est libre
+const TAILLE_JOUEUR := 20.0  # en pixels — plus petit qu'une case (32), il passe partout où une case est libre
 ## PROPOSÉ — combien de temps chaque événement est montré (charte §3, question ouverte).
 const DUREES := {"transforme": 0.6, "detruit": 0.5, "active": 0.4, "desactive": 0.4}
 ## L'énigme de démonstration, en colonnes de la grotte 1.
@@ -58,7 +58,7 @@ var entrees_cases: Array = []
 var sous_terre := false
 var grotte := 1
 var pos_surface := Vector2(12.5, 22.5)  # en cases
-var colonne := 0.5  # en colonnes de grotte
+var colonne := 4.5  # en colonnes de grotte — jamais 0 : les extrémités d'une galerie sont de la roche
 
 var grotte_montree := 1
 var colonne_montree := 4.5
@@ -103,10 +103,6 @@ func _ready() -> void:
 	_camera_surface = _camera(ecran.surface)
 	_dessus = _calque(ecran.grotte, _dessiner_dessus)
 	_camera_grotte = _camera(ecran.grotte)
-	_corps_surface = _corps(ecran.surface, pos_surface * CASE)
-	_corps_grotte = _corps(ecran.grotte, Vector2(colonne * CASE, LIGNE_DU_SOL * CASE + CASE / 2.0))
-	_seules_les_collisions_de(grotte)
-
 	print("GREYBOX — zone peinte, écran partagé")
 	print("  ZQSD ou stick : marcher   Maj ou B : courir   Espace ou A : descendre / remonter")
 	print("  R : rai rouge dans la grotte 1 (R : remettre)   F3 : état   F11 ou Alt+Entrée : plein écran")
@@ -115,6 +111,13 @@ func _ready() -> void:
 	print("  zone : %d×%d cases, %d grotte(s), %d entrée(s)" % [
 		monde.grilles[SURFACE]["largeur"], monde.grilles[SURFACE]["hauteur"], chemins.size(), entrees.size()])
 	_options()
+
+	# ⚠ LES CORPS SONT CRÉÉS APRÈS LES OPTIONS. Elles déplacent le joueur (--pres, --sous-terre) ; un corps
+	# posé avant resterait à l'ancienne place, et depuis que les extrémités d'une galerie sont creusées, il
+	# s'y retrouvait DANS la roche — la physique l'éjectait alors hors de la grille (vu : colonne −0,15).
+	_corps_surface = _corps(ecran.surface, pos_surface * CASE)
+	_corps_grotte = _corps(ecran.grotte, Vector2(colonne * CASE, LIGNE_DU_SOL * CASE + CASE / 2.0))
+	_seules_les_collisions_de(grotte)
 
 
 var _capture := ""

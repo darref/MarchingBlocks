@@ -224,31 +224,36 @@ Comment c'est tenu — `CLIENT/fenetre.gd`, en autoload, et F11 ou Alt+Entrée p
   agrandissement entier partout, en acceptant ces bandes. Les autres issues : (b) tailles calées sur
   les multiples, par crans ; (c) agrandissement fractionnaire en fenêtré seulement.
 
-### La résolution — PROPOSÉ : 320×160, cases de 16 pixels (remplace 320×180)
+### La résolution — PROPOSÉ : 640×320, cases de 32 pixels (remplace 320×160)
 
-**MESURÉ (calcul) — c'est la seule base 2:1 raisonnable dont la pleine largeur s'agrandit d'un facteur
-ENTIER sur tous les écrans courants**, parce que 320 divise 1280, 1920, 2560 et 3840 :
+**Changé le 16 septembre 2026, et par les TUILES, pas par un goût** : le lot acheté pour la surface est
+en 32×32. Garder une base de 320×160 aurait montré 10 × 5 cases à l'écran — injouable. On double donc la
+base et la case : **le compte de cases ne bouge pas** (20 × 10, comme avant), ni le 2:1, ni le partage.
+
+**MESURÉ (calcul) — l'agrandissement reste ENTIER sur tous les écrans courants**, parce que 640 divise
+1280, 1920, 2560 et 3840 :
 
 ```
   écran             agrandissement   image 2:1      bandes haut et bas
-  1280×720          ×4               1280×640       40 px
-  1920×1080         ×6               1920×960       60 px
-  2560×1440         ×8               2560×1280      80 px
-  3840×2160         ×12              3840×1920      120 px
-  1920×1200 (16:10) ×6               1920×960       120 px
+  1280×720          ×2               1280×640       40 px
+  1920×1080         ×3               1920×960       60 px
+  2560×1440         ×4               2560×1280      80 px
+  3840×2160         ×6               3840×1920      120 px
+  1920×1200 (16:10) ×3               1920×960       120 px
 
-  les autres bases 2:1 cassent :  360×180 → ×5,33 en 1080p
-                                  480×240 → ×5,33 en 1440p
-                                  384×192 → ×6,67 en 1440p
+  les bases 2:1 qui cassent :  720×360 → ×2,67 en 1080p
+                               960×480 → ×2,67 en 1440p
+                               768×384 → ×3,33 en 1440p
 ```
 
 Un pixel art agrandi d'un facteur non entier se déforme : c'est ce réglage qui décide si le jeu a
-l'air d'un jeu SNES ou d'une capture floue. 640×320 marcherait aussi, mais 40 × 20 cases, c'est une
-carte, pas *A Link to the Past*.
+l'air d'un jeu SNES ou d'une capture floue. ⚠ Une case de 32 pixels sur une base de 640 donne le MÊME
+cadrage qu'une case de 16 sur une base de 320 — c'est la même décision, exprimée dans l'unité du lot
+de tuiles qu'on a fini par acheter.
 
-- En écran partagé, la vue principale fait **240×160, soit 15 × 10 cases**. ⚠ Le 2:1 coûte quatre
+- En écran partagé, la vue principale fait **480×320, soit 15 × 10 cases**. ⚠ Le 2:1 coûte quatre
   cases de hauteur par rapport à ALTTP (16 × 14) : c'est le prix du partage, et il est assumé.
-- ⚠ **OUVERT — la bande de 1/4 fait 80 pixels, soit CINQ cases de large** sur dix de haut. Elle est en
+- ⚠ **OUVERT — la bande de 1/4 fait 160 pixels, soit CINQ cases de large** sur dix de haut. Elle est en
   portrait : ça va très bien à une coupe de grotte (on y voit la profondeur, c'est un puits de
   lumière), c'est serré pour la surface quand la grotte court d'est en ouest. La question se tranche
   au greybox et nulle part ailleurs : **voit-on, depuis la grotte, le miroir de surface qui est
@@ -538,11 +543,31 @@ premier mur déplacé.
 - **MESURÉ (test)** — `DEV_TOOLS/test_niveau.gd` peint ses cartes en code, saines et fautives :
   23 vérifications, sept mutations délibérées, toutes rouges — y compris l'indépendance à l'ORDRE de
   peinture, gardée par un scénario qui construit les deux ordres.
-- **Le lot de tuiles est GÉNÉRÉ** (`DEV_TOOLS/faire_tuiles.gd`) : quatorze couleurs, des aplats propres,
-  et l'aveu qu'il est temporaire. ⚠ **C'est aussi un critère d'ACHAT pour le lot final** : le monde
-  vivant et le monde intriqué doivent être la même carte repeinte par permutation de palette (§5), ce
-  qui exige une palette restreinte et PARTAGÉE. Un lot qui ne s'y plie pas coûtera deux jeux de tuiles
-  au lieu d'un, à chaque décor.
+- **DEUX lots achetés, DEUX tilesets, et une table de rôles pour chacun** (16 septembre 2026) :
+  `DEV_TOOLS/faire_surface.gd` bâtit `ART/surface.tres` sur le *Top-Down 32x32 RPG Asset Pack*,
+  `DEV_TOOLS/faire_coupe.gd` bâtit `ART/coupe.tres` sur *Pixel Art Platformer — Village Props*. Le lot
+  généré à la main (`faire_tuiles.gd`) ne sert plus qu'à dépanner.
+  - ⚠ **TOUT le lot est déclaré, pas seulement les rôles nommés** : sinon on ne pourrait peindre que la
+    poignée de tuiles qu'un outil a baptisées, sur des planches qui en comptent des centaines. Les cases
+    anonymes arrivent sans nom. Pour la COUPE, `mur` se déduit de l'opacité (dans un lot de roche, une
+    case pleine est de la roche) ; pour la SURFACE, non — l'herbe est opaque et se traverse — donc elles
+    arrivent traversables, et une falaise peinte à la main doit être marquée dans l'éditeur.
+  - ⚠ **PLANCHE DE CONTRÔLE, et c'est une méthode, pas un confort.** Chaque générateur écrit une image
+    (`ART/planche_*.png`) montrant chaque rôle, les blocs RECONSTITUÉS, puis des CANDIDATS — des cases
+    dont on hésite. On regarde avant de peindre une zone entière. C'est ce qui a montré qu'un trou
+    d'entrée n'est pas une tuile mais un bloc de 2 × 2, et qu'un « sol de grotte » pris dans un lot de
+    plateforme arrivait coiffé d'herbe.
+  - Les tuiles de FOND ne sont pas choisies à l'œil : un outil repère celles qui sont opaques, peu
+    contrastées et se raccordent à elles-mêmes bord à bord. C'est mesurable, donc c'est mesuré.
+  - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
+    l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
+    extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol
+    restent de la roche pleine, donc plats. À reprendre à la main, ou avec un lot de grotte.
+  - ⚠ **OUVERT — la permutation de palette (§5) ne tient plus telle quelle.** Elle supposait une palette
+    restreinte et PARTAGÉE ; les lots achetés n'en ont pas. Deux issues : une transformation de couleur
+    par shader (teinte, saturation, luminosité) qui marche sur n'importe quel art mais ne permute rien ;
+    ou deux jeux de tuiles, donc deux fois le travail à chaque décor. À trancher avant de dessiner le
+    monde intriqué.
 - **La zone de départ est une première passe générée** (`DEV_TOOLS/faire_zone.gd`), faite pour être
   repeinte à la main. L'outil valide sa sortie par le chargeur avant d'écrire — un outil qui ne sait pas
   produire une carte valide n'a pas à la sauvegarder — et refuse d'écraser une zone existante.

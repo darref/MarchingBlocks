@@ -6,18 +6,22 @@ extends RefCounted
 ## sans écran (DEV_TOOLS/test_mise_en_page.gd).
 ##
 ## La surface est toujours À GAUCHE, la grotte toujours À DROITE (charte §3). Trois positions :
-##   320  surface seule
-##   240  surface, près d'une entrée ou pendant qu'un événement de grotte est montré
-##    80  dans une grotte — la surface ne quitte jamais l'écran sous terre
+##   640  surface seule
+##   480  surface, près d'une entrée ou pendant qu'un événement de grotte est montré
+##   160  dans une grotte — la surface ne quitte jamais l'écran sous terre
 ## Passer de l'une à l'autre ne permute rien : le séparateur GLISSE.
+##
+## ⚠ TOUT EST EN PIXELS DE BASE, et la base a DOUBLÉ le 16 septembre 2026 : 640×320, cases de 32, parce
+## que le lot de tuiles acheté est en 32×32. Le compte de CASES à l'écran n'a pas bougé (20 × 10), ni le
+## 2:1, ni l'agrandissement entier (×2 en 1280, ×3 en 1920, ×4 en 1440p, ×6 en 4K).
 
-const LARGEUR := 320
-const HAUTEUR := 160
-const CASE := 16
+const LARGEUR := 640
+const HAUTEUR := 320
+const CASE := 32
 
-const SURFACE_SEULE := 320
-const PRES_ENTREE := 240
-const SOUS_TERRE := 80
+const SURFACE_SEULE := 640
+const PRES_ENTREE := 480
+const SOUS_TERRE := 160
 
 ## PROPOSÉ — en CASES, jamais en pixels. La bande s'ouvre à RAYON_ENTREE d'une entrée et ne se referme
 ## qu'au-delà de RAYON_ENTREE + MARGE_ENTREE : sans cet écart, un joueur qui longe le seuil ferait
@@ -31,7 +35,7 @@ const DUREE_BALAYAGE := 0.3
 const MAINTIEN := 0.5
 
 ## PROPOSÉ — deux fois la base : en dessous, le pixel art n'est plus lisible.
-const FENETRE_MIN := Vector2i(640, 320)
+const FENETRE_MIN := Vector2i(1280, 640)
 
 var proche := false
 var balayage := Balayage.new(SURFACE_SEULE, SOUS_TERRE, SURFACE_SEULE)
