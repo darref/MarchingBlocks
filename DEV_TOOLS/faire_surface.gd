@@ -43,9 +43,12 @@ const TUILES := [
 	# ⚠ « entree » ne vient PAS du lot : la case qu'il occupait appartient au bloc de coins rentrants du
 	# gravier, et une tuile n'appartient qu'à un seul terrain. C'est un marqueur que nous dessinons, posé
 	# sur le calque des objets ; le TROU, lui, reste le décor visible (bloc de 2 × 2, plus bas).
-	["buisson", "deco", Vector2i(5, 1), true, ""],
+	# ⚠ « buisson » n'est plus ici : c'est un objet de 2 × 2, et n'en prendre qu'une case donnait son quart
+	# sud-ouest tout seul. Il est déclaré en BLOC, plus bas — comme les arbres et le trou d'entrée.
 	["rocher", "deco", Vector2i(1, 6), true, ""],
-	["cailloux", "deco", Vector2i(3, 4), false, ""],
+	# ⚠ Les cailloux BLOQUENT : un tas de pierres qu'on traverse n'est pas un décor, c'est un mensonge.
+	# Ce qui reste traversable est ce qui arrive à la cheville — fleurs, hautes herbes, champignons.
+	["cailloux", "deco", Vector2i(3, 4), true, ""],
 	["fleurs", "deco", Vector2i(8, 9), false, ""],
 	["herbe_haute", "deco", Vector2i(6, 9), false, ""],
 	["champignons", "deco", Vector2i(2, 1), false, ""],
@@ -54,13 +57,18 @@ const TUILES := [
 ## Les objets qui tiennent sur PLUSIEURS cases : [nom, planche, coin, taille, rangées murées].
 ## ⚠ Chaque case du bloc devient une tuile nommée « nom_x_y » : le générateur de zone les pose ensemble,
 ## et la planche de contrôle montre le bloc reconstitué — un arbre décalé d'une case se voit tout de suite.
+## ⚠ Les rangées MURÉES d'un bloc. Un arbre bloque ses DEUX rangées basses, pas seulement le tronc :
+## avec la seule rangée du bas, on entrait dans l'arbre et on ne s'arrêtait qu'au pied — à l'usage, ça se
+## voit comme une absence de collision. Les rangées hautes restent traversables, pour passer DERRIÈRE la
+## cime, comme dans A Link to the Past.
 const BLOCS := [
-	["arbre", "deco", Vector2i(6, 3), Vector2i(3, 4), [3]],
-	["arbre_roux", "deco", Vector2i(6, 17), Vector2i(3, 4), [3]],
+	["arbre", "deco", Vector2i(6, 3), Vector2i(3, 4), [2, 3]],
+	["arbre_roux", "deco", Vector2i(6, 17), Vector2i(3, 4), [2, 3]],
 	# ⚠ Le trou d'une entrée n'est pas une tuile : c'est un bloc de 2 × 2. C'est ce que la planche de
 	# contrôle a montré — « entree » tombait sur son quart supérieur gauche, d'où la pierre à cailloux.
 	# Ce quart reste le MARQUEUR posé sur le calque des objets ; ce bloc-ci est le décor, sur le sol.
 	["trou", "sol", Vector2i(29, 5), Vector2i(2, 2), []],
+	["buisson", "deco", Vector2i(5, 0), Vector2i(2, 2), [1]],
 ]
 
 ## ⚠ Des cases dont je ne suis pas sûr : elles ne sont PAS déclarées dans le tileset, elles ne font que
@@ -388,7 +396,12 @@ func _declarer_le_reste(planche: String) -> void:
 
 func _ecrire_planche() -> void:
 	var lignes := ceili(float(_ordre.size()) / PAR_LIGNE) + _hauteur_des_blocs() + ceili(float(CANDIDATS.size()) / PAR_LIGNE)
-	var image := Image.create_empty(PAR_LIGNE * (COTE + 2), lignes * (COTE + 2), false, Image.FORMAT_RGBA8)
+	# ⚠ La planche doit être assez large pour TOUS les blocs reconstitués : le buisson tombait hors de
+	# l'image, et un outil de contrôle qui tronque sa sortie ment par omission.
+	var largeur_blocs := 1
+	for b in BLOCS:
+		largeur_blocs += (b[3] as Vector2i).x * COTE + 8
+	var image := Image.create_empty(maxi(PAR_LIGNE * (COTE + 2), largeur_blocs), lignes * (COTE + 2), false, Image.FORMAT_RGBA8)
 	for y in image.get_height():
 		for x in image.get_width():
 			image.set_pixel(x, y, Color(0.1, 0.1, 0.12) if (x / 8 + y / 8) % 2 == 0 else Color(0.18, 0.18, 0.22))

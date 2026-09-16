@@ -293,10 +293,19 @@ func _semer(props: TileMapLayer) -> void:
 	var petites := ["buisson", "cailloux", "fleurs", "herbe_haute", "herbe_haute", "champignons"]
 	for n in 260:
 		var pos := Vector2i(_hasard.randi_range(1, LARGEUR - 2), _hasard.randi_range(1, HAUTEUR - 2))
-		if not _libre(pos, Vector2i.ONE):
+		var quoi: String = petites[_hasard.randi_range(0, petites.size() - 1)]
+		# ⚠ Un buisson occupe 2 × 2 cases. Posé comme une case unique, il ne montrait que son quart
+		# sud-ouest — le même piège que le trou d'entrée, et la raison pour laquelle les blocs existent.
+		var taille := Vector2i(2, 2) if quoi == "buisson" else Vector2i.ONE
+		if not _libre(pos, taille):
 			continue
-		_poser(props, pos, petites[_hasard.randi_range(0, petites.size() - 1)], _noms_surface)
-		_pris[pos] = true
+		if taille == Vector2i.ONE:
+			_poser(props, pos, quoi, _noms_surface)
+		else:
+			_poser_bloc(props, pos, quoi, taille, _noms_surface)
+		for y in taille.y:
+			for x in taille.x:
+				_pris[pos + Vector2i(x, y)] = true
 
 
 ## Libre = dans la carte, sur de l'herbe, et rien d'autre par-dessus.

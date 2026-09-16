@@ -462,12 +462,21 @@ elle ne la laisse passer qu'une fois l'onde arrivée sur elle. Ce qu'on voit est
 des deux horloges de River Stones (§8), et c'est la lisibilité d'*A Link to the Past*. Dans le moteur,
 c'est une modification d'état stocké par front d'onde, suivie d'une résolution (§4).
 
-### PROPOSÉ — le rendu : *A Link to the Past* l'a déjà fait
+### DÉCIDÉ — le rendu : le monde intriqué est le monde VIDÉ DE SA COULEUR
 
-Le Monde des Ténèbres d'ALTTP est **la même carte, repeinte par permutation de palette**. C'est
-exactement « vivante / intriquée ». Un shader de tuiles lit une texture d'état à un texel par case et
-le front de l'onde ; les changements de FORME (lianes, racines, nœuds visibles) vivent sur un calque
-à part. Un seul jeu de tuiles à dessiner, pas deux.
+**DÉCIDÉ (Jordan, 16 septembre 2026)** — le monde des ténèbres est un SHADER qui passe la couleur en
+NIVEAUX DE GRIS. Pas de permutation de palette : donc aucune palette restreinte à exiger d'un lot acheté,
+n'importe quel art y passe, et il n'y a toujours qu'un seul jeu de tuiles à dessiner.
+
+Un shader de tuiles lit une texture d'état à un texel par case et le front de l'onde ; les changements de
+FORME (lianes, racines, nœuds visibles) vivent sur un calque à part.
+
+⚠ **CE QUE LE GRIS COÛTE, ET QU'IL FAUT TRANCHER AVANT DE L'ÉCRIRE : dans ce jeu, la couleur EST la
+mécanique** (§4). Un rouge fait fondre la glace, un bleu éteint le feu, un violet sur un œil jaune ne fait
+rien. Si le shader vide TOUT l'écran de sa couleur, les faisceaux et leurs cibles deviennent
+indiscernables, et l'énigme devient injouable là où elle devrait être la plus lisible.
+**PROPOSÉ — le gris s'arrête donc au DÉCOR** : les faisceaux, les activables et tout ce qui réagit à la
+lumière gardent leur couleur. Sur un monde gris, ils ne ressortiront jamais aussi bien.
 
 - **OUVERT — la force du ciel.** Ce qu'elle est et comment on l'obtient. Aucune énigme du début n'en
   dépend ; seul le type de nœud doit exister.
@@ -588,11 +597,10 @@ premier mur déplacé.
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol
     restent de la roche pleine, donc plats. À reprendre à la main, ou avec un lot de grotte.
-  - ⚠ **OUVERT — la permutation de palette (§5) ne tient plus telle quelle.** Elle supposait une palette
-    restreinte et PARTAGÉE ; les lots achetés n'en ont pas. Deux issues : une transformation de couleur
-    par shader (teinte, saturation, luminosité) qui marche sur n'importe quel art mais ne permute rien ;
-    ou deux jeux de tuiles, donc deux fois le travail à chaque décor. À trancher avant de dessiner le
-    monde intriqué.
+  - **TRANCHÉ (§5) — le monde intriqué sera un shader en NIVEAUX DE GRIS**, et non une permutation de
+    palette. Les lots achetés n'ont donc aucune contrainte de palette à respecter : c'était ma réserve
+    d'achat, elle tombe. ⚠ Reste la règle qui va avec : le gris s'arrête au décor, les faisceaux gardent
+    leur couleur, sans quoi l'énigme ne se lit plus.
 - **La zone de départ est une première passe générée** (`DEV_TOOLS/faire_zone.gd`), faite pour être
   repeinte à la main. L'outil valide sa sortie par le chargeur avant d'écrire — un outil qui ne sait pas
   produire une carte valide n'a pas à la sauvegarder — et refuse d'écraser une zone existante.
