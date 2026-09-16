@@ -606,6 +606,21 @@ premier mur déplacé.
       se confondent avec des rectangles de tuiles. On agrandit la capture avec une grille de 32 px : si
       les taches tombent sur les cases, c'est un défaut ; sinon, c'est la texture. ⚠ Ne jamais trancher
       ce genre de doute à l'œil nu sur une image réduite.
+    - **DÉCIDÉ (Jordan, 16 septembre 2026) — l'auto-tuilage passe à BETTER TERRAIN**, le système natif
+      est abandonné. Raison mesurée : le natif exige un match EXACT et n'a que deux modes exclusifs
+      (coins OU côtés) ; un lot acheté n'a jamais toutes les pièces, et il retombe alors sur la tuile
+      pleine sans un mot d'erreur. Better Terrain accepte les HUIT voisinages à la fois, choisit au
+      meilleur score — donc dégrade au lieu de s'effondrer — et connaît les CATÉGORIES : l'eau borde
+      « tout ce qui est ferme » (herbe, terre, sable, gravier) au lieu de la seule herbe.
+      - ⚠ **Il s'utilise hors éditeur**, mais il faut l'INSTANCIER et l'AJOUTER À L'ARBRE : ses caches
+        appellent `add_child()`. Ses données vivent dans les métadonnées du TileSet et des TileData, et
+        survivent à l'aller-retour sur disque (vérifié en ligne de commande).
+      - **Peindre se fait en DEUX temps** : `set_cells()` pose, `update_terrain_cells()` résout. Poser ne
+        raccorde rien, et raccorder sans avoir posé ne voit rien.
+      - ⚠ **Les SYMÉTRIES : essayées, retirées.** Retourner une bordure multiplierait la couverture, mais
+        les motifs de ce lot ont un haut et un bas — la berge est éclairée par le dessus. Pivotés, ils
+        donnent des blocs de roche qui flottent dans l'herbe. À ne garder que pour un motif sans
+        orientation : un gravier, une mousse.
     - ⚠ **OUVERT — LA RIVE DU LAC RÉSISTE, et voici ce qui a été essayé pour que personne ne recommence.**
       L'eau est déclarée comme terrain et ses bords viennent bien de sa planche, mais le rivage sort en
       MARCHES, avec des fragments de bord isolés au lieu d'un trait continu. Trois approches, trois échecs :

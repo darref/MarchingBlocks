@@ -20,6 +20,7 @@ config/icon="res://MARQUE/embleme.png"
 
 Fenetre="*res://CLIENT/fenetre.gd"
 Entrees="*res://CLIENT/entrees.gd"
+BetterTerrain="*uid://n2wjmkx0pehv"
 
 [display]
 
@@ -30,6 +31,10 @@ window/size/window_width_override=1280
 window/size/window_height_override=640
 window/stretch/mode="viewport"
 window/stretch/scale_mode="integer"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/better-terrain/plugin.cfg", "res://addons/kenyoni/plugin_reloader/plugin.cfg")
 
 [rendering]
 

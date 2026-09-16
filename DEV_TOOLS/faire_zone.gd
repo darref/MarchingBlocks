@@ -20,6 +20,9 @@ extends SceneTree
 ##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/faire_zone.gd [-- --ecraser]
 
 const Niveau := preload("res://CLIENT/niveau.gd")
+## ⚠ Better Terrain remplace le système natif (voir faire_surface.gd). Il s'utilise hors éditeur, mais
+## il faut l'instancier ET l'ajouter à l'arbre : ses caches appellent add_child().
+const BETTER_TERRAIN := "res://addons/better-terrain/BetterTerrain.gd"
 
 const TILESET_SURFACE := "res://ART/surface.tres"
 const TILESET_COUPE := "res://ART/coupe.tres"
@@ -70,6 +73,8 @@ var _surface: TileSet
 var _coupe: TileSet
 var _noms_surface := {}
 var _noms_coupe := {}
+var _bt
+var _terrains := {}  # nom -> indice, relu du TileSet : une seule vérité, celle de faire_surface.gd
 var _hasard := RandomNumberGenerator.new()
 var _pris := {}  # les cases de surface déjà occupées par un décor : on n'empile pas deux arbres
 
@@ -85,10 +90,14 @@ func _initialize() -> void:
 			print("%s manque — lance DEV_TOOLS/faire_surface.gd et faire_coupe.gd d'abord." % chemin)
 			quit(1)
 			return
+	_bt = load(BETTER_TERRAIN).new()
+	root.add_child(_bt)
 	_surface = load(TILESET_SURFACE)
 	_coupe = load(TILESET_COUPE)
 	_noms_surface = _nommer(_surface)
 	_noms_coupe = _nommer(_coupe)
+	for i in _bt.terrain_count(_surface):
+		_terrains[_bt.get_terrain(_surface, i).name] = i
 	_hasard.seed = GRAINE
 
 	var racine := _batir()
@@ -117,6 +126,18 @@ func _initialize() -> void:
 	var erreur := ResourceSaver.save(scene, CHEMIN)
 	print("zone écrite : %s" % CHEMIN if erreur == OK else "ÉCHEC — écriture de %s (%d)" % [CHEMIN, erreur])
 	quit(0 if erreur == OK else 1)
+
+
+## Peindre un terrain par Better Terrain : on POSE les cases, puis on lance le solveur. ⚠ Les deux temps
+## sont séparés exprès (comme en Godot 3) : poser ne raccorde rien, et raccorder sans avoir posé ne voit
+## rien. `update_terrain_cells` recalcule aussi les cases ALENTOUR, pour que la couture se ferme.
+func _raccorder(calque: TileMapLayer, cases: Array, terrain: String) -> void:
+	if not _terrains.has(terrain):
+		print("  ⚠ terrain inconnu : « %s »" % terrain)
+		return
+	_bt.set_cells(calque, cases, _terrains[terrain])
+	_bt.update_terrain_cells(calque, cases)
+	print("  %s : %d cases raccordées" % [terrain, cases.size()])
 
 
 ## nom -> {source, case}. ⚠ On parcourt TOUTES les sources : un tileset bâti sur trois planches en a trois.
@@ -239,7 +260,7 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 			var t := _terrain(x, y)
 			if t == "eau" or t == "eau_profonde":
 				lac.append(Vector2i(x, y))
-	sol.set_cells_terrain_connect(lac, 2, 0, false)  # jeu 2 = l'eau, raccordée par les CÔTÉS
+	_raccorder(sol, lac, "eau")
 	# Le raccord pose de l'eau unie partout : on repose ensuite le fond, là où le lac est profond.
 	for y in HAUTEUR:
 		for x in LARGEUR:
@@ -254,7 +275,7 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 		for x in LARGEUR:
 			if _terrain(x, y) == "herbe_sombre" and not _est_tache(x, y):
 				claire.append(Vector2i(x, y))
-	nappe.set_cells_terrain_connect(claire, 1, 2, false)
+	_raccorder(nappe, claire, "herbe_claire")
 	print("  nappe d'herbe claire : %d cases, %d clairières" % [claire.size(), _compter_taches()])
 
 	# ⚠ LES CHEMINS SONT RACCORDÉS, PAS POSÉS CASE PAR CASE. `set_cells_terrain_connect()` choisit, pour
@@ -265,7 +286,7 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 		for x in LARGEUR:
 			if _terrain(x, y) == "terre":
 				chemin_cases.append(Vector2i(x, y))
-	sol.set_cells_terrain_connect(chemin_cases, 0, 1, false)
+	_raccorder(sol, chemin_cases, "terre")
 	print("  chemins raccordés : %d cases" % chemin_cases.size())
 
 	for rocher in ROCHERS:
@@ -282,7 +303,7 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 			if _est_plage(x, y):
 				sable.append(Vector2i(x, y))
 				_pris[Vector2i(x, y)] = true
-	recouvrement.set_cells_terrain_connect(sable, 1, 1, false)
+	_raccorder(recouvrement, sable, "sable")
 
 	# Les entrées : une plaque de gravier ARRONDIE et raccordée, le trou par-dessus, puis le marqueur.
 	# ⚠ Le trou passe sur les props, au-dessus du gravier : posé dessous, il disparaîtrait.
@@ -294,7 +315,7 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 				if absi(dx) + absi(dy) * 2 <= 5:
 					gravier.append(case + Vector2i(dx, dy))
 					_pris[case + Vector2i(dx, dy)] = true
-	recouvrement.set_cells_terrain_connect(gravier, 1, 0, false)
+	_raccorder(recouvrement, gravier, "gravier")
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
 		# ⚠ Du noir SOUS le trou, sur le recouvrement lui-même : les tuiles de trou ont le centre
