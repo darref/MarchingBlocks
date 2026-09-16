@@ -606,9 +606,19 @@ premier mur déplacé.
       se confondent avec des rectangles de tuiles. On agrandit la capture avec une grille de 32 px : si
       les taches tombent sur les cases, c'est un défaut ; sinon, c'est la texture. ⚠ Ne jamais trancher
       ce genre de doute à l'œil nu sur une image réduite.
-    - ⚠ **OUVERT — la rive du LAC elle-même.** L'eau reste un aplat opaque posé sur le sol : elle
-      rencontre le sable par une arête droite. Ses ensembles à elle sont des cadres opaques (de la terre
-      percée d'un trou d'eau), donc une troisième façon de faire, à traiter à part.
+    - ⚠ **OUVERT — LA RIVE DU LAC RÉSISTE, et voici ce qui a été essayé pour que personne ne recommence.**
+      L'eau est déclarée comme terrain et ses bords viennent bien de sa planche, mais le rivage sort en
+      MARCHES, avec des fragments de bord isolés au lieu d'un trait continu. Trois approches, trois échecs :
+      1. **coins, sans coins rentrants** — la planche de l'eau n'en fournit aucun (elle a des cadres, des
+         baies de deux cases, un îlot rond). Un lac convexe s'en passe, un lac organique en réclame partout ;
+      2. **côtés** (`TERRAIN_MODE_MATCH_SIDES`, jeu de terrains séparé, puisqu'un jeu n'a qu'un mode) — les
+         diagonales cessent de compter, mais les fragments isolés demeurent ;
+      3. **côtés sur contour LISSÉ** — un bord bruité case par case fabrique des saillies d'une case, qu'un
+         cadre de seize tuiles ne sait pas border ; les retirer a réduit les cas impossibles, sans suffire.
+      **Ce qui marchait** : un lac RECTANGULAIRE, dont la rive était propre et complète — mais qui se lit
+      comme une piscine. Les issues restantes : assumer un plan d'eau anguleux ; peindre la rive à la main
+      dans l'éditeur (le TileSet expose toutes les cases) ; ou prendre un lot d'eau qui fournisse un jeu
+      complet de raccords. ⚠ Décision de Jordan, pas une quatrième tentative à l'aveugle.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol

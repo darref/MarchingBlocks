@@ -99,6 +99,16 @@ const TRANSITIONS := [
 	[0, 1, "sol", Vector2i(1, 1), Vector2i(3, 5)],
 ]
 
+## ⚠ L'EAU SE RACCORDE PAR LES CÔTÉS, PAS PAR LES COINS — et ce n'est pas un détail d'implémentation.
+## Sa planche ne fournit AUCUN coin rentrant : elle a des cadres, des baies de deux cases, un îlot rond,
+## rien qui se range dans le modèle « quatre coins ». Or un lac au contour organique réclame des coins
+## rentrants partout, et sans eux Godot retombe sur l'eau unie : le rivage repart en escalier, ce qu'on
+## a vu. En mode CÔTÉS, une case ne déclare que ses quatre bords, les diagonales ne comptent plus, et le
+## cadre suffit à border n'importe quelle forme. ⚠ Un jeu de terrains n'a qu'un seul mode : l'eau a donc
+## le sien, séparé de l'herbe et de la terre.
+const TERRAIN_EAU := 2
+const CADRE_EAU := {"planche": "eau", "cadre": Vector2i(0, 7), "plein": Vector2i(9, 3)}
+
 ## ⚠ LE SECOND JEU : LES RECOUVREMENTS. Ces ensembles-là ont l'extérieur TRANSPARENT — ils ne remplacent
 ## pas l'herbe, ils se posent par-dessus, et c'est le calque du dessous qui se voit sur leurs bords. Leur
 ## fond n'est donc pas un terrain mais « rien » (-1), et ils vivent sur leur propre calque.
@@ -258,6 +268,10 @@ func _declarer_terrains() -> void:
 	for i in TERRAINS_RECOUVREMENT.size():
 		_jeu.add_terrain(1, i)
 		_jeu.set_terrain_name(1, i, TERRAINS_RECOUVREMENT[i])
+	_jeu.add_terrain_set(TERRAIN_EAU)
+	_jeu.set_terrain_set_mode(TERRAIN_EAU, TileSet.TERRAIN_MODE_MATCH_SIDES)
+	_jeu.add_terrain(TERRAIN_EAU, 0)
+	_jeu.set_terrain_name(TERRAIN_EAU, 0, "eau")
 
 	var posees := 0
 	for u in UNIES:
@@ -306,6 +320,8 @@ func _declarer_terrains() -> void:
 					dessus if fx <= 2 and fy <= 2 else fond)
 				posees += 1
 		# Les COINS RENTRANTS : le fond ne mord qu'un seul coin, celui tourné vers le centre du bloc.
+		if rentrants.x < 0:
+			continue  # l'ensemble n'en fournit pas : une étendue convexe s'en passe (voir TRANSITIONS)
 		for cy in 2:
 			for cx in 2:
 				_poser_coins(planche, rentrants + Vector2i(cx, cy), jeu_terrain, centre,
@@ -314,7 +330,20 @@ func _declarer_terrains() -> void:
 					fond if cx == 1 and cy == 0 else dessus,
 					fond if cx == 0 and cy == 0 else dessus)
 				posees += 1
+	# L'eau, par les CÔTÉS : la tuile pleine, puis le cadre. Un bord est « eau » du côté de l'intérieur.
+	var posees_eau := 0
+	_poser_cotes(CADRE_EAU["planche"], CADRE_EAU["plein"], 0, 0, 0, 0)
+	posees_eau += 1
+	for fy in 4:
+		for fx in 4:
+			_poser_cotes(CADRE_EAU["planche"], (CADRE_EAU["cadre"] as Vector2i) + Vector2i(fx, fy),
+				0 if fx >= 1 else RIEN,
+				0 if fx <= 2 else RIEN,
+				0 if fy >= 1 else RIEN,
+				0 if fy <= 2 else RIEN)
+			posees_eau += 1
 	print("  terrain « %s » : %d tuiles raccordables (mode coins)" % [" / ".join(PackedStringArray(TERRAINS)), posees])
+	print("  terrain « eau » : %d tuiles raccordables (mode CÔTÉS)" % posees_eau)
 
 
 ## Les quatre coins d'une case, dans l'ordre haut-gauche, haut-droit, bas-gauche, bas-droit.
@@ -328,7 +357,11 @@ func _poser_coins(planche: String, case: Vector2i, jeu_terrain: int, centre: int
 		return
 	var source: TileSetAtlasSource = _sources[planche]["source"]
 	if source.get_tile_at_coords(case) == Vector2i(-1, -1):
-		print("  ⚠ terrain : la case %s de %s n'existe pas" % [case, planche])
+		# ⚠ Une case PLEINE (quatre coins de la même matière) qui n'existe pas n'est pas une faute : c'est
+		# le centre d'un cadre dont le milieu est transparent, et une tuile unie déclarée ailleurs le
+		# remplace déjà. On ne signale que ce qui manque VRAIMENT : une tuile de bord introuvable.
+		if not (tl == tr and tr == bl and bl == br):
+			print("  ⚠ terrain : la case %s de %s n'existe pas" % [case, planche])
 		return
 	var donnees := source.get_tile_data(case, 0)
 	donnees.set_terrain_set(jeu_terrain)
@@ -373,14 +406,25 @@ func _ecrire_planche_terrains() -> void:
 		[TileSet.CELL_NEIGHBOR_BOTTOM_LEFT_CORNER, Vector2i(2, COTE - 8)],
 		[TileSet.CELL_NEIGHBOR_BOTTOM_RIGHT_CORNER, Vector2i(COTE - 8, COTE - 8)],
 	]
+	# ⚠ Un jeu en mode CÔTÉS n'a pas de coins : les interroger fait journaliser une erreur par tuile, et
+	# une planche de contrôle qui crie à chaque passage finit par ne plus être lue. On demande à chaque
+	# tuile ce que SON mode permet — les pastilles se posent alors au milieu des bords.
+	var cotes := [
+		[TileSet.CELL_NEIGHBOR_LEFT_SIDE, Vector2i(2, COTE / 2 - 3)],
+		[TileSet.CELL_NEIGHBOR_RIGHT_SIDE, Vector2i(COTE - 8, COTE / 2 - 3)],
+		[TileSet.CELL_NEIGHBOR_TOP_SIDE, Vector2i(COTE / 2 - 3, 2)],
+		[TileSet.CELL_NEIGHBOR_BOTTOM_SIDE, Vector2i(COTE / 2 - 3, COTE - 8)],
+	]
+	var couleurs_eau := [Color(0.45, 0.45, 0.5), _jeu.get_terrain_color(TERRAIN_EAU, 0)]
 	for i in cases.size():
 		var e: Dictionary = cases[i]
 		var donnees: TileData = e["donnees"]
 		var atlas: Image = (_sources[e["planche"]]["texture"] as Texture2D).get_image()
 		var coin := Vector2i(i % PAR_LIGNE, i / PAR_LIGNE) * (COTE + 2) + Vector2i(1, 1)
 		image.blend_rect(atlas, Rect2i((e["case"] as Vector2i) * COTE, Vector2i(COTE, COTE)), coin)
-		var palette: Array = couleurs if donnees.get_terrain_set() == 0 else couleurs_r
-		for c in coins:
+		var jeu_tuile := donnees.get_terrain_set()
+		var palette: Array = couleurs if jeu_tuile == 0 else (couleurs_r if jeu_tuile == 1 else couleurs_eau)
+		for c in (cotes if jeu_tuile == TERRAIN_EAU else coins):
 			var terrain: int = donnees.get_terrain_peering_bit(c[0])
 			image.fill_rect(Rect2i(coin + (c[1] as Vector2i), Vector2i(6, 6)), palette[terrain + 1])
 	image.resize(image.get_width() * 2, image.get_height() * 2, Image.INTERPOLATE_NEAREST)
@@ -388,6 +432,21 @@ func _ecrire_planche_terrains() -> void:
 	print("planche des terrains : res://ART/planche_terrains.png — %d tuiles raccordables, %d par ligne" % [cases.size(), PAR_LIGNE])
 	print("    pastilles : gris = rien ; jeu 0 = %s ; jeu 1 = %s" % [
 		" / ".join(PackedStringArray(TERRAINS)), " / ".join(PackedStringArray(TERRAINS_RECOUVREMENT))])
+
+
+## Les quatre CÔTÉS d'une case : gauche, droite, haut, bas. ⚠ Une case absente est le centre d'un cadre
+## dont le milieu est transparent — la tuile pleine le remplace, on ne signale rien.
+func _poser_cotes(planche: String, case: Vector2i, gauche: int, droite: int, haut: int, bas: int) -> void:
+	var source: TileSetAtlasSource = _sources[planche]["source"]
+	if source.get_tile_at_coords(case) == Vector2i(-1, -1):
+		return
+	var donnees := source.get_tile_data(case, 0)
+	donnees.set_terrain_set(TERRAIN_EAU)
+	donnees.set_terrain(0)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_LEFT_SIDE, gauche)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_RIGHT_SIDE, droite)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_TOP_SIDE, haut)
+	donnees.set_terrain_peering_bit(TileSet.CELL_NEIGHBOR_BOTTOM_SIDE, bas)
 
 
 func _trouver(nom: String) -> Dictionary:

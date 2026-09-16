@@ -43,7 +43,12 @@ const ROUTES := [
 	Rect2i(44, 12, 2, 24),
 	Rect2i(12, 8, 19, 2),
 ]
-const LAC := Rect2i(47, 4, 12, 11)
+## ⚠ LE LAC EST FAIT DE DISQUES QUI SE RECOUVRENT, PAS D'UN RECTANGLE. Avec un rectangle, les meilleures
+## tuiles de rive du monde donnent une piscine : ce sont les bords dessinés qui suivent la forme, jamais
+## l'inverse. [centre, rayon]
+const LAC_FORMES := [
+	[Vector2i(52, 9), 5.2], [Vector2i(56, 7), 3.6], [Vector2i(48, 11), 3.2], [Vector2i(55, 12), 3.4],
+]
 const BOSQUETS := [Vector2i(18, 25), Vector2i(33, 14), Vector2i(6, 31), Vector2i(52, 24), Vector2i(26, 33), Vector2i(38, 5)]
 ## Les taches d'herbe sombre : des ÉTENDUES, pas un tirage par case. Un grain aléatoire case par case
 ## donne des carrés isolés qu'on prend pour un défaut d'affichage — vu sur la première capture.
@@ -226,6 +231,22 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 		for x in LARGEUR:
 			_poser(sol, Vector2i(x, y), _terrain(x, y), _noms_surface)
 
+	# ⚠ LE LAC EST RACCORDÉ, LUI AUSSI. Ses bords viennent de la planche de l'eau : des cadres OPAQUES,
+	# de la terre herbue percée d'un trou d'eau. Le terrain 2 du jeu 0, c'est « eau » (faire_surface.gd).
+	var lac: Array[Vector2i] = []
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			var t := _terrain(x, y)
+			if t == "eau" or t == "eau_profonde":
+				lac.append(Vector2i(x, y))
+	sol.set_cells_terrain_connect(lac, 2, 0, false)  # jeu 2 = l'eau, raccordée par les CÔTÉS
+	# Le raccord pose de l'eau unie partout : on repose ensuite le fond, là où le lac est profond.
+	for y in HAUTEUR:
+		for x in LARGEUR:
+			if _terrain(x, y) == "eau_profonde":
+				_poser(sol, Vector2i(x, y), "eau_profonde", _noms_surface)
+	print("  lac raccordé : %d cases" % lac.size())
+
 	# La nappe d'herbe claire, partout SAUF dans les taches : celles-ci deviennent des clairières sombres,
 	# et le raccord leur donne des bords irréguliers au lieu de l'escalier d'une tache posée case par case.
 	var claire: Array[Vector2i] = []
@@ -338,13 +359,13 @@ func _libre(coin: Vector2i, taille: Vector2i) -> bool:
 func _terrain(x: int, y: int) -> String:
 	if x == 0 or y == 0 or x == LARGEUR - 1 or y == HAUTEUR - 1:
 		return "falaise"  # le bord du monde est plein : la lumière s'y arrête, le joueur aussi
-	var pos := Vector2i(x, y)
-	if LAC.grow(-2).has_point(pos):
+	if _dans_lac(x, y, -1.8):
 		return "eau_profonde"
-	if LAC.has_point(pos):
+	if _dans_lac(x, y, 0.0):
 		return "eau"
 	# ⚠ La plage n'est PLUS du terrain : c'est un recouvrement de sable posé par-dessus l'herbe, qui
 	# reste donc de l'herbe ici. Sans ça, ses bords seraient des marches au lieu d'un rivage.
+	var pos := Vector2i(x, y)
 	for route in ROUTES:
 		if route.has_point(pos):
 			return "terre"
@@ -375,13 +396,26 @@ func _compter_taches() -> int:
 ## ⚠ LE GRAIN EST UNE FONCTION DE LA CASE, PAS UN TIRAGE. `_libre()` interroge `_terrain()` longtemps
 ## après que la carte a été peinte : un tirage au hasard lui répondrait autre chose qu'à la peinture, et
 ## des arbres pousseraient dans l'eau. Une case doit donner la même réponse chaque fois qu'on la pose.
-## La bande de sable autour du lac : dans son pourtour élargi, mais pas dans l'eau.
+## Dans le lac, à `marge` cases près (négative pour l'eau profonde, positive pour la plage).
+##
+## ⚠ PAS DE GRAIN SUR LE CONTOUR DE L'EAU, contrairement aux clairières. Un bord bruité case par case
+## fabrique des saillies d'UNE case, et un cadre de seize tuiles ne sait pas border ça : il n'a aucune
+## tuile pour « terre à gauche, en haut ET à droite ». Le rivage repartait alors en marches, avec des
+## fragments de bord isolés. La forme vient des disques qui se recouvrent ; le détail vient des tuiles.
+func _dans_lac(x: int, y: int, marge: float) -> bool:
+	var pos := Vector2i(x, y)
+	for forme in LAC_FORMES:
+		if Vector2(pos - (forme[0] as Vector2i)).length() < float(forme[1]) + marge:
+			return true
+	return false
+
+
+## La bande de sable autour du lac : le pourtour, mais pas l'eau.
 ## ⚠ QUATRE cases d'épaisseur, pas deux. Une bande de deux n'a aucune case INTÉRIEURE : chacune est un
 ## cas limite, et le raccord n'a plus que des tuiles de bord à poser — d'où le peigne de dents carrées
 ## qu'on a vu sur la première plage.
 func _est_plage(x: int, y: int) -> bool:
-	var pos := Vector2i(x, y)
-	return LAC.grow(4).has_point(pos) and not LAC.has_point(pos)
+	return _dans_lac(x, y, 4.0) and not _dans_lac(x, y, 0.0)
 
 
 func _grain(x: int, y: int) -> float:
