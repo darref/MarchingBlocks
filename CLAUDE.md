@@ -789,8 +789,33 @@ sur le plateau ne descend pas au sol.**
 - **deux grilles partagent désormais les mêmes x, y.** La table du §2 — « une colonne de grotte par case
   de surface » — ne dit plus **sous quelle altitude** passe une grotte. Tant qu'aucune grotte ne court
   sous un plateau, la question dort ; le jour où l'une le fait, il faudra dire ce que sa table désigne ;
-- **l'affichage doit montrer les deux altitudes**, et rien n'est encore fait côté `CLIENT/` : le joueur
-  n'a ni corps ni caméra sur le plateau ;
+**Ce qui se JOUE — le greybox (17 septembre 2026)**
+
+- ⚠ **UN TROISIÈME CORPS, PAS UNE TROISIÈME VUE.** L'écran n'a que deux vues, surface et grotte (§3) ;
+  un plateau, c'est la MÊME vue de dessus à une hauteur différente. Le corps du plateau vit donc dans la
+  vue de surface à côté de l'autre, et **un seul des deux bouge** — `pos_surface` se relit sur celui-là.
+  Deux corps qui avanceraient ensemble seraient deux vérités sur « où est le joueur ».
+- **`altitude` est un ENTIER, pas un second booléen** : il y a trois lieux possibles, et un booléen n'en
+  tient que deux. C'est aussi ce qui laissera la place à une altitude 2 sans tout reprendre.
+- **Les collisions basculent comme pour les grottes** — `Sol` et `Props` à l'altitude 0, `Massifs` à
+  l'altitude 1 — parce que les deux étages occupent les mêmes coordonnées et que le corps se cognerait
+  aux murs de celui où il n'est pas. ⚠ `Massifs` peut MANQUER (une zone peinte avant l'altitude n'en a
+  pas) et ce n'est pas une faute : on reste au sol.
+- **L'escalier passe avant l'entrée** dans `agir` : on est en surface dans les deux cas, et une entrée
+  peinte près d'un escalier ferait sinon descendre quand on voulait monter.
+- ⚠ **MONTER D'UN CRAN NE MET PAS SUR LE PLATEAU**, et c'est assumé : `vers_haut` désigne la marche du
+  dessus. C'est la MARCHE À PIED qui achève le trajet. **MESURÉ** sur la zone d'essai : de la marche
+  d'arrivée jusqu'au cœur du massif, la colonne est praticable à l'altitude 1 — donc marcher vers le nord
+  y mène par construction. La bande d'herbe qu'on voit entre le plateau et l'escalier est la PROFONDEUR
+  de la falaise, pas un décalage.
+- **MESURÉ (journal)** — maintenir « agir » ne fait pas osciller le joueur entre les deux altitudes :
+  l'action se déclenche sur le front. Une seule montée par pression.
+- ⚠ **`DEV_TOOLS/faire_zone.gd --sortie=` et le greybox `--zone=`** permettent d'essayer une carte sans
+  toucher à celle qu'on repeint. Le plateau d'essai est généré, pas peint à la main.
+- ⚠ **LE RELAIS `_console.exe` AVALE LA SORTIE DANS UN TUBE.** Un lancement du greybox rendait un écran
+  vide alors qu'il fonctionnait parfaitement — la capture avait bien été écrite. On redirige donc la
+  sortie vers un FICHIER, jamais vers un `|`. (La note de projet le disait déjà pour la fenêtre ; c'est
+  vrai aussi de la console.)
 - **la projection d'une grotte** (§2) est calculée en coordonnées de surface, donc elle se dessinera au
   même endroit quelle que soit l'altitude du joueur. À juger au greybox.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour

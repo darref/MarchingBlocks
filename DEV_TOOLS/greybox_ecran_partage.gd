@@ -30,6 +30,9 @@ const Couleur := preload("res://CORE/couleur.gd")
 const Direction := preload("res://CORE/direction.gd")
 
 const ZONE := "res://NIVEAUX/zone_depart.tscn"
+## ⚠ `--zone=` se lit AVANT le chargement, donc pas dans `_options()` qui tourne après. Sert à essayer une
+## carte (un plateau, un escalier) sans toucher à celle qu'on est en train de repeindre.
+var _zone_chemin := ZONE
 const CASE := MiseEnPage.CASE
 const SURFACE := 0
 const VITESSE := 5.0  # cases par seconde
@@ -69,6 +72,14 @@ var _marque: Node2D
 var _dessus: Node2D  # objets et faisceaux, par-dessus les tuiles de la grotte
 var _corps_surface: CharacterBody2D
 var _corps_grotte: CharacterBody2D
+## ⚠ UN TROISIÈME CORPS, ET PAS UNE TROISIÈME VUE. L'écran n'a que deux vues — surface et grotte
+## (charte §3) ; un plateau, c'est la MÊME vue de dessus à une hauteur différente. Le corps du plateau
+## vit donc dans la vue de surface à côté de l'autre, et un seul des deux est actif.
+## ⚠ `altitude` est un ENTIER, pas un second booléen : il y a désormais trois lieux possibles, et un
+## booléen n'en tient que deux. C'est aussi ce qui laissera la place à une altitude 2 sans tout reprendre.
+var altitude := 0
+var _corps_plateau: CharacterBody2D
+var escaliers: Array = []  # {"case", "nom", "vers_haut", "vers_bas"} — déduits par CLIENT/niveau.gd
 var _camera_surface: Camera2D
 var _camera_grotte: Camera2D
 var _noeuds_grottes := {}  # id -> le nœud de la grotte dans la vue
@@ -79,7 +90,10 @@ func _ready() -> void:
 	ecran = EcranPartage.new()
 	add_child(ecran)
 
-	zone = load(ZONE).instantiate()
+	for option in OS.get_cmdline_user_args():
+		if option.begins_with("--zone="):
+			_zone_chemin = option.substr("--zone=".length())
+	zone = load(_zone_chemin).instantiate()
 	add_child(zone)
 	var resultat: Dictionary = zone.construire()
 	for erreur in resultat["erreurs"]:
@@ -88,6 +102,7 @@ func _ready() -> void:
 	monde = resultat["monde"]
 	chemins = resultat["chemins"]
 	entrees = resultat["entrees"]
+	escaliers = resultat.get("escaliers", [])
 	for e in entrees:
 		entrees_cases.append(e["case"])
 	_poser_la_demo()
@@ -116,8 +131,10 @@ func _ready() -> void:
 	# posé avant resterait à l'ancienne place, et depuis que les extrémités d'une galerie sont creusées, il
 	# s'y retrouvait DANS la roche — la physique l'éjectait alors hors de la grille (vu : colonne −0,15).
 	_corps_surface = _corps(ecran.surface, pos_surface * CASE)
+	_corps_plateau = _corps(ecran.surface, pos_surface * CASE)
 	_corps_grotte = _corps(ecran.grotte, Vector2(colonne * CASE, LIGNE_DU_SOL * CASE + CASE / 2.0))
 	_seules_les_collisions_de(grotte)
+	_seules_les_collisions_de_altitude(altitude)
 
 
 var _capture := ""
@@ -157,8 +174,13 @@ func _capturer_si_demande(delta: float) -> void:
 	_horloge += delta
 	if _horloge >= _capture_a:
 		get_viewport().get_texture().get_image().save_png(_capture)
-		print("capture de base : %s à %.2f s, séparateur %d — corps surface %s, corps grotte x=%.1f (colonne %.2f)" % [
-			_capture, _horloge, mep.pixel(), _corps_surface.position, _corps_grotte.position.x, colonne])
+		# ⚠ LE CORPS ACTIF, PAS `_corps_surface`. Depuis l'altitude, deux corps vivent dans la vue de
+		# dessus et un seul bouge : imprimer l'autre montre une position périmée — au pied de l'escalier
+		# alors que le joueur est en haut. Une trace qui désigne le mauvais corps trompe exactement quand
+		# on s'en sert pour comprendre quelque chose.
+		var actif: CharacterBody2D = _corps_plateau if altitude == 1 else _corps_surface
+		print("capture de base : %s à %.2f s, séparateur %d — altitude %d, corps %s, corps grotte x=%.1f (colonne %.2f)" % [
+			_capture, _horloge, mep.pixel(), altitude, actif.position, _corps_grotte.position.x, colonne])
 		_capture = ""
 
 
@@ -177,9 +199,13 @@ func _physics_process(_delta: float) -> void:
 		_corps_grotte.move_and_slide()
 		colonne = _corps_grotte.position.x / CASE
 	else:
-		_corps_surface.velocity = dir * vitesse
-		_corps_surface.move_and_slide()
-		pos_surface = _corps_surface.position / CASE
+		# ⚠ UN SEUL CORPS BOUGE, ET `pos_surface` SE RELIT SUR LUI. La physique reste la seule autorité
+		# sur la position ; deux corps qui avanceraient ensemble seraient deux vérités sur « où est le
+		# joueur », et elles divergeraient au premier mur.
+		var corps: CharacterBody2D = _corps_plateau if altitude == 1 else _corps_surface
+		corps.velocity = dir * vitesse
+		corps.move_and_slide()
+		pos_surface = corps.position / CASE
 
 
 func _process(delta: float) -> void:
@@ -242,7 +268,58 @@ func _rai() -> void:
 
 # ── se déplacer d'une vue à l'autre ─────────────────────────────────────────────────────────────────
 
+## Les calques de surface d'une altitude à l'autre. ⚠ MÊME GESTE QUE POUR LES GROTTES : le sol et le
+## plateau occupent les mêmes coordonnées, donc le corps se cognerait aux murs de l'étage où il n'est pas.
+## ⚠ `Massifs` peut MANQUER — une zone peinte avant l'altitude n'en a pas — et ce n'est pas une faute :
+## on reste alors au sol, sans plateau nulle part.
+func _seules_les_collisions_de_altitude(a: int) -> void:
+	# ⚠ TYPES EXPLICITES : `get_node_or_null()` ne rend rien que `:=` sache inférer. Faute commise une
+	# fois dans `CLIENT/niveau.gd` ce matin, commentée là-bas comme « déjà consignée », puis refaite ici
+	# TROIS fois dans la foulée. Ce n'est plus un accident : `get_node_or_null()` avec `:=` est une forme
+	# à ne plus taper.
+	var surface: Node = ecran.surface.get_node_or_null("Surface")
+	if surface == null:
+		return
+	for nom in ["Sol", "Props"]:
+		var calque: Node = surface.get_node_or_null(nom)
+		if calque is TileMapLayer:
+			(calque as TileMapLayer).collision_enabled = (a == 0)
+	var massifs: Node = surface.get_node_or_null("Massifs")
+	if massifs is TileMapLayer:
+		(massifs as TileMapLayer).collision_enabled = (a == 1)
+
+
+## Monter ou descendre par un escalier. Rend `true` s'il s'est passé quelque chose.
+## ⚠ Le lien n'est pas écrit : `CLIENT/niveau.gd` l'a DÉDUIT du plateau et du bord, et on ne fait que le
+## suivre — comme une entrée déduit sa grotte du chemin qui passe dessous.
+func _passer_escalier() -> bool:
+	var meilleure := -1
+	var plus_courte := PORTEE_ENTREE
+	for i in escaliers.size():
+		var centre := Vector2(escaliers[i]["case"]) + Vector2(0.5, 0.5)
+		var d := centre.distance_to(pos_surface)
+		if d <= plus_courte:
+			plus_courte = d
+			meilleure = i
+	if meilleure == -1:
+		return false
+	var e: Dictionary = escaliers[meilleure]
+	var arrivee: Vector2i = e["vers_bas"] if altitude == 1 else e["vers_haut"]
+	altitude = 0 if altitude == 1 else 1
+	pos_surface = Vector2(arrivee) + Vector2(0.5, 0.5)
+	var corps: CharacterBody2D = _corps_plateau if altitude == 1 else _corps_surface
+	corps.position = pos_surface * CASE
+	_seules_les_collisions_de_altitude(altitude)
+	print("%s par l'escalier %s — altitude %d, arrivée %s"
+		% ["monté" if altitude == 1 else "descendu", e["case"], altitude, arrivee])
+	return true
+
+
 func _passer_entree() -> void:
+	# ⚠ L'escalier passe AVANT l'entrée : on est en surface dans les deux cas, et une entrée peinte près
+	# d'un escalier ferait sinon descendre sous terre quand on voulait monter.
+	if not sous_terre and _passer_escalier():
+		return
 	if sous_terre:
 		for e in entrees:
 			if e["grotte"] == grotte and absf(e["colonne"] + 0.5 - colonne) <= PORTEE_ENTREE:
