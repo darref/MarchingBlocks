@@ -726,9 +726,31 @@ premier mur déplacé.
       - **Le calque `Massifs` vit entre `Recouvrement` et `Props`** : au-dessus de ce que ses bords
         ajourés révèlent (presque toutes ses cases sont partiellement transparentes — mesuré), mais sous
         les décors, sans quoi un arbre planté sur un plateau aurait l'air enterré dans sa lèvre.
-      - ⚠ **Une falaise est un `mur`** : seules les quatre cases de paroi (`RRRR`) le sont. Les tuiles de
-        LÈVRE restent traversables, donc **le joueur marche sur le bord du plateau**. C'est une décision
-        prise pour la passe décorative, pas un oubli.
+      - ⚠ **LA FALAISE SE DÉRIVE, ELLE NE S'AUTO-TUILE PAS — corrigé par Jordan le 17 septembre, et
+        j'avais tout mis à l'envers.** J'avais rangé la paroi DANS le terrain du massif et laissé Better
+        Terrain la choisir : elle se peignait alors SUR la dernière rangée du plateau au lieu de PENDRE
+        en dessous, d'où la bande d'herbe qu'on voyait entre le plateau et l'escalier. Une falaise n'est
+        pas décidée par son voisinage, elle est décidée par **le bord qu'elle prolonge** — c'est la même
+        forme de règle que `_est_plage()`, qui déduit la plage du lac.
+        - **ON MARCHE SUR TOUT LE 4 × 4** (Jordan) : plus aucun mur dans le terrain du plateau. Le liseré
+          est une lisière, pas une paroi. **MESURÉ** : 62 cases praticables = 56 de massif + 6 de marches.
+        - **TROIS RÔLES × DEUX RANGÉES** : gauche, milieu, droite — et le lot livre **deux milieux**, que
+          la mesure dit interchangeables dans les deux ordres et avec eux-mêmes (joints de 0,013 à 0,069,
+          là où un joint franc entre deux pièces vaut 0,56). Le milieu se répète, le pied touche le sol.
+        - ⚠ **UNE FALAISE BLOQUE LE SOL, PAS L'ALTITUDE.** Elle pend dans des cases qui sont au niveau du
+          sol : on ne marche pas dedans et la lumière n'y passe pas (une seule donnée pour les deux, §6).
+          Je l'avais murée à l'altitude 1 — ce qui mettait la paroi **en l'air** au lieu de la mettre en
+          travers du chemin. **MESURÉ** : les 10 cases de paroi de la zone d'essai murent bien la grille 0.
+        - ⚠ **Retirer la paroi du terrain n'a RIEN cassé** : 0 % de repli sur les six formes, pour les
+          quatre familles. Ces tuiles ne servaient donc jamais de bord — la correction retire du code mort
+          autant qu'elle corrige un défaut.
+        - ⚠ **Les cases de paroi se RÉSERVENT** (`_pris`) : les bosquets sont semés après le plateau et ne
+          consultent que ça, donc sans la réservation **un arbre pousse sur la falaise**. Repéré par un
+          audit des murs par origine, pas à l'œil. ⚠ Et le générateur ne REPLACE pas un bosquet refusé, il
+          l'abandonne : la réservation coûte un arbre (décor passé de 127 à 121 cases murées).
+        - **OUVERT — la hauteur d'une falaise est fixée à DEUX rangées** (milieu + pied), faute de quoi
+          que ce soit dans la carte qui dise qu'un plateau est haut de trois. Le lot sait répéter le
+          milieu ; le jour où une hauteur se peint, c'est `_descendre_la_falaise()` qui la lira.
       - **LE REPORT DU SABLE — FAIT (17 septembre 2026), et c'est une planche DÉRIVÉE.** Le lot ne livre
         au sable ni falaise ni la moitié de ses pièces ; on le **reconstruit** depuis l'herbe claire par
         une table de substitution, et `ART/massif_sable.png` est écrite par `faire_surface.gd`.

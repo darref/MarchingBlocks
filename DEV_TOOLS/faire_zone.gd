@@ -70,6 +70,8 @@ const PLATEAU := Rect2i(26, 25, 8, 7)
 ## dessous est encore de l'escalier, donc encore du plateau — et la règle de `CLIENT/niveau.gd` exige que
 ## le dessous SORTE du plateau. C'est voulu : on relie au pied de l'escalier, pas à mi-hauteur.
 const PLATEAU_ESCALIER := Vector2i(29, 32)
+## Les rangées de la falaise, de haut en bas — le milieu se répète, le pied touche le sol.
+const FALAISE_RANGEES := ["milieu", "pied"]
 
 ## Chaque grotte : son chemin sur la grille de surface (charte §2) et la case où l'on peint son entrée.
 ## ⚠ L'entrée ne dit pas où elle mène — `CLIENT/niveau.gd` le DÉDUIT en la cherchant dans les chemins.
@@ -263,6 +265,51 @@ func _poser(calque: TileMapLayer, pos: Vector2i, nom: String, noms: Dictionary) 
 	calque.set_cell(pos, noms[nom]["source"], noms[nom]["case"])
 
 
+## LA FALAISE SE DÉRIVE, ELLE NE SE RACCORDE PAS. Sous chaque bord SUD d'un plateau, on fait descendre la
+## colonne qui convient : cap gauche là où l'ouest n'est pas aussi un bord sud, cap droit là où l'est ne
+## l'est pas, milieu ailleurs. C'est la même forme de règle que `_est_plage()`, qui déduit la plage du lac.
+##
+## ⚠ J'avais mis la paroi DANS le terrain du massif et laissé Better Terrain la choisir : elle se peignait
+## alors SUR la dernière rangée du plateau au lieu de PENDRE en dessous. Une falaise n'est pas décidée par
+## son voisinage, elle est décidée par le bord qu'elle prolonge.
+##
+## ⚠ DEUX RANGÉES FIXES — milieu puis pied — faute de quoi que ce soit, dans la carte, qui dise la hauteur
+## d'un plateau. Le lot sait répéter le milieu ; le jour où une hauteur se peint, c'est ici que ça se lit.
+##
+## ⚠ ON SAUTE LES MARCHES : la falaise descend exactement là où l'escalier se tient, et la murer
+## boucherait le passage qu'on vient de construire.
+##
+## ⚠ Les deux milieux sont interchangeables — MESURÉ (joints de 0,013 à 0,069) — et se tirent au GRAIN,
+## pas au hasard : deux exécutions doivent rendre la même carte.
+func _descendre_la_falaise(massifs: TileMapLayer, dessus: Array, marches: Dictionary, famille: String) -> int:
+	var plateau := {}
+	for c in dessus:
+		plateau[c] = true
+	var posees := 0
+	for c in dessus:
+		var pos: Vector2i = c
+		if plateau.has(pos + Vector2i(0, 1)):
+			continue  # pas un bord sud : il y a encore du plateau dessous
+		var a_gauche: bool = plateau.has(pos + Vector2i(-1, 0)) and not plateau.has(pos + Vector2i(-1, 1))
+		var a_droite: bool = plateau.has(pos + Vector2i(1, 0)) and not plateau.has(pos + Vector2i(1, 1))
+		var role := "milieu_a" if _grain(pos.x, pos.y) < 0.5 else "milieu_b"
+		if not a_gauche:
+			role = "gauche"
+		elif not a_droite:
+			role = "droite"
+		for i in FALAISE_RANGEES.size():
+			var ou: Vector2i = pos + Vector2i(0, 1 + i)
+			if marches.has(ou):
+				continue
+			_poser(massifs, ou, "%s_falaise_%s_%s" % [famille, role, FALAISE_RANGEES[i]], _noms_surface)
+			# ⚠ RÉSERVER LA PAROI. Les bosquets sont semés APRÈS le plateau et ne consultent que `_pris` :
+			# sans cette ligne, un arbre pousse sur la falaise. Rien ne planterait — les deux sont des
+			# murs — mais ça se verrait, et c'est le genre de défaut qu'aucun compteur ne signale.
+			_pris[ou] = true
+			posees += 1
+	return posees
+
+
 ## Un objet qui tient sur plusieurs cases : ses tuiles s'appellent « nom_x_y » (voir faire_surface.gd).
 func _poser_bloc(calque: TileMapLayer, coin: Vector2i, nom: String, taille: Vector2i, noms: Dictionary) -> void:
 	for y in taille.y:
@@ -370,10 +417,15 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 			_pris[Vector2i(x, y)] = true
 	_raccorder(massifs, dessus, "massif_herbe")
 	_poser_bloc(massifs, PLATEAU_ESCALIER, "massif_herbe_escalier_haut", Vector2i(3, 2), _noms_surface)
+	var marches := {}
 	for dy in 2:
 		for dx in 3:
-			_pris[PLATEAU_ESCALIER + Vector2i(dx, dy)] = true
-	print("  plateau : %d cases, escalier en %s" % [dessus.size(), PLATEAU_ESCALIER])
+			var m: Vector2i = PLATEAU_ESCALIER + Vector2i(dx, dy)
+			marches[m] = true
+			_pris[m] = true
+	var parois := _descendre_la_falaise(massifs, dessus, marches, "massif_herbe")
+	print("  plateau : %d cases, escalier en %s, falaise : %d case(s)"
+		% [dessus.size(), PLATEAU_ESCALIER, parois])
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
 		# ⚠ Le noir va SOUS tout, sur le sol : les tuiles de trou ont le centre transparent, et le gravier

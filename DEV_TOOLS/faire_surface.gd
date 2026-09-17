@@ -461,7 +461,12 @@ func _declarer_massifs() -> void:
 	var signatures := {}  # colonne, ligne relative -> "MMRR"
 	for dy in MASSIF_LIGNES:
 		for cx in largeur:
-			if dy >= 4 and cx > MASSIF_DERNIERE_COLONNE_FALAISE:
+			# ⚠ LES RANGÉES +4 ET +5 NE SONT PAS DU TERRAIN. Ce sont la FALAISE (x0..3) et les escaliers
+			# (au-delà), et ni l'une ni les autres ne se choisissent par voisinage. J'avais mis la paroi
+			# DANS le terrain du massif et laissé Better Terrain la placer : elle se peignait alors sur la
+			# dernière rangée du plateau au lieu de PENDRE en dessous. La falaise se dérive (comme la
+			# plage se dérive du lac), elle ne se raccorde pas.
+			if dy >= 4:
 				continue
 			var s := _signature_massif(image, cx, MASSIF_REFERENCE + dy)
 			if s == "" or s.contains("V"):
@@ -480,6 +485,7 @@ func _declarer_massifs() -> void:
 			img.decompress()
 		img.convert(Image.FORMAT_RGBA8)
 		_declarer_escaliers(planche, src, famille)
+		_declarer_falaises(planche, src, famille)
 		if not _bt.add_terrain(_jeu, famille["nom"], Color(famille["couleur"]),
 				_bt.TerrainType.MATCH_VERTICES, []):
 			print("  ⚠ massif « %s » refusé" % famille["nom"])
@@ -513,18 +519,9 @@ func _declarer_massifs() -> void:
 			if not _poser(planche, case, terrain, quoi):
 				continue
 			posees += 1
-			# ⚠ UNE FALAISE EST UN MUR, et c'est la MÊME donnée qui arrête les pieds et la lumière
-			# (charte §6). Une tuile dont les quatre coins sont de la roche est une paroi ; le dessus du
-			# plateau se marche. Les séparer donnerait un mur qu'on traverse mais pas le rayon.
-			if s == "RRRR":
-				var donnees := src.get_tile_data(case, 0)
-				donnees.set_custom_data("mur", true)
-				if donnees.get_collision_polygons_count(0) == 0:
-					var demi := COTE / 2.0
-					donnees.add_collision_polygon(0)
-					donnees.set_collision_polygon_points(0, 0, PackedVector2Array([
-						Vector2(-demi, -demi), Vector2(demi, -demi), Vector2(demi, demi), Vector2(-demi, demi)]))
-				murs += 1
+			# ⚠ AUCUN MUR DANS LE TERRAIN DU PLATEAU : ON MARCHE SUR TOUT LE 4 × 4 (Jordan, 17 septembre).
+			# La roche ne vient plus d'ici mais de la falaise dérivée, qui pend SOUS le bord sud et bloque
+			# le SOL. Le liseré du plateau est une lisière, pas une paroi.
 		print("  massif « %-20s » : %d tuiles, %d de paroi (murs), %d écartée(s) car non unies"
 			% [famille["nom"], posees, murs, ecartees])
 
@@ -556,6 +553,37 @@ func _signature_massif(image: Image, cx: int, cy: int) -> String:
 		else:
 			s += "M" if matiere >= roche else "R"
 	return s if vue else ""
+
+
+## LA FALAISE — ce qui PEND sous le bord sud d'un plateau. ⚠ CE N'EST PAS UN TERRAIN : elle ne se choisit
+## pas par voisinage, elle se DÉRIVE, comme la plage se dérive du lac. `DEV_TOOLS/faire_zone.gd` la
+## descend colonne par colonne sous chaque bord sud.
+##
+## ⚠ TROIS RÔLES, PAS QUATRE COLONNES : gauche, milieu, droite — et le lot livre DEUX milieux, que la
+## mesure dit interchangeables dans les deux ordres et avec eux-mêmes (joints de 0,013 à 0,069, là où un
+## joint franc entre deux pièces vaut 0,56). De quoi éviter une paroi qui se répète visiblement.
+##
+## ⚠ DEUX RANGÉES : le MILIEU se répète autant que la falaise est haute, le PIED se pose en bas — c'est
+## lui qui porte le bord érodé et le liseré sombre au contact du sol.
+##
+## ⚠ `mur = true` : une paroi arrête les pieds ET la lumière, une seule donnée pour les deux (charte §6).
+const FALAISES := [
+	["gauche", 0], ["milieu_a", 1], ["milieu_b", 2], ["droite", 3],
+]
+const FALAISE_RANGEES := [["milieu", 4], ["pied", 5]]
+
+
+func _declarer_falaises(planche: String, src: TileSetAtlasSource, famille: Dictionary) -> void:
+	var poses := 0
+	for rangee in FALAISE_RANGEES:
+		for role in FALAISES:
+			var case := Vector2i(role[1], famille["y"] + rangee[1])
+			if src.get_tile_at_coords(case) == Vector2i(-1, -1):
+				continue
+			_declarer(planche, case, "%s_falaise_%s_%s" % [famille["nom"], role[0], rangee[0]], true, "", false)
+			poses += 1
+	if poses > 0:
+		print("    falaise de « %s » : %d tuile(s) nommée(s), murées" % [famille["nom"], poses])
 
 
 ## Les escaliers d'une famille, nommés case par case. ⚠ `mur = false` : un escalier est un PASSAGE, c'est

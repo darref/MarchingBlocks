@@ -88,11 +88,20 @@ static func construire(sol, objets, grottes: Array, props = null, marqueurs = nu
 				var pos := Vector2i(x, y)
 				if massifs.get_cell_tile_data(pos) == null:
 					monde.poser_mur(PLATEAU, pos)
-		# ⚠ La PAROI d'un massif est un mur EN HAUT AUSSI : on ne marche pas sur la tranche d'une falaise.
+		# ⚠ UNE FALAISE BLOQUE LE SOL, PAS L'ALTITUDE — et je l'avais écrit à l'envers. Elle PEND sous le
+		# bord sud d'un plateau, donc elle occupe des cases qui sont au niveau du SOL : on ne marche pas
+		# dedans, et la lumière n'y passe pas non plus (une seule donnée pour les deux, charte §6). La
+		# murer à l'altitude 1 mettait la paroi en l'air au lieu de la mettre en travers du chemin.
+		# ⚠ Elle est murée aux DEUX étages : au sol parce qu'elle est solide, en haut parce qu'on ne
+		# marche pas sur la tranche.
 		for pos in massifs.get_used_cells():
 			var d = massifs.get_cell_tile_data(pos)
-			if d != null and d.get_custom_data("mur") and not monde.est_mur(PLATEAU, pos):
+			if d == null or not d.get_custom_data("mur"):
+				continue
+			if not monde.est_mur(PLATEAU, pos):
 				monde.poser_mur(PLATEAU, pos)
+			if not monde.est_mur(SURFACE, pos):
+				monde.poser_mur(SURFACE, pos)
 
 	# 3. Les grottes : la coupe doit faire exactement la longueur du chemin.
 	for id in chemins:
