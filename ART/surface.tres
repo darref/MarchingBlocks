@@ -1,12 +1,13 @@
 [gd_resource type="TileSet" format=3]
 
-[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/FLOORS.png" id="1_moxpi"]
-[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/WATER TILES.png" id="2_ky336"]
-[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/Decorations.png" id="3_8pxnh"]
-[ext_resource type="Texture2D" path="res://ART/surface_dessinees.png" id="4_0ous7"]
+[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/FLOORS.png" id="1_ky336"]
+[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/WATER TILES.png" id="2_8pxnh"]
+[ext_resource type="Texture2D" path="res://TILESOURCES/Top-Down 32x32 RPG Asset Pack/Decorations.png" id="3_0ous7"]
+[ext_resource type="Texture2D" path="res://ART/surface_dessinees.png" id="4_ptduf"]
+[ext_resource type="Texture2D" path="res://ART/massif_sable.png" id="5_2em43"]
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ptduf"]
-texture = ExtResource("1_moxpi")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ly3k1"]
+texture = ExtResource("1_ky336")
 texture_region_size = Vector2i(32, 32)
 1:9/0 = 0
 1:9/0/probability = 0.4
@@ -1414,19 +1415,33 @@ texture_region_size = Vector2i(32, 32)
 }
 3:12/0 = 0
 7:12/0 = 0
+7:12/0/custom_data_0 = "massif_herbe_rampe_etroite_0_0"
 9:12/0 = 0
+9:12/0/custom_data_0 = "massif_herbe_escalier_haut_0_0"
 10:12/0 = 0
+10:12/0/custom_data_0 = "massif_herbe_escalier_haut_1_0"
 11:12/0 = 0
+11:12/0/custom_data_0 = "massif_herbe_escalier_haut_2_0"
 12:12/0 = 0
+12:12/0/custom_data_0 = "massif_herbe_escalier_bas_0_0"
 13:12/0 = 0
+13:12/0/custom_data_0 = "massif_herbe_escalier_bas_1_0"
 14:12/0 = 0
+14:12/0/custom_data_0 = "massif_herbe_escalier_bas_2_0"
 20:12/0 = 0
+20:12/0/custom_data_0 = "massif_herbe_rampe_etroite_b_0_0"
 22:12/0 = 0
+22:12/0/custom_data_0 = "massif_herbe_escalier_haut_b_0_0"
 23:12/0 = 0
+23:12/0/custom_data_0 = "massif_herbe_escalier_haut_b_1_0"
 24:12/0 = 0
+24:12/0/custom_data_0 = "massif_herbe_escalier_haut_b_2_0"
 25:12/0 = 0
+25:12/0/custom_data_0 = "massif_herbe_escalier_bas_b_0_0"
 26:12/0 = 0
+26:12/0/custom_data_0 = "massif_herbe_escalier_bas_b_1_0"
 27:12/0 = 0
+27:12/0/custom_data_0 = "massif_herbe_escalier_bas_b_2_0"
 0:13/0 = 0
 1:13/0 = 0
 1:13/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -1442,13 +1457,21 @@ texture_region_size = Vector2i(32, 32)
 }
 3:13/0 = 0
 7:13/0 = 0
+7:13/0/custom_data_0 = "massif_herbe_rampe_etroite_0_1"
 9:13/0 = 0
+9:13/0/custom_data_0 = "massif_herbe_escalier_haut_0_1"
 10:13/0 = 0
+10:13/0/custom_data_0 = "massif_herbe_escalier_haut_1_1"
 11:13/0 = 0
+11:13/0/custom_data_0 = "massif_herbe_escalier_haut_2_1"
 20:13/0 = 0
+20:13/0/custom_data_0 = "massif_herbe_rampe_etroite_b_0_1"
 22:13/0 = 0
+22:13/0/custom_data_0 = "massif_herbe_escalier_haut_b_0_1"
 23:13/0 = 0
+23:13/0/custom_data_0 = "massif_herbe_escalier_haut_b_1_1"
 24:13/0 = 0
+24:13/0/custom_data_0 = "massif_herbe_escalier_haut_b_2_1"
 0:14/0 = 0
 1:14/0 = 0
 2:14/0 = 0
@@ -1774,19 +1797,33 @@ texture_region_size = Vector2i(32, 32)
 }
 3:18/0 = 0
 7:18/0 = 0
+7:18/0/custom_data_0 = "massif_terre_rampe_etroite_0_0"
 9:18/0 = 0
+9:18/0/custom_data_0 = "massif_terre_escalier_haut_0_0"
 10:18/0 = 0
+10:18/0/custom_data_0 = "massif_terre_escalier_haut_1_0"
 11:18/0 = 0
+11:18/0/custom_data_0 = "massif_terre_escalier_haut_2_0"
 12:18/0 = 0
+12:18/0/custom_data_0 = "massif_terre_escalier_bas_0_0"
 13:18/0 = 0
+13:18/0/custom_data_0 = "massif_terre_escalier_bas_1_0"
 14:18/0 = 0
+14:18/0/custom_data_0 = "massif_terre_escalier_bas_2_0"
 20:18/0 = 0
+20:18/0/custom_data_0 = "massif_terre_rampe_etroite_b_0_0"
 22:18/0 = 0
+22:18/0/custom_data_0 = "massif_terre_escalier_haut_b_0_0"
 23:18/0 = 0
+23:18/0/custom_data_0 = "massif_terre_escalier_haut_b_1_0"
 24:18/0 = 0
+24:18/0/custom_data_0 = "massif_terre_escalier_haut_b_2_0"
 25:18/0 = 0
+25:18/0/custom_data_0 = "massif_terre_escalier_bas_b_0_0"
 26:18/0 = 0
+26:18/0/custom_data_0 = "massif_terre_escalier_bas_b_1_0"
 27:18/0 = 0
+27:18/0/custom_data_0 = "massif_terre_escalier_bas_b_2_0"
 0:19/0 = 0
 1:19/0 = 0
 1:19/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -1802,13 +1839,21 @@ texture_region_size = Vector2i(32, 32)
 }
 3:19/0 = 0
 7:19/0 = 0
+7:19/0/custom_data_0 = "massif_terre_rampe_etroite_0_1"
 9:19/0 = 0
+9:19/0/custom_data_0 = "massif_terre_escalier_haut_0_1"
 10:19/0 = 0
+10:19/0/custom_data_0 = "massif_terre_escalier_haut_1_1"
 11:19/0 = 0
+11:19/0/custom_data_0 = "massif_terre_escalier_haut_2_1"
 20:19/0 = 0
+20:19/0/custom_data_0 = "massif_terre_rampe_etroite_b_0_1"
 22:19/0 = 0
+22:19/0/custom_data_0 = "massif_terre_escalier_haut_b_0_1"
 23:19/0 = 0
+23:19/0/custom_data_0 = "massif_terre_escalier_haut_b_1_1"
 24:19/0 = 0
+24:19/0/custom_data_0 = "massif_terre_escalier_haut_b_2_1"
 0:20/0 = 0
 1:20/0 = 0
 2:20/0 = 0
@@ -2141,19 +2186,33 @@ texture_region_size = Vector2i(32, 32)
 }
 3:24/0 = 0
 7:24/0 = 0
+7:24/0/custom_data_0 = "massif_herbe_sombre_rampe_etroite_0_0"
 9:24/0 = 0
+9:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_0_0"
 10:24/0 = 0
+10:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_1_0"
 11:24/0 = 0
+11:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_2_0"
 12:24/0 = 0
+12:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_0_0"
 13:24/0 = 0
+13:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_1_0"
 14:24/0 = 0
+14:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_2_0"
 20:24/0 = 0
+20:24/0/custom_data_0 = "massif_herbe_sombre_rampe_etroite_b_0_0"
 22:24/0 = 0
+22:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_0_0"
 23:24/0 = 0
+23:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_1_0"
 24:24/0 = 0
+24:24/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_2_0"
 25:24/0 = 0
+25:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_b_0_0"
 26:24/0 = 0
+26:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_b_1_0"
 27:24/0 = 0
+27:24/0/custom_data_0 = "massif_herbe_sombre_escalier_bas_b_2_0"
 0:25/0 = 0
 1:25/0 = 0
 1:25/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -2169,13 +2228,21 @@ texture_region_size = Vector2i(32, 32)
 }
 3:25/0 = 0
 7:25/0 = 0
+7:25/0/custom_data_0 = "massif_herbe_sombre_rampe_etroite_0_1"
 9:25/0 = 0
+9:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_0_1"
 10:25/0 = 0
+10:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_1_1"
 11:25/0 = 0
+11:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_2_1"
 20:25/0 = 0
+20:25/0/custom_data_0 = "massif_herbe_sombre_rampe_etroite_b_0_1"
 22:25/0 = 0
+22:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_0_1"
 23:25/0 = 0
+23:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_1_1"
 24:25/0 = 0
+24:25/0/custom_data_0 = "massif_herbe_sombre_escalier_haut_b_2_1"
 0:26/0 = 0
 1:26/0 = 0
 2:26/0 = 0
@@ -2275,8 +2342,8 @@ texture_region_size = Vector2i(32, 32)
 10:31/0 = 0
 11:31/0 = 0
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_2em43"]
-texture = ExtResource("2_ky336")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_o1h3g"]
+texture = ExtResource("2_8pxnh")
 texture_region_size = Vector2i(32, 32)
 9:3/0 = 0
 9:3/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -2697,8 +2764,8 @@ texture_region_size = Vector2i(32, 32)
 14:22/0 = 0
 15:22/0 = 0
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_ly3k1"]
-texture = ExtResource("3_8pxnh")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_smqna"]
+texture = ExtResource("3_0ous7")
 texture_region_size = Vector2i(32, 32)
 3:4/0 = 0
 3:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
@@ -2988,14 +3055,412 @@ texture_region_size = Vector2i(32, 32)
 12:20/0 = 0
 13:20/0 = 0
 
-[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_o1h3g"]
-texture = ExtResource("4_0ous7")
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_eeg7v"]
+texture = ExtResource("4_ptduf")
 texture_region_size = Vector2i(32, 32)
 0:0/0 = 0
 0:0/0/custom_data_0 = "entree"
 0:0/0/custom_data_2 = "ENTREE"
 1:0/0 = 0
 1:0/0/custom_data_0 = "vide"
+
+[sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_gvd4f"]
+texture = ExtResource("5_2em43")
+texture_region_size = Vector2i(32, 32)
+0:0/0 = 0
+1:0/0 = 0
+2:0/0 = 0
+2:0/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+&"type": 10
+}
+3:0/0 = 0
+4:0/0 = 0
+4:0/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+15: [10],
+&"type": 10
+}
+5:0/0 = 0
+5:0/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+&"type": 10
+}
+6:0/0 = 0
+6:0/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+7:0/0 = 0
+7:0/0/metadata/_better_terrain = {
+11: [10],
+&"type": 10
+}
+8:0/0 = 0
+8:0/0/metadata/_better_terrain = {
+15: [10],
+&"type": 10
+}
+9:0/0 = 0
+9:0/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+11:0/0 = 0
+14:0/0 = 0
+16:0/0 = 0
+17:0/0 = 0
+18:0/0 = 0
+20:0/0 = 0
+20:0/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+21:0/0 = 0
+21:0/0/metadata/_better_terrain = {
+11: [10],
+&"type": 10
+}
+22:0/0 = 0
+22:0/0/metadata/_better_terrain = {
+15: [10],
+&"type": 10
+}
+23:0/0 = 0
+23:0/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+24:0/0 = 0
+27:0/0 = 0
+28:0/0 = 0
+29:0/0 = 0
+30:0/0 = 0
+0:1/0 = 0
+0:1/0/metadata/_better_terrain = {
+3: [10],
+15: [10],
+&"type": 10
+}
+1:1/0 = 0
+1:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+2:1/0 = 0
+2:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+3:1/0 = 0
+3:1/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+&"type": 10
+}
+4:1/0 = 0
+4:1/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+5:1/0 = 0
+5:1/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+6:1/0 = 0
+7:1/0 = 0
+7:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+&"type": 10
+}
+8:1/0 = 0
+8:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+&"type": 10
+}
+9:1/0 = 0
+11:1/0 = 0
+11:1/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+12:1/0 = 0
+13:1/0 = 0
+14:1/0 = 0
+14:1/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+16:1/0 = 0
+17:1/0 = 0
+18:1/0 = 0
+20:1/0 = 0
+21:1/0 = 0
+21:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+&"type": 10
+}
+22:1/0 = 0
+22:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+&"type": 10
+}
+23:1/0 = 0
+24:1/0 = 0
+24:1/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+25:1/0 = 0
+26:1/0 = 0
+27:1/0 = 0
+27:1/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+28:1/0 = 0
+29:1/0 = 0
+29:1/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+30:1/0 = 0
+0:2/0 = 0
+0:2/0/metadata/_better_terrain = {
+3: [10],
+15: [10],
+&"type": 10
+}
+1:2/0 = 0
+1:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+2:2/0 = 0
+2:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+15: [10],
+&"type": 10
+}
+3:2/0 = 0
+3:2/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+&"type": 10
+}
+4:2/0 = 0
+4:2/0/metadata/_better_terrain = {
+3: [10],
+15: [10],
+&"type": 10
+}
+5:2/0 = 0
+5:2/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+&"type": 10
+}
+6:2/0 = 0
+6:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+&"type": 10
+}
+7:2/0 = 0
+7:2/0/metadata/_better_terrain = {
+7: [10],
+15: [10],
+&"type": 10
+}
+8:2/0 = 0
+8:2/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+&"type": 10
+}
+9:2/0 = 0
+9:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+15: [10],
+&"type": 10
+}
+11:2/0 = 0
+12:2/0 = 0
+13:2/0 = 0
+14:2/0 = 0
+20:2/0 = 0
+20:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+11: [10],
+&"type": 10
+}
+21:2/0 = 0
+21:2/0/metadata/_better_terrain = {
+7: [10],
+15: [10],
+&"type": 10
+}
+22:2/0 = 0
+22:2/0/metadata/_better_terrain = {
+3: [10],
+11: [10],
+&"type": 10
+}
+23:2/0 = 0
+23:2/0/metadata/_better_terrain = {
+3: [10],
+7: [10],
+15: [10],
+&"type": 10
+}
+24:2/0 = 0
+25:2/0 = 0
+26:2/0 = 0
+27:2/0 = 0
+0:3/0 = 0
+1:3/0 = 0
+1:3/0/metadata/_better_terrain = {
+11: [10],
+15: [10],
+&"type": 10
+}
+2:3/0 = 0
+2:3/0/metadata/_better_terrain = {
+11: [10],
+15: [10],
+&"type": 10
+}
+3:3/0 = 0
+4:3/0 = 0
+4:3/0/metadata/_better_terrain = {
+3: [10],
+15: [10],
+&"type": 10
+}
+5:3/0 = 0
+5:3/0/metadata/_better_terrain = {
+7: [10],
+11: [10],
+&"type": 10
+}
+0:4/0 = 0
+1:4/0 = 0
+1:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:4/0/custom_data_1 = true
+1:4/0/metadata/_better_terrain = {
+&"type": 10
+}
+2:4/0 = 0
+2:4/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:4/0/custom_data_1 = true
+2:4/0/metadata/_better_terrain = {
+&"type": 10
+}
+3:4/0 = 0
+7:4/0 = 0
+7:4/0/custom_data_0 = "massif_sable_rampe_etroite_0_0"
+9:4/0 = 0
+9:4/0/custom_data_0 = "massif_sable_escalier_haut_0_0"
+10:4/0 = 0
+10:4/0/custom_data_0 = "massif_sable_escalier_haut_1_0"
+11:4/0 = 0
+11:4/0/custom_data_0 = "massif_sable_escalier_haut_2_0"
+12:4/0 = 0
+12:4/0/custom_data_0 = "massif_sable_escalier_bas_0_0"
+13:4/0 = 0
+13:4/0/custom_data_0 = "massif_sable_escalier_bas_1_0"
+14:4/0 = 0
+14:4/0/custom_data_0 = "massif_sable_escalier_bas_2_0"
+20:4/0 = 0
+20:4/0/custom_data_0 = "massif_sable_rampe_etroite_b_0_0"
+22:4/0 = 0
+22:4/0/custom_data_0 = "massif_sable_escalier_haut_b_0_0"
+23:4/0 = 0
+23:4/0/custom_data_0 = "massif_sable_escalier_haut_b_1_0"
+24:4/0 = 0
+24:4/0/custom_data_0 = "massif_sable_escalier_haut_b_2_0"
+25:4/0 = 0
+25:4/0/custom_data_0 = "massif_sable_escalier_bas_b_0_0"
+26:4/0 = 0
+26:4/0/custom_data_0 = "massif_sable_escalier_bas_b_1_0"
+27:4/0 = 0
+27:4/0/custom_data_0 = "massif_sable_escalier_bas_b_2_0"
+0:5/0 = 0
+1:5/0 = 0
+1:5/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:5/0/custom_data_1 = true
+1:5/0/metadata/_better_terrain = {
+&"type": 10
+}
+2:5/0 = 0
+2:5/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:5/0/custom_data_1 = true
+2:5/0/metadata/_better_terrain = {
+&"type": 10
+}
+3:5/0 = 0
+7:5/0 = 0
+7:5/0/custom_data_0 = "massif_sable_rampe_etroite_0_1"
+9:5/0 = 0
+9:5/0/custom_data_0 = "massif_sable_escalier_haut_0_1"
+10:5/0 = 0
+10:5/0/custom_data_0 = "massif_sable_escalier_haut_1_1"
+11:5/0 = 0
+11:5/0/custom_data_0 = "massif_sable_escalier_haut_2_1"
+20:5/0 = 0
+20:5/0/custom_data_0 = "massif_sable_rampe_etroite_b_0_1"
+22:5/0 = 0
+22:5/0/custom_data_0 = "massif_sable_escalier_haut_b_0_1"
+23:5/0 = 0
+23:5/0/custom_data_0 = "massif_sable_escalier_haut_b_1_1"
+24:5/0 = 0
+24:5/0/custom_data_0 = "massif_sable_escalier_haut_b_2_1"
 
 [resource]
 tile_size = Vector2i(32, 32)
@@ -3006,14 +3471,15 @@ custom_data_layer_1/name = "mur"
 custom_data_layer_1/type = 1
 custom_data_layer_2/name = "objet"
 custom_data_layer_2/type = 4
-sources/0 = SubResource("TileSetAtlasSource_ptduf")
-sources/1 = SubResource("TileSetAtlasSource_2em43")
-sources/2 = SubResource("TileSetAtlasSource_ly3k1")
-sources/3 = SubResource("TileSetAtlasSource_o1h3g")
+sources/0 = SubResource("TileSetAtlasSource_ly3k1")
+sources/1 = SubResource("TileSetAtlasSource_o1h3g")
+sources/2 = SubResource("TileSetAtlasSource_smqna")
+sources/3 = SubResource("TileSetAtlasSource_eeg7v")
+sources/4 = SubResource("TileSetAtlasSource_gvd4f")
 metadata/_better_terrain = {
 &"decoration": ["Decoration", Color(0.4117647, 0.4117647, 0.4117647, 1), 3, [], {
 &"path": "res://addons/better-terrain/icons/Decoration.svg"
 }],
-&"terrains": [["sol", Color(0.5411765, 0.48235294, 0.3529412, 1), 2, [], {}], ["herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 0, [0], {}], ["herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 0, [0], {}], ["terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 0, [0], {}], ["sable", Color(0.84313726, 0.72156864, 0.4627451, 1), 0, [0], {}], ["gravier", Color(0.65882355, 0.6039216, 0.54509807, 1), 0, [0], {}], ["eau", Color(0.11372549, 0.5803922, 0.53333336, 1), 0, [], {}], ["massif_herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 1, [], {}], ["massif_terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 1, [], {}], ["massif_herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 1, [], {}]],
+&"terrains": [["sol", Color(0.5411765, 0.48235294, 0.3529412, 1), 2, [], {}], ["herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 0, [0], {}], ["herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 0, [0], {}], ["terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 0, [0], {}], ["sable", Color(0.84313726, 0.72156864, 0.4627451, 1), 0, [0], {}], ["gravier", Color(0.65882355, 0.6039216, 0.54509807, 1), 0, [0], {}], ["eau", Color(0.11372549, 0.5803922, 0.53333336, 1), 0, [], {}], ["massif_herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 1, [], {}], ["massif_terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 1, [], {}], ["massif_herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 1, [], {}], ["massif_sable", Color(0.84313726, 0.72156864, 0.4627451, 1), 1, [], {}]],
 &"version": "0.2"
 }

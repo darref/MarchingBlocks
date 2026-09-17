@@ -167,6 +167,10 @@ func _initialize() -> void:
 	root.add_child(_bt)  # ⚠ ses caches appellent add_child : il lui faut l'arbre
 
 	_dessiner_les_notres()
+	# ⚠ AVANT de bâtir les sources : cette planche-là est FABRIQUÉE, et il faut qu'elle existe sur disque
+	# pour être chargée comme texture. Au tout premier lancement elle n'est pas encore importée — le
+	# message ci-dessous le dira, il suffit de relancer après un « --import ».
+	_fabriquer_le_sable()
 	_jeu = TileSet.new()
 	_jeu.tile_size = Vector2i(COTE, COTE)
 	for nom in ["nom", "mur", "objet"]:
@@ -179,6 +183,7 @@ func _initialize() -> void:
 
 	var toutes := PLANCHES.duplicate()
 	toutes["dessinees"] = DESSINEES
+	toutes["massif_sable"] = MASSIF_SABLE_PNG
 	for cle in toutes:
 		var texture: Texture2D = load(toutes[cle]) if ResourceLoader.exists(toutes[cle]) else null
 		if texture == null:
@@ -203,7 +208,11 @@ func _initialize() -> void:
 		for y in taille.y:
 			for x in taille.x:
 				_declarer(b[1], b[2] + Vector2i(x, y), "%s_%d_%d" % [b[0], x, y], y in murs, "")
-	for cle in PLANCHES:
+	# ⚠ SUR « toutes », PAS SUR « PLANCHES ». La planche fabriquée du sable est une source comme les
+	# autres, et c'est ici que les tuiles d'une source sont CRÉÉES. Bouclée sur PLANCHES, elle restait une
+	# source sans une seule tuile : `get_tile_at_coords()` rendait −1, tout était sauté, et le massif de
+	# sable sortait à zéro tuile SANS UNE ERREUR.
+	for cle in toutes:
 		_declarer_le_reste(cle)
 
 	_declarer_terrains()
@@ -237,7 +246,12 @@ func _dessiner_les_notres() -> void:
 	print("tuiles dessinées : %s (%s)" % [DESSINEES, "écrite" if erreur == OK else "ÉCHEC"])
 
 
-func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: String) -> void:
+## ⚠ `dans_la_planche` — la planche de contrôle existe pour retrouver une tuile PAR SON RÔLE. Y verser les
+## quatre-vingt-douze cases d'escalier y enterrait l'herbe, l'eau et les arbres sous des fragments. Les
+## escaliers gardent leur nom (le chargeur en aura besoin pour reconnaître un passage) mais sortent de la
+## grille des rôles, comme les cases d'un arbre, qui ont leur bande à part.
+func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: String,
+		dans_la_planche: bool = true) -> void:
 	var source: TileSetAtlasSource = _sources[planche]["source"]
 	var texture: Texture2D = _sources[planche]["texture"]
 	var limite := Vector2i(texture.get_width() / COTE, texture.get_height() / COTE)
@@ -258,7 +272,8 @@ func _declarer(planche: String, case: Vector2i, nom: String, mur: bool, objet: S
 	# ⚠ `objet` va dans la légende : c'est la donnée qui décide si une tuile peinte devient un objet du
 	# jeu (aujourd'hui l'entrée, et elle seule). L'oublier ici rendait la colonne vide pour TOUT le lot,
 	# y compris pour « entree » — une légende qui ment par omission sur la seule tuile qui compte.
-	_ordre.append({"nom": nom, "planche": planche, "case": case, "mur": mur, "objet": objet})
+	if dans_la_planche:
+		_ordre.append({"nom": nom, "planche": planche, "case": case, "mur": mur, "objet": objet})
 
 
 ## Les cases du lot qu'aucun rôle n'a prises : déclarées sans nom et TRAVERSABLES, pour qu'on puisse les
@@ -301,9 +316,48 @@ func _declarer_le_reste(planche: String) -> void:
 ## ⚠ LE SABLE N'EST PAS ICI. Il n'a aucune bande de falaise (65 cases contre 114) : une dune n'a pas de
 ## paroi verticale. Il reste un recouvrement à plat, qui marche déjà à 0 % de repli.
 const MASSIFS := [
-	{"nom": "massif_herbe", "y": 8, "couleur": "#7b9729"},
-	{"nom": "massif_terre", "y": 14, "couleur": "#81502f"},
-	{"nom": "massif_herbe_sombre", "y": 20, "couleur": "#59842c"},
+	{"nom": "massif_herbe", "planche": "sol", "y": 8, "couleur": "#7b9729"},
+	{"nom": "massif_terre", "planche": "sol", "y": 14, "couleur": "#81502f"},
+	{"nom": "massif_herbe_sombre", "planche": "sol", "y": 20, "couleur": "#59842c"},
+	# ⚠ LE SABLE EST UNE PLANCHE FABRIQUÉE, PAS UNE PLANCHE DU LOT. Le lot n'en livre que 65 cases, sans
+	# aucune bande de falaise : on le REPORTE depuis l'herbe claire par table de substitution (voir
+	# `_fabriquer_le_sable`). Il vit donc à y = 0 de sa propre feuille, et non à y = 26 de FLOORS.
+	{"nom": "massif_sable", "planche": "massif_sable", "y": 0, "couleur": "#d7b876"},
+]
+
+## LA TABLE DU REPORT. ⚠ La roche est COMMUNE aux quatre familles (onze bruns partagés, mesuré) : elle
+## va à l'identité, pas un pixel touché. Seuls les verts se traduisent.
+## ⚠ `#dfc57d` est FABRIQUÉ, en prolongeant la rampe du sable (#d7b876 → #cfab6f) d'un pas vers le haut :
+## le sable n'a pas de rehaut. Importer le RAPPORT de l'herbe saturait le canal rouge à 255 et donnait un
+## liseré criard — le contraste d'une matière ne se transpose pas à une autre, c'est sa rampe qui le dit.
+## ⚠ `#22463d` est un vert-bleu d'ombre, ni herbe ni roche : il est versé vers une ombre sableuse.
+const REPORT_SABLE := {
+	"#7b9729": "#d7b876",  # le plat épinglé contre le plat, sans quoi tout glisse d'un cran
+	"#95a631": "#dfc57d",  # le rehaut, fabriqué
+	"#59842c": "#cfab6f",
+	"#406a25": "#c59c5f",
+	"#22463d": "#7d5336",
+}
+## La rampe du sable, du plus clair au plus sombre, et ses luminosités de coupure. ⚠ Elle sert de FILET :
+## les teintes rares passent sous le seuil d'un relevé de palette et n'entrent jamais dans une table
+## écrite à la main — mesuré, vingt pixels verts y échappaient. Tout vert survivant y est reversé.
+const RAMPE_SABLE := ["#dfc57d", "#d7b876", "#cfab6f", "#c59c5f", "#7d5336"]
+const RAMPE_BORNES := [0.70, 0.62, 0.52, 0.40]
+const MASSIF_SABLE_PNG := "res://ART/massif_sable.png"
+
+## LES ESCALIERS — ce qui relie deux altitudes. ⚠ CE NE SONT PAS DES TERRAINS : un escalier n'est pas
+## décidé par son voisinage mais par l'endroit où l'on veut monter. C'est une intention de niveau, donc un
+## BLOC, posé à la main comme un arbre. Déclarés comme terrain, ils se faisaient choisir comme arêtes
+## ordinaires et semaient des marches rayées au bord des plateaux (mesuré).
+## [nom, colonne, ligne relative, taille] — MESURÉ par les joints : l'art est continu à l'intérieur d'une
+## pièce (écart < 0,17) et franc entre deux (0,56).
+const ESCALIERS := [
+	["escalier_haut", 9, 4, Vector2i(3, 2)],   # monte de deux cases
+	["escalier_bas", 12, 4, Vector2i(3, 1)],   # monte d'une seule
+	["escalier_haut_b", 22, 4, Vector2i(3, 2)],
+	["escalier_bas_b", 25, 4, Vector2i(3, 1)],
+	["rampe_etroite", 7, 4, Vector2i(1, 2)],
+	["rampe_etroite_b", 20, 4, Vector2i(1, 2)],
 ]
 const MASSIF_REFERENCE := 8   # l'herbe claire : la seule famille qu'on classe
 const MASSIF_LIGNES := 6
@@ -345,7 +399,55 @@ const MASSIF_COINS := ["hg", "hd", "bg", "bd"]
 ## saisie à la main est exactement l'endroit où l'on se trompe d'une case sans jamais s'en apercevoir.
 ## MESURÉ : 0 % de repli sur six formes, dont l'anneau, le L, la croix et la bande d'une seule case —
 ## toutes celles qui avaient tué la rive du lac.
+## Fabrique la planche du sable : les six lignes de l'herbe claire, recolorées par table.
+## ⚠ CETTE IMAGE EST DÉRIVÉE, JAMAIS RETOUCHÉE À LA MAIN. La retoucher ferait deux descriptions du même
+## dessin, et elles divergeraient au premier réglage de la table.
+func _fabriquer_le_sable() -> void:
+	var chemin: String = PLANCHES["sol"]
+	var img := Image.load_from_file(chemin)
+	if img == null:
+		print("ÉCHEC — planche du sol illisible pour le report du sable : %s" % chemin)
+		return
+	img.convert(Image.FORMAT_RGBA8)
+	var largeur := img.get_width() / COTE
+	var feuille := Image.create_empty(largeur * COTE, MASSIF_LIGNES * COTE, false, Image.FORMAT_RGBA8)
+	feuille.fill(Color(0, 0, 0, 0))
+	var traduits := 0
+	var rattrapes := 0
+	for dy in MASSIF_LIGNES:
+		for cx in largeur:
+			for y in COTE:
+				for x in COTE:
+					var p := img.get_pixel(cx * COTE + x, (MASSIF_REFERENCE + dy) * COTE + y)
+					if p.a < 0.02:
+						continue
+					var h := "#%02x%02x%02x" % [int(p.r * 255), int(p.g * 255), int(p.b * 255)]
+					if REPORT_SABLE.has(h):
+						feuille.set_pixel(cx * COTE + x, dy * COTE + y, Color(REPORT_SABLE[h]))
+						traduits += 1
+					elif p.g > p.r:
+						feuille.set_pixel(cx * COTE + x, dy * COTE + y, Color(_dans_rampe_sable(p)))
+						rattrapes += 1
+					else:
+						feuille.set_pixel(cx * COTE + x, dy * COTE + y, p)  # la roche, intacte
+	var erreur := feuille.save_png(MASSIF_SABLE_PNG)
+	print("report du sable : %s (%s) — %d px traduits, %d rattrapés par la rampe"
+		% [MASSIF_SABLE_PNG, "écrite" if erreur == OK else "ÉCHEC", traduits, rattrapes])
+
+
+func _dans_rampe_sable(p: Color) -> String:
+	var l := 0.2126 * p.r + 0.7152 * p.g + 0.0722 * p.b
+	for i in RAMPE_BORNES.size():
+		if l >= RAMPE_BORNES[i]:
+			return RAMPE_SABLE[i]
+	return RAMPE_SABLE[RAMPE_SABLE.size() - 1]
+
+
 func _declarer_massifs() -> void:
+	# ⚠ LES SIGNATURES SE DÉRIVENT SUR LA RÉFÉRENCE, LES TUILES VIENNENT DE CHAQUE FAMILLE. Les formes
+	# coïncident (405 px d'écart sur 116 736), donc un seul relevé sert aux quatre ; mais chacune a sa
+	# planche et son décalage, et le sable a même une feuille à lui. Coder « sol » en dur ici déclarerait
+	# le sable sur le haut de FLOORS — les bonnes signatures sur les mauvaises tuiles, sans une erreur.
 	var source: TileSetAtlasSource = _sources["sol"]["source"]
 	var image: Image = (_sources["sol"]["texture"] as Texture2D).get_image()
 	# ⚠ Une texture importée rend souvent une image COMPRESSÉE, sur laquelle `get_pixel` ne dit pas la
@@ -367,6 +469,17 @@ func _declarer_massifs() -> void:
 			signatures[Vector2i(cx, dy)] = s
 
 	for famille in MASSIFS:
+		var planche: String = famille["planche"]
+		if not _sources.has(planche):
+			print("  ⚠ massif « %s » : planche « %s » absente — le report du sable a-t-il été importé ?"
+				% [famille["nom"], planche])
+			continue
+		var src: TileSetAtlasSource = _sources[planche]["source"]
+		var img: Image = (_sources[planche]["texture"] as Texture2D).get_image()
+		if img.is_compressed():
+			img.decompress()
+		img.convert(Image.FORMAT_RGBA8)
+		_declarer_escaliers(planche, src, famille)
 		if not _bt.add_terrain(_jeu, famille["nom"], Color(famille["couleur"]),
 				_bt.TerrainType.MATCH_VERTICES, []):
 			print("  ⚠ massif « %s » refusé" % famille["nom"])
@@ -378,7 +491,7 @@ func _declarer_massifs() -> void:
 		var ecartees := 0
 		for cle in signatures:
 			var case := Vector2i(cle.x, famille["y"] + cle.y)
-			if source.get_tile_at_coords(case) == Vector2i(-1, -1):
+			if src.get_tile_at_coords(case) == Vector2i(-1, -1):
 				continue
 			var s: String = signatures[cle]
 			# ⚠ Les quatre CÔTÉS restent à RIEN : c'est ce qui fait du MATCH_VERTICES et non du
@@ -391,20 +504,20 @@ func _declarer_massifs() -> void:
 			# l'uniformité du centre. MESURÉ, et la frontière est un SAUT du lot, pas un seuil choisi :
 			# cinq cases à 100 %, quatre entre 90 et 94 %, puis plus rien avant 80 %.
 			# Une tuile d'intérieur doit être UNIE. Tout le reste appartient aux bords.
-			if s == "MMMM" and _uniformite(image, case) < 100.0:
+			if s == "MMMM" and _uniformite(img, case) < 100.0:
 				ecartees += 1
 				continue
 			var quoi := {"gauche": RIEN, "droite": RIEN, "haut": RIEN, "bas": RIEN}
 			for i in 4:
 				quoi[MASSIF_COINS[i]] = terrain if s[i] == "M" else RIEN
-			if not _poser("sol", case, terrain, quoi):
+			if not _poser(planche, case, terrain, quoi):
 				continue
 			posees += 1
 			# ⚠ UNE FALAISE EST UN MUR, et c'est la MÊME donnée qui arrête les pieds et la lumière
 			# (charte §6). Une tuile dont les quatre coins sont de la roche est une paroi ; le dessus du
 			# plateau se marche. Les séparer donnerait un mur qu'on traverse mais pas le rayon.
 			if s == "RRRR":
-				var donnees := source.get_tile_data(case, 0)
+				var donnees := src.get_tile_data(case, 0)
 				donnees.set_custom_data("mur", true)
 				if donnees.get_collision_polygons_count(0) == 0:
 					var demi := COTE / 2.0
@@ -443,6 +556,24 @@ func _signature_massif(image: Image, cx: int, cy: int) -> String:
 		else:
 			s += "M" if matiere >= roche else "R"
 	return s if vue else ""
+
+
+## Les escaliers d'une famille, nommés case par case. ⚠ `mur = false` : un escalier est un PASSAGE, c'est
+## tout son objet. C'est par lui qu'on changera d'altitude, donc `CLIENT/niveau.gd` doit pouvoir le
+## trouver par son NOM — d'où la déclaration, alors que ces cases sont déjà peignables comme anonymes.
+func _declarer_escaliers(planche: String, src: TileSetAtlasSource, famille: Dictionary) -> void:
+	var poses := 0
+	for e in ESCALIERS:
+		var taille: Vector2i = e[3]
+		for y in taille.y:
+			for x in taille.x:
+				var case := Vector2i(e[1] + x, famille["y"] + e[2] + y)
+				if src.get_tile_at_coords(case) == Vector2i(-1, -1):
+					continue
+				_declarer(planche, case, "%s_%s_%d_%d" % [famille["nom"], e[0], x, y], false, "", false)
+				poses += 1
+	if poses > 0:
+		print("    escaliers de « %s » : %d cases nommées" % [famille["nom"], poses])
 
 
 ## La part de la couleur DOMINANTE dans une case, en pourcentage des pixels opaques. Un vrai aplat rend
