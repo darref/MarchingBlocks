@@ -20,6 +20,9 @@ extends SceneTree
 ##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/faire_zone.gd [-- --ecraser]
 
 const Niveau := preload("res://CLIENT/niveau.gd")
+## ⚠ LA RÈGLE DE LA FALAISE, PARTAGÉE. Une seule description, trois appelants : ce générateur, l'outil
+## `deriver_falaises.gd`, et le bouton de l'éditeur.
+const Falaises := preload("res://DEV_TOOLS/falaises.gd")
 ## ⚠ Better Terrain remplace le système natif (voir faire_surface.gd). Il s'utilise hors éditeur, mais
 ## il faut l'instancier ET l'ajouter à l'arbre : ses caches appellent add_child().
 const BETTER_TERRAIN := "res://addons/better-terrain/BetterTerrain.gd"
@@ -281,32 +284,22 @@ func _poser(calque: TileMapLayer, pos: Vector2i, nom: String, noms: Dictionary) 
 ##
 ## ⚠ Les deux milieux sont interchangeables — MESURÉ (joints de 0,013 à 0,069) — et se tirent au GRAIN,
 ## pas au hasard : deux exécutions doivent rendre la même carte.
+## ⚠ LA RÈGLE N'EST PLUS ICI. Elle vit dans `DEV_TOOLS/falaises.gd`, partagée avec l'outil en ligne de
+## commande et le bouton de l'éditeur. Elle était écrite deux fois et les deux avaient DÉJÀ divergé —
+## l'une sautait une case occupée par une marche, l'autre sautait aussi le plateau. Ce générateur ne fait
+## plus que l'APPLIQUER : le calcul d'un côté, la pose de l'autre.
 func _descendre_la_falaise(massifs: TileMapLayer, dessus: Array, marches: Dictionary, famille: String) -> int:
 	var plateau := {}
 	for c in dessus:
-		plateau[c] = true
+		plateau[c] = famille
 	var posees := 0
-	for c in dessus:
-		var pos: Vector2i = c
-		if plateau.has(pos + Vector2i(0, 1)):
-			continue  # pas un bord sud : il y a encore du plateau dessous
-		var a_gauche: bool = plateau.has(pos + Vector2i(-1, 0)) and not plateau.has(pos + Vector2i(-1, 1))
-		var a_droite: bool = plateau.has(pos + Vector2i(1, 0)) and not plateau.has(pos + Vector2i(1, 1))
-		var role := "milieu_a" if _grain(pos.x, pos.y) < 0.5 else "milieu_b"
-		if not a_gauche:
-			role = "gauche"
-		elif not a_droite:
-			role = "droite"
-		for i in FALAISE_RANGEES.size():
-			var ou: Vector2i = pos + Vector2i(0, 1 + i)
-			if marches.has(ou):
-				continue
-			_poser(massifs, ou, "%s_falaise_%s_%s" % [famille, role, FALAISE_RANGEES[i]], _noms_surface)
-			# ⚠ RÉSERVER LA PAROI. Les bosquets sont semés APRÈS le plateau et ne consultent que `_pris` :
-			# sans cette ligne, un arbre pousse sur la falaise. Rien ne planterait — les deux sont des
-			# murs — mais ça se verrait, et c'est le genre de défaut qu'aucun compteur ne signale.
-			_pris[ou] = true
-			posees += 1
+	for p in Falaises.calculer(plateau, marches):
+		_poser(massifs, p["case"], p["nom"], _noms_surface)
+		# ⚠ RÉSERVER LA PAROI. Les bosquets sont semés APRÈS le plateau et ne consultent que `_pris` :
+		# sans cette ligne, un arbre pousse sur la falaise. Rien ne planterait — les deux sont des murs —
+		# mais ça se verrait, et c'est le genre de défaut qu'aucun compteur ne signale.
+		_pris[p["case"]] = true
+		posees += 1
 	return posees
 
 

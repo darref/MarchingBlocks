@@ -753,6 +753,28 @@ premier mur déplacé.
       - **Le calque `Massifs` vit entre `Recouvrement` et `Props`** : au-dessus de ce que ses bords
         ajourés révèlent (presque toutes ses cases sont partiellement transparentes — mesuré), mais sous
         les décors, sans quoi un arbre planté sur un plateau aurait l'air enterré dans sa lèvre.
+      - ⚠ **LA RÈGLE DE LA FALAISE VIT DANS `DEV_TOOLS/falaises.gd`, ET NULLE PART AILLEURS.** Trois
+        appelants l'appliquent : le générateur de zone, l'outil `DEV_TOOLS/deriver_falaises.gd` (qui
+        redérive les parois d'un calque déjà peint), et le bouton « Falaises » du greffon
+        `addons/undermend/`. ⚠ **Elle CALCULE, elle ne pose rien** — c'est ce qui permet à chacun de
+        l'appliquer à sa façon : le générateur marque ses cases prises, la commande écrit directement, le
+        bouton passe par l'historique d'annulation.
+        - ⚠ **Elle était écrite DEUX fois, et les deux avaient DÉJÀ divergé** — à une heure d'intervalle.
+          L'une sautait une case occupée par une marche, l'autre sautait aussi le plateau. Ajouter le
+          bouton en aurait fait une troisième. L'extraction a pris la plus défensive.
+        - ⚠ **UNE EXTRACTION QUI CHANGE SA SORTIE N'EST PAS UNE EXTRACTION.** Le test de fidélité a
+          attrapé quatre `milieu_a` / `milieu_b` permutés : les deux grains différaient. Invisible (les
+          deux milieux sont mesurés interchangeables), mais relancer l'outil aurait réécrit quatre cases
+          pour rien. On n'a pas relâché le test : **la règle partagée est devenue l'autorité et le
+          générateur s'y est conformé** — faire dépendre la règle de la graine du générateur aurait fait
+          fuiter sa préoccupation dans un calcul que le bouton partage.
+        - ⚠ **LE BOUTON NE MODIFIE PAS BETTER TERRAIN.** On se sert de cet addon comme d'une bibliothèque
+          et on n'y touche jamais : un fork, c'est un conflit à chaque mise à jour amont. Le greffon est
+          le nôtre. ⚠ Et il passe par `get_undo_redo()` : un bouton qui réécrit des cases sans que Ctrl+Z
+          les rattrape abîme une peinture sans retour.
+        - ⚠ **UN GREFFON D'ÉDITEUR NE SE TESTE PAS EN HEADLESS.** On vérifie qu'il compile et que la règle
+          qu'il appelle est fidèle ; qu'il apparaisse et que l'annulation marche se juge dans l'éditeur,
+          comme les gizmos.
       - ⚠ **LA FALAISE SE DÉRIVE, ELLE NE S'AUTO-TUILE PAS — corrigé par Jordan le 17 septembre, et
         j'avais tout mis à l'envers.** J'avais rangé la paroi DANS le terrain du massif et laissé Better
         Terrain la choisir : elle se peignait alors SUR la dernière rangée du plateau au lieu de PENDRE
