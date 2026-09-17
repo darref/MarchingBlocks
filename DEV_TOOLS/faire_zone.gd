@@ -61,6 +61,16 @@ const TACHES := [
 ]
 const ROCHERS := [Rect2i(20, 15, 3, 2), Rect2i(54, 33, 3, 2), Rect2i(4, 12, 2, 2)]
 
+## UN PLATEAU, et son escalier. ⚠ Posé à l'écart de tout : le lac vit vers x48-56, les quatre routes
+## passent en y20-21, x12-13, x44-45 et y8-9, et les trois entrées sont ailleurs encore. Un massif qui
+## chevaucherait une route ou une entrée rendrait la carte fautive, et c'est le générateur qui le
+## signalerait — mais autant ne pas le provoquer.
+const PLATEAU := Rect2i(26, 25, 8, 7)
+## ⚠ L'ESCALIER VA SOUS LE BORD BAS, et c'est sa rangée du BAS qui reliera : pour la rangée du haut, le
+## dessous est encore de l'escalier, donc encore du plateau — et la règle de `CLIENT/niveau.gd` exige que
+## le dessous SORTE du plateau. C'est voulu : on relie au pied de l'escalier, pas à mi-hauteur.
+const PLATEAU_ESCALIER := Vector2i(29, 32)
+
 ## Chaque grotte : son chemin sur la grille de surface (charte §2) et la case où l'on peint son entrée.
 ## ⚠ L'entrée ne dit pas où elle mène — `CLIENT/niveau.gd` le DÉDUIT en la cherchant dans les chemins.
 const GROTTES := [
@@ -79,9 +89,18 @@ var _hasard := RandomNumberGenerator.new()
 var _pris := {}  # les cases de surface déjà occupées par un décor : on n'empile pas deux arbres
 
 
+## ⚠ `--sortie=` — écrire AILLEURS que sur la zone de départ. Sert à se fabriquer une carte d'essai
+## (un plateau, un escalier) sans toucher à celle que Jordan est en train de repeindre. Le refus
+## d'écraser continue de s'appliquer, à la destination demandée.
+var _chemin := CHEMIN
+
+
 func _initialize() -> void:
-	if FileAccess.file_exists(CHEMIN) and not "--ecraser" in OS.get_cmdline_user_args():
-		print("%s existe déjà — je n'écrase pas une zone peinte." % CHEMIN)
+	for option in OS.get_cmdline_user_args():
+		if option.begins_with("--sortie="):
+			_chemin = option.substr("--sortie=".length())
+	if FileAccess.file_exists(_chemin) and not "--ecraser" in OS.get_cmdline_user_args():
+		print("%s existe déjà — je n'écrase pas une zone peinte." % _chemin)
 		print("Relance avec « -- --ecraser » si c'est vraiment ce que tu veux.")
 		quit(0)
 		return
@@ -123,8 +142,8 @@ func _initialize() -> void:
 		print("ÉCHEC — impossible d'empaqueter la scène")
 		quit(1)
 		return
-	var erreur := ResourceSaver.save(scene, CHEMIN)
-	print("zone écrite : %s" % CHEMIN if erreur == OK else "ÉCHEC — écriture de %s (%d)" % [CHEMIN, erreur])
+	var erreur := ResourceSaver.save(scene, _chemin)
+	print("zone écrite : %s" % _chemin if erreur == OK else "ÉCHEC — écriture de %s (%d)" % [_chemin, erreur])
 	quit(0 if erreur == OK else 1)
 
 
@@ -189,7 +208,7 @@ func _batir() -> Node2D:
 	var marqueurs := Node2D.new()
 	marqueurs.name = "Marqueurs"
 	surface.add_child(marqueurs)
-	_peindre_surface(sol, nappe, recouvrement, props, objets, decor)
+	_peindre_surface(sol, nappe, recouvrement, massifs, props, objets, decor)
 
 	var grottes := Node2D.new()
 	grottes.name = "Grottes"
@@ -262,7 +281,8 @@ func _peindre_pourtour(decor: TileMapLayer, jeu: Rect2i, marge: Vector2i, nom: S
 				_poser(decor, Vector2i(x, y), nom, noms)
 
 
-func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
+func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: TileMapLayer,
+		massifs: TileMapLayer, props: TileMapLayer, objets: TileMapLayer, decor: TileMapLayer) -> void:
 	_peindre_pourtour(decor, Rect2i(0, 0, LARGEUR, HAUTEUR), MARGE_SURFACE, "falaise", _noms_surface)
 	for y in HAUTEUR:
 		for x in LARGEUR:
@@ -339,6 +359,21 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 				if absi(dx) + absi(dy) * 2 <= 5 and not trous.has(ou):
 					gravier.append(ou)
 	_raccorder(recouvrement, gravier, "gravier")
+
+	# LE PLATEAU. ⚠ Le calque `Massifs` existait depuis plusieurs jours et RIEN N'Y PEIGNAIT : une zone
+	# générée en sortait avec un calque vide, donc sans altitude à jouer. Un calque sans peintre n'est pas
+	# une fonctionnalité, c'est une intention.
+	var dessus: Array[Vector2i] = []
+	for y in range(PLATEAU.position.y, PLATEAU.end.y):
+		for x in range(PLATEAU.position.x, PLATEAU.end.x):
+			dessus.append(Vector2i(x, y))
+			_pris[Vector2i(x, y)] = true
+	_raccorder(massifs, dessus, "massif_herbe")
+	_poser_bloc(massifs, PLATEAU_ESCALIER, "massif_herbe_escalier_haut", Vector2i(3, 2), _noms_surface)
+	for dy in 2:
+		for dx in 3:
+			_pris[PLATEAU_ESCALIER + Vector2i(dx, dy)] = true
+	print("  plateau : %d cases, escalier en %s" % [dessus.size(), PLATEAU_ESCALIER])
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
 		# ⚠ Le noir va SOUS tout, sur le sol : les tuiles de trou ont le centre transparent, et le gravier

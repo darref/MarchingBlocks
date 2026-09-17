@@ -53,6 +53,7 @@ func _initialize() -> void:
 
 	_montrer_grilles(monde, chemins)
 	_montrer_entrees(entrees, chemins)
+	_montrer_escaliers(monde, resultat.get("escaliers", []))
 	_montrer_objets(monde)
 
 	print("")
@@ -99,6 +100,33 @@ func _montrer_entrees(entrees: Array, chemins: Dictionary) -> void:
 	for e in entrees:
 		print("  case %-10s → grotte %d, colonne %d, bouche %s"
 			% [str(e["case"]), e["grotte"], e["colonne"], str(e["bouche"])])
+
+
+## ⚠ CE QUE LE CHARGEUR A DÉDUIT DE L'ALTITUDE, pas ce qui est peint. Un escalier peut être parfaitement
+## valide et relier autre chose qu'on ne croit — c'est le même angle mort que pour les entrées, et aucune
+## erreur ne le dira jamais. Tant que ceci ne s'imprimait pas, le vérificateur annonçait « CARTE SAINE »
+## d'une carte dont il n'avait jamais mentionné une seule liaison d'altitude.
+func _montrer_escaliers(monde, escaliers: Array) -> void:
+	const PLATEAU := 1000
+	if not monde.grilles.has(PLATEAU):
+		return
+	var g: Dictionary = monde.grilles[PLATEAU]
+	var libres := 0
+	for y in g["hauteur"]:
+		for x in g["largeur"]:
+			if not monde.est_mur(PLATEAU, Vector2i(x, y)):
+				libres += 1
+	print("")
+	print("PLATEAUX (altitude 1) — %d case(s) où l'on marche" % libres)
+	print("  ⚠ une case peinte mais MURÉE est une paroi de massif : on ne marche pas sur la tranche.")
+	print("")
+	print("ESCALIERS (%d)" % escaliers.size())
+	if escaliers.is_empty():
+		print("  aucun — le plateau est peint mais on n'y monte pas")
+		return
+	for e in escaliers:
+		print("  case %-10s « %s »" % [str(e["case"]), e["nom"]])
+		print("       monte vers %s, redescend vers %s" % [str(e["vers_haut"]), str(e["vers_bas"])])
 
 
 func _montrer_objets(monde) -> void:
