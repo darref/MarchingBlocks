@@ -51,4 +51,4 @@ func marqueurs() -> Array:
 ## dire que la CARTE est fautive : à afficher, jamais à taire.
 func construire() -> Dictionary:
 	return Niveau.construire(get_node_or_null("Surface/Sol"), get_node_or_null("Surface/Objets"), grottes(),
-		get_node_or_null("Surface/Props"), marqueurs())
+		get_node_or_null("Surface/Props"), marqueurs(), get_node_or_null("Surface/Massifs"))

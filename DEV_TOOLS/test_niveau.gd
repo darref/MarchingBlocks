@@ -18,6 +18,8 @@ const SOL := 0
 const MUR := 1
 const ENTREE := 2
 const OEIL := 3
+const MASSIF := 4
+const ESCALIER := 5
 
 var echecs: int = 0
 var verifs: int = 0
@@ -48,6 +50,9 @@ func _initialize() -> void:
 	test_ordre_des_marqueurs_indifferent()
 	test_dependance_entre_deux_vues()
 	test_depend_de_mal_forme()
+	test_plateau_est_une_grille()
+	test_escalier_relie_les_altitudes()
+	test_escalier_qui_ne_relie_rien()
 
 	print("")
 	if echecs == 0:
@@ -71,7 +76,9 @@ func _titre(texte: String) -> void:
 
 
 func _jeu_de_tuiles() -> TileSet:
-	var image := Image.create_empty(4 * 16, 16, false, Image.FORMAT_RGBA8)
+	# ⚠ SIX CASES, PAS QUATRE : ajouter une entrée à `tuiles` sans élargir l'image ferait échouer
+	# `create_tile` hors de l'atlas — la source serait là, la tuile pas, et le test vérifierait du vide.
+	var image := Image.create_empty(6 * 16, 16, false, Image.FORMAT_RGBA8)
 	image.fill(Color.WHITE)
 	var jeu := TileSet.new()
 	jeu.tile_size = Vector2i(16, 16)
@@ -92,6 +99,10 @@ func _jeu_de_tuiles() -> TileSet:
 		{"nom": "mur", "mur": true, "objet": ""},
 		{"nom": "entree", "mur": false, "objet": "ENTREE"},
 		{"nom": "oeil", "mur": false, "objet": "OEIL_SACRE"},
+		# Le dessus d'un plateau, et ce qui y monte. ⚠ Un escalier se reconnaît à son NOM, jamais à sa
+		# position dans l'atlas : le jour où un autre lot arrive, seules les positions changent.
+		{"nom": "massif_herbe", "mur": false, "objet": ""},
+		{"nom": "massif_herbe_escalier_haut_0_0", "mur": false, "objet": ""},
 	]
 	for i in tuiles.size():
 		var coords := Vector2i(i, 0)
@@ -441,6 +452,65 @@ func test_depend_de_mal_forme() -> void:
 		return
 	_verifier(monde.objets[porte]["depend_de"] is Array,
 		"depend_de doit rester un TABLEAU quoi qu'on ait peint : %s" % str(monde.objets[porte]["depend_de"]))
+
+
+# --- l'élévation : un plateau est une GRILLE, un escalier est un PORTAIL -----------------------------
+
+## ⚠ Le dessus d'un plateau obéit à la même règle que la surface : ce qui n'est pas peint est un MUR.
+## À l'altitude 1 le vide n'est pas du sol, c'est du vide — sans quoi on marcherait dans les airs
+## partout où aucun massif n'a été posé.
+func test_plateau_est_une_grille() -> void:
+	_titre("un massif peint devient une grille où l'on ne marche que sur lui")
+	var massifs := _calque()
+	_remplir(massifs, Rect2i(3, 3, 3, 3), MASSIF)
+	var resultat := Niveau.construire(_surface(10, 10), null, [], null, null, massifs)
+	_verifier(resultat["erreurs"].is_empty(), "rien à signaler : %s" % str(resultat["erreurs"]))
+	var monde = resultat["monde"]
+	_verifier(monde.grilles.has(Niveau.PLATEAU), "la grille du plateau doit exister")
+	if not monde.grilles.has(Niveau.PLATEAU):
+		return
+	_verifier(not monde.est_mur(Niveau.PLATEAU, Vector2i(4, 4)), "on marche sur le massif peint")
+	_verifier(monde.est_mur(Niveau.PLATEAU, Vector2i(8, 8)), "hors du massif, l'altitude 1 est pleine")
+	_verifier(not monde.est_mur(0, Vector2i(8, 8)), "le SOL, lui, reste libre sous le vide du plateau")
+
+
+func test_escalier_relie_les_altitudes() -> void:
+	_titre("un escalier pose deux portails, un par sens, et le peintre n'écrit aucune liaison")
+	var massifs := _calque()
+	_remplir(massifs, Rect2i(3, 3, 3, 3), MASSIF)
+	# l'escalier juste SOUS le massif : dessus = plateau, dessous = sol
+	massifs.set_cell(Vector2i(4, 6), 0, Vector2i(ESCALIER, 0))
+	var resultat := Niveau.construire(_surface(10, 10), null, [], null, null, massifs)
+	_verifier(resultat["erreurs"].is_empty(), "rien à signaler : %s" % str(resultat["erreurs"]))
+	_verifier(resultat["escaliers"].size() == 1, "un escalier attendu, %d trouvé(s)" % resultat["escaliers"].size())
+	var monde = resultat["monde"]
+	var montee: int = monde.objet_en(0, Vector2i(4, 6))
+	var descente: int = monde.objet_en(Niveau.PLATEAU, Vector2i(4, 6))
+	_verifier(montee != -1 and descente != -1, "deux portails attendus à la même case, un par altitude")
+	if montee == -1 or descente == -1:
+		return
+	_verifier(monde.objets[montee]["vers_grille"] == Niveau.PLATEAU
+			and monde.objets[montee]["vers_case"] == Vector2i(4, 5),
+		"depuis le sol, on monte sur le plateau : %s" % str(monde.objets[montee]))
+	_verifier(monde.objets[descente]["vers_grille"] == 0
+			and monde.objets[descente]["vers_case"] == Vector2i(4, 7),
+		"depuis le plateau, on redescend au sol : %s" % str(monde.objets[descente]))
+
+
+## ⚠ CE TEST GARDE LE SENS DE LA RÈGLE. Un escalier peint au milieu d'un plateau ne relie rien : il ne
+## doit poser AUCUN portail — sinon la carte se remplirait de passages vers nulle part — et ne doit PAS
+## être une faute, sinon on ne pourrait plus s'en servir comme décor.
+func test_escalier_qui_ne_relie_rien() -> void:
+	_titre("un escalier qui ne relie rien ne pose aucun portail, et n'est pas une faute")
+	var massifs := _calque()
+	_remplir(massifs, Rect2i(3, 3, 4, 4), MASSIF)
+	massifs.set_cell(Vector2i(4, 4), 0, Vector2i(ESCALIER, 0))  # en plein milieu du plateau
+	var resultat := Niveau.construire(_surface(10, 10), null, [], null, null, massifs)
+	_verifier(resultat["erreurs"].is_empty(), "un décor ne doit rien signaler : %s" % str(resultat["erreurs"]))
+	_verifier(resultat["escaliers"].is_empty(), "aucun passage attendu, %d trouvé(s)" % resultat["escaliers"].size())
+	var monde = resultat["monde"]
+	_verifier(monde.objet_en(0, Vector2i(4, 4)) == -1, "aucun portail au sol")
+	_verifier(monde.objet_en(Niveau.PLATEAU, Vector2i(4, 4)) == -1, "aucun portail sur le plateau")
 
 
 func _contient(erreurs: Array, morceau: String) -> bool:

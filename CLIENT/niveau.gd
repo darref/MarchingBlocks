@@ -36,6 +36,18 @@ const Direction := preload("res://CORE/direction.gd")
 
 const SURFACE := 0
 
+## L'ALTITUDE 1 — le dessus des plateaux, et c'est une GRILLE, pas une propriété de case.
+##
+## ⚠ POURQUOI UNE GRILLE. `CORE` sait déjà tenir plusieurs grilles reliées par des PORTAILS : c'est ce qui
+## fait marcher les grottes. Un plateau est exactement ça — un lieu où l'on est ou l'on n'est pas, relié au
+## sol par des passages nommés. Donc `CORE` n'apprend RIEN : ni altitude, ni troisième axe, ni ordre de
+## mise à jour. Et la lumière fait gratuitement ce qu'il faut — un rayon au sol ne traverse pas un plateau,
+## un rayon sur le plateau ne descend pas au sol.
+##
+## ⚠ L'identifiant est haut exprès : les grottes prennent 1, 2, … dans l'ordre de l'arbre, et se
+## marcheraient dessus.
+const PLATEAU := 1000
+
 
 ## Construit le monde d'un niveau peint.
 ##   sol, objets : les deux calques de la surface (`objets` peut être null)
@@ -43,7 +55,7 @@ const SURFACE := 0
 ##                   "objets": TileMapLayer}] — les grilles sont numérotées 1, 2, … dans cet ordre
 ## Rend {"monde", "chemins", "entrees", "erreurs"}. ⚠ `erreurs` non vide veut dire que la CARTE est
 ## fautive : on rend quand même ce qu'on a pu construire, pour que l'éditeur montre le reste.
-static func construire(sol, objets, grottes: Array, props = null, marqueurs = null) -> Dictionary:
+static func construire(sol, objets, grottes: Array, props = null, marqueurs = null, massifs = null) -> Dictionary:
 	var erreurs: Array = []
 	var monde = Monde.new()
 
@@ -66,6 +78,22 @@ static func construire(sol, objets, grottes: Array, props = null, marqueurs = nu
 	monde.ajouter_grille(SURFACE, taille.x, taille.y)
 	_poser_murs(monde, SURFACE, sol, taille, props)
 
+	# 2 bis. Les plateaux, s'il y en a. ⚠ MÊME RÈGLE QU'EN SURFACE : une case non peinte est un MUR. À
+	# l'altitude 1, le vide n'est pas du sol, c'est du vide — on ne marche que là où un massif est peint.
+	var plateaux := massifs != null and not (massifs.get_used_cells() as Array).is_empty()
+	if plateaux:
+		monde.ajouter_grille(PLATEAU, taille.x, taille.y)
+		for y in taille.y:
+			for x in taille.x:
+				var pos := Vector2i(x, y)
+				if massifs.get_cell_tile_data(pos) == null:
+					monde.poser_mur(PLATEAU, pos)
+		# ⚠ La PAROI d'un massif est un mur EN HAUT AUSSI : on ne marche pas sur la tranche d'une falaise.
+		for pos in massifs.get_used_cells():
+			var d = massifs.get_cell_tile_data(pos)
+			if d != null and d.get_custom_data("mur") and not monde.est_mur(PLATEAU, pos):
+				monde.poser_mur(PLATEAU, pos)
+
 	# 3. Les grottes : la coupe doit faire exactement la longueur du chemin.
 	for id in chemins:
 		var coupe = grottes[id - 1]["coupe"]
@@ -86,12 +114,18 @@ static func construire(sol, objets, grottes: Array, props = null, marqueurs = nu
 		_poser_objets(monde, id, grottes[id - 1].get("objets"), chemins, entrees, erreurs)
 		_poser_marqueurs(monde, id, grottes[id - 1].get("marqueurs"), chemins, entrees, noms, a_resoudre, erreurs)
 
+	# 4 bis. Les escaliers : ce qui relie les deux altitudes.
+	var escaliers: Array = []
+	if plateaux:
+		_poser_escaliers(monde, massifs, escaliers, erreurs)
+
 	# 5. Les dépendances, une fois TOUT posé : un marqueur peut dépendre d'un autre posé après lui.
 	_resoudre_dependances(monde, noms, a_resoudre, erreurs)
 
 	for erreur in monde.valider():
 		erreurs.append("monde : " + erreur)
-	return {"monde": monde, "chemins": chemins, "entrees": entrees, "erreurs": erreurs}
+	return {"monde": monde, "chemins": chemins, "entrees": entrees, "escaliers": escaliers,
+		"erreurs": erreurs}
 
 
 ## La table d'une grotte : la case de départ, puis un pas par case le long de chaque segment.
@@ -174,6 +208,47 @@ static func _poser_objets(monde, grille: int, calque, chemins: Dictionary, entre
 			_poser_entree(monde, grille, pos, chemins, entrees, erreurs)
 		elif monde.poser(type, grille, pos) == -1:
 			erreurs.append("grille %d, case %s : %s n'a pas pu être posé (case occupée ou murée)" % [grille, pos, type])
+
+
+## LES ESCALIERS — le seul passage entre le sol et le dessus d'un plateau.
+##
+## ⚠ UN ESCALIER EST RECONNU PAR SON NOM, jamais par sa position dans l'atlas : le jour où un autre lot
+## remplacera celui-ci, seules les positions changeront (charte §6).
+##
+## ⚠ CE QU'ON DÉDUIT, ET LA RÈGLE TIENT EN UNE LIGNE : une case d'escalier dont le DESSUS est un plateau
+## où l'on marche et le DESSOUS un sol où l'on marche est un passage. On y pose deux portails, un par
+## sens. Le peintre ne déclare donc aucune liaison — il pose un escalier au bord de son plateau, et le
+## lien s'en déduit, exactement comme une entrée déduit sa grotte du chemin qui passe dessous.
+static func _poser_escaliers(monde, massifs, escaliers: Array, erreurs: Array) -> void:
+	var cellules: Array = massifs.get_used_cells()
+	cellules.sort()  # ⚠ l'ordre de pose ne doit jamais dépendre de l'ordre de peinture
+	for pos in cellules:
+		var donnees = massifs.get_cell_tile_data(pos)
+		if donnees == null:
+			continue
+		var nom: String = donnees.get_custom_data("nom")
+		if not ("escalier" in nom or "rampe" in nom):
+			continue
+		# ⚠ TYPES EXPLICITES : `pos` vient d'un Array nu, donc il est Variant et `:=` n'a rien à inférer.
+		# Faute déjà consignée dans ce projet, et refaite — elle ne coûte qu'un refus de compilation,
+		# ce qui est la bonne façon d'échouer.
+		var haut: Vector2i = pos + Vector2i(0, -1)
+		var bas: Vector2i = pos + Vector2i(0, 1)
+		# ⚠ LE DESSOUS DOIT SORTIR DU PLATEAU, et c'est un test qui me l'a appris. Ma première règle
+		# disait « le dessus est du plateau, le dessous est du sol praticable » — or le SOL EST
+		# PRATICABLE PARTOUT, y compris sous un massif : cette condition ne discriminait rien, et tout
+		# escalier peint au milieu d'un plateau fabriquait un passage vers nulle part. Ce qui relie
+		# vraiment, c'est un escalier posé au BORD : son dessus est le plateau, son dessous n'en est plus.
+		if monde.est_mur(PLATEAU, haut) or monde.est_mur(SURFACE, bas) or not monde.est_mur(PLATEAU, bas):
+			continue  # cet escalier ne relie rien : ce n'est qu'un dessin, et ce n'est pas une faute
+		var descente: int = monde.poser("ENTREE", PLATEAU, pos, {
+			"vers_grille": SURFACE, "vers_case": bas, "vers_direction": Direction.S})
+		var montee: int = monde.poser("ENTREE", SURFACE, pos, {
+			"vers_grille": PLATEAU, "vers_case": haut, "vers_direction": Direction.N})
+		if descente == -1 or montee == -1:
+			erreurs.append("escalier « %s » en %s : la case n'est pas libre dans les deux altitudes" % [nom, pos])
+			continue
+		escaliers.append({"case": pos, "nom": nom, "vers_haut": haut, "vers_bas": bas})
 
 
 ## Les marqueurs d'une grille. ⚠ L'ORDRE DE POSE NE DÉPEND PAS DE L'ORDRE DE L'ARBRE : on trie par case,

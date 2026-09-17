@@ -729,14 +729,70 @@ premier mur déplacé.
       - ⚠ **Une falaise est un `mur`** : seules les quatre cases de paroi (`RRRR`) le sont. Les tuiles de
         LÈVRE restent traversables, donc **le joueur marche sur le bord du plateau**. C'est une décision
         prise pour la passe décorative, pas un oubli.
-      - **OUVERT — le report du sable.** Ton idée (dupliquer ce qui lui manque depuis une famille
-        complète et recolorer) est mesurée faisable : **97,7 % des pixels se traduisent par table**,
-        la roche étant partagée (onze bruns communs, identité) et la surface étant un aplat d'une seule
-        teinte. Restent à épingler le plat contre le plat, à inventer deux tons (le sable n'a ni rehaut
-        ni ombre profonde) et à trancher ~1 100 px orphelins, dont un vert-bleu sans équivalent sableux.
-      - **OUVERT — ce que l'élévation veut dire dans le jeu.** Décorative (des obstacles, un dessin) ou
-        jouable (le joueur monte) ? La seconde demande une notion d'altitude à `CLIENT/niveau.gd` et
-        rouvre la table « une colonne par case de surface » (§2). La passe faite est **décorative**.
+      - **LE REPORT DU SABLE — FAIT (17 septembre 2026), et c'est une planche DÉRIVÉE.** Le lot ne livre
+        au sable ni falaise ni la moitié de ses pièces ; on le **reconstruit** depuis l'herbe claire par
+        une table de substitution, et `ART/massif_sable.png` est écrite par `faire_surface.gd`.
+        ⚠ **Cette image ne se retouche JAMAIS à la main** : ce serait une seconde description du même
+        dessin, et elle divergerait au premier réglage de la table. ⚠ Elle demande un `--import` entre sa
+        première écriture et son chargement comme texture, comme `surface_dessinees.png`.
+        - **La roche va à l'IDENTITÉ** (onze bruns partagés, mesuré) : pas un pixel touché. Seuls les
+          quatre verts se traduisent, plus `#22463d`, un vert-bleu d'ombre qui n'est ni herbe ni roche.
+        - ⚠ **LE PLAT S'ÉPINGLE CONTRE LE PLAT.** Classées par luminosité, les deux rampes se décalent
+          d'un cran — le plat de l'herbe tombait sur la première ombre du sable, et son rehaut prenait le
+          plat. Tout glissait, et la couverture avait pourtant l'air bonne.
+        - ⚠ **UN CONTRASTE NE SE TRANSPOSE PAS D'UNE MATIÈRE À L'AUTRE.** Le sable n'a pas de rehaut : je
+          l'ai d'abord fabriqué en appliquant le RAPPORT canal par canal de l'herbe, ce qui a saturé le
+          rouge à 255 et donné un liseré criard. Le bon rehaut se prend en **prolongeant la rampe du
+          sable** (`#d7b876` → `#cfab6f`) d'un pas vers le haut : `#dfc57d`.
+        - ⚠ **UNE RÈGLE PLUTÔT QU'UNE LISTE, pour les teintes rares.** Un relevé de palette ignore ce qui
+          apparaît moins de 200 fois : vingt pixels verts échappaient ainsi à la table, dont quatorze du
+          même ton — une tache verte sur une tuile de sable. Tout vert survivant est désormais reversé
+          dans la rampe du sable par luminosité.
+        - **MESURÉ** — 48 tuiles, 4 parois, 9 écartées : exactement les chiffres de l'herbe claire, ce qui
+          est le bon résultat pour sa recolorisation. 0 % de repli sur les six formes.
+      - ⚠ **LA ROCHE RESTE CELLE DE L'HERBE — variante réchauffée ESSAYÉE, PUIS REJETÉE.** Posé, le sable
+        m'a paru porter « un mur de roche » plutôt qu'une falaise de sable : ses 65 cases natives emploient
+        des bruns plus chauds (`#946837`, `#6a3321`, `#54231c`) que la famille d'herbe. J'ai donc bâti la
+        variante et je l'ai regardée côte à côte — **elle est pire**. La bande rocheuse y perd ses creux
+        sombres et ses arêtes éclairées, tout s'effondre vers un brun moyen, et la frontière entre la
+        surface et la paroi devient molle. ⚠ **Le défaut était réel, le remède supprimait le contraste qui
+        fait lire une falaise.** Une observation juste ne valide pas la correction qu'on en tire.
+      - **L'ÉLÉVATION EST JOUABLE — DÉCIDÉ (Jordan, 17 septembre 2026).** Le joueur monte.
+
+### L'altitude — DÉCIDÉ : un plateau est une GRILLE, un escalier est un PORTAIL
+
+⚠ **`CORE` N'APPREND RIEN.** Ni altitude, ni troisième axe, ni ordre de mise à jour. `CORE/monde.gd` sait
+déjà tenir plusieurs grilles reliées par des portails — c'est ce qui fait marcher les grottes — et un
+plateau est exactement ça : un lieu où l'on est ou l'on n'est pas, relié au sol par des passages. La
+lumière fait alors gratuitement ce qu'il faut : **un rayon au sol ne traverse pas un plateau, un rayon
+sur le plateau ne descend pas au sol.**
+
+- **La grille du dessus porte l'identifiant 1000**, haut exprès : les grottes prennent 1, 2, … dans
+  l'ordre de l'arbre et se marcheraient dessus.
+- ⚠ **« UNE CASE NON PEINTE EST UN MUR » VAUT AUSSI EN HAUTEUR.** À l'altitude 1, le vide n'est pas du
+  sol, c'est du vide — sans quoi on marcherait dans les airs partout où aucun massif n'est posé. Et la
+  PAROI d'un massif est murée là-haut aussi : on ne marche pas sur la tranche d'une falaise.
+- **Un escalier se reconnaît à son NOM**, jamais à sa position dans l'atlas (§6).
+- ⚠ **CE QUI RELIE, ET UN TEST ME L'A APPRIS.** Ma première règle disait « le dessus est du plateau, le
+  dessous est du sol praticable ». Or **le sol est praticable PARTOUT**, y compris sous un massif : cette
+  condition ne discriminait rien, et tout escalier peint au milieu d'un plateau fabriquait un passage
+  vers nulle part. Un escalier relie quand son dessus est le plateau et que **son dessous n'en est
+  plus** — c'est-à-dire quand il est posé au BORD. Le peintre n'écrit donc aucune liaison : il pose un
+  escalier au bord de son plateau et le lien s'en déduit, exactement comme une entrée déduit sa grotte du
+  chemin qui passe dessous.
+- **MESURÉ (test)** — `DEV_TOOLS/test_niveau.gd`, 77 vérifications, quatre mutations délibérées, toutes
+  rouges : condition du bord retirée (le passage fantôme revient), grille non créée, altitude 1 non
+  murée (on marche dans les airs), sens des portails inversés.
+
+⚠ **CE QUE ÇA OUVRE, ET QU'IL FAUDRA TRANCHER :**
+
+- **deux grilles partagent désormais les mêmes x, y.** La table du §2 — « une colonne de grotte par case
+  de surface » — ne dit plus **sous quelle altitude** passe une grotte. Tant qu'aucune grotte ne court
+  sous un plateau, la question dort ; le jour où l'une le fait, il faudra dire ce que sa table désigne ;
+- **l'affichage doit montrer les deux altitudes**, et rien n'est encore fait côté `CLIENT/` : le joueur
+  n'a ni corps ni caméra sur le plateau ;
+- **la projection d'une grotte** (§2) est calculée en coordonnées de surface, donc elle se dessinera au
+  même endroit quelle que soit l'altitude du joueur. À juger au greybox.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol
