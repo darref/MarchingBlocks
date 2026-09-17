@@ -12,41 +12,29 @@ texture_region_size = Vector2i(32, 32)
 1:9/0/probability = 0.4
 1:9/0/custom_data_0 = "herbe"
 1:9/0/metadata/_better_terrain = {
-0: [1],
-3: [1],
-4: [1],
-7: [1],
-8: [1],
-11: [1],
-12: [1],
-15: [1],
-&"type": 1
+3: [1, 7],
+7: [1, 7],
+11: [1, 7],
+15: [1, 7],
+&"type": 7
 }
 1:21/0 = 0
 1:21/0/custom_data_0 = "herbe_sombre"
 1:21/0/metadata/_better_terrain = {
-0: [2],
-3: [2],
-4: [2],
-7: [2],
-8: [2],
-11: [2],
-12: [2],
-15: [2],
-&"type": 2
+3: [2, 9],
+7: [2, 9],
+11: [2, 9],
+15: [2, 9],
+&"type": 9
 }
 1:15/0 = 0
 1:15/0/custom_data_0 = "terre"
 1:15/0/metadata/_better_terrain = {
-0: [3],
-3: [3],
-4: [3],
-7: [3],
-8: [3],
-11: [3],
-12: [3],
-15: [3],
-&"type": 3
+3: [3, 8],
+7: [3, 8],
+11: [3, 8],
+15: [3, 8],
+&"type": 8
 }
 1:27/0 = 0
 1:27/0/custom_data_0 = "sable"
@@ -1097,121 +1085,333 @@ texture_region_size = Vector2i(32, 32)
 0:8/0 = 0
 1:8/0 = 0
 2:8/0 = 0
+2:8/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+&"type": 7
+}
 3:8/0 = 0
 4:8/0 = 0
+4:8/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+15: [7],
+&"type": 7
+}
 5:8/0 = 0
+5:8/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+11: [7],
+&"type": 7
+}
 6:8/0 = 0
+6:8/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 7:8/0 = 0
+7:8/0/metadata/_better_terrain = {
+11: [7],
+&"type": 7
+}
 8:8/0 = 0
+8:8/0/metadata/_better_terrain = {
+15: [7],
+&"type": 7
+}
 9:8/0 = 0
+9:8/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 11:8/0 = 0
 14:8/0 = 0
 16:8/0 = 0
 17:8/0 = 0
 18:8/0 = 0
 20:8/0 = 0
+20:8/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 21:8/0 = 0
+21:8/0/metadata/_better_terrain = {
+11: [7],
+&"type": 7
+}
 22:8/0 = 0
+22:8/0/metadata/_better_terrain = {
+15: [7],
+&"type": 7
+}
 23:8/0 = 0
+23:8/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 24:8/0 = 0
 27:8/0 = 0
 28:8/0 = 0
 29:8/0 = 0
 30:8/0 = 0
 0:9/0 = 0
+0:9/0/metadata/_better_terrain = {
+3: [7],
+15: [7],
+&"type": 7
+}
 2:9/0 = 0
 2:9/0/probability = 0.4
 2:9/0/metadata/_better_terrain = {
-0: [1],
-3: [1],
-4: [1],
-7: [1],
-8: [1],
-11: [1],
-12: [1],
-15: [1],
-&"type": 1
+3: [1, 7],
+7: [1, 7],
+11: [1, 7],
+15: [1, 7],
+&"type": 7
 }
 3:9/0 = 0
+3:9/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+&"type": 7
+}
 4:9/0 = 0
+4:9/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 5:9/0 = 0
+5:9/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 6:9/0 = 0
 7:9/0 = 0
+7:9/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+&"type": 7
+}
 8:9/0 = 0
+8:9/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+&"type": 7
+}
 9:9/0 = 0
 11:9/0 = 0
+11:9/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 12:9/0 = 0
 13:9/0 = 0
 14:9/0 = 0
+14:9/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 16:9/0 = 0
 17:9/0 = 0
 18:9/0 = 0
 20:9/0 = 0
 21:9/0 = 0
+21:9/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+&"type": 7
+}
 22:9/0 = 0
+22:9/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+&"type": 7
+}
 23:9/0 = 0
 24:9/0 = 0
+24:9/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 25:9/0 = 0
 26:9/0 = 0
 27:9/0 = 0
+27:9/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 28:9/0 = 0
 29:9/0 = 0
+29:9/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+11: [7],
+15: [7],
+&"type": 7
+}
 30:9/0 = 0
 0:10/0 = 0
+0:10/0/metadata/_better_terrain = {
+3: [7],
+15: [7],
+&"type": 7
+}
 1:10/0 = 0
 1:10/0/probability = 0.4
 1:10/0/metadata/_better_terrain = {
-0: [1],
-3: [1],
-4: [1],
-7: [1],
-8: [1],
-11: [1],
-12: [1],
-15: [1],
-&"type": 1
+3: [1, 7],
+7: [1, 7],
+11: [1, 7],
+15: [1, 7],
+&"type": 7
 }
 2:10/0 = 0
 2:10/0/probability = 0.4
 2:10/0/metadata/_better_terrain = {
-0: [1],
-3: [1],
-4: [1],
-7: [1],
-8: [1],
-11: [1],
-12: [1],
-15: [1],
-&"type": 1
+3: [1, 7],
+7: [1, 7],
+11: [1, 7],
+15: [1, 7],
+&"type": 7
 }
 3:10/0 = 0
+3:10/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+&"type": 7
+}
 4:10/0 = 0
+4:10/0/metadata/_better_terrain = {
+3: [7],
+15: [7],
+&"type": 7
+}
 5:10/0 = 0
+5:10/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+&"type": 7
+}
 6:10/0 = 0
+6:10/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+11: [7],
+&"type": 7
+}
 7:10/0 = 0
+7:10/0/metadata/_better_terrain = {
+7: [7],
+15: [7],
+&"type": 7
+}
 8:10/0 = 0
+8:10/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+&"type": 7
+}
 9:10/0 = 0
+9:10/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+15: [7],
+&"type": 7
+}
 11:10/0 = 0
 12:10/0 = 0
 13:10/0 = 0
 14:10/0 = 0
 20:10/0 = 0
+20:10/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+11: [7],
+&"type": 7
+}
 21:10/0 = 0
+21:10/0/metadata/_better_terrain = {
+7: [7],
+15: [7],
+&"type": 7
+}
 22:10/0 = 0
+22:10/0/metadata/_better_terrain = {
+3: [7],
+11: [7],
+&"type": 7
+}
 23:10/0 = 0
+23:10/0/metadata/_better_terrain = {
+3: [7],
+7: [7],
+15: [7],
+&"type": 7
+}
 24:10/0 = 0
 25:10/0 = 0
 26:10/0 = 0
 27:10/0 = 0
 0:11/0 = 0
 1:11/0 = 0
+1:11/0/metadata/_better_terrain = {
+11: [7],
+15: [7],
+&"type": 7
+}
 2:11/0 = 0
+2:11/0/metadata/_better_terrain = {
+11: [7],
+15: [7],
+&"type": 7
+}
 3:11/0 = 0
 4:11/0 = 0
+4:11/0/metadata/_better_terrain = {
+3: [7],
+15: [7],
+&"type": 7
+}
 5:11/0 = 0
+5:11/0/metadata/_better_terrain = {
+7: [7],
+11: [7],
+&"type": 7
+}
 0:12/0 = 0
 1:12/0 = 0
+1:12/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:12/0/custom_data_1 = true
+1:12/0/metadata/_better_terrain = {
+&"type": 7
+}
 2:12/0 = 0
+2:12/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:12/0/custom_data_1 = true
+2:12/0/metadata/_better_terrain = {
+&"type": 7
+}
 3:12/0 = 0
 7:12/0 = 0
 9:12/0 = 0
@@ -1229,7 +1429,17 @@ texture_region_size = Vector2i(32, 32)
 27:12/0 = 0
 0:13/0 = 0
 1:13/0 = 0
+1:13/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:13/0/custom_data_1 = true
+1:13/0/metadata/_better_terrain = {
+&"type": 7
+}
 2:13/0 = 0
+2:13/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:13/0/custom_data_1 = true
+2:13/0/metadata/_better_terrain = {
+&"type": 7
+}
 3:13/0 = 0
 7:13/0 = 0
 9:13/0 = 0
@@ -1242,121 +1452,326 @@ texture_region_size = Vector2i(32, 32)
 0:14/0 = 0
 1:14/0 = 0
 2:14/0 = 0
+2:14/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+&"type": 8
+}
 3:14/0 = 0
 4:14/0 = 0
+4:14/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+15: [8],
+&"type": 8
+}
 5:14/0 = 0
+5:14/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+11: [8],
+&"type": 8
+}
 6:14/0 = 0
+6:14/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 7:14/0 = 0
+7:14/0/metadata/_better_terrain = {
+11: [8],
+&"type": 8
+}
 8:14/0 = 0
+8:14/0/metadata/_better_terrain = {
+15: [8],
+&"type": 8
+}
 9:14/0 = 0
+9:14/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 11:14/0 = 0
 14:14/0 = 0
 16:14/0 = 0
 17:14/0 = 0
 18:14/0 = 0
 20:14/0 = 0
+20:14/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 21:14/0 = 0
+21:14/0/metadata/_better_terrain = {
+11: [8],
+&"type": 8
+}
 22:14/0 = 0
+22:14/0/metadata/_better_terrain = {
+15: [8],
+&"type": 8
+}
 23:14/0 = 0
+23:14/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 24:14/0 = 0
 27:14/0 = 0
 28:14/0 = 0
 29:14/0 = 0
 30:14/0 = 0
 0:15/0 = 0
+0:15/0/metadata/_better_terrain = {
+3: [8],
+15: [8],
+&"type": 8
+}
 2:15/0 = 0
 2:15/0/probability = 0.4
 2:15/0/metadata/_better_terrain = {
-0: [3],
-3: [3],
-4: [3],
-7: [3],
-8: [3],
-11: [3],
-12: [3],
-15: [3],
-&"type": 3
+3: [3, 8],
+7: [3, 8],
+11: [3, 8],
+15: [3, 8],
+&"type": 8
 }
 3:15/0 = 0
+3:15/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+&"type": 8
+}
 4:15/0 = 0
+4:15/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 5:15/0 = 0
+5:15/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 6:15/0 = 0
 7:15/0 = 0
+7:15/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+&"type": 8
+}
 8:15/0 = 0
+8:15/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+&"type": 8
+}
 9:15/0 = 0
 11:15/0 = 0
+11:15/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 12:15/0 = 0
 13:15/0 = 0
 14:15/0 = 0
+14:15/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 16:15/0 = 0
 17:15/0 = 0
 18:15/0 = 0
 20:15/0 = 0
 21:15/0 = 0
+21:15/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+&"type": 8
+}
 22:15/0 = 0
+22:15/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+&"type": 8
+}
 23:15/0 = 0
 24:15/0 = 0
+24:15/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 25:15/0 = 0
 26:15/0 = 0
 27:15/0 = 0
+27:15/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+15: [8],
+&"type": 8
+}
 28:15/0 = 0
 29:15/0 = 0
 30:15/0 = 0
 0:16/0 = 0
+0:16/0/metadata/_better_terrain = {
+3: [8],
+15: [8],
+&"type": 8
+}
 1:16/0 = 0
 1:16/0/probability = 0.4
 1:16/0/metadata/_better_terrain = {
-0: [3],
-3: [3],
-4: [3],
-7: [3],
-8: [3],
-11: [3],
-12: [3],
-15: [3],
-&"type": 3
+3: [3, 8],
+7: [3, 8],
+11: [3, 8],
+15: [3, 8],
+&"type": 8
 }
 2:16/0 = 0
 2:16/0/probability = 0.4
 2:16/0/metadata/_better_terrain = {
-0: [3],
-3: [3],
-4: [3],
-7: [3],
-8: [3],
-11: [3],
-12: [3],
-15: [3],
-&"type": 3
+3: [3, 8],
+7: [3, 8],
+11: [3, 8],
+15: [3, 8],
+&"type": 8
 }
 3:16/0 = 0
+3:16/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+&"type": 8
+}
 4:16/0 = 0
+4:16/0/metadata/_better_terrain = {
+3: [8],
+15: [8],
+&"type": 8
+}
 5:16/0 = 0
+5:16/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+&"type": 8
+}
 6:16/0 = 0
+6:16/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+11: [8],
+&"type": 8
+}
 7:16/0 = 0
+7:16/0/metadata/_better_terrain = {
+7: [8],
+15: [8],
+&"type": 8
+}
 8:16/0 = 0
+8:16/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+&"type": 8
+}
 9:16/0 = 0
+9:16/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+15: [8],
+&"type": 8
+}
 11:16/0 = 0
 12:16/0 = 0
 13:16/0 = 0
 14:16/0 = 0
 20:16/0 = 0
+20:16/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+11: [8],
+&"type": 8
+}
 21:16/0 = 0
+21:16/0/metadata/_better_terrain = {
+7: [8],
+15: [8],
+&"type": 8
+}
 22:16/0 = 0
+22:16/0/metadata/_better_terrain = {
+3: [8],
+11: [8],
+&"type": 8
+}
 23:16/0 = 0
+23:16/0/metadata/_better_terrain = {
+3: [8],
+7: [8],
+15: [8],
+&"type": 8
+}
 24:16/0 = 0
 25:16/0 = 0
 26:16/0 = 0
 27:16/0 = 0
 0:17/0 = 0
 1:17/0 = 0
+1:17/0/metadata/_better_terrain = {
+11: [8],
+15: [8],
+&"type": 8
+}
 2:17/0 = 0
+2:17/0/metadata/_better_terrain = {
+11: [8],
+15: [8],
+&"type": 8
+}
 3:17/0 = 0
 4:17/0 = 0
+4:17/0/metadata/_better_terrain = {
+3: [8],
+15: [8],
+&"type": 8
+}
 5:17/0 = 0
+5:17/0/metadata/_better_terrain = {
+7: [8],
+11: [8],
+&"type": 8
+}
 0:18/0 = 0
 1:18/0 = 0
+1:18/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:18/0/custom_data_1 = true
+1:18/0/metadata/_better_terrain = {
+&"type": 8
+}
 2:18/0 = 0
+2:18/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:18/0/custom_data_1 = true
+2:18/0/metadata/_better_terrain = {
+&"type": 8
+}
 3:18/0 = 0
 7:18/0 = 0
 9:18/0 = 0
@@ -1374,7 +1789,17 @@ texture_region_size = Vector2i(32, 32)
 27:18/0 = 0
 0:19/0 = 0
 1:19/0 = 0
+1:19/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:19/0/custom_data_1 = true
+1:19/0/metadata/_better_terrain = {
+&"type": 8
+}
 2:19/0 = 0
+2:19/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:19/0/custom_data_1 = true
+2:19/0/metadata/_better_terrain = {
+&"type": 8
+}
 3:19/0 = 0
 7:19/0 = 0
 9:19/0 = 0
@@ -1387,121 +1812,333 @@ texture_region_size = Vector2i(32, 32)
 0:20/0 = 0
 1:20/0 = 0
 2:20/0 = 0
+2:20/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+&"type": 9
+}
 3:20/0 = 0
 4:20/0 = 0
+4:20/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+15: [9],
+&"type": 9
+}
 5:20/0 = 0
+5:20/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+11: [9],
+&"type": 9
+}
 6:20/0 = 0
+6:20/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 7:20/0 = 0
+7:20/0/metadata/_better_terrain = {
+11: [9],
+&"type": 9
+}
 8:20/0 = 0
+8:20/0/metadata/_better_terrain = {
+15: [9],
+&"type": 9
+}
 9:20/0 = 0
+9:20/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 11:20/0 = 0
 14:20/0 = 0
 16:20/0 = 0
 17:20/0 = 0
 18:20/0 = 0
 20:20/0 = 0
+20:20/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 21:20/0 = 0
+21:20/0/metadata/_better_terrain = {
+11: [9],
+&"type": 9
+}
 22:20/0 = 0
+22:20/0/metadata/_better_terrain = {
+15: [9],
+&"type": 9
+}
 23:20/0 = 0
+23:20/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 24:20/0 = 0
 27:20/0 = 0
 28:20/0 = 0
 29:20/0 = 0
 30:20/0 = 0
 0:21/0 = 0
+0:21/0/metadata/_better_terrain = {
+3: [9],
+15: [9],
+&"type": 9
+}
 2:21/0 = 0
 2:21/0/probability = 0.4
 2:21/0/metadata/_better_terrain = {
-0: [2],
-3: [2],
-4: [2],
-7: [2],
-8: [2],
-11: [2],
-12: [2],
-15: [2],
-&"type": 2
+3: [2, 9],
+7: [2, 9],
+11: [2, 9],
+15: [2, 9],
+&"type": 9
 }
 3:21/0 = 0
+3:21/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+&"type": 9
+}
 4:21/0 = 0
+4:21/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 5:21/0 = 0
+5:21/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 6:21/0 = 0
 7:21/0 = 0
+7:21/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+&"type": 9
+}
 8:21/0 = 0
+8:21/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+&"type": 9
+}
 9:21/0 = 0
 11:21/0 = 0
+11:21/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 12:21/0 = 0
 13:21/0 = 0
 14:21/0 = 0
+14:21/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 16:21/0 = 0
 17:21/0 = 0
 18:21/0 = 0
 20:21/0 = 0
 21:21/0 = 0
+21:21/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+&"type": 9
+}
 22:21/0 = 0
+22:21/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+&"type": 9
+}
 23:21/0 = 0
 24:21/0 = 0
+24:21/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 25:21/0 = 0
 26:21/0 = 0
 27:21/0 = 0
+27:21/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 28:21/0 = 0
 29:21/0 = 0
+29:21/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+11: [9],
+15: [9],
+&"type": 9
+}
 30:21/0 = 0
 0:22/0 = 0
+0:22/0/metadata/_better_terrain = {
+3: [9],
+15: [9],
+&"type": 9
+}
 1:22/0 = 0
 1:22/0/probability = 0.4
 1:22/0/metadata/_better_terrain = {
-0: [2],
-3: [2],
-4: [2],
-7: [2],
-8: [2],
-11: [2],
-12: [2],
-15: [2],
-&"type": 2
+3: [2, 9],
+7: [2, 9],
+11: [2, 9],
+15: [2, 9],
+&"type": 9
 }
 2:22/0 = 0
 2:22/0/probability = 0.4
 2:22/0/metadata/_better_terrain = {
-0: [2],
-3: [2],
-4: [2],
-7: [2],
-8: [2],
-11: [2],
-12: [2],
-15: [2],
-&"type": 2
+3: [2, 9],
+7: [2, 9],
+11: [2, 9],
+15: [2, 9],
+&"type": 9
 }
 3:22/0 = 0
+3:22/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+&"type": 9
+}
 4:22/0 = 0
+4:22/0/metadata/_better_terrain = {
+3: [9],
+15: [9],
+&"type": 9
+}
 5:22/0 = 0
+5:22/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+&"type": 9
+}
 6:22/0 = 0
+6:22/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+11: [9],
+&"type": 9
+}
 7:22/0 = 0
+7:22/0/metadata/_better_terrain = {
+7: [9],
+15: [9],
+&"type": 9
+}
 8:22/0 = 0
+8:22/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+&"type": 9
+}
 9:22/0 = 0
+9:22/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+15: [9],
+&"type": 9
+}
 11:22/0 = 0
 12:22/0 = 0
 13:22/0 = 0
 14:22/0 = 0
 20:22/0 = 0
+20:22/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+11: [9],
+&"type": 9
+}
 21:22/0 = 0
+21:22/0/metadata/_better_terrain = {
+7: [9],
+15: [9],
+&"type": 9
+}
 22:22/0 = 0
+22:22/0/metadata/_better_terrain = {
+3: [9],
+11: [9],
+&"type": 9
+}
 23:22/0 = 0
+23:22/0/metadata/_better_terrain = {
+3: [9],
+7: [9],
+15: [9],
+&"type": 9
+}
 24:22/0 = 0
 25:22/0 = 0
 26:22/0 = 0
 27:22/0 = 0
 0:23/0 = 0
 1:23/0 = 0
+1:23/0/metadata/_better_terrain = {
+11: [9],
+15: [9],
+&"type": 9
+}
 2:23/0 = 0
+2:23/0/metadata/_better_terrain = {
+11: [9],
+15: [9],
+&"type": 9
+}
 3:23/0 = 0
 4:23/0 = 0
+4:23/0/metadata/_better_terrain = {
+3: [9],
+15: [9],
+&"type": 9
+}
 5:23/0 = 0
+5:23/0/metadata/_better_terrain = {
+7: [9],
+11: [9],
+&"type": 9
+}
 0:24/0 = 0
 1:24/0 = 0
+1:24/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:24/0/custom_data_1 = true
+1:24/0/metadata/_better_terrain = {
+&"type": 9
+}
 2:24/0 = 0
+2:24/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:24/0/custom_data_1 = true
+2:24/0/metadata/_better_terrain = {
+&"type": 9
+}
 3:24/0 = 0
 7:24/0 = 0
 9:24/0 = 0
@@ -1519,7 +2156,17 @@ texture_region_size = Vector2i(32, 32)
 27:24/0 = 0
 0:25/0 = 0
 1:25/0 = 0
+1:25/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+1:25/0/custom_data_1 = true
+1:25/0/metadata/_better_terrain = {
+&"type": 9
+}
 2:25/0 = 0
+2:25/0/physics_layer_0/polygon_0/points = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+2:25/0/custom_data_1 = true
+2:25/0/metadata/_better_terrain = {
+&"type": 9
+}
 3:25/0 = 0
 7:25/0 = 0
 9:25/0 = 0
@@ -2367,6 +3014,6 @@ metadata/_better_terrain = {
 &"decoration": ["Decoration", Color(0.4117647, 0.4117647, 0.4117647, 1), 3, [], {
 &"path": "res://addons/better-terrain/icons/Decoration.svg"
 }],
-&"terrains": [["sol", Color(0.5411765, 0.48235294, 0.3529412, 1), 2, [], {}], ["herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 0, [0], {}], ["herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 0, [0], {}], ["terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 0, [0], {}], ["sable", Color(0.84313726, 0.72156864, 0.4627451, 1), 0, [0], {}], ["gravier", Color(0.65882355, 0.6039216, 0.54509807, 1), 0, [0], {}], ["eau", Color(0.11372549, 0.5803922, 0.53333336, 1), 0, [], {}]],
+&"terrains": [["sol", Color(0.5411765, 0.48235294, 0.3529412, 1), 2, [], {}], ["herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 0, [0], {}], ["herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 0, [0], {}], ["terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 0, [0], {}], ["sable", Color(0.84313726, 0.72156864, 0.4627451, 1), 0, [0], {}], ["gravier", Color(0.65882355, 0.6039216, 0.54509807, 1), 0, [0], {}], ["eau", Color(0.11372549, 0.5803922, 0.53333336, 1), 0, [], {}], ["massif_herbe", Color(0.48235294, 0.5921569, 0.16078432, 1), 1, [], {}], ["massif_terre", Color(0.5058824, 0.3137255, 0.18431373, 1), 1, [], {}], ["massif_herbe_sombre", Color(0.34901962, 0.5176471, 0.17254902, 1), 1, [], {}]],
 &"version": "0.2"
 }

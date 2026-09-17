@@ -207,6 +207,7 @@ func _initialize() -> void:
 		_declarer_le_reste(cle)
 
 	_declarer_terrains()
+	_declarer_massifs()
 
 	var erreur := ResourceSaver.save(_jeu, SORTIE)
 	if erreur != OK:
@@ -290,6 +291,181 @@ func _declarer_le_reste(planche: String) -> void:
 
 
 # ── les terrains, par Better Terrain ────────────────────────────────────────────────────────────────
+
+## LES MASSIFS — les plateaux et leurs falaises. Une famille par matière, six lignes chacune.
+## ⚠ MESURÉ, et c'est ce qui a décidé de tout : les trois familles sont le MÊME jeu à un décalage près
+## (114 cases chacune, zéro case en propre, 405 px d'écart de forme sur 116 736). On dérive donc les
+## signatures UNE SEULE FOIS sur l'herbe claire — où le vert et le brun se séparent proprement — et on
+## les réutilise telles quelles pour la terre et l'herbe sombre. Classer la famille brune serait
+## impossible : sa matière EST brune, comme sa roche.
+## ⚠ LE SABLE N'EST PAS ICI. Il n'a aucune bande de falaise (65 cases contre 114) : une dune n'a pas de
+## paroi verticale. Il reste un recouvrement à plat, qui marche déjà à 0 % de repli.
+const MASSIFS := [
+	{"nom": "massif_herbe", "y": 8, "couleur": "#7b9729"},
+	{"nom": "massif_terre", "y": 14, "couleur": "#81502f"},
+	{"nom": "massif_herbe_sombre", "y": 20, "couleur": "#59842c"},
+]
+const MASSIF_REFERENCE := 8   # l'herbe claire : la seule famille qu'on classe
+const MASSIF_LIGNES := 6
+const MASSIF_ECHANTILLON := 8  # côté du carré lu à chaque coin
+## Les teintes de MATIÈRE de la famille de référence ; tout le reste est de la roche.
+const MASSIF_MATIERE := ["#7b9729", "#95a631", "#59842c", "#406a25", "#626c1e"]
+## ⚠ Au-delà de cette colonne, les lignes +4 et +5 sont des ESCALIERS, pas du terrain. MESURÉ : déclarés
+## comme terrain, Better Terrain les choisissait comme arêtes ordinaires — la couverture restait à 0 % de
+## repli et le rendu aurait montré des marches rayées au bord d'un plateau. Une pièce posée « avec
+## succès » peut n'avoir rien à faire là. Les escaliers se posent à la main, comme un arbre.
+const MASSIF_DERNIERE_COLONNE_FALAISE := 3
+
+## ⚠ CE QUE LES COINS NE VOIENT PAS. Une tuile dont les quatre coins sont de la matière peut avoir un
+## centre TEXTURÉ — une marche d'escalier, une bande rayée. `MATCH_VERTICES` ne les distingue pas d'un
+## aplat, et les sème alors au milieu des plateaux, où rien ne les attend.
+##
+## ⚠ IL N'Y A PAS DE SEUIL À CALIBRER : UNE SEULE TEINTE, OU PLUSIEURS. J'avais d'abord gardé les
+## « presque-aplats » (90 à 94 % de couleur dominante) comme variantes pondérées, au nom du damier qu'une
+## tuile unique répétée fabrique. La capture a répondu : ce ne sont pas des variations d'herbe, ce sont
+## des MARQUES — 6 à 9 % de pixels étrangers chacune — et semées au hasard sous un plateau elles se
+## lisent comme des saletés. C'est la réserve que la charte portait déjà : une variante ne CRÉE pas de la
+## variété, elle la RÉVÈLE si le lot en a.
+##
+## ⚠ Et le seuil n'aurait de toute façon pas pu être commun : à formes identiques, les TEXTURES diffèrent
+## (61,5 % des pixels entre herbe et terre). Mesuré, la coupure tombe à 90 % pour les herbes et à 87 %
+## pour la terre — un seuil calibré sur l'une et appliqué à l'autre, c'est la faute des deux jeux de
+## terre refaite. « Une seule couleur » ne se calibre pas.
+##
+## ⚠ Corollaire : des aplats d'une même et unique couleur sont interchangeables, donc les variantes
+## pondérées n'ont aucun sens pour un intérieur de massif. Le damier qu'elles évitent n'existe pas ici.
+
+## Les quatre coins d'une case, dans l'ordre hg, hd, bg, bd.
+const MASSIF_COINS := ["hg", "hd", "bg", "bd"]
+
+
+## Déclare les trois massifs en MATCH_VERTICES, avec un peering DÉRIVÉ DES PIXELS.
+## ⚠ Aucune table de géométrie écrite à la main. Ce gabarit ne suit pas la convention « cadre 4×4 +
+## rentrants 2×2 » des ensembles de sol — ses rentrants sont dispersés — et une table de seize lignes
+## saisie à la main est exactement l'endroit où l'on se trompe d'une case sans jamais s'en apercevoir.
+## MESURÉ : 0 % de repli sur six formes, dont l'anneau, le L, la croix et la bande d'une seule case —
+## toutes celles qui avaient tué la rive du lac.
+func _declarer_massifs() -> void:
+	var source: TileSetAtlasSource = _sources["sol"]["source"]
+	var image: Image = (_sources["sol"]["texture"] as Texture2D).get_image()
+	# ⚠ Une texture importée rend souvent une image COMPRESSÉE, sur laquelle `get_pixel` ne dit pas la
+	# vérité. Les scripts de mesure lisaient le PNG en direct et ne rencontraient pas le cas ; ici on lit
+	# la texture du TileSet, donc on remet l'image à plat avant de la croire.
+	if image.is_compressed():
+		image.decompress()
+	image.convert(Image.FORMAT_RGBA8)
+	var largeur := image.get_width() / COTE
+
+	var signatures := {}  # colonne, ligne relative -> "MMRR"
+	for dy in MASSIF_LIGNES:
+		for cx in largeur:
+			if dy >= 4 and cx > MASSIF_DERNIERE_COLONNE_FALAISE:
+				continue
+			var s := _signature_massif(image, cx, MASSIF_REFERENCE + dy)
+			if s == "" or s.contains("V"):
+				continue  # bordure ajourée ou case vide : pas une tuile de terrain
+			signatures[Vector2i(cx, dy)] = s
+
+	for famille in MASSIFS:
+		if not _bt.add_terrain(_jeu, famille["nom"], Color(famille["couleur"]),
+				_bt.TerrainType.MATCH_VERTICES, []):
+			print("  ⚠ massif « %s » refusé" % famille["nom"])
+			continue
+		var terrain: int = _bt.terrain_count(_jeu) - 1
+		_indices[famille["nom"]] = terrain
+		var posees := 0
+		var murs := 0
+		var ecartees := 0
+		for cle in signatures:
+			var case := Vector2i(cle.x, famille["y"] + cle.y)
+			if source.get_tile_at_coords(case) == Vector2i(-1, -1):
+				continue
+			var s: String = signatures[cle]
+			# ⚠ Les quatre CÔTÉS restent à RIEN : c'est ce qui fait du MATCH_VERTICES et non du
+			# MATCH_TILES. `_poser` saute les voisins à RIEN, donc rien d'autre à changer.
+			# ⚠ MATCH_VERTICES NE REGARDE QUE LES COINS, et c'est un piège que mes mesures ne voyaient pas :
+			# une marche d'escalier dont les quatre coins sont de l'herbe est, pour lui, un aplat d'herbe.
+			# Déclarées telles quelles, ces tuiles se faisaient tirer au sort pour l'INTÉRIEUR des plateaux
+			# et le semaient de fragments rayés. « 0 % de repli » restait vrai et ne disait rien — ces
+			# cases SONT des pleines, simplement hideuses. Il faut donc mesurer ce que les coins ignorent :
+			# l'uniformité du centre. MESURÉ, et la frontière est un SAUT du lot, pas un seuil choisi :
+			# cinq cases à 100 %, quatre entre 90 et 94 %, puis plus rien avant 80 %.
+			# Une tuile d'intérieur doit être UNIE. Tout le reste appartient aux bords.
+			if s == "MMMM" and _uniformite(image, case) < 100.0:
+				ecartees += 1
+				continue
+			var quoi := {"gauche": RIEN, "droite": RIEN, "haut": RIEN, "bas": RIEN}
+			for i in 4:
+				quoi[MASSIF_COINS[i]] = terrain if s[i] == "M" else RIEN
+			if not _poser("sol", case, terrain, quoi):
+				continue
+			posees += 1
+			# ⚠ UNE FALAISE EST UN MUR, et c'est la MÊME donnée qui arrête les pieds et la lumière
+			# (charte §6). Une tuile dont les quatre coins sont de la roche est une paroi ; le dessus du
+			# plateau se marche. Les séparer donnerait un mur qu'on traverse mais pas le rayon.
+			if s == "RRRR":
+				var donnees := source.get_tile_data(case, 0)
+				donnees.set_custom_data("mur", true)
+				if donnees.get_collision_polygons_count(0) == 0:
+					var demi := COTE / 2.0
+					donnees.add_collision_polygon(0)
+					donnees.set_collision_polygon_points(0, 0, PackedVector2Array([
+						Vector2(-demi, -demi), Vector2(demi, -demi), Vector2(demi, demi), Vector2(-demi, demi)]))
+				murs += 1
+		print("  massif « %-20s » : %d tuiles, %d de paroi (murs), %d écartée(s) car non unies"
+			% [famille["nom"], posees, murs, ecartees])
+
+
+## La signature des quatre coins d'une case, LUE DANS L'IMAGE : M matière, R roche, V vide.
+## Rend "" si la case est entièrement transparente.
+func _signature_massif(image: Image, cx: int, cy: int) -> String:
+	var vue := false
+	var s := ""
+	for coin in [Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]:
+		var ox: int = cx * COTE + (0 if coin.x == 0 else COTE - MASSIF_ECHANTILLON)
+		var oy: int = cy * COTE + (0 if coin.y == 0 else COTE - MASSIF_ECHANTILLON)
+		var matiere := 0
+		var roche := 0
+		var vide := 0
+		for y in MASSIF_ECHANTILLON:
+			for x in MASSIF_ECHANTILLON:
+				var p := image.get_pixel(ox + x, oy + y)
+				if p.a < 0.02:
+					vide += 1
+				elif "#%02x%02x%02x" % [int(p.r * 255), int(p.g * 255), int(p.b * 255)] in MASSIF_MATIERE:
+					matiere += 1
+					vue = true
+				else:
+					roche += 1
+					vue = true
+		if vide > matiere and vide > roche:
+			s += "V"
+		else:
+			s += "M" if matiere >= roche else "R"
+	return s if vue else ""
+
+
+## La part de la couleur DOMINANTE dans une case, en pourcentage des pixels opaques. Un vrai aplat rend
+## 100 ; une tuile texturée descend vite. ⚠ C'est la mesure que les coins ne savent pas faire, et la
+## seule qui distingue un champ d'herbe d'une marche d'escalier posée dans un champ d'herbe.
+func _uniformite(image: Image, case: Vector2i) -> float:
+	var couleurs := {}
+	var opaques := 0
+	for y in COTE:
+		for x in COTE:
+			var p := image.get_pixel(case.x * COTE + x, case.y * COTE + y)
+			if p.a < 0.02:
+				continue
+			opaques += 1
+			var h := "#%02x%02x%02x" % [int(p.r * 255), int(p.g * 255), int(p.b * 255)]
+			couleurs[h] = couleurs.get(h, 0) + 1
+	if opaques == 0:
+		return 0.0
+	var dominante := 0
+	for h in couleurs:
+		dominante = maxi(dominante, couleurs[h])
+	return 100.0 * dominante / opaques
+
 
 func _declarer_terrains() -> void:
 	for t in TERRAINS:

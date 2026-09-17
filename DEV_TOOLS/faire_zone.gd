@@ -175,6 +175,11 @@ func _batir() -> Node2D:
 	# ⚠ Le RECOUVREMENT se pose entre le sol et les décors : ses ensembles ont l'extérieur transparent,
 	# donc leurs bords laissent voir l'herbe du dessous. Le chargeur ne le lit pas — on marche dessus.
 	var recouvrement := _calque("Recouvrement", surface, _surface)
+	# ⚠ LES MASSIFS AU-DESSUS DU RECOUVREMENT, SOUS LES DÉCORS. Leurs bords sont ajourés — MESURÉ : la
+	# quasi-totalité de leurs cases sont partiellement transparentes — donc ils vivent au-dessus de ce
+	# qu'ils révèlent (charte §6). Mais sous les props : un arbre planté sur un plateau doit passer
+	# par-dessus sa lèvre, sinon il a l'air enterré dedans.
+	var massifs := _calque("Massifs", surface, _surface)
 	var props := _calque("Props", surface, _surface)
 	var objets := _calque("Objets", surface, _surface)
 	# ⚠ LE NŒUD DES MARQUEURS EST CRÉÉ VIDE, ET C'EST EXPRÈS. Les objets du catalogue sont des nœuds et

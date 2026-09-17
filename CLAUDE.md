@@ -674,6 +674,69 @@ premier mur déplacé.
          raison là-dessus (deux jeux de terre, un par herbe) ; c'est moi qui n'en avais déclaré qu'un,
          et la couverture est passée de 12/36 à 36/36 le jour où j'ai déclaré le second.
       ⚠ **Sur l'aperçu d'une boutique : 4 × 4 seul = incomplet ; bloc 2 × 3 ou 47 tuiles = complet.**
+    - **LES MASSIFS — DÉCIDÉ (17 septembre 2026), et mesuré de bout en bout.** Le lot range quatre
+      familles de plateau, identifiées non pas à l'œil mais par la couleur moyenne de leur bloc, qui
+      tombe sur nos terrains **à un 255ᵉ près** : `#7b9728` herbe claire, `#814f2e` terre, `#59832b`
+      herbe sombre, `#d7b775` sable. Ce ne sont pas de nouvelles matières, ce sont nos sols en relief.
+      - **Les trois premières sont le MÊME jeu** à six lignes d'écart (114 cases chacune, zéro case en
+        propre, cartes d'opacité identiques caractère par caractère). Déclarer une famille les déclare
+        toutes les trois.
+      - ⚠ **Le sable n'est pas un massif** : 65 cases contre 114, et **rien sous son bloc** — aucune
+        bande de falaise. Ce n'est pas un trou du lot, c'est le lot qui dit qu'une dune n'a pas de paroi
+        verticale. Il reste un RECOUVREMENT à plat, qui marche déjà à 0 % de repli.
+      - ⚠ **PAS DE FORK DE BETTER TERRAIN, et la question s'est posée.** `create_terrain_changeset()`
+        accepte un `Dictionary` `case → terrain` mêlant PLUSIEURS terrains : le plateau et sa falaise
+        partent en une passe, la couture résolue dedans. L'addon se pilote comme une bibliothèque. Et il
+        n'écrit JAMAIS dans une case qu'on ne lui a pas donnée (`update_terrain_cells` ne boucle que sur
+        `cells`, élargi d'un anneau par `_widen` pour refermer les coutures) — donc **peindre un plateau
+        ne peut pas créer ses falaises**. Cette dérivation est à NOUS, exactement comme `_est_plage()`
+        déduit la plage du lac : `falaise(x,y) = plateau(x, y-1) and not plateau(x, y)`.
+      - **`MATCH_VERTICES`, et le peering est DÉRIVÉ DES PIXELS.** Ce gabarit ne suit pas la convention
+        « cadre 4 × 4 + rentrants 2 × 2 » des ensembles de sol — ses rentrants sont dispersés entre x4 et
+        x9. On échantillonne donc les quatre coins de chaque case (8 × 8 px) et l'on classe matière /
+        roche / vide. **Aucune table de géométrie écrite à la main**, donc aucune case décalée en silence.
+      - ⚠ **Les signatures se dérivent sur l'HERBE CLAIRE et se réutilisent par décalage.** Pour la
+        famille brune, matière et roche sont toutes deux brunes : le classeur y échouerait. Les formes
+        étant identiques (405 px d'écart sur 116 736), on ne classe jamais la famille brune.
+      - ⚠ **ESCALIERS ET PENTES SONT DES BLOCS, PAS DU TERRAIN — et c'est mesuré, pas supposé.** Un
+        escalier n'est pas décidé par son voisinage mais par l'endroit où l'on veut monter : c'est une
+        intention de niveau. Déclarés comme terrain, Better Terrain les choisissait comme **arêtes
+        ordinaires** ; la couverture restait à 0 % de repli et le rendu aurait montré des marches rayées
+        au bord d'un plateau. ⚠ **Une pièce posée « avec succès » peut n'avoir rien à faire là** — d'où
+        le recensement des cases d'atlas employées, à côté du taux de repli.
+      - ⚠ **UNE TUILE D'INTÉRIEUR DOIT ÊTRE UNIE : une seule couleur, ou plusieurs.** `MATCH_VERTICES`
+        ne regarde que les COINS, donc une marche d'escalier dont les quatre coins sont de l'herbe est,
+        pour lui, un aplat d'herbe. Deux erreurs successives, toutes deux corrigées par la CAPTURE et non
+        par un compteur :
+        1. j'ai gardé les « presque-aplats » (90 à 94 % de couleur dominante) comme variantes pondérées,
+           au nom du damier qu'une tuile unique répétée fabrique. La capture a montré une vingtaine de
+           **mouchetures** semées dans les plateaux : ce ne sont pas des variations d'herbe, ce sont des
+           marques. C'est la réserve que cette charte portait déjà — *une variante ne CRÉE pas de la
+           variété, elle la RÉVÈLE si le lot en a* ;
+        2. j'ai justifié le seuil de 90 % par « un saut du lot, pas un chiffre rond ». C'était vrai de
+           l'herbe et **faux de la terre** : à formes identiques, les textures diffèrent (61,5 % des
+           pixels), la coupure tombe à 90 % pour les herbes et à 87 % pour la terre. Un seuil calibré sur
+           l'une et appliqué à l'autre, c'est la faute des deux jeux de terre refaite. « Une seule
+           couleur » ne se calibre pas.
+      - **MESURÉ (six formes, contre le tileset LIVRÉ)** — 0 % de repli et 0 case sans terrain pour les
+        trois familles, sur le disque, l'**anneau**, le **L**, la **croix** et les bandes de deux puis
+        d'**une seule case**. ⚠ Le disque seul ne prouve rien : c'est une frontière convexe, et c'est
+        exactement ce qui m'avait fait lire 36/36 pendant que la carte réelle était pleine de carrés
+        bruts. Les formes qui jugent sont celles qui avaient tué la rive du lac.
+      - **Le calque `Massifs` vit entre `Recouvrement` et `Props`** : au-dessus de ce que ses bords
+        ajourés révèlent (presque toutes ses cases sont partiellement transparentes — mesuré), mais sous
+        les décors, sans quoi un arbre planté sur un plateau aurait l'air enterré dans sa lèvre.
+      - ⚠ **Une falaise est un `mur`** : seules les quatre cases de paroi (`RRRR`) le sont. Les tuiles de
+        LÈVRE restent traversables, donc **le joueur marche sur le bord du plateau**. C'est une décision
+        prise pour la passe décorative, pas un oubli.
+      - **OUVERT — le report du sable.** Ton idée (dupliquer ce qui lui manque depuis une famille
+        complète et recolorer) est mesurée faisable : **97,7 % des pixels se traduisent par table**,
+        la roche étant partagée (onze bruns communs, identité) et la surface étant un aplat d'une seule
+        teinte. Restent à épingler le plat contre le plat, à inventer deux tons (le sable n'a ni rehaut
+        ni ombre profonde) et à trancher ~1 100 px orphelins, dont un vert-bleu sans équivalent sableux.
+      - **OUVERT — ce que l'élévation veut dire dans le jeu.** Décorative (des obstacles, un dessin) ou
+        jouable (le joueur monte) ? La seconde demande une notion d'altitude à `CLIENT/niveau.gd` et
+        rouvre la table « une colonne par case de surface » (§2). La passe faite est **décorative**.
   - ⚠ **OUVERT — une galerie n'a pas encore de bords en haut et en bas.** Le lot de côté est fait pour
     l'extérieur : tous ses bords supérieurs sont coiffés d'HERBE, ce qui n'a aucun sens sous terre. Les
     extrémités d'une galerie sont creusées avec les deux parois latérales du lot ; le plafond et le sol
