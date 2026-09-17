@@ -718,11 +718,38 @@ premier mur déplacé.
            pixels), la coupure tombe à 90 % pour les herbes et à 87 % pour la terre. Un seuil calibré sur
            l'une et appliqué à l'autre, c'est la faute des deux jeux de terre refaite. « Une seule
            couleur » ne se calibre pas.
-      - **MESURÉ (six formes, contre le tileset LIVRÉ)** — 0 % de repli et 0 case sans terrain pour les
-        trois familles, sur le disque, l'**anneau**, le **L**, la **croix** et les bandes de deux puis
-        d'**une seule case**. ⚠ Le disque seul ne prouve rien : c'est une frontière convexe, et c'est
-        exactement ce qui m'avait fait lire 36/36 pendant que la carte réelle était pleine de carrés
-        bruts. Les formes qui jugent sont celles qui avaient tué la rive du lac.
+      - ⚠ **CE QUI EST DU TERRAIN, ET CE QUI N'EN EST PAS — la carte donnée par Jordan, le 17 septembre.**
+        Par famille, en coordonnées relatives :
+        ```
+          x0..3, rangées +0..+3   la SURFACE du plateau, un cadre de 4 × 4   (16 tuiles)
+          x4..5, rangées +0..+1   les quatre COINS RENTRANTS, un par orientation ( 4 tuiles)
+          x0..3, rangées +4..+5   la FALAISE, dérivée et non raccordée
+          x6 et au-delà            PENTES et ESCALIERS, patchés à la main
+        ```
+        **Vingt tuiles de terrain, pas davantage.** ⚠ J'en avais déclaré 44, puis 24 : `x4..5` sur les
+        rangées +2 et +3 sont des **doublons de bords** — même signature de coins que les bords du cadre,
+        à poids égal — et Better Terrain en piochait un pour un bord droit. Il avait raison, ce SONT des
+        bords ; l'incohérence graphique sur les flancs venait de ma déclaration, pas de son choix.
+      - **MESURÉ** — 20 tuiles : zéro case prise hors du 4 × 4 sur un rectangle, les quatre angles d'une
+        croix servis chacun par un rentrant DISTINCT, l'angle d'un L par le sien. Et vu à l'image : le
+        cadre se ferme, l'angle rentrant se raccorde sans cassure.
+      - **MESURÉ (contre le tileset LIVRÉ)** — 0 % de repli et 0 case sans terrain pour les quatre
+        familles, sur neuf formes : disque, **anneau**, **L**, **croix**, bandes de deux puis d'**une
+        seule case**, **deux blocs se touchant par un coin**, escalier de blocs, damier lâche. ⚠ Le disque
+        seul ne prouve rien : c'est une frontière convexe, et c'est ce qui m'avait fait lire 36/36 pendant
+        que la carte réelle était pleine de carrés bruts.
+      - ⚠ **DEUX PLATEAUX NE DOIVENT PAS SE TOUCHER PAR UN SEUL COIN.** Les deux combinaisons DIAGONALES
+        (`RMMR`, `MRRM`) n'existent pas dans le lot — sur seize combinaisons de coins, neuf seulement sont
+        fournies. Au contact, Better Terrain prend donc le meilleur score disponible : ce n'est pas une
+        tuile pleine, donc **le compteur lit 0 % de repli**, et le rendu est pourtant une **coupe droite**,
+        sans jonction. Règle de peinture, ou pièce à dessiner à la main.
+      - ⚠ **LA LEÇON GÉNÉRALE, ET ELLE S'EST REFERMÉE TROIS FOIS DANS LA MÊME JOURNÉE : un compteur vert
+        ne dit jamais qu'une tuile est à SA place.** Les escaliers se faisaient choisir comme arêtes
+        ordinaires (couverture parfaite, marches rayées au bord d'un plateau) ; les « presque-aplats »
+        passaient pour des variantes (couverture parfaite, mouchetures dans les champs) ; le contact en
+        diagonale se coupe net (couverture parfaite sur NEUF formes). À chaque fois, seule une image l'a
+        montré. **Une mesure de couverture répond à « a-t-on posé quelque chose », jamais à « est-ce la
+        bonne chose ».**
       - **Le calque `Massifs` vit entre `Recouvrement` et `Props`** : au-dessus de ce que ses bords
         ajourés révèlent (presque toutes ses cases sont partiellement transparentes — mesuré), mais sous
         les décors, sans quoi un arbre planté sur un plateau aurait l'air enterré dans sa lèvre.

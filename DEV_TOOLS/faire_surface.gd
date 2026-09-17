@@ -370,6 +370,23 @@ const MASSIF_MATIERE := ["#7b9729", "#95a631", "#59842c", "#406a25", "#626c1e"]
 ## succès » peut n'avoir rien à faire là. Les escaliers se posent à la main, comme un arbre.
 const MASSIF_DERNIERE_COLONNE_FALAISE := 3
 
+## ⚠ LE TERRAIN S'ARRÊTE À x5, ET C'EST JORDAN QUI L'A DIT. Le jeu, c'est le 4 × 4 (x0..3) PLUS les deux
+## colonnes à sa droite (x4..5), sur quatre rangées. **Tout ce qui est au-delà de x6 est une PENTE ou un
+## ESCALIER** — des pièces qu'on patche par-dessus, jamais du terrain.
+##
+## ⚠ J'en avais déclaré 44 par famille au lieu de 19 : mes « coins rentrants » étaient ses rampes. La
+## couverture ne l'a pas signalé — elle lisait 0 % de repli dans les deux cas — parce qu'une pièce peut
+## être posée « avec succès » et n'avoir rien à faire là. C'est la troisième fois aujourd'hui que ce
+## piège se referme : un compteur vert ne dit jamais qu'une tuile est à SA place.
+##
+## MESURÉ sur les 19 : 0 % de repli et aucune case sans tuile sur NEUF formes — disque, anneau, L, croix,
+## bandes d'une et deux cases, deux blocs se touchant par un coin, escalier de blocs, damier lâche. Les
+## sept combinaisons de coins absentes (dont les deux diagonales) ne sont jamais réclamées.
+const MASSIF_DERNIERE_COLONNE := 5
+## La dernière colonne du CADRE proprement dit. Au-delà, et seulement sur les deux premières rangées,
+## viennent les quatre coins RENTRANTS — un par orientation.
+const MASSIF_CADRE := 3
+
 ## ⚠ CE QUE LES COINS NE VOIENT PAS. Une tuile dont les quatre coins sont de la matière peut avoir un
 ## centre TEXTURÉ — une marche d'escalier, une bande rayée. `MATCH_VERTICES` ne les distingue pas d'un
 ## aplat, et les sème alors au milieu des plateaux, où rien ne les attend.
@@ -466,11 +483,24 @@ func _declarer_massifs() -> void:
 			# DANS le terrain du massif et laissé Better Terrain la placer : elle se peignait alors sur la
 			# dernière rangée du plateau au lieu de PENDRE en dessous. La falaise se dérive (comme la
 			# plage se dérive du lac), elle ne se raccorde pas.
+			# ⚠ LE TERRAIN, EXACTEMENT : le 4 × 4 (x0..3) sur quatre rangées, PLUS les quatre coins
+			# RENTRANTS — et ceux-là ne sont QUE x4..5 sur les rangées +0 et +1.
+			#
+			# Je prenais x4..5 sur les quatre rangées. Or x4..5 aux rangées +2 et +3 sont des DOUBLONS DE
+			# BORDS : même signature de coins que les bords du cadre, à poids égal. Better Terrain en
+			# piochait donc un pour un bord droit — et il avait raison, ce SONT des bords. L'incohérence
+			# graphique que Jordan a vue sur les flancs du plateau venait de ma déclaration, pas de son
+			# choix. MESURÉ : 20 tuiles, zéro case prise hors du 4 × 4 sur un rectangle, et les quatre
+			# angles d'une croix servis chacun par un rentrant distinct.
 			if dy >= 4:
 				continue
+			if cx > MASSIF_CADRE and dy > 1:
+				continue
+			if cx > MASSIF_DERNIERE_COLONNE:
+				continue
 			var s := _signature_massif(image, cx, MASSIF_REFERENCE + dy)
-			if s == "" or s.contains("V"):
-				continue  # bordure ajourée ou case vide : pas une tuile de terrain
+			if s == "":
+				continue  # case entièrement vide : ce n'est pas une tuile
 			signatures[Vector2i(cx, dy)] = s
 
 	for famille in MASSIFS:
@@ -548,10 +578,14 @@ func _signature_massif(image: Image, cx: int, cy: int) -> String:
 				else:
 					roche += 1
 					vue = true
-		if vide > matiere and vide > roche:
-			s += "V"
-		else:
-			s += "M" if matiere >= roche else "R"
+		# ⚠ UN COIN TRANSPARENT EST UN COIN « DEHORS », PAS UNE TUILE À JETER. Le cadre du 4 × 4 est
+		# AJOURÉ : ses coins extérieurs sont vides, et c'est précisément ce qui laisse voir le sol du
+		# dessous. En écartant toute tuile dont un coin lisait « V », je jetais exactement les bords et
+		# les quatre coins qui FERMENT le cadre — il ne restait que l'intérieur, et un rectangle peint
+		# sortait avec ses quatre angles ouverts sur l'herbe. MESURÉ : 19 tuiles et 1 coin sur 4 avant,
+		# 24 tuiles et 4 coins sur 4 après. Pour le voisinage, « vide » et « roche » disent la même
+		# chose : ce n'est pas de la matière.
+		s += "M" if (matiere >= roche and matiere >= vide) else "R"
 	return s if vue else ""
 
 
