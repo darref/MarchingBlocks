@@ -797,9 +797,34 @@ premier mur déplacé.
           consultent que ça, donc sans la réservation **un arbre pousse sur la falaise**. Repéré par un
           audit des murs par origine, pas à l'œil. ⚠ Et le générateur ne REPLACE pas un bosquet refusé, il
           l'abandonne : la réservation coûte un arbre (décor passé de 127 à 121 cases murées).
-        - **OUVERT — la hauteur d'une falaise est fixée à DEUX rangées** (milieu + pied), faute de quoi
-          que ce soit dans la carte qui dise qu'un plateau est haut de trois. Le lot sait répéter le
-          milieu ; le jour où une hauteur se peint, c'est `_descendre_la_falaise()` qui la lira.
+        - **LA HAUTEUR EST RÉGLABLE (18 septembre 2026)** — `hauteur` rangées de milieu, le pied
+          toujours dessous. **Défaut à 1**, qui rend exactement la falaise d'avant : rien ne bouge là où
+          personne n'a demandé d'étage. Le réglage vit dans les trois appelants : `--hauteur=N` en ligne
+          de commande, un compteur « étages » à côté du bouton, le défaut pour le générateur.
+        - **MESURÉ AVANT D'ÊTRE OFFERT** : le milieu s'empile sur lui-même — joint vertical de 0,043 et
+          0,048 sur 32 px sans un pixel sauté, contre **0,42 à 0,46 pour un empilement IMPOSSIBLE** mis
+          dans la mesure comme contrôle. Et la prédiction annoncée AVANT le lancement : 8 colonnes × 4
+          rangées − 6 de marches = 26 ; l'outil en a rendu 26. ⚠ **Une prédiction qui tombe juste vaut
+          mieux qu'un résultat qu'on interprète après coup.**
+
+⚠ **DEUX INSTRUMENTS M'ONT MENTI AVEC ASSURANCE LE MÊME JOUR, ET VOICI À QUOI ON LES RECONNAÎT.**
+
+- **La moyenne de joint sur les pièces AJOURÉES.** Les bords d'escalier sont transparents : la
+  comparaison ne portait que sur **2 ou 3 pixels sur 32**, et une moyenne sur trois pixels est du bruit.
+  ⚠ Le signe qui l'a trahie n'est pas le chiffre, c'est le **CONTRÔLE QUI S'EST INVERSÉ** — l'empilement
+  délibérément impossible lisait *mieux* (0,40) que tous les montages légitimes (0,51 à 0,75).
+  **Un contrôle qui s'inverse invalide l'INSTRUMENT, pas le sujet mesuré.** Sans ce contrôle, j'aurais
+  conclu « le lot ne sait pas faire d'escalier haut » sur du bruit.
+- **Le rendu jugé contre un fond qu'il n'aura jamais.** J'ai composé des empilements sur de l'herbe pour
+  les regarder ; or en place, ce qu'on voit par les trous d'une pièce ajourée, c'est la ROCHE derrière.
+  Le test montrait des bandes vertes qui n'existeraient pas dans le jeu. ⚠ **Un rendu de contrôle doit
+  reproduire le contexte, pas seulement la pièce.**
+
+⚠ **ET LA LEÇON DE PORTÉE, qui vaut autant que les deux autres** : j'ai passé quatre passes à vouloir
+empiler les escaliers pour réparer un scellement à hauteur ≥ 2. **Sans objet** — les escaliers et les
+jonctions entre étages seront un dispositif À PART, sur un calque au-dessus (Jordan, 18 septembre). Le
+partage actuel du calque `Massifs` est temporaire. ⚠ **Avant de réparer, demander si le défaut est dans
+le périmètre** : ici la réponse tenait en une phrase et m'aurait épargné quatre mesures.
       - **LE REPORT DU SABLE — FAIT (17 septembre 2026), et c'est une planche DÉRIVÉE.** Le lot ne livre
         au sable ni falaise ni la moitié de ses pièces ; on le **reconstruit** depuis l'herbe claire par
         une table de substitution, et `ART/massif_sable.png` est écrite par `faire_surface.gd`.
