@@ -49,6 +49,26 @@ func marqueurs() -> Array:
 
 ## Rend {"monde", "chemins", "entrees", "erreurs"} — voir `CLIENT/niveau.gd`. ⚠ `erreurs` non vide veut
 ## dire que la CARTE est fautive : à afficher, jamais à taire.
+## LES CALQUES DE MASSIF, dans l'ordre de l'arbre — un par ÉTAGE.
+##
+## ⚠ LE MONDE EST FAIT DE MASSIFS (Jordan, 18 septembre). Ce ne sont pas des reliefs poses sur un fond :
+## ce sont eux le terrain, et `Sol` n'est que la matiere peinte À L'INTÉRIEUR de leurs cadres, `Nappe`
+## celle qui est ajourée par-dessus. D'où leur place en tête de l'arbre — donc dessinés DERRIÈRE — et
+## d'où le fait qu'il en faut un par étage.
+##
+## ⚠ On les reconnaît par leur PRÉFIXE, pas par un chemin exact : « Massif00 », « Massif01 »… et l'ancien
+## « Massifs » tout court, pour qu'une zone peinte avant les étages continue de se charger.
+func massifs() -> Array:
+	var liste: Array = []
+	var surface := get_node_or_null("Surface")
+	if surface == null:
+		return liste
+	for enfant in surface.get_children():
+		if enfant is TileMapLayer and String(enfant.name).begins_with("Massif"):
+			liste.append(enfant)
+	return liste
+
+
 func construire() -> Dictionary:
 	return Niveau.construire(get_node_or_null("Surface/Sol"), get_node_or_null("Surface/Objets"), grottes(),
-		get_node_or_null("Surface/Props"), marqueurs(), get_node_or_null("Surface/Massifs"))
+		get_node_or_null("Surface/Props"), marqueurs(), massifs())

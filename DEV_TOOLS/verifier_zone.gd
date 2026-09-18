@@ -107,26 +107,43 @@ func _montrer_entrees(entrees: Array, chemins: Dictionary) -> void:
 ## erreur ne le dira jamais. Tant que ceci ne s'imprimait pas, le vérificateur annonçait « CARTE SAINE »
 ## d'une carte dont il n'avait jamais mentionné une seule liaison d'altitude.
 func _montrer_escaliers(monde, escaliers: Array) -> void:
+	# ⚠ TOUS LES ÉTAGES, PAS LE PREMIER. Ce bloc ne regardait que la grille 1000 : avec vingt calques il
+	# en aurait rapporté UN et se serait tu sur dix-neuf, avec le même aplomb. Un outil qui affirme en ne
+	# voyant qu'un vingtième est pire qu'un outil muet.
+	# ⚠ ON BALAIE, ON NE S'ARRÊTE PAS AU PREMIER TROU. `CLIENT/niveau.gd` ne crée une grille que pour un
+	# calque NON VIDE : peindre l'étage 0 et l'étage 5 en laissant les autres vierges donne les grilles
+	# 1000 et 1005, sans 1001 à 1004. Une boucle « tant que la suivante existe » s'arrêterait après la
+	# première et rapporterait un étage en se taisant sur l'autre — le mensonge même que ce bloc venait
+	# de corriger, réintroduit trois lignes plus bas. Et la zone d'essai n'ayant qu'un étage, aucun de mes
+	# lancements ne l'aurait attrapé.
 	const PLATEAU := 1000
-	if not monde.grilles.has(PLATEAU):
+	const ETAGES_MAX := 64
+	var etages: Array = []
+	for n in ETAGES_MAX:
+		if monde.grilles.has(PLATEAU + n):
+			etages.append(PLATEAU + n)
+	if etages.is_empty():
 		return
-	var g: Dictionary = monde.grilles[PLATEAU]
-	var libres := 0
-	for y in g["hauteur"]:
-		for x in g["largeur"]:
-			if not monde.est_mur(PLATEAU, Vector2i(x, y)):
-				libres += 1
 	print("")
-	print("PLATEAUX (altitude 1) — %d case(s) où l'on marche" % libres)
+	print("PLATEAUX — %d étage(s)" % etages.size())
+	for i in etages.size():
+		var g: Dictionary = monde.grilles[etages[i]]
+		var libres := 0
+		for y in g["hauteur"]:
+			for x in g["largeur"]:
+				if not monde.est_mur(etages[i], Vector2i(x, y)):
+					libres += 1
+		print("  étage %-2d (grille %d) : %d case(s) où l'on marche" % [i, etages[i], libres])
 	print("  ⚠ une case peinte mais MURÉE est une paroi de massif : on ne marche pas sur la tranche.")
+
 	print("")
 	print("ESCALIERS (%d)" % escaliers.size())
 	if escaliers.is_empty():
-		print("  aucun — le plateau est peint mais on n'y monte pas")
+		print("  aucun — des plateaux sont peints mais on n'y monte pas")
 		return
 	for e in escaliers:
-		print("  case %-10s « %s »" % [str(e["case"]), e["nom"]])
-		print("       monte vers %s, redescend vers %s" % [str(e["vers_haut"]), str(e["vers_bas"])])
+		print("  étage %-2d  case %-10s « %s »" % [e.get("etage", 0), str(e["case"]), e["nom"]])
+		print("            monte vers %s, redescend vers %s" % [str(e["vers_haut"]), str(e["vers_bas"])])
 
 
 func _montrer_objets(monde) -> void:
