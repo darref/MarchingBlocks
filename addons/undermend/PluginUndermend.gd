@@ -13,7 +13,7 @@ extends EditorPlugin
 ## ⚠ IL PASSE PAR L'HISTORIQUE D'ANNULATION. Un bouton qui réécrit des cases sans que Ctrl+Z les
 ## rattrape, c'est une peinture qu'un clic malheureux abîme sans retour.
 ##
-## CE QU'IL FAIT, sur le calque « Surface/Massifs » de la scène ouverte :
+## CE QU'IL FAIT, sur le calque de massif SÉLECTIONNÉ dans l'arbre (un par étage) :
 ##   tuile nommée « …_falaise_… »                 une paroi déjà dérivée — effacée, puis refaite
 ##   tuile nommée « …_escalier_… » / « …_rampe_… »  posée par le peintre — jamais touchée
 ##   tuile anonyme portant un terrain               le PLATEAU, d'où la paroi se déduit
@@ -40,7 +40,7 @@ func _enter_tree() -> void:
 
 	_bouton = Button.new()
 	_bouton.text = "Falaises"
-	_bouton.tooltip_text = "Dériver les parois sous le bord sud des massifs peints (Surface/Massifs)"
+	_bouton.tooltip_text = "Dériver les parois sous le bord sud du calque de massif SÉLECTIONNÉ"
 	_bouton.pressed.connect(_deriver)
 	add_control_to_container(CONTAINER_CANVAS_EDITOR_MENU, _bouton)
 
@@ -76,7 +76,7 @@ func _deriver() -> void:
 			+ "puis clique « Falaises ». La paroi sera dérivée sur CE calque-là.")
 		return
 	if massifs.tile_set == null:
-		_dire("Le calque « Massifs » n'a pas de TileSet.")
+		_dire("Le calque « %s » n'a pas de TileSet." % massifs.name)
 		return
 
 	var bt = load(BETTER_TERRAIN).new()
@@ -103,7 +103,7 @@ func _deriver() -> void:
 	bt.queue_free()
 
 	if plateau.is_empty():
-		_dire("Aucun massif peint sur « Massifs » : rien à dériver.")
+		_dire("Aucun massif peint sur « %s » : rien à dériver." % massifs.name)
 		return
 
 	var poses: Array = Falaises.calculer(plateau, marches, int(_hauteur.value))

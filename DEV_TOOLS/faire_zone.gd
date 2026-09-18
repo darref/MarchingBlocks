@@ -36,6 +36,10 @@ const GRAINE := 20260916
 const LARGEUR := 64
 const HAUTEUR := 40
 const HAUTEUR_GROTTE := 10  # dix cases : exactement la hauteur d'une vue (charte §3)
+## ⚠ VINGT ÉTAGES DE MASSIF, livrés vides et nommés `Massif00`…`Massif19` (Jordan, 18 septembre). Le
+## nombre n'est pas une limite du moteur — `CLIENT/zone.gd` prend tout ce qui commence par « Massif »,
+## et le vérificateur en balaie 64. C'est le nombre qu'on livre pour peindre sans avoir à en créer.
+const ETAGES := 20
 
 ## ⚠ CE QUE LA CAMÉRA VOIT AU-DELÀ DU JEU, en cases — donc ce qu'il faut remplir pour qu'on ne voie
 ## jamais le vide. Une vue de grotte fait au plus 480 px de large (sous terre), soit 15 cases, et le
@@ -190,7 +194,24 @@ func _batir() -> Node2D:
 	var surface := Node2D.new()
 	surface.name = "Surface"
 	racine.add_child(surface)
-	var decor := _calque("Decor", surface, _surface)  # d'abord : il se dessine sous le reste
+	# ⚠ LES MASSIFS D'ABORD, ET C'EST TOUTE LA DÉCISION (Jordan, 18 septembre). « Le monde est les
+	# massifs » : ce ne sont pas des reliefs posés sur un fond, ce sont EUX le terrain. Placés en tête de
+	# l'arbre, ils sont dessinés DERRIÈRE, et chaque étage révèle par ses bords ajourés celui du dessous —
+	# `Massif07` laisse voir `Massif06`. C'est la PILE qui fait le relief, pas une tuile d'ombre.
+	#
+	# ⚠ CECI REMPLACE UNE DÉCISION MESURÉE, ET IL FAUT SAVOIR LAQUELLE. Les massifs vivaient au-dessus du
+	# recouvrement parce que leurs bords sont ajourés et devaient révéler l'herbe. Ce n'est plus l'herbe
+	# qu'ils révèlent, c'est l'étage inférieur — la mesure n'est pas fausse, son sujet a changé.
+	#
+	# ⚠ VINGT CALQUES CRÉÉS VIDES, comme le nœud « Marqueurs » plus bas et pour la même raison : un calque
+	# d'étage qu'il faudrait créer à la main serait un calque nommé de travers un jour sur deux, et
+	# `CLIENT/zone.gd` les reconnaît par leur PRÉFIXE. Un calque vierge ne crée aucune grille — mesuré.
+	var etages: Array = []
+	for n in ETAGES:
+		etages.append(_calque("Massif%02d" % n, surface, _surface))
+	# ⚠ `Decor` passe APRÈS les massifs, et ça ne change rien : il ne peint QUE hors du rectangle de jeu
+	# (voir `_peindre_pourtour`), là où aucun massif ne va. Son rang n'a aucun effet sur l'aire jouable.
+	var decor := _calque("Decor", surface, _surface)
 	# ⚠ LA RÈGLE DES CALQUES (charte §6) : même calque quand l'art de transition est OPAQUE, calque séparé
 	# quand il est AJOURÉ. Le sol porte donc ce dont les bordures sont dessinées en entier — herbe sombre,
 	# terre, eau, falaise — et l'herbe claire, dont les bordures sont ajourées, vient au-dessus.
@@ -199,11 +220,6 @@ func _batir() -> Node2D:
 	# ⚠ Le RECOUVREMENT se pose entre le sol et les décors : ses ensembles ont l'extérieur transparent,
 	# donc leurs bords laissent voir l'herbe du dessous. Le chargeur ne le lit pas — on marche dessus.
 	var recouvrement := _calque("Recouvrement", surface, _surface)
-	# ⚠ LES MASSIFS AU-DESSUS DU RECOUVREMENT, SOUS LES DÉCORS. Leurs bords sont ajourés — MESURÉ : la
-	# quasi-totalité de leurs cases sont partiellement transparentes — donc ils vivent au-dessus de ce
-	# qu'ils révèlent (charte §6). Mais sous les props : un arbre planté sur un plateau doit passer
-	# par-dessus sa lèvre, sinon il a l'air enterré dedans.
-	var massifs := _calque("Massifs", surface, _surface)
 	var props := _calque("Props", surface, _surface)
 	var objets := _calque("Objets", surface, _surface)
 	# ⚠ LE NŒUD DES MARQUEURS EST CRÉÉ VIDE, ET C'EST EXPRÈS. Les objets du catalogue sont des nœuds et
@@ -213,7 +229,7 @@ func _batir() -> Node2D:
 	var marqueurs := Node2D.new()
 	marqueurs.name = "Marqueurs"
 	surface.add_child(marqueurs)
-	_peindre_surface(sol, nappe, recouvrement, massifs, props, objets, decor)
+	_peindre_surface(sol, nappe, recouvrement, etages[0], props, objets, decor)
 
 	var grottes := Node2D.new()
 	grottes.name = "Grottes"
@@ -419,6 +435,29 @@ func _peindre_surface(sol: TileMapLayer, nappe: TileMapLayer, recouvrement: Tile
 	var parois := _descendre_la_falaise(massifs, dessus, marches, "massif_herbe")
 	print("  plateau : %d cases, escalier en %s, falaise : %d case(s)"
 		% [dessus.size(), PLATEAU_ESCALIER, parois])
+	# ⚠ LE SOL S'EFFACE SOUS LE MASSIF, sinon le relief ne se voit pas. MESURÉ, avant ce bloc : les massifs
+	# étant passés en tête de l'arbre (donc dessinés DERRIÈRE) et `Sol` étant peint sur les 2560 cases,
+	# 72 cases de massif sur 72 étaient entièrement recouvertes. Le plateau existait dans les données et
+	# nulle part à l'écran — le défaut exact que ce fichier dénonce trois blocs plus haut.
+	# « Le sol est les tuiles qu'on utilise À L'INTÉRIEUR des cadres » (Jordan, 18 septembre) : là où un
+	# massif est peint, c'est le massif qu'on voit.
+	# ⚠ ET LA CONSÉQUENCE DE JEU EST VOULUE, PAS SUBIE : une case non peinte sur `Sol` est un MUR à
+	# l'altitude 0 (charte §6). L'empreinte d'un plateau cesse donc d'être praticable au niveau du sol —
+	# on ne marche plus DANS le massif, on marche DESSUS, à son étage, et on y monte par l'escalier.
+	# ⚠ SAUF SOUS LES MARCHES, et c'est le générateur qui me l'a appris en REFUSANT d'écrire : effacer le
+	# sol sous l'escalier a rendu les trois portails invalides (« la case n'est pas libre dans les deux
+	# altitudes »). Un escalier est le seul endroit du jeu où le sol ET le plateau doivent être praticables
+	# sur la MÊME case — c'est la définition d'un passage. La règle des falaises saute déjà ces cases-là.
+	# ⚠ Ces six cases restent donc recouvertes par le sol, donc INVISIBLES. C'est le cas que Jordan a
+	# explicitement remis à plus tard : les jonctions entre étages iront sur un calque PAR-DESSUS.
+	var efface := 0
+	for pos in massifs.get_used_cells():
+		if marches.has(pos):
+			continue
+		if sol.get_cell_source_id(pos) != -1:
+			sol.erase_cell(pos)
+			efface += 1
+	print("  sol effacé sous le massif : %d case(s)" % efface)
 	for grotte in GROTTES:
 		var case: Vector2i = grotte["entree"]
 		# ⚠ Le noir va SOUS tout, sur le sol : les tuiles de trou ont le centre transparent, et le gravier
