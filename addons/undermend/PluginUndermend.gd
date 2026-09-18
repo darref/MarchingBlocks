@@ -57,15 +57,23 @@ func _exit_tree() -> void:
 
 
 func _deriver() -> void:
+	# ⚠ LE CALQUE SÉLECTIONNÉ, PAS UN CHEMIN EN DUR. Je visais « Surface/Massifs » : avec un seul calque
+	# ça marchait, mais un terrain à étages en compte autant qu'il a de niveaux, et chaque clic aurait
+	# dérivé le même. On dérive donc CE QUE LE PEINTRE A SOUS LA MAIN — c'est aussi ce qui permet de
+	# donner une hauteur différente à chaque étage.
 	var racine := get_editor_interface().get_edited_scene_root()
 	if racine == null:
 		_dire("Aucune scène ouverte.")
 		return
-	var massifs := racine.get_node_or_null("Surface/Massifs") as TileMapLayer
+	var massifs: TileMapLayer = null
+	for n in get_editor_interface().get_selection().get_selected_nodes():
+		if n is TileMapLayer:
+			massifs = n
+			break
 	if massifs == null:
-		_dire("Cette scène n'a pas de calque « Surface/Massifs ».\n\n"
-			+ "Ajoute un TileMapLayer nommé exactement Massifs, avec " + TILESET + ",\n"
-			+ "entre Recouvrement et Props, et peins-y un massif.")
+		_dire("Aucun calque sélectionné.\n\n"
+			+ "Choisis dans l'arbre le TileMapLayer d'étage où tu viens de peindre,\n"
+			+ "puis clique « Falaises ». La paroi sera dérivée sur CE calque-là.")
 		return
 	if massifs.tile_set == null:
 		_dire("Le calque « Massifs » n'a pas de TileSet.")
