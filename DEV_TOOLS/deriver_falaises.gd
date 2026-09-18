@@ -34,13 +34,18 @@ var _noms := {}
 func _initialize() -> void:
 	var chemin := ""
 	var ecrire := false
+	var hauteur := 1
 	for option in OS.get_cmdline_user_args():
 		if option.begins_with("--zone="):
 			chemin = option.substr("--zone=".length())
+		elif option.begins_with("--hauteur="):
+			hauteur = maxi(1, int(option.substr("--hauteur=".length())))
 		elif option == "--ecrire":
 			ecrire = true
 	if chemin == "":
-		print("Usage : --zone=res://NIVEAUX/ma_zone.tscn [--ecrire]")
+		print("Usage : --zone=res://NIVEAUX/ma_zone.tscn [--hauteur=N] [--ecrire]")
+		print("  --hauteur : nombre de rangées de MILIEU sous le bord sud ; le pied s'ajoute dessous.")
+		print("              1 (défaut) donne la falaise de deux rangées.")
 		print("  Sans --ecrire, rien n'est enregistré : l'outil dit seulement ce qu'il ferait.")
 		quit(1)
 		return
@@ -110,7 +115,7 @@ func _initialize() -> void:
 	# avec le générateur de zone et le bouton de l'éditeur. Cet outil ne fait que POSER ce qu'il rend.
 	var posees := 0
 	var manquantes := {}
-	for p in Falaises.calculer(plateau, marches):
+	for p in Falaises.calculer(plateau, marches, hauteur):
 		var nom: String = p["nom"]
 		if not _noms.has(nom):
 			manquantes[nom] = manquantes.get(nom, 0) + 1

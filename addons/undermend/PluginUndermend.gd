@@ -23,9 +23,21 @@ const TILESET := "res://ART/surface.tres"
 const BETTER_TERRAIN := "res://addons/better-terrain/BetterTerrain.gd"
 
 var _bouton: Button
+var _hauteur: SpinBox
 
 
 func _enter_tree() -> void:
+	# ⚠ La hauteur est le nombre de rangées de MILIEU ; le pied s'ajoute toujours dessous. 1 donne la
+	# falaise de deux rangées. Le milieu s'empile proprement sur lui-même — mesuré, joint vertical de
+	# 0,043 contre 0,45 pour un empilement impossible.
+	_hauteur = SpinBox.new()
+	_hauteur.min_value = 1
+	_hauteur.max_value = 8
+	_hauteur.value = 1
+	_hauteur.prefix = "étages "
+	_hauteur.tooltip_text = "Rangées de milieu sous le bord sud ; le pied s'ajoute dessous"
+	add_control_to_container(CONTAINER_CANVAS_EDITOR_MENU, _hauteur)
+
 	_bouton = Button.new()
 	_bouton.text = "Falaises"
 	_bouton.tooltip_text = "Dériver les parois sous le bord sud des massifs peints (Surface/Massifs)"
@@ -38,6 +50,10 @@ func _exit_tree() -> void:
 		remove_control_from_container(CONTAINER_CANVAS_EDITOR_MENU, _bouton)
 		_bouton.queue_free()
 		_bouton = null
+	if _hauteur != null:
+		remove_control_from_container(CONTAINER_CANVAS_EDITOR_MENU, _hauteur)
+		_hauteur.queue_free()
+		_hauteur = null
 
 
 func _deriver() -> void:
@@ -82,7 +98,7 @@ func _deriver() -> void:
 		_dire("Aucun massif peint sur « Massifs » : rien à dériver.")
 		return
 
-	var poses: Array = Falaises.calculer(plateau, marches)
+	var poses: Array = Falaises.calculer(plateau, marches, int(_hauteur.value))
 	var manquantes := {}
 	var retenues: Array = []
 	for p in poses:

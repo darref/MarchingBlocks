@@ -16,15 +16,30 @@ extends RefCounted
 ## n'écrit jamais dans une case qu'on ne lui a pas donnée — peindre un plateau ne peut donc pas créer sa
 ## paroi, et c'est à ce calcul de le faire.
 
-## Les rangées, de haut en bas. Le milieu se répète autant que la falaise est haute, le pied touche le sol.
-## ⚠ Hauteur FIXE à deux, faute de quoi que ce soit dans la carte qui dise qu'un plateau est haut de trois.
-const RANGEES := ["milieu", "pied"]
+## ⚠ LE MILIEU S'EMPILE SUR LUI-MÊME, ET C'EST MESURÉ, pas supposé : joint vertical de 0,043 et 0,048
+## pour les deux milieux (sur 32 px, aucun pixel sauté), contre 0,42 à 0,46 pour un empilement IMPOSSIBLE
+## — le pied sous le milieu, mis dans la mesure comme contrôle. Un empilement faux lit quatre à dix fois
+## plus mal qu'un juste : la mesure discrimine, donc son verdict vaut quelque chose.
+##
+## D'où la HAUTEUR : `hauteur` rangées de milieu, puis le pied. `hauteur = 1` rend exactement la falaise
+## d'avant — deux rangées — pour que rien ne bouge là où personne n'a demandé d'étage.
+static func _rangees(hauteur: int) -> Array:
+	var r: Array = []
+	for i in maxi(hauteur, 1):
+		r.append("milieu")
+	r.append("pied")
+	return r
 
 
 ## Les poses à faire : [{case, nom}], triées, pour un résultat indépendant de l'ordre de peinture.
 ##   plateau : case -> nom de la famille (« massif_herbe », « massif_sable »…)
 ##   marches : case -> true, les escaliers et rampes posés à la main, qu'on ne recouvre JAMAIS
-static func calculer(plateau: Dictionary, marches: Dictionary) -> Array:
+##   hauteur : le nombre de rangées de MILIEU ; le pied s'ajoute dessous. 1 = la falaise d'origine.
+## ⚠ UN ESCALIER FAIT DEUX RANGÉES. Au-delà de `hauteur = 1`, il ne touchera plus le sol et un vide
+## restera sous lui : ou bien on répète ses marches, ou bien on interdit un escalier plus court que sa
+## paroi. Rien ici ne le corrige — ce calcul ne fait que ne PAS recouvrir ce que le peintre a posé.
+static func calculer(plateau: Dictionary, marches: Dictionary, hauteur: int = 1) -> Array:
+	var RANGEES := _rangees(hauteur)
 	var poses: Array = []
 	var cles: Array = plateau.keys()
 	cles.sort()  # ⚠ deux cartes identiques doivent rendre la même falaise, quel que soit l'ordre de pose
