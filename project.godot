@@ -11,16 +11,9 @@ config_version=5
 [application]
 
 config/name="Undermend"
-config/description="Réparer le monde vu de dessus en résolvant les énigmes enfouies dans les profondeurs, vues de côté."
-run/main_scene="res://DEV_TOOLS/greybox_ecran_partage.tscn"
-config/features=PackedStringArray("4.7", "GL Compatibility")
+config/description="Un greffon Godot pour peindre des tuiles 3D non cubiques dans un GridMap."
+config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://MARQUE/embleme.png"
-
-[autoload]
-
-Fenetre="*res://CLIENT/fenetre.gd"
-Entrees="*res://CLIENT/entrees.gd"
-BetterTerrain="*uid://n2wjmkx0pehv"
 
 [display]
 
@@ -29,17 +22,11 @@ window/size/viewport_height=320
 window/size/mode=3
 window/size/window_width_override=1280
 window/size/window_height_override=640
-window/stretch/mode="viewport"
-window/stretch/scale_mode="integer"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/better-terrain/plugin.cfg", "res://addons/kenyoni/plugin_reloader/plugin.cfg", "res://addons/undermend/plugin.cfg")
+enabled=PackedStringArray("res://addons/kenyoni/plugin_reloader/plugin.cfg", "res://addons/undermend/plugin.cfg")
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=0
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
-2d/snap/snap_2d_transforms_to_pixel=true
-2d/snap/snap_2d_vertices_to_pixel=true
+renderer/rendering_method.mobile="forward_plus"

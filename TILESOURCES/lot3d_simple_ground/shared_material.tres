@@ -1,0 +1,8 @@
+[gd_resource type="StandardMaterial3D" format=3 uid="uid://de8xaxqj4nywy"]
+
+[ext_resource type="Texture2D" path="res://TILESOURCES/lot3d_simple_ground/TILES3D_stone+well+3d+model_basecolor.jpg" id="1_qkwt3"]
+
+[resource]
+resource_name = "tripo_node_8f8b61ee-aad6-4175-9c80-3bbcefa68cce_material"
+cull_mode = 2
+albedo_texture = ExtResource("1_qkwt3")

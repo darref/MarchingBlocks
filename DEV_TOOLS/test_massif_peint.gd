@@ -1,0 +1,347 @@
+extends SceneTree
+##
+## TEST — la partie PEINTURE : on peint des cases, le greffon pose les pièces.
+##
+## LANCEMENT
+##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_massif_peint.gd
+##
+## ⚠ CE QUE CE TEST GARDE, ET POURQUOI :
+##
+##   • **l'invariant du greffon** — peindre n'importe quelle forme ne produit JAMAIS une faute. Ce n'est
+##     plus une promesse : le classificateur répond aux 256 configurations, et le repli procédural
+##     fournit les 68 classes de surface. Zéro faute, sur toutes les formes, y compris les tordues ;
+##   • **le décalage d'une demi-case sur les TROIS axes**, et son SIGNE. L'ancien modèle portait
+##     `(-0,5 ; 0 ; -0,5)` ; le nouveau vaut `+0,5` partout. Un signe tenu de mémoire aurait déporté
+##     tout le rendu d'une case entière — invisible sur un sol plat, catastrophique sur une falaise ;
+##   • **une case touche HUIT sommets**, pas quatre. La moitié du voisinage manquait dans l'ancien
+##     modèle, par construction ;
+##   • **la règle du ventre creux** : les sommets entourés de huit cellules pleines ne posent rien, et
+##     c'est compté à part des fautes — une économie ne doit pas se lire comme une panne.
+##
+## ⚠ `_ready()` N'A PAS TOURNÉ pendant `_initialize()` d'un test lancé par `--script` : la boucle
+## principale n'a pas commencé. On appelle donc `preparer()` et `reconstruire()` à la main, ce que
+## l'API rend possible exprès.
+
+const MB := preload("res://addons/undermend/marching_blocks.gd")
+const RP := preload("res://addons/undermend/repli_procedural.gd")
+## ⚠ CHARGÉ PAR CHEMIN, jamais par `class_name` : un nom de classe tout neuf n'entre dans le cache
+## global de l'éditeur qu'après régénération, et un test en `--script` tourne avant.
+const Peint := preload("res://addons/undermend/massif_peint.gd")
+
+var _ok := 0
+var _echecs := 0
+var _premier := ""
+
+
+func _initialize() -> void:
+	print("=== TEST — la partie peinture ===\n")
+	_les_trois_grilles_existent()
+	_le_decalage_est_d_une_demi_case_partout()
+	_une_case_seule_pose_huit_pieces()
+	_aucune_forme_ne_produit_de_faute()
+	_le_ventre_est_creux()
+	_ce_qui_est_pose_est_ce_que_les_regles_disent()
+	_effacer_efface()
+	_l_empreinte_suit_les_cases()
+
+	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
+	if _echecs > 0:
+		print("PREMIER ÉCHEC — %s" % _premier)
+	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
+	quit(1 if _echecs > 0 else 0)
+
+
+func _dire(condition: bool, quoi: String) -> void:
+	if condition:
+		_ok += 1
+	else:
+		_echecs += 1
+		if _premier == "":
+			_premier = quoi
+		if _echecs <= 12:
+			print("  ÉCHEC — %s" % quoi)
+
+
+## Un massif prêt à peindre, hors éditeur.
+func _massif() -> Node3D:
+	var noeud: Node3D = Peint.new()
+	root.add_child(noeud)
+	noeud.preparer()
+	return noeud
+
+
+func _peindre(noeud: Node3D, cellules: Array) -> void:
+	var cases: GridMap = noeud.get_node("Cases")
+	var id: int = cases.mesh_library.find_item_by_name("case")
+	for c in cellules:
+		cases.set_cell_item(c, id)
+
+
+func _pave(x0: int, x1: int, y0: int, y1: int, z0: int, z1: int) -> Array:
+	var sortie: Array = []
+	for x in range(x0, x1 + 1):
+		for y in range(y0, y1 + 1):
+			for z in range(z0, z1 + 1):
+				sortie.append(Vector3i(x, y, z))
+	return sortie
+
+
+# ── 1. les trois grilles ────────────────────────────────────────────────────────────────────────────
+
+func _les_trois_grilles_existent() -> void:
+	print("1. les trois grilles sont bâties par preparer()")
+	var m := _massif()
+	for nom in ["Cases", "Rendu", "Fautes"]:
+		var g := m.get_node_or_null(nom)
+		_dire(g != null and g is GridMap, "la grille « %s » manque" % nom)
+	_dire(m.get_node("Cases").mesh_library != null, "« Cases » doit avoir une palette pour peindre")
+	_dire(m.get_node("Cases").mesh_library.find_item_by_name("case") >= 0,
+		"la palette doit contenir la tuile « case »")
+	var lot_rendu: MeshLibrary = m.get_node("Rendu").mesh_library
+	_dire(lot_rendu != null, "« Rendu » doit avoir un lot")
+	# ⚠ Sans lot sculpté, le REPLI prend la main : 68 pièces, aucune ne peut manquer.
+	#
+	# ⚠ ET ON SE GARDE DU NULL, PARCE QUE LE BANC DE MUTATIONS L'A MONTRÉ. Sous « lot par défaut
+	# retiré », cette ligne appelait `get_item_list()` sur `null` : le test PLANTAIT au lieu d'échouer.
+	# Il rougissait quand même, mais une assertion qui plante interrompt le fichier et masque tout ce
+	# qui suit — un test qui s'arrête en route ne garde que ce qu'il a eu le temps de lire.
+	var combien: int = lot_rendu.get_item_list().size() if lot_rendu != null else -1
+	_dire(combien == 68,
+		"le lot par défaut devrait être le repli procédural (68 pièces), on en trouve %d" % combien)
+	m.free()
+	print("   → Cases, Rendu, Fautes, et le repli procédural par défaut")
+
+
+# ── 2. LE DÉCALAGE ──────────────────────────────────────────────────────────────────────────────────
+
+## ⚠ MESURÉ (`sonde_gridmap_centrage.gd`) : `cell_center_x/y/z` valent tous trois `true`, une case
+## occupe [0,1]³, et le sommet lu par `bits(p, v)` siège en `v + (1,1,1)`. La grille de rendu doit donc
+## être décalée de **+0,5 sur les trois axes** — signe positif, et le y compris.
+func _le_decalage_est_d_une_demi_case_partout() -> void:
+	print("\n2. le décalage d'une demi-case, sur les trois axes")
+	var m := _massif()
+	for nom in ["Rendu", "Fautes"]:
+		var p: Vector3 = m.get_node(nom).position
+		_dire(p.is_equal_approx(Vector3.ONE * 0.5),
+			"« %s » devrait être décalée de (0.5, 0.5, 0.5), elle est en %s" % [nom, str(p)])
+	_dire(m.get_node("Cases").position.is_equal_approx(Vector3.ZERO),
+		"« Cases » ne doit PAS être décalée : c'est la vérité")
+	# Le décalage suit la taille de case.
+	m.taille_de_case = 2.0
+	for nom in ["Rendu", "Fautes"]:
+		_dire(m.get_node(nom).position.is_equal_approx(Vector3.ONE),
+			"à 2,0 par case, « %s » devrait être décalée de (1,1,1)" % nom)
+		_dire(m.get_node(nom).cell_size.is_equal_approx(Vector3.ONE * 2.0),
+			"« %s » devrait avoir des cases de 2,0" % nom)
+	m.free()
+	print("   → +0,5 par case sur x, y ET z ; « Cases » reste à l'origine")
+
+
+# ── 3. une case seule ───────────────────────────────────────────────────────────────────────────────
+
+func _une_case_seule_pose_huit_pieces() -> void:
+	print("\n3. une case seule pose huit pièces")
+	var m := _massif()
+	_peindre(m, [Vector3i(4, 2, -3)])
+	var bilan: Dictionary = m.reconstruire()
+	# ⚠ HUIT, pas quatre : une cellule influe sur les huit sommets qui l'entourent.
+	_dire(bilan["pieces"] == 8, "une case seule devrait poser 8 pièces, elle en pose %d" % bilan["pieces"])
+	_dire(bilan["fautes"] == 0, "une case seule ne devrait produire aucune faute, il y en a %d"
+		% bilan["fautes"])
+	_dire(bilan["muets"] == 0, "une case seule n'a aucun sommet muet, il y en a %d" % bilan["muets"])
+	# Les huit pièces sont toutes des coins, dans huit orientations… ou moins : `mb_coin_b1h0` et
+	# `mb_coin_b0h1` sont DEUX classes distinctes en modèle orienté (le coin du dessus et celui du
+	# dessous ne sont pas la même chose). C'est précisément ce que le modèle orienté a acheté.
+	var rendu: GridMap = m.get_node("Rendu")
+	var noms := {}
+	for c in rendu.get_used_cells():
+		noms[rendu.mesh_library.get_item_name(rendu.get_cell_item(c))] = true
+	_dire(noms.size() == 2, "une case seule devrait employer 2 classes (le coin haut et le coin bas), "
+		+ "on en trouve %d : %s" % [noms.size(), str(noms.keys())])
+	_dire(noms.has("mb_coin_b1h0") and noms.has("mb_coin_b0h1"),
+		"les deux classes devraient être mb_coin_b1h0 et mb_coin_b0h1, on a %s" % str(noms.keys()))
+	m.free()
+	print("   → 8 pièces, 2 classes distinctes (le coin du dessus et celui du dessous)")
+
+
+# ── 4. L'INVARIANT : AUCUNE FAUTE, JAMAIS ───────────────────────────────────────────────────────────
+
+## ⚠ C'EST LA PROMESSE DU GREFFON, ET ELLE SE VÉRIFIE SUR LES FORMES QUI FONT MAL. La charte a appris
+## trois fois en 2D qu'un disque ne prouve rien : sa frontière est convexe. On prend donc l'encoche, le
+## trou, le contact en diagonale, le surplomb et la case isolée.
+func _aucune_forme_ne_produit_de_faute() -> void:
+	print("\n4. aucune forme peinte ne produit de faute")
+	for essai in [
+		{"nom": "un plateau 4×1×4", "cellules": _pave(0, 3, 0, 0, 0, 3)},
+		{"nom": "un bloc 3×3×3", "cellules": _pave(0, 2, 0, 2, 0, 2)},
+		{"nom": "une colonne 1×5×1", "cellules": _pave(0, 0, 0, 4, 0, 0)},
+		{"nom": "un L", "cellules": _pave(0, 2, 0, 0, 0, 0) + _pave(0, 0, 0, 0, 1, 2)},
+		{"nom": "un plateau ENCOCHÉ",
+			"cellules": _pave(0, 3, 0, 0, 0, 3).filter(func(c): return c != Vector3i(3, 0, 3))},
+		{"nom": "une dalle TROUÉE",
+			"cellules": _pave(0, 2, 0, 0, 0, 2).filter(func(c): return c != Vector3i(1, 0, 1))},
+		{"nom": "contact en DIAGONALE",
+			"cellules": [Vector3i(0, 0, 0), Vector3i(1, 0, 1)]},
+		{"nom": "diagonale de CORPS",
+			"cellules": [Vector3i(0, 0, 0), Vector3i(1, 1, 1)]},
+		{"nom": "un SURPLOMB (matière en l'air)",
+			"cellules": _pave(0, 2, 0, 0, 0, 2) + _pave(0, 2, 2, 2, 0, 2)},
+		{"nom": "deux îles séparées",
+			"cellules": _pave(0, 1, 0, 0, 0, 1) + _pave(5, 6, 0, 0, 5, 6)},
+	]:
+		var m := _massif()
+		_peindre(m, essai["cellules"])
+		var bilan: Dictionary = m.reconstruire()
+		_dire(bilan["fautes"] == 0, "%s : %d faute(s) — l'invariant est cassé"
+			% [essai["nom"], bilan["fautes"]])
+		_dire(m.get_node("Fautes").get_used_cells().is_empty(),
+			"%s : des cubes rouges sont posés" % essai["nom"])
+		_dire(bilan["pieces"] > 0, "%s : aucune pièce posée" % essai["nom"])
+		print("   %-32s %3d cases → %4d pièces, %d faute(s), %d muet(s)"
+			% [essai["nom"], essai["cellules"].size(), bilan["pieces"], bilan["fautes"], bilan["muets"]])
+		m.free()
+
+
+# ── 5. le ventre creux ──────────────────────────────────────────────────────────────────────────────
+
+## ⚠ UN MASSIF COÛTE SA SURFACE, PAS SON VOLUME. Un sommet entouré de huit cellules pleines est à
+## l'intérieur de la matière : personne ne le voit, on n'y pose rien. C'est compté comme « muet », et
+## surtout PAS comme une faute — une économie ne doit pas se lire comme une panne.
+func _le_ventre_est_creux() -> void:
+	print("\n5. le ventre d'un massif est creux")
+	var m := _massif()
+	_peindre(m, _pave(0, 2, 0, 2, 0, 2))   # 27 cellules
+	var bilan: Dictionary = m.reconstruire()
+	# ⚠ COMPTÉ À LA MAIN, PAS DEMANDÉ AU MODULE. Les cellules vont de 0 à 2 sur chaque axe. Un sommet
+	# `v` lit les cellules `v` … `v+1` : il est donc muet quand `v` ET `v+1` tiennent dans 0..2, soit
+	# `v ∈ {0,1}` sur chaque axe → 2³ = **8 sommets muets**. Les sommets touchés vont de −1 à 2, soit
+	# 4³ = 64. Il reste donc 56 pièces.
+	#
+	# ⚠ J'AVAIS ÉCRIT « 1 MUET, 63 PIÈCES », ET DEUX DE MES PROPRES FICHIERS SE CONTREDISAIENT : le test
+	# du repli imprimait déjà « un cube 3×3×3 — 27 cellules, 56 pièces ». Un chiffre attendu qu'on pose
+	# de tête sans le recompter est exactement ce qui pousse à « arranger » le code pour lui plaire.
+	_dire(bilan["muets"] == 8, "un bloc 3×3×3 a exactement 8 sommets muets, on en compte %d"
+		% bilan["muets"])
+	_dire(bilan["pieces"] == 56, "un bloc 3×3×3 devrait poser 56 pièces, il en pose %d"
+		% bilan["pieces"])
+	_dire(bilan["fautes"] == 0, "le ventre creux n'est pas une faute")
+	# Et aucun des huit sommets du ventre ne porte quoi que ce soit.
+	var rendu: GridMap = m.get_node("Rendu")
+	for v in [Vector3i(0, 0, 0), Vector3i(1, 1, 1), Vector3i(0, 1, 0), Vector3i(1, 0, 1)]:
+		_dire(rendu.get_cell_item(v) == GridMap.INVALID_CELL_ITEM,
+			"le sommet %s est dans le ventre plein : il ne doit rien porter" % str(v))
+	# ⚠ Et le contrôle inverse : un sommet du BORD, lui, doit porter une pièce. Sans lui, « rien n'est
+	# posé nulle part » passerait ce test au vert.
+	_dire(rendu.get_cell_item(Vector3i(-1, -1, -1)) != GridMap.INVALID_CELL_ITEM,
+		"le sommet du coin extérieur devrait porter une pièce")
+	m.free()
+	print("   → 64 sommets, 56 pièces, 8 muets : le ventre ne coûte rien")
+
+
+# ── 6. le nœud ne réinvente aucune règle ────────────────────────────────────────────────────────────
+
+## ⚠ UNE SEULE AUTORITÉ SUR LA FORME DU MONDE. Si le nœud déduisait la pièce à sa façon, on aurait deux
+## descriptions du même fait — et la charte est formelle : elles divergent au premier réglage. On
+## vérifie donc case par case que ce qui est POSÉ est exactement ce que `MB.classer` dit.
+func _ce_qui_est_pose_est_ce_que_les_regles_disent() -> void:
+	print("\n6. ce qui est posé est exactement ce que les règles disent")
+	var m := _massif()
+	var cellules: Array = _pave(0, 3, 0, 1, 0, 3).filter(func(c): return c != Vector3i(3, 1, 3))
+	_peindre(m, cellules)
+	m.reconstruire()
+
+	var pleines := {}
+	for c in cellules:
+		pleines[c] = true
+	var rendu: GridMap = m.get_node("Rendu")
+	var verifies := 0
+	var faux := 0
+	for c in rendu.get_used_cells():
+		var sommet: Vector3i = c
+		var attendu: Dictionary = MB.classer(MB.bits(pleines, sommet))
+		var nom: String = rendu.mesh_library.get_item_name(rendu.get_cell_item(sommet))
+		var orientation: int = rendu.get_cell_item_orientation(sommet)
+		if nom != attendu["nom"] or orientation != attendu["orientation"]:
+			faux += 1
+			if faux <= 3:
+				_dire(false, "sommet %s : posé « %s »/%d, attendu « %s »/%d"
+					% [str(sommet), nom, orientation, attendu["nom"], attendu["orientation"]])
+		verifies += 1
+	_dire(faux == 0, "%d sommet(s) posés autrement que ce que les règles disent" % faux)
+	_dire(verifies > 50, "trop peu de sommets vérifiés (%d)" % verifies)
+	m.free()
+	print("   → %d sommets vérifiés un par un, pièce ET orientation" % verifies)
+
+
+# ── 7. effacer ──────────────────────────────────────────────────────────────────────────────────────
+
+func _effacer_efface() -> void:
+	print("\n7. effacer des cases efface le rendu")
+	var m := _massif()
+	_peindre(m, _pave(0, 2, 0, 0, 0, 2))
+	var avant: Dictionary = m.reconstruire()
+	_dire(avant["pieces"] > 0, "rien n'a été posé avant l'effacement")
+	var cases: GridMap = m.get_node("Cases")
+	for c in cases.get_used_cells():
+		cases.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+	var apres: Dictionary = m.reconstruire()
+	_dire(apres["pieces"] == 0, "après effacement il reste %d pièce(s)" % apres["pieces"])
+	_dire(m.get_node("Rendu").get_used_cells().is_empty(), "« Rendu » n'est pas vide")
+	_dire(m.get_node("Fautes").get_used_cells().is_empty(), "« Fautes » n'est pas vide")
+	m.free()
+	print("   → effacé est effacé, des deux côtés")
+
+
+# ── 8. l'empreinte ──────────────────────────────────────────────────────────────────────────────────
+
+## ⚠ UN GRIDMAP N'ÉMET AUCUN SIGNAL quand on y peint : il n'y a rien à écouter. `_process()` compare
+## donc une EMPREINTE à chaque image de l'éditeur, et ne reconstruit que si elle a changé. Aplatie,
+## cette empreinte fige le rendu **en silence** dès qu'on déplace une case.
+##
+## ⚠ CE TEST APPELLE L'EMPREINTE DIRECTEMENT, ET C'EST UNE CORRECTION. La version précédente passait par
+## `reconstruire()` — qui recalcule de toute façon — donc elle ne consultait JAMAIS l'empreinte, tout en
+## s'intitulant « l'empreinte suit le déplacement ». Le banc de mutations l'a prouvé : aplatir
+## l'empreinte ne faisait rougir personne. Une étiquette qui promet plus que ce qu'elle vérifie est pire
+## qu'une absence de test, parce qu'elle rassure.
+##
+## ⚠ CE QU'ON NE PEUT PAS TESTER ICI, ET IL FAUT LE DIRE : la boucle `_process` elle-même. Elle est
+## gardée par `Engine.is_editor_hint()`, faux en `--script`. On teste donc l'empreinte comme FONCTION
+## PURE ; que l'éditeur la consulte à chaque image se juge dans l'éditeur, avec Jordan.
+func _l_empreinte_suit_les_cases() -> void:
+	print("\n8. l'empreinte distingue deux peintures différentes")
+	var m := _massif()
+	var cases: GridMap = m.get_node("Cases")
+	var vide: int = m._empreinte_des_cases()
+
+	_peindre(m, [Vector3i(0, 0, 0)])
+	var une: int = m._empreinte_des_cases()
+	_dire(une != vide, "peindre une case devrait changer l'empreinte (%d puis %d)" % [vide, une])
+
+	_peindre(m, [Vector3i(1, 0, 0)])
+	var deux: int = m._empreinte_des_cases()
+	_dire(deux != une, "ajouter une seconde case devrait changer l'empreinte")
+
+	# ⚠ LE CAS QUI PIÈGE, ET C'EST CELUI QUE LA MUTATION EXPLOITAIT : DÉPLACER une case sans changer
+	# leur NOMBRE. Une empreinte qui ne compterait que les cases resterait identique, et le rendu se
+	# figerait sans que rien ne le dise.
+	cases.set_cell_item(Vector3i(1, 0, 0), GridMap.INVALID_CELL_ITEM)
+	_peindre(m, [Vector3i(9, 4, 9)])
+	var deplacee: int = m._empreinte_des_cases()
+	_dire(cases.get_used_cells().size() == 2, "le déplacement doit garder DEUX cases")
+	_dire(deplacee != deux,
+		"déplacer une case sans changer leur nombre doit changer l'empreinte (%d des deux côtés)" % deux)
+
+	# Un second déplacement, pour ne pas conclure sur un seul couple.
+	cases.set_cell_item(Vector3i(9, 4, 9), GridMap.INVALID_CELL_ITEM)
+	_peindre(m, [Vector3i(-7, 1, 2)])
+	_dire(m._empreinte_des_cases() != deplacee, "un second déplacement doit aussi changer l'empreinte")
+
+	# Et l'empreinte est une FONCTION de l'état : revenir au même dessin rend la même valeur.
+	for c in cases.get_used_cells():
+		cases.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+	_dire(m._empreinte_des_cases() == vide, "tout effacer doit rendre l'empreinte du vide")
+	_peindre(m, [Vector3i(0, 0, 0)])
+	_dire(m._empreinte_des_cases() == une, "repeindre le même dessin doit rendre la même empreinte")
+
+	m.free()
+	print("   → l'empreinte distingue l'ajout, le retrait ET le déplacement à nombre constant")

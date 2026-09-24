@@ -1,168 +1,41 @@
 @tool
 extends EditorPlugin
-## LE BOUTON « FALAISES » — dériver les parois sous les massifs peints, sans quitter l'éditeur.
+## LE GREFFON UNDERMEND — le panneau de peinture de tuiles 3D, dans la bande de droite de la vue 3D.
 ##
-## ⚠ CE PLUGIN EST LE NÔTRE, PAS UNE MODIFICATION DE BETTER TERRAIN. On se sert de cet addon comme d'une
-## bibliothèque et on n'y touche jamais : un fork, c'est un conflit à chaque mise à jour amont. Le bouton
-## vit donc ici, chez nous.
+## ⚠ **IL A PORTÉ UN SECOND BOUTON, « FALAISES », ET IL EST PARTI AVEC LE VERSANT 2D** (Jordan,
+## 24 septembre 2026). Il dérivait les parois sous les massifs peints d'un `TileMapLayer`, en s'appuyant
+## sur l'addon Better Terrain. ⚠ Better Terrain avait DÉJÀ disparu du disque : le bouton plantait à la
+## première pression (`load()` sur un chemin absent) et **rien ne le signalait tant qu'on ne cliquait
+## pas**. Un greffon garde ce qu'il sait faire, pas ce qu'il savait faire.
 ##
-## ⚠ IL NE CONTIENT PAS LA RÈGLE. Le calcul vit dans `DEV_TOOLS/falaises.gd`, partagé avec le générateur
-## de zone et l'outil en ligne de commande. Trois appelants, une seule description — c'est ce qui évite
-## qu'elles divergent, ce qui était DÉJÀ arrivé entre les deux premières.
-##
-## ⚠ IL PASSE PAR L'HISTORIQUE D'ANNULATION. Un bouton qui réécrit des cases sans que Ctrl+Z les
-## rattrape, c'est une peinture qu'un clic malheureux abîme sans retour.
-##
-## CE QU'IL FAIT, sur le calque de massif SÉLECTIONNÉ dans l'arbre (un par étage) :
-##   tuile nommée « …_falaise_… »                 une paroi déjà dérivée — effacée, puis refaite
-##   tuile nommée « …_escalier_… » / « …_rampe_… »  posée par le peintre — jamais touchée
-##   tuile anonyme portant un terrain               le PLATEAU, d'où la paroi se déduit
+## ⚠ **IL NE CONTIENT AUCUNE RÈGLE, ET C'EST LA MÊME DOCTRINE QU'AVANT.** Tout le calcul vit dans
+## `blocs_maitres.gd`, `tranchage.gd` et `decoupe.gd` ; cet écran ne fait que les appeler. Un greffon qui
+## recalcule finit par diverger de ce qu'il pilote — c'est ce qui était arrivé à la règle des falaises,
+## écrite deux fois et déjà divergente à une heure d'intervalle.
 
-const Falaises := preload("res://DEV_TOOLS/falaises.gd")
-const TILESET := "res://ART/surface.tres"
-const BETTER_TERRAIN := "res://addons/better-terrain/BetterTerrain.gd"
+const ECRAN := preload("res://addons/undermend/ecran_edition.gd")
 
-var _bouton: Button
-var _hauteur: SpinBox
+var _ecran: Control
 
 
 func _enter_tree() -> void:
-	# ⚠ La hauteur est le nombre de rangées de MILIEU ; le pied s'ajoute toujours dessous. 1 donne la
-	# falaise de deux rangées. Le milieu s'empile proprement sur lui-même — mesuré, joint vertical de
-	# 0,043 contre 0,45 pour un empilement impossible.
-	_hauteur = SpinBox.new()
-	_hauteur.min_value = 1
-	_hauteur.max_value = 8
-	_hauteur.value = 1
-	_hauteur.prefix = "étages "
-	_hauteur.tooltip_text = "Rangées de milieu sous le bord sud ; le pied s'ajoute dessous"
-	add_control_to_container(CONTAINER_CANVAS_EDITOR_MENU, _hauteur)
-
-	_bouton = Button.new()
-	_bouton.text = "Falaises"
-	_bouton.tooltip_text = "Dériver les parois sous le bord sud du calque de massif SÉLECTIONNÉ"
-	_bouton.pressed.connect(_deriver)
-	add_control_to_container(CONTAINER_CANVAS_EDITOR_MENU, _bouton)
+	# ⚠ **LA BANDE DE DROITE DE LA VUE 3D, PLUS L'ÉCRAN ENTIER — DÉCIDÉ (Jordan, 24 septembre 2026).**
+	# Le greffon déclarait `_has_main_screen()` : il REMPLAÇAIT la vue 3D, comme les onglets 2D/3D/Script.
+	# On ne pouvait donc pas peindre et voir ses outils en même temps, ce qui est pourtant tout l'usage.
+	# ⚠ `CONTAINER_SPATIAL_EDITOR_SIDE_RIGHT` existe bien — vérifié, et non supposé
+	# (`DEV_TOOLS/sonde_api_editeur.gd` a listé les douze conteneurs, dont les quatre de l'éditeur 3D).
+	_ecran = ECRAN.new()
+	_ecran.name = "UndermendEdition"
+	_ecran.custom_minimum_size = Vector2(320, 0)
+	add_control_to_container(CONTAINER_SPATIAL_EDITOR_SIDE_RIGHT, _ecran)
 
 
 func _exit_tree() -> void:
-	if _bouton != null:
-		remove_control_from_container(CONTAINER_CANVAS_EDITOR_MENU, _bouton)
-		_bouton.queue_free()
-		_bouton = null
-	if _hauteur != null:
-		remove_control_from_container(CONTAINER_CANVAS_EDITOR_MENU, _hauteur)
-		_hauteur.queue_free()
-		_hauteur = null
+	if _ecran != null:
+		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_SIDE_RIGHT, _ecran)
+		_ecran.queue_free()
+		_ecran = null
 
-
-func _deriver() -> void:
-	# ⚠ LE CALQUE SÉLECTIONNÉ, PAS UN CHEMIN EN DUR. Je visais « Surface/Massifs » : avec un seul calque
-	# ça marchait, mais un terrain à étages en compte autant qu'il a de niveaux, et chaque clic aurait
-	# dérivé le même. On dérive donc CE QUE LE PEINTRE A SOUS LA MAIN — c'est aussi ce qui permet de
-	# donner une hauteur différente à chaque étage.
-	var racine := get_editor_interface().get_edited_scene_root()
-	if racine == null:
-		_dire("Aucune scène ouverte.")
-		return
-	var massifs: TileMapLayer = null
-	for n in get_editor_interface().get_selection().get_selected_nodes():
-		if n is TileMapLayer:
-			massifs = n
-			break
-	if massifs == null:
-		_dire("Aucun calque sélectionné.\n\n"
-			+ "Choisis dans l'arbre le TileMapLayer d'étage où tu viens de peindre,\n"
-			+ "puis clique « Falaises ». La paroi sera dérivée sur CE calque-là.")
-		return
-	if massifs.tile_set == null:
-		_dire("Le calque « %s » n'a pas de TileSet." % massifs.name)
-		return
-
-	var bt = load(BETTER_TERRAIN).new()
-	add_child(bt)
-	var noms := _nommer(massifs.tile_set)
-
-	# 1. Trier ce qui est déjà là, par le NOM de la tuile.
-	var plateau := {}
-	var marches := {}
-	var anciennes: Array = []
-	for pos in massifs.get_used_cells():
-		var d := massifs.get_cell_tile_data(pos)
-		if d == null:
-			continue
-		var nom: String = d.get_custom_data("nom")
-		if "falaise" in nom:
-			anciennes.append(pos)
-		elif "escalier" in nom or "rampe" in nom:
-			marches[pos] = true
-		else:
-			var t: int = bt.get_cell(massifs, pos)
-			if t >= 0:
-				plateau[pos] = bt.get_terrain(massifs.tile_set, t)["name"]
-	bt.queue_free()
-
-	if plateau.is_empty():
-		_dire("Aucun massif peint sur « %s » : rien à dériver." % massifs.name)
-		return
-
-	var poses: Array = Falaises.calculer(plateau, marches, int(_hauteur.value))
-	var manquantes := {}
-	var retenues: Array = []
-	for p in poses:
-		if noms.has(p["nom"]):
-			retenues.append(p)
-		else:
-			manquantes[p["nom"]] = true
-
-	# 2. Appliquer, en passant par l'historique : un seul « Dériver les falaises » à annuler.
-	var histoire := get_undo_redo()
-	histoire.create_action("Dériver les falaises")
-	for pos in anciennes:
-		histoire.add_do_method(massifs, "erase_cell", pos)
-		histoire.add_undo_method(massifs, "set_cell", pos,
-			massifs.get_cell_source_id(pos), massifs.get_cell_atlas_coords(pos),
-			massifs.get_cell_alternative_tile(pos))
-	for p in retenues:
-		var pos: Vector2i = p["case"]
-		histoire.add_do_method(massifs, "set_cell", pos, noms[p["nom"]]["source"], noms[p["nom"]]["case"], 0)
-		if massifs.get_cell_source_id(pos) == -1:
-			histoire.add_undo_method(massifs, "erase_cell", pos)
-		else:
-			histoire.add_undo_method(massifs, "set_cell", pos,
-				massifs.get_cell_source_id(pos), massifs.get_cell_atlas_coords(pos),
-				massifs.get_cell_alternative_tile(pos))
-	histoire.commit_action()
-
-	var message := "Plateau : %d case(s)\nEscaliers épargnés : %d\nParois refaites : %d → %d" % [
-		plateau.size(), marches.size(), anciennes.size(), retenues.size()]
-	if not manquantes.is_empty():
-		message += "\n\n⚠ Tuiles absentes du TileSet :\n  " + "\n  ".join(manquantes.keys())
-	_dire(message)
-
-
-## nom -> {source, case}. ⚠ La MÊME table que `faire_zone.gd` et `deriver_falaises.gd` : une seule
-## autorité sur « où vit ce rôle » dans les planches.
-func _nommer(jeu: TileSet) -> Dictionary:
-	var noms := {}
-	for i in jeu.get_source_count():
-		var id := jeu.get_source_id(i)
-		var source := jeu.get_source(id) as TileSetAtlasSource
-		if source == null:
-			continue
-		for k in source.get_tiles_count():
-			var case := source.get_tile_id(k)
-			var nom: String = source.get_tile_data(case, 0).get_custom_data("nom")
-			if nom != "":
-				noms[nom] = {"source": id, "case": case}
-	return noms
-
-
-func _dire(texte: String) -> void:
-	var boite := AcceptDialog.new()
-	boite.title = "Falaises"
-	boite.dialog_text = texte
-	get_editor_interface().get_base_control().add_child(boite)
-	boite.popup_centered()
-	boite.confirmed.connect(boite.queue_free)
-	boite.canceled.connect(boite.queue_free)
+# ⚠ **`_has_main_screen`, `_get_plugin_name`, `_get_plugin_icon` ET `_make_visible` ONT VÉCU ICI.** Ils
+# faisaient du greffon un ÉCRAN PRINCIPAL — un onglet qui remplace la vue 3D. Ils n'ont plus lieu d'être
+# depuis qu'il est un panneau dans la bande de droite : un panneau ne se déclare pas, il s'ajoute.
