@@ -369,7 +369,13 @@ func _borne(boite: AABB, mini: float, maxi: float, quoi: String) -> void:
 ##      lieu de 6 405. Le bloc écrit en couches ASCII n'ayant que des coordonnées positives, RIEN dans
 ##      le projet ne pouvait le montrer : il fallait construire le scénario.
 func _la_legende_du_temoin_dit_le_contexte() -> void:
-	print("\n10. la légende du témoin : la roche souterraine est plus sombre")
+	# ⚠ **« PLUS SOMBRE » A ÉTÉ CORRIGÉ EN « UNE AUTRE TEINTE » (25 septembre 2026), et le test n'a pas
+	# bougé d'une ligne.** La légende modulait autrefois les trois couleurs vers du sombre ; elle porte
+	# maintenant SIX teintes franches, dont l'ocre des sols de grotte, PLUS CLAIR que le vert qu'il
+	# remplace. Le mécanisme tenait déjà — `_verdicts_par_quad` reconnaît les trois teintes de plein air
+	# par égalité, jamais par un seuil de luminosité — mais l'énoncé, lui, était devenu faux.
+	# Un test vert dont le titre ment est un test qu'on cessera de lire (charte §6 : un mot, une chose).
+	print("\n10. la légende du témoin : la roche souterraine porte une AUTRE TEINTE")
 
 	# Un relief écrit à la main, choisi pour porter les trois cas : une colonne coiffée, une case à
 	# l'air libre, et un TROU dans la colonne — la roche au-dessus compte même à distance.

@@ -58,6 +58,24 @@ const COULEUR_DESSUS := Color("#6f9e4a")   # ce qui regarde le ciel
 const COULEUR_PLAFOND := Color("#4e7ba8")  # ce qui regarde le sol : une grotte
 const COULEUR_PAROI := Color("#8a7a68")    # les flancs
 
+## ── LES SIX TEINTES DU TÉMOIN : trois orientations × deux contextes ─────────────────────────────────
+##
+## ⚠ **SIX TEINTES FRANCHES, ET C'EST UN CHOIX DE JORDAN CONTRE LE MIEN (25 septembre 2026).** J'avais
+## MODULÉ les trois couleurs ci-dessus — la roche souterraine simplement assombrie — en craignant qu'un
+## témoin à six couleurs devienne bariolé, donc moins lisible que le défaut qu'on corrigeait. Jordan a
+## tranché pour le contraste, avec une légende écrite sous la vue : c'est elle qui lève mon objection,
+## puisque chaque teinte y porte son nom au lieu de devoir être devinée.
+##
+## ⚠ **ET L'ASSOMBRISSEMENT SEUL NE POUVAIT PAS SUFFIRE**, c'est ce qui rend le choix de Jordan juste :
+## la lumière directionnelle assombrit déjà les faces à l'ombre du même ordre. Une paroi de grotte et une
+## paroi extérieure dans l'ombre se confondaient. Des TEINTES distinctes ne se confondent pas.
+##
+## ⚠ Les trois « dehors » restent les couleurs historiques : le repli procédural, qui n'a aucune notion
+## de contexte, continue de les employer telles quelles.
+const COULEUR_DESSUS_DEDANS := Color("#c9913f")   # un sol de GROTTE : ocre, jamais d'herbe
+const COULEUR_PAROI_DEDANS := Color("#8a6f9e")    # une paroi de GROTTE : mauve, franchement autre
+const COULEUR_PLAFOND_DEDANS := Color("#2f4f6f")  # un plafond de GROTTE : bleu profond
+
 
 ## La surface d'une configuration. Rend un `ArrayMesh` — VIDE pour le vide et le ventre plein.
 ##

@@ -59,6 +59,12 @@ n'est qu'un sol retourné.
 dérivé** : les cases pleines, les pièces, les classes, les contextes. Couverture **68/68, 0 manquante**,
 matière en **un seul morceau**.
 
+⚠ **ET LA COUVERTURE N'EST PAS LA LIVRAISON — les deux ont déjà divergé ici** (la machine annonçait
+90/90 quand le greffon en livrait 73). Ce qui est mesuré, sur la grille livrée de 262 cases :
+**`librairie()` rend 90 items — 68 nus et 22 variantes d'air libre — 0 classe manquante, 0 erreur de
+tranchage**, et le bloc exhibe **22 germes sur les 22 à coudre**. La chaîne tient donc de bout en
+bout : le bloc porte les 90 tuiles, et le greffon les pose.
+
 ⚠ **IL Y EN A EU NEUF, DE 4³.** Ils couvraient bien 68/68, mais ne pouvaient pas livrer les deux
 CONTEXTES — mesuré, 10 classes à double contexte sur les 90 nécessaires — et leur alignement sur une
 bande n'existait que pour les transporter ensemble.
@@ -196,9 +202,21 @@ rejoignent. Interdire ces contacts fait tomber la couverture à **52/90**, trois
 C'est l'ambiguïté que le modèle nomme `PONT_SUR_FACE_AMBIGUE`.
 
 **DÉCIDÉ (Jordan, 25 septembre 2026) — on livre le témoin COMPLET et on le DIT à l'artiste.** Mesuré
-sur ce qui part réellement : **18 arêtes ambiguës sur 8 364 quads (0,2 %), 0 trou, 100 % soudé,
-valence 4 à 89 %**. Le nombre d'arêtes non-manifold du solide **ÉGALE exactement** le nombre de
-contacts d'arête de l'occupation — la cause est dans la forme voulue, jamais dans le mailleur.
+sur ce qui part réellement : **15 arêtes ambiguës sur 8 326 quads (0,2 %), 0 trou, 100 % soudé,
+valence 4 à 91 %**.
+
+⚠ **CES CHIFFRES ÉTAIENT 18 SUR 8 364 ET 89 % JUSQU'AU 25 septembre 2026** : ils décrivaient la grille
+de 267 cases, remplacée par la sortie du finisseur (262 cases). La 90ᵉ tuile — `mb_arete_creuse_b4h2`,
+la dernière classe extérieure — a été gagnée **en RÉDUISANT** les arêtes ambiguës, pas en les payant.
+J'avais annoncé l'inverse en opposant « 44 contacts par arête » (qui porte sur l'OCCUPATION) aux « 18
+ambiguës » (qui porte sur le MAILLAGE AMINCI) : deux instruments différents, une conclusion fausse.
+`DEV_TOOLS/sonde_cout_du_dernier_contexte.gd` les rend désormais dans la même unité.
+
+⚠ **ET UNE PHRASE A ÉTÉ RETIRÉE D'ICI FAUTE DE SE REPRODUIRE** : « le nombre d'arêtes non-manifold du
+solide ÉGALE exactement le nombre de contacts d'arête de l'occupation ». Mesuré sur les deux grilles,
+le rapport est de **4 pour 1** (60 contacts → 240 ; 44 → 176), jamais de 1 pour 1. Le fait sous-jacent
+tient toujours — la cause est dans la forme voulue, jamais dans le mailleur — mais l'égalité annoncée
+n'a pas été retrouvée, et une charte qui affirme un chiffre invérifiable vaut moins que son silence.
 
 ⚠ **Et les valences se comptent sur les QUADS, pas sur les triangles.** Chaque quad porte sa diagonale,
 qui ajoute une arête à ses deux bouts : un sommet de valence 4 y apparaît en valence 6. C'est pourquoi
@@ -328,9 +346,15 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **6 626 vérifications, 0 échec** (25 septembre 2026, recomptées) :
-  `test_marching_blocks` 1 974, `test_repli_procedural` 3 922, `test_blocs_maitres` 597,
+  Six suites, **6 618 vérifications, 0 échec** (25 septembre 2026, recomptées) :
+  `test_marching_blocks` 1 974, `test_repli_procedural` 3 922, `test_blocs_maitres` 589,
   `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
+  ⚠ **`test_blocs_maitres` EST PASSÉ DE 597 À 589 SANS QU'AUCUNE ASSERTION NE SOIT TOUCHÉE**, en
+  collant la grille du finisseur. Deux de ses boucles assertent **une fois par élément** — une par
+  cellule (« sort du cube ») et une par pièce (« le sommet n'est pas intérieur ») — et ces deux
+  populations ont rétréci : **267 → 262 cellules (−5)** et **282 → 279 pièces (−3)**, soit exactement
+  les huit. Mesuré sur les deux grilles, pas déduit par soustraction : raisonner « −5 aux cellules donc
+  −3 aux pièces » aurait supposé qu'aucune autre boucle du fichier n'assertit par élément.
   ⚠ **LE TOTAL ÉCRIT ICI A MENTI, ET C'EST UN CAS DE « TENUE DE REGISTRE ».** Il annonçait 6 686 alors
   que les suites en rendaient 6 597 : personne n'avait recompté après une suite retouchée. Un chiffre
   de charte se relève, il ne se reporte pas.
@@ -399,19 +423,35 @@ désormais le greffon.
    - **le score du finisseur est AVEUGLE AU CONTEXTE** (mesuré, `75eae30`) : une classe d'intérieur
      gagnée y vaut exactement une classe d'extérieur perdue, alors que la marge est de ×4,53 dedans
      contre ×0,95 dehors. Le grimpeur rebouche donc le ciel pour gagner dedans, et **redessiner les
-     couches ne sert à rien** tant que le score ne distingue pas les deux contextes : il faudra
-     pondérer la rareté, ou imposer un PLANCHER de sommets sous le ciel à chaque coup.
+     couches ne sert à rien** tant que le score ne distingue pas les deux contextes.
+     ⚠ **LE REMÈDE EST POSÉ, ET CETTE RÉSERVE NE L'EST PLUS QU'À MOITIÉ** : `_finir` et `_elaguer`
+     imposent un **PLANCHER de sommets sous le ciel** (`ciel_plancher`), dérivé de la silhouette écrite
+     à la main et vérifié à CHAQUE coup, jamais constaté à la fin. Le score reste aveugle — c'est
+     assumé : le plancher l'empêche de nuire, là où pondérer la rareté aurait demandé de choisir un
+     poids arbitraire. La seconde branche (pondérer) reste donc OUVERTE, mais elle n'est plus
+     nécessaire, et la grille livrée atteint 90/90.
 
 5. **LA LÉGENDE DU TÉMOIN — EN COURS.** Le solide qui part chez l'artiste peint sa roche SOUTERRAINE
-   plus sombre et désaturée. ⚠ **La raison est un défaut observé, pas un ornement** : rien ne disait à
+   d'une AUTRE TEINTE. ⚠ **La raison est un défaut observé, pas un ornement** : rien ne disait à
    l'artiste quelle part de son bloc est souterraine, et c'est ce qui lui a fait extruder le haut en
    croyant tenir le massif de base.
-   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 25 septembre 2026)** : 203 des 267 cases du bloc
-     sont sous roche — **76,0 %** — et l'aminci qui part chez l'artiste peint 6 405 de ses 8 364 quads
-     en sombre (76,6 %).
-   - **On MODULE les trois teintes, on n'en ajoute pas trois** : l'orientation reste lisible (vert au
-     ciel, brun aux parois, bleu aux plafonds) et le contexte se lit à la MATIÈRE. Six teintes franches
-     auraient rendu bariolé un témoin dont l'illisibilité est précisément le défaut qu'on corrige.
+   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 25 septembre 2026, sur la grille livrée de
+     262 cases)** : **198 sous roche sur 262 — 75,6 %** — et l'aminci qui part chez l'artiste peint
+     **6 287 de ses 8 326 quads** en teinte souterraine (75,5 %). La légende suit le bloc translaté.
+   - **DÉCIDÉ (Jordan, 25 septembre 2026) — SIX TEINTES FRANCHES, et c'est contre ma recommandation.**
+     Trois orientations × deux contextes : vert / ocre pour les sols, beige-brun / mauve pour les
+     parois, bleu / bleu profond pour les plafonds (`repli_procedural.gd`, qui reste leur unique
+     source ; le mailleur ne les redéfinit pas).
+     ⚠ **CE QUI ÉTAIT ÉCRIT ICI — « on MODULE les trois teintes, on n'en ajoute pas trois ; six teintes
+     franches auraient rendu bariolé un témoin dont l'illisibilité est le défaut qu'on corrige » — A
+     ÉTÉ RENVERSÉ, et la raison compte plus que le verdict** : mon objection visait une couleur qu'il
+     faut DEVINER, et la **légende écrite sous la vue** (`ecran_edition.gd`) y répond en donnant son nom
+     à chacune. Six teintes nommées valent mieux que trois modulées ; six teintes muettes auraient
+     effectivement été pires.
+     ⚠ **ET LA MODULATION NE POUVAIT PAS SUFFIRE, c'est ce qui rend le renversement juste** : la lumière
+     directionnelle assombrit déjà les faces à l'ombre du même ordre de grandeur, si bien qu'une paroi
+     de grotte et une paroi extérieure à l'ombre se confondaient. Des TEINTES distinctes ne se
+     confondent pas — aucun compteur ne l'aurait dit, seul l'œil.
    - ⚠ **`case_sous_roche()` VIT DANS `marching_blocks.gd` ET NULLE PART AILLEURS.** L'écrire dans le
      mailleur en ferait une SECONDE description du critère de contexte — la faute que le vérificateur
      du bloc a déjà coûtée (§6). Elle est VOISINE de `sous_le_ciel()` sans lui être égale : l'une
@@ -420,13 +460,20 @@ désormais le greffon.
    - **MESURÉ — les deux gardes ont su échouer**, cinq mutations délibérées chacune, toutes rouges :
      côté `test_blocs_maitres` §10, le retour de la division entière (qui fait porter DEUX légendes à
      la case (−7,0,0)), `case_sous_roche` bloquée à vrai puis à faux, son balayage réduit d'un cran, et
-     l'assombrissement retiré de `_quad` ; côté `test_marching_blocks` §14, la régression
+     la teinte souterraine retirée de `_quad` (l'ASSOMBRISSEMENT, à l'époque où la légende modulait) ;
+     côté `test_marching_blocks` §14, la régression
      `sommet.y + 2` → `+ 1` (celle qui a coûté quatre tours), **la fusion des deux fonctions**
      (`case_sous_roche := not sous_le_ciel`), les deux décalages du balayage de matière, et
      `sous_le_ciel` bloquée à vrai.
-   - ⚠ **RESTE À JUGER À L'IMAGE, AVEC JORDAN** : le headless ne rend rien, et aucun compteur ne dira
-     si la roche sombre se distingue d'une face à l'ombre (§6 — c'est déjà ce qui a tranché la force du
-     chanfrein).
+   - ⚠ **RESTE À JUGER À L'IMAGE, AVEC JORDAN — ET RIEN DE CE QUI SUIT N'A ENCORE ÉTÉ VU D'UN ŒIL
+     HUMAIN** : le headless ne rend rien, et aucun compteur ne dira si les six teintes se distinguent
+     réellement en place (§6 — c'est déjà ce qui a tranché la force du chanfrein). Trois choses
+     attendent ce jugement, toutes écrites et compilées, aucune éprouvée :
+     **les six teintes**, **la vue orbitale carrée** de la bande de droite avec sa légende écrite
+     dessous, et **le sens du glissé**, dont Jordan a signalé qu'il partait à l'envers et dont les deux
+     signes ont été inversés sans que je puisse le vérifier autrement qu'en le lisant.
+     ⚠ **MES MESURES DE PIXELS ONT ÉCHOUÉ DEUX FOIS SUR CE MÊME SUJET** : c'est l'œil de Jordan qui
+     tranche, pas une comparaison d'images que je fabrique et que je juge seul.
 
 6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.

@@ -114,84 +114,99 @@ const BLOCS := [
 		"contexte": EXTERIEUR,
 		"quoi": "le témoin unique : 68 classes en intérieur, 22 en extérieur, soit 90 tuiles",
 		"couches": [
-			[   # y = 0 — le socle, creusé par-dessous
+			# ⚠ **CETTE GRILLE EST LA SORTIE DU FINISSEUR, COLLÉE TELLE QUELLE (25 septembre 2026).**
+			# Elle remplace une grille de 267 cases qui livrait 89/90 — il lui manquait
+			# `mb_arete_creuse_b4h2` en extérieur. Mesuré avant de coller, parce que je redoutais que la
+			# 90ᵉ tuile se paie en arêtes non-manifold : **elle ne se paie pas du tout.**
+			#
+			#                               collée (267)   celle-ci (262)
+			#   couverture                     89/90           90/90
+			#   contacts par arête (occupation)   60              44
+			#   aminci : arêtes ambiguës          18              15
+			#
+			# ⚠ Les deux compteurs de mon alarme ne comptaient PAS la même chose — « 44 contacts par
+			# arête » porte sur l'OCCUPATION, les « 18 ambiguës » de la charte sur le MAILLAGE AMINCI.
+			# Les opposer aurait fait renoncer à une tuile pour un coût imaginaire. La sonde
+			# `sonde_cout_du_dernier_contexte.gd` les rend dans la même unité, et se valide au passage en
+			# retrouvant exactement les 18 ambiguës sur 8 364 quads que la charte enregistre.
+			[   # y = 0 — le socle, presque plein
 				"########",
 				"########",
-				"##....##",
-				"###...##",
+				"########",
 				"#####.##",
-				"###...##",
+				"####..##",
+				"########",
 				"########",
 				"########",
 			],
 			[   # y = 1 — la grotte
 				"######..",
-				"##...#..",
-				"#.#.##..",
-				"##...#..",
-				"###..#..",
 				"#.#..#..",
-				"#..#.#..",
+				"#..###..",
+				"#....#..",
+				"#....#..",
+				"#...##..",
+				"#....#..",
 				"######..",
 			],
 			[   # y = 2 — la grotte se poursuit
 				"######..",
-				"#...##..",
-				"#.##.#..",
-				"##...#..",
-				"#..#.#..",
 				"#....#..",
+				"##...#..",
+				"#....#..",
+				"#...##..",
+				"#...##..",
 				"#....#..",
 				"######..",
 			],
 			[   # y = 3 — le plafond, percé
 				"######..",
-				"##.#.#..",
-				"###.##..",
-				"#...##..",
+				"#.#.##..",
+				"##.###..",
+				"#.####..",
 				"#.##.#..",
-				"###..#..",
-				"######..",
+				"##..##..",
+				"#..###..",
 				"######..",
 			],
 			[   # y = 4 — le corps, et la falaise qui serpente à l'est
-				"#...##..",
+				"######..",
 				"###.#...",
-				"#.#..#..",
+				"#..###..",
 				"#.#####.",
-				"####.#..",
-				"#####...",
-				"#...##..",
-				"#..#.#..",
+				"##.#.#..",
+				"##.##...",
+				"###.##..",
+				"##..##..",
 			],
-			[   # y = 5 — le plateau recule ; surplomb en z = 5
-				"#.###...",
+			[   # y = 5 — le plateau recule
+				"#####...",
 				"##.#....",
+				"###.#...",
+				"##.###..",
 				"#..##...",
 				"######..",
 				"#####...",
-				"######..",
-				"#.###...",
-				"##.##...",
+				"###.#...",
 			],
 			[   # y = 6 — le bord échancré
-				"##.##...",
-				"####....",
 				"#####...",
-				"####....",
-				"###.#...",
 				"##.#....",
-				".####...",
+				"###.....",
 				"#.##....",
+				"#.#.#...",
+				"...#....",
+				".#.##...",
+				"####....",
 			],
 			[   # y = 7 — les éperons
 				"###.....",
-				"##......",
-				"###.....",
-				"##......",
-				"###.....",
+				"........",
 				"#.......",
-				".##.....",
+				"#.......",
+				"##......",
+				"##......",
+				".#......",
 				"#.......",
 			],
 		],
@@ -452,12 +467,17 @@ static func _quad(sommets: PackedVector3Array, normales: PackedVector3Array,
 	var ordre: Array = quad
 	if (b - a).cross(c - a).dot(normale) > 0.0:
 		ordre = [quad[3], quad[2], quad[1], quad[0]]
-	var couleur: Color = RP.COULEUR_DESSUS if normale.y > 0.5 \
-		else (RP.COULEUR_PLAFOND if normale.y < -0.5 else RP.COULEUR_PAROI)
-	if dedans:
-		# ⚠ Assombrie ET désaturée : l'assombrissement seul se confond avec une face à l'ombre, que la
-		# lumière directionnelle produit déjà. C'est la perte de saturation qui dit « sous la roche ».
-		couleur = Color(couleur.r, couleur.g, couleur.b).lerp(Color(0.24, 0.22, 0.21), 0.55)
+	# ⚠ **SIX TEINTES, PAS TROIS MODULÉES.** La modulation assombrissait la roche souterraine ; la lumière
+	# directionnelle assombrit déjà les faces à l'ombre du même ordre, et les deux se confondaient. Les
+	# six couleurs vivent dans `repli_procedural.gd`, qui est le vocabulaire des teintes de ce projet :
+	# les inventer ici en ferait une seconde description, et elles divergeraient au premier réglage.
+	var couleur: Color
+	if normale.y > 0.5:
+		couleur = RP.COULEUR_DESSUS_DEDANS if dedans else RP.COULEUR_DESSUS
+	elif normale.y < -0.5:
+		couleur = RP.COULEUR_PLAFOND_DEDANS if dedans else RP.COULEUR_PLAFOND
+	else:
+		couleur = RP.COULEUR_PAROI_DEDANS if dedans else RP.COULEUR_PAROI
 	for triangle in [[0, 1, 2], [0, 2, 3]]:
 		for k in triangle:
 			sommets.append(ordre[k])

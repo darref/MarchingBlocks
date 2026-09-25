@@ -19,6 +19,8 @@ extends Control
 
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+# ⚠ Pour la LÉGENDE sous la vue, qui lit les six teintes à leur source au lieu de les recopier.
+const RP := preload("res://addons/undermend/repli_procedural.gd")
 
 ## ⚠ **UN SEUL LOT, PARCE QU'IL N'Y A PLUS QU'UN MODE (Jordan, 25 septembre 2026).** Il y en avait deux,
 ## `marching_blocks_9.tres` et `marching_blocks_moitie.tres`, que la case à cocher départageait. Le « 9 »
@@ -37,6 +39,21 @@ var _action := ""
 ## aucune notion de sélection au script (mesuré, `DEV_TOOLS/sonde_api_editeur.gd`).
 var _etage := 0
 var _etiquette_etage: Label
+
+## ── LA VUE DU TÉMOIN ────────────────────────────────────────────────────────────────────────────────
+##
+## ⚠ **UNE VUE 3D A DÉJÀ ÉTÉ RETIRÉE D'ICI (Jordan, 24 septembre 2026)**, avec deux onglets, un
+## catalogue et un panneau de tranchage : *« chaque pièce se justifiait seule, ensemble elles noyaient
+## ce qu'on veut faire »*. Celle-ci revient pour une raison qui n'existait pas alors : **le témoin
+## unique n'a plus de légende**. Mesuré — 76 % de son volume est sous roche et rien ne le disait, ce qui
+## a coûté à Jordan une soirée de modélisation passée à extruder le haut en croyant tenir un massif.
+##
+## Elle montre **le solide aminci tel qu'il part chez l'artiste** (Jordan, 25 septembre 2026) — donc
+## avec sa légende — et non le résultat tranché : on regarde ce qu'il y a à sculpter, pas une pose.
+var _vue: SubViewport
+var _camera: Camera3D
+var _azimut := 0.7
+var _elevation := 0.6
 
 
 func _ready() -> void:
@@ -62,6 +79,8 @@ func _batir() -> void:
 	titre.add_theme_font_size_override("font_size", 18)
 	titre.add_theme_color_override("font_color", OR)
 	colonne.add_child(titre)
+
+	_batir_la_vue(colonne)
 
 	# ⚠ **UNE CASE À COCHER A VÉCU ICI (retirée par Jordan, 25 septembre 2026).** Elle offrait le solide
 	# brut à la place de l'aminci. Ce n'était pas un réglage mais une manière de se tromper : l'aminci est
@@ -157,6 +176,132 @@ func _batir() -> void:
 	_dialogue.add_filter("*.glb", "MasterBlockSet")
 	_dialogue.file_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
+
+
+## Bâtit la vue orbitale du témoin, carrée, en tête de la bande.
+##
+## ⚠ **ELLE NE S'ÉTEND PAS, ET C'EST DÉLIBÉRÉ.** `_rapport` porte déjà `SIZE_EXPAND_FILL` : deux
+## enfants extensibles se disputeraient la hauteur, et la vue écraserait le rapport ou l'inverse selon
+## la taille de la bande. Sa hauteur est donc PILOTÉE PAR SA LARGEUR — c'est ce qui la rend carrée quelle
+## que soit la largeur que Jordan donne à la bande, qui est redimensionnable à la souris.
+func _batir_la_vue(colonne: VBoxContainer) -> void:
+	var boite := SubViewportContainer.new()
+	boite.stretch = true
+	boite.tooltip_text = ("Le bloc témoin tel qu'il part chez toi — glisse pour le tourner.\n"
+		+ "VERT ce qui regarde le ciel · BRUN les parois · BLEU les plafonds.\n"
+		+ "Assombri et désaturé = SOUS LA ROCHE : c'est une grotte, pas un massif.")
+	boite.gui_input.connect(_tourner_la_vue)
+	# ⚠ LA GARDE CONTRE LA BOUCLE : écrire une taille minimale depuis un gestionnaire de
+	# redimensionnement redéclenche ce même gestionnaire. On ne l'écrit que si elle change vraiment.
+	boite.resized.connect(func():
+		if not is_equal_approx(boite.custom_minimum_size.y, boite.size.x):
+			boite.custom_minimum_size = Vector2(0, boite.size.x))
+	colonne.add_child(boite)
+
+	_vue = SubViewport.new()
+	_vue.own_world_3d = true
+	# ⚠ `WHEN_VISIBLE` et non `ALWAYS` : la vue ne se redessine que quand on la regarde. `ALWAYS` ferait
+	# tourner un rendu 3D en permanence dans l'éditeur, pendant qu'on peint.
+	_vue.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	boite.add_child(_vue)
+
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color("#101216")
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#8892a4")
+	env.ambient_light_energy = 0.85
+	var monde := WorldEnvironment.new()
+	monde.environment = env
+	_vue.add_child(monde)
+
+	var lumiere := DirectionalLight3D.new()
+	lumiere.rotation_degrees = Vector3(-48, -34, 0)
+	lumiere.light_energy = 1.1
+	_vue.add_child(lumiere)
+
+	# ⚠ **LE MAILLAGE EST BÂTI UNE SEULE FOIS.** Il porte 8 364 quads ; le reconstruire à chaque image
+	# ferait ramer l'éditeur pendant qu'on peint. Tourner ne change que la CAMÉRA.
+	var instance := MeshInstance3D.new()
+	instance.mesh = BlocsMaitres.maillage_moitie(0)
+	_vue.add_child(instance)
+
+	_camera = Camera3D.new()
+	# ⚠ ORTHOGONALE, comme les planches : un bloc ne doit pas paraître plus gros parce qu'on l'a tourné.
+	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_camera.size = BlocsMaitres.COTE * 1.6
+	_vue.add_child(_camera)
+	_caler_la_camera()
+
+	_batir_la_legende(colonne)
+
+
+## LA LÉGENDE ÉCRITE, sous la vue — une pastille de couleur et son nom.
+##
+## ⚠ **C'EST ELLE QUI LÈVE MON OBJECTION AUX SIX TEINTES.** Je craignais qu'un témoin à six couleurs
+## devienne bariolé donc illisible ; une couleur qui porte son nom écrit juste en dessous ne se devine
+## plus, elle se lit. Sans cette légende, six teintes seraient pires que trois.
+##
+## ⚠ **ET ELLE EST DÉRIVÉE DES CONSTANTES, jamais recopiée.** Écrire ici les codes hexadécimaux ferait
+## une seconde description des couleurs : le jour où l'une change dans `repli_procedural.gd`, la légende
+## mentirait sans qu'aucune erreur ne le dise — et une légende fausse est pire qu'une absence de légende.
+func _batir_la_legende(colonne: VBoxContainer) -> void:
+	var grille := GridContainer.new()
+	grille.columns = 2
+	grille.add_theme_constant_override("h_separation", 10)
+	colonne.add_child(grille)
+
+	for entree in [
+		[RP.COULEUR_DESSUS, "sol à l'air libre"],
+		[RP.COULEUR_DESSUS_DEDANS, "sol de GROTTE"],
+		[RP.COULEUR_PAROI, "falaise"],
+		[RP.COULEUR_PAROI_DEDANS, "paroi de GROTTE"],
+		[RP.COULEUR_PLAFOND, "dessous de surplomb"],
+		[RP.COULEUR_PLAFOND_DEDANS, "plafond de GROTTE"],
+	]:
+		var ligne := HBoxContainer.new()
+		ligne.add_theme_constant_override("separation", 6)
+		var pastille := ColorRect.new()
+		pastille.color = entree[0]
+		pastille.custom_minimum_size = Vector2(14, 14)
+		# ⚠ La pastille ne doit pas s'étirer avec la colonne, sinon elle mange le texte sur une bande
+		# large : c'est un repère de couleur, pas un aplat.
+		pastille.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		ligne.add_child(pastille)
+		var nom := Label.new()
+		nom.text = entree[1]
+		nom.add_theme_font_size_override("font_size", 11)
+		ligne.add_child(nom)
+		grille.add_child(ligne)
+
+
+## Fait tourner la vue au glissé. ⚠ **L'ÉLÉVATION EST BORNÉE À ±80°, ET CE N'EST PAS UN DÉTAIL** : sans
+## butée, la caméra franchit la verticale, `look_at` bascule d'un coup et l'image se retourne. Ça se lit
+## comme un bogue, alors que c'est la dégénérescence attendue du repère au pôle.
+func _tourner_la_vue(event: InputEvent) -> void:
+	if not (event is InputEventMouseMotion):
+		return
+	var bouge := event as InputEventMouseMotion
+	if (bouge.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+		return
+	# ⚠ **LES DEUX SIGNES ONT ÉTÉ INVERSÉS (Jordan, 25 septembre 2026) : le glissé partait à l'envers.**
+	# Je les avais choisis au jugé, faute de pouvoir juger un glissé en headless — c'est exactement le
+	# genre de réglage que la charte §6 réserve à l'éditeur, avec Jordan. Le bloc suit maintenant la
+	# souris au lieu de la fuir.
+	_azimut += bouge.relative.x * 0.01
+	_elevation = clampf(_elevation + bouge.relative.y * 0.01, -1.4, 1.4)
+	_caler_la_camera()
+
+
+## Place la caméra sur sa sphère, centrée sur le bloc.
+func _caler_la_camera() -> void:
+	if _camera == null:
+		return
+	var cible := Vector3.ONE * (BlocsMaitres.COTE * 0.5)
+	var direction := Vector3(
+		cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
+	_camera.position = cible + direction * 40.0
+	_camera.look_at_from_position(_camera.position, cible, Vector3.UP)
 
 
 func _demander_un_fichier(quoi: String) -> void:
