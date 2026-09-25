@@ -282,6 +282,32 @@ prendre pour complète. Et j'ai annoncé « doublon pur, zéro perte » sur deux
 identiques mais aux **référents différents** : les supprimer a cassé 22 ressources.
 **Avant d'énoncer un fait, vérifier que l'instrument mesure bien ce qu'on croit.**
 
+⚠ **ET VÉRIFIER QUE LE SUJET N'A PAS CHANGÉ ENTRE DEUX MESURES.** Le même chemin de fichier, lu à vingt
+minutes d'écart, a rendu deux résultats opposés — *UV oui, texture OUI* puis *UV NON, texture aucune*.
+J'en ai conclu que la lecture des `.glb` était **instable**, et j'ai suspendu trois conclusions justes.
+Les deux mesures étaient bonnes : le `.glb` sculpté avait été **écrasé par l'export brut** entre les
+deux. Ce n'était pas l'instrument, c'était la **tenue de registre**. Une empreinte du sujet relevée à
+chaque mesure l'aurait dit en une ligne ; trois tours ont été dépensés à chercher une instabilité qui
+n'existait pas.
+
+⚠ **UN TEST NE CALCULE JAMAIS SON ATTENDU AVEC LA FONCTION QU'IL ÉPROUVE.** Le contrôle du choix de
+contexte appelait `MB.sous_le_ciel()` pour bâtir son attendu. Muter cette fonction déplaçait donc
+l'attendu ET le mesuré ensemble : la mutation restait **muette**, et le test se comparait à lui-même.
+L'attendu doit venir d'ailleurs — recalculé à la main, ou dérivé d'une autre autorité. ⚠ Et le même
+piège a une seconde forme : un contrôle d'instrument qui n'a de valeur que s'il peut **s'inverser**.
+Compter les contextes avec `exterieur_possible(bits)`, qui ne dépend que des bits, ne pouvait
+structurellement jamais trouver une classe à double contexte — c'était une tautologie déguisée en
+mesure.
+
+⚠ **QUAND UNE HYPOTHÈSE SURVIT À PLUSIEURS MESURES SANS ÊTRE CONFIRMÉE, SOUPÇONNER L'INSTRUMENT AVANT
+LE SUJET.** Dix-sept classes manquaient au témoin. J'ai accusé la silhouette, puis le score du
+finisseur, puis la taille du bloc — quatre tours, une silhouette redessinée pour rien, un plancher de
+contrainte posé pour rien. Le défaut était dans `sous_le_ciel()`, **que j'avais écrit la veille** : il
+faisait coiffer chaque pièce par sa propre couche haute, donc 5 classes extérieures atteignables sur
+22, quelle que soit la forme du bloc. **Le témoin n'avait jamais eu tort.** Le premier réflexe doit être
+de mesurer si ce qu'on cherche est seulement ATTEIGNABLE — ici, l'énumération exhaustive tenait en
+vingt lignes et aurait tout tranché d'emblée.
+
 ⚠ **UN CONTRÔLE NÉGATIF TRANCHE CE QU'UNE IMPRESSION NE TRANCHE PAS.** Huit erreurs « already has a
 parent » ont été attribuées à nos modifications ; greffon désactivé, il y en avait **huit aussi**. Elles
 ne sont pas à nous.
