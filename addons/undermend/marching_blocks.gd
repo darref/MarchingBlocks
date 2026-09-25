@@ -657,6 +657,67 @@ static func classes_exterieures() -> Array:
 	return sortie
 
 
+## ── LE CONTEXTE D'UN LIEU, ET LE NOM QUI EN DÉCOULE ────────────────────────────────────────────────
+##
+## ⚠ **`exterieur_possible()` PARLE D'UNE CLASSE, PAS D'UN ENDROIT.** Il dit qu'un plafond ne peut
+## jamais être sous le ciel ; il ne dit pas si CE sommet-ci l'est. Il fallait donc le pendant côté
+## lieu — et il vit ici, dans le module du modèle, parce que le TRANCHEUR et le PEINTRE s'en servent
+## tous les deux. Deux copies de ce critère divergeraient, et ce projet a déjà payé cette faute trois
+## fois (charte §6).
+##
+## ⚠ **UNE VARIANTE N'EXISTE QUE SI LES DEUX CONDITIONS TIENNENT** : la classe doit POUVOIR être
+## dehors, et le lieu doit l'ÊTRE. Les 46 classes structurellement intérieures n'ont donc jamais de
+## variante — d'où 68 + 22 = 90, et non 136.
+
+## Ce qui distingue la tuile d'air libre de celle d'intérieur.
+##
+## ⚠ **C'EST LA VARIANTE QUI PORTE LE SUFFIXE, JAMAIS LE NOM NU** — et ce n'est pas une préférence
+## d'écriture. Six appelants cherchent encore leur pièce par le nom de classe, et `test_massif_peint`
+## compare sommet par sommet le nom posé au nom de la classe. Le nom nu reste donc l'item par défaut :
+## un lot sans variantes — le repli procédural, un lot d'avant cette version — continue de fonctionner
+## mot pour mot.
+const SUFFIXE_DEHORS := "_dehors"
+
+
+## Le nom de la tuile d'une classe dans un contexte donné.
+static func nom_en_contexte(nom: String, dehors: bool) -> String:
+	return (nom + SUFFIXE_DEHORS) if dehors else nom
+
+
+## Le nom de CLASSE d'une tuile, suffixe retiré. ⚠ C'est par là que les contrôles existants comparent
+## ce qui est POSÉ à ce que les règles DISENT, sans être desserrés pour autant.
+static func nom_nu(nom: String) -> String:
+	return nom.trim_suffix(SUFFIXE_DEHORS)
+
+
+## Ce sommet est-il sous le ciel ? `plafond` borne le balayage vers le haut.
+##
+## ⚠ **LA BORNE EST OBLIGATOIRE, ET CE N'EST PAS UN DÉTAIL.** Dans un BLOC, le volume s'arrête à `COTE`
+## et la question a une réponse finie. Dans un MONDE PEINT, rien ne borne le ciel : l'appelant doit donc
+## dire jusqu'où regarder, et le seul choix qui ne mente pas est **le plus haut sommet occupé** —
+## au-dessus, il n'y a par définition aucune roche.
+##
+## ⚠ **ON SONDE LES HUIT CELLULES DU SOMMET, PAS UNE COLONNE UNIQUE.** Une pièce est à cheval sur huit
+## demi-cases ; si l'une d'elles est coiffée, la pièce a de la roche au-dessus d'elle. Ne regarder que
+## la verticale du sommet laisserait passer un surplomb décalé d'une seule case.
+static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) -> bool:
+	for t in 8:
+		var base: Vector3i = sommet + COINS[t]
+		for y in range(base.y + 1, plafond + 1):
+			if pleines.has(Vector3i(base.x, y, base.z)):
+				return false
+	return true
+
+
+## Le plus haut `y` occupé. ⚠ DÉRIVÉ de l'occupation, jamais déclaré : un plafond écrit en dur rendrait
+## le contexte faux dès qu'on peint plus haut que prévu.
+static func plafond_de(pleines: Dictionary) -> int:
+	var haut := -2147483648
+	for c in pleines:
+		haut = maxi(haut, (c as Vector3i).y)
+	return haut
+
+
 ## LES CONTACTS PAR ARÊTE SEULE d'une occupation : deux cellules DIAGONALES dans un plan, les deux
 ## complémentaires vides. Quatre faces se rejoignent alors sur l'arête commune, qui est donc
 ## **NON-MANIFOLD**.

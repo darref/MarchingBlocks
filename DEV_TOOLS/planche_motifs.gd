@@ -49,6 +49,27 @@ const MOTIFS := [
 		Vector3i(0, 1, 0), Vector3i(1, 1, 0), Vector3i(0, 1, 1), Vector3i(1, 1, 1)]},
 ]
 
+## ⚠ **UN `const` NE PEUT PAS APPELER UNE FONCTION — et je l'ai écrit ainsi du premier coup.** Les
+## quatre motifs ci-dessus sont littéraux ; le plateau, lui, est DÉRIVÉ, donc il rejoint la liste à
+## l'exécution. Recopier trente-six coordonnées à la main aurait été trente-six occasions de se tromper
+## d'une case sans que rien ne le signale.
+##
+## ⚠ **ET C'EST UN CHAMP, PAS UN MOTIF.** Les quatre motifs jugent la FORME, et quatre cases y
+## suffisent. Mais les UV sont CUITES dans chaque tuile : une même tuile répète son fragment de texture
+## à chaque pose, et **ça ne se voit qu'à partir d'un champ**. Sur 2×2 on ne distingue pas un motif
+## d'une répétition.
+var _motifs: Array = []
+
+
+## Un plateau plein de `n`×`n` cases sur un seul étage. ⚠ DÉRIVÉ plutôt qu'écrit à la main : trente-six
+## coordonnées recopiées, c'est trente-six occasions de se tromper d'une case sans que rien ne le dise.
+static func _plateau(n: int) -> Array:
+	var cases: Array = []
+	for x in n:
+		for z in n:
+			cases.append(Vector3i(x, 0, z))
+	return cases
+
 var _fichier := ""
 var _sortie := "motifs.png"
 var _vues: Array = []
@@ -79,8 +100,11 @@ func _initialize() -> void:
 		lots.append({"quoi": "SCULPT", "lot": (bilan["lot"] as MeshLibrary)})
 		print("relu du disque : %s\n" % str(bilan["sculptes"]))
 
+	_motifs = MOTIFS.duplicate()
+	_motifs.append({"quoi": "plateau 6x6 (la répétition)", "cases": _plateau(6)})
+
 	for source in lots:
-		for motif in MOTIFS:
+		for motif in _motifs:
 			var bilan: Dictionary = {}
 			_vues.append(_faire_vue(source["lot"], motif["cases"], bilan))
 			print("   %-8s %-22s → %s" % [source["quoi"], motif["quoi"], str(bilan)])
@@ -91,15 +115,15 @@ func _image() -> void:
 	_images += 1
 	if _images < 6:   # ⚠ laisser les SubViewport rendre avant de capturer
 		return
-	var lignes: int = _vues.size() / MOTIFS.size()
+	var lignes: int = _vues.size() / _motifs.size()
 	var premiere: Image = _vues[0].get_texture().get_image()
-	var planche := Image.create(CASE.x * MOTIFS.size(), CASE.y * lignes, false,
+	var planche := Image.create(CASE.x * _motifs.size(), CASE.y * lignes, false,
 		premiere.get_format())
 	planche.fill(FOND)
 	for i in _vues.size():
 		var img: Image = _vues[i].get_texture().get_image()
 		planche.blit_rect(img, Rect2i(Vector2i.ZERO, CASE),
-			Vector2i((i % MOTIFS.size()) * CASE.x, (i / MOTIFS.size()) * CASE.y))
+			Vector2i((i % _motifs.size()) * CASE.x, (i / _motifs.size()) * CASE.y))
 	if lignes > 1:
 		for x in planche.get_width():
 			planche.set_pixel(x, CASE.y, OR)
@@ -110,7 +134,7 @@ func _image() -> void:
 		% [planche.get_width(), planche.get_height(), _sortie,
 			"écrite" if err == OK else "ERREUR %d" % err])
 	print("   colonnes : %s"
-		% ", ".join(PackedStringArray(MOTIFS.map(func(m): return m["quoi"]))))
+		% ", ".join(PackedStringArray(_motifs.map(func(m): return m["quoi"]))))
 	print("   HAUT = lot du TÉMOIN%s" % ("   ·   BAS = lot du SCULPT" if lignes > 1 else ""))
 	print("\n⚠ Si les DEUX lignes sont fausses, le défaut est dans la pose, pas dans le sculpt.")
 	quit(0 if err == OK else 1)

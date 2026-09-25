@@ -246,16 +246,34 @@ func reconstruire() -> Dictionary:
 		if id_faute < 0 and fautes.mesh_library.get_item_list().size() > 0:
 			id_faute = fautes.mesh_library.get_item_list()[0]
 
+	# ⚠ DÉRIVÉ UNE FOIS POUR TOUTE LA PASSE : le contexte d'un sommet demande de savoir jusqu'où chercher
+	# de la roche au-dessus, et recalculer ce plafond par sommet coûterait le monde entier à chaque pièce.
+	var plafond: int = MB.plafond_de(pleines)
+
 	var poses := 0
 	var manquantes := 0
 	var muets := 0
+	var dehors_poses := 0
 	for k in sommets:
 		var sommet: Vector3i = k
-		var r: Dictionary = MB.classer(MB.bits(pleines, sommet))
+		var bits: int = MB.bits(pleines, sommet)
+		var r: Dictionary = MB.classer(bits)
 		if not r["surface"]:
 			muets += 1
 			continue
-		var id: int = rendu.mesh_library.find_item_by_name(r["nom"]) if rendu.mesh_library != null else -1
+		# ⚠ **LA VARIANTE D'ABORD, LE NOM NU ENSUITE — ET CE REPLI N'EST PAS UNE COMMODITÉ.** Un lot sans
+		# variantes (le repli procédural, ou un lot d'avant cette version) doit continuer de fonctionner
+		# mot pour mot : ne chercher QUE la variante ferait apparaître des cubes rouges partout sur des
+		# lots parfaitement valides. Le nom nu reste donc l'item par défaut.
+		var dehors: bool = MB.exterieur_possible(bits) and MB.sous_le_ciel(pleines, sommet, plafond)
+		var id := -1
+		if rendu.mesh_library != null:
+			if dehors:
+				id = rendu.mesh_library.find_item_by_name(MB.nom_en_contexte(r["nom"], true))
+				if id >= 0:
+					dehors_poses += 1
+			if id < 0:
+				id = rendu.mesh_library.find_item_by_name(r["nom"])
 		if id < 0:
 			# ⚠ UNE PIÈCE QUE LES RÈGLES DEMANDENT ET QUE LE LOT N'A PAS : c'est une FAUTE DE LOT, jamais
 			# une faute de peinture. Avec le repli par défaut, elle ne peut pas se produire.
@@ -267,7 +285,10 @@ func reconstruire() -> Dictionary:
 		poses += 1
 
 	_empreinte = _empreinte_des_cases()
-	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets}
+	# ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
+	# variantes il vaut 0 alors que le monde est plein de ciel — et c'est exactement ce qu'il doit dire :
+	# « ce lot n'a rien de spécifique au dehors ». Compter les sommets ferait croire l'inverse.
+	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses}
 	return _dernier_bilan
 
 

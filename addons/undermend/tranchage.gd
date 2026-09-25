@@ -193,6 +193,10 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 
 	var grille := GridMap.new()   # ⚠ seulement pour lire les bases d'orientation
 	var vues := {}
+	# ⚠ LE PLAFOND EST DÉRIVÉ DE L'OCCUPATION, jamais pris à `cases.y` : une couche de bord vide ferait
+	# chercher de la roche là où le bloc s'arrête, et tous les sommets du haut passeraient pour coiffés.
+	# C'est la même faute que prendre le cube DÉCLARÉ pour l'étendue réelle, corrigée plus haut.
+	var plafond: int = MB.plafond_de(pleines)
 
 	# ⚠ **QUELS SOMMETS ON RÉCOLTE — DÉCIDÉ (Jordan, 24 septembre 2026) : LES INTÉRIEURS SEULEMENT.**
 	#
@@ -217,7 +221,17 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 				var v := Vector3i(vx, vy, vz)
 				var bits: int = MB.bits(pleines, v)
 				var r: Dictionary = MB.classer(bits)
-				if not r["surface"] or pieces.has(r["nom"]):
+				if not r["surface"]:
+					continue
+				# ⚠ **ON RÉCOLTE PAR (CLASSE, CONTEXTE), PLUS PAR CLASSE SEULE.** Le module annonçait
+				# 90 tuiles — les 68 classes plus les 22 qui peuvent AUSSI être à l'air libre — et n'en
+				# livrait que 68 : « sol de grotte » et « sol de massif » étaient la MÊME tuile, alors
+				# que c'est exactement la distinction pour laquelle le modèle ORIENTÉ a été choisi.
+				# ⚠ Une variante n'existe que si la classe PEUT être dehors ET que ce sommet-ci l'EST.
+				var dehors: bool = MB.exterieur_possible(bits) \
+					and MB.sous_le_ciel(pleines, v, plafond)
+				var cle: String = MB.nom_en_contexte(r["nom"], dehors)
+				if pieces.has(cle):
 					continue
 
 				var morceau: ArrayMesh = Decoupe.trancher(normalise, boite_du_sommet(v, cellule))
@@ -238,8 +252,8 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 				var reference: ArrayMesh = Decoupe.poser(recentre,
 					Transform3D(base.transposed(), Vector3.ZERO))
 
-				pieces[r["nom"]] = reference
-				vues[r["nom"]] = MB.classes()[r["classe"]]["bits"]
+				pieces[cle] = reference
+				vues[cle] = MB.classes()[r["classe"]]["bits"]
 
 	grille.free()
 	# ⚠ L'UN REFUSE, L'AUTRE SIGNALE. Les octants vérifient la COUPE ; la couture juge l'ART, et l'art

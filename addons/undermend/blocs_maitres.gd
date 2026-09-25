@@ -848,20 +848,42 @@ static func librairie() -> Dictionary:
 static func _assembler(pieces: Dictionary) -> Dictionary:
 	var lot := MeshLibrary.new()
 	var manquantes: Array = []
+	var variantes := 0
 	var id := 0
 	for c in MB.classes():
 		if not MB.porte_une_surface(c["bits"]):
 			continue
 		var mesh: ArrayMesh = pieces.get(c["nom"], null)
 		if mesh == null or mesh.get_surface_count() == 0:
-			manquantes.append(c["nom"])
-			continue   # ⚠ PAS de repli : l'absence doit se voir
+			manquantes.append(c["nom"])   # ⚠ PAS de repli : l'absence doit se voir
+		else:
+			lot.create_item(id)
+			lot.set_item_name(id, c["nom"])
+			lot.set_item_mesh(id, mesh)
+			lot.set_item_shapes(id, RP.collision(c["bits"]))
+			id += 1
+
+		# ── LA VARIANTE D'AIR LIBRE ─────────────────────────────────────────────────────────────────
+		#
+		# ⚠ **UNE VARIANTE ABSENTE N'EST PAS UNE CLASSE MANQUANTE.** Le peintre cherche la variante puis
+		# retombe sur le nom nu : un bloc qui ne montre jamais telle classe sous le ciel produit donc un
+		# monde CORRECT, simplement sans distinction à cet endroit. La compter dans `manquantes` ferait
+		# poser des cubes rouges pour une tuile que personne ne réclame — et une absence doit se voir,
+		# mais seulement quand c'en est une.
+		if not MB.exterieur_possible(c["bits"]):
+			continue
+		var dehors: ArrayMesh = pieces.get(MB.nom_en_contexte(c["nom"], true), null)
+		if dehors == null or dehors.get_surface_count() == 0:
+			continue
 		lot.create_item(id)
-		lot.set_item_name(id, c["nom"])
-		lot.set_item_mesh(id, mesh)
+		lot.set_item_name(id, MB.nom_en_contexte(c["nom"], true))
+		lot.set_item_mesh(id, dehors)
+		# ⚠ MÊME COLLISION QUE LA CLASSE : la variante ne change que l'ASPECT, jamais la forme de
+		# collision — sinon deux mondes identiques ne se traverseraient pas pareil selon le contexte.
 		lot.set_item_shapes(id, RP.collision(c["bits"]))
 		id += 1
-	return {"lot": lot, "manquantes": manquantes}
+		variantes += 1
+	return {"lot": lot, "manquantes": manquantes, "variantes": variantes}
 
 
 ## ── L'ALLER-RETOUR : UN SEUL `.glb` ─────────────────────────────────────────────────────────────────

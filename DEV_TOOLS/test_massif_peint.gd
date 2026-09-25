@@ -43,6 +43,7 @@ func _initialize() -> void:
 	_ce_qui_est_pose_est_ce_que_les_regles_disent()
 	_effacer_efface()
 	_l_empreinte_suit_les_cases()
+	_le_contexte_choisit_la_variante()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -60,6 +61,105 @@ func _dire(condition: bool, quoi: String) -> void:
 			_premier = quoi
 		if _echecs <= 12:
 			print("  ÉCHEC — %s" % quoi)
+
+
+# ── 9. LE CONTEXTE CHOISIT LA VARIANTE ──────────────────────────────────────────────────────────────
+
+## ⚠ **SANS CE CONTRÔLE, LA RÉCOLTE À DEUX CONTEXTES EST NON GARDÉE.** Les huit contrôles ci-dessus
+## passent tous par le repli procédural, qui ne porte AUCUNE variante : ils n'éprouvent donc que le
+## chemin de repli, et resteraient verts même si le choix du contexte était entièrement cassé. Un vert
+## qui ne garde rien est pire qu'une absence de test, parce qu'il rassure (charte §6).
+##
+## ⚠ **ET IL ÉPROUVE LA MÊME CLASSE DANS LES DEUX CONTEXTES.** Montrer qu'une variante est posée quelque
+## part ne prouverait rien : il faut que `mb_plaque_b4h0` sorte en VARIANTE sous le ciel et en NOM NU
+## sous un couvercle — même classe, même orientation, deux tuiles différentes. C'est exactement la
+## distinction pour laquelle le modèle orienté a été choisi.
+func _le_contexte_choisit_la_variante() -> void:
+	print("\n9. le contexte choisit la variante d'air libre")
+
+	# Un lot qui PORTE une variante : le repli, plus « mb_plaque_b4h0_dehors ».
+	# ⚠ On réemploie le mesh du repli : ce contrôle porte sur le CHOIX du nom, pas sur la géométrie.
+	var lot: MeshLibrary = RP.librairie()
+	var id_sol: int = lot.find_item_by_name("mb_plaque_b4h0")
+	_dire(id_sol >= 0, "le repli devrait contenir « mb_plaque_b4h0 »")
+	if id_sol < 0:
+		return
+	var neuf: int = 1000
+	lot.create_item(neuf)
+	lot.set_item_name(neuf, MB.nom_en_contexte("mb_plaque_b4h0", true))
+	lot.set_item_mesh(neuf, lot.get_item_mesh(id_sol))
+
+	# Un plateau 4×1×4 en y = 0, et un COUVERCLE au-dessus de sa moitié z ≤ 1, trois étages plus haut.
+	# ⚠ Le couvercle est LOIN (y = 3) exprès : il ne doit pas changer les huit cellules du sommet, donc
+	# pas la CLASSE — seulement le contexte. Un couvercle collé changerait les bits et prouverait autre
+	# chose que ce qu'on cherche.
+	var m := _massif()
+	m.lot = lot
+	var cellules: Array = _pave(0, 5, 0, 0, 0, 5) + _pave(0, 5, 3, 3, 0, 2)
+	_peindre(m, cellules)
+	var bilan: Dictionary = m.reconstruire()
+	_dire(bilan["fautes"] == 0, "ce monde ne doit produire aucune faute, il en produit %d"
+		% bilan["fautes"])
+	_dire(int(bilan.get("dehors", -1)) > 0,
+		"des variantes devraient être posées, le bilan en compte %s" % str(bilan.get("dehors", "absent")))
+
+	var pleines := {}
+	for c in cellules:
+		pleines[c] = true
+	var rendu: GridMap = m.get_node("Rendu")
+
+	# ⚠ **L'ATTENDU EST CALCULÉ À LA MAIN, SANS APPELER `MB.sous_le_ciel` — ET C'EST TOUTE LA
+	# CORRECTION.** La première version de ce contrôle employait la fonction qu'elle prétendait
+	# éprouver : muter cette fonction déplaçait l'attendu ET le mesuré ensemble, et la mutation restait
+	# MUETTE. Un test dont l'attendu vient de la fonction testée se compare à lui-même et ne garde rien.
+	var haut := -999
+	for c in cellules:
+		haut = maxi(haut, (c as Vector3i).y)
+
+	var sous_ciel_nu := 0
+	var sous_roche_suffixe := 0
+	var vus_dehors := 0
+	var vus_dedans := 0
+	for c in rendu.get_used_cells():
+		var sommet: Vector3i = c
+		var nom: String = rendu.mesh_library.get_item_name(rendu.get_cell_item(sommet))
+		if MB.nom_nu(nom) != "mb_plaque_b4h0":
+			continue
+		# La règle, réécrite ici : le sommet est sous le ciel si AUCUNE de ses huit cellules n'a de
+		# roche au-dessus d'elle, jusqu'au plus haut y peint.
+		var attendu_dehors := true
+		for t in 8:
+			var base: Vector3i = sommet + MB.COINS[t]
+			for y in range(base.y + 1, haut + 1):
+				if pleines.has(Vector3i(base.x, y, base.z)):
+					attendu_dehors = false
+					break
+			if not attendu_dehors:
+				break
+		var suffixee: bool = nom.ends_with(MB.SUFFIXE_DEHORS)
+		if attendu_dehors:
+			vus_dehors += 1
+			if not suffixee:
+				sous_ciel_nu += 1
+		else:
+			vus_dedans += 1
+			if suffixee:
+				sous_roche_suffixe += 1
+
+	# ⚠ LES DEUX SENS, ET C'EST LE CŒUR DU CONTRÔLE. « Jamais de variante » passerait le second ;
+	# « toujours la variante » passerait le premier. Il faut les deux pour que le choix soit gardé.
+	_dire(sous_ciel_nu == 0,
+		"%d sommet(s) à l'air libre portent le nom NU alors que la variante existe" % sous_ciel_nu)
+	_dire(sous_roche_suffixe == 0,
+		"%d sommet(s) sous roche portent la VARIANTE" % sous_roche_suffixe)
+	# ⚠ ET LES CONTRÔLES QUI INVALIDENT L'INSTRUMENT, UN PAR CÔTÉ. Un total suffisant laisserait passer
+	# « zéro sous roche » : les deux lignes ci-dessus porteraient alors sur zéro relevé d'un côté et ne
+	# garderaient que la moitié du choix — ce qui est exactement ce qui s'est produit la première fois.
+	_dire(vus_dehors > 4, "trop peu de sols à l'AIR LIBRE (%d) : ce côté n'est pas éprouvé" % vus_dehors)
+	_dire(vus_dedans > 4, "trop peu de sols SOUS ROCHE (%d) : ce côté n'est pas éprouvé" % vus_dedans)
+	m.free()
+	print("   → %d sol(s) à l'air libre et %d sous roche, chacun avec le bon nom"
+		% [vus_dehors, vus_dedans])
 
 
 ## Un massif prêt à peindre, hors éditeur.
@@ -155,7 +255,11 @@ func _une_case_seule_pose_huit_pieces() -> void:
 	var rendu: GridMap = m.get_node("Rendu")
 	var noms := {}
 	for c in rendu.get_used_cells():
-		noms[rendu.mesh_library.get_item_name(rendu.get_cell_item(c))] = true
+					# ⚠ **SUFFIXE RETIRÉ, ET CE N'EST PAS UN DESSERRAGE.** Depuis la récolte à deux contextes, une
+			# tuile posée sous le ciel peut s'appeler « mb_coin_b1h0_dehors ». Ce contrôle porte sur la
+			# CLASSE — le coin du dessus contre celui du dessous — pas sur le contexte, qui a son propre
+			# contrôle plus bas. Comparer le nom brut le ferait rougir sur un comportement CORRECT.
+			noms[MB.nom_nu(rendu.mesh_library.get_item_name(rendu.get_cell_item(c)))] = true
 	_dire(noms.size() == 2, "une case seule devrait employer 2 classes (le coin haut et le coin bas), "
 		+ "on en trouve %d : %s" % [noms.size(), str(noms.keys())])
 	_dire(noms.has("mb_coin_b1h0") and noms.has("mb_coin_b0h1"),
@@ -261,7 +365,12 @@ func _ce_qui_est_pose_est_ce_que_les_regles_disent() -> void:
 		var attendu: Dictionary = MB.classer(MB.bits(pleines, sommet))
 		var nom: String = rendu.mesh_library.get_item_name(rendu.get_cell_item(sommet))
 		var orientation: int = rendu.get_cell_item_orientation(sommet)
-		if nom != attendu["nom"] or orientation != attendu["orientation"]:
+		# ⚠ **ON COMPARE LA CLASSE, SUFFIXE RETIRÉ — et le contexte est vérifié à part, jamais ignoré.**
+		# Une tuile d'air libre s'appelle « <classe>_dehors » ; exiger l'égalité du nom BRUT ferait
+		# rougir ce contrôle sur un comportement correct. Mais retirer le suffixe sans rien mettre à la
+		# place reviendrait à ne plus rien garder du contexte : d'où l'assertion qui suit, et le contrôle
+		# dédié `_le_contexte_choisit_la_variante`.
+		if MB.nom_nu(nom) != attendu["nom"] or orientation != attendu["orientation"]:
 			faux += 1
 			if faux <= 3:
 				_dire(false, "sommet %s : posé « %s »/%d, attendu « %s »/%d"
@@ -269,6 +378,16 @@ func _ce_qui_est_pose_est_ce_que_les_regles_disent() -> void:
 		verifies += 1
 	_dire(faux == 0, "%d sommet(s) posés autrement que ce que les règles disent" % faux)
 	_dire(verifies > 50, "trop peu de sommets vérifiés (%d)" % verifies)
+	# ⚠ **ET UNE VARIANTE NE PEUT PAS APPARAÎTRE N'IMPORTE OÙ.** Ce lot est le repli procédural, qui n'en
+	# porte aucune : il ne doit donc y en avoir zéro. Sans cette ligne, retirer le suffixe ci-dessus
+	# aurait rendu le contrôle aveugle à une variante posée à tort.
+	var suffixees := 0
+	for c in rendu.get_used_cells():
+		if (rendu.mesh_library.get_item_name(rendu.get_cell_item(c)) as String) \
+				.ends_with(MB.SUFFIXE_DEHORS):
+			suffixees += 1
+	_dire(suffixees == 0,
+		"le repli procédural n'a aucune variante : %d tuile(s) suffixée(s) posées" % suffixees)
 	m.free()
 	print("   → %d sommets vérifiés un par un, pièce ET orientation" % verifies)
 
