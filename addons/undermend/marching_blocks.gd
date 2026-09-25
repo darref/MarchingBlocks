@@ -697,13 +697,28 @@ static func nom_nu(nom: String) -> String:
 ## dire jusqu'où regarder, et le seul choix qui ne mente pas est **le plus haut sommet occupé** —
 ## au-dessus, il n'y a par définition aucune roche.
 ##
-## ⚠ **ON SONDE LES HUIT CELLULES DU SOMMET, PAS UNE COLONNE UNIQUE.** Une pièce est à cheval sur huit
-## demi-cases ; si l'une d'elles est coiffée, la pièce a de la roche au-dessus d'elle. Ne regarder que
-## la verticale du sommet laisserait passer un surplomb décalé d'une seule case.
+## ⚠ **ON SONDE LES HUIT COLONNES, MAIS TOUTES À PARTIR DU MÊME ÉTAGE — et c'est une correction.** La
+## première version partait de `case.y + 1` pour chacune des huit cases. Or les cases du HAUT sont
+## exactement « au-dessus » de celles du BAS : une classe dont la couche haute porte de la matière se
+## déclarait donc **coiffée par sa propre configuration**. Elle s'auto-excluait.
+##
+## ⚠ **MESURÉ, ET C'EST CE QUI A COÛTÉ QUATRE TOURS DE RECHERCHE DANS LA MAUVAISE DIRECTION** : dans le
+## voisinage le plus favorable qui soit — rien du tout au-dessus des huit cases — seules **5 des
+## 22 classes extérieures** passaient. Les 17 autres, tous les `b2h2`, `b3h1`, `b2h1`, étaient hors
+## d'atteinte quelle que soit la silhouette. J'ai cherché le défaut dans le dessin du témoin, puis dans
+## le score du finisseur ; il était ici.
+##
+## ⚠ **LA RÈGLE JUSTE EST CELLE QUE `exterieur_possible()` APPLIQUE DÉJÀ** : *« les cases vides du HAUT
+## ne contraignent rien : ce qui les couvre est HORS du voisinage »*. Le balayage commence donc à
+## `sommet.y + 2` — au-dessus des deux étages de la pièce — pour les huit colonnes. Les deux fonctions
+## parlent enfin du même monde : l'une contraint par les bits, l'autre par ce qui surplombe.
+##
+## Les huit colonnes restent sondées, et non la seule verticale du sommet : un surplomb décalé d'une
+## case coiffe bien la pièce, et ne regarder qu'au centre le laisserait passer.
 static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) -> bool:
 	for t in 8:
 		var base: Vector3i = sommet + COINS[t]
-		for y in range(base.y + 1, plafond + 1):
+		for y in range(sommet.y + 2, plafond + 1):
 			if pleines.has(Vector3i(base.x, y, base.z)):
 				return false
 	return true

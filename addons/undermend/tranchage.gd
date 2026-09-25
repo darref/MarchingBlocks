@@ -302,9 +302,19 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 ## surface » ne tient pas. Un octant plein dont les trois voisins sont pleins est INTÉRIEUR — il n'a
 ## aucune surface, personne ne le voit. Sur `mb_coin_creux` (sept pleins, un creux), l'octant opposé au
 ## creux en est exactement un. La condition porte donc sur les octants qui BORDENT le vide.
+## ⚠ **LE NOM EST LU SUFFIXE RETIRÉ PAR DÉFENSE, PAS POUR RÉPARER UN DÉFAUT — ET J'AI D'ABORD ÉCRIT
+## L'INVERSE ICI.** J'avais affirmé que ce contrôle était devenu MUET sur les tuiles d'extérieur depuis
+## la récolte à deux contextes, parce que `bits_par_nom.get(nom, 0)` rendrait 0 sur une clé suffixée.
+## **Mesuré sur les quatre combinaisons clé × table : c'est faux.** Le trancheur écrit `vues[cle]` puis
+## passe `vues` — la table est donc indexée par la MÊME clé que les pièces, et la lecture trouvait
+## toujours les bons bits. Le contrôle n'a jamais cessé de voir.
+##
+## Les deux seuls montages aveugles demandent une clé et une table DÉSACCORDÉES, ce qu'aucun appelant
+## ne produit. Le repli sur `nom_nu` reste comme garde pour un appelant futur qui fournirait une table
+## par nom de classe ; il ne change rien aujourd'hui.
 static func verifier_octants(pieces: Dictionary, bits_par_nom: Dictionary, erreurs: Array) -> void:
 	for nom in pieces:
-		var bits: int = bits_par_nom.get(nom, 0)
+		var bits: int = bits_par_nom.get(MB.nom_nu(nom), bits_par_nom.get(nom, 0))
 
 		# Les octants qui doivent porter de la surface : pleins, et bordant au moins un vide.
 		var attendus := {}
@@ -462,7 +472,11 @@ static func _batir_les_germes() -> void:
 static func verifier_couture(pieces: Dictionary, bits_par_nom: Dictionary, erreurs: Array) -> void:
 	var par_germe := {}
 	for nom in pieces:
-		var bits: int = bits_par_nom.get(nom, 0)
+		# ⚠ SUFFIXE RETIRÉ PAR DÉFENSE, comme pour les octants — et pour la même raison corrigée : j'avais
+		# cru ce contrôle aveugle sur les tuiles d'extérieur, la mesure dit que non. La table que le
+		# trancheur passe est indexée par la même clé que les pièces. Ce repli ne sert qu'à un appelant
+		# futur qui fournirait une table par nom de classe.
+		var bits: int = bits_par_nom.get(MB.nom_nu(nom), bits_par_nom.get(nom, 0))
 		for face in MB.FACES:
 			# La configuration de la face : sa FORME sert à savoir s'il y a quelque chose à coudre et à
 			# nommer la faute ; c'est le GERME, lui, qui décide de ce qu'on compare à quoi.
@@ -530,7 +544,13 @@ static func librairie(pieces: Dictionary) -> MeshLibrary:
 	for c in MB.classes():
 		if not MB.porte_une_surface(c["bits"]):
 			continue
+		# ⚠ **ON CHERCHE AUSSI LA VARIANTE, ET SON OUBLI SUBSTITUAIT EN SILENCE.** Une classe récoltée
+		# uniquement à l'air libre n'existe que sous « <classe>_dehors » : cette fonction ne la trouvait
+		# pas et posait le REPLI PROCÉDURAL à sa place. L'art de l'artiste était remplacé par de la
+		# géométrie calculée, sans une seule erreur — exactement la panne muette que ce projet traque.
 		var mesh: ArrayMesh = pieces.get(c["nom"], null)
+		if mesh == null or mesh.get_surface_count() == 0:
+			mesh = pieces.get(MB.nom_en_contexte(c["nom"], true), null)
 		if mesh == null or mesh.get_surface_count() == 0:
 			mesh = Repli.maillage(c["bits"])
 		lot.create_item(id)
@@ -546,8 +566,15 @@ static func librairie(pieces: Dictionary) -> MeshLibrary:
 ## INFORMATION : elle dit au sculpteur quelles cellules creuser pour compléter son lot, et elle dit au
 ## greffon lesquelles garderont leur repli procédural.
 static func manquantes(pieces: Dictionary) -> Array:
+	# ⚠ **UNE CLASSE RÉCOLTÉE EN VARIANTE N'EST PAS MANQUANTE.** Cette fonction comparait des noms NUS à
+	# des clés qui peuvent porter « _dehors » : elle déclarait absentes 63 classes parfaitement livrées.
+	# Elle est employée par le greffon ET par les tests, donc le défaut rendait aussi des assertions
+	# vertes pour une mauvaise raison — « il reste des manquantes » était vrai quoi qu'il arrive.
+	var recoltees := {}
+	for cle in pieces:
+		recoltees[MB.nom_nu(cle)] = true
 	var absentes: Array = []
 	for nom in MB.pieces_a_sculpter():
-		if not pieces.has(nom):
+		if not recoltees.has(nom):
 			absentes.append(nom)
 	return absentes

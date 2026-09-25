@@ -343,9 +343,13 @@ func _contextes(pleines: Dictionary) -> Dictionary:
 ##
 ## ⚠ **MESURÉ SUR UNE ÉBAUCHE QUI PARTAIT AVEC 49 SOMMETS DE CIEL — le plafond structurel d'un bloc
 ## 8³ — : le finisseur l'a ramenée à 21**, et il a rendu exactement les mêmes 73/90 et les mêmes 17
-## classes extérieures manquantes que la silhouette d'origine. **Redessiner les couches ne sert donc à
-## rien tant que ce score ne distingue pas les deux contextes.** Il faudra pondérer la rareté, ou poser
-## un PLANCHER de sommets sous le ciel imposé à chaque coup — pas vérifié à la fin, comme la connexité.
+## classes extérieures manquantes que la silhouette d'origine. **Redessiner les couches ne servait donc
+## à rien tant que la recherche pouvait dépenser le ciel.**
+##
+## ⚠ **LE REMÈDE EST POSÉ DANS `_finir` ET `_elaguer`, PAS ICI** : un PLANCHER de sommets sous le ciel,
+## dérivé de la silhouette écrite à la main et imposé à chaque coup. Ce score reste donc aveugle au
+## contexte — c'est assumé : le plancher l'empêche de nuire, et un score pondéré aurait demandé de
+## choisir un poids arbitraire là où le plancher ne demande qu'à respecter le dessin de l'artiste.
 func _score(pleines: Dictionary) -> int:
 	var c: Dictionary = _contextes(pleines)
 	return (c["int"] as Dictionary).size() + (c["ext"] as Dictionary).size()
@@ -362,6 +366,13 @@ func _finir(depart: Dictionary) -> Dictionary:
 	rng.seed = 90210
 	var meilleur: Dictionary = depart.duplicate()
 	var meilleur_score: int = _score(depart)
+	# ⚠ **LE PLANCHER DE CIEL — DÉRIVÉ DE LA SILHOUETTE, JAMAIS DÉCRÉTÉ.** Mesuré : le grimpeur
+	# REBOUCHE le ciel, parce que son score compte une classe d'intérieur et une classe d'extérieur à
+	# égalité alors que la marge est de ×4,53 dedans contre ×0,95 dehors. Un essai parti avec 49
+	# sommets de ciel — le plafond structurel d'un bloc 8³ — a été ramené à 21, et il a rendu
+	# exactement les mêmes 17 classes extérieures manquantes.
+	# **La main décide de la quantité de ciel, la recherche n'a pas le droit de la dépenser.**
+	var ciel_plancher: int = int(_contextes(depart)["n_ext"])
 	print("\n   le finisseur ne touche qu'aux %d cases LIBRES sur %d — la silhouette est verrouillée"
 		% [_libres.size(), COTE * COTE * COTE])
 
@@ -394,7 +405,16 @@ func _finir(depart: Dictionary) -> Dictionary:
 			# prétendre le supprimer.
 			var ok: bool = not pleines.is_empty() \
 				and (not _imposer_connexite or _morceaux(pleines) == 1)
-			var s2: int = _score(pleines) if ok else -1
+			# ⚠ **UN SEUL APPEL À `_contextes()` PAR PAS.** `_score()` le rappelait, et le plancher
+			# l'aurait rappelé une seconde fois : trois parcours du volume là où un suffit.
+			var c2: Dictionary = _contextes(pleines) if ok else {}
+			# ⚠ **LE PLANCHER EST IMPOSÉ ICI, À CHAQUE COUP — PAS VÉRIFIÉ À LA FIN.** C'est la leçon déjà
+			# écrite pour la connexité : une contrainte constatée après coup n'en est pas une. Reboucher
+			# le ciel devient un coup REFUSÉ, au même titre que fragmenter la matière.
+			if ok and int(c2["n_ext"]) < ciel_plancher:
+				ok = false
+			var s2: int = ((c2["int"] as Dictionary).size() + (c2["ext"] as Dictionary).size()) \
+				if ok else -1
 			# ⚠ **LE GRIMPEUR NE JUGE QUE LA COUVERTURE — appris en cassant les deux critères à la fois.**
 			# J'avais mis la compacité en second critère ICI : la couverture est tombée à 88/90 et
 			# l'exposition a MONTÉ, de 218 à 342. La cause est structurelle et pas un réglage : un gain de
@@ -422,7 +442,9 @@ func _finir(depart: Dictionary) -> Dictionary:
 			break
 	if meilleur_score < cible:
 		return meilleur
-	return _elaguer(meilleur, depart, cible)
+	# ⚠ LE PLANCHER EST PASSÉ, PAS RECALCULÉ : le recalculer dans `_elaguer` en ferait une SECONDE
+	# DESCRIPTION du même nombre, qui dériverait le jour où le point de départ changerait.
+	return _elaguer(meilleur, depart, cible, ciel_plancher)
 
 
 ## ⚠ **L'ÉLAGAGE — SANS LUI LE FINISSEUR REND DU BRUIT, ET C'EST MESURÉ.** Sa première version atteignait
@@ -436,7 +458,8 @@ func _finir(depart: Dictionary) -> Dictionary:
 ##
 ## On cherche donc le plus PETIT ensemble de retouches : on annule chaque changement l'un après l'autre,
 ## et l'on garde l'annulation dès que le score ne baisse pas. Ce qui survit est chirurgical.
-func _elaguer(pleines: Dictionary, depart: Dictionary, cible: int) -> Dictionary:
+func _elaguer(pleines: Dictionary, depart: Dictionary, cible: int,
+		ciel_plancher: int) -> Dictionary:
 	var sortie: Dictionary = pleines.duplicate()
 	var avant := 0
 	for p in _libres:
@@ -477,8 +500,12 @@ func _elaguer(pleines: Dictionary, depart: Dictionary, cible: int) -> Dictionary
 				sortie[q] = true
 			else:
 				sortie.erase(q)
+			# ⚠ **LE PLANCHER VAUT ICI AUSSI, et son absence serait le même défaut par une autre porte.**
+			# L'élagage annule des retouches ; sans contrainte, il peut parfaitement annuler celles qui
+			# tenaient le ciel ouvert et reboucher ce que le grimpeur avait préservé.
 			var ok: bool = not sortie.is_empty() \
-				and (not _imposer_connexite or _morceaux(sortie) == 1)
+				and (not _imposer_connexite or _morceaux(sortie) == 1) \
+				and int(_contextes(sortie)["n_ext"]) >= ciel_plancher
 			if not ok or _score(sortie) < cible:
 				if etait2:
 					sortie[q] = true

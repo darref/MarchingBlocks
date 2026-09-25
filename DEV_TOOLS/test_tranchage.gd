@@ -181,9 +181,12 @@ func _un_bloc_plein_ne_donne_que_du_convexe() -> void:
 	var par_nom := {}
 	for c in MB.classes():
 		par_nom[c["nom"]] = c["pleines"]
+	# ⚠ SUFFIXE RETIRÉ : depuis la récolte à deux contextes une clé peut valoir « <classe>_dehors », et
+	# `par_nom.get(nom, 0)` rendait alors 0 — donc AUCUNE concave n'était jamais comptée, et ce contrôle
+	# passait au vert sans rien regarder.
 	var concaves_trouvees: Array = []
 	for nom in pieces:
-		if par_nom.get(nom, 0) >= 5:
+		if par_nom.get(MB.nom_nu(nom), 0) >= 5:
 			concaves_trouvees.append(nom)
 	_dire(concaves_trouvees.is_empty(),
 		"un bloc plein ne peut pas livrer de classe concave, il en livre %s" % str(concaves_trouvees))
@@ -206,11 +209,22 @@ func _creuser_un_angle_fabrique_le_concave() -> void:
 	var par_nom := {}
 	for c in MB.classes():
 		par_nom[c["nom"]] = c["pleines"]
+	# ⚠ SUFFIXE RETIRÉ, et c'est ce qui faisait ROUGIR ce contrôle : la concave sortait bien, mais sous
+	# « mb_coin_creux_b4h3_dehors », et le compteur cherchait un nom nu. Le tranchage était juste ;
+	# l'interface avait changé sous le test.
 	var concaves := 0
+	var en_variante := 0
 	for nom in pieces:
-		if par_nom.get(nom, 0) >= 5:
+		if par_nom.get(MB.nom_nu(nom), 0) >= 5:
 			concaves += 1
+			if (nom as String).ends_with(MB.SUFFIXE_DEHORS):
+				en_variante += 1
 	_dire(concaves > 0, "creuser un angle devrait faire apparaître au moins une classe concave")
+	# ⚠ **ET L'ASSERTION QUI MANQUAIT : la concave doit être comptée QUEL QUE SOIT SON CONTEXTE.**
+	# Sans elle, retirer le suffixe ne ferait que repeindre ce contrôle en vert : il redeviendrait
+	# aveugle le jour où la classe ne sortirait plus qu'en variante. Ici elle en sort — on l'exige.
+	_dire(en_variante > 0,
+		"la concave de ce bloc sort à l'air libre : elle doit être comptée sous sa variante aussi")
 	# ⚠ ET LE CONTRÔLE INVERSE, sans lequel « tout apparaît toujours » passerait : un seul angle creusé
 	# ne peut pas livrer TOUTES les concaves.
 	_dire(not Tranchage.manquantes(pieces).is_empty(),
