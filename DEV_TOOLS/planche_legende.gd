@@ -6,6 +6,9 @@ extends SceneTree
 ##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
 ##       --script res://DEV_TOOLS/planche_legende.gd -- --sortie=D:/UnderMend/ART/legende.png
 ##
+## Avec `--brut`, le témoin est rendu AVEC SES PROPRES COULEURS — celles qui partent chez l'artiste —
+## au lieu d'être repeint en deux teintes franches. C'est la seule façon de juger la légende livrée.
+##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
 ##
 ## En fondant les neuf blocs en un seul, on a gagné les raccords visibles (mesuré : 22/22 germes) et
@@ -55,6 +58,14 @@ const ANGLES := [
 ]
 
 var _sortie := "legende.png"
+## ⚠ **`--brut` REND LE TÉMOIN TEL QU'IL PART, SANS RECOLORIAGE.** Cette planche a été écrite pour
+## CHERCHER une légende : elle repeint le bloc en deux teintes franches pour montrer ce qu'une légende
+## POURRAIT désigner. Depuis, la légende est dans le maillage lui-même — la roche souterraine part
+## assombrie et désaturée. Les deux images répondent à deux questions : « une légende est-elle
+## possible ? » (sans l'option) et « celle qu'on livre se voit-elle ? » (avec).
+## ⚠ Et c'est bien la MÊME planche, pas une seconde : mêmes angles, même cadrage, même fond. Deux
+## planches divergeraient au premier réglage, et l'on comparerait deux images qui ne se comparent pas.
+var _brut := false
 var _vues: Array = []
 var _images := 0
 
@@ -63,6 +74,8 @@ func _initialize() -> void:
 	for option in OS.get_cmdline_user_args():
 		if option.begins_with("--sortie="):
 			_sortie = option.substr("--sortie=".length())
+		if option == "--brut":
+			_brut = true
 
 	var pleines: Dictionary = BM.cases(0)
 	var region: Dictionary = _regions(pleines)
@@ -98,8 +111,12 @@ func _initialize() -> void:
 	print("\n⚠ « Franc » se lit dans ces chiffres : une région dont le plus gros morceau porte")
 	print("   l'essentiel est désignable ; une région en confettis ne l'est pas.\n")
 
+	var temoin: ArrayMesh = BM.maillage_moitie(0)
+	if _brut:
+		print("⚠ --brut : le témoin est rendu TEL QU'IL PART, avec ses propres couleurs.")
+		print("   Ce qu'on juge ici : la roche souterraine se distingue-t-elle d'une face à l'ombre ?\n")
 	for a in ANGLES:
-		_vues.append(_faire_vue(_colorier(BM.maillage_moitie(0), region), a["dir"]))
+		_vues.append(_faire_vue(temoin if _brut else _colorier(temoin, region), a["dir"]))
 	process_frame.connect(_image)
 
 
