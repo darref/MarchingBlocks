@@ -328,8 +328,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **6 686 vérifications, 0 échec** : `test_marching_blocks`, `test_repli_procedural`,
-  `test_massif_peint`, `test_tranchage`, `test_decoupe`, `test_blocs_maitres`.
+  Six suites, **6 626 vérifications, 0 échec** (25 septembre 2026, recomptées) :
+  `test_marching_blocks` 1 974, `test_repli_procedural` 3 922, `test_blocs_maitres` 597,
+  `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
+  ⚠ **LE TOTAL ÉCRIT ICI A MENTI, ET C'EST UN CAS DE « TENUE DE REGISTRE ».** Il annonçait 6 686 alors
+  que les suites en rendaient 6 597 : personne n'avait recompté après une suite retouchée. Un chiffre
+  de charte se relève, il ne se reporte pas.
 - **Pas de `class_name`** dans le code testé : les tests tournent en `--script`, avant que l'éditeur ait
   indexé les classes globales. On `preload`.
 - ⚠ **`--check-only --script` rend TOUJOURS le code 0**, même sur une erreur de parsing : **seul le
@@ -412,7 +416,14 @@ désormais le greffon.
      mailleur en ferait une SECONDE description du critère de contexte — la faute que le vérificateur
      du bloc a déjà coûtée (§6). Elle est VOISINE de `sous_le_ciel()` sans lui être égale : l'une
      qualifie un LIEU DE POSE, l'autre un MORCEAU DE MATIÈRE, et `test_marching_blocks` §14 construit
-     exprès le cas où les deux répondent différemment.
+     exprès un auvent où les deux répondent différemment au même endroit.
+   - **MESURÉ — les deux gardes ont su échouer**, cinq mutations délibérées chacune, toutes rouges :
+     côté `test_blocs_maitres` §10, le retour de la division entière (qui fait porter DEUX légendes à
+     la case (−7,0,0)), `case_sous_roche` bloquée à vrai puis à faux, son balayage réduit d'un cran, et
+     l'assombrissement retiré de `_quad` ; côté `test_marching_blocks` §14, la régression
+     `sommet.y + 2` → `+ 1` (celle qui a coûté quatre tours), **la fusion des deux fonctions**
+     (`case_sous_roche := not sous_le_ciel`), les deux décalages du balayage de matière, et
+     `sous_le_ciel` bloquée à vrai.
    - ⚠ **RESTE À JUGER À L'IMAGE, AVEC JORDAN** : le headless ne rend rien, et aucun compteur ne dira
      si la roche sombre se distingue d'une face à l'ombre (§6 — c'est déjà ce qui a tranché la force du
      chanfrein).
