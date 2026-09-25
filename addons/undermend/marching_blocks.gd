@@ -724,6 +724,24 @@ static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) ->
 	return true
 
 
+## Cette CASE est-elle sous de la roche ? `plafond` borne le balayage, comme pour `sous_le_ciel`.
+##
+## ⚠ **VOISINE DE `sous_le_ciel()`, MAIS DISTINCTE — ET IL FAUT LE DIRE, sinon on les confondra.**
+## `sous_le_ciel` qualifie un **lieu de pose** : le sommet du réseau où une pièce ira. Celle-ci qualifie
+## un **morceau de matière** : une case pleine, pour savoir de quelle couleur la peindre dans le témoin.
+## L'une répond « quelle tuile poser ici », l'autre « à quoi ressemble cette roche ».
+##
+## ⚠ **ELLE VIT ICI ET NULLE PART AILLEURS.** Le mailleur en a besoin pour la légende du témoin, et
+## l'écrire là-bas en ferait une SECONDE description du critère de contexte. Ce projet a déjà payé cette
+## faute : le vérificateur du bloc calculait sa propre couverture, elle avait dérivé de celle du
+## pinceau, et il a fallu quatre tours pour s'en apercevoir.
+static func case_sous_roche(pleines: Dictionary, case: Vector3i, plafond: int) -> bool:
+	for y in range(case.y + 1, plafond + 1):
+		if pleines.has(Vector3i(case.x, y, case.z)):
+			return true
+	return false
+
+
 ## Le plus haut `y` occupé. ⚠ DÉRIVÉ de l'occupation, jamais déclaré : un plafond écrit en dur rendrait
 ## le contexte faux dès qu'on peint plus haut que prévu.
 static func plafond_de(pleines: Dictionary) -> int:

@@ -58,6 +58,7 @@ func _initialize() -> void:
 	_l_echantillonnage_est_coherent()
 	_les_tuiles_de_run_se_repetent()
 	_les_symetries_imposees()
+	_le_lieu_et_la_matiere_sont_deux_questions()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -576,3 +577,65 @@ func _les_symetries_imposees() -> void:
 			"« %s » : les groupes de faces en couvrent %d sur 6" % [classes[c]["nom"], couvertes.size()])
 	print("   → %d stabilisateurs, orbite × stabilisateur = %d partout, %d classes totalement libres"
 		% [classes.size(), taille, libres])
+
+
+# ── 14. le lieu et la matière ───────────────────────────────────────────────────────────────────────
+
+## ⚠ **`sous_le_ciel()` ET `case_sous_roche()` SE RESSEMBLENT ET RÉPONDENT À DEUX QUESTIONS.** L'une
+## qualifie un LIEU DE POSE — le sommet où une pièce ira, et elle sonde les huit colonnes à partir de
+## `sommet.y + 2` parce que les deux étages de la pièce ne se coiffent pas eux-mêmes. L'autre qualifie
+## un MORCEAU DE MATIÈRE — une case pleine, pour la peindre dans le témoin, et elle ne regarde que SA
+## colonne, dès la case juste au-dessus.
+##
+## ⚠ **LE SCÉNARIO EST CONSTRUIT POUR QUE LES DEUX RÉPONSES DIFFÈRENT**, sinon rien ne garderait la
+## distinction : le jour où quelqu'un les fusionnera « puisqu'elles font la même chose », ce contrôle
+## doit rougir. ⚠ Et les attendus sont écrits à la main, jamais calculés par les fonctions éprouvées —
+## c'est la faute que `test_massif_peint` a déjà payée : un attendu qui bouge avec le mesuré rend toute
+## mutation muette.
+func _le_lieu_et_la_matiere_sont_deux_questions() -> void:
+	print("\n14. le lieu de pose et le morceau de matière — deux questions distinctes")
+
+	# Un auvent : un socle plein en y = 0..1 sur 4 × 4, et une dalle en y = 3 qui ne couvre QUE la
+	# moitié x ≤ 1. La colonne x = 3 reste à ciel ouvert de bout en bout.
+	var pleines: Dictionary = _pave(0, 3, 0, 1, 0, 3)
+	for x in 2:
+		for z in 4:
+			pleines[Vector3i(x, 3, z)] = true
+	var plafond := 3
+
+	_dire(MB.plafond_de(pleines) == plafond,
+		"le plafond dérivé doit être %d, pas %d" % [plafond, MB.plafond_de(pleines)])
+
+	# ── la MATIÈRE : ce qui a quelque chose de plein au-dessus, dans SA colonne ──
+	_dire(MB.case_sous_roche(pleines, Vector3i(0, 0, 0), plafond),
+		"(0,0,0) porte (0,1,0) et la dalle au-dessus : sous roche")
+	_dire(MB.case_sous_roche(pleines, Vector3i(0, 1, 0), plafond),
+		"(0,1,0) est coiffée par la dalle PAR-DESSUS UN VIDE : sous roche quand même")
+	_dire(not MB.case_sous_roche(pleines, Vector3i(0, 3, 0), plafond),
+		"la dalle elle-même n'a rien au-dessus : à l'air libre")
+	_dire(MB.case_sous_roche(pleines, Vector3i(3, 0, 0), plafond),
+		"(3,0,0) porte (3,1,0) : sous roche, même hors de l'auvent")
+	_dire(not MB.case_sous_roche(pleines, Vector3i(3, 1, 0), plafond),
+		"(3,1,0) est le sommet d'une colonne non couverte : à l'air libre")
+	_dire(not MB.case_sous_roche(pleines, Vector3i(9, 9, 9), plafond),
+		"une case hors de l'occupation n'a rien au-dessus d'elle")
+
+	# ── LE LIEU : le sommet (2,1,1) a ses huit cases en x = 2..3, donc HORS de l'auvent, et
+	# `sous_le_ciel` balaie à partir de y = 3 — la dalle ne l'atteint pas.
+	_dire(MB.sous_le_ciel(pleines, Vector3i(2, 1, 1), plafond),
+		"le sommet (2,1,1) est hors de l'auvent : c'est un lieu de pose à l'air libre")
+	# ⚠ ET LE COUPLE QUI SÉPARE LES DEUX FONCTIONS, AU MÊME ENDROIT. La matière de (3,0,0) est
+	# ENTERRÉE — (3,1,0) la couvre — tandis que le lieu de pose (2,1,1), qui la touche, est à CIEL
+	# OUVERT. Les deux disent « oui » à des questions de polarité opposée : écrire l'une comme la
+	# négation de l'autre ferait tomber la première à faux.
+	_dire(MB.case_sous_roche(pleines, Vector3i(3, 0, 0), plafond)
+			and MB.sous_le_ciel(pleines, Vector3i(2, 1, 1), plafond),
+		"au même endroit : la matière (3,0,0) doit être enterrée ET le lieu (2,1,1) à ciel ouvert")
+	# Le sommet (0,1,1) est SOUS l'auvent : ses colonnes portent la dalle en y = 3.
+	_dire(not MB.sous_le_ciel(pleines, Vector3i(0, 1, 1), plafond),
+		"le sommet (0,1,1) est coiffé par la dalle : ce n'est pas un lieu à l'air libre")
+	# ⚠ ET LA CORRECTION QUI A COÛTÉ QUATRE TOURS : une pièce ne se coiffe pas elle-même. Le sommet
+	# (0,2,1) a ses cases en y = 2..3, dont la dalle ; partir de `sommet.y + 1` le déclarerait couvert.
+	_dire(MB.sous_le_ciel(pleines, Vector3i(0, 2, 1), plafond),
+		"une pièce ne se coiffe pas elle-même : (0,2,1) reste un lieu à l'air libre")
+	print("   → sous l'auvent et à côté, le lieu et la matière donnent bien des réponses différentes")

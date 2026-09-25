@@ -365,12 +365,23 @@ static func sous_voxels(pleines: Dictionary, retrait: float) -> Dictionary:
 		for x in range(a.x, b.x):
 			for y in range(a.y, b.y):
 				for z in range(a.z, b.z):
-					pleins[Vector3i(x, y, z)] = true
+					# ⚠ **LA VALEUR EST LA CASE PROPRIÉTAIRE, ET CE N'EST PAS DÉCORATIF.** Ici, `p`
+					# est connu exactement ; le retrouver plus tard par une division serait une
+					# SECONDE description du découpage (charte §6). Les clés ne changent pas, et
+					# tous les lecteurs actuels n'interrogent que `has()`.
+					pleins[Vector3i(x, y, z)] = p
 	return pleins
 
 
 static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh:
 	var pleins: Dictionary = sous_voxels(pleines, retrait)
+
+	# ⚠ **LA CARTE DES CONTEXTES, CALCULÉE UNE FOIS.** La demander par face coûterait un balayage
+	# vertical sur les 8 364 quads du bloc ; ici c'est une fois par case pleine, soit 267.
+	var plafond: int = MB.plafond_de(pleines)
+	var dedans_de := {}
+	for c0 in pleines:
+		dedans_de[c0] = MB.case_sous_roche(pleines, c0, plafond)
 
 	var sommets := PackedVector3Array()
 	var normales := PackedVector3Array()
@@ -401,7 +412,8 @@ static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh
 					quad.append(q)
 				# ⚠ On passe par `_quad` et non par une émission directe : c'est lui qui porte
 				# l'enroulement HORAIRE de Godot et le codage couleur par normale.
-				_quad(sommets, normales, couleurs, quad, normale)
+				_quad(sommets, normales, couleurs, quad, normale,
+						bool(dedans_de.get(pleins[s], false)))
 
 	var mesh := ArrayMesh.new()
 	if sommets.is_empty():
@@ -422,8 +434,18 @@ static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh
 ## pointer À L'OPPOSÉ de la normale. Même règle et même piège que `repli_procedural._ajouter_quad`, où
 ## l'erreur inverse avait coûté une planche entière — le maillage restait cohérent avec lui-même, seul le
 ## moteur divergeait, et toutes les faces étaient éliminées par le `cull_mode`.
+## ⚠ **`dedans` PORTE LA LÉGENDE DU TÉMOIN, ET IL A UNE VALEUR PAR DÉFAUT EXPRÈS.** `_coque_lissee` —
+## le chanfrein mis en sommeil — appelle aussi cette fonction et ne connaît pas le contexte : sans
+## défaut, j'aurais changé son rendu sans m'en apercevoir.
+##
+## ⚠ **ON MODULE LES TROIS TEINTES, ON N'EN AJOUTE PAS TROIS.** L'orientation reste lisible — vert pour
+## ce qui regarde le ciel, brun pour les parois, bleu pour les plafonds — et le contexte se lit à la
+## MATIÈRE : la roche souterraine est plus sombre et désaturée, comme une pierre jamais lessivée. Six
+## teintes franches auraient rendu bariolé un témoin dont l'illisibilité est précisément le défaut qu'on
+## corrige : 76 % du bloc est souterrain, et rien ne le disait à l'artiste — c'est ce qui lui a fait
+## extruder le haut en croyant tenir le massif de base.
 static func _quad(sommets: PackedVector3Array, normales: PackedVector3Array,
-		couleurs: PackedColorArray, quad: Array, normale: Vector3) -> void:
+		couleurs: PackedColorArray, quad: Array, normale: Vector3, dedans := false) -> void:
 	var a: Vector3 = quad[0]
 	var b: Vector3 = quad[1]
 	var c: Vector3 = quad[2]
@@ -432,6 +454,10 @@ static func _quad(sommets: PackedVector3Array, normales: PackedVector3Array,
 		ordre = [quad[3], quad[2], quad[1], quad[0]]
 	var couleur: Color = RP.COULEUR_DESSUS if normale.y > 0.5 \
 		else (RP.COULEUR_PLAFOND if normale.y < -0.5 else RP.COULEUR_PAROI)
+	if dedans:
+		# ⚠ Assombrie ET désaturée : l'assombrissement seul se confond avec une face à l'ombre, que la
+		# lumière directionnelle produit déjà. C'est la perte de saturation qui dit « sous la roche ».
+		couleur = Color(couleur.r, couleur.g, couleur.b).lerp(Color(0.24, 0.22, 0.21), 0.55)
 	for triangle in [[0, 1, 2], [0, 2, 3]]:
 		for k in triangle:
 			sommets.append(ordre[k])

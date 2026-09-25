@@ -381,15 +381,43 @@ désormais le greffon.
 1. ~~Le modèle, le bloc maître unique de 8³, le tranchage, la classification~~ — fait, 68/68.
 2. ~~L'aller-retour `.glb` avec Blender~~ — fait, et vérifié sur le fichier réel de Jordan.
 3. ~~Le panneau dans la bande de droite, les opérations d'étage~~ — fait.
-4. ⚠ **LA RÉCOLTE À DEUX CONTEXTES — PAS FAITE, et c'est le premier piège pour qui reprend.** Le module
-   ANNONCE 90 tuiles (68 + 22) et le bloc les porte, mais `librairie()` n'en livre que **68** : le
-   trancheur rend une pièce par CLASSE, pas par (classe, contexte). Il faut dédoubler la récolte dans
-   `tranchage.gd`, nommer les variantes dans `_assembler()`, et apprendre au pinceau à choisir.
-   ⚠ **Le nom NU doit rester l'item par défaut** et la variante porter un suffixe : six appelants
-   cherchent encore par le nom de classe, et `test_massif_peint.gd` exige sommet par sommet que le nom
-   posé ÉGALE le nom de la classe. Ce garde devra être retravaillé — en comparant la classe suffixe
-   retiré **et** en ajoutant une assertion neuve sur le contexte choisi. Jamais affaibli pour du vert.
-5. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
+4. ~~**La récolte à deux contextes**~~ — **FAITE** (`503b768`, redressée par `75eae30` et `2f0258d`).
+   Le trancheur récolte par (classe, contexte), `_assembler()` nomme la variante, et le peintre cherche
+   la variante PUIS retombe sur le nom nu. ⚠ **Ce repli n'est pas une commodité** : un lot sans
+   variantes — le repli procédural, un lot d'avant cette version — doit continuer de marcher mot pour
+   mot, sinon des cubes rouges apparaissent sur des lots parfaitement valides.
+   **MESURÉ (revérifié le 25 septembre 2026)** : `verifier_bloc_unique` rend 90/90 sur la silhouette en
+   place, et les six suites sont vertes.
+   ⚠ **DEUX RÉSERVES QUI SURVIVENT À LA TÂCHE, à ne pas perdre avec elle** :
+   - **le coût de `sous_le_ciel()` sur une carte réelle n'a été mesuré sur AUCUN monde** (`503b768`).
+     Il balaie la verticale des huit cellules d'un sommet, par pièce ; ça ne doit pas être supposé
+     négligeable ;
+   - **le score du finisseur est AVEUGLE AU CONTEXTE** (mesuré, `75eae30`) : une classe d'intérieur
+     gagnée y vaut exactement une classe d'extérieur perdue, alors que la marge est de ×4,53 dedans
+     contre ×0,95 dehors. Le grimpeur rebouche donc le ciel pour gagner dedans, et **redessiner les
+     couches ne sert à rien** tant que le score ne distingue pas les deux contextes : il faudra
+     pondérer la rareté, ou imposer un PLANCHER de sommets sous le ciel à chaque coup.
+
+5. **LA LÉGENDE DU TÉMOIN — EN COURS.** Le solide qui part chez l'artiste peint sa roche SOUTERRAINE
+   plus sombre et désaturée. ⚠ **La raison est un défaut observé, pas un ornement** : rien ne disait à
+   l'artiste quelle part de son bloc est souterraine, et c'est ce qui lui a fait extruder le haut en
+   croyant tenir le massif de base.
+   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 25 septembre 2026)** : 203 des 267 cases du bloc
+     sont sous roche — **76,0 %** — et l'aminci qui part chez l'artiste peint 6 405 de ses 8 364 quads
+     en sombre (76,6 %).
+   - **On MODULE les trois teintes, on n'en ajoute pas trois** : l'orientation reste lisible (vert au
+     ciel, brun aux parois, bleu aux plafonds) et le contexte se lit à la MATIÈRE. Six teintes franches
+     auraient rendu bariolé un témoin dont l'illisibilité est précisément le défaut qu'on corrige.
+   - ⚠ **`case_sous_roche()` VIT DANS `marching_blocks.gd` ET NULLE PART AILLEURS.** L'écrire dans le
+     mailleur en ferait une SECONDE description du critère de contexte — la faute que le vérificateur
+     du bloc a déjà coûtée (§6). Elle est VOISINE de `sous_le_ciel()` sans lui être égale : l'une
+     qualifie un LIEU DE POSE, l'autre un MORCEAU DE MATIÈRE, et `test_marching_blocks` §14 construit
+     exprès le cas où les deux répondent différemment.
+   - ⚠ **RESTE À JUGER À L'IMAGE, AVEC JORDAN** : le headless ne rend rien, et aucun compteur ne dira
+     si la roche sombre se distingue d'une face à l'ombre (§6 — c'est déjà ce qui a tranché la force du
+     chanfrein).
+
+6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.
-5. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
-6. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
+7. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
+8. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.

@@ -42,6 +42,8 @@ const Tranchage := preload("res://addons/undermend/tranchage.gd")
 ## ⚠ On EMPRUNTE le bilan topologique plutôt que d'en recopier le calcul : deux descriptions d'un même
 ## fait divergent toujours, et celle-ci porte déjà deux pièges payés cher (charte §6).
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
+## Les trois teintes de base du témoin : tout le reste est une roche souterraine assombrie.
+const RP := preload("res://addons/undermend/repli_procedural.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -59,6 +61,7 @@ func _initialize() -> void:
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
+	_la_legende_du_temoin_dit_le_contexte()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -348,3 +351,137 @@ func _borne(boite: AABB, mini: float, maxi: float, quoi: String) -> void:
 	var bout: Vector3 = boite.position + boite.size
 	_dire(bout.x <= M and bout.y <= M and bout.z <= M,
 		"%s : finit en %s, après %.3f" % [quoi, str(bout), maxi])
+
+
+# ── la légende du témoin ────────────────────────────────────────────────────────────────────────────
+
+## ⚠ **CE QUE CETTE VÉRIFICATION GARDE.** Le solide qui part chez l'artiste peint sa roche SOUTERRAINE
+## plus sombre — mesuré, 76 % du bloc unique l'est, et rien ne le disait auparavant. Deux propriétés,
+## et aucune des deux ne se voit sur un compteur :
+##
+##   1. **LA COULEUR DIT LE CRITÈRE.** Un quad est sombre si et seulement si SA case porte de la roche
+##      au-dessus d'elle. ⚠ L'attendu est recalculé ICI, par un balayage écrit à la main — appeler
+##      `MB.case_sous_roche()` ferait bouger l'attendu ET le mesuré ensemble, et la mutation resterait
+##      MUETTE (charte §6, la leçon payée par `test_massif_peint`).
+##   2. **LA LÉGENDE SUIT LE BLOC.** Translater l'occupation translate le maillage et rien d'autre.
+##      ⚠ Ce n'est pas un ornement : la coque a retrouvé sa case par une DIVISION ENTIÈRE, qui tronque
+##      VERS ZÉRO en GDScript. Mesuré sur le bloc unique déplacé en x négatif — 3 926 quads sombres au
+##      lieu de 6 405. Le bloc écrit en couches ASCII n'ayant que des coordonnées positives, RIEN dans
+##      le projet ne pouvait le montrer : il fallait construire le scénario.
+func _la_legende_du_temoin_dit_le_contexte() -> void:
+	print("\n10. la légende du témoin : la roche souterraine est plus sombre")
+
+	# Un relief écrit à la main, choisi pour porter les trois cas : une colonne coiffée, une case à
+	# l'air libre, et un TROU dans la colonne — la roche au-dessus compte même à distance.
+	#
+	#     y=3            #..        (3,0,0) seule
+	#     y=2            ...        rien : le trou
+	#     y=1            ##.
+	#     y=0            ###
+	var pleines := {}
+	for x in 3:
+		pleines[Vector3i(x, 0, 0)] = true
+	for x in 2:
+		pleines[Vector3i(x, 1, 0)] = true
+	pleines[Vector3i(0, 3, 0)] = true
+
+	var attendu := {}
+	for c in pleines:
+		attendu[c] = _roche_au_dessus_a_la_main(pleines, c)
+	_dire(attendu[Vector3i(0, 0, 0)] and attendu[Vector3i(1, 0, 0)],
+		"le socle sous la colonne doit être sous roche")
+	_dire(not attendu[Vector3i(2, 0, 0)],
+		"la case (2,0,0) n'a rien au-dessus : elle doit être à l'air libre")
+	_dire(attendu[Vector3i(0, 1, 0)],
+		"la case (0,1,0) est coiffée PAR-DESSUS UN TROU : elle doit être sous roche")
+	_dire(not attendu[Vector3i(1, 1, 0)] and not attendu[Vector3i(0, 3, 0)],
+		"les sommets de colonne doivent être à l'air libre")
+
+	var a_l_origine: Dictionary = _verdicts_par_quad(BlocsMaitres._coque_sous_voxels(pleines, 0.25))
+	_dire(not a_l_origine.is_empty(), "la coque du relief d'essai ne rend aucun quad")
+	var sombres := 0
+	var faux := 0
+	for cle in a_l_origine:
+		var case: Vector3i = cle
+		if a_l_origine[cle]["sombre"]:
+			sombres += a_l_origine[cle]["quads"]
+		if a_l_origine[cle]["sombre"] != bool(attendu.get(case, false)):
+			faux += 1
+	_dire(faux == 0, "%d case(s) peintes à l'envers de ce que le critère dit" % faux)
+	_dire(a_l_origine.size() == pleines.size(),
+		"la coque peint %d cases, le relief en porte %d" % [a_l_origine.size(), pleines.size()])
+	_dire(sombres > 0, "aucun quad sombre : la légende ne dit plus rien")
+
+	# ⚠ ET LE SCÉNARIO QUI A TROUVÉ LE DÉFAUT : le MÊME relief, en coordonnées négatives.
+	for decalage in [Vector3i(-8, 0, 0), Vector3i(-3, 0, -5), Vector3i(0, -4, 0)]:
+		var deplace := {}
+		for c in pleines:
+			deplace[Vector3i(c) + decalage] = true
+		var la_bas: Dictionary = _verdicts_par_quad(BlocsMaitres._coque_sous_voxels(deplace, 0.25))
+		_dire(la_bas.size() == a_l_origine.size(),
+			"translaté de %s : %d cases peintes au lieu de %d"
+				% [str(decalage), la_bas.size(), a_l_origine.size()])
+		var divergentes := 0
+		for cle in a_l_origine:
+			var ici: Dictionary = a_l_origine[cle]
+			var ailleurs = la_bas.get(Vector3i(cle) + decalage, null)
+			if ailleurs == null or ailleurs["sombre"] != ici["sombre"] \
+					or ailleurs["quads"] != ici["quads"]:
+				divergentes += 1
+		_dire(divergentes == 0,
+			"translaté de %s : %d case(s) changent de légende" % [str(decalage), divergentes])
+	print("   → %d cases peintes, %d quads sombres, et la légende suit le bloc en x, y et z négatifs"
+		% [a_l_origine.size(), sombres])
+
+
+## LE BALAYAGE VERTICAL, RÉÉCRIT ICI EXPRÈS — voir le ⚠ ci-dessus. Il ne borne rien par un plafond :
+## il regarde toute la colonne, ce qui rend le même verdict et ne partage pas une ligne avec le module.
+func _roche_au_dessus_a_la_main(pleines: Dictionary, case: Vector3i) -> bool:
+	var haut := case.y
+	for c in pleines:
+		haut = maxi(haut, Vector3i(c).y)
+	for y in range(case.y + 1, haut + 1):
+		if pleines.has(Vector3i(case.x, y, case.z)):
+			return true
+	return false
+
+
+## Pour chaque case du relief, ce que la coque a peint dessus : {case: {sombre, quads}}.
+##
+## ⚠ **LA CASE D'UN QUAD EST RETROUVÉE PAR SA GÉOMÉTRIE, JAMAIS PAR LA DIVISION DU MODULE** : on recule
+## d'un cheveu le long de la normale pour rentrer dans la matière, puis on prend le plancher. Emprunter
+## le calcul du mailleur reviendrait à lui demander de se juger lui-même.
+## ⚠ Et l'on EXIGE qu'une case ne porte qu'une seule couleur : deux teintes sur une même case
+## signeraient que la carte des contextes s'est décalée en route.
+func _verdicts_par_quad(mesh: ArrayMesh) -> Dictionary:
+	var par_case := {}
+	if mesh.get_surface_count() == 0:
+		return par_case
+	var tout: Array = mesh.surface_get_arrays(0)
+	var sommets: PackedVector3Array = tout[Mesh.ARRAY_VERTEX]
+	var normales: PackedVector3Array = tout[Mesh.ARRAY_NORMAL]
+	var couleurs: PackedColorArray = tout[Mesh.ARRAY_COLOR]
+	var claires := [RP.COULEUR_DESSUS, RP.COULEUR_PAROI, RP.COULEUR_PLAFOND]
+	var partagees := {}
+	var i := 0
+	while i < sommets.size():
+		var centre: Vector3 = (sommets[i] + sommets[i + 1] + sommets[i + 2]
+			+ sommets[i + 3] + sommets[i + 4] + sommets[i + 5]) / 6.0
+		var dedans: Vector3 = centre - normales[i] * 0.01
+		var case := Vector3i(floori(dedans.x), floori(dedans.y), floori(dedans.z))
+		var sombre := true
+		for base in claires:
+			if couleurs[i].is_equal_approx(base):
+				sombre = false
+		if par_case.has(case):
+			if par_case[case]["sombre"] != sombre:
+				partagees[case] = true
+			par_case[case]["quads"] += 1
+		else:
+			par_case[case] = {"sombre": sombre, "quads": 1}
+		i += 6
+	# ⚠ UNE SEULE vérification, pas une par quad : un compteur que 8 000 quads gonflent ne dit plus
+	# rien de ce qui est gardé.
+	_dire(partagees.is_empty(),
+		"%d case(s) portent DEUX légendes à la fois : %s" % [partagees.size(), str(partagees.keys())])
+	return par_case
