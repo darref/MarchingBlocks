@@ -247,12 +247,16 @@ func _les_maillages_existent_et_tiennent_dans_le_bloc() -> void:
 			_borne(recolte.get_aabb(), 0.5, float(BlocsMaitres.COTE) - 0.5, "%s (récolte)" % nom)
 
 
-## LA GÉOMÉTRIE RÉELLEMENT LIVRÉE — celle que `exporter_le_bloc()` écrit et que `librairie()` tranche.
+## LE CHANFREIN, QUI EST SUSPENDU — gardé quand même, parce qu'on y reviendra.
 ##
-## ⚠ **ELLE N'ÉTAIT GARDÉE PAR RIEN JUSQU'AU 25 SEPTEMBRE 2026.** Les contrôles ci-dessus éprouvent
-## `maillage()` et `maillage_des_pieces()` ; le chanfrein a changé ce qui PART chez l'artiste sans que
-## la moindre assertion ne le suive. Livrer une géométrie que rien ne garde rend toute régression
-## invisible jusqu'à ce qu'un acheteur ouvre le `.glb`.
+## ⚠ **IL N'EST PLUS LA GÉOMÉTRIE LIVRÉE.** Il l'a été une heure le 25 septembre 2026, puis Jordan l'a
+## reposé : *« je voulais plus aucun angle et tu as fait des angles moins obtus. »* Ce contrôle ne garde
+## donc plus ce qui part chez l'artiste — c'est `maillage_moitie` qui part — mais il garde que le
+## lissage **reste juste** pendant sa mise en sommeil. Un code dormant que rien n'éprouve pourrit en
+## silence, et on le retrouve cassé le jour où on en a besoin.
+##
+## ⚠ **CE QU'IL NE GARDE TOUJOURS PAS** : que `exporter_le_bloc()` appelle bien la géométrie voulue.
+## Seul `essai_aller_retour.gd` le verrait, et il n'est pas dans les six suites.
 func _la_geometrie_livree_est_saine() -> void:
 	var cases: Dictionary = BlocsMaitres.cases(0)
 

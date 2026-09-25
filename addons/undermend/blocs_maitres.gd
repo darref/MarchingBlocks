@@ -573,14 +573,18 @@ static func _coque_lissee(pleines: Dictionary, retrait: float, force := 1.0) -> 
 ## fallait un réglage : à pleine force les contours droits deviennent ondulants et le trou rectangulaire
 ## d'une dalle devient un ovale.
 ##
-## ⚠ **C'EST LA GÉOMÉTRIE LIVRÉE DEPUIS LE 25 SEPTEMBRE 2026 (DÉCIDÉ, Jordan), à `FORCE_CHANFREIN`.**
-## Elle est jugée par `sonde_lissage.gd` pour les chiffres et par `planche_lissage.gd` pour ce
-## qu'aucun chiffre ne dit.
+## ⚠ **SUSPENDU — ESSAYÉ ET REPOSÉ LE 25 SEPTEMBRE 2026 (Jordan).** Il a été branché sur l'export une
+## heure, puis débranché : *« je voulais plus aucun angle et tu as fait des angles moins obtus. »* Une
+## marche remplacée par une pente reste une ARÊTE ; ce qui était demandé, c'est que les deux arêtes
+## d'une marche FUSIONNENT en une face. Le maillage dual ne sait pas faire ça — il adoucit, il ne
+## supprime pas. ⚠ **Le code reste, et les mesures avec** : elles sont justes, c'est l'objectif qu'elles
+## n'atteignent pas. Jugé par `sonde_lissage.gd` pour les chiffres et `planche_lissage.gd` pour le reste.
 static func maillage_lisse(i: int, cote := 0.5, force := 1.0) -> ArrayMesh:
 	return _coque_lissee(cases(i), clampf(cote, 0.05, 1.0) * 0.5, force)
 
 
-## DE COMBIEN LE TÉMOIN EST CHANFREINÉ — DÉCIDÉ (Jordan, 25 septembre 2026).
+## DE COMBIEN LE TÉMOIN SERAIT CHANFREINÉ — ⚠ **RÉGLAGE SUSPENDU, plus branché sur rien** (voir
+## `maillage_lisse`). Les mesures ci-dessous restent valides et sont gardées pour qui reprendra.
 ##
 ## ⚠ **CE NOMBRE EST MESURÉ, PAS CHOISI AU GOÛT.** Jordan voulait que les deux arêtes d'une marche
 ## soient reliées par une face DIRECTE, et prévoyait que les triangles aux coins à trois contremarches
@@ -815,9 +819,11 @@ static func librairie() -> Dictionary:
 	var erreurs: Array = []
 
 	for i in BLOCS.size():
-		# ⚠ LA MÊME GÉOMÉTRIE QUE L'EXPORT, chanfrein compris : le catalogue avec lequel on peint doit
-		# être celui que l'artiste va sculpter, sinon le témoin ment sur ce qu'on attend de lui.
-		var solide: ArrayMesh = maillage_lisse(i, 0.5, FORCE_CHANFREIN)
+		# ⚠ LA MÊME GÉOMÉTRIE QUE L'EXPORT : le catalogue avec lequel on peint doit être celui que
+		# l'artiste va sculpter, sinon le témoin ment sur ce qu'on attend de lui. Les trois chemins —
+		# export, catalogue, repli — lisent donc le même appel, et changer de géométrie veut dire les
+		# changer tous les trois. Voir `maillage_lisse` pour le chanfrein, suspendu.
+		var solide: ArrayMesh = maillage_moitie(i)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
 		var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
@@ -896,7 +902,7 @@ static func boite_du_bloc() -> AABB:
 ## ⚠ **CE FUT D'ABORD UN DÉFAUT DE PARAMÈTRE, C'EST DÉSORMAIS LE SEUL MODE.** Un export capable de partir
 ## plein était une façon de mentir à l'artiste sur sa marge, pas une option qu'on avait envie d'offrir.
 static func exporter_le_bloc(chemin: String) -> String:
-	var brut: ArrayMesh = maillage_lisse(0, 0.5, FORCE_CHANFREIN)
+	var brut: ArrayMesh = maillage_moitie(0)
 	var mesh: ArrayMesh = sans_normales(souder(brut))
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
@@ -954,7 +960,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		# alors que le bloc était parti aminci : le témoin de secours n'avait donc pas la géométrie du
 		# témoin exporté, et la récolte pouvait différer sans qu'aucun compteur ne le signale. Les deux
 		# chemins sont maintenant le même appel, donc d'accord par construction et non par vigilance.
-		solide = maillage_lisse(0, 0.5, FORCE_CHANFREIN)
+		solide = maillage_moitie(0)
 
 	var fautes: Array = []
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,

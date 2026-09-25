@@ -151,11 +151,19 @@ C'est le partage de responsabilité, et il a été énoncé par Jordan mot pour 
   n'ont pas le même retrait. La coque ferme la surface sans culler ni boucher.
   ⚠ Coût mesuré : **×5 en triangles**, et la RÉCOLTE est identique (mêmes classes, 0 erreur d'octant).
 
-### Le CHANFREIN : un maillage DUAL à 0,35 — DÉCIDÉ (Jordan, 25 septembre 2026)
+### Le CHANFREIN : un maillage DUAL à 0,35 — ESSAYÉ puis SUSPENDU (Jordan, 25 septembre 2026)
 
 Le témoin partait avec des **escaliers**, et Jordan les a croisés en rouge sur une capture : *« il
 faudrait que les deux arêtes soient reliées par des faces directes plutôt que par deux faces formant un
 escalier. »*
+
+⚠ **IL A ÉTÉ BRANCHÉ SUR L'EXPORT UNE HEURE, PUIS DÉBRANCHÉ** : *« je voulais plus aucun angle et tu as
+fait des angles moins obtus. »* Une marche remplacée par une pente reste une **arête** ; ce qui était
+demandé, c'est que les deux arêtes **fusionnent en une face**. Le maillage dual adoucit, il ne supprime
+pas. **Le code et les mesures restent** — elles sont justes, c'est l'objectif qu'elles n'atteignent pas.
+⚠ **Et la leçon de méthode est là** : j'ai livré ce que ma méthode savait faire, pas ce qui était
+demandé, sans voir l'écart avant qu'il ne le dise. La priorité est revenue à **éprouver le pipeline
+entier** sur le témoin unique.
 
 - ⚠ **CES ESCALIERS SONT UN ARTEFACT DE L'AMINCISSEMENT, PAS LA FORME VOULUE — MESURÉ.** Le solide n'a
   **aucune** petite marche : ses 244 contremarches sont à 100 % des multiples d'une cellule.
