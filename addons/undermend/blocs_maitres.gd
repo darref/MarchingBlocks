@@ -336,7 +336,15 @@ static func maillage(i: int) -> ArrayMesh:
 ## d'érosion, 0/0 sur les six autres). ⚠ **C'est dans l'OCCUPATION, pas dans le mailleur** — et c'est
 ## le cas que le modèle nomme `PONT_SUR_FACE_AMBIGUE`, donc parfaitement légal. Le retrait en répare
 ## l'essentiel (240 → 18 sur le bloc unique) parce qu'il sépare les deux cellules.
-static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh:
+## L'OCCUPATION EN SOUS-VOXELS dont la coque est exactement la frontière — `SOUS` par cellule.
+##
+## ⚠ **EXTRAITE DE `_coque_sous_voxels` POUR ÊTRE L'AUTORITÉ UNIQUE (25 septembre 2026).** Une sonde
+## avait besoin de cette occupation pour imprimer le profil réel d'un rebord ; la recopier lui aurait
+## donné une SECONDE description du retrait, et une seconde description d'un même fait finit toujours
+## par diverger (charte §6). Le mailleur la lit comme tout le monde.
+## ⚠ Et l'extraction ne doit RIEN changer à ce qui sort : une extraction qui modifie sa sortie n'est pas
+## une extraction. Vérifié — mêmes maillages, mêmes comptes d'arêtes, mêmes suites vertes.
+static func sous_voxels(pleines: Dictionary, retrait: float) -> Dictionary:
 	var pleins := {}
 	for c in pleines:
 		var p: Vector3i = c
@@ -358,6 +366,11 @@ static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh
 			for y in range(a.y, b.y):
 				for z in range(a.z, b.z):
 					pleins[Vector3i(x, y, z)] = true
+	return pleins
+
+
+static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh:
+	var pleins: Dictionary = sous_voxels(pleines, retrait)
 
 	var sommets := PackedVector3Array()
 	var normales := PackedVector3Array()
@@ -424,6 +437,169 @@ static func _quad(sommets: PackedVector3Array, normales: PackedVector3Array,
 			sommets.append(ordre[k])
 			normales.append(normale)
 			couleurs.append(couleur)
+
+
+## Le CENTRE d'un sous-voxel. ⚠ Le réseau dual siège sur les centres, pas sur les coins : c'est ce
+## décalage d'un demi-sous-voxel qui fait qu'un sommet dual tombe AU MILIEU d'une marche, donc qu'une
+## marche devient une pente au lieu de deux faces.
+static func _centre(s: Vector3i, pas: float) -> Vector3:
+	return (Vector3(s) + Vector3.ONE * 0.5) * pas
+
+
+## LA COQUE LISSÉE — le maillage DUAL du champ de sous-voxels (« surface nets »).
+##
+## ⚠ **POURQUOI CETTE MÉTHODE PLUTÔT QUE LE GESTE LITTÉRAL (Jordan, 25 septembre 2026).** Jordan
+## proposait de supprimer l'arête à angle droit d'une marche et de relier les deux arêtes restantes par
+## une face directe, tout en prévoyant que *« là où trois contremarches se rencontrent, le triangle
+## qu'on créera rendra beaucoup d'endroits non-manifold »*. Les deux moitiés de sa phrase sont justes,
+## et il y a pire : **un palier large d'UN sous-voxel n'a qu'une face, réclamée par les chanfreins de
+## ses DEUX côtés** — l'opération n'y est pas définie. Or c'est le cas majoritaire, mesuré :
+## 91 paliers de largeur 1 sur 261.
+##
+## ⚠ **CETTE VOIE-CI REND SA PRÉDICTION STRUCTURELLEMENT IMPOSSIBLE, elle ne la contourne pas.** Un
+## sommet par cube DUAL traversé, un quad par ARÊTE PRIMALE traversée. Une arête du maillage rendu
+## sépare exactement deux quads duaux voisins : aucune troisième face ne peut s'y attacher. La
+## non-manifoldité n'est donc pas évitée au cas par cas, elle n'a pas de place où naître.
+##
+## ⚠ **ET ELLE A UN COÛT QU'IL FAUT DIRE** : la surface se déplace d'un demi-sous-voxel au plus, PARTOUT
+## — y compris sur les grandes faces plates. Le contrat de couture s'en juge par la mesure, pas par ce
+## commentaire ; `sonde_lissage.gd` compare les classes récoltées avant et après.
+##
+## ⚠ `_coque_sous_voxels` RESTE INTACTE et reste ce qui part chez l'artiste. Ce qui marche ne doit pas
+## dépendre d'une expérience en cours.
+static func _coque_lissee(pleines: Dictionary, retrait: float, force := 1.0) -> ArrayMesh:
+	var pleins: Dictionary = sous_voxels(pleines, retrait)
+	var pas: float = 1.0 / float(SOUS)
+
+	# ── 1. UN SOMMET PAR CUBE DUAL TRAVERSÉ ─────────────────────────────────────────────────────────
+	#
+	# Le cube dual `g` a pour coins les huit sous-voxels `g + (0..1)³`. S'ils ne sont pas tous du même
+	# côté, la surface le traverse : on y pose UN sommet, à la moyenne des milieux d'arêtes traversées.
+	# ⚠ Ne sont candidats que les cubes touchant un sous-voxel plein — les autres ne peuvent pas être
+	# traversés, et les parcourir tous coûterait le volume entier pour rien.
+	var candidats := {}
+	for c in pleins:
+		var s: Vector3i = c
+		for dx in [-1, 0]:
+			for dy in [-1, 0]:
+				for dz in [-1, 0]:
+					candidats[s + Vector3i(dx, dy, dz)] = true
+
+	var sommet_de := {}
+	for c in candidats:
+		var g: Vector3i = c
+		var somme := Vector3.ZERO
+		var combien := 0
+		for dx in 2:
+			for dy in 2:
+				for dz in 2:
+					var d := Vector3i(dx, dy, dz)
+					for axe in 3:
+						if d[axe] != 0:
+							continue
+						var e := Vector3i.ZERO
+						e[axe] = 1
+						var a: Vector3i = g + d
+						var b: Vector3i = a + e
+						if pleins.has(a) == pleins.has(b):
+							continue
+						somme += (_centre(a, pas) + _centre(b, pas)) * 0.5
+						combien += 1
+		if combien > 0:
+			# ⚠ **LE RÉGLAGE, ET IL PORTE SON PROPRE CONTRÔLE NÉGATIF.** Le centre du cube dual `g`
+			# tombe exactement sur un COIN du réseau de sous-voxels — donc là où la coque à facettes
+			# place ses sommets. À `force = 0` le lissage doit donc REPRODUIRE la coque à facettes,
+			# pente pour pente ; s'il en reste une seule, le réglage ne fait pas ce qu'il dit et aucune
+			# mesure prise avec lui ne porte sur ce qu'on croit. À `force = 1`, maillage dual complet.
+			# ⚠ Il existe parce que l'image a tranché ce qu'aucun compteur ne disait : à pleine force,
+			# la surface FOND au lieu de se chanfreiner — les contours droits deviennent ondulants.
+			var coin: Vector3 = (Vector3(g) + Vector3.ONE) * pas
+			sommet_de[g] = coin.lerp(somme / float(combien), clampf(force, 0.0, 1.0))
+
+	# ── 2. UN QUAD PAR ARÊTE PRIMALE TRAVERSÉE ──────────────────────────────────────────────────────
+	var sommets := PackedVector3Array()
+	var normales := PackedVector3Array()
+	var couleurs := PackedColorArray()
+	for c in pleins:
+		var s: Vector3i = c
+		for axe in 3:
+			var e := Vector3i.ZERO
+			e[axe] = 1
+			for signe in [-1, 1]:
+				var voisin: Vector3i = s + (e if signe > 0 else -e)
+				if pleins.has(voisin):
+					continue
+				# le plus PETIT des deux bouts de l'arête primale, pour indexer les cubes duaux
+				var base: Vector3i = s if signe > 0 else voisin
+				var autres: Array = []
+				for k in 3:
+					if k != axe:
+						autres.append(k)
+				var coins: Array = []
+				for uv in [[0, 0], [1, 0], [1, 1], [0, 1]]:
+					var g: Vector3i = base
+					g[autres[0]] = base[autres[0]] - 1 + int(uv[0])
+					g[autres[1]] = base[autres[1]] - 1 + int(uv[1])
+					if not sommet_de.has(g):
+						coins = []
+						break
+					coins.append(sommet_de[g])
+				# ⚠ Les quatre cubes duaux d'une arête traversée sont traversés eux aussi, par
+				# construction : ce `continue` ne devrait JAMAIS servir. S'il servait, il ouvrirait un
+				# trou — et `sonde_lissage.gd` le verrait en arêtes de BORD, jamais en silence.
+				if coins.size() != 4:
+					continue
+				var normale := Vector3.ZERO
+				normale[axe] = float(signe)
+				_quad(sommets, normales, couleurs, coins, normale)
+
+	var mesh := ArrayMesh.new()
+	if sommets.is_empty():
+		return mesh
+	var tout: Array = []
+	tout.resize(Mesh.ARRAY_MAX)
+	tout[Mesh.ARRAY_VERTEX] = sommets
+	tout[Mesh.ARRAY_NORMAL] = normales
+	tout[Mesh.ARRAY_COLOR] = couleurs
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tout)
+	mesh.surface_set_material(0, RP.matiere())
+	return mesh
+
+
+## LE BLOC LISSÉ — même amincissement que `maillage_moitie`, mais les marches deviennent des pentes.
+##
+## `force` : 0 rend la coque à facettes à l'identique, 1 le maillage dual complet. ⚠ Entre les deux,
+## c'est un CHANFREIN plutôt qu'un fondu — et c'est l'image, pas un compteur, qui a montré qu'il en
+## fallait un réglage : à pleine force les contours droits deviennent ondulants et le trou rectangulaire
+## d'une dalle devient un ovale.
+##
+## ⚠ **C'EST LA GÉOMÉTRIE LIVRÉE DEPUIS LE 25 SEPTEMBRE 2026 (DÉCIDÉ, Jordan), à `FORCE_CHANFREIN`.**
+## Elle est jugée par `sonde_lissage.gd` pour les chiffres et par `planche_lissage.gd` pour ce
+## qu'aucun chiffre ne dit.
+static func maillage_lisse(i: int, cote := 0.5, force := 1.0) -> ArrayMesh:
+	return _coque_lissee(cases(i), clampf(cote, 0.05, 1.0) * 0.5, force)
+
+
+## DE COMBIEN LE TÉMOIN EST CHANFREINÉ — DÉCIDÉ (Jordan, 25 septembre 2026).
+##
+## ⚠ **CE NOMBRE EST MESURÉ, PAS CHOISI AU GOÛT.** Jordan voulait que les deux arêtes d'une marche
+## soient reliées par une face DIRECTE, et prévoyait que les triangles aux coins à trois contremarches
+## rendraient le maillage non-manifold. Il avait raison pour le geste littéral — et il y avait pire :
+## un palier large d'UN sous-voxel n'a qu'une face, réclamée par les chanfreins de ses deux côtés, et
+## c'est le cas majoritaire (91 paliers sur 261). D'où le maillage dual, où le cas n'existe pas.
+##
+## ⚠ **LE PLAFOND TECHNIQUE EST 0,60, ET IL A ÉTÉ MESURÉ EN BALAYANT** — jusqu'à 0,60 le lissé est
+## strictement identique à la coque à facettes sur tout ce qui compte (8 364 quads, 0 orphelin, 89,3 %
+## de valence 4, 18 arêtes ambiguës, 68 classes récoltées) ; à 0,80 les orphelins apparaissent (390),
+## à 1,00 ils sont 528. **Le chanfrein ne coûte donc RIEN en deçà de 0,60.**
+##
+## ⚠ **ET LE PLAFOND ESTHÉTIQUE EST PLUS BAS QUE LE TECHNIQUE — seule l'image l'a dit.** À 1,00 la
+## surface FOND : les contours droits ondulent, le trou rectangulaire d'une dalle devient un ovale, on
+## ne lit plus des cases. À 0,60 l'ondulation commence. À 0,20 le chanfrein chuchote et ne montre plus
+## rien à l'artiste. **0,35 est la seule valeur vue où les arêtes sont abattues ET le bloc reste
+## lisible comme des cases.** ⚠ Aucun compteur ne pouvait trancher ça : celui des pentes SATURE — il
+## dit SI une face penche, jamais DE COMBIEN — et rend 63,0 % à 0,35 comme 63,2 % à 1,00.
+const FORCE_CHANFREIN := 0.35
 
 
 ## CE QUE LE TRANCHEUR RÉCOLTE : une pièce Marching Blocks par sommet intérieur, posée par sa classe et
@@ -607,32 +783,41 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 	return _coque_sous_voxels(cases(i), clampf(cote, 0.05, 1.0) * 0.5)
 
 
-## LA BIBLIOTHÈQUE DES NEUF BLOCS TÉMOINS — une `MeshLibrary` prête pour un `MassifPeint`.
+## LA BIBLIOTHÈQUE DU BLOC TÉMOIN — une `MeshLibrary` prête pour un `MassifPeint`.
 ##
 ## Rend {"lot": MeshLibrary, "erreurs": Array, "provenance": {classe: nom du bloc}, "manquantes": Array}.
-## `moitie` : les faces qui donnent sur du vide rentrent d'un quart de case AVANT le tranchage.
 ##
-## ⚠ **LA RÈGLE DE COLLISION EST ÉCRITE PLUTÔT QUE SUBIE : LE PREMIER BLOC GAGNE**, dans l'ordre du
-## catalogue — les cinq paysages, puis la salle, puis les érosions. Une même classe est livrée par
-## plusieurs blocs (mesuré : `mb_plaque_b2h2` sort de sept d'entre eux) ; sans règle, c'est l'ordre de
-## parcours qui trancherait en silence. À classe égale, l'art d'un massif bat celui d'une érosion.
-## ⚠ C'est un choix, pas une nécessité — pour l'inverser, il suffit de réordonner `BLOCS`.
+## ⚠ **UN SEUL MODE, L'AMINCI (Jordan, 25 septembre 2026).** Un paramètre `moitie` laissait choisir entre
+## le solide brut et les tuiles ramenées à la moitié de leur case. Le choix n'avait pas de second terme
+## utile : l'aminci est ce qu'on exporte, ce qu'on peint, et ce sur quoi on se replie.
+##
+## ⚠ **ET CE PARAMÈTRE PORTAIT UN DÉFAUT RÉEL, pas seulement une option de trop** : l'export amincissait
+## par défaut (`moitie := true`) tandis que le repli de `librairie_depuis_glb()` rendait le solide PLEIN
+## (`moitie := false`). Un bloc absent du `.glb` revenait donc dans une géométrie DIFFÉRENTE de celle qui
+## était partie, et la récolte changeait sans que rien ne le dise. Deux défauts qu'il fallait penser à
+## garder d'accord ; un mode unique les rend identiques par construction.
+##
+## ⚠ **LA BOUCLE ET « LE PREMIER BLOC GAGNE » SURVIVENT À UN SEUL BLOC, ET C'EST VOULU.** Avec un unique
+## bloc il n'y a plus de collision ; la garde reste parce que `BLOCS` peut regrossir, et qu'une règle
+## d'arbitrage écrite vaut mieux qu'un ordre de parcours qui tranche en silence le jour où elle manque.
 ##
 ## ⚠ **AUCUN REPLI (Jordan, 23 septembre 2026).** Une classe qu'aucun bloc ne livre n'est PAS comblée
 ## par le calcul : elle est SIGNALÉE, et le peintre verra un cube rouge à cet endroit. Combler en
 ## silence rendrait le trou invisible jusqu'à ce qu'un joueur tombe dessus.
 ##
-## ⚠ **ET CES NEUF BLOCS SONT DES CUBES : aucun réglage ne leur donnera des formes.** Ce sont des
-## TÉMOINS, qui montrent où sont les tuiles ; ce qui donnera des formes, c'est le relief sculpté par
-## l'artiste, d'où l'aller-retour `.glb` (`exporter_le_bloc` / `librairie_depuis_glb`).
-static func librairie(moitie := false) -> Dictionary:
+## ⚠ **ET CE BLOC EST FAIT DE CUBES : aucun réglage ne lui donnera des formes.** C'est un TÉMOIN, qui
+## montre où sont les tuiles ; ce qui donnera des formes, c'est le relief sculpté par l'artiste, d'où
+## l'aller-retour `.glb` (`exporter_le_bloc` / `librairie_depuis_glb`).
+static func librairie() -> Dictionary:
 	var Tranchage := load("res://addons/undermend/tranchage.gd")
 	var pieces := {}
 	var provenance := {}
 	var erreurs: Array = []
 
 	for i in BLOCS.size():
-		var solide: ArrayMesh = maillage_moitie(i) if moitie else maillage(i)
+		# ⚠ LA MÊME GÉOMÉTRIE QUE L'EXPORT, chanfrein compris : le catalogue avec lequel on peint doit
+		# être celui que l'artiste va sculpter, sinon le témoin ment sur ce qu'on attend de lui.
+		var solide: ArrayMesh = maillage_lisse(i, 0.5, FORCE_CHANFREIN)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
 		var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
@@ -704,12 +889,14 @@ static func boite_du_bloc() -> AABB:
 ##
 ## ⚠ SANS PARENT VIDE : la racine de la scène est le `MeshInstance3D` lui-même, pas un `Node3D` qui
 ## arriverait dans Blender comme un Empty dont personne ne veut.
-## ⚠ **`moitie` VAUT `true` PAR DÉFAUT (Jordan, 24 septembre 2026)** : le bloc part avec ses tuiles de
-## bordure DÉJÀ ramenées à la moitié de leur case. L'artiste voit ainsi d'emblée la liberté qu'il a —
-## la matière ne remplit pas sa case, il peut donc pousser, creuser, chanfreiner. Exporter des cubes
-## pleins lui laisserait croire que la case est la limite.
-static func exporter_le_bloc(chemin: String, moitie := true) -> String:
-	var brut: ArrayMesh = maillage_moitie(0) if moitie else maillage(0)
+## ⚠ **IL PART TOUJOURS AMINCI (Jordan, 24 puis 25 septembre 2026)** : le bloc part avec ses tuiles de
+## bordure ramenées à la moitié de leur case. L'artiste voit ainsi d'emblée la liberté qu'il a — la
+## matière ne remplit pas sa case, il peut donc pousser, creuser, chanfreiner. Exporter des cubes pleins
+## lui laisserait croire que la case est la limite.
+## ⚠ **CE FUT D'ABORD UN DÉFAUT DE PARAMÈTRE, C'EST DÉSORMAIS LE SEUL MODE.** Un export capable de partir
+## plein était une façon de mentir à l'artiste sur sa marge, pas une option qu'on avait envie d'offrir.
+static func exporter_le_bloc(chemin: String) -> String:
+	var brut: ArrayMesh = maillage_lisse(0, 0.5, FORCE_CHANFREIN)
 	var mesh: ArrayMesh = sans_normales(souder(brut))
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
@@ -736,7 +923,7 @@ static func exporter_le_bloc(chemin: String, moitie := true) -> String:
 ## ⚠ **UN BLOC DONT LA BOÎTE RESSORT VIDE EST SIGNALÉ, pas remplacé en silence.** C'est le piège de
 ## toute cette boucle : si l'artiste déplace le bloc dans Blender, sa boîte se vide, le greffon retombe
 ## sur la version calculée, et tout semble marcher alors que son travail n'est pas dans le lot.
-static func librairie_depuis_glb(chemin: String, moitie := false) -> Dictionary:
+static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	var Tranchage := load("res://addons/undermend/tranchage.gd")
 	var Decoupe := load("res://addons/undermend/decoupe.gd")
 	var journal: Array = []
@@ -763,7 +950,11 @@ static func librairie_depuis_glb(chemin: String, moitie := false) -> Dictionary:
 			sculptes.append(BLOCS[0]["nom"])
 	if solide == null:
 		absents.append(BLOCS[0]["nom"])
-		solide = maillage_moitie(0) if moitie else maillage(0)
+		# ⚠ **LE MÊME AMINCI QUE L'EXPORT, ET C'EST UNE CORRECTION.** Ce repli rendait le solide PLEIN
+		# alors que le bloc était parti aminci : le témoin de secours n'avait donc pas la géométrie du
+		# témoin exporté, et la récolte pouvait différer sans qu'aucun compteur ne le signale. Les deux
+		# chemins sont maintenant le même appel, donc d'accord par construction et non par vigilance.
+		solide = maillage_lisse(0, 0.5, FORCE_CHANFREIN)
 
 	var fautes: Array = []
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,

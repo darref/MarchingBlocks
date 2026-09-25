@@ -139,11 +139,45 @@ C'est le partage de responsabilité, et il a été énoncé par Jordan mot pour 
 - **Il part déjà AMINCI** — tuiles ramenées à la moitié de leur case — pour montrer à l'artiste la marge
   dont il dispose. ⚠ **On rétrécit AVANT le tranchage** : chaque cube reste fermé, et les pièces
   voisines se rebouchent. Rétrécir APRÈS les crève, puisqu'elles sont ouvertes sur leurs faces de coupe.
+- ⚠ **L'AMINCI EST LE SEUL MODE — DÉCIDÉ (Jordan, 25 septembre 2026).** Une case à cocher offrait le
+  solide brut à la place. Ce n'était pas un réglage mais une façon de mentir à l'artiste sur sa marge.
+  ⚠ **Et le paramètre cachait un défaut réel** : l'export amincissait par défaut tandis que le repli de
+  `librairie_depuis_glb()` rendait le solide PLEIN — un bloc absent du `.glb` revenait donc dans une
+  géométrie DIFFÉRENTE de celle qui était partie. **Export, catalogue et repli lisent désormais le même
+  appel**, donc sont d'accord par construction et non par vigilance.
 - ⚠ **LA GÉOMÉTRIE EST UNE COQUE EN SOUS-VOXELS** (4 par cellule, le retrait valant un quart de case).
   L'ancienne version émettait une face par face de cellule : l'aminci en sortait **non-manifold**, avec
   144 faces enterrées sur 216. Et culler naïvement ouvrait **16 trous**, là où deux cellules voisines
   n'ont pas le même retrait. La coque ferme la surface sans culler ni boucher.
   ⚠ Coût mesuré : **×5 en triangles**, et la RÉCOLTE est identique (mêmes classes, 0 erreur d'octant).
+
+### Le CHANFREIN : un maillage DUAL à 0,35 — DÉCIDÉ (Jordan, 25 septembre 2026)
+
+Le témoin partait avec des **escaliers**, et Jordan les a croisés en rouge sur une capture : *« il
+faudrait que les deux arêtes soient reliées par des faces directes plutôt que par deux faces formant un
+escalier. »*
+
+- ⚠ **CES ESCALIERS SONT UN ARTEFACT DE L'AMINCISSEMENT, PAS LA FORME VOULUE — MESURÉ.** Le solide n'a
+  **aucune** petite marche : ses 244 contremarches sont à 100 % des multiples d'une cellule.
+  L'amincissement les porte à 398 en coupant chaque marche de 4 sous-voxels en une paire **1 + 3**, et
+  crée **91 paliers larges d'un seul sous-voxel** sur 261.
+- ⚠ **LE GESTE LITTÉRAL EST IMPOSSIBLE, et Jordan l'avait pressenti** : *« là où trois contremarches se
+  rencontrent, le triangle qu'on créera rendra beaucoup d'endroits non-manifold. »* Pire encore — un
+  palier d'UN sous-voxel n'a qu'une face, **réclamée par les chanfreins de ses deux côtés**.
+- **LE REMÈDE EST UN MAILLAGE DUAL** (*surface nets*) sur le champ de sous-voxels : un sommet par cube
+  dual traversé, **un quad par arête primale traversée**. Une arête du maillage sépare donc exactement
+  deux quads : ⚠ la non-manifoldité n'est pas évitée au cas par cas, **elle n'a pas de place où naître**.
+  Mesuré : **18 arêtes ambiguës avant, 18 après**, 0 trou, tout soudé, **68 classes récoltées** des deux
+  côtés — le contrat de couture tient.
+- ⚠ **0,35 EST MESURÉ, PAS CHOISI AU GOÛT.** Jusqu'à **0,60** le lissé est strictement identique à la
+  coque à facettes (8 364 quads, 0 orphelin, 89,3 % de valence 4) ; à 0,80 apparaissent 390 orphelins,
+  à 1,00 il y en a 528. **Le plafond esthétique est plus bas que le technique** : à 1,00 la surface FOND
+  — contours ondulants, trou rectangulaire devenu ovale — et à 0,20 le chanfrein chuchote.
+- ⚠ **AUCUN COMPTEUR NE POUVAIT TRANCHER LA FORCE.** Celui des pentes **sature** : il dit SI une face
+  penche, jamais DE COMBIEN, et rend 63,0 % à 0,35 comme 63,2 % à 1,00. **Seule l'image l'a tranché.**
+- ⚠ **ET CE QUE LE CHANFREIN NE RÈGLE PAS** : les décrochements d'une **cellule entière** restent des
+  marches, simplement adoucies. Aucune force ne les enlèvera — ils sont dans l'occupation des cases,
+  qui n'appartient pas à l'artiste (§3).
 
 ### Ce que le témoin NE PEUT PAS être — MESURÉ
 

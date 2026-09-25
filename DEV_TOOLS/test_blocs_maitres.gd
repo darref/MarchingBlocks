@@ -38,6 +38,10 @@ extends SceneTree
 
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const Tranchage := preload("res://addons/undermend/tranchage.gd")
+## ⚠ On EMPRUNTE le bilan topologique plutôt que d'en recopier le calcul : deux descriptions d'un même
+## fait divergent toujours, et celle-ci porte déjà deux pièges payés cher (charte §6).
+const Topo := preload("res://DEV_TOOLS/topologie.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -54,6 +58,7 @@ func _initialize() -> void:
 	_la_partition_des_contextes_est_derivee()
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
+	_la_geometrie_livree_est_saine()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -240,6 +245,95 @@ func _les_maillages_existent_et_tiennent_dans_le_bloc() -> void:
 		_dire(recolte.get_surface_count() > 0, "« %s » : la RÉCOLTE est vide" % nom)
 		if recolte.get_surface_count() > 0:
 			_borne(recolte.get_aabb(), 0.5, float(BlocsMaitres.COTE) - 0.5, "%s (récolte)" % nom)
+
+
+## LA GÉOMÉTRIE RÉELLEMENT LIVRÉE — celle que `exporter_le_bloc()` écrit et que `librairie()` tranche.
+##
+## ⚠ **ELLE N'ÉTAIT GARDÉE PAR RIEN JUSQU'AU 25 SEPTEMBRE 2026.** Les contrôles ci-dessus éprouvent
+## `maillage()` et `maillage_des_pieces()` ; le chanfrein a changé ce qui PART chez l'artiste sans que
+## la moindre assertion ne le suive. Livrer une géométrie que rien ne garde rend toute régression
+## invisible jusqu'à ce qu'un acheteur ouvre le `.glb`.
+func _la_geometrie_livree_est_saine() -> void:
+	var cases: Dictionary = BlocsMaitres.cases(0)
+
+	# ── le réglage reste dans le budget MESURÉ ──────────────────────────────────────────────────────
+	# ⚠ Au-delà de 0,60 l'appariement en quads se dégrade (390 orphelins à 0,80, 528 à 1,00) et les
+	# boucles d'arêtes que Jordan exige pour Blender avec. En deçà, le chanfrein ne coûte rien.
+	var force: float = BlocsMaitres.FORCE_CHANFREIN
+	_dire(force > 0.0 and force <= 0.6,
+		"FORCE_CHANFREIN vaut %.2f — hors du budget mesuré ]0 ; 0,60]" % force)
+
+	# ── le contrôle négatif du réglage ──────────────────────────────────────────────────────────────
+	# ⚠ Le centre d'un cube dual tombe sur un coin du réseau, là où la coque à facettes pose ses
+	# sommets : à force 0, le lissage DOIT rendre la coque à facettes, sans une seule pente. S'il en
+	# rend, l'interpolation est fausse et TOUT ce qui est mesuré avec porte sur autre chose.
+	var plat: ArrayMesh = BlocsMaitres.maillage_lisse(0, 0.5, 0.0)
+	_dire(_obliques(plat) == 0,
+		"à force 0 le lissage rend %d triangle(s) obliques — il devrait reproduire les facettes"
+			% _obliques(plat))
+
+	# ── et il chanfreine vraiment ───────────────────────────────────────────────────────────────────
+	# ⚠ Sans cette assertion, remettre FORCE_CHANFREIN à 0 passerait tous les autres contrôles : une
+	# géométrie qui ne chanfreine rien est parfaitement saine, elle ne fait simplement pas son travail.
+	var livree: ArrayMesh = BlocsMaitres.maillage_lisse(0, 0.5, force)
+	_dire(_obliques(livree) > 0, "la géométrie livrée n'a AUCUNE face oblique : elle ne chanfreine pas")
+
+	# ── elle est fermée et soudée ───────────────────────────────────────────────────────────────────
+	# ⚠ C'est la promesse du maillage dual — un quad par arête traversée, donc aucune place où un trou
+	# puisse naître. Une promesse par construction se garde quand même : c'est la construction qu'on
+	# peut casser.
+	var soudee: ArrayMesh = BlocsMaitres.souder(livree)
+	var bilan: Dictionary = Topo.bilan(soudee, cases)
+	_dire(int(bilan["bords"]) == 0,
+		"la géométrie livrée a %d arête(s) de BORD — donc des trous" % int(bilan["bords"]))
+	_dire(int(bilan["doubles"]) == 0,
+		"la géométrie livrée garde %d sommet(s) non soudés" % int(bilan["doubles"]))
+
+	# ── et le trancheur y voit EXACTEMENT les mêmes classes que sur les facettes ────────────────────
+	# ⚠ **C'EST LE CONTRAT DE COUTURE, et c'est le contrôle qui compte le plus ici.** Le chanfrein
+	# déplace la surface près des plans de coupe ; s'il changeait ne serait-ce qu'une classe, les tuiles
+	# ne se raccorderaient plus dans un monde peint — et aucun compteur de topologie ne le dirait.
+	var avant: Array = _recolte(BlocsMaitres.maillage_moitie(0))
+	var apres: Array = _recolte(livree)
+	_dire(avant == apres,
+		"la récolte change avec le chanfrein : %d classe(s) contre %d" % [apres.size(), avant.size()])
+
+
+## Les triangles dont la normale géométrique n'est alignée sur aucun axe.
+##
+## ⚠ Normale GÉOMÉTRIQUE (produit vectoriel des sommets), jamais celle du tableau : souder impose une
+## moyenne par sommet, et s'y fier a déjà coûté 23 erreurs d'octant dans ce projet.
+func _obliques(mesh: ArrayMesh) -> int:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return 0
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] \
+		if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array(range(v.size()))
+	var combien := 0
+	for t in range(0, idx.size() - 2, 3):
+		var n: Vector3 = (v[idx[t + 1]] - v[idx[t]]).cross(v[idx[t + 2]] - v[idx[t]])
+		if n.length_squared() < 0.000000001:
+			continue
+		n = n.normalized()
+		var aligne := false
+		for axe in 3:
+			if absf(absf(n[axe]) - 1.0) < 0.001:
+				aligne = true
+		if not aligne:
+			combien += 1
+	return combien
+
+
+## Les noms de classes que le trancheur tire d'un solide, triés — de quoi comparer deux géométries.
+func _recolte(solide: ArrayMesh) -> Array:
+	var fautes: Array = []
+	var pieces: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * BlocsMaitres.COTE, 1.0,
+		BlocsMaitres.creuses(0), fautes, false)
+	_dire(fautes.is_empty(), "le tranchage de la géométrie livrée rend %d faute(s)" % fautes.size())
+	var noms: Array = pieces.keys()
+	noms.sort()
+	return noms
 
 
 func _borne(boite: AABB, mini: float, maxi: float, quoi: String) -> void:

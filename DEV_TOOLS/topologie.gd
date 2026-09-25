@@ -94,6 +94,60 @@ static func en_mesh(sommets: PackedVector3Array) -> ArrayMesh:
 	return mesh
 
 
+## LE GRAPHE DES QUADS — les arêtes du maillage une fois les DIAGONALES retirées, et les valences qui
+## en découlent. C'est ce graphe-là que Blender montre après « Tris to Quads », donc celui sur lequel
+## se juge la continuité des boucles d'arêtes.
+##
+## ⚠ **IL PREND SES DIAGONALES EN ARGUMENT, et c'est tout l'intérêt** : appelé avec les diagonales
+## coplanaires il rend la mesure historique, appelé avec les tolérantes il rend celle qui vaut pour un
+## maillage aux quads non plans. Une seule description, deux lectures.
+static func _graphe_quads(idx: PackedInt32Array, cle_de: Dictionary, diagonales: Dictionary,
+		cases: Dictionary) -> Dictionary:
+	var q_aretes := {}
+	var q_voisins := {}
+	for t in range(0, idx.size() - 2, 3):
+		var trio2: Array = [cle_de[idx[t]], cle_de[idx[t + 1]], cle_de[idx[t + 2]]]
+		for i in 3:
+			var a2: String = trio2[i]
+			var b2: String = trio2[(i + 1) % 3]
+			var e2: String = (a2 + "|" + b2) if a2 < b2 else (b2 + "|" + a2)
+			if diagonales.has(e2):
+				continue
+			q_aretes[e2] = int(q_aretes.get(e2, 0)) + 1
+			if not q_voisins.has(a2):
+				q_voisins[a2] = {}
+			if not q_voisins.has(b2):
+				q_voisins[b2] = {}
+			(q_voisins[a2] as Dictionary)[b2] = true
+			(q_voisins[b2] as Dictionary)[a2] = true
+	var q_bords := 0
+	var q_mult := 0
+	for e2 in q_aretes:
+		var n3: int = int(q_aretes[e2])
+		if n3 == 1:
+			q_bords += 1
+		elif n3 > 2:
+			q_mult += 1
+	var q_val := {}
+	var poles: Array = []
+	for s in q_voisins:
+		var d2: int = (q_voisins[s] as Dictionary).size()
+		q_val[d2] = int(q_val.get(d2, 0)) + 1
+		if d2 == 4:
+			continue
+		var bouts: PackedStringArray = (s as String).split(",")
+		var pos := Vector3(bouts[0].to_float(), bouts[1].to_float(), bouts[2].to_float())
+		var autour := 0
+		for dx in [-1, 0]:
+			for dy in [-1, 0]:
+				for dz in [-1, 0]:
+					if cases.has(Vector3i(floori(pos.x) + dx, floori(pos.y) + dy, floori(pos.z) + dz)):
+						autour += 1
+		poles.append({"valence": d2, "autour": autour})
+	return {"q_aretes": q_aretes.size(), "q_bords": q_bords, "q_multiples": q_mult,
+		"q_val": q_val, "q_sommets": q_voisins.size(), "poles": poles}
+
+
 ## LE BILAN TOPOLOGIQUE d'un maillage. `cases` sert à classer les pôles (combien de cellules pleines
 ## entourent le point) ; il peut être vide.
 ##
@@ -171,71 +225,61 @@ static func bilan(mesh: ArrayMesh, cases: Dictionary = {}) -> Dictionary:
 		elif n2 > 2:
 			multiples += 1
 
+	# ⚠ **DEUX COMPTAGES, ET LE SECOND EXISTE PARCE QUE LE PREMIER NE SAIT PAS TOUT VOIR.**
+	# `apparies` exige que les deux triangles soient COPLANAIRES (0,9999) : c'est juste pour une coque
+	# faite de rectangles, où un quad est plan par construction. Mais un quad de maillage DUAL ne l'est
+	# pas — ses quatre sommets ne sont pas dans un plan — et le compteur le déclarerait « orphelin »
+	# alors que Blender l'apparierait sans hésiter. Conclure « le lissage casse les boucles d'arêtes »
+	# sur ce chiffre-là, ce serait accuser le sujet d'un défaut de l'instrument (charte §6).
+	# `apparies_tol` apparie sur la seule règle qui compte — l'arête la plus longue, MUTUELLE — et
+	# `plat_mini` dit à quel point les paires s'écartent du plan.
+	# ⚠ CONTRÔLE NÉGATIF : sur une coque de rectangles, les deux comptages DOIVENT être égaux.
 	var diagonales := {}
 	var apparies := {}
+	var apparies_tol := {}
+	var diagonales_tol := {}
+	var plat_mini := 1.0
 	for e in par_arete:
 		var ts: Array = par_arete[e]
-		if ts.size() != 2 or apparies.has(ts[0]) or apparies.has(ts[1]):
+		if ts.size() != 2:
 			continue
 		if plus_longue[ts[0]] != e or plus_longue[ts[1]] != e:
 			continue
-		if (normale_de[ts[0]] as Vector3).dot(normale_de[ts[1]]) > 0.9999:
+		var produit: float = (normale_de[ts[0]] as Vector3).dot(normale_de[ts[1]])
+		if not apparies_tol.has(ts[0]) and not apparies_tol.has(ts[1]):
+			apparies_tol[ts[0]] = true
+			apparies_tol[ts[1]] = true
+			diagonales_tol[e] = true
+			plat_mini = minf(plat_mini, produit)
+		if apparies.has(ts[0]) or apparies.has(ts[1]):
+			continue
+		if produit > 0.9999:
 			apparies[ts[0]] = true
 			apparies[ts[1]] = true
 			diagonales[e] = true
 
-	var q_aretes := {}
-	var q_voisins := {}
-	for t in range(0, idx.size() - 2, 3):
-		var trio2: Array = [cle_de[idx[t]], cle_de[idx[t + 1]], cle_de[idx[t + 2]]]
-		for i in 3:
-			var a2: String = trio2[i]
-			var b2: String = trio2[(i + 1) % 3]
-			var e2: String = (a2 + "|" + b2) if a2 < b2 else (b2 + "|" + a2)
-			if diagonales.has(e2):
-				continue
-			q_aretes[e2] = int(q_aretes.get(e2, 0)) + 1
-			if not q_voisins.has(a2):
-				q_voisins[a2] = {}
-			if not q_voisins.has(b2):
-				q_voisins[b2] = {}
-			(q_voisins[a2] as Dictionary)[b2] = true
-			(q_voisins[b2] as Dictionary)[a2] = true
-	var q_bords := 0
-	var q_mult := 0
-	for e2 in q_aretes:
-		var n3: int = int(q_aretes[e2])
-		if n3 == 1:
-			q_bords += 1
-		elif n3 > 2:
-			q_mult += 1
+	# ⚠ **DEUX GRAPHES, UNE SEULE DESCRIPTION.** Le même calcul, appliqué d'abord aux diagonales
+	# COPLANAIRES (la règle historique) puis aux TOLÉRANTES. Le recopier pour la seconde aurait donné
+	# deux descriptions d'un même fait, qui divergent toujours — c'est arrivé aux deux règles de falaise
+	# de ce projet, à une heure d'intervalle (charte §6).
+	var g: Dictionary = _graphe_quads(idx, cle_de, diagonales, cases)
+	var g_tol: Dictionary = _graphe_quads(idx, cle_de, diagonales_tol, cases)
 
 	var val := {}
 	for s in voisins:
 		var d1: int = (voisins[s] as Dictionary).size()
 		val[d1] = int(val.get(d1, 0)) + 1
-	var q_val := {}
-	var poles: Array = []
-	for s in q_voisins:
-		var d2: int = (q_voisins[s] as Dictionary).size()
-		q_val[d2] = int(q_val.get(d2, 0)) + 1
-		if d2 == 4:
-			continue
-		var bouts: PackedStringArray = (s as String).split(",")
-		var pos := Vector3(bouts[0].to_float(), bouts[1].to_float(), bouts[2].to_float())
-		var autour := 0
-		for dx in [-1, 0]:
-			for dy in [-1, 0]:
-				for dz in [-1, 0]:
-					if cases.has(Vector3i(floori(pos.x) + dx, floori(pos.y) + dy, floori(pos.z) + dz)):
-						autour += 1
-		poles.append({"valence": d2, "autour": autour})
 
 	return {
 		"sommets": v.size(), "triangles": idx.size() / 3,
 		"doubles": v.size() - positions.size(),
 		"aretes": aretes.size(), "bords": bords, "multiples": multiples, "val": val,
 		"quads": apparies.size() / 2, "orphelins": (idx.size() / 3) - apparies.size(),
-		"q_aretes": q_aretes.size(), "q_bords": q_bords, "q_multiples": q_mult,
-		"q_val": q_val, "q_sommets": q_voisins.size(), "poles": poles,
+		"quads_tolerants": apparies_tol.size() / 2,
+		"orphelins_tolerants": (idx.size() / 3) - apparies_tol.size(),
+		"plat_mini": plat_mini,
+		"q_aretes": g["q_aretes"], "q_bords": g["q_bords"], "q_multiples": g["q_multiples"],
+		"q_val": g["q_val"], "q_sommets": g["q_sommets"], "poles": g["poles"],
+		"q_val_tolerant": g_tol["q_val"], "q_sommets_tolerant": g_tol["q_sommets"],
+		"q_bords_tolerant": g_tol["q_bords"], "q_multiples_tolerant": g_tol["q_multiples"],
 	}

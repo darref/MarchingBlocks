@@ -1,13 +1,13 @@
 @tool
 extends Control
-## L'ÉCRAN DU GREFFON — une case à cocher, trois boutons.
+## L'ÉCRAN DU GREFFON — trois boutons, et plus aucun réglage.
 ##
 ## ⚠ **IL EN CONTENAIT BEAUCOUP PLUS, ET C'ÉTAIT LE DÉFAUT** (Jordan, 24 septembre 2026) : deux onglets,
 ## une vue 3D orbitale avec son gizmo, un catalogue de neuf blocs, un panneau d'import et de tranchage.
 ## Chaque pièce se justifiait seule ; ensemble elles noyaient ce qu'on veut faire. Ce qui reste est la
 ## BOUCLE COMPLÈTE, et rien d'autre :
 ##
-##   1. PEINDRE       les neuf blocs du catalogue → tranchage → MeshLibrary → un MassifPeint posé ;
+##   1. PEINDRE       le bloc témoin du catalogue → tranchage → MeshLibrary → un MassifPeint posé ;
 ##   2. EXPORTER      le MasterBlockSet entier vers un dossier quelconque du disque, pour Blender ;
 ##   3. IMPORTER      un set sculpté depuis ce dossier, le repasser au pipeline, et peindre avec.
 ##
@@ -20,14 +20,14 @@ extends Control
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
 
-## ⚠ Deux chemins distincts : confondre le lot de production et le lot d'essai ferait peindre un monde
-## de test en croyant peindre le vrai.
-const LOT_PLEIN := "res://ART/marching_blocks_9.tres"
-const LOT_MOITIE := "res://ART/marching_blocks_moitie.tres"
+## ⚠ **UN SEUL LOT, PARCE QU'IL N'Y A PLUS QU'UN MODE (Jordan, 25 septembre 2026).** Il y en avait deux,
+## `marching_blocks_9.tres` et `marching_blocks_moitie.tres`, que la case à cocher départageait. Le « 9 »
+## comptait des blocs qui n'existent plus, et la « moitié » ne distinguait plus rien une fois l'aminci
+## devenu la règle : deux noms qui désignaient des choix disparus (charte §6, « un mot, une chose »).
+const LOT := "res://ART/marching_blocks.tres"
 
 const OR := Color("#ebbb69")
 
-var _moitie := false
 var _rapport: RichTextLabel
 var _dialogue: EditorFileDialog
 ## Ce que le dialogue de dossier doit faire au retour : "exporter" ou "importer".
@@ -63,29 +63,25 @@ func _batir() -> void:
 	titre.add_theme_color_override("font_color", OR)
 	colonne.add_child(titre)
 
-	var bascule := CheckBox.new()
-	bascule.text = "tuiles ramenées à la moitié de la case"
-	bascule.tooltip_text = ("Les faces qui donnent sur du VIDE rentrent d'un quart de case, avant le "
-		+ "tranchage.\nUne face partagée entre deux cases pleines reste intacte : le massif garde ses "
-		+ "formes.")
-	bascule.toggled.connect(func(oui): _moitie = oui)
-	colonne.add_child(bascule)
-
+	# ⚠ **UNE CASE À COCHER A VÉCU ICI (retirée par Jordan, 25 septembre 2026).** Elle offrait le solide
+	# brut à la place de l'aminci. Ce n'était pas un réglage mais une manière de se tromper : l'aminci est
+	# ce qui part chez l'artiste, donc le seul mode qui décrive la réalité de ce qu'il va sculpter.
 	var peindre := Button.new()
 	peindre.text = "Peindre un massif"
-	peindre.tooltip_text = "Les neuf blocs du catalogue, passés par tout le pipeline."
+	peindre.tooltip_text = ("Le bloc témoin du catalogue, passé par tout le pipeline.\n"
+		+ "Tuiles ramenées à la moitié de leur case : les faces qui donnent sur du VIDE rentrent d'un "
+		+ "quart.\nUne face partagée entre deux cases pleines reste intacte — le massif garde ses formes.")
 	peindre.custom_minimum_size = Vector2(260, 36)
-	peindre.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(_moitie),
-		LOT_MOITIE if _moitie else LOT_PLEIN, "catalogue"))
+	peindre.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(), LOT, "catalogue"))
 	colonne.add_child(peindre)
 
 	colonne.add_child(HSeparator.new())
 
 	var exporter := Button.new()
 	exporter.text = "Exporter le MasterBlockSet…"
-	exporter.tooltip_text = ("Écrit les neuf blocs dans UN SEUL .glb, alignés sur une bande, pour les "
-		+ "modéliser et texturer dans Blender.\n"
-		+ "⚠ Ne DÉPLACE aucun bloc : c'est sa position qui l'identifie au retour, pas son nom.\n"
+	exporter.tooltip_text = ("Écrit le bloc témoin dans UN .glb, pour le modéliser et le texturer dans "
+		+ "Blender.\n"
+		+ "⚠ Ne le DÉPLACE pas : c'est sa position qui l'identifie au retour, pas son nom.\n"
 		+ "Tuiles déjà ramenées à la moitié de leur case, pour montrer la marge disponible.")
 	exporter.custom_minimum_size = Vector2(300, 36)
 	exporter.pressed.connect(func(): _demander_un_fichier("exporter"))
@@ -219,7 +215,7 @@ func _exporter(fichier: String) -> void:
 # ── 2. IMPORTER ET PEINDRE ──────────────────────────────────────────────────────────────────────────
 
 func _importer(fichier: String) -> void:
-	var bilan: Dictionary = BlocsMaitres.librairie_depuis_glb(fichier, _moitie)
+	var bilan: Dictionary = BlocsMaitres.librairie_depuis_glb(fichier)
 	var entete := "[b]Set importé depuis[/b] %s\n" % fichier
 	var sculptes: Array = bilan["sculptes"]
 	var absents: Array = bilan["absents"]
@@ -285,9 +281,9 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	EditorInterface.get_selection().add_node(noeud)
 
 	var texte := entete
-	texte += "[color=#6f9e4a][b]Massif posé[/b][/color] (%s) — %d item(s) sur %d classes%s\n" \
-		% [quoi, lot.get_item_list().size(), MB.pieces_a_sculpter().size(),
-			"  ·  tuiles à la MOITIÉ" if _moitie else ""]
+	texte += "[color=#6f9e4a][b]Massif posé[/b][/color] (%s) — %d item(s) sur %d classes" \
+		% [quoi, lot.get_item_list().size(), MB.pieces_a_sculpter().size()]
+	texte += "  ·  tuiles à la MOITIÉ\n"
 	if chemin_du_lot != "":
 		texte += "lot écrit → %s\n" % chemin_du_lot
 

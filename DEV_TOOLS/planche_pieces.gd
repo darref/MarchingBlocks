@@ -20,11 +20,16 @@ extends SceneTree
 ## ── CE QU'ON COMPARE ────────────────────────────────────────────────────────────────────────────────
 ##
 ## Quatre classes, en colonnes : un coin SAILLANT, un coin RENTRANT, une arête SAILLANTE, une arête
-## RENTRANTE. Deux lots, en lignes : le lot PLEIN et le lot MOITIÉ.
+## RENTRANTE. UNE seule ligne : le lot unique, aminci.
 ##
-## ⚠ **CE QU'ON CHERCHE** : sur la ligne MOITIÉ, la pièce rentrante doit-elle encore creuser un angle
-## concave, ou est-elle devenue un bloc posé — donc convexe ? Si les deux lignes diffèrent sur les
-## rentrantes et pas sur les saillantes, le défaut est bien dans l'amincissement, pas dans le modèle.
+## ⚠ **LA COMPARAISON QUI JUSTIFIAIT CET OUTIL N'EXISTE PLUS (Jordan, 25 septembre 2026).** Il montrait
+## DEUX lignes — le lot PLEIN et le lot MOITIÉ — pour répondre à « la pièce rentrante creuse-t-elle
+## encore un angle concave une fois amincie, ou devient-elle un bloc posé ? ». L'aminci étant désormais
+## le seul mode, il n'y a plus de second terme à la comparaison.
+##
+## ⚠ **CE QUI RESTE GARDE SA RAISON D'ÊTRE** : un contrôle À L'ŒIL des quatre formes caractéristiques.
+## Aucun compteur ne dit si une pièce est à l'endroit — trois fois la couverture fut parfaite et le rendu
+## faux, et seule une image l'a montré (charte §6).
 
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 
@@ -40,9 +45,11 @@ const CLASSES := [
 	{"nom": "mb_arete_creuse_b4h2", "quoi": "arête RENTRANTE"},
 ]
 
+## ⚠ RESTE UNE LISTE, bien qu'elle n'ait plus qu'un seul élément : la mise en page se DÉDUIT de
+## `LOTS.size()` (voir `_image`), donc y remettre un terme à comparer un jour ne demandera pas de
+## retoucher la grille.
 const LOTS := [
-	{"chemin": "res://ART/marching_blocks_9.tres", "quoi": "lot PLEIN"},
-	{"chemin": "res://ART/marching_blocks_moitie.tres", "quoi": "lot MOITIÉ"},
+	{"chemin": "res://ART/marching_blocks.tres", "quoi": "lot aminci"},
 ]
 
 var _vues: Array = []
@@ -89,8 +96,8 @@ func _image() -> void:
 		"écrite" if err == OK else "ERREUR %d" % err])
 	print("   colonnes : %s" % ", ".join(PackedStringArray(CLASSES.map(func(c): return c["quoi"]))))
 	print("   lignes   : %s" % ", ".join(PackedStringArray(LOTS.map(func(l): return l["quoi"]))))
-	print("\n⚠ Ce qu'on cherche : sur la ligne MOITIÉ, la pièce RENTRANTE creuse-t-elle encore un angle")
-	print("   concave, ou est-elle devenue un bloc posé — donc convexe ?")
+	print("\n⚠ Ce qu'on regarde : la pièce RENTRANTE creuse-t-elle bien un angle concave, ou est-elle")
+	print("   devenue un bloc posé — donc convexe ? Aucun compteur ne répond à ça, seule l'image.")
 	quit(0 if err == OK else 1)
 
 

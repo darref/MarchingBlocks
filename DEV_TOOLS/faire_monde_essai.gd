@@ -16,7 +16,7 @@ extends SceneTree
 ## ce projet, répétée trois fois en une journée (charte §6) : *une mesure de couverture répond à « a-t-on
 ## posé quelque chose », jamais à « est-ce la bonne chose »*.
 ##
-## Cet outil fait donc le seul essai qui reste : il bâtit le lot des neuf blocs, peint un monde qui
+## Cet outil fait donc le seul essai qui reste : il bâtit le lot du bloc témoin, peint un monde qui
 ## contient exprès les situations difficiles, et regarde ce qui manque.
 ##
 ## ⚠ **AUCUN REPLI.** Une classe qu'aucun bloc ne livre n'est pas comblée : elle est signalée ici, et le
@@ -25,35 +25,25 @@ extends SceneTree
 ##
 ## ── CE QU'IL ÉCRIT ──────────────────────────────────────────────────────────────────────────────────
 ##
-##   ART/marching_blocks_9.tres   la MeshLibrary des neuf blocs
+##   ART/marching_blocks.tres     la MeshLibrary tirée du bloc témoin
 ##   NIVEAUX/monde_essai_3d.tscn  une scène ouvrable, déjà peinte, et qu'on peut CONTINUER à peindre
 
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
 
-## ⚠ `--moitie` : chaque bloc maître est ramené à la MOITIÉ de sa case AVANT le tranchage. C'est l'ordre
-## qui compte — les cubes restent fermés, le trancheur coupe dedans, et les pièces voisines se rebouchent
-## comme d'habitude. Deux mécanismes essayés avant celui-ci sont mesurés faux : amincir les CASES dessine
-## la grille décalée d'une demi-case par rapport au pavage, et rétrécir les pièces APRÈS le tranchage les
+## ⚠ **LE DRAPEAU `--moitie` A DISPARU AVEC LE MODE (Jordan, 25 septembre 2026).** Les tuiles sont
+## DÉSORMAIS TOUJOURS ramenées à la moitié de leur case avant le tranchage. C'est l'ordre qui compte —
+## les cubes restent fermés, le trancheur coupe dedans, et les pièces voisines se rebouchent comme
+## d'habitude. Deux mécanismes essayés avant celui-ci sont mesurés faux : amincir les CASES dessine la
+## grille décalée d'une demi-case par rapport au pavage, et rétrécir les pièces APRÈS le tranchage les
 ## crève (une pièce est ouverte sur ses faces de coupe — aire 3,0 au lieu de 4,0).
-var _moitie := false
-
-## ⚠ DES CHEMINS DISTINCTS SELON LE MODE : écraser le lot de production avec un lot d'essai ferait
-## peindre un monde de test en croyant peindre le vrai.
-var _lot := "res://ART/marching_blocks_9.tres"
+var _lot := "res://ART/marching_blocks.tres"
 var _scene := "res://NIVEAUX/monde_essai_3d.tscn"
 
 
 func _initialize() -> void:
-	for option in OS.get_cmdline_user_args():
-		if option == "--moitie":
-			_moitie = true
-	if _moitie:
-		_lot = "res://ART/marching_blocks_moitie.tres"
-		_scene = "res://NIVEAUX/monde_essai_moitie.tscn"
-
-	print("=== LE MONDE D'ESSAI — lot des neuf blocs, sans repli ===\n")
-	print("tuiles à la moitié de la case : %s\n" % ("OUI" if _moitie else "non"))
+	print("=== LE MONDE D'ESSAI — lot du bloc témoin, sans repli ===\n")
+	print("tuiles ramenées à la moitié de leur case : toujours (mode unique)\n")
 
 	# ── 1. le jeu de blocs doit être sain AVANT qu'on en tire quoi que ce soit ───────────────────────
 	var fautes: Array = BlocsMaitres.anomalies()
@@ -65,7 +55,7 @@ func _initialize() -> void:
 		return
 
 	# ── 2. la bibliothèque ──────────────────────────────────────────────────────────────────────────
-	var bilan: Dictionary = BlocsMaitres.librairie(_moitie)
+	var bilan: Dictionary = BlocsMaitres.librairie()
 	var lot: MeshLibrary = bilan["lot"]
 	var manquantes: Array = bilan["manquantes"]
 	var erreurs: Array = bilan["erreurs"]
