@@ -249,19 +249,10 @@ func _lire() -> Dictionary:
 	return pleines
 
 
-## La carte des vides COIFFÉS — il y a de la roche plus haut dans la même colonne.
-func _couverture(pleines: Dictionary) -> Dictionary:
-	var couverte := {}
-	for x in COTE:
-		for z in COTE:
-			var vu := false
-			for y in range(COTE - 1, -1, -1):
-				var c := Vector3i(x, y, z)
-				if pleines.has(c):
-					vu = true
-				elif vu:
-					couverte[c] = true
-	return couverte
+## ⚠ **UNE CARTE DES VIDES COIFFÉS A VÉCU ICI, ET ELLE AVAIT DIVERGÉ DU GREFFON.** Elle sondait la
+## COLONNE ENTIÈRE de chaque cellule VIDE ; `MB.sous_le_ciel()` sonde les huit cellules du sommet,
+## PLEINES COMPRISES, jusqu'au plus haut `y` occupé. Deux descriptions du même critère, donc deux
+## réponses — et c'est le module du modèle qui fait foi, puisque c'est lui que le pinceau applique.
 
 
 func _morceaux(pleines: Dictionary) -> int:
@@ -301,12 +292,24 @@ func _expose(pleines: Dictionary) -> int:
 	return faces
 
 
-## Ce que le bloc livre, par contexte.
+## Ce que le bloc livre — EXACTEMENT ce que `librairie()` en tirera.
+##
+## ⚠ **CETTE FONCTION CALCULAIT SON PROPRE CRITÈRE, ET IL AVAIT DIVERGÉ.** Elle rangeait les sommets en
+## TROIS camps — dedans, dehors, et « mixtes » qu'elle ÉCARTAIT des deux. Le pinceau n'en connaît que
+## deux : un sommet dont **une seule** cellule est coiffée est INTÉRIEUR, point. Mesuré sur la
+## silhouette en place : la machine annonçait **90/90** là où le greffon livrait **73**, et les
+## **35 sommets « mixtes »** étaient exactement l'écart. Le finisseur optimisait donc contre une
+## définition plus permissive que la réalité, et personne ne pouvait le voir tant que rien en aval ne
+## comptait les contextes.
+##
+## ⚠ **ELLE COMPOSE DÉSORMAIS LA MÊME CLÉ QUE LE TRANCHEUR** : nom nu, ou nom suffixé quand la classe
+## PEUT être dehors **et** que le lieu l'EST. Brancher `sous_le_ciel` sans reprendre
+## `exterieur_possible` aurait laissé la moitié du critère de côté et fait reparaître la divergence
+## sous un autre nom.
 func _contextes(pleines: Dictionary) -> Dictionary:
-	var couverte: Dictionary = _couverture(pleines)
-	var dedans := {}
-	var dehors := {}
-	var mixtes := 0
+	var plafond: int = MB.plafond_de(pleines)
+	var nus := {}
+	var variantes := {}
 	var n_int := 0    # ⚠ le nombre de SOMMETS, pas de classes : c'est lui qui dit la marge
 	var n_ext := 0
 	for vx in range(COTE - 1):
@@ -316,41 +319,36 @@ func _contextes(pleines: Dictionary) -> Dictionary:
 				var b: int = MB.bits(pleines, v)
 				if not MB.porte_une_surface(b):
 					continue
-				var couv := 0
-				var libre := 0
-				for t in 8:
-					var q: Vector3i = v + MB.COINS[t]
-					if pleines.has(q):
-						continue
-					if couverte.has(q):
-						couv += 1
-					else:
-						libre += 1
 				var nom: String = MB.classer(b)["nom"]
-				if couv > 0 and libre == 0:
-					dedans[nom] = true
-					n_int += 1
-				elif libre > 0 and couv == 0:
-					dehors[nom] = true
+				var dehors: bool = MB.exterieur_possible(b) and MB.sous_le_ciel(pleines, v, plafond)
+				if dehors:
+					variantes[nom] = true
 					n_ext += 1
 				else:
-					mixtes += 1
-	return {"int": dedans, "ext": dehors, "mixtes": mixtes, "n_int": n_int, "n_ext": n_ext}
+					nus[nom] = true
+					n_int += 1
+	return {"int": nus, "ext": variantes, "n_int": n_int, "n_ext": n_ext}
 
 
-## Le score : classes d'intérieur + classes d'extérieur RECONNUES comme possibles à l'air libre.
-## ⚠ On ne compte en extérieur que celles que le modèle autorise : compter les autres gonflerait le
-## score avec des sommets mal classés et masquerait un vrai manque.
+## Le score : le nombre de TUILES que `librairie()` livrerait — noms nus plus variantes.
+##
+## ⚠ **LE FILTRE « classes autorisées à l'air libre » A DISPARU D'ICI, ET CE N'EST PAS UN OUBLI.** Il
+## existait parce que l'ancien critère pouvait ranger dehors une classe que le modèle interdit à l'air
+## libre. `_contextes()` appliquant maintenant `exterieur_possible()` lui-même, un tel nom ne peut plus
+## entrer dans `ext` : refiltrer ici serait une seconde description de la même règle.
+## ⚠ **ET CE SCORE EST AVEUGLE AU CONTEXTE — MESURÉ, ET C'EST LE PROCHAIN CHANTIER.** Une classe
+## d'INTÉRIEUR gagnée y vaut exactement une classe d'EXTÉRIEUR perdue. Or la marge n'est pas la même des
+## deux côtés : ×4,53 dedans contre ×0,95 dehors. Le grimpeur trouve donc toujours plus facile de gagner
+## à l'intérieur, et il **rebouche le ciel** pour y arriver.
+##
+## ⚠ **MESURÉ SUR UNE ÉBAUCHE QUI PARTAIT AVEC 49 SOMMETS DE CIEL — le plafond structurel d'un bloc
+## 8³ — : le finisseur l'a ramenée à 21**, et il a rendu exactement les mêmes 73/90 et les mêmes 17
+## classes extérieures manquantes que la silhouette d'origine. **Redessiner les couches ne sert donc à
+## rien tant que ce score ne distingue pas les deux contextes.** Il faudra pondérer la rareté, ou poser
+## un PLANCHER de sommets sous le ciel imposé à chaque coup — pas vérifié à la fin, comme la connexité.
 func _score(pleines: Dictionary) -> int:
 	var c: Dictionary = _contextes(pleines)
-	var possibles := {}
-	for n in MB.classes_exterieures():
-		possibles[n] = true
-	var dehors := 0
-	for n in (c["ext"] as Dictionary):
-		if possibles.has(n):
-			dehors += 1
-	return (c["int"] as Dictionary).size() + dehors
+	return (c["int"] as Dictionary).size() + (c["ext"] as Dictionary).size()
 
 
 # ── LE FINISSEUR ────────────────────────────────────────────────────────────────────────────────────
@@ -503,13 +501,13 @@ func _mesurer(pleines: Dictionary, quoi: String) -> void:
 	var possibles := {}
 	for n in MB.classes_exterieures():
 		possibles[n] = true
-	var dehors := 0
-	for n in (c["ext"] as Dictionary):
-		if possibles.has(n):
-			dehors += 1
+	var dehors: int = (c["ext"] as Dictionary).size()
 	var total: int = MB.pieces_a_sculpter().size()
-	print("   [%s] %d cases pleines, %d morceau(x), %d sommets mixtes"
-		% [quoi, pleines.size(), _morceaux(pleines), c["mixtes"]])
+	# ⚠ « SOMMETS MIXTES » A DISPARU DE CETTE LIGNE avec la catégorie qui le portait : le pinceau ne
+	# connaît que deux états. On imprime donc ce qui EXISTE dans les deux mondes — combien de sommets
+	# tombent de chaque côté — au lieu d'un troisième camp que seul cet outil voyait.
+	print("   [%s] %d cases pleines, %d morceau(x), %d sommets sous roche / %d sous le ciel"
+		% [quoi, pleines.size(), _morceaux(pleines), c["n_int"], c["n_ext"]])
 	print("   [%s] INTÉRIEUR %d/%d   EXTÉRIEUR %d/%d   TOTAL %d/%d"
 		% [quoi, (c["int"] as Dictionary).size(), total, dehors, possibles.size(),
 			(c["int"] as Dictionary).size() + dehors, total + possibles.size()])
