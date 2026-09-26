@@ -66,9 +66,11 @@ damier.
   pour incomplet de 33 classes, et c'est ce qui faisait traîner un SECOND témoin bourré de diagonales.
 - ⚠ **UNE CLASSE DIAGONALE N'EST PAS « MANQUANTE », ELLE EST HORS DU MONDE** : `librairie()` ne la
   réclame pas, mais le peintre qui en rencontre une pose toujours un cube rouge (§3).
-- **OUVERT — le pinceau ne complète pas encore les carrés.** `MB.completer_les_carres()` existe (« on
-  complète le trou pour qu'il soit carré », Jordan) mais **rien ne l'appelle** : peindre une diagonale
-  donne aujourd'hui un cube rouge, pas un trou complété.
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — LE ROUGE, PAS LA COMPLÉTION.** Peindre une diagonale pose un
+  cube rouge, et le pinceau ne retouche rien de lui-même. `MB.completer_les_carres()` reste (le
+  vérificateur s'en sert) mais **le pinceau ne l'appelle pas** : la réponse d'avant — « on complète le
+  trou pour qu'il soit carré » — est retirée. C'est aussi la ligne du §3 : l'absence doit se VOIR là où
+  elle arrive, jamais être comblée en silence.
 
 ### UN témoin UNIQUE : la planète paysage de 12³ — MESURÉ (27 septembre 2026)
 
@@ -302,6 +304,16 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
 - ⚠ **L'UI RESTE MINIMALE (Jordan, 24 septembre 2026).** Elle a compté deux onglets, une vue 3D
   orbitale, un catalogue et un panneau de tranchage : chaque pièce se justifiait seule, ensemble elles
   noyaient ce qu'on veut faire. Il reste la boucle complète et rien d'autre.
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — la boucle a quatre boutons, et leurs noms** : « Générer les
+  nœuds » (le témoin calculé, un massif vide à peindre) · « Exporter le témoin… » · « Importer le
+  travail… », qui **l'AFFICHE seulement**, dans la vue et tel que le trancheur le lira
+  (`BlocsMaitres.travail_depuis_glb()`, la même lecture que le tranchage) · « Trancher, générer et
+  peindre », qui relit ce travail au moment du clic, pose les nœuds et **peint les cases du témoin**
+  dans la même action d'annulation. Le résultat doit redonner le témoin : c'est la preuve de
+  l'aller-retour, à l'œil. Tout est dans une **barre de défilement verticale** : le bas de la bande
+  était inatteignable.
+  ⚠ Ces libellés sont en français, alors que le §7 veut l'anglais à l'écran : c'est **OUVERT**, et toute
+  l'UI est dans le même cas.
 
 ---
 
@@ -525,10 +537,6 @@ désormais le greffon.
      sans décider ; l'occlusion reste écartée comme critère de pose (§2).
    - ⚠ **UN `.glb` SCULPTÉ SUR L'ANCIEN 8³ NE REVIENT PLUS** : le bloc est retrouvé par sa POSITION
      dans une boîte de 12³ (§4), et sa forme a changé. Il faut réexporter le témoin avant de sculpter.
-
-5 bis. **LE PINCEAU COMPLÈTE LES CARRÉS** (§2, OUVERT) : brancher `MB.completer_les_carres()` sur les
-   gestes de peinture, sous `get_undo_redo()`. Sans ça, le monde sans diagonale n'est tenu que par des
-   cubes rouges.
 
 6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.

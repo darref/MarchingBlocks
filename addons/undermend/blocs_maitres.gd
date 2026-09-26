@@ -1246,29 +1246,20 @@ static func exporter_le_bloc(chemin: String) -> String:
 ## sur la version calculée, et tout semble marcher alors que son travail n'est pas dans le lot.
 static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	var Tranchage := load("res://addons/undermend/tranchage.gd")
-	var Decoupe := load("res://addons/undermend/decoupe.gd")
 	var journal: Array = []
-	var relu: ArrayMesh = _lire_glb(chemin, journal)
 	var pieces := {}
 	var provenance := {}
 	var erreurs: Array = []
 	var sculptes: Array = []
 	var absents: Array = []
 
-	if relu == null:
-		# ⚠ ON REMONTE LE MOTIF PRÉCIS, jamais « illisible » : les trois échecs possibles n'ont ni la
-		# même cause ni le même remède, et l'appelant doit pouvoir le dire à l'artiste.
-		for j in journal:
-			erreurs.append("lecture de « %s » : %s" % [chemin.get_file(), j])
-
-	var solide: ArrayMesh = null
-	if relu != null:
-		# ⚠ On découpe quand même dans une boîte tolérante : le relief déborde légalement, et un `.glb`
-		# revenu de Blender peut traîner des restes hors du bloc.
-		var extrait: ArrayMesh = Decoupe.trancher(relu, boite_du_bloc())
-		if extrait.get_surface_count() > 0:
-			solide = extrait
-			sculptes.append(BLOCS[0]["nom"])
+	var solide: ArrayMesh = travail_depuis_glb(chemin, journal)
+	# ⚠ ON REMONTE LE MOTIF PRÉCIS, jamais « illisible » : les trois échecs possibles n'ont ni la même
+	# cause ni le même remède, et l'appelant doit pouvoir le dire à l'artiste.
+	for j in journal:
+		erreurs.append("lecture de « %s » : %s" % [chemin.get_file(), j])
+	if solide != null:
+		sculptes.append(BLOCS[0]["nom"])
 	if solide == null:
 		absents.append(BLOCS[0]["nom"])
 		# ⚠ **LE MÊME AMINCI QUE L'EXPORT, ET C'EST UNE CORRECTION.** Ce repli rendait le solide PLEIN
@@ -1292,6 +1283,27 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	resultat["sculptes"] = sculptes
 	resultat["absents"] = absents
 	return resultat
+
+
+## LE TRAVAIL DE L'ARTISTE tel que le trancheur le lira : le `.glb` relu, découpé dans la boîte
+## tolérante du bloc. `null` si le fichier est illisible — le motif va alors dans `journal` — ou si la
+## boîte ressort VIDE, et `journal` reste alors vide : un bloc absent n'est pas une erreur de lecture,
+## `librairie_depuis_glb()` le range dans `absents`, comme avant cette extraction.
+##
+## ⚠ **UNE SEULE LECTURE POUR L'ÉCRAN ET POUR LE TRANCHEUR.** Le bouton « Importer le travail » l'affiche,
+## « Trancher, générer et peindre » le tranche : si l'un lisait autrement que l'autre, l'artiste verrait
+## une chose et en peindrait une autre, sans qu'aucune erreur ne le dise (charte §6).
+static func travail_depuis_glb(chemin: String, journal: Array = []) -> ArrayMesh:
+	var Decoupe := load("res://addons/undermend/decoupe.gd")
+	var relu: ArrayMesh = _lire_glb(chemin, journal)
+	if relu == null:
+		return null
+	# ⚠ On découpe quand même dans une boîte tolérante : le relief déborde légalement, et un `.glb`
+	# revenu de Blender peut traîner des restes hors du bloc.
+	var extrait: ArrayMesh = Decoupe.trancher(relu, boite_du_bloc())
+	if extrait.get_surface_count() == 0:
+		return null
+	return extrait
 
 
 ## RETIRE LES NORMALES d'un maillage — ce qui, en glTF, veut dire « ombrage PLAT ».

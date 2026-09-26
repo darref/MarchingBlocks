@@ -7,12 +7,19 @@ extends Control
 ## Chaque pièce se justifiait seule ; ensemble elles noyaient ce qu'on veut faire. Ce qui reste est la
 ## BOUCLE COMPLÈTE, et rien d'autre :
 ##
-##   1. PEINDRE       le bloc témoin du catalogue → tranchage → MeshLibrary → un MassifPeint posé ;
-##   2. EXPORTER      le MasterBlockSet entier vers un dossier quelconque du disque, pour Blender ;
-##   3. IMPORTER      un set sculpté depuis ce dossier, le repasser au pipeline, et peindre avec.
+##   1. GÉNÉRER LES NŒUDS   le témoin calculé → tranchage → MeshLibrary → un MassifPeint vide, à peindre ;
+##   2. EXPORTER LE TÉMOIN  en UN .glb, n'importe où sur le disque, pour Blender ;
+##   3. IMPORTER LE TRAVAIL relit le .glb sculpté et l'AFFICHE dans la vue — rien n'est encore tranché ;
+##   4. TRANCHER, GÉNÉRER ET PEINDRE  tranche ce travail, pose les nœuds, et peint les cases du témoin.
 ##
-## Le troisième est le seul essai qui prouve quelque chose : si le monde peint avec l'art réimporté reste
-## exact, toute la chaîne tient — export, modélisation, réimport, tranchage, classification, assemblage.
+## Le quatrième est le seul essai qui prouve quelque chose : le témoin repeint avec l'art réimporté doit
+## redonner le témoin — toute la chaîne tient alors, export, modélisation, réimport, tranchage,
+## classification, assemblage. (Noms des boutons : Jordan, 27 septembre 2026.)
+##
+## ⚠ **TOUT EST DANS UNE BARRE DE DÉFILEMENT (Jordan, 27 septembre 2026)** : la vue carrée, la légende,
+## les boutons et les opérations d'étage dépassaient la hauteur de la bande, et le bas devenait
+## inatteignable. Le défilement est VERTICAL seulement — la vue tire sa hauteur de sa largeur, et une
+## largeur qui défile la laisserait grandir sans fin.
 ##
 ## ⚠ UN GREFFON D'ÉDITEUR NE SE TESTE PAS EN HEADLESS (charte §6). On vérifie qu'il COMPILE et que les
 ## règles qu'il appelle sont justes ; qu'il apparaisse et que les boutons agissent se juge dans l'éditeur.
@@ -52,6 +59,13 @@ var _etiquette_etage: Label
 ## avec sa légende — et non le résultat tranché : on regarde ce qu'il y a à sculpter, pas une pose.
 var _vue: SubViewport
 var _camera: Camera3D
+## Le maillage montré : le témoin calculé, puis le travail importé.
+var _instance: MeshInstance3D
+## Ce que la vue montre, écrit sous elle — sinon on ne sait pas si l'on regarde le témoin ou son art.
+var _etiquette_vue: Label
+## Le `.glb` importé, que « Trancher, générer et peindre » relira. ⚠ RELU au moment du clic, pas gardé
+## en mémoire : l'artiste a pu réenregistrer entre les deux, et c'est son dernier état qu'on tranche.
+var _travail := ""
 var _azimut := 0.7
 var _elevation := 0.6
 
@@ -64,11 +78,16 @@ func _ready() -> void:
 
 
 func _batir() -> void:
+	var defile := ScrollContainer.new()
+	defile.set_anchors_preset(Control.PRESET_FULL_RECT)
+	defile.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	add_child(defile)
+
 	var marge := MarginContainer.new()
-	marge.set_anchors_preset(Control.PRESET_FULL_RECT)
+	marge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	for cote in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		marge.add_theme_constant_override(cote, 12)
-	add_child(marge)
+	defile.add_child(marge)
 
 	var colonne := VBoxContainer.new()
 	colonne.add_theme_constant_override("separation", 10)
@@ -85,35 +104,44 @@ func _batir() -> void:
 	# ⚠ **UNE CASE À COCHER A VÉCU ICI (retirée par Jordan, 25 septembre 2026).** Elle offrait le solide
 	# brut à la place de l'aminci. Ce n'était pas un réglage mais une manière de se tromper : l'aminci est
 	# ce qui part chez l'artiste, donc le seul mode qui décrive la réalité de ce qu'il va sculpter.
-	var peindre := Button.new()
-	peindre.text = "Peindre un massif"
-	peindre.tooltip_text = ("Le bloc témoin du catalogue, passé par tout le pipeline.\n"
-		+ "Tuiles ramenées à la moitié de leur case : les faces qui donnent sur du VIDE rentrent d'un "
-		+ "quart.\nUne face partagée entre deux cases pleines reste intacte — le massif garde ses formes.")
-	peindre.custom_minimum_size = Vector2(260, 36)
-	peindre.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(), LOT, "catalogue"))
-	colonne.add_child(peindre)
+	var generer := Button.new()
+	generer.text = "Générer les nœuds"
+	generer.tooltip_text = ("Le témoin calculé, passé par tout le pipeline, et un MassifPeint vide à "
+		+ "peindre.\nTuiles ramenées à la moitié de leur case : les faces qui donnent sur du VIDE "
+		+ "rentrent d'un quart.\nUne face partagée entre deux cases pleines reste intacte.")
+	generer.custom_minimum_size = Vector2(0, 36)
+	generer.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(), LOT, "catalogue"))
+	colonne.add_child(generer)
 
 	colonne.add_child(HSeparator.new())
 
 	var exporter := Button.new()
-	exporter.text = "Exporter le MasterBlockSet…"
-	exporter.tooltip_text = ("Écrit le bloc témoin dans UN .glb, pour le modéliser et le texturer dans "
+	exporter.text = "Exporter le témoin…"
+	exporter.tooltip_text = ("Écrit le témoin dans UN .glb, pour le modéliser et le texturer dans "
 		+ "Blender.\n"
 		+ "⚠ Ne le DÉPLACE pas : c'est sa position qui l'identifie au retour, pas son nom.\n"
 		+ "Tuiles déjà ramenées à la moitié de leur case, pour montrer la marge disponible.")
-	exporter.custom_minimum_size = Vector2(300, 36)
+	exporter.custom_minimum_size = Vector2(0, 36)
 	exporter.pressed.connect(func(): _demander_un_fichier("exporter"))
 	colonne.add_child(exporter)
 
 	var importer := Button.new()
-	importer.text = "Importer un MasterBlockSet et peindre…"
-	importer.tooltip_text = ("Relit le .glb sculpté, redécoupe chaque bloc par sa position, le repasse "
-		+ "au pipeline, et pose un massif peint avec.\n⚠ Un bloc dont la boîte ressort vide garde sa "
-		+ "version calculée, et c'est DIT — jamais en silence.")
-	importer.custom_minimum_size = Vector2(300, 36)
+	importer.text = "Importer le travail…"
+	importer.tooltip_text = ("Relit le .glb sculpté et l'AFFICHE dans la vue, tel que le trancheur le "
+		+ "lira.\nRien n'est tranché ni posé : c'est le bouton suivant.")
+	importer.custom_minimum_size = Vector2(0, 36)
 	importer.pressed.connect(func(): _demander_un_fichier("importer"))
 	colonne.add_child(importer)
+
+	var trancher := Button.new()
+	trancher.text = "Trancher, générer et peindre"
+	trancher.tooltip_text = ("Relit le travail importé, le tranche, pose un MassifPeint avec ses tuiles, "
+		+ "et y peint les cases du témoin.\nLe résultat doit redonner le témoin : c'est la preuve que "
+		+ "l'aller-retour tient.\n⚠ Un bloc dont la boîte ressort vide garde sa version calculée, et "
+		+ "c'est DIT — jamais en silence.")
+	trancher.custom_minimum_size = Vector2(0, 36)
+	trancher.pressed.connect(_trancher_generer_et_peindre)
+	colonne.add_child(trancher)
 
 	colonne.add_child(HSeparator.new())
 
@@ -164,7 +192,9 @@ func _batir() -> void:
 	_rapport.bbcode_enabled = true
 	_rapport.custom_minimum_size = Vector2(0, 180)
 	_rapport.text = "[i]Ouvre une scène 3D, puis clique.[/i]"
-	_rapport.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	# ⚠ DANS UNE BARRE DE DÉFILEMENT, « S'ÉTENDRE » N'A PLUS DE SENS : il n'y a pas de hauteur à remplir.
+	# Le rapport grandit donc avec son texte, et c'est la barre qui défile.
+	_rapport.fit_content = true
 	colonne.add_child(_rapport)
 
 	# ⚠ ACCÈS AU SYSTÈME DE FICHIERS ENTIER, pas au seul `res://` : tout l'objet de l'export est de
@@ -180,16 +210,15 @@ func _batir() -> void:
 
 ## Bâtit la vue orbitale du témoin, carrée, en tête de la bande.
 ##
-## ⚠ **ELLE NE S'ÉTEND PAS, ET C'EST DÉLIBÉRÉ.** `_rapport` porte déjà `SIZE_EXPAND_FILL` : deux
-## enfants extensibles se disputeraient la hauteur, et la vue écraserait le rapport ou l'inverse selon
-## la taille de la bande. Sa hauteur est donc PILOTÉE PAR SA LARGEUR — c'est ce qui la rend carrée quelle
-## que soit la largeur que Jordan donne à la bande, qui est redimensionnable à la souris.
+## ⚠ **SA HAUTEUR EST PILOTÉE PAR SA LARGEUR** — c'est ce qui la rend carrée quelle que soit la largeur
+## que Jordan donne à la bande, qui est redimensionnable à la souris. Dans la barre de défilement, il n'y
+## a de toute façon plus de hauteur à se disputer.
 func _batir_la_vue(colonne: VBoxContainer) -> void:
 	var boite := SubViewportContainer.new()
 	boite.stretch = true
-	boite.tooltip_text = ("Le bloc témoin tel qu'il part chez toi — glisse pour le tourner.\n"
-		+ "VERT ce qui regarde le ciel · BRUN les parois · BLEU les plafonds.\n"
-		+ "Assombri et désaturé = SOUS LA ROCHE : c'est une grotte, pas un massif.")
+	boite.tooltip_text = ("Le témoin tel qu'il part chez toi, ou ton travail une fois importé — glisse "
+		+ "pour le tourner.\nLes six teintes sont nommées dessous : sol, paroi et plafond, chacun à l'air "
+		+ "libre ou en GROTTE.")
 	boite.gui_input.connect(_tourner_la_vue)
 	# ⚠ LA GARDE CONTRE LA BOUCLE : écrire une taille minimale depuis un gestionnaire de
 	# redimensionnement redéclenche ce même gestionnaire. On ne l'écrit que si elle change vraiment.
@@ -220,11 +249,11 @@ func _batir_la_vue(colonne: VBoxContainer) -> void:
 	lumiere.light_energy = 1.1
 	_vue.add_child(lumiere)
 
-	# ⚠ **LE MAILLAGE EST BÂTI UNE SEULE FOIS.** Il porte 8 364 quads ; le reconstruire à chaque image
-	# ferait ramer l'éditeur pendant qu'on peint. Tourner ne change que la CAMÉRA.
-	var instance := MeshInstance3D.new()
-	instance.mesh = BlocsMaitres.maillage_moitie(0)
-	_vue.add_child(instance)
+	# ⚠ **LE MAILLAGE EST BÂTI UNE SEULE FOIS** (15 560 quads) ; le reconstruire à chaque image ferait
+	# ramer l'éditeur pendant qu'on peint. Tourner ne change que la CAMÉRA, et seul l'import le remplace.
+	_instance = MeshInstance3D.new()
+	_instance.mesh = BlocsMaitres.maillage_moitie(0)
+	_vue.add_child(_instance)
 
 	_camera = Camera3D.new()
 	# ⚠ ORTHOGONALE, comme les planches : un bloc ne doit pas paraître plus gros parce qu'on l'a tourné.
@@ -232,6 +261,12 @@ func _batir_la_vue(colonne: VBoxContainer) -> void:
 	_camera.size = BlocsMaitres.COTE * 1.6
 	_vue.add_child(_camera)
 	_caler_la_camera()
+
+	_etiquette_vue = Label.new()
+	_etiquette_vue.text = "le témoin calculé"
+	_etiquette_vue.add_theme_font_size_override("font_size", 11)
+	_etiquette_vue.add_theme_color_override("font_color", Color(1, 1, 1, 0.55))
+	colonne.add_child(_etiquette_vue)
 
 	_batir_la_legende(colonne)
 
@@ -349,30 +384,50 @@ func _exporter(fichier: String) -> void:
 		+ "survit pas à une séance de modélisation, une place fixée si.\n")
 	texte += ("⚠ Le relief peut déborder d'une demi-case autour du bloc ; au-delà il sera perdu.\n")
 	texte += "⚠ Ne change pas QUELLES cases sont pleines — c'est le remplissage qui fixe les classes.\n"
-	# ⚠ ON LE DIT PLUTÔT QUE DE LE CACHER : 33 des 68 classes SONT des contacts diagonaux, donc un
-	# témoin complet contient nécessairement quelques arêtes non-manifold. Mesuré : 18 sur 8 364 quads.
-	texte += ("\n[i]Passe-le en quads (Alt+J) : les boucles d'arêtes deviennent continues. Quelques "
-		+ "arêtes restent ambiguës, là où deux cases ne se touchent que par un coin — c'est le modèle, "
-		+ "pas un défaut du fichier.[/i]")
+	# ⚠ « QUELQUES ARÊTES RESTENT AMBIGUËS » A ÉTÉ DIT ICI jusqu'au 27 septembre 2026 : c'était vrai du
+	# monde avec diagonales. Le témoin sans contact diagonal est manifold — mesuré, 0 arête à 3 faces.
+	texte += ("\n[i]Passe-le en quads (Alt+J) : les boucles d'arêtes deviennent continues. Aucune "
+		+ "arête n'est partagée par plus de deux faces.[/i]")
 	_dire(texte)
 
 
-# ── 2. IMPORTER ET PEINDRE ──────────────────────────────────────────────────────────────────────────
+# ── 2. IMPORTER LE TRAVAIL : on l'AFFICHE, rien de plus ─────────────────────────────────────────────
 
+## ⚠ **ON MONTRE CE QUE LE TRANCHEUR LIRA, PAS LE FICHIER BRUT** : `travail_depuis_glb()` est l'appel même
+## qu'emploie le tranchage. Un relief perdu hors de la boîte tolérante disparaît donc ICI, sous les yeux
+## de l'artiste, et non plus tard, en silence, dans le lot.
 func _importer(fichier: String) -> void:
-	var bilan: Dictionary = BlocsMaitres.librairie_depuis_glb(fichier)
-	var entete := "[b]Set importé depuis[/b] %s\n" % fichier
-	var sculptes: Array = bilan["sculptes"]
+	var journal: Array = []
+	var travail: ArrayMesh = BlocsMaitres.travail_depuis_glb(fichier, journal)
+	if travail == null:
+		_travail = ""
+		var motif: String = "\n  ".join(PackedStringArray(journal)) if not journal.is_empty() \
+			else "aucune géométrie dans la boîte du bloc — l'a-t-on déplacé ?"
+		_dire("[color=#e0603c]Rien à afficher depuis[/color] %s\n  %s" % [fichier, motif])
+		return
+	_travail = fichier
+	_instance.mesh = travail
+	_etiquette_vue.text = "le travail importé — %s" % fichier.get_file()
+	_dire(("[color=#6f9e4a][b]Travail importé[/b][/color] ← %s\n\n"
+		+ "La vue le montre tel que le trancheur le lira : ce qui dépasse la boîte du bloc n'y est plus.\n\n"
+		+ "[i]« Trancher, générer et peindre » le relira au moment du clic — réenregistrer dans Blender "
+		+ "entre-temps suffit.[/i]") % fichier)
+
+
+# ── 3. TRANCHER, GÉNÉRER ET PEINDRE ─────────────────────────────────────────────────────────────────
+
+func _trancher_generer_et_peindre() -> void:
+	if _travail == "":
+		_dire("Aucun travail importé.\n\n[i]« Importer le travail… » d'abord : on tranche ce qu'on a vu.[/i]")
+		return
+	var bilan: Dictionary = BlocsMaitres.librairie_depuis_glb(_travail)
+	var entete := "[b]Travail tranché depuis[/b] %s\n" % _travail
 	var absents: Array = bilan["absents"]
-	entete += "[color=#6f9e4a]%d bloc(s) SCULPTÉ(S) relu(s)[/color]" % sculptes.size()
-	if not sculptes.is_empty():
-		entete += " : %s" % ", ".join(PackedStringArray(sculptes))
-	entete += "\n"
 	if not absents.is_empty():
 		# ⚠ ON LE DIT. Sans ça, on croirait peindre avec son art alors qu'on peint avec le témoin.
-		entete += "[color=#e0b84a]⚠ %d bloc(s) ABSENT(S) du dossier, version calculée gardée :[/color] %s\n" \
-			% [absents.size(), ", ".join(PackedStringArray(absents))]
-	_peindre_avec(bilan, "", "import", entete)
+		entete += "[color=#e0b84a]⚠ bloc ABSENT du fichier, version calculée gardée :[/color] %s\n" \
+			% ", ".join(PackedStringArray(absents))
+	_peindre_avec(bilan, "", "travail", entete, BlocsMaitres.cases(0))
 
 
 # ── le tronc commun ─────────────────────────────────────────────────────────────────────────────────
@@ -381,7 +436,10 @@ func _importer(fichier: String) -> void:
 ##
 ## ⚠ PARTAGÉ par les deux chemins de peinture : deux copies de cette pose auraient divergé, et l'une des
 ## deux aurait fini par oublier l'historique d'annulation ou le `preparer()`.
-func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entete := "") -> void:
+## `a_peindre` — {Vector3i: true} — remplit la grille « Cases » DANS la même action : un seul Ctrl+Z
+## retire le massif et sa peinture, jamais l'un sans l'autre.
+func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entete := "",
+		a_peindre := {}) -> void:
 	var racine := EditorInterface.get_edited_scene_root()
 	if racine == null:
 		_dire("Aucune scène ouverte.\n\nOuvre ou crée une scène 3D, puis réessaie.")
@@ -409,6 +467,18 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	# elles existent dans l'arbre mais N'APPARAISSENT PAS dans le dock, donc rien à peindre.
 	noeud.preparer()
 
+	# ⚠ LA TUILE À PEINDRE EST CHERCHÉE AVANT D'OUVRIR L'ACTION : un refus au milieu d'une action ouverte
+	# la laisserait pendante dans l'historique de l'éditeur.
+	var grille: GridMap = noeud.get_node_or_null("Cases")
+	var id := -1
+	if not a_peindre.is_empty():
+		if grille != null and grille.mesh_library != null:
+			id = grille.mesh_library.find_item_by_name("case")
+		if id < 0:
+			noeud.free()
+			_dire("[color=#e0603c]La palette du massif n'a pas de tuile « case » : rien n'est posé.[/color]")
+			return
+
 	# ⚠ PAR L'HISTORIQUE : un bouton qui ajoute un nœud sans que Ctrl+Z le reprenne laisse traîner des
 	# massifs qu'on n'a pas demandés (charte §6, même règle que le bouton « Falaises »).
 	var histoire := EditorInterface.get_editor_undo_redo()
@@ -418,6 +488,12 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	histoire.add_do_method(noeud, "set_owner", racine)
 	for enfant in noeud.get_children():
 		histoire.add_do_method(enfant, "set_owner", racine)
+	var peintes := 0
+	if not a_peindre.is_empty():
+		for c in a_peindre:
+			histoire.add_do_method(grille, "set_cell_item", c, id)
+			peintes += 1
+		histoire.add_do_method(noeud, "reconstruire")
 	histoire.add_do_reference(noeud)
 	histoire.add_undo_method(racine, "remove_child", noeud)
 	histoire.commit_action()
@@ -429,6 +505,8 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	texte += "[color=#6f9e4a][b]Massif posé[/b][/color] (%s) — %d item(s) sur %d classes" \
 		% [quoi, lot.get_item_list().size(), MB.pieces_a_sculpter().size()]
 	texte += "  ·  tuiles à la MOITIÉ\n"
+	if peintes > 0:
+		texte += "%d case(s) du témoin peintes : le massif doit redonner le témoin, avec ton art.\n" % peintes
 	if chemin_du_lot != "":
 		texte += "lot écrit → %s\n" % chemin_du_lot
 

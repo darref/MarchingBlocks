@@ -758,6 +758,10 @@ const PLANS_2X2 := [
 ## ⚠ **C'EST LA RÉPONSE DE JORDAN AU « TOUT ROUGE »** : « au lieu de mettre dans un état rouge quand un
 ## creusement n'est pas carré, on complète le trou pour qu'il soit carré ». Le pinceau ne refuse donc
 ## pas — il termine le geste.
+## ⚠ **RETIRÉE LE 27 SEPTEMBRE 2026 (Jordan) : ON LAISSE LE ROUGE.** Le pinceau n'appelle PAS cette
+## fonction ; une diagonale peinte pose un cube rouge. Elle reste pour les outils qui bâtissent un
+## témoin (`verifier_bloc_unique.gd`), où compléter est un geste de l'outil et non une retouche de la
+## peinture de quelqu'un.
 ##
 ## ⚠ **LE DÉCLENCHEUR EST LA DIAGONALE, PAS L'ADJACENCE.** Deux trous solo en (0,0) et (1,1) ne sont pas
 ## adjacents et produisent pourtant un contact diagonal ; une règle fondée sur l'adjacence les laisserait
