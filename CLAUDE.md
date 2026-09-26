@@ -312,6 +312,12 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
   dans la même action d'annulation. Le résultat doit redonner le témoin : c'est la preuve de
   l'aller-retour, à l'œil. Tout est dans une **barre de défilement verticale** : le bas de la bande
   était inatteignable.
+  ⚠ **ET TOUT TEXTE Y EST REPLIABLE (`_assouplir`), sinon le panneau DÉBORDE À DROITE sous la vue 3D.**
+  Sans défilement horizontal, la barre prend la largeur minimale de son texte le plus long — mesuré,
+  **647 px** pour l'étiquette d'étage allongée, **16 px** une fois repliable. Le défaut n'apparaissait
+  que « parfois » : quand l'étage ou le nom du fichier importé s'allongeait.
+  ⚠ Mesurer une taille minimale hors de l'arbre rend la valeur en CACHE : la première mesure disait
+  « rien ne change ». Elle se prend dans l'arbre, une image plus tard.
   ⚠ Ces libellés sont en français, alors que le §7 veut l'anglais à l'écran : c'est **OUVERT**, et toute
   l'UI est dans le même cas.
 

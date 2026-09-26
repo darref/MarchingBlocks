@@ -197,6 +197,11 @@ func _batir() -> void:
 	_rapport.fit_content = true
 	colonne.add_child(_rapport)
 
+	_assouplir(colonne)
+	# La seule exception : « étage y = » est court et fixe. Étiré, il prendrait la moitié de sa rangée
+	# et repousserait le compteur au milieu ; c'est l'étiquette d'à côté, qui s'allonge, qui doit s'étirer.
+	dit.size_flags_horizontal = Control.SIZE_FILL
+
 	# ⚠ ACCÈS AU SYSTÈME DE FICHIERS ENTIER, pas au seul `res://` : tout l'objet de l'export est de
 	# poser le set là où Blender ira le chercher, donc hors du projet.
 	# ⚠ **UN FICHIER, PLUS UN DOSSIER (Jordan, 24 septembre 2026).** Neuf `.glb` à ouvrir un par un puis
@@ -206,6 +211,32 @@ func _batir() -> void:
 	_dialogue.add_filter("*.glb", "MasterBlockSet")
 	_dialogue.file_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
+
+
+## REND CHAQUE TEXTE DE L'ÉCRAN REPLIABLE — le panneau ne doit jamais être plus large que la bande.
+##
+## ⚠ **LE PANNEAU DÉBORDAIT À DROITE, SOUS LE RESTE DE L'ÉDITEUR** (Jordan, 27 septembre 2026), et sa
+## moitié droite devenait invisible. La cause : une barre de défilement sans défilement horizontal prend
+## pour largeur minimale celle de son contenu le plus large, et un texte qui ne se replie pas impose la
+## sienne. Or notre racine est un simple `Control` : il ne s'agrandit pas pour autant, donc la barre
+## le DÉBORDE au lieu de le pousser — et elle passe sous la vue 3D.
+## ⚠ **« PARFOIS », PARCE QUE DEUX ÉTIQUETTES S'ALLONGENT EN COURS D'USAGE** : l'étage (« 12 case(s)
+## ici · peint de y=0 à y=9 ») et le nom du fichier importé. Le panneau tenait au démarrage et
+## débordait dès qu'on touchait au compteur ou qu'on importait.
+## ⚠ **UNE PASSE SUR TOUT L'ARBRE, PAS UN RÉGLAGE PAR TEXTE** : un réglage par texte, c'est le prochain
+## libellé ajouté qui l'oublie et fait revenir le défaut sans que rien ne le signale.
+func _assouplir(noeud: Node) -> void:
+	if noeud is Label:
+		(noeud as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		(noeud as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	elif noeud is Button:
+		(noeud as Button).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	elif noeud is HBoxContainer:
+		# ⚠ Un texte repliable n'a plus de largeur minimale : dans une rangée, sans ce drapeau, il en
+		# recevrait zéro et s'écrirait en colonne, une lettre par ligne.
+		(noeud as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for enfant in noeud.get_children():
+		_assouplir(enfant)
 
 
 ## Bâtit la vue orbitale du témoin, carrée, en tête de la bande.
