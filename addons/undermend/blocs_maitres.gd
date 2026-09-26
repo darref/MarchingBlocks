@@ -2,11 +2,16 @@
 extends RefCounted
 ## LE BLOC MAÎTRE UNIQUE — ce que l'artiste sculpte, et rien de plus.
 ##
-## ⚠ **IL Y EN A EU NEUF, DE 4³, JUSQU'AU 25 SEPTEMBRE 2026 (DÉCIDÉ, Jordan).** Un seul bloc de 8³ les
-## remplace, et ce n'est pas une simplification cosmétique : les neuf ne pouvaient pas livrer les deux
-## CONTEXTES (mesuré, 10 classes à double contexte sur les 90 nécessaires), et leur alignement sur une
-## bande n'existait que pour les transporter ensemble. Le bloc unique couvre **68 classes en intérieur
-## et 22 en extérieur — 90 tuiles**, en un seul morceau.
+## ⚠ **DEPUIS LE 27 SEPTEMBRE 2026 (Jordan), C'EST LA PLANÈTE PAYSAGE DE 12³** : un témoin fait de
+## formes qu'on reconnaît, pour le MONDE SANS CONTACT DIAGONAL — **35 classes en intérieur et 17 en
+## extérieur, 52 tuiles**, 0 contact diagonal, donc manifold. Il est produit par
+## `DEV_TOOLS/planete_paysage.gd --couches` et collé tel quel dans `BLOCS`.
+##
+## ⚠ **SON HISTOIRE, parce que les leçons plus bas en viennent** : neuf blocs de 4³ jusqu'au
+## 25 septembre 2026, qui ne pouvaient pas livrer les deux CONTEXTES ; puis un bloc unique de 8³ fini
+## par un finisseur, 90 tuiles du monde AVEC diagonales ; puis deux jours à deux témoins — un paysage
+## lisible (27 tuiles) et un résidu (63), ce dernier fait presque entièrement de contacts diagonaux que
+## le monde avait déjà interdits.
 ##
 ## ── LE FAIT QUI COMMANDE TOUT LE RESTE ──────────────────────────────────────────────────────────────
 ##
@@ -63,10 +68,10 @@ extends RefCounted
 ## quatre faces se rejoignent. Interdire ces contacts fait tomber la couverture à **52/90** — mesuré,
 ## trois essais sur trois. C'est l'ambiguïté que le modèle nomme `PONT_SUR_FACE_AMBIGUE`.
 ##
-## **DÉCIDÉ (Jordan, 25 septembre 2026) — on livre le témoin COMPLET et on le DIT.** Mesuré sur ce qui
-## part réellement : **18 arêtes ambiguës sur 8 364 quads (0,2 %), 0 trou, 100 % soudé, valence 4 à
-## 89 %.** Le nombre d'arêtes non-manifold du solide ÉGALE exactement le nombre de contacts d'arête de
-## l'occupation — la faute est dans la forme voulue, jamais dans le mailleur.
+## ⚠ **CE PARAGRAPHE DÉCRIT LE MONDE D'AVANT.** Le jour même, Jordan a tranché dans l'autre sens :
+## **le monde n'a pas de contact diagonal** (voir `marching_blocks.gd`). Les 33 classes en contact
+## diagonal ne sont plus à sculpter, et « 52/90 », rangé ici comme un échec, est devenu la cible —
+## 52/52. Le témoin n'a donc plus d'arête ambiguë du tout.
 ##
 ## ── CE QUI EST DÉRIVÉ ET CE QUI EST ÉCRIT ───────────────────────────────────────────────────────────
 ##
@@ -82,9 +87,10 @@ extends RefCounted
 const MB := preload("res://addons/undermend/marching_blocks.gd")
 const RP := preload("res://addons/undermend/repli_procedural.gd")
 
-## Le côté d'un bloc maître, en cellules. ⚠ 4 et pas 3 : un 3³ n'a que 2×2×2 = 8 sommets intérieurs,
-## donc 8 classes au maximum, ce qui demanderait douze blocs. Un 4³ en a 27.
-const COTE := 8
+## Le côté du bloc, en cellules. ⚠ 12 et non 8 : des formes qu'on RECONNAÎT — une arche visible comme
+## une arche, un pont, une cheminée — coûtent de la place ; en tenir moins, c'est l'optimisation que
+## Jordan a refusée (« il ne s'agit pas de produire le nombre de gestes minimum »).
+const COTE := 12
 
 ## ⚠ La subdivision de la coque : le retrait de l'amincissement vaut un QUART de cellule, donc quatre
 ## sous-voxels par cellule représentent exactement les boîtes rentrées, sans le moindre arrondi.
@@ -106,108 +112,198 @@ const INTERIEUR := "interieur"
 # au-dessus. Le « 63 » annoncé ci-dessus n'est pas en contradiction : il répondait à un autre critère,
 # et seul celui du toit a été mesuré STABLE entre l'échelle du bloc et celle du monde peint.
 
-## LES NEUF BLOCS. `couches[y][z]` est une rangée de `COTE` caractères indexée par x — « # » plein,
-## « . » vide. ⚠ y = 0 est le BAS (marching_blocks.gd : « Y EST LE HAUT »).
+## LE BLOC. `couches[y][z]` est une rangée de `COTE` caractères indexée par x — « # » plein, « . » vide.
+## ⚠ y = 0 est le BAS (marching_blocks.gd : « Y EST LE HAUT »).
 const BLOCS := [
+	# ── LA PLANÈTE PAYSAGE — le témoin UNIQUE (Jordan, 27 septembre 2026) ─────────────────────────────
+	#
+	# ⚠ **IL Y A EU DEUX TÉMOINS DU 25 AU 27 SEPTEMBRE 2026, ET LE SECOND N'EXISTAIT QUE POUR LE MONDE
+	# D'AVANT.** Le paysage lisible couvrait 27 tuiles sur 90 ; un « résidu » sorti du finisseur portait
+	# les 63 autres — presque toutes des CONTACTS DIAGONAUX. Or le monde sans contact diagonal était
+	# DÉCIDÉ depuis le 25 : ces 38 tuiles-là ne seront jamais posées. Le second témoin fabriquait donc,
+	# à grands frais d'arêtes non-manifold, des tuiles que personne n'emploiera.
+	#
+	# ⚠ **ENGENDRÉ PAR `DEV_TOOLS/planete_paysage.gd --couches`, COLLÉ TEL QUEL.** On n'écrit pas ce
+	# bloc ici à la main : on retouche les FORMES là-bas — le canyon, l'arche, le pont, la bouche de
+	# grotte, la cheminée, l'auvent… — et l'on recolle. Mesuré à la sortie : **820 cases, 0 contact
+	# diagonal, 52 tuiles sur 52** (35 d'intérieur, 17 d'air libre).
+	#
+	# ⚠ **12³ ET NON 8³** : un paysage fait de formes qu'on reconnaît coûte de la place. Le placeur
+	# minimal de la même journée tenait en moins, et rendait un cube blanc dont toute la substance était
+	# enfermée dans une cavité invisible — « tu as encore trop optimisé, il faut que l'arche soit
+	# visible comme une arche » (Jordan).
 	{
-		"nom": "le massif, sa falaise et sa grotte",
+		"nom": "la planète paysage — canyon, arche, pont, grotte, cheminée, auvent",
 		"contexte": EXTERIEUR,
-		"quoi": "le témoin unique : 68 classes en intérieur, 22 en extérieur, soit 90 tuiles",
+		"quoi": "le témoin unique : les 52 tuiles d'un monde sans contact diagonal, par des formes",
 		"couches": [
-			# ⚠ **CETTE GRILLE EST LA SORTIE DU FINISSEUR, COLLÉE TELLE QUELLE (25 septembre 2026).**
-			# Elle remplace une grille de 267 cases qui livrait 89/90 — il lui manquait
-			# `mb_arete_creuse_b4h2` en extérieur. Mesuré avant de coller, parce que je redoutais que la
-			# 90ᵉ tuile se paie en arêtes non-manifold : **elle ne se paie pas du tout.**
-			#
-			#                               collée (267)   celle-ci (262)
-			#   couverture                     89/90           90/90
-			#   contacts par arête (occupation)   60              44
-			#   aminci : arêtes ambiguës          18              15
-			#
-			# ⚠ Les deux compteurs de mon alarme ne comptaient PAS la même chose — « 44 contacts par
-			# arête » porte sur l'OCCUPATION, les « 18 ambiguës » de la charte sur le MAILLAGE AMINCI.
-			# Les opposer aurait fait renoncer à une tuile pour un coût imaginaire. La sonde
-			# `sonde_cout_du_dernier_contexte.gd` les rend dans la même unité, et se valide au passage en
-			# retrouvant exactement les 18 ambiguës sur 8 364 quads que la charte enregistre.
-			[   # y = 0 — le socle, presque plein
-				"########",
-				"########",
-				"########",
-				"#####.##",
-				"####..##",
-				"########",
-				"########",
-				"########",
+			[   # y = 0
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
 			],
-			[   # y = 1 — la grotte
-				"######..",
-				"#.#..#..",
-				"#..###..",
-				"#....#..",
-				"#....#..",
-				"#...##..",
-				"#....#..",
-				"######..",
+			[   # y = 1
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
+				"############",
 			],
-			[   # y = 2 — la grotte se poursuit
-				"######..",
-				"#....#..",
-				"##...#..",
-				"#....#..",
-				"#...##..",
-				"#...##..",
-				"#....#..",
-				"######..",
+			[   # y = 2
+				"######...###",
+				"######...###",
+				"######...###",
+				"#######.####",
+				"#######.####",
+				"######...###",
+				"######...###",
+				"######...###",
+				"######...###",
+				"######...#..",
+				"######...#..",
+				"######...###",
 			],
-			[   # y = 3 — le plafond, percé
-				"######..",
-				"#.#.##..",
-				"##.###..",
-				"#.####..",
-				"#.##.#..",
-				"##..##..",
-				"#..###..",
-				"######..",
+			[   # y = 3
+				"######...###",
+				"######...###",
+				"######......",
+				"#....##.#...",
+				"#.#..##.####",
+				"#........###",
+				"##..#....###",
+				"##.......###",
+				"####.#...###",
+				"#..###...#..",
+				"######...#..",
+				"######...###",
 			],
-			[   # y = 4 — le corps, et la falaise qui serpente à l'est
-				"######..",
-				"###.#...",
-				"#..###..",
-				"#.#####.",
-				"##.#.#..",
-				"##.##...",
-				"###.##..",
-				"##..##..",
+			[   # y = 4
+				"#######..###",
+				"#######..###",
+				"#######.....",
+				"#....##.#...",
+				"#.#..##.####",
+				"#....##..###",
+				"#...##...###",
+				"#........###",
+				"#....#...###",
+				"#..###...#..",
+				"######...#..",
+				"######...###",
 			],
-			[   # y = 5 — le plateau recule
-				"#####...",
-				"##.#....",
-				"###.#...",
-				"##.###..",
-				"#..##...",
-				"######..",
-				"#####...",
-				"###.#...",
+			[   # y = 5
+				"######...###",
+				"######...###",
+				"######...###",
+				"#....##.####",
+				"#.#..##.####",
+				"#....#...###",
+				"#........###",
+				"#..#.....###",
+				"#....#######",
+				"#..#######..",
+				"######...#..",
+				"######...###",
 			],
-			[   # y = 6 — le bord échancré
-				"#####...",
-				"##.#....",
-				"###.....",
-				"#.##....",
-				"#.#.#...",
-				"...#....",
-				".#.##...",
-				"####....",
+			[   # y = 6
+				"######......",
+				"######......",
+				"######......",
+				"#######.#...",
+				"#######.#..#",
+				"######.....#",
+				"######...#..",
+				"##.###......",
+				"##..##.....#",
+				"######.....#",
+				"######.....#",
+				"######.....#",
 			],
-			[   # y = 7 — les éperons
-				"###.....",
-				"........",
-				"#.......",
-				"#.......",
-				"##......",
-				"##......",
-				".#......",
-				"#.......",
+			[   # y = 7
+				"######......",
+				"######......",
+				"#######.....",
+				"####..###...",
+				"####.####..#",
+				"######.....#",
+				"#######..#..",
+				"##..###.....",
+				"##..###....#",
+				"#######....#",
+				"######.....#",
+				"######.....#",
+			],
+			[   # y = 8
+				"............",
+				".###........",
+				".#..........",
+				".#..........",
+				"............",
+				"............",
+				".........#..",
+				"............",
+				".....#......",
+				"..##........",
+				"..##........",
+				"............",
+			],
+			[   # y = 9
+				"............",
+				".#..........",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+			],
+			[   # y = 10
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+			],
+			[   # y = 11
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
+				"............",
 			],
 		],
 	},
@@ -829,6 +925,94 @@ static func creuses(i: int) -> Array:
 ## bord — mais le remède était pire que le mal : 144 faces enterrées sur 216, et un maillage
 ## **non-manifold** que Blender transporte sans que personne ne les voie. La coque en sous-voxels ferme
 ## la surface sans culler ni boucher : il n'y a plus de choix à faire.
+## LE TÉMOIN EN FACES DIRECTES — la version sans une seule marche.
+##
+## ⚠ **ELLE DÉLÈGUE À `RP.maillage_direct_du_bloc()` et ne recalcule RIEN.** La géométrie dérivée des
+## bits vit dans `repli_procedural.gd` (c'est déjà « la tuile depuis ses 8 bits »), et `blocs_maitres`
+## la précharge déjà — l'inverse ferait un cycle. Ce point d'entrée existe pour que les planches et
+## l'export atteignent la face directe sans préchargement neuf.
+static func maillage_direct(i: int) -> ArrayMesh:
+	return RP.maillage_direct_du_bloc(cases(i), COTE)
+
+
+## LE TÉMOIN CHANFREINÉ — le geste que Jordan a MODELÉ, reproduit à 1,5 % près.
+##
+## ⚠ **LA CIBLE N'EST PAS UNE INTENTION, C'EST UN MAILLAGE MESURÉ (26 septembre 2026).** Plutôt que de
+## décrire ce qu'il appelait « les contremarches », Jordan a repris le témoin tel qu'il part et les a
+## retirées lui-même dans Blender. Son résultat, relevé par `sonde_spectre_des_angles` :
+##
+## ```
+##                       0° (plat)     45°       90° (mur)    aire
+##   le témoin parti      158,25        —         227,00      385,3
+##   LE SCULPT            138,75      27,31       203,53      370,1   ← la cible
+##   cette fonction       136,94      29,32       201,11      368,4
+## ```
+##
+## ⚠ **ET LA LARGEUR DU CHANFREIN N'EST PAS UN RÉGLAGE : C'EST LE PAS DE LA GRILLE.** La surface des
+## faces directes passe par les MILIEUX des arêtes du réseau, donc couper un coin lui coûte exactement
+## un pas de chaque côté. Au pas d'un sous-voxel (1/4 de case), le chanfrein sort DEUX FOIS trop large
+## — 55,24 case² à 45° au lieu de 27,31 ; à `finesse = 2`, soit 1/8 de case, il tombe sur la cible. Il
+## n'y a donc aucun nombre à choisir au goût, seulement une résolution à mesurer.
+##
+## ⚠ **AUCUNE CHIRURGIE DE MAILLAGE, ET C'EST TOUT L'INTÉRÊT.** Biseauter des arêtes à la main demande
+## de recoudre les coins, et la charte §4 dit ce que ça coûte : non-manifold là où trois contremarches
+## se rencontrent, et un palier d'un sous-voxel réclamé par les chanfreins de ses deux côtés. Ici on ne
+## coupe rien — on remaille un champ plus fin avec le générateur qui existe déjà.
+##
+## ⚠ **TROIS CRAINTES, TOUTES LEVÉES PAR LA MESURE** (`sonde_chanfrein_sous_voxel.gd`) :
+##   • les TROUS — `_direct_dans` n'émet rien sur un contact diagonal : **0 sommet muet sur 6 162** ;
+##   • le RÉTRÉCISSEMENT — la boîte reste **(0,250 … 7,750)**, identique à l'aminci ;
+##   • la COUTURE — **27 classes récoltées, 0 faute**, exactement comme l'aminci.
+##
+## ⚠ **CE QU'IL EN COÛTE, ET IL FAUT LE DIRE** : **×4 en triangles** (49 316 contre 12 328).
+##
+## ⚠ **ET CE QU'IL LUI MANQUE ENCORE** : la LÉGENDE. `maillage_direct_du_bloc` colorie par la seule
+## NORMALE, donc trois teintes au lieu des six décidées le 25 septembre 2026 — la roche souterraine ne
+## s'y distingue pas. C'est le même trou que `_coque_lissee`, et il se voit à l'image.
+static func maillage_chanfreine(i: int, finesse := 2) -> ArrayMesh:
+	var pas: int = SOUS * maxi(1, finesse)
+	var champ: Dictionary = _affiner(sous_voxels(cases(i), 0.25), maxi(1, finesse))
+	var brut: ArrayMesh = RP.maillage_direct_du_bloc(champ, COTE * pas)
+	return _a_l_echelle(brut, 1.0 / float(pas))
+
+
+## AFFINE un champ de voxels : chaque voxel devient `facteur³` voxels, exactement le même volume.
+##
+## ⚠ **ON SUBDIVISE PLUTÔT QUE DE RAPPELER `sous_voxels()` AVEC UN AUTRE `SOUS`.** Cette constante est
+## lue par le mailleur, le trancheur et l'export : la faire varier changerait ce qui part chez
+## l'artiste pour régler un chanfrein. La subdivision ne touche à rien d'autre.
+static func _affiner(champ: Dictionary, facteur: int) -> Dictionary:
+	if facteur <= 1:
+		return champ
+	var sortie := {}
+	for c in champ:
+		var p: Vector3i = c
+		for i in facteur:
+			for j in facteur:
+				for k in facteur:
+					sortie[Vector3i(p.x * facteur + i, p.y * facteur + j, p.z * facteur + k)] = true
+	return sortie
+
+
+## ⚠ **ON MET À L'ÉCHELLE LES SOMMETS, PAS LE NŒUD.** Une `Transform3D` sur un `MeshInstance3D`
+## laisserait le maillage en unités de sous-voxel : le trancheur, qui reçoit le MAILLAGE et pas le
+## nœud, travaillerait huit fois trop grand sans qu'aucune erreur ne le dise.
+static func _a_l_echelle(mesh: ArrayMesh, facteur: float) -> ArrayMesh:
+	if mesh.get_surface_count() == 0:
+		return mesh
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var mis := PackedVector3Array()
+	mis.resize(v.size())
+	for i in v.size():
+		mis[i] = v[i] * facteur
+	arrays[Mesh.ARRAY_VERTEX] = mis
+	var sortie := ArrayMesh.new()
+	sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	sortie.surface_set_material(0, RP.matiere())
+	return sortie
+
+
 static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 	return _coque_sous_voxels(cases(i), clampf(cote, 0.05, 1.0) * 0.5)
 
@@ -897,7 +1081,10 @@ static func _assembler(pieces: Dictionary) -> Dictionary:
 	var variantes := 0
 	var id := 0
 	for c in MB.classes():
-		if not MB.porte_une_surface(c["bits"]):
+		# ⚠ **UNE CLASSE EN CONTACT DIAGONAL N'EST PAS « MANQUANTE » : ELLE EST HORS DU MONDE.** Le
+		# témoin ne la porte pas, et c'est voulu (DÉCIDÉ, 25 septembre 2026). Le peintre qui en rencontre
+		# une pose quand même un cube rouge — l'absence se voit toujours là où elle arrive.
+		if not MB.porte_une_surface(c["bits"]) or not MB.sans_contact_diagonal(c["bits"]):
 			continue
 		var mesh: ArrayMesh = pieces.get(c["nom"], null)
 		if mesh == null or mesh.get_surface_count() == 0:
@@ -969,9 +1156,69 @@ static func boite_du_bloc() -> AABB:
 ## lui laisserait croire que la case est la limite.
 ## ⚠ **CE FUT D'ABORD UN DÉFAUT DE PARAMÈTRE, C'EST DÉSORMAIS LE SEUL MODE.** Un export capable de partir
 ## plein était une façon de mentir à l'artiste sur sa marge, pas une option qu'on avait envie d'offrir.
+## SÉPARE UN MAILLAGE EN UNE SURFACE PAR TEINTE, chacune portant un matériau NOMMÉ.
+##
+## ⚠ **PARCE QU'UNE COULEUR DE SOMMET N'ARRIVE PAS CHEZ L'ARTISTE, ET C'EST MESURÉ.** Le témoin partait
+## avec ses six teintes dans `COLOR_0` et ressortait **blanc** : le glTF n'avait aucun matériau, donc
+## rien ne disait à quoi rattacher ces couleurs. Un matériau par teinte survit à tout importeur —
+## et il fait mieux que porter la couleur : **il porte son NOM**. L'artiste lit
+## « Wall - underground » dans sa liste de matériaux au lieu de deviner ce que le mauve veut dire.
+##
+## ⚠ **ON RETIRE `ARRAY_COLOR` EN CHEMIN, et ce n'est pas une économie.** La spécification glTF
+## MULTIPLIE `COLOR_0` par la couleur de base du matériau : garder les deux donnerait la teinte au
+## CARRÉ chez un lecteur conforme, donc un témoin plus sombre que celui qu'on a jugé à l'écran. Une
+## seule source de couleur, et c'est le matériau.
+##
+## ⚠ **ET LES SIX NOMS VIVENT DANS `repli_procedural.gd`**, avec les six couleurs. Les réécrire ici en
+## ferait une seconde description de la légende, et ce projet a déjà payé trois fois cette faute.
+static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
+	var paquets := {}
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		if arrays.is_empty():
+			continue
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var c: PackedColorArray = arrays[Mesh.ARRAY_COLOR] 			if arrays[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null 			else PackedInt32Array(range(v.size()))
+		# ⚠ **PAR TRIANGLE, D'APRÈS SON PREMIER SOMMET.** Un triangle dont les trois sommets auraient
+		# deux teintes différentes devrait être coupé ; ça n'arrive pas ici — le mailleur pose une
+		# couleur par FACE — mais le dire évite qu'on croie la fonction plus générale qu'elle n'est.
+		for t in range(0, ordre.size() - 2, 3):
+			var teinte: Dictionary = RP.teinte_de(c[ordre[t]] if c.size() > ordre[t] else Color.WHITE)
+			var nom: String = teinte["nom"]
+			if not paquets.has(nom):
+				# ⚠ **UN `Array` ET NON UN `PackedVector3Array`, ET CE N'EST PAS UN DÉTAIL DE GOÛT.**
+				# Les tableaux compacts de GDScript sont des types VALEUR : relire
+				# `paquets[nom]["sommets"]` en rend une COPIE, et tout ce qu'on y ajoute est perdu à la
+				# ligne suivante. Mesuré à mes dépens — l'export sortait un `.glb` de 272 octets, six
+				# surfaces vides, sans qu'aucune erreur ne parle de copie. `Array` est une référence.
+				paquets[nom] = {"couleur": teinte["couleur"], "sommets": []}
+			var sac: Array = paquets[nom]["sommets"]
+			for k in 3:
+				sac.append(v[ordre[t + k]])
+
+	var sortie := ArrayMesh.new()
+	# ⚠ L'ordre des surfaces suit `RP.TEINTES`, pas celui du dictionnaire : deux exports du même bloc
+	# doivent rendre le même fichier, sinon un `diff` de `.glb` ne veut plus rien dire.
+	for teinte in RP.TEINTES:
+		var nom: String = teinte["nom"]
+		if not paquets.has(nom):
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array(paquets[nom]["sommets"])
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var matiere := StandardMaterial3D.new()
+		matiere.resource_name = nom
+		matiere.albedo_color = paquets[nom]["couleur"]
+		sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
+	return sortie
+
+
 static func exporter_le_bloc(chemin: String) -> String:
 	var brut: ArrayMesh = maillage_moitie(0)
-	var mesh: ArrayMesh = sans_normales(souder(brut))
+	var mesh: ArrayMesh = par_teinte(sans_normales(souder(brut)))
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
 	var instance := MeshInstance3D.new()
@@ -1070,6 +1317,14 @@ static func sans_normales(mesh: ArrayMesh) -> ArrayMesh:
 		arrays[Mesh.ARRAY_NORMAL] = null
 		arrays[Mesh.ARRAY_TANGENT] = null
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		# ⚠ **LE MATÉRIAU SE REPORTE, ET L'OUBLIER A COÛTÉ LA LÉGENDE ENTIÈRE.** Reconstruire une
+		# surface par `add_surface_from_arrays` ne transporte QUE les tableaux : le matériau reste sur
+		# la source. Le témoin partait donc sans matériau, le glTF sortait avec `materials: []`, et les
+		# six teintes décidées le 25 septembre n'arrivaient jamais chez l'artiste — sans qu'aucune
+		# erreur ne le dise, puisque `COLOR_0` était bien là.
+		var matiere: Material = mesh.surface_get_material(s)
+		if matiere != null:
+			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
 	return sortie
 
 

@@ -67,7 +67,7 @@ func _initialize() -> void:
 	print("   → %d classe(s) qu'aucun bloc ne livre%s"
 		% [absentes.size(), "" if absentes.is_empty() else " : " + str(absentes.slice(0, 6))])
 	# ⚠ Le contexte se DÉDUIT du modèle depuis que la liste `AMBIGUES` a été invalidée par la mesure.
-	var dehors: Array = BlocsMaitres.MB.classes_exterieures()
+	var dehors: Array = BlocsMaitres.MB.exterieures_a_sculpter()
 	print("   → contexte déduit : %d classe(s) possibles à l'air libre, %d intérieures seulement\n"
 		% [dehors.size(), BlocsMaitres.MB.pieces_a_sculpter().size() - dehors.size()])
 

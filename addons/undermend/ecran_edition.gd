@@ -336,7 +336,7 @@ func _exporter(fichier: String) -> void:
 		_dire("[color=#e0603c]Échec de l'export :[/color] %s" % raison)
 		return
 
-	var dehors: int = MB.classes_exterieures().size()
+	var dehors: int = MB.exterieures_a_sculpter().size()
 	var total: int = MB.pieces_a_sculpter().size()
 	var texte := "[color=#6f9e4a][b]MasterBlock écrit[/b][/color] → %s\n" % fichier
 	texte += "  « %s » — un seul bloc de %d × %d × %d\n" \

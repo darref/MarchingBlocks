@@ -37,9 +37,26 @@ const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BM := preload("res://addons/undermend/blocs_maitres.gd")
 const Tranchage := preload("res://addons/undermend/tranchage.gd")
 
+## ⚠ **QUEL BLOC — ET C'EST DEVENU LA QUESTION CENTRALE DEPUIS QU'IL Y EN A DEUX (Jordan, 25 septembre
+## 2026).** Avec un témoin unique, « 22/22 » suffisait. Avec deux, la règle est que **chaque germe doit
+## apparaître À L'INTÉRIEUR d'au moins un des blocs** : un raccord qui n'existerait qu'à la jonction
+## entre les deux n'existerait nulle part, et l'artiste ne le sculpterait jamais.
+## Mesuré le jour même : le témoin paysage n'en exhibe que **18 sur 22**, les quatre manquants étant
+## tous de forme « diagonale » — un paysage orthogonal n'en produit aucun. C'est donc au second bloc de
+## les porter, et cette sonde doit pouvoir l'interroger lui aussi.
+var _bloc := 0
+
 
 func _initialize() -> void:
-	print("=== LE TÉMOIN MONTRE-T-IL TOUS LES RACCORDS POSSIBLES ? ===\n")
+	for option in OS.get_cmdline_user_args():
+		if option.begins_with("--bloc="):
+			_bloc = int(option.substr("--bloc=".length()))
+	if _bloc < 0 or _bloc >= BM.nombre():
+		print("⚠ --bloc=%d : il y a %d bloc(s)" % [_bloc, BM.nombre()])
+		quit(1)
+		return
+	print("=== LE TÉMOIN MONTRE-T-IL TOUS LES RACCORDS POSSIBLES ? ===")
+	print("bloc %d — « %s »\n" % [_bloc, BM.BLOCS[_bloc]["nom"]])
 
 	var attendus: int = Tranchage.nombre_de_germes()
 	print("germes définis par le groupe : %d   (le modèle orienté en attend 28)\n" % attendus)
@@ -75,7 +92,7 @@ func _initialize() -> void:
 		% [univers.size(), a_coudre.size()])
 
 	# ── CE QUE LE BLOC EXHIBE RÉELLEMENT ────────────────────────────────────────────────────────────
-	var pleines: Dictionary = BM.cases(0)
+	var pleines: Dictionary = BM.cases(_bloc)
 	var vus := {}
 	var sommets_lus := 0
 	for vx in range(0, BM.COTE - 1):

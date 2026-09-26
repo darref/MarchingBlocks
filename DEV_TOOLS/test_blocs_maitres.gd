@@ -1,6 +1,6 @@
 extends SceneTree
 ##
-## TEST — les neuf blocs maîtres (étape 7).
+## TEST — le bloc maître unique : la planète paysage de 12³, 52 tuiles du monde sans diagonale.
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_blocs_maitres.gd
@@ -58,6 +58,7 @@ func _initialize() -> void:
 	_on_ne_lit_que_les_sommets_interieurs()
 	_la_couverture_est_complete()
 	_la_partition_des_contextes_est_derivee()
+	_le_temoin_livre_exactement_le_monde()
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
@@ -159,7 +160,9 @@ func _la_couverture_est_complete() -> void:
 ## l'observation. La mesure a invalidé sa prémisse : les neuf blocs exposent **10** classes dans les deux
 ## contextes, et un seul monde d'essai en expose **35**. On garde donc la DÉDUCTION, pas la liste.
 func _la_partition_des_contextes_est_derivee() -> void:
-	var total: int = MB.pieces_a_sculpter().size()
+	# ⚠ C'est le MODÈLE qu'on partitionne ici (68 = 22 + 46), pas le monde sans diagonale : les
+	# pièces à sculpter (35) ne sont plus le bon total depuis le 27 septembre 2026.
+	var total: int = MB.classes_de_surface().size()
 	var dehors: Array = MB.classes_exterieures()
 	_dire(dehors.size() == 22,
 		"22 classes peuvent être à l'air libre, le modèle en rend %d" % dehors.size())
@@ -190,8 +193,76 @@ func _la_partition_des_contextes_est_derivee() -> void:
 			divergents += 1
 	_dire(divergents == 0,
 		"%d configuration(s) ne s'accordent pas avec le représentant de leur classe" % divergents)
-	print("  contexte : %d à l'air libre possible, %d intérieures seulement → %d tuiles à sculpter"
-		% [dehors.size(), total - dehors.size(), total + dehors.size()])
+	print("  contexte du modèle : %d à l'air libre possible, %d intérieures seulement"
+		% [dehors.size(), total - dehors.size()])
+
+
+## ⚠ **LA COUVERTURE N'EST PAS LA LIVRAISON — et les deux ont déjà divergé ici** (charte §2 : la machine
+## annonçait 90/90 quand le greffon en livrait 73). `_la_couverture_est_complete` compte des classes
+## NUES ; ce contrôle-ci ouvre ce que `librairie()` rend vraiment, variantes d'air libre comprises, et
+## le compare à une attente bâtie ICI depuis les bits — sans appeler `pieces_a_sculpter()` ni
+## `exterieures_a_sculpter()`, qui décident déjà de ce que le module vise.
+##
+## ⚠ **ET LE TÉMOIN N'A AUCUN CONTACT DIAGONAL SUR SES SOMMETS INTÉRIEURS.** C'est la promesse du monde
+## qu'il montre : un témoin qui en porterait livrerait une tuile que le monde ne pose jamais, et
+## rouvrirait l'ambiguïté non-manifold que ce monde a fermée.
+func _le_temoin_livre_exactement_le_monde() -> void:
+	var attendu := {}
+	for c in MB.classes():
+		var b: int = c["bits"]
+		if not MB.porte_une_surface(b):
+			continue
+		var diagonal := false
+		for f in MB.faces_de(b):
+			if f["forme"] == "diagonale":
+				diagonal = true
+		if diagonal:
+			continue
+		attendu[c["nom"]] = true
+		# Une variante d'air libre n'existe que si aucune case vide du bas n'est coiffée — recalculé
+		# ici bit à bit, sans `exterieur_possible()`.
+		var coiffee := false
+		for t in MB.BAS:
+			if (b & (1 << int(t))) == 0 and (b & (1 << (int(t) + 2))) != 0:
+				coiffee = true
+		if not coiffee:
+			attendu[MB.nom_en_contexte(c["nom"], true)] = true
+	_dire(attendu.size() == 52, "le monde sans diagonale demande %d tuiles, la charte en dit 52"
+		% attendu.size())
+
+	var resultat: Dictionary = BlocsMaitres.librairie()
+	_dire((resultat["erreurs"] as Array).is_empty(), "librairie() rend %d erreur(s) de tranchage : %s"
+		% [(resultat["erreurs"] as Array).size(), str((resultat["erreurs"] as Array).slice(0, 3))])
+	_dire((resultat["manquantes"] as Array).is_empty(), "librairie() se déclare incomplète : %s"
+		% str(resultat["manquantes"]))
+	var lot: MeshLibrary = resultat["lot"]
+	var livre := {}
+	for id in lot.get_item_list():
+		livre[lot.get_item_name(id)] = true
+	var manque: Array = []
+	for nom in attendu:
+		if not livre.has(nom):
+			manque.append(nom)
+	var en_trop: Array = []
+	for nom in livre:
+		if not attendu.has(nom):
+			en_trop.append(nom)
+	_dire(manque.is_empty(), "%d tuile(s) du monde que librairie() ne livre pas : %s"
+		% [manque.size(), str(manque.slice(0, 6))])
+	_dire(en_trop.is_empty(), "%d tuile(s) livrées HORS du monde : %s"
+		% [en_trop.size(), str(en_trop.slice(0, 6))])
+
+	var diagonaux := 0
+	var pleines: Dictionary = BlocsMaitres.cases(0)
+	for x in BlocsMaitres.COTE - 1:
+		for y in BlocsMaitres.COTE - 1:
+			for z in BlocsMaitres.COTE - 1:
+				var b: int = MB.bits(pleines, Vector3i(x, y, z))
+				if MB.porte_une_surface(b) and not MB.sans_contact_diagonal(b):
+					diagonaux += 1
+	_dire(diagonaux == 0, "le témoin porte %d sommet(s) en contact diagonal" % diagonaux)
+	print("  livraison : %d tuiles sur %d, %d contact(s) diagonal(aux)"
+		% [livre.size() - en_trop.size(), attendu.size(), diagonaux])
 
 
 func _le_cumul_est_croissant() -> void:

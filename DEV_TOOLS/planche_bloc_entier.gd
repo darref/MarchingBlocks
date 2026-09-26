@@ -40,6 +40,20 @@ const ANGLES := [
 	{"quoi": "de dessous", "dir": Vector3(1.0, -0.5, 1.0)},
 ]
 
+## ⚠ **`--zoom=` ET `--cible=` PARCE QU'UN CHANFREIN DE 0,2 CASE NE SE VOIT PAS SUR UN BLOC DE 8.**
+## Le cadrage large répond à « quelle FORME a-t-il sculptée » ; il ne répond pas à « quel GESTE a-t-il
+## fait sur une arête ». Deux questions, un seul cadrage réglable — jamais deux planches (charte §6).
+## ⚠ **`--chanfrein` MET LA PISTE EN HAUT À LA PLACE DE L'AMINCI.** La ligne du haut est le RÉFÉRENT :
+## tant qu'on cherchait ce que Jordan voyait, c'était le témoin qui part ; maintenant qu'on cherche à
+## reproduire son geste, c'est le candidat. Une seule planche, un seul cadrage — sinon on compare deux
+## images qui ne se comparent pas (charte §6).
+## ⚠ **`--ouest` REGARDE DE L'AUTRE CÔTÉ, et il a fallu s'en apercevoir à l'image.** Les quatre angles
+## tournent tous autour de +x/+z : un relief creusé du côté −x reste invisible sur les quatre vues, et
+## l'on conclut « le bloc ne montre rien » alors qu'on ne l'a simplement jamais regardé.
+var _ouest := false
+var _chanfrein := false
+var _zoom := 0.0
+var _cible := Vector3.INF
 var _fichier := ""
 var _sortie := "bloc_entier.png"
 var _vues: Array = []
@@ -52,6 +66,16 @@ func _initialize() -> void:
 			_fichier = option.substr("--fichier=".length())
 		if option.begins_with("--sortie="):
 			_sortie = option.substr("--sortie=".length())
+		if option == "--ouest":
+			_ouest = true
+		if option == "--chanfrein":
+			_chanfrein = true
+		if option.begins_with("--zoom="):
+			_zoom = float(option.substr("--zoom=".length()))
+		if option.begins_with("--cible="):
+			var m: PackedStringArray = option.substr("--cible=".length()).split(",")
+			if m.size() == 3:
+				_cible = Vector3(float(m[0]), float(m[1]), float(m[2]))
 	if _fichier == "":
 		print("il faut --fichier=<le .glb sculpté>")
 		quit(1)
@@ -66,10 +90,11 @@ func _initialize() -> void:
 		print("⚠ illisible comme glTF")
 		quit(1)
 		return
-	print("témoin  : %d sommet(s)" % _sommets(BM.maillage_moitie(0)))
+	var referent: ArrayMesh = BM.maillage_chanfreine(0) if _chanfrein else BM.maillage_moitie(0)
+	print("%s : %d sommet(s)" % ["piste " if _chanfrein else "témoin", _sommets(referent)])
 	print("sculpt  : %d sommet(s)\n" % _sommets(sculpte))
 
-	for mesh in [BM.maillage_moitie(0), sculpte]:
+	for mesh in [referent, sculpte]:
 		for a in ANGLES:
 			_vues.append(_faire_vue(mesh, a["dir"]))
 	process_frame.connect(_image)
@@ -95,7 +120,8 @@ func _image() -> void:
 		% [planche.get_width(), planche.get_height(), _sortie,
 			"écrite" if err == OK else "ERREUR %d" % err])
 	print("   colonnes : %s" % ", ".join(PackedStringArray(ANGLES.map(func(a): return a["quoi"]))))
-	print("   HAUT = le TÉMOIN tel qu'il part   ·   BAS = le SCULPT de Jordan")
+	print("   HAUT = %s   ·   BAS = le SCULPT de Jordan"
+		% ("LA PISTE chanfreinée" if _chanfrein else "le TÉMOIN tel qu'il part"))
 	quit(0 if err == OK else 1)
 
 
@@ -125,10 +151,12 @@ func _faire_vue(mesh: ArrayMesh, direction: Vector3) -> SubViewport:
 	instance.mesh = mesh
 	vue.add_child(instance)
 
-	var cible := Vector3.ONE * (BM.COTE * 0.5)
+	if _ouest:
+		direction.x = -direction.x
+	var cible: Vector3 = _cible if _cible != Vector3.INF else Vector3.ONE * (BM.COTE * 0.5)
 	var camera := Camera3D.new()
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
-	camera.size = BM.COTE * 1.5
+	camera.size = _zoom if _zoom > 0.0 else BM.COTE * 1.5
 	camera.position = cible + direction.normalized() * 30.0
 	vue.add_child(camera)
 	camera.look_at_from_position(camera.position, cible, Vector3.UP)

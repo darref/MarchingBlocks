@@ -2,6 +2,12 @@ extends SceneTree
 ##
 ## LE BLOC MAÎTRE UNIQUE — la silhouette écrite à la main, la couverture finie mécaniquement.
 ##
+## ⚠ **IL N'ENGENDRE PLUS LE TÉMOIN LIVRÉ DEPUIS LE 27 SEPTEMBRE 2026.** Le greffon porte désormais la
+## planète paysage de 12³, produite par `planete_paysage.gd --couches`. Cet outil reste parce qu'il porte
+## le finisseur et son élagage (charte §2), mais sa silhouette de 8³ est celle de l'ancien monde. Ses
+## cibles lisent les pièces à sculpter du monde sans diagonale (35 + 17), et `--residu`, qui supposait
+## deux témoins, refuse de tourner.
+##
 ## LANCEMENT
 ##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
 ##       --script res://DEV_TOOLS/verifier_bloc_unique.gd
@@ -51,6 +57,9 @@ const MB := preload("res://addons/undermend/marching_blocks.gd")
 ## ⚠ La coque en sous-voxels et le bilan topologique vivent dans un module PARTAGÉ avec
 ## `sonde_topologie_export.gd` : deux copies d'un même calcul divergent, et ce projet l'a déjà payé.
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
+## ⚠ Pour le MODE RÉSIDU seulement : lire ce que le PREMIER témoin couvre déjà, afin de ne pas le
+## refabriquer. Le vérificateur ne dépend pas des blocs livrés en dehors de ce mode.
+const BM := preload("res://addons/undermend/blocs_maitres.gd")
 
 const COTE := 8
 
@@ -168,17 +177,64 @@ var _libres: Array = []       # les cases que le finisseur a le droit de changer
 ##   • 84 dans les deux cas            ⇒ c'est la ZONE LIBRE qui est trop petite ou mal placée.
 var _imposer_connexite := true
 
+## ── LE MODE RÉSIDU : finir le SECOND témoin, pas le premier ─────────────────────────────────────────
+##
+## ⚠ **DEUX TÉMOINS DEPUIS LE 25 septembre 2026 (Jordan)** : le premier montre ce qu'on rencontre le
+## plus — massifs, grotte, tunnel, arche, puits — et ne couvre que 27 des 90 tuiles ; le second
+## « récolte tout le reste qui n'a pas été utilisé ».
+##
+## ⚠ **SANS CE MODE, LE FINISSEUR REDONDE LE PREMIER TÉMOIN.** Il vise les 90 classes, donc il dépense
+## sa matière à refabriquer les 27 que le paysage montre déjà — alors que ces 27 sont précisément
+## celles qu'il ne doit PAS porter, puisque « le premier bloc gagne » dans `librairie()`.
+##
+## ⚠ **ET LE RÉSIDU EST DÉDUIT, JAMAIS RECOPIÉ** : il s'obtient en appliquant `_contextes()` — la MÊME
+## fonction qui juge le bloc en cours — aux cases du bloc 0. Écrire ici la liste des 63 classes serait
+## une seconde description qui se périmerait au premier retouchage du paysage.
+var _mode_residu := false
+var _residu_int := {}
+var _residu_ext := {}
+
+## ── LE MONDE SANS CONTACT DIAGONAL — DÉCIDÉ (Jordan, 25 septembre 2026) ─────────────────────────────
+##
+## ⚠ **CE MODE RÉPOND À LA SEULE QUESTION QUI RESTAIT AVANT DE BASCULER** : un témoin sans contact
+## diagonal peut-il réellement EXHIBER les 52 tuiles de ce monde ? La charte affirmait « 52/90, trois
+## essais sur trois » — trois fois exactement le maximum théorique — mais elle le rangeait comme un
+## ÉCHEC, et c'est un chiffre CITÉ. Cette charte m'en a déjà servi trois de faux : on le reproduit.
+##
+## ⚠ **LA BORNE EST `COTE`, PAS LE MONDE.** Les faces extérieures d'un bloc sont des faces de SCIAGE et
+## la Convention (A) ne récolte jamais ses sommets de bord : y réparer une diagonale éroderait la
+## silhouette pour des sommets que le greffon ne lit pas. Le pinceau, lui, emploiera la version non
+## bornée — dans un monde peint, l'extérieur est réellement du vide.
+var _sans_diagonale := false
+
 
 func _initialize() -> void:
 	for option in OS.get_cmdline_user_args():
 		if option == "--sans-connexite":
 			_imposer_connexite = false
+		if option == "--residu":
+			_mode_residu = true
+		if option == "--sans-diagonale":
+			_sans_diagonale = true
+	if _mode_residu:
+		print("⚠ --residu supposait DEUX témoins, et le greffon n'en porte plus qu'un (27 septembre 2026).")
+		quit(1)
+		return
 	print("=== LE BLOC MAÎTRE UNIQUE (8³) ===")
 	print("    connexité imposée : %s\n" % ("oui" if _imposer_connexite else "NON (diagnostic)"))
 	var pleines: Dictionary = _lire()
 	if pleines.is_empty():
 		quit(1)
 		return
+	if _sans_diagonale:
+		# ⚠ **LA SILHOUETTE DOIT OBÉIR AU MONDE AVANT QUE LA RECHERCHE COMMENCE.** Elle porte 2 contacts
+		# diagonaux ; sans ce nettoyage, `ok` refuserait tous les coups et la recherche ne dirait rien.
+		# On emploie la règle de Jordan elle-même — on COMPLÈTE le trou, on ne refuse pas.
+		var coupees: int = MB.completer_les_carres(pleines, COTE)
+		print("── LE MONDE SANS CONTACT DIAGONAL ──")
+		print("   cible : %d tuiles (%d classes atteignables + leurs variantes d'air libre)"
+			% [_cible_sans_diagonale(), MB.classes_sans_diagonale().size()])
+		print("   la silhouette a perdu %d case(s) en se conformant au monde\n" % coupees)
 	print("── LA SILHOUETTE ÉCRITE À LA MAIN ──")
 	_mesurer(pleines, "départ")
 	var fini: Dictionary = _finir(pleines)
@@ -350,9 +406,41 @@ func _contextes(pleines: Dictionary) -> Dictionary:
 ## dérivé de la silhouette écrite à la main et imposé à chaque coup. Ce score reste donc aveugle au
 ## contexte — c'est assumé : le plancher l'empêche de nuire, et un score pondéré aurait demandé de
 ## choisir un poids arbitraire là où le plancher ne demande qu'à respecter le dessin de l'artiste.
+## Le nombre de tuiles d'un monde sans contact diagonal : les classes atteignables, plus celles d'entre
+## elles qui peuvent être à l'air libre. ⚠ DÉDUIT du modèle, jamais écrit en dur — mesuré à 52.
+func _cible_sans_diagonale() -> int:
+	var n := 0
+	var e := 0
+	for c in MB.classes():
+		if not MB.porte_une_surface(c["bits"]) or not MB.sans_contact_diagonal(c["bits"]):
+			continue
+		n += 1
+		if MB.exterieur_possible(c["bits"]):
+			e += 1
+	return n + e
+
+
 func _score(pleines: Dictionary) -> int:
-	var c: Dictionary = _contextes(pleines)
-	return (c["int"] as Dictionary).size() + (c["ext"] as Dictionary).size()
+	return _compte(_contextes(pleines))
+
+
+## Ce que vaut un relevé de contextes — TOUTES les classes, ou seulement celles du résidu.
+##
+## ⚠ **UN SEUL ENDROIT, parce que le grimpeur ne passe PAS par `_score()`.** Il rappelait
+## `c2["int"].size() + c2["ext"].size()` en ligne pour éviter un second parcours du volume. Filtrer le
+## résidu dans `_score` seul aurait donc laissé la boucle de recherche compter les 90 : elle aurait
+## optimisé une cible et le rapport en aurait affiché une autre, sans qu'aucune erreur ne le dise.
+func _compte(c: Dictionary) -> int:
+	if not _mode_residu:
+		return (c["int"] as Dictionary).size() + (c["ext"] as Dictionary).size()
+	var n := 0
+	for nom in c["int"]:
+		if _residu_int.has(nom):
+			n += 1
+	for nom in c["ext"]:
+		if _residu_ext.has(nom):
+			n += 1
+	return n
 
 
 # ── LE FINISSEUR ────────────────────────────────────────────────────────────────────────────────────
@@ -361,7 +449,9 @@ func _score(pleines: Dictionary) -> int:
 ## une contrainte constatée après coup n'en est pas une — la recherche avait atteint sa cible avec une
 ## poussière de morceaux, et je ne m'en apercevais qu'au rapport.
 func _finir(depart: Dictionary) -> Dictionary:
-	var cible: int = MB.pieces_a_sculpter().size() + MB.classes_exterieures().size()
+	var cible: int = _cible_sans_diagonale() if _sans_diagonale \
+		else ((_residu_int.size() + _residu_ext.size()) if _mode_residu \
+		else (MB.pieces_a_sculpter().size() + MB.exterieures_a_sculpter().size()))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 90210
 	var meilleur: Dictionary = depart.duplicate()
@@ -404,7 +494,8 @@ func _finir(depart: Dictionary) -> Dictionary:
 			# `PONT_SUR_FACE_AMBIGUE`. On mesure donc le résidu et on le DIT à l'artiste, au lieu de
 			# prétendre le supprimer.
 			var ok: bool = not pleines.is_empty() \
-				and (not _imposer_connexite or _morceaux(pleines) == 1)
+				and (not _imposer_connexite or _morceaux(pleines) == 1) \
+				and (not _sans_diagonale or MB.contacts_par_arete(pleines, COTE) == 0)
 			# ⚠ **UN SEUL APPEL À `_contextes()` PAR PAS.** `_score()` le rappelait, et le plancher
 			# l'aurait rappelé une seconde fois : trois parcours du volume là où un suffit.
 			var c2: Dictionary = _contextes(pleines) if ok else {}
@@ -413,8 +504,7 @@ func _finir(depart: Dictionary) -> Dictionary:
 			# le ciel devient un coup REFUSÉ, au même titre que fragmenter la matière.
 			if ok and int(c2["n_ext"]) < ciel_plancher:
 				ok = false
-			var s2: int = ((c2["int"] as Dictionary).size() + (c2["ext"] as Dictionary).size()) \
-				if ok else -1
+			var s2: int = _compte(c2) if ok else -1
 			# ⚠ **LE GRIMPEUR NE JUGE QUE LA COUVERTURE — appris en cassant les deux critères à la fois.**
 			# J'avais mis la compacité en second critère ICI : la couverture est tombée à 88/90 et
 			# l'exposition a MONTÉ, de 218 à 342. La cause est structurelle et pas un réglage : un gain de
@@ -503,9 +593,16 @@ func _elaguer(pleines: Dictionary, depart: Dictionary, cible: int,
 			# ⚠ **LE PLANCHER VAUT ICI AUSSI, et son absence serait le même défaut par une autre porte.**
 			# L'élagage annule des retouches ; sans contrainte, il peut parfaitement annuler celles qui
 			# tenaient le ciel ouvert et reboucher ce que le grimpeur avait préservé.
+			# ⚠ **LA CONTRAINTE VAUT ICI AUSSI, et son absence serait le même défaut par une autre porte.**
+			# L'élagage ANNULE des retouches : sans ce test, il peut parfaitement annuler celles qui
+			# avaient supprimé un contact diagonal, et réintroduire dans le témoin livré une forme que
+			# le monde interdit — sans qu'aucun compteur ne le dise, puisque le score, lui, ne baisse
+			# pas. Ma première édition de cette ligne a échoué silencieusement (mauvaise indentation),
+			# et c'est exactement le genre de trou qu'on ne découvre qu'au rendu.
 			var ok: bool = not sortie.is_empty() \
 				and (not _imposer_connexite or _morceaux(sortie) == 1) \
-				and int(_contextes(sortie)["n_ext"]) >= ciel_plancher
+				and int(_contextes(sortie)["n_ext"]) >= ciel_plancher \
+				and (not _sans_diagonale or MB.contacts_par_arete(sortie, COTE) == 0)
 			if not ok or _score(sortie) < cible:
 				if etait2:
 					sortie[q] = true
@@ -526,7 +623,7 @@ func _elaguer(pleines: Dictionary, depart: Dictionary, cible: int,
 func _mesurer(pleines: Dictionary, quoi: String) -> void:
 	var c: Dictionary = _contextes(pleines)
 	var possibles := {}
-	for n in MB.classes_exterieures():
+	for n in MB.exterieures_a_sculpter():
 		possibles[n] = true
 	var dehors: int = (c["ext"] as Dictionary).size()
 	var total: int = MB.pieces_a_sculpter().size()
@@ -559,7 +656,7 @@ func _mesurer(pleines: Dictionary, quoi: String) -> void:
 func _dire_les_manquantes(pleines: Dictionary) -> void:
 	var c: Dictionary = _contextes(pleines)
 	var possibles := {}
-	for n in MB.classes_exterieures():
+	for n in MB.exterieures_a_sculpter():
 		possibles[n] = true
 	var bits_par_nom := {}
 	for cl in MB.classes():
@@ -570,7 +667,7 @@ func _dire_les_manquantes(pleines: Dictionary) -> void:
 		if not (c["int"] as Dictionary).has(n):
 			manque_dedans.append(n)
 	var manque_dehors: Array = []
-	for n in MB.classes_exterieures():
+	for n in MB.exterieures_a_sculpter():
 		if not (c["ext"] as Dictionary).has(n):
 			manque_dehors.append(n)
 
@@ -581,7 +678,7 @@ func _dire_les_manquantes(pleines: Dictionary) -> void:
 		print("\n   ⚠ MANQUENT EN EXTÉRIEUR (%d) :" % manque_dehors.size())
 		_dessiner_formes(manque_dehors, bits_par_nom)
 	if manque_dedans.is_empty() and manque_dehors.is_empty():
-		print("\n   ✅ COUVERTURE COMPLÈTE — 90 tuiles sur 90.")
+		print("\n   ✅ COUVERTURE COMPLÈTE — toutes les tuiles du monde.")
 
 
 ## Chaque classe en deux carrés 2×2 : la couche du BAS (bits 0,1,4,5) et celle du HAUT (2,3,6,7),

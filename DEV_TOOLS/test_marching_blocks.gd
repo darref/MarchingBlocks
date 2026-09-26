@@ -30,7 +30,11 @@ const MB := preload("res://addons/undermend/marching_blocks.gd")
 ## HORS du moteur (Burnside vérifié sur les trois groupes). Si le module se met à en rendre d'autres,
 ## c'est le module qui a changé, pas la vérité.
 const CLASSES_ATTENDUES := 70
-const A_SCULPTER := 68
+const DE_SURFACE := 68
+## ⚠ Le MONDE sans contact diagonal (DÉCIDÉ, 25 septembre 2026) : ce que l'artiste sculpte vraiment.
+## MESURÉ le 25 septembre 2026, avant que `pieces_a_sculpter()` ne le rende — écrit ici, pas relu.
+const A_SCULPTER := 35
+const DEHORS_A_SCULPTER := 17
 const QUARTS := [0, 10, 16, 22]
 const GERMES := 28
 const GERMES_HORIZONTAUX := 12
@@ -59,6 +63,7 @@ func _initialize() -> void:
 	_les_tuiles_de_run_se_repetent()
 	_les_symetries_imposees()
 	_le_lieu_et_la_matiere_sont_deux_questions()
+	_le_flanc_d_une_falaise_est_a_l_air_libre()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -236,10 +241,23 @@ func _les_classes_partitionnent_les_256() -> void:
 		_dire(minimum == classes[c]["bits"],
 			"« %s » : référence %d, minimum de l'orbite %d" % [classes[c]["nom"], classes[c]["bits"], minimum])
 
+	_dire(MB.classes_de_surface().size() == DE_SURFACE,
+		"%d classes de surface, il en faut %d" % [MB.classes_de_surface().size(), DE_SURFACE])
 	_dire(MB.pieces_a_sculpter().size() == A_SCULPTER,
 		"%d pièces à sculpter, il en faut %d" % [MB.pieces_a_sculpter().size(), A_SCULPTER])
-	print("   → %d classes, orbites totalisant 256, %d pièces à sculpter"
-		% [classes.size(), MB.pieces_a_sculpter().size()])
+	_dire(MB.exterieures_a_sculpter().size() == DEHORS_A_SCULPTER,
+		"%d pièces à sculpter aussi à l'air libre, il en faut %d"
+			% [MB.exterieures_a_sculpter().size(), DEHORS_A_SCULPTER])
+	# ⚠ Aucune pièce à sculpter ne montre de contact diagonal — sinon « le monde » n'est qu'un nom.
+	var fautives := 0
+	for nom in MB.pieces_a_sculpter():
+		for c in classes:
+			if c["nom"] == nom and not MB.sans_contact_diagonal(c["bits"]):
+				fautives += 1
+	_dire(fautives == 0, "%d pièce(s) à sculpter portent un contact diagonal" % fautives)
+	print("   → %d classes, orbites totalisant 256, %d de surface, %d pièces à sculpter (+%d d'air libre)"
+		% [classes.size(), MB.classes_de_surface().size(), MB.pieces_a_sculpter().size(),
+			MB.exterieures_a_sculpter().size()])
 
 
 # ── 6. le haut et le bas sont des invariants ────────────────────────────────────────────────────────
@@ -639,3 +657,46 @@ func _le_lieu_et_la_matiere_sont_deux_questions() -> void:
 	_dire(MB.sous_le_ciel(pleines, Vector3i(0, 2, 1), plafond),
 		"une pièce ne se coiffe pas elle-même : (0,2,1) reste un lieu à l'air libre")
 	print("   → sous l'auvent et à côté, le lieu et la matière donnent bien des réponses différentes")
+
+
+# ── 15. le flanc d'une falaise est à l'air libre ────────────────────────────────────────────────────
+
+## ⚠ **LE DÉFAUT QUE CE CONTRÔLE GARDE A POSÉ DES MURS DE GROTTE SUR TOUTES LES FALAISES** (corrigé le
+## 26 septembre 2026). `sous_le_ciel()` sondait les HUIT colonnes d'un sommet ; or sur une paroi, quatre
+## d'entre elles SONT la falaise, qui continue vers le haut — le sommet se déclarait donc couvert par la
+## matière même qu'il borde. Mesuré sur le monde peint de Jordan : 85 % des murs d'un paysage étaient
+## des murs d'intérieur.
+##
+## ⚠ **IL A SURVÉCU PARCE QU'AUCUN SCÉNARIO N'AVAIT PLUS D'UNE CASE DE RELIEF** : sur une marche d'une
+## case, les deux règles rendent exactement la même chose. Le scénario est donc une falaise de TROIS
+## cases, et le sommet choisi est à mi-hauteur, là où la roche continue au-dessus de lui.
+## ⚠ Les attendus sont écrits à la main (charte §6), et le contrôle négatif — un surplomb au-dessus du
+## vide — garde que la correction n'est pas une simple permissivité.
+func _le_flanc_d_une_falaise_est_a_l_air_libre() -> void:
+	print("\n15. le flanc d'une falaise est à l'air libre, le dessous d'un surplomb ne l'est pas")
+
+	#     y=3   ##..          une falaise x = 0..1, haute de y = 1 à 3, sur un socle x = 0..3
+	#     y=2   ##..
+	#     y=1   ##..          le sommet (1,1,0) : cases x = 1..2, y = 1..2 — la paroi à mi-hauteur
+	#     y=0   ####
+	var pleines: Dictionary = _pave(0, 3, 0, 0, 0, 1)
+	for x in 2:
+		for y in range(1, 4):
+			for z in 2:
+				pleines[Vector3i(x, y, z)] = true
+	var v := Vector3i(1, 1, 0)
+	var plafond := 3
+	_dire(MB.exterieur_possible(MB.bits(pleines, v)),
+		"une paroi verticale doit POUVOIR être à l'air libre — sinon ce contrôle ne garde rien")
+	# Attendu à la main : les colonnes x = 2 sont vides de y = 1 jusqu'en haut — le vide voit le ciel.
+	_dire(MB.sous_le_ciel(pleines, v, plafond),
+		"le flanc d'une falaise de 3 cases (sommet (1,1,0)) doit être à l'air libre")
+
+	# ⚠ LE CONTRÔLE NÉGATIF : la même falaise, avec un surplomb en y = 4 AU-DESSUS DU VIDE (x = 2).
+	var sous_surplomb: Dictionary = pleines.duplicate()
+	for x in 3:
+		for z in 2:
+			sous_surplomb[Vector3i(x, 4, z)] = true
+	_dire(not MB.sous_le_ciel(sous_surplomb, v, 4),
+		"sous un surplomb qui couvre le vide, le même sommet ne doit PAS être à l'air libre")
+	print("   → la falaise voit le ciel par son vide, et le surplomb le lui retire")

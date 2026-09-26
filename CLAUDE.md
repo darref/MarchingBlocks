@@ -53,17 +53,45 @@ n'est qu'un sol retourné.
   [0, 10, 16, 22] — les quarts qu'employait le modèle 2D du temps où ce projet portait un jeu. Le modèle
   orienté EST la grille duale 2D remontée en 3D.
 
-### UN bloc maître de 8³ couvre les 68 classes — MESURÉ (25 septembre 2026)
+### LE MONDE SANS CONTACT DIAGONAL : 52 tuiles — DÉCIDÉ (Jordan, 25 septembre 2026), APPLIQUÉ le 27
 
-`blocs_maitres.gd` décrit **un seul bloc de 8×8×8** en couches ASCII, et **tout le reste en est
-dérivé** : les cases pleines, les pièces, les classes, les contextes. Couverture **68/68, 0 manquante**,
-matière en **un seul morceau**.
+Deux cellules qui ne se touchent que par une arête sont interdites dans le monde. Ce que ça achète,
+mesuré : **35 classes d'intérieur + 17 variantes d'air libre = 52 tuiles au lieu de 90**, et un témoin
+**manifold par construction** — les 33 classes en contact diagonal étaient la seule source d'arêtes à
+quatre faces. Ce que ça coûte, assumé : plus d'éperon qui se touche par une pointe, plus d'érosion en
+damier.
+
+- ⚠ **`pieces_a_sculpter()` DIT LE MONDE (35), `classes_de_surface()` DIT LE MODÈLE (68).** La décision
+  est restée deux jours sans atteindre cette fonction : tant qu'elle disait 68, un témoin juste passait
+  pour incomplet de 33 classes, et c'est ce qui faisait traîner un SECOND témoin bourré de diagonales.
+- ⚠ **UNE CLASSE DIAGONALE N'EST PAS « MANQUANTE », ELLE EST HORS DU MONDE** : `librairie()` ne la
+  réclame pas, mais le peintre qui en rencontre une pose toujours un cube rouge (§3).
+- **OUVERT — le pinceau ne complète pas encore les carrés.** `MB.completer_les_carres()` existe (« on
+  complète le trou pour qu'il soit carré », Jordan) mais **rien ne l'appelle** : peindre une diagonale
+  donne aujourd'hui un cube rouge, pas un trou complété.
+
+### UN témoin UNIQUE : la planète paysage de 12³ — MESURÉ (27 septembre 2026)
+
+`blocs_maitres.gd` porte **un seul bloc de 12³**, fait de FORMES qu'on reconnaît — canyon, arche,
+pont, bouche de grotte, cheminée, auvent… — et **tout le reste en est dérivé**. Il n'est pas écrit à
+la main dans `BLOCS` : il est la sortie de `DEV_TOOLS/planete_paysage.gd --couches`, **collée telle
+quelle**. On retouche les formes là-bas, on recolle.
 
 ⚠ **ET LA COUVERTURE N'EST PAS LA LIVRAISON — les deux ont déjà divergé ici** (la machine annonçait
-90/90 quand le greffon en livrait 73). Ce qui est mesuré, sur la grille livrée de 262 cases :
-**`librairie()` rend 90 items — 68 nus et 22 variantes d'air libre — 0 classe manquante, 0 erreur de
-tranchage**, et le bloc exhibe **22 germes sur les 22 à coudre**. La chaîne tient donc de bout en
-bout : le bloc porte les 90 tuiles, et le greffon les pose.
+90/90 quand le greffon en livrait 73). Ce qui est mesuré, par le vrai trancheur sur l'aminci
+(`test_blocs_maitres`, « livraison ») : **`librairie()` rend exactement les 52 tuiles du monde, aucune
+en trop, 0 erreur de tranchage, 0 contact diagonal** sur 820 cases.
+
+⚠ **IL Y A EU DEUX TÉMOINS, DU 25 AU 27 SEPTEMBRE 2026** : un paysage lisible (27 tuiles sur 90) et un
+« résidu » sorti du finisseur (63), fait presque entièrement de contacts diagonaux — que le monde avait
+déjà interdits. **Le second témoin fabriquait des tuiles que personne ne posera.** Jordan : un bloc
+unique. ⚠ **Et « l'arche doit être visible comme une arche »** : un placeur minimal rendait 50/50 en
+dix coups et un cube blanc, toute sa substance enfermée dans une cavité invisible. On bâtit un paysage,
+et la couverture se mesure ensuite.
+
+⚠ **L'ANCIEN 8³ (90 tuiles, avec diagonales) AVAIT ÉTÉ MESURÉ ainsi** : 90 items, 22 germes sur 22.
+`verifier_bloc_unique.gd` reste, parce qu'il porte le finisseur et son élagage, mais il n'engendre plus
+le témoin, et son mode `--residu` refuse de tourner.
 
 ⚠ **IL Y EN A EU NEUF, DE 4³.** Ils couvraient bien 68/68, mais ne pouvaient pas livrer les deux
 CONTEXTES — mesuré, 10 classes à double contexte sur les 90 nécessaires — et leur alignement sur une
@@ -193,7 +221,11 @@ entier** sur le témoin unique.
   marches, simplement adoucies. Aucune force ne les enlèvera — ils sont dans l'occupation des cases,
   qui n'appartient pas à l'artiste (§3).
 
-### Ce que le témoin NE PEUT PAS être — MESURÉ
+### Ce que le témoin NE POUVAIT PAS être — MESURÉ, et devenu sans objet le 27 septembre 2026
+
+⚠ **TOUTE CETTE SECTION DÉCRIT LE MONDE AVEC DIAGONALES.** Le monde sans contact diagonal (§2) l'a
+retournée : la planète paysage part avec **15 560 quads, 0 trou, 0 arête à trois faces ou plus**
+(`sonde_cout_du_dernier_contexte.gd`, aminci). Elle reste écrite parce que ses leçons de mesure valent.
 
 ⚠ **UN TÉMOIN COMPLET CONTIENT NÉCESSAIREMENT DES ARÊTES NON-MANIFOLD.** Ce n'est pas un défaut à
 corriger : **33 des 68 classes SONT des contacts diagonaux** (`diagonale`, `damier`, `chicane`,
@@ -346,9 +378,11 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **6 618 vérifications, 0 échec** (25 septembre 2026, recomptées) :
-  `test_marching_blocks` 1 974, `test_repli_procedural` 3 922, `test_blocs_maitres` 589,
+  Six suites, **7 450 vérifications, 0 échec** (27 septembre 2026, recomptées) :
+  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 415,
   `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
+  ⚠ `test_blocs_maitres` a presque triplé avec le bloc de 12³, pour la même raison qu'en dessous : ses
+  boucles par cellule et par pièce assertent une fois par élément, et il y a 820 cases.
   ⚠ **`test_blocs_maitres` EST PASSÉ DE 597 À 589 SANS QU'AUCUNE ASSERTION NE SOIT TOUCHÉE**, en
   collant la grille du finisseur. Deux de ses boucles assertent **une fois par élément** — une par
   cellule (« sort du cube ») et une par pièce (« le sommet n'est pas intérieur ») — et ces deux
@@ -414,8 +448,17 @@ désormais le greffon.
    la variante PUIS retombe sur le nom nu. ⚠ **Ce repli n'est pas une commodité** : un lot sans
    variantes — le repli procédural, un lot d'avant cette version — doit continuer de marcher mot pour
    mot, sinon des cubes rouges apparaissent sur des lots parfaitement valides.
-   **MESURÉ (revérifié le 25 septembre 2026)** : `verifier_bloc_unique` rend 90/90 sur la silhouette en
-   place, et les six suites sont vertes.
+   **MESURÉ (27 septembre 2026)** : `librairie()` livre les 52 tuiles du monde, variantes comprises.
+   ⚠ **`sous_le_ciel()` POSAIT DES MURS DE GROTTE SUR TOUTES LES FALAISES — CORRIGÉ LE 26 SEPTEMBRE
+   2026.** Il sondait les HUIT colonnes d'un sommet ; sur une paroi, quatre d'entre elles SONT la falaise,
+   qui continue vers le haut. Mesuré sur le monde peint de Jordan : **85 % des murs d'un paysage étaient
+   des murs d'intérieur**. La question juste est « le VIDE que borde la pièce voit-il le ciel ? » — on ne
+   sonde que les colonnes vides. Ça reste un oui-ou-non, donc ça ne rouvre pas le débat de l'occlusion.
+   ⚠ **IL A SURVÉCU PARCE QUE LE TÉMOIN N'AVAIT QU'UNE À DEUX CASES DE RELIEF**, où les deux règles
+   rendent exactement la même chose — et il n'est apparu qu'à l'IMAGE, en peignant la légende par
+   occlusion. Gardé par `test_marching_blocks` §15, une falaise de TROIS cases, **vu rougir** en
+   rétablissant les huit colonnes ; le contrôle négatif (un surplomb au-dessus du vide) garde que la
+   correction n'est pas une simple permissivité.
    ⚠ **DEUX RÉSERVES QUI SURVIVENT À LA TÂCHE, à ne pas perdre avec elle** :
    - **le coût de `sous_le_ciel()` sur une carte réelle n'a été mesuré sur AUCUN monde** (`503b768`).
      Il balaie la verticale des huit cellules d'un sommet, par pièce ; ça ne doit pas être supposé
@@ -429,15 +472,17 @@ désormais le greffon.
      à la main et vérifié à CHAQUE coup, jamais constaté à la fin. Le score reste aveugle — c'est
      assumé : le plancher l'empêche de nuire, là où pondérer la rareté aurait demandé de choisir un
      poids arbitraire. La seconde branche (pondérer) reste donc OUVERTE, mais elle n'est plus
-     nécessaire, et la grille livrée atteint 90/90.
+     nécessaire. ⚠ **Et depuis le 27 septembre 2026, le finisseur n'engendre plus le témoin livré** :
+     cette réserve ne vaut que pour `verifier_bloc_unique.gd`.
 
 5. **LA LÉGENDE DU TÉMOIN — EN COURS.** Le solide qui part chez l'artiste peint sa roche SOUTERRAINE
    d'une AUTRE TEINTE. ⚠ **La raison est un défaut observé, pas un ornement** : rien ne disait à
    l'artiste quelle part de son bloc est souterraine, et c'est ce qui lui a fait extruder le haut en
    croyant tenir le massif de base.
-   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 25 septembre 2026, sur la grille livrée de
-     262 cases)** : **198 sous roche sur 262 — 75,6 %** — et l'aminci qui part chez l'artiste peint
-     **6 287 de ses 8 326 quads** en teinte souterraine (75,5 %). La légende suit le bloc translaté.
+   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 27 septembre 2026, sur la planète paysage de
+     820 cases)** : **676 sous roche — 82,4 %** — et l'aminci qui part chez l'artiste peint
+     **11 869 de ses 15 560 quads** en teinte souterraine (76,3 %). La légende suit le bloc translaté.
+     (Sur l'ancien 8³ : 75,6 % et 6 287 / 8 326.)
    - **DÉCIDÉ (Jordan, 25 septembre 2026) — SIX TEINTES FRANCHES, et c'est contre ma recommandation.**
      Trois orientations × deux contextes : vert / ocre pour les sols, beige-brun / mauve pour les
      parois, bleu / bleu profond pour les plafonds (`repli_procedural.gd`, qui reste leur unique
@@ -474,6 +519,16 @@ désormais le greffon.
      signes ont été inversés sans que je puisse le vérifier autrement qu'en le lisant.
      ⚠ **MES MESURES DE PIXELS ONT ÉCHOUÉ DEUX FOIS SUR CE MÊME SUJET** : c'est l'œil de Jordan qui
      tranche, pas une comparaison d'images que je fabrique et que je juge seul.
+
+   - **À JUGER AUSSI À L'IMAGE** : la planète paysage elle-même (`ART/paysage.png`), et la légende
+     peinte par occlusion (`planete_paysage.gd --ao`, `ART/paysage_ao.png`) — une LÉGENDE, qui informe
+     sans décider ; l'occlusion reste écartée comme critère de pose (§2).
+   - ⚠ **UN `.glb` SCULPTÉ SUR L'ANCIEN 8³ NE REVIENT PLUS** : le bloc est retrouvé par sa POSITION
+     dans une boîte de 12³ (§4), et sa forme a changé. Il faut réexporter le témoin avant de sculpter.
+
+5 bis. **LE PINCEAU COMPLÈTE LES CARRÉS** (§2, OUVERT) : brancher `MB.completer_les_carres()` sur les
+   gestes de peinture, sous `get_undo_redo()`. Sans ça, le monde sans diagonale n'est tenu que par des
+   cubes rouges.
 
 6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.

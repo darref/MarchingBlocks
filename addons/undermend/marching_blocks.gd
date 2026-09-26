@@ -590,11 +590,40 @@ static func nom_de(classe: int) -> String:
 	return _classes[classe]["nom"]
 
 
-## Toutes les pièces à sculpter — les classes qui portent une surface.
-static func pieces_a_sculpter() -> Array:
+## Toutes les classes qui portent une surface — le MODÈLE : 68 en groupe orienté.
+static func classes_de_surface() -> Array:
 	var sortie: Array = []
 	for c in classes():
 		if porte_une_surface(c["bits"]):
+			sortie.append(c["nom"])
+	return sortie
+
+
+## Les pièces que l'artiste sculpte — les classes du MONDE, c'est-à-dire de surface ET sans contact
+## diagonal : 35 en groupe orienté.
+##
+## ⚠ **ELLE RENDAIT LES 68 CLASSES DU MODÈLE JUSQU'AU 27 SEPTEMBRE 2026.** Le monde sans contact
+## diagonal était DÉCIDÉ depuis deux jours (plus bas), mais cette fonction — que le témoin, le trancheur,
+## l'écran et `anomalies()` lisent tous — parlait encore de l'ancien. Tant qu'elle disait 68, un témoin
+## juste pour ce monde passait pour incomplet de 33 classes, et c'est ce qui obligeait à traîner un
+## second bloc bourré de contacts diagonaux pour les fournir.
+## ⚠ **UN MOT, UNE CHOSE (charte §6)** : « à sculpter » veut dire ce que l'artiste reçoit. Le modèle
+## garde son nom à lui, `classes_de_surface()`.
+static func pieces_a_sculpter() -> Array:
+	var sortie: Array = []
+	for c in classes():
+		if porte_une_surface(c["bits"]) and sans_contact_diagonal(c["bits"]):
+			sortie.append(c["nom"])
+	return sortie
+
+
+## Parmi les pièces à sculpter, celles qui ont AUSSI une variante d'air libre — 17. Le jeu complet que
+## l'artiste reçoit compte donc `pieces_a_sculpter() + exterieures_a_sculpter()` = 35 + 17 = 52 tuiles.
+static func exterieures_a_sculpter() -> Array:
+	var sortie: Array = []
+	for c in classes():
+		if porte_une_surface(c["bits"]) and sans_contact_diagonal(c["bits"]) \
+				and exterieur_possible(c["bits"]):
 			sortie.append(c["nom"])
 	return sortie
 
@@ -680,6 +709,120 @@ const SUFFIXE_DEHORS := "_dehors"
 
 
 ## Le nom de la tuile d'une classe dans un contexte donné.
+# ── LE MONDE SANS CONTACT DIAGONAL — DÉCIDÉ (Jordan, 25 septembre 2026) ─────────────────────────────
+#
+# ⚠ **LA RÈGLE VIT ICI ET NULLE PART AILLEURS.** Trois appelants en dépendent — le vérificateur de bloc,
+# les sondes, et le PINCEAU qui devra l'appliquer à chaque clic. La laisser dans une sonde l'aurait fait
+# recopier trois fois, et « une seconde description d'un même fait diverge toujours » (charte §6).
+#
+# ⚠ **CE QU'ELLE ACHÈTE, MESURÉ** : 35 classes d'intérieur et 17 variantes au lieu de 68 et 22, soit
+# **52 tuiles au lieu de 90** (−42 %) ; **18 germes à coudre au lieu de 22** ; et un témoin **manifold
+# par construction** — les 33 classes en contact diagonal étaient la seule source d'arêtes à quatre
+# faces, donc `PONT_SUR_FACE_AMBIGUE` n'a plus d'objet.
+#
+# ⚠ **CE QU'ELLE COÛTE AU MONDE, et c'est assumé** : plus aucun éperon qui se touche par une pointe,
+# plus d'arête fine en diagonale, plus d'érosion en damier. Le vocabulaire du paysage s'appauvrit
+# VOLONTAIREMENT — c'est le prix d'un témoin que l'artiste comprend.
+
+## Une configuration est-elle atteignable dans un monde sans contact diagonal ?
+##
+## ⚠ Le critère est « aucune des six faces ne montre la forme `diagonale` », et il emploie
+## `faces_de()` — la MÊME fonction qui définit les germes et le contrat de couture. Réécrire ici ce
+## qu'est une diagonale ferait diverger la règle du pinceau et celle de la couture.
+static func sans_contact_diagonal(bits_config: int) -> bool:
+	for f in faces_de(bits_config):
+		if f["forme"] == "diagonale":
+			return false
+	return true
+
+
+## Les classes de surface qu'un tel monde peut produire. ⚠ DÉDUITES, jamais listées : le jour où le
+## groupe de pose change, ce compte suit tout seul.
+## ⚠ Depuis le 27 septembre 2026 ce sont exactement les pièces à sculpter : elle y renvoie plutôt que
+## d'en garder une seconde description.
+static func classes_sans_diagonale() -> Array:
+	return pieces_a_sculpter()
+
+
+## Les trois plans d'un carré 2×2, chacun donné par ses deux vecteurs de bord.
+const PLANS_2X2 := [
+	[Vector3i(1, 0, 0), Vector3i(0, 1, 0)],
+	[Vector3i(1, 0, 0), Vector3i(0, 0, 1)],
+	[Vector3i(0, 1, 0), Vector3i(0, 0, 1)],
+]
+
+
+## COMPLÈTE LES TROUS EN CARRÉS jusqu'à ce qu'aucun contact diagonal ne subsiste. Modifie `pleines` et
+## rend le nombre de cases retirées EN PLUS du geste demandé.
+##
+## ⚠ **C'EST LA RÉPONSE DE JORDAN AU « TOUT ROUGE »** : « au lieu de mettre dans un état rouge quand un
+## creusement n'est pas carré, on complète le trou pour qu'il soit carré ». Le pinceau ne refuse donc
+## pas — il termine le geste.
+##
+## ⚠ **LE DÉCLENCHEUR EST LA DIAGONALE, PAS L'ADJACENCE.** Deux trous solo en (0,0) et (1,1) ne sont pas
+## adjacents et produisent pourtant un contact diagonal ; une règle fondée sur l'adjacence les laisserait
+## passer.
+##
+## ⚠ **ON NE FAIT QUE RETIRER, jamais ajouter — et c'est ce qui garantit la terminaison** : la matière
+## est strictement décroissante et minorée. Boucher au lieu de creuser selon le cas rendrait la boucle
+## non monotone, donc potentiellement sans fin.
+##
+## ⚠ **COÛT MESURÉ (25 septembre 2026)** : ×1,00 sur un puits, un tunnel 1×1, un tunnel 2×2 et une
+## grotte 3×3×2 — la complétion ne se déclenche JAMAIS sur un geste contigu. Elle ne coûte que sur
+## l'escalier délibérément diagonal (×2,67, 3 cases au pire clic), c'est-à-dire sur le geste que le monde
+## interdit. Un chiffre de ×1,70 mesuré sur des creusements AU HASARD ne décrit aucun geste humain.
+## ⚠ **`cote` REND LA BORNE EXPLICITE, ET CE N'EST PAS UN DÉTAIL — CE SONT DEUX QUESTIONS DIFFÉRENTES
+## QUE J'AVAIS CONFONDUES (mesuré le 25 septembre 2026).** Sans borne, la règle lit l'absence de case
+## comme du vide, y compris HORS de la grille, et répare donc des diagonales de BORDURE.
+##
+##   • `cote = 0` — le MONDE PEINT : l'extérieur est réellement de l'air, la bordure compte. C'est la
+##     règle du pinceau.
+##   • `cote = n` — un BLOC de n³ : ses faces extérieures sont des faces de SCIAGE, et la Convention (A)
+##     ne récolte jamais ses sommets de bord. Y réparer une diagonale éroderait la silhouette de
+##     l'artiste pour des sommets que le greffon ne lit pas.
+##
+## ⚠ La confusion s'est trahie d'elle-même : en déménageant la règle ici, la sonde est passée de 92 à
+## 94 cases retirées sur le même tirage. Deux cases d'écart, et c'est ce qui a révélé que la fonction
+## extraite ne répondait plus à la même question que l'originale.
+static func completer_les_carres(pleines: Dictionary, cote: int = 0) -> int:
+	var retirees := 0
+	var encore := true
+	while encore:
+		encore = false
+		var a_vider := {}
+		for cle in pleines:
+			var p: Vector3i = cle
+			for plan in PLANS_2X2:
+				for du in [0, -1]:
+					for dv in [0, -1]:
+						var o: Vector3i = p + plan[0] * du + plan[1] * dv
+						var a: Vector3i = o
+						var b: Vector3i = o + plan[0]
+						var c: Vector3i = o + plan[1]
+						var d: Vector3i = o + plan[0] + plan[1]
+						# ⚠ **LES QUATRE COINS, PAS LES TROIS AXES** — même défaut, même correction que
+						# dans `contacts_par_arete()` : le carré s'étend sur deux axes, le troisième est
+						# fixe, et le borner excluait des carrés parfaitement intérieurs. Les deux
+						# fonctions DOIVENT partager cette convention, sinon la réparation et le
+						# compteur ne parlent pas du même monde.
+						if cote > 0 and (a.x < 0 or a.y < 0 or a.z < 0
+								or d.x > cote - 1 or d.y > cote - 1 or d.z > cote - 1):
+							continue
+						if not pleines.has(a) and not pleines.has(d) \
+								and pleines.has(b) and pleines.has(c):
+							a_vider[b] = true
+							a_vider[c] = true
+						elif not pleines.has(b) and not pleines.has(c) \
+								and pleines.has(a) and pleines.has(d):
+							a_vider[a] = true
+							a_vider[d] = true
+		for q in a_vider:
+			pleines.erase(q)
+			retirees += 1
+			encore = true
+	return retirees
+
+
 static func nom_en_contexte(nom: String, dehors: bool) -> String:
 	return (nom + SUFFIXE_DEHORS) if dehors else nom
 
@@ -715,9 +858,37 @@ static func nom_nu(nom: String) -> String:
 ##
 ## Les huit colonnes restent sondées, et non la seule verticale du sommet : un surplomb décalé d'une
 ## case coiffe bien la pièce, et ne regarder qu'au centre le laisserait passer.
+## ⚠ **ON NE SONDE QUE LES COLONNES VIDES — CORRIGÉ LE 26 SEPTEMBRE 2026, ET C'ÉTAIT UN DÉFAUT GRAVE.**
+## La version précédente sondait les HUIT colonnes. Or quatre d'entre elles portent la matière de la
+## pièce elle-même, et sur une falaise cette matière CONTINUE vers le haut : le sommet se déclarait
+## donc « pas sous le ciel » parce que la falaise qu'il borde existe. Autrement dit, **le flanc de
+## toute montagne recevait des tuiles de GROTTE, partout sauf à son sommet.**
+##
+## ⚠ **MESURÉ** (`DEV_TOOLS/sonde_sous_le_ciel.gd`) : sur une mesa de six cases de haut posée dans le
+## vide, **73 sommets sur 218** passaient sous le ciel ; avec la règle juste, 169. Et sur le monde
+## peint de Jordan, `mb_plaque_b2h2` — le mur d'INTÉRIEUR — était posé **1 605 fois** contre 282 pour
+## sa variante d'air libre : 85 % des murs d'un paysage étaient des murs de grotte.
+##
+## ⚠ **ET VOILÀ POURQUOI IL A SURVÉCU SI LONGTEMPS : sur un relief d'UNE case, les deux règles donnent
+## exactement le même résultat** (49 sommets sur 98, à l'identique). Le témoin livré a un relief d'une
+## à deux cases — le défaut y était rigoureusement invisible. Il n'est apparu qu'en bâtissant un vrai
+## paysage, et seulement à l'image.
+##
+## La question juste est : **le VIDE que borde cette pièce voit-il le ciel ?** Une colonne pleine ne
+## dit rien du ciel ; seules les colonnes vides répondent.
+##
+## ⚠ **ELLE RESTE UN OUI-OU-NON, et c'est ce qui la sépare de l'occlusion** que la charte §2 a écartée :
+## on ne demande toujours pas COMBIEN, donc aucun seuil, donc aucune dérive d'échelle. Seule la LISTE
+## des colonnes a changé.
+##
+## ⚠ **CONTRÔLE QUI DEVAIT POUVOIR ROUGIR** : dans une salle entièrement close, la règle refuse
+## **82 sommets sur 82**, comme l'ancienne. Une règle simplement plus laxiste aurait laissé fuir des
+## sommets de grotte ; celle-ci n'en laisse aucun.
 static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) -> bool:
 	for t in 8:
 		var base: Vector3i = sommet + COINS[t]
+		if pleines.has(base):
+			continue
 		for y in range(sommet.y + 2, plafond + 1):
 			if pleines.has(Vector3i(base.x, y, base.z)):
 				return false
@@ -768,7 +939,13 @@ static func plafond_de(pleines: Dictionary) -> int:
 ##
 ## ⚠ Elle vit ICI et non dans une sonde : j'en avais deux copies en préparation dans deux outils, ce
 ## qui est exactement la divergence qui a frappé les deux règles de falaise de ce projet.
-static func contacts_par_arete(pleines: Dictionary) -> int:
+## ⚠ **`cote` PORTE LA MÊME CONVENTION QUE `completer_les_carres()`, et elle DOIT être la même.** Ce
+## compteur était non borné : il lisait l'absence de case comme du vide, y compris hors du bloc, donc il
+## comptait les contacts de BORDURE. Nettoyer un témoin en mode borné tout en testant avec ce compteur
+## exigerait zéro contact que la réparation ne retire jamais — la recherche éroderait la silhouette ou
+## ne convergerait pas. `cote = 0` garde le comportement d'origine (le monde peint), `cote = n` se
+## restreint à l'intérieur d'un bloc de n³.
+static func contacts_par_arete(pleines: Dictionary, cote: int = 0) -> int:
 	var paires := [[0, 1], [0, 2], [1, 2]]
 	var vus := {}
 	var combien := 0
@@ -784,6 +961,16 @@ static func contacts_par_arete(pleines: Dictionary) -> int:
 			# chaque carré serait compté une fois par cellule pleine qu'il contient.
 			for coin in [Vector3i.ZERO, -e1, -e2, -e1 - e2]:
 				var p: Vector3i = cc + coin
+				# ⚠ **ON BORNE LES QUATRE COINS DU CARRÉ, PAS LES TROIS AXES.** Un carré 2×2 vit dans un
+				# PLAN : il s'étend sur deux axes, le troisième est fixe. Appliquer `< cote-1` aux trois
+				# excluait tous les carrés de la dernière couche de l'axe fixe, donc des diagonales
+				# parfaitement intérieures n'étaient pas comptées. Le finisseur a alors atteint **53
+				# tuiles dans un monde qui n'en contient que 52** — un score au-dessus du maximum
+				# théorique, qui a dénoncé la borne au lieu de passer inaperçu.
+				var q: Vector3i = p + e1 + e2
+				if cote > 0 and (p.x < 0 or p.y < 0 or p.z < 0
+						or q.x > cote - 1 or q.y > cote - 1 or q.z > cote - 1):
+					continue
 				var cle := "%d,%d,%d,%d" % [p.x, p.y, p.z, k]
 				if vus.has(cle):
 					continue

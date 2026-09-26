@@ -283,3 +283,71 @@ static func bilan(mesh: ArrayMesh, cases: Dictionary = {}) -> Dictionary:
 		"q_val_tolerant": g_tol["q_val"], "q_sommets_tolerant": g_tol["q_sommets"],
 		"q_bords_tolerant": g_tol["q_bords"], "q_multiples_tolerant": g_tol["q_multiples"],
 	}
+
+
+## ── LA HAUTEUR DE LA CHUTE dont une face verticale fait partie ──────────────────────────────────────
+##
+## ⚠ **ELLE VIT ICI PARCE QU'ELLE A DEUX LECTEURS** : `sonde_reste_t_il_des_marches.gd`, qui la COMPTE,
+## et `planche_legende.gd --chutes`, qui la MONTRE. Une sonde qui mesure et une planche qui peint des
+## chiffres différents ne se comparent pas — c'est exactement la faute que ce module a été créé pour
+## empêcher, et que la charte §6 nomme (« une seconde description d'un même fait diverge toujours »).
+##
+## ⚠ **C'EST L'OCCUPATION QUI RÉPOND, PAS LE MAILLAGE.** On part de la case pleine que la face borde,
+## on lit sa voisine vide, et l'on compte combien d'étages superposés portent EXACTEMENT le même couple
+## plein | vide. Déduire la chute du maillage ferait se comparer le maillage à lui-même.
+##
+## ⚠ **ON N'ARRONDIT PAS LA NORMALE POUR EN TIRER UN PAS, ET ÇA A COÛTÉ UN TIERS DE LA MESURE.** La
+## première version faisait `Vector3i(roundi(u.x), 0, roundi(u.z))`, ce qui suppose toute paroi
+## perpendiculaire à un axe. Une falaise EN BIAIS a une normale à (0,707 ; 0 ; 0,707) : les deux
+## arrondis rendent 1, le pas devient une DIAGONALE, et la lecture tombe à côté — 24 triangles sur 71
+## illisibles sur le témoin, et 46 de ses 71 parois sont en biais. On ÉCHANTILLONNE donc les deux côtés
+## de la face, et le couple plein | vide sort des cases elles-mêmes.
+##
+## ⚠ **`cote` NEUTRALISE LES FACES DE SCIAGE DU BLOC, et sans lui l'image ment.** La paroi extérieure
+## d'un bloc de 8³ est un plan vertical haut de tout le bloc : lue naïvement, elle rend « chute de 5 »
+## et vient peindre la moitié du témoin, noyant les marches qu'on cherche. Ce n'est pourtant pas une
+## contremarche — c'est la limite du volume, là où l'artiste raccordera. `cote = 0` désactive le test,
+## pour une occupation qui n'est pas bornée par un bloc.
+##
+## Rend 0 si le couple attendu n'est pas là — jamais 1, qui se confondrait avec une chute réelle.
+static func chute_de(pleines: Dictionary, centre: Vector3, normale: Vector3, cote := 0) -> int:
+	var plein: Vector3i = case_en(centre - normale * 0.3)
+	var vide: Vector3i = case_en(centre + normale * 0.3)
+	if plein == vide:
+		return 0
+	if not pleines.has(plein) or pleines.has(vide):
+		return 0
+	if cote > 0 and (vide.x < 0 or vide.z < 0 or vide.x >= cote or vide.z >= cote):
+		return 0
+	var hauteur := 1
+	var monte := Vector3i(0, 1, 0)
+	for sens in [monte, -monte]:
+		var k := 1
+		while pleines.has(plein + sens * k) and not pleines.has(vide + sens * k):
+			hauteur += 1
+			k += 1
+	return hauteur
+
+
+## La case qui contient un point. ⚠ La case `p` occupe `[p, p+1]` : c'est un plancher, jamais un arrondi.
+static func case_en(point: Vector3) -> Vector3i:
+	return Vector3i(floori(point.x), floori(point.y), floori(point.z))
+
+
+## LES TRIANGLES D'UN MAILLAGE, indexés ou non — ⚠ **ET C'EST UNE FAUTE PAYÉE LE 26 SEPTEMBRE 2026.**
+## `surface_get_arrays()` rend les sommets UNIQUES dans `ARRAY_VERTEX` et la topologie à part, dans
+## `ARRAY_INDEX`. Les maillages fabriqués ici n'ont pas d'index — les lire trois par trois marche — mais
+## **un `.glb` revenu de Blender EST indexé**, et les lire trois par trois fabrique des triangles qui
+## n'existent pas. La sonde a ainsi annoncé 201 lèvres et un spectre d'angles entier sur le sculpt de
+## Jordan : des chiffres tirés d'une géométrie imaginaire. On DÉDUIT la topologie, on ne la suppose pas.
+static func triangles_de(mesh: ArrayMesh, surface := 0) -> PackedVector3Array:
+	var arrays: Array = mesh.surface_get_arrays(surface)
+	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var idx = arrays[Mesh.ARRAY_INDEX]
+	if idx == null:
+		return v
+	var sortie := PackedVector3Array()
+	sortie.resize((idx as PackedInt32Array).size())
+	for k in (idx as PackedInt32Array).size():
+		sortie[k] = v[(idx as PackedInt32Array)[k]]
+	return sortie
