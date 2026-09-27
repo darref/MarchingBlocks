@@ -167,6 +167,13 @@ func _mener() -> void:
 	vue._commencer_coup(MOUSE_BUTTON_RIGHT, ou_coller, false)
 	_vrai(vue.collage.is_empty() and couche1.get_used_cells().size() == 3, "le clic droit abandonne le collage sans rien poser")
 
+	# ── L'export vers les moteurs refuse une couche sans tuiles ────────────────────────────────────
+	# La couche 1 n'a jamais été tranchée : exporter livrerait le repli procédural sous le nom de l'artiste.
+	await ed._exporter_le_jeu(ProjectSettings.globalize_path("user://fumee"))
+	_vrai(ed._rapport.text.contains("Nothing to export") and not DirAccess.dir_exists_absolute(
+		ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")),
+		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
+
 	ed.queue_free()
 	await process_frame
 	_rendre_les_reglages()

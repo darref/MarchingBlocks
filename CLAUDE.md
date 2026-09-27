@@ -39,7 +39,13 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   ⚠ **CE QUE LE CHIFFREMENT NE FAIT PAS** : la clé est forcément dans l'exe, qui doit se déchiffrer
   lui-même — des outils publics l'en extraient. Il arrête le curieux, pas le déterminé ; le rempart
   commercial reste la licence.
-- **OUVERT** : le format neutre que liront les trois greffons ; la licence ; l'icône et le splash ; les
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — FORMAT OUVERT, GREFFONS GRATUITS.** Ce qui se vend, c'est
+  l'outil qui FABRIQUE les tuiles (le témoin, le trancheur, l'aller-retour), et il vit dans l'exe chiffré.
+  Cacher la règle ne protégerait rien : elle est un calcul (70 orbites), et un greffon doit l'EXÉCUTER
+  chez l'acheteur — un addon Godot part en source, une DLL Unity se décompile. Des greffons gratuits vont
+  là où l'on cherche (Asset Library Godot, Asset Store Unity, Fab) : c'est la DÉCOUVERTE du §10. Le
+  format est décrit au §4.
+- **OUVERT** : la licence ; l'icône et le splash ; les
   textures PBR de test viennent de HEART_WORLD — leur droit de revente n'est PAS établi.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
@@ -377,6 +383,61 @@ qui ajoute une arête à ses deux bouts : un sommet de valence 4 y apparaît en 
 
 ---
 
+### LE FORMAT NEUTRE v1 — DÉCIDÉ (Jordan, 27 septembre 2026)
+
+Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : un dossier `<nom>.mbset/`.
+
+```
+  tileset.json   la règle ET les tuiles : table des 256, coins, décalage, classes, contexte, hachage,
+                 rules_text, et tiles = {clé: [noms des exemplaires]}, missing
+  tiles.glb      un nœud par tuile, maillage centré sur l'origine, nœud à l'identité, matériaux
+  README.txt     la règle en clair
+```
+
+- ⚠ **LE FICHIER PORTE LA RÈGLE.** Trois greffons qui réécriraient la classification, c'est la seconde
+  description qui diverge (§6). La table est PRÉ-CALCULÉE ; le contexte et l'exemplaire, qui se
+  recalculent en jeu, sont ÉCRITS (`FormatNeutre.regle()`, ligne à ligne) et gardés par des cas
+  d'épreuve.
+- ⚠ **LA RÉFÉRENCE EST `MB.poses()`**, extraite de `massif_peint.gd` pour l'être : le peintre de l'appli
+  l'appelle, et les cas d'épreuve sont calculés par elle. Une référence qu'on ne peut pas appeler sans
+  `GridMap` n'en était pas une.
+- **Repère glTF** : droitier, +Y en haut, 1 unité = 1 case. **Quarts de tour autour de +Y, main droite
+  (+Z va vers +X)** — MESURÉ : les index de `GridMap` 0, 16, 10, 22 donnent 0, 1, 2, 3, et
+  `quarts_de_tour()` le DÉRIVE de la base au lieu de le recopier. ⚠ Un moteur d'un autre repère doit
+  convertir la grille des cases par la MÊME application que son importeur glTF applique aux maillages ; un
+  repère miroir inverse le sens des quarts de tour.
+- ⚠ **LES NOMS SORTENT EN ANGLAIS ET EN `[a-z0-9_]`** (§7, et certains moteurs refusent `~` ou `.`) :
+  `mb_arete_creuse_b2h2_dehors` → `edge_inner_b2h2_outdoor`, exemplaires `_2`, `_3`… La traduction vit
+  dans `format_neutre.gd` ET NULLE PART AILLEURS ; les greffons ne décodent jamais un nom, ils lisent
+  `tiles`. Gardé : aucun id en double, aucun hors de l'alphabet.
+- ⚠ **LE PBR ESPACE MONDE NE VOYAGE PAS** — c'est un shader de Godot. Une tuile à `ShaderMaterial` part
+  avec un matériau standard lisant ses couleurs de sommet ; le travail de l'artiste part avec SES matériaux.
+- **Un format plus récent est REFUSÉ** par les greffons : sa règle peut vouloir dire autre chose.
+- **LES CAS D'ÉPREUVE** (`FormatNeutre.cas_d_epreuve()`, écrits par `DEV_TOOLS/generer_cas_d_epreuve.gd`
+  dans `conformance.json`, LIVRÉ AVEC CHAQUE GREFFON) : 9 mondes (case seule, sol, falaise de 3,
+  surplomb, tunnel, grotte close, contact diagonal, coordonnées négatives, relief irrégulier) × 2 jeux
+  (riche : variantes d'air libre et 3 exemplaires ; nu : noms nus seuls) = 18 cas, **1 624 poses — 460
+  d'air libre, 203 exemplaires au-delà du premier, 46 marqueurs**. Un greffon doit les passer à 100 %.
+  ⚠ Le test vérifie AUSSI que les cas exercent ce qu'ils prétendent : un cas qui ne pose aucune tuile
+  d'air libre ne garderait pas le contexte (§6).
+  ⚠ **ET IL ROUGIT SI LE FICHIER LIVRÉ EST PÉRIMÉ** : changer la règle sans régénérer les cas est vu.
+- **LE GREFFON GODOT GRATUIT** : `addons/marchingblocks_paint/`, **un addon NEUF ET SÉPARÉ** — l'addon
+  historique porte le trancheur, qui est ce qui se vend. Il ne charge RIEN du cœur : `mb_rule.gd`
+  réimplémente la règle depuis le TEXTE du format, `mb_tileset.gd` charge un `.mbset`, `mb_world.gd` est
+  le nœud `MarchingBlocksWorld` (on peint `Cells` au pinceau natif du GridMap, `Tiles` suit, `Errors`
+  montre les cubes rouges). En anglais, commentaires compris : sa source part chez l'acheteur.
+  **MESURÉ de bout en bout** (`test_greffon_peinture`) : l'appli exporte le témoin (541 tuiles), le
+  greffon le charge et pose **1 048 tuiles sur la forme du témoin, 0 écart** avec ce que pose l'appli.
+  **Cinq mutations** : pas de repli sur le nom nu, hachage sans masque, rotations ignorées, référence
+  changée sans régénérer — rouges ; ⚠ **la bande de contexte ramenée de 2 à 1 est MUETTE, et c'est une
+  mutation ÉQUIVALENTE, pas un trou** : `outdoor_possible` exclut déjà toute classe dont une case vide du
+  bas est coiffée dans les 8, donc la seule rangée que `v.y + 1` ajoute est vide pour toute classe qui
+  atteint ce test. Bande 1 ou 2, même règle sur tout manifeste cohérent.
+- **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
+  option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
+  jusqu'à la hauteur de la case changent) — ni l'appli ni le greffon ne la font encore ; les greffons
+  Unity et Unreal.
+
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
 **MESURÉ (`DEV_TOOLS/sonde_api_editeur.gd`)**, et c'est la réponse à la question de Jordan :
@@ -545,10 +606,10 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Dix suites, **7 642 vérifications, 0 échec** (27 septembre 2026, recomptées après l'export OBJ) :
+  Onze suites, **7 685 vérifications, 0 échec** (27 septembre 2026, recomptées après le format neutre) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 43, `fumee_appli` 40.
+  `test_outils` 43, `fumee_appli` 41, `test_greffon_peinture` 42.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.

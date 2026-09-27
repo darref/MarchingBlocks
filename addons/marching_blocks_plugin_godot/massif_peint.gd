@@ -234,70 +234,45 @@ func reconstruire() -> Dictionary:
 	for c in cases.get_used_cells():
 		pleines[c] = true
 
-	# ⚠ LES SOMMETS TOUCHÉS : les HUIT coins de chaque case peinte, pas quatre.
-	var sommets := {}
-	for c in pleines:
-		for s in MB.sommets_de(c):
-			sommets[s] = true
-
 	var id_faute: int = -1
 	if fautes.mesh_library != null:
 		id_faute = fautes.mesh_library.find_item_by_name("faute")
 		if id_faute < 0 and fautes.mesh_library.get_item_list().size() > 0:
 			id_faute = fautes.mesh_library.get_item_list()[0]
 
-	# ⚠ DÉRIVÉ UNE FOIS POUR TOUTE LA PASSE : le contexte d'un sommet demande de savoir jusqu'où chercher
-	# de la roche au-dessus, et recalculer ce plafond par sommet coûterait le monde entier à chaque pièce.
-	var plafond: int = MB.plafond_de(pleines)
-
 	# ⚠ **L'INDEX DES FAMILLES SE BÂTIT UNE FOIS PAR RECONSTRUCTION, PAS PAR CASE.**
 	# `find_item_by_name()` est un balayage linéaire du lot ; le chercher par case et par exemplaire
 	# coûterait items × cases à chaque touche de pinceau. Un passage sur le lot, puis un accès direct.
 	var familles: Dictionary = _familles(rendu.mesh_library)
+	var comptes := {}
+	for cle in familles:
+		comptes[cle] = (familles[cle] as Array).size()
 
+	# ⚠ **LA RÈGLE N'EST PLUS ÉCRITE ICI** : elle vit dans `MB.poses()`, qui est aussi la référence des
+	# cas d'épreuve du format neutre. Le peintre ne fait plus que POSER ce qu'elle décide — une seconde
+	# description de la règle, ici, serait celle qui divergerait des greffons (charte §6).
 	var poses := 0
 	var manquantes := 0
-	var muets := 0
 	var dehors_poses := 0
 	var exemplaires_poses := 0
-	for k in sommets:
-		var sommet: Vector3i = k
-		var bits: int = MB.bits(pleines, sommet)
-		var r: Dictionary = MB.classer(bits)
-		if not r["surface"]:
-			muets += 1
-			continue
-		# ⚠ **LA VARIANTE D'ABORD, LE NOM NU ENSUITE — ET CE REPLI N'EST PAS UNE COMMODITÉ.** Un lot sans
-		# variantes (le repli procédural, ou un lot d'avant cette version) doit continuer de fonctionner
-		# mot pour mot : ne chercher QUE la variante ferait apparaître des cubes rouges partout sur des
-		# lots parfaitement valides. Le nom nu reste donc l'item par défaut.
-		var dehors: bool = MB.exterieur_possible(bits) and MB.sous_le_ciel(pleines, sommet, plafond)
-		# ⚠ **LE TIRAGE D'EXEMPLAIRE EST DÉTERMINÉ PAR LA POSITION** (`MB.exemplaire_du_sommet`) : le
-		# massif se reconstruit à chaque case peinte et à chaque Ctrl+Z, et un tirage aléatoire
-		# redessinerait un autre monde à chaque fois.
-		var id := -1
-		var indice := 0
-		if dehors:
-			var tire: Array = _tirer(familles, MB.nom_en_contexte(r["nom"], true), sommet)
-			id = tire[0]
-			indice = tire[1]
-			if id >= 0:
-				dehors_poses += 1
-		if id < 0:
-			var tire: Array = _tirer(familles, r["nom"], sommet)
-			id = tire[0]
-			indice = tire[1]
-		if indice > 0:
-			exemplaires_poses += 1
-		if id < 0:
+	var decisions: Array = MB.poses(pleines, comptes)
+	for d in decisions:
+		var sommet: Vector3i = d["sommet"]
+		if d["cle"] == "":
 			# ⚠ UNE PIÈCE QUE LES RÈGLES DEMANDENT ET QUE LE LOT N'A PAS : c'est une FAUTE DE LOT, jamais
-			# une faute de peinture. Avec le repli par défaut, elle ne peut pas se produire.
+			# une faute de peinture.
 			manquantes += 1
 			if id_faute >= 0:
 				fautes.set_cell_item(sommet, id_faute)
 			continue
-		rendu.set_cell_item(sommet, id, r["orientation"])
+		var id: int = (familles[d["cle"]] as Array)[d["k"]]
+		if d["dehors"]:
+			dehors_poses += 1
+		if d["k"] > 0:
+			exemplaires_poses += 1
+		rendu.set_cell_item(sommet, id, d["orientation"])
 		poses += 1
+	var muets: int = _sommets_touches(pleines) - decisions.size()
 
 	_empreinte = _empreinte_des_cases()
 	# ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
@@ -308,6 +283,16 @@ func reconstruire() -> Dictionary:
 	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses,
 		"exemplaires": exemplaires_poses}
 	return _dernier_bilan
+
+
+## Combien de sommets les cases touchent — pour compter les MUETS (sommets sans surface), que `MB.poses`
+## ne rend pas.
+static func _sommets_touches(pleines: Dictionary) -> int:
+	var sommets := {}
+	for c in pleines:
+		for s in MB.sommets_de(c):
+			sommets[s] = true
+	return sommets.size()
 
 
 ## Le bilan de la dernière reconstruction, SANS en déclencher une.

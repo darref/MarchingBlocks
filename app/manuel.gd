@@ -166,6 +166,12 @@ func _demarrer() -> String:
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
 	l.append(_note("A red cube is a tile your library does not have. Nothing is ever filled in for you: "
 		+ "a hole must be seen where it happens."))
+	l.append(_titre("4. Take it to your engine"))
+	l.append("[b]Export the tileset…[/b] writes the active layer's tiles as a [b].mbset[/b] folder. The "
+		+ "free [b]MarchingBlocks Paint[/b] plugins for Godot, Unity and Unreal read it: you paint cells "
+		+ "in your engine, the tiles follow — exactly as here.")
+	l.append(_note("The format is open, and the placement rule is written inside it. The tiles you make "
+		+ "are yours."))
 	return "\n".join(l)
 
 

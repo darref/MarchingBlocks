@@ -31,6 +31,7 @@ const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.
 const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
 const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
 const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
+const FormatNeutre := preload("res://addons/marching_blocks_plugin_godot/format_neutre.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")
@@ -229,6 +230,7 @@ func _batir() -> void:
 	_dialogue.access = FileDialog.ACCESS_FILESYSTEM
 	_dialogue.use_native_dialog = true
 	_dialogue.file_selected.connect(_fichier_choisi)
+	_dialogue.dir_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
 
 
@@ -733,7 +735,17 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
 		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
 
-	# ── 5. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
+	# ── 5. L'EXPORT VERS LES MOTEURS — le format neutre, ouvert (charte §4).
+	var export := Section.new("Export to engines", true, Icones.icone("exporter"))
+	pile.add_child(export)
+	export.contenu.add_child(_texte("Writes the ACTIVE layer's tiles as a .mbset folder — read by the "
+		+ "free MarchingBlocks Paint plugins for Godot, Unity and Unreal.", 11, Palette.GRIS))
+	export.contenu.add_child(_bouton("Export the tileset…",
+		"Writes <layer>.mbset/ : tileset.json (the placement rule and the tile list), tiles.glb (every "
+		+ "tile, with its materials) and README.txt.\nOpen format: the tiles you make are yours.",
+		func() -> void: _demander("tileset"), "exporter", Palette.PRINCIPAL))
+
+	# ── 6. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
 	var etage := Section.new("Shape operations", false, Icones.icone("etage"))
 	pile.add_child(etage)
 	_sections_monde.append(etage)
@@ -852,7 +864,11 @@ func _demander(quoi: String) -> void:
 	var ecrire: bool = quoi in ["exporter", "enregistrer"]
 	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if ecrire else FileDialog.FILE_MODE_OPEN_FILE
 	_dialogue.clear_filters()
-	if quoi in ["ouvrir", "enregistrer"]:
+	if quoi == "tileset":
+		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+		_dialogue.title = "Export the tileset into…"
+		_dialogue.current_file = ""
+	elif quoi in ["ouvrir", "enregistrer"]:
 		_dialogue.add_filter("*." + Projet.EXTENSION, "MarchingBlocks project")
 		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
 		_dialogue.current_file = _projet.get_file() if quoi == "enregistrer" else ""
@@ -877,6 +893,8 @@ func _fichier_choisi(fichier: String) -> void:
 			_ouvrir(fichier)
 		"enregistrer":
 			_enregistrer_sous(fichier)
+		"tileset":
+			_exporter_le_jeu(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
@@ -1187,6 +1205,31 @@ static func _axe_horizontal(v: Vector3) -> Vector3i:
 	if absf(v.x) >= absf(v.z):
 		return Vector3i(int(signf(v.x)), 0, 0)
 	return Vector3i(0, 0, int(signf(v.z)))
+
+
+## L'EXPORT DU JEU DE TUILES de la couche active, au format neutre (`format_neutre.gd`).
+## ⚠ UNE COUCHE SANS TUILES EST REFUSÉE, et on le dit : exporter le repli procédural livrerait des
+## tuiles que personne n'a sculptées, sous le nom de l'artiste.
+func _exporter_le_jeu(dossier: String) -> void:
+	var massif: Node = _vue.monde()
+	if massif == null or _couches[_active]["source"] == "" or massif.lot == null:
+		_dire("[color=#e0603c]Nothing to export.[/color] This layer has no tiles yet — slice the witness "
+			+ "or your work into it first.")
+		return
+	await _attendre("Exporting the tileset", _couches[_active]["nom"])
+	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
+	var r: Dictionary = FormatNeutre.exporter(massif.lot, dossier, _couches[_active]["nom"], version)
+	_fin_attente()
+	if r.has("erreur"):
+		_dire("[color=#e0603c]Export failed:[/color] %s" % r["erreur"])
+		return
+	var texte := ("[color=#b4bd85][b]Tileset written[/b][/color] → %s\n%d tile(s) for %d keys. Open it with "
+		+ "the free MarchingBlocks Paint plugin for your engine.") % [r["dossier"], r["tuiles"], r["cles"]]
+	if not (r["manquantes"] as Array).is_empty():
+		texte += ("\n\n[color=#f2ca79]%d tile(s) of the world are missing[/color] — the engine will show red "
+			+ "cubes there: %s") % [(r["manquantes"] as Array).size(),
+			", ".join(PackedStringArray((r["manquantes"] as Array).slice(0, 8)))]
+	_dire(texte)
 
 
 func _copier() -> bool:

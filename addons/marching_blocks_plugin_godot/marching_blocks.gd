@@ -875,6 +875,49 @@ static func indice_d_exemplaire(nom: String) -> int:
 	return queue.to_int() if queue.is_valid_int() and queue.to_int() > 0 else 0
 
 
+## ── LA RÈGLE DE POSE, EN UNE FONCTION PURE ────────────────────────────────────────────────────────
+##
+## **CE QUE LE PEINTRE POSE, POUR UNE COUCHE** : une entrée par sommet qui porte une surface —
+## {"sommet", "nom" (la classe), "cle" (la clé choisie, "" si le lot ne l'a pas), "k" (l'exemplaire),
+## "orientation" (index de GridMap), "dehors" (la variante d'air libre a été prise)}.
+##
+## ⚠ **ELLE EST LA RÉFÉRENCE DU FORMAT NEUTRE (charte §4, 27 septembre 2026).** Le peintre de l'appli
+## l'appelle, et les CAS D'ÉPREUVE que les greffons Godot, Unity et Unreal doivent reproduire à
+## l'identique sont calculés par elle. Elle vivait dans `massif_peint.gd`, mêlée aux `GridMap` : une
+## référence qu'on ne peut pas appeler sans grille n'en est pas une.
+##
+## `comptes` — {clé: nombre d'exemplaires} : c'est TOUT ce qu'elle a besoin de savoir du lot.
+## ⚠ La variante d'air libre d'abord, le nom nu ensuite (charte §9.4) ; une clé absente rend `cle = ""`,
+## et c'est au peintre de poser son cube rouge.
+static func poses(pleines: Dictionary, comptes: Dictionary) -> Array:
+	var sommets := {}
+	for c in pleines:
+		for s in sommets_de(c):
+			sommets[s] = true
+	var plafond: int = plafond_de(pleines)
+	var sortie: Array = []
+	for k in sommets:
+		var sommet: Vector3i = k
+		var b: int = bits(pleines, sommet)
+		var r: Dictionary = classer(b)
+		if not r["surface"]:
+			continue
+		var cle := ""
+		var dehors := false
+		if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond):
+			var variante: String = nom_en_contexte(r["nom"], true)
+			if int(comptes.get(variante, 0)) > 0:
+				cle = variante
+				dehors = true
+		if cle == "" and int(comptes.get(r["nom"], 0)) > 0:
+			cle = r["nom"]
+		var n: int = int(comptes.get(cle, 0)) if cle != "" else 0
+		sortie.append({"sommet": sommet, "nom": r["nom"], "cle": cle,
+			"k": exemplaire_du_sommet(sommet, n) if n > 0 else 0,
+			"orientation": r["orientation"], "dehors": dehors})
+	return sortie
+
+
 ## QUEL EXEMPLAIRE POSER À CE SOMMET — un tirage DÉTERMINÉ par la position, jamais aléatoire.
 ##
 ## ⚠ **`randi()` AURAIT ÉTÉ UN DÉFAUT, PAS UN RACCOURCI.** Le massif se reconstruit à chaque case
