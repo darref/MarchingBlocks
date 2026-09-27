@@ -1264,10 +1264,19 @@ static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
 				# `paquets[nom]["sommets"]` en rend une COPIE, et tout ce qu'on y ajoute est perdu à la
 				# ligne suivante. Mesuré à mes dépens — l'export sortait un `.glb` de 272 octets, six
 				# surfaces vides, sans qu'aucune erreur ne parle de copie. `Array` est une référence.
-				paquets[nom] = {"couleur": teinte["couleur"], "sommets": []}
-			var sac: Array = paquets[nom]["sommets"]
+				paquets[nom] = {"couleur": teinte["couleur"], "sommets": [], "indices": [], "connus": {}}
+			# ⚠ **ON GARDE LA SOUDURE : un sommet par POSITION, et des INDICES.** Recopier les trois
+			# sommets de chaque triangle défaisait `souder()` juste avant : le `.glb` partait en soupe de
+			# triangles — 93 360 sommets pour 15 546 positions, chaque arête une couture dans Blender
+			# (`sonde_soudure_glb.gd`, mesuré sur les OCTETS du fichier, 27 septembre 2026). La charte
+			# disait « le .glb part soudé » ; c'était faux depuis l'ajout des teintes.
+			var paquet: Dictionary = paquets[nom]
 			for k in 3:
-				sac.append(v[ordre[t + k]])
+				var i_source: int = ordre[t + k]
+				if not paquet["connus"].has(i_source):
+					paquet["connus"][i_source] = paquet["sommets"].size()
+					paquet["sommets"].append(v[i_source])
+				paquet["indices"].append(paquet["connus"][i_source])
 
 	var sortie := ArrayMesh.new()
 	# ⚠ L'ordre des surfaces suit `RP.TEINTES`, pas celui du dictionnaire : deux exports du même bloc
@@ -1279,6 +1288,7 @@ static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
 		var arrays: Array = []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array(paquets[nom]["sommets"])
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array(paquets[nom]["indices"])
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		var matiere := StandardMaterial3D.new()
 		matiere.resource_name = nom

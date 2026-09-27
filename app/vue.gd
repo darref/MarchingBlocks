@@ -23,6 +23,7 @@ signal colle(ancre: Vector3i)
 
 const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
 const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 ## Jusqu'où porte le rayon de sculpture, en cases.
 const PORTEE := 400.0
@@ -40,6 +41,9 @@ var _elevation := 0.55
 var _distance := 26.0
 
 var _temoin: MeshInstance3D
+## LES PLANS DE COUPE du témoin — là où le trancheur coupe. Montrés à la demande (« Show the cells »).
+var _plans_de_coupe: MeshInstance3D
+var _plans_voulus := false
 ## Un `MassifPeint` par COUCHE du monde (`projet.gd`). On peint sur la couche ACTIVE ; les autres restent
 ## visibles, chacune rendue avec SON lot et selon SES cases seulement.
 var _couches: Node3D
@@ -107,6 +111,11 @@ func _ready() -> void:
 
 	_temoin = MeshInstance3D.new()
 	_vue.add_child(_temoin)
+	_plans_de_coupe = MeshInstance3D.new()
+	_plans_de_coupe.mesh = _maillage_plans_de_coupe(BM.COTE)
+	_plans_de_coupe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_plans_de_coupe.visible = false
+	_vue.add_child(_plans_de_coupe)
 
 	_couches = Node3D.new()
 	_couches.name = "MondeDeTest"
@@ -147,6 +156,7 @@ func _ready() -> void:
 func montrer(quoi: String) -> void:
 	mode = quoi
 	_temoin.visible = quoi == "temoin"
+	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
 	_couches.visible = quoi == "monde"
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
@@ -155,6 +165,56 @@ func montrer(quoi: String) -> void:
 		_boite_vue.visible = false
 	_dessiner_selection()
 	_placer_grille()
+
+
+func montrer_plans_de_coupe(oui: bool) -> void:
+	_plans_voulus = oui
+	_plans_de_coupe.visible = mode == "temoin" and oui
+
+
+## LES PLANS DE COUPE : le trancheur coupe par les CENTRES des cases, sur les trois axes (charte §2) —
+## la case `p` occupe `[p, p+1]`, donc les plans sont en `p + ½`, de 0 à COTE − 1 sur chaque axe, et
+## couvrent tout le bloc [0, COTE]³. Un voile très léger, et son contour un peu plus net : on doit voir
+## à travers, c'est l'art qui compte. ⚠ **L'ALPHA S'EMPILE** : on regarde à travers douze plans par axe,
+## et 0,055 chacun noyait le bloc dans un brouillard vert (vu à l'image). 0,018 laisse lire la matière.
+## ⚠ `CULL_DISABLED` : un plan se regarde des deux côtés. ⚠ Aucune ombre : un voile qui ombrerait le
+## témoin changerait ce qu'on juge.
+static func _maillage_plans_de_coupe(cote: int) -> ImmediateMesh:
+	var mesh := ImmediateMesh.new()
+	var voile := StandardMaterial3D.new()
+	voile.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	voile.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	voile.cull_mode = BaseMaterial3D.CULL_DISABLED
+	voile.albedo_color = Color(0.706, 0.741, 0.522, 0.018)
+	var contour := StandardMaterial3D.new()
+	contour.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	contour.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	contour.albedo_color = Color(0.706, 0.741, 0.522, 0.22)
+	var n := float(cote)
+	var coins: Array = []
+	for axe in 3:
+		for k in cote:
+			var c := float(k) + 0.5
+			var q: Array = []
+			for uv in [Vector2(0, 0), Vector2(n, 0), Vector2(n, n), Vector2(0, n)]:
+				var p := Vector3.ZERO
+				p[axe] = c
+				p[(axe + 1) % 3] = uv.x
+				p[(axe + 2) % 3] = uv.y
+				q.append(p)
+			coins.append(q)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, voile)
+	for q in coins:
+		for i in [0, 1, 2, 0, 2, 3]:
+			mesh.surface_add_vertex(q[i])
+	mesh.surface_end()
+	mesh.surface_begin(Mesh.PRIMITIVE_LINES, contour)
+	for q in coins:
+		for i in 4:
+			mesh.surface_add_vertex(q[i])
+			mesh.surface_add_vertex(q[(i + 1) % 4])
+	mesh.surface_end()
+	return mesh
 
 
 func montrer_maillage(mesh: Mesh, surcharge: Material) -> void:

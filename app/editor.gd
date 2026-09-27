@@ -36,19 +36,20 @@ const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
+const Icones := preload("res://app/icones.gd")
+const Manuel := preload("res://app/manuel.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
 
-const PART_ECRAN := 0.95
-const LARGEUR_GAUCHE := 272
-const LARGEUR_DROITE := 272
+const LARGEUR_GAUCHE := 300
+const LARGEUR_DROITE := 308
 const SECONDES_CONSEIL := 7.0
 
 ## Les conseils du bandeau. ⚠ Chacun dit un GESTE ou une PROMESSE vérifiable, jamais un slogan.
 const CONSEILS: Array[String] = [
 	"One witness block carries every tile. Sculpt it, bring it back, paint with it.",
-	"The witness is proven complete: 52 tiles, not one missing, not one extra.",
+	"The witness is proven complete: not one tile missing, not one extra.",
 	"Test world: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
 	"Tab switches between Grid (paint on the floor plane) and Sculpt (paint against the matter).",
 	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
@@ -69,7 +70,8 @@ var _droite: Panneau
 var _attente: PanelContainer
 var _attente_titre: Label
 var _attente_note: Label
-var _bandeau: Label
+var _bandeau: Button
+var _manuel: Control
 var _conseil := 0
 var _ecoule := 0.0
 
@@ -77,7 +79,8 @@ var _boutons_atelier := {}
 var _atelier := "witness"
 var _sections_monde: Array[Control] = []
 
-var _pbr: CheckBox
+var _pbr: CheckButton
+var _plans: CheckButton
 var _matiere_pbr: ShaderMaterial
 var _etiquette_vue: Label
 var _etiquette_etage: Label
@@ -99,6 +102,7 @@ var _nom_couche: LineEdit
 ## Le fichier du projet, réécrit après chaque changement.
 var _projet := ""
 var _etiquette_projet: Label
+var _etiquette_projet_chemin: Label
 ## Vrai pendant qu'on rebâtit un projet : rien ne s'enregistre d'un monde à moitié relu.
 var _ouverture := false
 ## Les couches supprimées, gardées vivantes tant qu'un Ctrl+Z peut les rendre.
@@ -111,8 +115,10 @@ var _coup_nom := ""
 
 var _boutons_visee := {}
 var _boutons_outil := {}
-var _taille: SpinBox
-var _forme: OptionButton
+var _taille: HSlider
+var _valeur_taille: Label
+var _boutons_forme := {}
+var _bouton_coller: Button
 var _compteur_etage: SpinBox
 var _section_selection: Control
 var _etiquette_selection: Label
@@ -144,8 +150,10 @@ func _ready() -> void:
 	await _ouvrir_au_lancement()
 
 
-## ⚠ LA FENÊTRE OCCUPE 95 % DE L'ÉCRAN, CENTRÉE — comme SoluTiles, et reposée après la première image :
-## selon la façon de lancer, la taille demandée dans `_ready` peut être écrasée par celle du projet.
+## ⚠ LA FENÊTRE S'OUVRE MAXIMISÉE (Jordan, 27 septembre 2026 : « on a besoin de place ») — fenêtrée,
+## donc la barre des tâches et les autres fenêtres restent accessibles, mais toute la surface utile.
+## Reposée après la première image : selon la façon de lancer, le mode demandé dans `_ready` peut être
+## écrasé par celui du projet.
 ## ⚠ Et l'échelle de contenu est COUPÉE : le projet hérite d'un réglage de jeu en pixel art (viewport
 ## 640×320 étiré au multiple entier), qui rendrait une interface floue et énorme.
 func _regler_fenetre() -> void:
@@ -153,13 +161,9 @@ func _regler_fenetre() -> void:
 	if fenetre == null:
 		return
 	fenetre.content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
-	if fenetre.mode != Window.MODE_WINDOWED:
-		fenetre.mode = Window.MODE_WINDOWED
-	var utile: Rect2i = DisplayServer.screen_get_usable_rect(fenetre.current_screen)
-	var cible := Vector2i(int(utile.size.x * PART_ECRAN), int(utile.size.y * PART_ECRAN))
-	fenetre.size = cible
-	fenetre.position = utile.position + (utile.size - cible) / 2
-	fenetre.title = "MarchingBlocks"
+	fenetre.min_size = Vector2i(1100, 680)
+	if fenetre.mode != Window.MODE_MAXIMIZED and fenetre.mode != Window.MODE_FULLSCREEN:
+		fenetre.mode = Window.MODE_MAXIMIZED
 
 
 func _process(delta: float) -> void:
@@ -167,13 +171,26 @@ func _process(delta: float) -> void:
 	if _ecoule < SECONDES_CONSEIL:
 		return
 	_ecoule = 0.0
-	_bandeau.text = CONSEILS[_conseil]
+	_montrer_conseil(_conseil)
 	_conseil = (_conseil + 1) % CONSEILS.size()
 
 
+func _montrer_conseil(i: int) -> void:
+	_bandeau.text = CONSEILS[i] + "     ·  click for the manual"
+
+
 # ── LA CONSTRUCTION DE L'ÉCRAN ───────────────────────────────────────────────────────────────────────
+#
+# ⚠ **LA HIÉRARCHIE EST VOULUE (Jordan, 27 septembre 2026 : « une hiérarchisation des fonctionnalités
+# les plus importantes aux moindres »).** De haut en bas, dans chaque barre, ce qu'on touche le plus
+# souvent d'abord :
+#   GAUCHE — ce qu'on REGARDE et ce qu'on échange : l'atelier, le projet, le témoin, l'aller-retour
+#            avec l'artiste, les raccourcis (repliés) ; le RAPPORT est épinglé en bas, toujours visible.
+#   DROITE — ce que fait la MAIN : les outils, la sélection (seulement quand elle existe), les couches,
+#            le tranchage, puis les opérations de forme (repliées : on s'en sert moins).
 
 func _batir() -> void:
+	theme = Palette.theme()
 	var fond := Panel.new()
 	fond.set_anchors_preset(Control.PRESET_FULL_RECT)
 	fond.add_theme_stylebox_override("panel", Palette.fond(Palette.FOND_VUE, 0, 0))
@@ -196,14 +213,17 @@ func _batir() -> void:
 	_vue.touche.connect(_touche)
 	_vue.selection_changee.connect(_selection_changee)
 	_vue.colle.connect(_colle)
-	_vue.coup_fini.connect(_coup_fini)
 	corps.add_child(_vue)
 
 	_gauche = _panneau(corps, true, LARGEUR_GAUCHE)
 	_batir_gauche(_gauche.get_meta("pile"))
+	_batir_rapport(_gauche.get_meta("pied"))
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
 	_batir_attente(corps)
+
+	_manuel = Manuel.new()
+	add_child(_manuel)
 
 	_dialogue = FileDialog.new()
 	_dialogue.access = FileDialog.ACCESS_FILESYSTEM
@@ -214,18 +234,28 @@ func _batir() -> void:
 
 func _barre_titre() -> Control:
 	var barre := PanelContainer.new()
-	barre.custom_minimum_size = Vector2(0, 34)
+	barre.custom_minimum_size = Vector2(0, 40)
 	var style := Palette.fond(Palette.BARRE_TITRE, 0, 0)
 	style.content_margin_left = 14
-	style.content_margin_right = 14
+	style.content_margin_right = 10
+	style.border_color = Palette.FILET
+	style.border_width_bottom = 1
 	barre.add_theme_stylebox_override("panel", style)
 	var ligne := HBoxContainer.new()
-	ligne.add_theme_constant_override("separation", 12)
+	ligne.add_theme_constant_override("separation", 10)
 	barre.add_child(ligne)
 
+	if ResourceLoader.exists("res://MARQUE/embleme.png"):
+		var embleme := TextureRect.new()
+		embleme.texture = load("res://MARQUE/embleme.png")
+		embleme.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		embleme.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		embleme.custom_minimum_size = Vector2(24, 24)
+		ligne.add_child(embleme)
 	var marque := Label.new()
 	marque.text = "MarchingBlocks"
-	marque.add_theme_font_size_override("font_size", 16)
+	marque.add_theme_font_override("font", Palette.gras())
+	marque.add_theme_font_size_override("font_size", 17)
 	marque.add_theme_color_override("font_color", Palette.OLIVE)
 	ligne.add_child(marque)
 	var version := Label.new()
@@ -240,24 +270,54 @@ func _barre_titre() -> Control:
 	devise.add_theme_font_size_override("font_size", 12)
 	ligne.add_child(devise)
 
-	_bandeau = Label.new()
-	_bandeau.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_bandeau.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	# ⚠ LE BANDEAU EST UN BOUTON : il ouvre le manuel (Jordan). Il le DIT dans son texte — un bandeau
+	# cliquable qui ne se présente pas comme tel ne serait jamais cliqué.
+	_bandeau = Button.new()
+	_bandeau.theme_type_variation = Palette.DISCRET
+	_bandeau.icon = Icones.icone("ampoule")
+	# ⚠ ALIGNÉ À GAUCHE : aligné à droite, le texte partait au bout de la barre et laissait l'ampoule
+	# seule au milieu, sans rien à éclairer.
+	_bandeau.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_bandeau.clip_text = true
-	_bandeau.add_theme_color_override("font_color", Palette.AMBRE)
+	_bandeau.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_bandeau.focus_mode = Control.FOCUS_NONE
+	_bandeau.tooltip_text = "Open the user guide (F1)"
+	_bandeau.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	for c in ["font_color", "font_focus_color", "icon_normal_color", "icon_focus_color"]:
+		_bandeau.add_theme_color_override(c, Palette.AMBRE)
+	for c in ["font_hover_color", "font_pressed_color", "font_hover_pressed_color", "icon_hover_color",
+			"icon_pressed_color", "icon_hover_pressed_color"]:
+		_bandeau.add_theme_color_override(c, Palette.AMBRE.lightened(0.25))
 	_bandeau.add_theme_font_size_override("font_size", 12)
-	_bandeau.text = CONSEILS[0]
+	_bandeau.pressed.connect(func() -> void: _manuel.ouvrir())
+	_montrer_conseil(0)
 	_conseil = 1
 	ligne.add_child(_bandeau)
+
+	var manuel := Button.new()
+	manuel.text = "Manual"
+	manuel.icon = Icones.icone("livre")
+	manuel.tooltip_text = "The user guide (F1)"
+	manuel.focus_mode = Control.FOCUS_NONE
+	manuel.pressed.connect(func() -> void: _manuel.ouvrir())
+	ligne.add_child(manuel)
 	return barre
 
 
-## Un panneau posé sur la vue, ancré à gauche ou à droite sur TOUTE la hauteur.
+## Un panneau posé sur la vue, ancré à gauche ou à droite sur TOUTE la hauteur. `pile` défile ; `pied`
+## est ÉPINGLÉ sous elle et ne défile jamais (le rapport).
 ## ⚠ LES QUATRE ANCRES, pas deux (leçon de SoluTiles) : ancrer seulement le haut laisse le panneau à sa
 ## taille minimale et coupe ce qui dépasse.
 func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
 	var p := Panneau.new()
-	p.add_theme_stylebox_override("panel", Palette.fond(Palette.PANNEAU, 0, 12))
+	var style := Palette.fond(Palette.PANNEAU, 0, 10)
+	style.content_margin_right = 6
+	style.border_color = Palette.FILET
+	if a_gauche:
+		style.border_width_right = 1
+	else:
+		style.border_width_left = 1
+	p.add_theme_stylebox_override("panel", style)
 	p.anchor_top = 0.0
 	p.anchor_bottom = 1.0
 	p.anchor_left = 0.0 if a_gauche else 1.0
@@ -265,21 +325,33 @@ func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
 	p.offset_left = 0.0 if a_gauche else -largeur
 	p.offset_right = largeur if a_gauche else 0.0
 	parent.add_child(p)
+	var colonne := VBoxContainer.new()
+	colonne.add_theme_constant_override("separation", 10)
+	p.add_child(colonne)
 	var defile := ScrollContainer.new()
 	defile.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	p.add_child(defile)
+	defile.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	colonne.add_child(defile)
+	var marge := MarginContainer.new()
+	marge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	marge.add_theme_constant_override("margin_right", 8)
+	defile.add_child(marge)
 	var pile := VBoxContainer.new()
 	pile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pile.add_theme_constant_override("separation", 14)
-	defile.add_child(pile)
+	marge.add_child(pile)
+	var pied := VBoxContainer.new()
+	pied.add_theme_constant_override("separation", 6)
+	colonne.add_child(pied)
 	p.set_meta("pile", pile)
+	p.set_meta("pied", pied)
 	return p
 
 
 func _petit_titre(texte: String) -> Label:
 	var l := Label.new()
 	l.text = texte
-	l.add_theme_font_size_override("font_size", 11)
+	l.add_theme_font_size_override("font_size", 10)
 	l.add_theme_color_override("font_color", Palette.GRIS)
 	return l
 
@@ -296,53 +368,96 @@ func _texte(texte: String, taille := 12, couleur := Palette.TEXTE) -> Label:
 	return l
 
 
-func _bouton(texte: String, infobulle: String, action: Callable) -> Button:
+func _bouton(texte: String, infobulle: String, action: Callable, icone := "", variante := "") -> Button:
 	var b := Button.new()
 	b.text = texte
 	b.tooltip_text = infobulle
 	b.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	b.custom_minimum_size = Vector2(0, 32)
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT if icone != "" else HORIZONTAL_ALIGNMENT_CENTER
+	if icone != "":
+		b.icon = Icones.icone(icone)
+	if variante != "":
+		b.theme_type_variation = variante
 	b.pressed.connect(action)
 	return b
 
 
-func _batir_gauche(pile: VBoxContainer) -> void:
-	var projet := Section.new("Project")
-	pile.add_child(projet)
-	_etiquette_projet = _texte("", 11, Palette.GRIS)
-	projet.contenu.add_child(_etiquette_projet)
+## Des boutons côte à côte, de même largeur.
+func _rangee(boutons: Array, separation := 6) -> HBoxContainer:
 	var ligne := HBoxContainer.new()
-	for b in [
-		["New", "Starts an empty project with one layer. The current one is already saved.",
-			_nouveau_projet],
-		["Open…", "Opens a MarchingBlocks project (.mbproj).", func() -> void: _demander("ouvrir")],
-		["Save as…", "Writes the project where you want it. It keeps saving itself there.",
-			func() -> void: _demander("enregistrer")],
-	]:
-		var bouton := _bouton(b[0], b[1], b[2])
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ligne.add_child(bouton)
-	projet.contenu.add_child(ligne)
+	ligne.add_theme_constant_override("separation", separation)
+	for b in boutons:
+		(b as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# ⚠ UNE LIGNE PAR BOUTON dans une rangée : replié, « Save as » passait sur deux lignes et la rangée
+		# doublait de hauteur pour un seul mot.
+		(b as Button).autowrap_mode = TextServer.AUTOWRAP_OFF
+		ligne.add_child(b)
+	return ligne
 
+
+## Des boutons en grille de `colonnes`.
+func _grille(boutons: Array, colonnes := 2) -> GridContainer:
+	var g := GridContainer.new()
+	g.columns = colonnes
+	g.add_theme_constant_override("h_separation", 6)
+	g.add_theme_constant_override("v_separation", 6)
+	for b in boutons:
+		(b as Control).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		(b as Button).autowrap_mode = TextServer.AUTOWRAP_OFF
+		g.add_child(b)
+	return g
+
+
+func _batir_gauche(pile: VBoxContainer) -> void:
+	# L'ATELIER : la décision la plus haute de l'écran, donc tout en haut, en grand.
 	pile.add_child(_petit_titre("WORKSPACE"))
-	var ateliers := HBoxContainer.new()
 	var groupe := ButtonGroup.new()
-	for a in [["witness", "Witness"], ["monde", "Test world"]]:
+	var ateliers: Array = []
+	for a in [
+		["witness", "Witness", "cube", "The block your artist sculpts: look at it, export it, bring it back."],
+		["monde", "Test world", "monde", "Paint worlds with the sliced tiles."],
+	]:
 		var b := Button.new()
 		b.text = a[1]
+		b.icon = Icones.icone(a[2])
+		b.tooltip_text = a[3]
 		b.toggle_mode = true
 		b.button_group = groupe
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 40)
+		b.add_theme_font_override("font", Palette.gras())
+		b.add_theme_constant_override("icon_max_width", 20)
 		b.pressed.connect(_aller_a.bind(a[0]))
-		ateliers.add_child(b)
 		_boutons_atelier[a[0]] = b
-	pile.add_child(ateliers)
+		ateliers.append(b)
+	pile.add_child(_rangee(ateliers))
 
-	var temoin := Section.new("Witness")
+	var projet := Section.new("Project", true, Icones.icone("enregistrer"))
+	pile.add_child(projet)
+	_etiquette_projet = Label.new()
+	_etiquette_projet.add_theme_font_override("font", Palette.gras())
+	_etiquette_projet.add_theme_font_size_override("font_size", 14)
+	_etiquette_projet.clip_text = true
+	projet.contenu.add_child(_etiquette_projet)
+	_etiquette_projet_chemin = _texte("", 11, Palette.GRIS)
+	projet.contenu.add_child(_etiquette_projet_chemin)
+	projet.contenu.add_child(_rangee([
+		_bouton("New", "Starts an empty project with one layer. The current one is already saved.",
+			_nouveau_projet, "nouveau"),
+		_bouton("Open", "Opens a MarchingBlocks project (.mbproj).", func() -> void: _demander("ouvrir"),
+			"ouvrir"),
+		_bouton("Save as", "Writes the project where you want it. It keeps saving itself there.",
+			func() -> void: _demander("enregistrer"), "enregistrer"),
+	], 4))
+
+	var temoin := Section.new("Witness", true, Icones.icone("cube"))
 	pile.add_child(temoin)
-	_pbr = CheckBox.new()
-	_pbr.text = "World-space PBR textures"
-	_pbr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_etiquette_vue = _texte("showing: the computed witness", 11, Palette.GRIS)
+	temoin.contenu.add_child(_etiquette_vue)
+	_pbr = CheckButton.new()
+	_pbr.text = "World-space PBR"
+	_pbr.icon = Icones.icone("texture")
+	_pbr.add_theme_constant_override("icon_max_width", 16)
 	if PBR.disponible():
 		_pbr.tooltip_text = ("One full PBR set per colour — albedo, normal, AO, roughness, height (POM) — "
 			+ "projected in WORLD space, so the tiles meet without seams.\nApplies to the witness and "
@@ -352,130 +467,190 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 		_pbr.tooltip_text = "The PBR textures are not installed."
 	_pbr.toggled.connect(func(_v: bool) -> void: _habiller())
 	temoin.contenu.add_child(_pbr)
-	_etiquette_vue = _texte("showing: the computed witness", 11, Palette.GRIS)
-	temoin.contenu.add_child(_etiquette_vue)
+	# Jordan (27 septembre 2026) : voir OÙ le trancheur coupe, sur le témoin comme sur le travail importé.
+	_plans = CheckButton.new()
+	_plans.text = "Show the cells"
+	_plans.icon = Icones.icone("grille")
+	_plans.add_theme_constant_override("icon_max_width", 16)
+	_plans.tooltip_text = ("Shows the cutting planes: the slicer cuts through the cell CENTRES, on all "
+		+ "three axes.
+Each piece between them becomes one tile — keep your relief inside its cell.")
+	_plans.toggled.connect(func(v: bool) -> void: _vue.montrer_plans_de_coupe(v))
+	temoin.contenu.add_child(_plans)
 	temoin.contenu.add_child(_legende())
 	temoin.contenu.add_child(_bouton("Show the witness", "Back to the computed witness.",
-		func() -> void: _travail_vu(false)))
+		func() -> void: _travail_vu(false), "cube"))
 
-	var echange := Section.new("Artist round trip")
+	var echange := Section.new("Artist round trip", true, Icones.icone("exporter"))
 	pile.add_child(echange)
+	echange.contenu.add_child(_texte("Send the witness to Blender, bring the sculpted .glb back.", 11,
+		Palette.GRIS))
 	echange.contenu.add_child(_bouton("Export the witness…",
 		"Writes the witness as ONE .glb for Blender.\nDo not MOVE it: its position identifies it "
 		+ "when it comes back, not its name.\nTiles are already shrunk to half their cell, to show "
-		+ "the margin you have.", func() -> void: _demander("exporter")))
+		+ "the margin you have.", func() -> void: _demander("exporter"), "exporter", Palette.PRINCIPAL))
 	echange.contenu.add_child(_bouton("Import the work…",
 		"Reads the sculpted .glb and SHOWS it, as the slicer will read it.\nNothing is sliced yet.",
-		func() -> void: _demander("importer")))
+		func() -> void: _demander("importer"), "importer"))
 
-	var aide := Section.new("Controls", false)
+	var aide := Section.new("Shortcuts", false, Icones.icone("clavier"))
 	pile.add_child(aide)
-	aide.contenu.add_child(_texte("Wheel — zoom\nMiddle drag — turn\nShift + middle drag — slide\n"
-		+ "Witness: left drag also turns\nTest world: left paints, right erases\nCtrl+Z / Ctrl+Y — undo / "
-		+ "redo", 11, Palette.GRIS))
+	var raccourcis := GridContainer.new()
+	raccourcis.columns = 2
+	raccourcis.add_theme_constant_override("h_separation", 10)
+	raccourcis.add_theme_constant_override("v_separation", 4)
+	for r in [["Tab", "Grid ↔ Sculpt"], ["A D S B", "Add Dig Select Box"], ["[  ]", "Brush size"],
+			["PgUp PgDn", "Floor y"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
+			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
+			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
+		raccourcis.add_child(_touche_clavier(r[0]))
+		raccourcis.add_child(_texte(r[1], 11, Palette.GRIS))
+	aide.contenu.add_child(raccourcis)
+	aide.contenu.add_child(_bouton("Open the user guide", "Everything, explained (F1).",
+		func() -> void: _manuel.ouvrir(), "livre", Palette.DISCRET))
+
+
+## Une touche de clavier, dessinée comme une touche.
+func _touche_clavier(texte: String) -> Control:
+	var cadre := PanelContainer.new()
+	var s := Palette.fond(Palette.BOUTON, 4, 0)
+	s.content_margin_left = 6
+	s.content_margin_right = 6
+	s.content_margin_top = 1
+	s.content_margin_bottom = 1
+	s.border_color = Palette.FILET
+	s.border_width_bottom = 2
+	cadre.add_theme_stylebox_override("panel", s)
+	var l := Label.new()
+	l.text = texte
+	l.add_theme_font_size_override("font_size", 11)
+	cadre.add_child(l)
+	cadre.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	return cadre
+
+
+## LE RAPPORT — épinglé en bas de la barre de gauche : ce qu'une action vient de faire doit se lire
+## SANS défiler. Il était au fond de la barre de droite, sous tous les outils : on ne le voyait jamais.
+func _batir_rapport(pied: VBoxContainer) -> void:
+	var tete := HBoxContainer.new()
+	tete.add_theme_constant_override("separation", 6)
+	var icone := TextureRect.new()
+	icone.texture = Icones.icone("rapport")
+	icone.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icone.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icone.custom_minimum_size = Vector2(14, 14)
+	icone.modulate = Palette.GRIS
+	tete.add_child(icone)
+	tete.add_child(_petit_titre("REPORT"))
+	pied.add_child(tete)
+	var cadre := PanelContainer.new()
+	var s := Palette.fond(Palette.SOMBRE, 6, 10)
+	s.border_color = Palette.FILET
+	s.set_border_width_all(1)
+	cadre.add_theme_stylebox_override("panel", s)
+	pied.add_child(cadre)
+	var defile := ScrollContainer.new()
+	defile.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	defile.custom_minimum_size = Vector2(0, 150)
+	cadre.add_child(defile)
+	_rapport = RichTextLabel.new()
+	_rapport.bbcode_enabled = true
+	_rapport.fit_content = true
+	_rapport.selection_enabled = true
+	_rapport.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rapport.add_theme_font_size_override("normal_font_size", 12)
+	_rapport.add_theme_font_size_override("bold_font_size", 12)
+	_rapport.add_theme_font_size_override("italics_font_size", 12)
+	_rapport.add_theme_font_override("bold_font", Palette.gras())
+	defile.add_child(_rapport)
 
 
 ## LA LÉGENDE — dérivée des six teintes de `RP.TEINTES`, jamais recopiée : une légende fausse est pire
-## qu'une absence de légende.
+## qu'une absence de légende. Sur deux colonnes : six lignes pleines prenaient la moitié du panneau.
 func _legende() -> Control:
-	var grille := VBoxContainer.new()
-	grille.add_theme_constant_override("separation", 3)
+	var grille := GridContainer.new()
+	grille.columns = 2
+	grille.add_theme_constant_override("h_separation", 10)
+	grille.add_theme_constant_override("v_separation", 4)
 	for t in RP.TEINTES:
 		var ligne := HBoxContainer.new()
 		ligne.add_theme_constant_override("separation", 6)
-		var pastille := ColorRect.new()
-		pastille.color = t["couleur"]
-		pastille.custom_minimum_size = Vector2(12, 12)
+		ligne.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var pastille := Panel.new()
+		pastille.add_theme_stylebox_override("panel", Palette.fond(t["couleur"], 3, 0))
+		pastille.custom_minimum_size = Vector2(11, 11)
 		pastille.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		ligne.add_child(pastille)
-		ligne.add_child(_texte(t["nom"], 11))
+		ligne.add_child(_texte(str(t["nom"]).replace(" - ", " · "), 11, Palette.GRIS))
 		grille.add_child(ligne)
 	return grille
 
 
 func _batir_droite(pile: VBoxContainer) -> void:
-	var couches := Section.new("Layers")
-	pile.add_child(couches)
-	_liste_couches = VBoxContainer.new()
-	_liste_couches.add_theme_constant_override("separation", 4)
-	couches.contenu.add_child(_liste_couches)
-	_nom_couche = LineEdit.new()
-	_nom_couche.placeholder_text = "layer name"
-	_nom_couche.text_submitted.connect(func(_t: String) -> void: _renommer_couche())
-	_nom_couche.focus_exited.connect(_renommer_couche)
-	couches.contenu.add_child(_nom_couche)
-	var gestes := HBoxContainer.new()
-	for b in [
-		["New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche],
-		["Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche],
-	]:
-		var bouton := _bouton(b[0], b[1], b[2])
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		gestes.add_child(bouton)
-	couches.contenu.add_child(gestes)
-
-	var trancher := Section.new("Slice into the active layer")
-	pile.add_child(trancher)
-	trancher.contenu.add_child(_bouton("Slice the witness",
-		"Slices the computed witness into its 52 tiles and dresses the ACTIVE layer with them.\n"
-		+ "Its painted cells stay as they are.", _trancher_temoin))
-	trancher.contenu.add_child(_bouton("Slice the work",
-		"Re-reads the imported work, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
-		+ "Its painted cells stay as they are.", _trancher_travail))
-
-	var outils := Section.new("Tools")
+	# ── 1. LES OUTILS — ce qu'on touche à chaque geste.
+	var outils := Section.new("Tools", true, Icones.icone("outils"))
 	pile.add_child(outils)
 	_sections_monde.append(outils)
-	outils.contenu.add_child(_petit_titre("AIM  (Tab)"))
+	outils.contenu.add_child(_petit_titre("AIM  ·  Tab"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_visee, [
-		["grille", "Grid", "Aims at the floor plane y — the grid. Good for laying out a map."],
-		["sculpt", "Sculpt", "Aims at the matter already there: Add builds on the face you point at, Dig "
-			+ "and Select act on the cell you point at.\nWhere the ray meets no matter, it falls back on "
-			+ "the floor plane."],
+		["grille", "Grid", "visee_grille", "Aims at the floor plane y — the grid. Good for laying out "
+			+ "a map."],
+		["sculpt", "Sculpt", "visee_sculpt", "Aims at the matter already there: Add builds on the face "
+			+ "you point at, Dig and Select act on the cell you point at.\nWhere the ray meets no "
+			+ "matter, it falls back on the floor plane."],
 	], _choisir_visee))
 	outils.contenu.add_child(_petit_titre("TOOL"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_outil, [
-		["ajouter", "Add", "A — adds matter. Right click digs."],
-		["creuser", "Dig", "D — removes matter. Right click adds."],
-		["selectionner", "Select", "S — selects matter (Shift adds to the selection). Right click "
-			+ "deselects."],
-		["boite", "Box", "B — drag a box: the matter inside becomes the selection (Shift adds, right "
-			+ "drag removes).\nIn Sculpt, the two corners are on the matter, so the box is 3D."],
-	], _choisir_outil))
-	var presse := HBoxContainer.new()
-	for b in [
-		["Copy", "Ctrl+C — copies the selected matter. Paste it into any layer.", _copier],
-		["Cut", "Ctrl+X — copies, then deletes.", _couper],
-		["Paste", "Ctrl+V — the copy follows the mouse; click to place it against the face you point "
-			+ "at, right click or Esc to cancel.", _coller],
-	]:
-		var bouton := _bouton(b[0], b[1], b[2])
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		presse.add_child(bouton)
-	outils.contenu.add_child(presse)
-	var pinceau := HBoxContainer.new()
-	pinceau.add_child(_texte("brush", 12))
-	_taille = SpinBox.new()
+		["ajouter", "Add", "ajouter", "A — adds matter. Right click digs."],
+		["creuser", "Dig", "creuser", "D — removes matter. Right click adds."],
+		["selectionner", "Select", "selectionner", "S — selects matter (Shift adds to the selection). "
+			+ "Right click deselects."],
+		["boite", "Box", "boite", "B — drag a box: the matter inside becomes the selection (Shift adds, "
+			+ "right drag removes).\nIn Sculpt, the two corners are on the matter, so the box is 3D."],
+	], _choisir_outil, Palette.OUTIL))
+
+	outils.contenu.add_child(_petit_titre("BRUSH  ·  [ ]"))
+	var taille := HBoxContainer.new()
+	taille.add_theme_constant_override("separation", 10)
+	_taille = HSlider.new()
 	_taille.min_value = 1
 	_taille.max_value = 7
+	_taille.step = 1
+	_taille.tick_count = 7
+	_taille.ticks_on_borders = true
+	_taille.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_taille.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_taille.tooltip_text = "[ and ] — brush size. 1 is a single cell."
+	_valeur_taille = Label.new()
+	_valeur_taille.text = "1"
+	_valeur_taille.custom_minimum_size = Vector2(18, 0)
+	_valeur_taille.add_theme_font_override("font", Palette.gras())
+	_valeur_taille.add_theme_color_override("font_color", Palette.OLIVE)
 	_taille.value_changed.connect(func(v: float) -> void:
 		_vue.taille = int(v)
+		_valeur_taille.text = str(int(v))
 		_vue.rafraichir())
-	pinceau.add_child(_taille)
-	_forme = OptionButton.new()
-	for f in [["Sphere", "sphere"], ["Cube", "cube"], ["Disc", "disque"]]:
-		_forme.add_item(f[0])
-		_forme.set_item_metadata(_forme.item_count - 1, f[1])
-	_forme.tooltip_text = ("Disc: flat, across the face you point at — fills or digs a wall without "
-		+ "thickening it.")
-	_forme.item_selected.connect(func(i: int) -> void:
-		_vue.forme = str(_forme.get_item_metadata(i))
-		_vue.rafraichir())
-	pinceau.add_child(_forme)
-	outils.contenu.add_child(pinceau)
+	taille.add_child(_taille)
+	taille.add_child(_valeur_taille)
+	outils.contenu.add_child(taille)
+	outils.contenu.add_child(_rangee_de_choix(_boutons_forme, [
+		["sphere", "Sphere", "sphere", "A ball of cells."],
+		["cube", "Cube", "cube", "A cube of cells."],
+		["disque", "Disc", "disque", "Flat, across the face you point at — fills or digs a wall without "
+			+ "thickening it."],
+	], _choisir_forme))
+
+	outils.contenu.add_child(_petit_titre("FLOOR  ·  PgUp PgDn"))
 	var ligne := HBoxContainer.new()
-	ligne.add_child(_texte("floor y =", 12))
+	ligne.add_theme_constant_override("separation", 8)
+	var icone_etage := TextureRect.new()
+	icone_etage.texture = Icones.icone("etage")
+	icone_etage.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icone_etage.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icone_etage.custom_minimum_size = Vector2(18, 18)
+	icone_etage.modulate = Palette.GRIS
+	ligne.add_child(icone_etage)
+	ligne.add_child(_texte("y =", 12))
 	_compteur_etage = SpinBox.new()
 	_compteur_etage.min_value = -64
 	_compteur_etage.max_value = 64
@@ -488,82 +663,117 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	_etiquette_etage = _texte("", 11, Palette.GRIS)
 	outils.contenu.add_child(_etiquette_etage)
 
-	var sel := Section.new("Selection")
+	# ── 2. LA SÉLECTION — seulement quand il y a quelque chose à sélectionner ou à coller.
+	var sel := Section.new("Selection", true, Icones.icone("boite"))
 	pile.add_child(sel)
 	_section_selection = sel
-	_etiquette_selection = _texte("", 11, Palette.GRIS)
+	_etiquette_selection = _texte("", 12, Palette.OLIVE)
 	sel.contenu.add_child(_etiquette_selection)
-	var grille_sel := GridContainer.new()
-	grille_sel.columns = 2
-	for op in [
-		["Delete", "supprimer", "Del — removes the selected matter."],
-		["Clear", "", "Esc — forgets the selection. No cell changes."],
-		["Extrude ↑", "extruder_haut", "Adds the layer above; the selection follows it. Repeat to "
-			+ "raise a wall."],
-		["Extrude ↓", "extruder_bas", "Adds the layer below; the selection follows it."],
-		["Grow", "grandir", "Selects the matter touching the selection by a face."],
-		["Shrink", "retrecir", "Drops the selected cells that touch an unselected one."],
-		["Connected", "connexe", "Selects all the matter linked to the selection by faces."],
-	]:
-		var bouton := _bouton(op[0], op[2], _operer_selection.bind(op[1]))
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		grille_sel.add_child(bouton)
-	sel.contenu.add_child(grille_sel)
-	sel.contenu.add_child(_petit_titre("MOVE  (arrows · Shift + Up / Down)"))
-	var bouger := GridContainer.new()
-	bouger.columns = 3
+	sel.contenu.add_child(_grille([
+		_bouton("Delete", "Del — removes the selected matter.", _operer_selection.bind("supprimer"),
+			"poubelle", Palette.DANGER),
+		_bouton("Clear", "Esc — forgets the selection. No cell changes.", _operer_selection.bind(""),
+			"croix"),
+		_bouton("Extrude ↑", "Adds the layer above; the selection follows it. Repeat to raise a wall.",
+			_operer_selection.bind("extruder_haut"), "extruder_haut"),
+		_bouton("Extrude ↓", "Adds the layer below; the selection follows it.",
+			_operer_selection.bind("extruder_bas"), "extruder_bas"),
+		_bouton("Grow", "Selects the matter touching the selection by a face.",
+			_operer_selection.bind("grandir"), "grandir"),
+		_bouton("Shrink", "Drops the selected cells that touch an unselected one.",
+			_operer_selection.bind("retrecir"), "retrecir"),
+		_bouton("Connected", "Selects all the matter linked to the selection by faces.",
+			_operer_selection.bind("connexe"), "connexe"),
+	]))
+	sel.contenu.add_child(_petit_titre("MOVE  ·  arrows, Shift + ↑ ↓"))
+	var bouger: Array = []
 	for m in [["X −", Vector3i(-1, 0, 0)], ["Y +", Vector3i(0, 1, 0)], ["X +", Vector3i(1, 0, 0)],
 			["Z −", Vector3i(0, 0, -1)], ["Y −", Vector3i(0, -1, 0)], ["Z +", Vector3i(0, 0, 1)]]:
-		var bouton := _bouton(m[0], "Moves the selected matter one cell. It merges with the matter it "
-			+ "lands on, never erases it.", _deplacer.bind(m[1]))
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bouger.add_child(bouton)
-	sel.contenu.add_child(bouger)
+		bouger.append(_bouton(m[0], "Moves the selected matter one cell. It merges with the matter it "
+			+ "lands on, never erases it.", _deplacer.bind(m[1])))
+	sel.contenu.add_child(_grille(bouger, 3))
+	sel.contenu.add_child(_petit_titre("CLIPBOARD  ·  Ctrl C X V"))
+	_bouton_coller = _bouton("Paste", "Ctrl+V — the copy follows the mouse; click to place it against "
+		+ "the face you point at, right click or Esc to cancel.", _coller, "coller")
+	sel.contenu.add_child(_rangee([
+		_bouton("Copy", "Ctrl+C — copies the selected matter. Paste it into any layer.",
+			func() -> void: _copier(), "copier"),
+		_bouton("Cut", "Ctrl+X — copies, then deletes.", _couper, "couper"),
+		_bouton_coller,
+	], 4))
 
-	var etage := Section.new("Floor / selection")
+	# ── 3. LES COUCHES.
+	var couches := Section.new("Layers", true, Icones.icone("couches"))
+	pile.add_child(couches)
+	_liste_couches = VBoxContainer.new()
+	_liste_couches.add_theme_constant_override("separation", 4)
+	couches.contenu.add_child(_liste_couches)
+	_nom_couche = LineEdit.new()
+	_nom_couche.placeholder_text = "rename the active layer"
+	_nom_couche.text_submitted.connect(func(_t: String) -> void: _renommer_couche())
+	_nom_couche.focus_exited.connect(_renommer_couche)
+	couches.contenu.add_child(_nom_couche)
+	couches.contenu.add_child(_rangee([
+		_bouton("New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche,
+			"plus"),
+		_bouton("Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche,
+			"poubelle", Palette.DANGER),
+	]))
+
+	# ── 4. LE TRANCHAGE.
+	var trancher := Section.new("Slice", true, Icones.icone("couteau"))
+	pile.add_child(trancher)
+	trancher.contenu.add_child(_texte("Gives the ACTIVE layer its tiles. Its painted cells stay.", 11,
+		Palette.GRIS))
+	trancher.contenu.add_child(_bouton("Slice the work",
+		"Re-reads the imported work, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
+		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL))
+	trancher.contenu.add_child(_bouton("Slice the witness",
+		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
+		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
+
+	# ── 5. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
+	var etage := Section.new("Shape operations", false, Icones.icone("etage"))
 	pile.add_child(etage)
 	_sections_monde.append(etage)
 	_etiquette_portee = _texte("", 11, Palette.GRIS)
 	etage.contenu.add_child(_etiquette_portee)
+	var ops: Array = []
 	for op in [
-		["Extend up", "haut", "copies the cells one cell higher"],
-		["Extend down", "bas", "copies the cells one cell lower"],
-		["Widen", "elargir", "adds a ring around the cells, in their plane"],
-		["Hollow", "creuser", "removes the cells whose four horizontal neighbours are full"],
+		["Extend up", "haut", "extruder_haut", "copies the cells one cell higher"],
+		["Extend down", "bas", "extruder_bas", "copies the cells one cell lower"],
+		["Widen", "elargir", "elargir", "adds a ring around the cells, in their plane"],
+		["Hollow", "creuser", "evider", "removes the cells whose four horizontal neighbours are full"],
 	]:
-		etage.contenu.add_child(_bouton(op[0], op[2] + " — the selection if there is one, otherwise "
-			+ "floor y.", _operer.bind(op[1])))
+		ops.append(_bouton(op[0], op[3] + " — the selection if there is one, otherwise floor y.",
+			_operer.bind(op[1]), op[2]))
+	etage.contenu.add_child(_grille(ops))
 	etage.contenu.add_child(_bouton("Paint the witness shape",
 		"Replaces this layer's cells with the witness's own cells (Ctrl+Z brings yours back).\n"
 		+ "Sliced from your work, the result must give your block back: that is the proof that "
-		+ "the round trip holds.", _peindre_la_forme_du_temoin))
+		+ "the round trip holds.", _peindre_la_forme_du_temoin, "cube"))
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
-		+ "brings them back).", _effacer_tout))
-
-	var rapport := Section.new("Report")
-	pile.add_child(rapport)
-	_rapport = RichTextLabel.new()
-	_rapport.bbcode_enabled = true
-	_rapport.fit_content = true
-	_rapport.selection_enabled = true
-	_rapport.custom_minimum_size = Vector2(0, 60)
-	_rapport.add_theme_font_size_override("normal_font_size", 12)
-	rapport.contenu.add_child(_rapport)
+		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 
 
 func _batir_attente(parent: Control) -> void:
 	_attente = PanelContainer.new()
-	_attente.add_theme_stylebox_override("panel", Palette.fond(Palette.ATTENTE, 6, 16))
+	var s := Palette.fond(Palette.ATTENTE, 8, 18)
+	s.border_color = Palette.FILET
+	s.set_border_width_all(1)
+	_attente.add_theme_stylebox_override("panel", s)
 	_attente.set_anchors_preset(Control.PRESET_CENTER)
-	_attente.custom_minimum_size = Vector2(340, 88)
-	_attente.offset_left = -170
-	_attente.offset_right = 170
-	_attente.offset_top = -44
-	_attente.offset_bottom = 44
+	_attente.custom_minimum_size = Vector2(360, 96)
+	_attente.offset_left = -180
+	_attente.offset_right = 180
+	_attente.offset_top = -48
+	_attente.offset_bottom = 48
 	_attente.visible = false
 	var pile := VBoxContainer.new()
+	pile.add_theme_constant_override("separation", 8)
 	_attente.add_child(pile)
-	_attente_titre = _texte("", 14, Palette.OLIVE)
+	_attente_titre = _texte("", 15, Palette.OLIVE)
+	_attente_titre.add_theme_font_override("font", Palette.gras())
 	pile.add_child(_attente_titre)
 	var barre := ProgressBar.new()
 	barre.value = 100
@@ -798,7 +1008,7 @@ func _poser_lot(bilan: Dictionary, quoi: String, source: String, pbr: bool, ente
 		texte += "[i]No missing class, no slicing error.[/i]\n"
 	if str(bilan.get("cache", "")) != "":
 		texte += "\n[color=#f2ca79]%s[/color] — the layer will be sliced again next time.\n" % bilan["cache"]
-	texte += "\n[i]Paint on the grid: left click adds, right click erases.[/i]"
+	texte += "\n[i]Pick a tool on the right: left click applies it, right click does the opposite.[/i]"
 	_dire(texte)
 
 
@@ -980,6 +1190,7 @@ func _copier() -> bool:
 		_dire("[i]Nothing selected to copy.[/i] Select some matter first (S or B).")
 		return false
 	_presse_papiers = pp
+	_selection_changee()
 	_dire("[b]Copied[/b] — %d cell(s). [i]Ctrl+V pastes, into this layer or any other.[/i]" % pp.size())
 	return true
 
@@ -1012,22 +1223,39 @@ func _colle(ancre: Vector3i) -> void:
 
 # ── LA BARRE D'OUTILS ────────────────────────────────────────────────────────────────────────────────
 
-## Une rangée de boutons exclusifs. `choix` : [clé, libellé, infobulle].
-func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable) -> Control:
+## Une rangée de boutons exclusifs. `choix` : [clé, libellé, icône, infobulle]. Avec la variante OUTIL,
+## l'icône est AU-DESSUS du nom : de grands boutons carrés qu'on trouve sans lire.
+func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable, variante := "") -> Control:
 	var ligne := HBoxContainer.new()
+	ligne.add_theme_constant_override("separation", 5)
 	var groupe := ButtonGroup.new()
 	for c in choix:
 		var b := Button.new()
 		b.text = c[1]
-		b.tooltip_text = c[2]
+		b.icon = Icones.icone(c[2])
+		b.tooltip_text = c[3]
 		b.toggle_mode = true
 		b.button_group = groupe
+		b.focus_mode = Control.FOCUS_NONE
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0, 34)
+		if variante != "":
+			b.theme_type_variation = variante
+		if variante == Palette.OUTIL:
+			b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			b.custom_minimum_size = Vector2(0, 58)
 		b.pressed.connect(action.bind(c[0]))
 		ligne.add_child(b)
 		boutons[c[0]] = b
 	(boutons[choix[0][0]] as Button).button_pressed = true
 	return ligne
+
+
+func _choisir_forme(f: String) -> void:
+	_vue.forme = f
+	(_boutons_forme[f] as Button).button_pressed = true
+	_vue.rafraichir()
 
 
 func _choisir_visee(v: String) -> void:
@@ -1046,8 +1274,10 @@ func _selection_changee() -> void:
 	if _section_selection == null:
 		return
 	var n: int = _vue.selection.size()
-	_section_selection.visible = _atelier == "monde" and n > 0
-	_etiquette_selection.text = "%d cell(s) selected" % n
+	# ⚠ VISIBLE AUSSI QUAND SEUL LE PRESSE-PAPIERS EST PLEIN : on colle souvent sans rien sélectionner.
+	_section_selection.visible = _atelier == "monde" and (n > 0 or not _presse_papiers.is_empty())
+	_etiquette_selection.text = ("%d cell(s) selected" % n) if n > 0 else "nothing selected"
+	_bouton_coller.disabled = _presse_papiers.is_empty()
 	_etiquette_portee.text = ("acts on the selection (%d cells)" % n) if n > 0 \
 		else "acts on floor y = %d" % _vue.etage
 
@@ -1140,6 +1370,8 @@ func _montrer_couche(i: int, oui: bool) -> void:
 	_enregistrer()
 
 
+## Une ligne par couche : l'œil (montrer / cacher), puis la couche elle-même, qu'on choisit d'un clic.
+## La couche ACTIVE se voit à son fond olive — c'est elle que le pinceau touche.
 func _rafraichir_couches() -> void:
 	if _liste_couches == null:
 		return
@@ -1150,19 +1382,29 @@ func _rafraichir_couches() -> void:
 	for i in _couches.size():
 		var c: Dictionary = _couches[i]
 		var ligne := HBoxContainer.new()
-		var vue := CheckBox.new()
-		vue.button_pressed = c["visible"]
-		vue.tooltip_text = "Show this layer"
-		vue.toggled.connect(_montrer_couche.bind(i))
-		ligne.add_child(vue)
+		ligne.add_theme_constant_override("separation", 4)
+		var oeil := Button.new()
+		oeil.theme_type_variation = Palette.DISCRET
+		oeil.toggle_mode = true
+		oeil.button_pressed = c["visible"]
+		oeil.icon = Icones.icone("oeil" if c["visible"] else "oeil_ferme")
+		oeil.tooltip_text = "Show or hide this layer"
+		oeil.focus_mode = Control.FOCUS_NONE
+		oeil.toggled.connect(func(v: bool) -> void:
+			oeil.icon = Icones.icone("oeil" if v else "oeil_ferme")
+			_montrer_couche(i, v))
+		ligne.add_child(oeil)
 		var choix := Button.new()
 		choix.toggle_mode = true
 		choix.button_group = groupe
 		choix.button_pressed = i == _active
+		choix.focus_mode = Control.FOCUS_NONE
 		choix.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		choix.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		choix.clip_text = true
 		choix.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choix.custom_minimum_size = Vector2(0, 40)
 		choix.text = "%s\n%s" % [c["nom"], _dire_la_source(c)]
+		choix.add_theme_font_size_override("font_size", 12)
 		choix.tooltip_text = "Paint on this layer.\nTiles: %s" % (c["source"] if c["source"] != "" else "none yet")
 		choix.pressed.connect(_activer.bind(i))
 		ligne.add_child(choix)
@@ -1332,16 +1574,20 @@ func _retenir_le_projet() -> void:
 func _dire_le_projet() -> void:
 	if _etiquette_projet == null:
 		return
-	_etiquette_projet.text = _projet.get_file().get_basename() + (" — autosaved in the app data, "
-		+ "« Save as… » to keep it elsewhere" if _projet.begins_with("user://") else " — autosaved")
-	get_window().title = "MarchingBlocks — " + _projet.get_file().get_basename()
+	_etiquette_projet.text = _projet.get_file().get_basename()
+	_etiquette_projet_chemin.text = ("Autosaved in the app data — « Save as » to keep it elsewhere."
+		if _projet.begins_with("user://") else "Autosaved · " + _projet.get_base_dir())
+	# ⚠ PAS DE FENÊTRE HORS DE L'ARBRE : le dernier enregistrement, à la fermeture, arrive quand l'écran
+	# en est déjà sorti — `get_window()` rend alors `null`, et c'était l'erreur du journal.
+	if is_inside_tree():
+		get_window().title = "MarchingBlocks — " + _projet.get_file().get_basename()
 
 
 # ── LES RACCOURCIS ───────────────────────────────────────────────────────────────────────────────────
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
-	if k == null or not k.pressed or k.echo:
+	if k == null or not k.pressed or k.echo or (_manuel != null and _manuel.visible):
 		return
 	if k.ctrl_pressed:
 		if k.keycode == KEY_Z and not k.shift_pressed:
@@ -1403,6 +1649,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 ## répètent quand on les tient (`echo`), comme on l'attend d'un déplacement.
 func _input(event: InputEvent) -> void:
 	var k := event as InputEventKey
+	if k != null and k.pressed and not k.echo and k.keycode == KEY_F1 and not _manuel.visible:
+		_manuel.ouvrir()
+		get_viewport().set_input_as_handled()
+		return
+	if _manuel != null and _manuel.visible:
+		return
 	if k == null or not k.pressed or _atelier != "monde" or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()

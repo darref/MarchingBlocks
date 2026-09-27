@@ -242,7 +242,17 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
   aussi la doctrine générale — **on DÉDUIT plutôt qu'on déclare**. Le bloc est à l'origine, et la
   réimportation le redécoupe dans une boîte **tolérante au relief** (`DEBORD_TOLERE`) : découper pile
   sur `COTE³` raboterait le travail de l'artiste au ras des bords.
-- ⚠ **LE .glb PART SOUDÉ, SANS NORMALES NI TANGENTES.** Sans normales, la spécification glTF impose
+- ⚠ **« LE .glb PART SOUDÉ » ÉTAIT FAUX DEPUIS L'AJOUT DES SIX TEINTES — MESURÉ LE 27 SEPTEMBRE 2026 SUR
+  LES OCTETS DU FICHIER** (`sonde_soudure_glb.gd`, et confirmé par un import dans Blender 5.1) : `par_teinte`
+  recopiait les trois sommets de chaque triangle, et le témoin partait en **soupe de triangles** — 93 360
+  sommets pour 15 546 positions, chaque arête une couture. Corrigé (indices gardés) : **18 891**. ⚠ **ET CE
+  QUI RESTE EST UNE LIMITE DU FORMAT, PAS DU CODE** : en glTF, un matériau est une primitive, et Blender
+  ne partage aucun sommet entre primitives — **6 610 coutures aux bords de couleur**, même quand les six
+  primitives lisent le MÊME tampon de sommets (mesuré). Un sommet glTF porte UNE valeur de chaque
+  attribut : tout ce qui change d'une face à l'autre (matériau, UV, couleur) coupe le maillage. Soudé à
+  100 % mesuré dans Blender : l'OBJ (15 546 sommets, 0 couture, six matériaux) ou le .glb importé avec
+  « Merge Vertices ». **OUVERT** — le choix est à Jordan.
+- ⚠ **LE .glb PART SANS NORMALES NI TANGENTES.** Sans normales, la spécification glTF impose
   l'ombrage PLAT : on obtient à la fois la topologie soudée (modifiable dans Blender) et des arêtes
   franches. ⚠ Nuller `ARRAY_NORMAL` **sans** `ARRAY_TANGENT` ne suffit pas.
 - **Il part déjà AMINCI** — tuiles ramenées à la moitié de leur case — pour montrer à l'artiste la marge

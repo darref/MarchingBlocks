@@ -44,9 +44,17 @@ func _initialize() -> void:
 
 func _derouler() -> void:
 	await _images(20)
+	# ⚠ Rouvrir le projet mène au monde de test : on revient au témoin pour le photographier.
+	_ecran._aller_a("witness")
+	await _images(10)
 	_photo("1_temoin")
+	_ecran._plans.button_pressed = true
+	await _images(10)
+	_photo("1b_plans_de_coupe")
+	_ecran._plans.button_pressed = false
 
 	await _ecran._trancher_temoin()
+	_ecran._aller_a("monde")
 	# Un petit monde : un plateau, une marche, un trou — posé par la seule entrée, `_appliquer`.
 	var poser := {}
 	for x in range(0, 8):
@@ -104,6 +112,11 @@ func _derouler() -> void:
 	_ecran._vue._survoler(cam.unproject_position(Vector3(-3.5, 0.0, 2.5)))
 	await _images(20)
 	_photo("7_collage")
+
+	_ecran._vue.annuler_collage()
+	_ecran._manuel.ouvrir(1)
+	await _images(10)
+	_photo("8_manuel")
 
 	_ecran.queue_free()
 	await process_frame
