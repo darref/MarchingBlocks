@@ -14,10 +14,20 @@ extends SubViewportContainer
 ## (`editor.gd`) applique le coup avec SON historique d'annulation.
 
 signal coup_commence
-signal case_touchee(case: Vector3i, poser: bool)
+## Ce qu'un coup CHANGE aux cases de la couche active : {"poser", "effacer"} (`Outils.modification`).
+signal touche(modif: Dictionary, nom: String)
 signal coup_fini
+signal selection_changee
 
 const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
+const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
+
+## Jusqu'où porte le rayon de sculpture, en cases.
+const PORTEE := 400.0
+const TEINTE_AJOUTER := Color(0.55, 0.82, 0.45, 0.32)
+const TEINTE_CREUSER := Color(0.9, 0.38, 0.24, 0.36)
+const TEINTE_SELECTIONNER := Color(0.42, 0.62, 0.98, 0.3)
+const TEINTE_SELECTION := Color(0.42, 0.62, 0.98, 0.22)
 
 var _vue: SubViewport
 var _camera: Camera3D
@@ -35,14 +45,29 @@ var _grille: MeshInstance3D
 ## La grille LOCALE : un morceau de grille qui suit le curseur quand il sort de la grille centrale —
 ## sans elle, on peint à l'aveugle dès qu'on s'éloigne du centre du monde.
 var _grille_locale: MeshInstance3D
-var _fantome: MeshInstance3D
+## L'APERÇU : les cases EXACTES que le prochain clic changera, avant qu'on clique.
+var _apercu: MultiMeshInstance3D
+var _selection_vue: MultiMeshInstance3D
+
+## LA BARRE D'OUTILS (charte §5, plan du 27 septembre 2026). La visée dit comment trouver le point :
+## "grille" (le plan de l'étage) ou "sculpt" (la matière). L'outil dit ce qu'on en fait.
+var visee := "grille"
+var outil := "ajouter"
+var taille := 1
+var forme := "sphere"
+## La SÉLECTION — des cases de la couche active. ⚠ Un état d'écran, pas une donnée : elle n'est ni
+## enregistrée ni annulable, et se vide quand on change de couche.
+var selection := {}
 
 ## "temoin" ou "monde".
 var mode := "temoin"
 var etage := 0
 
 var _coup := -1          # le bouton qui peint, -1 hors d'un coup
-var _derniere := Vector3i(1 << 20, 0, 0)
+var _derniere := ""
+## Le verrou de coup : ce qu'un coup d'AJOUT a posé, que son rayon traverse (`Outils.rayon`).
+var _pose_du_coup := {}
+var _derniere_souris := Vector2(-1, -1)
 
 
 func _ready() -> void:
@@ -85,17 +110,8 @@ func _ready() -> void:
 	_grille_locale.visible = false
 	_vue.add_child(_grille_locale)
 
-	_fantome = MeshInstance3D.new()
-	var boite := BoxMesh.new()
-	boite.size = Vector3.ONE * 1.02
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.706, 0.741, 0.522, 0.35)
-	boite.material = m
-	_fantome.mesh = boite
-	_fantome.visible = false
-	_vue.add_child(_fantome)
+	_apercu = _nuage_de_cases(1.03)
+	_selection_vue = _nuage_de_cases(1.01)
 
 	_camera = Camera3D.new()
 	_camera.fov = 45
@@ -111,8 +127,9 @@ func montrer(quoi: String) -> void:
 	_temoin.visible = quoi == "temoin"
 	_couches.visible = quoi == "monde"
 	_grille.visible = quoi == "monde"
-	_fantome.visible = false
+	_apercu.visible = false
 	_grille_locale.visible = false
+	_dessiner_selection()
 	_placer_grille()
 
 
@@ -176,6 +193,7 @@ func vider_couches() -> void:
 
 func activer(i: int) -> void:
 	_active = clampi(i, -1, _couches.get_child_count() - 1)
+	vider_selection()
 
 
 func regler_etage(y: int) -> void:
@@ -206,12 +224,10 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		if mode == "monde" and (b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT):
 			if b.pressed and _coup < 0:
-				_coup = b.button_index
-				_derniere = Vector3i(1 << 20, 0, 0)
-				coup_commence.emit()
-				_toucher(b.position)
+				_commencer_coup(b.button_index, b.position, b.shift_pressed)
 			elif not b.pressed and b.button_index == _coup:
 				_coup = -1
+				_pose_du_coup = {}
 				coup_fini.emit()
 			accept_event()
 			return
@@ -257,29 +273,190 @@ func case_sous(position: Vector2) -> Variant:
 	return Vector3i(floori(p.x), etage, floori(p.z))
 
 
-func _survoler(position: Vector2) -> void:
+## LE POINT VISÉ : {"touche", "case", "normale"}, ou {} si rien.
+## ⚠ En sculpture, un rayon qui ne touche aucune matière retombe sur le plan de l'étage : sans ça, on ne
+## pourrait jamais poser la première case d'un monde vide.
+## ⚠ AJOUTER voit toutes les couches VISIBLES — on pose de l'herbe sur la roche d'une autre couche ;
+## creuser et sélectionner ne voient que la couche ACTIVE, la seule qu'ils peuvent changer.
+func point_vise(position: Vector2, geste: String) -> Dictionary:
+	if visee == "sculpt":
+		var occupe: Callable = _occupe_visible if geste == "ajouter" else _occupe_actif
+		var r: Dictionary = Outils.rayon(occupe, _camera.project_ray_origin(position),
+			_camera.project_ray_normal(position), PORTEE, _pose_du_coup)
+		if r["touche"]:
+			return r
 	var c = case_sous(position)
-	_fantome.visible = c != null
-	_grille_locale.visible = c != null and not sur_la_grille_centrale(c)
-	if c != null:
-		_fantome.position = Vector3(c) + Vector3.ONE * 0.5
+	if c == null:
+		return {}
+	return {"touche": false, "case": c, "normale": Vector3i.ZERO}
+
+
+## Les cases du pinceau sous la souris, pour ce geste.
+func cibles(position: Vector2, geste: String) -> Array[Vector3i]:
+	var point := point_vise(position, geste)
+	if point.is_empty():
+		return []
+	return Outils.pinceau(Outils.ancre(geste, point), point["normale"], taille, forme)
+
+
+## Le geste réel : le clic DROIT fait l'inverse — ajouter ↔ creuser, sélectionner → désélectionner.
+func geste(bouton: int) -> String:
+	if bouton != MOUSE_BUTTON_RIGHT:
+		return outil
+	match outil:
+		"ajouter":
+			return "creuser"
+		"creuser":
+			return "ajouter"
+	return "deselectionner"
+
+
+func _occupe_actif(c: Vector3i) -> bool:
+	var g := cases()
+	return g != null and g.get_cell_item(c) != -1
+
+
+func _occupe_visible(c: Vector3i) -> bool:
+	for m in _couches.get_children():
+		if (m as Node3D).visible and (m.get_node("Cases") as GridMap).get_cell_item(c) != -1:
+			return true
+	return false
+
+
+func _survoler(position: Vector2) -> void:
+	_derniere_souris = position
+	var g: String = geste(_coup) if _coup >= 0 else outil
+	var point := point_vise(position, g)
+	var plan = case_sous(position)
+	# ⚠ La grille locale ne sert qu'à la visée de GRILLE : en sculpture, c'est la matière qui porte.
+	_grille_locale.visible = visee == "grille" and plan != null and not sur_la_grille_centrale(plan)
+	if plan != null:
 		# ⚠ Calée sur les LIGNES de la grille, pas sur le centre de la case : la case `p` occupe
 		# `[p, p+1]`, donc son coin est en `p` et ses lignes tombent sur des entiers.
-		_grille_locale.position = Vector3(c.x, etage + 0.002, c.z)
+		_grille_locale.position = Vector3(plan.x, etage + 0.002, plan.z)
+	if point.is_empty() or cases() == null:
+		_apercu.visible = false
+		return
+	var toutes := Outils.pinceau(Outils.ancre(g, point), point["normale"], taille, forme)
+	# ⚠ L'APERÇU MONTRE CE QUI CHANGERA, pas le pinceau entier : une sphère de 33 cases dont 4 seulement
+	# sont vides n'en posera que 4, et c'est ces 4 qu'il faut voir.
+	var montrees: Array = []
+	match g:
+		"ajouter":
+			montrees = Outils.modification("ajouter", toutes, _occupe_actif)["poser"].keys()
+		"creuser":
+			montrees = Outils.modification("creuser", toutes, _occupe_actif)["effacer"].keys()
+		_:
+			montrees = toutes.filter(_occupe_actif)
+	var teinte: Color = {"ajouter": TEINTE_AJOUTER, "creuser": TEINTE_CREUSER}.get(g, TEINTE_SELECTIONNER)
+	_remplir(_apercu, montrees, teinte)
+
+
+## Une nouvelle case sous la souris pendant un coup : on applique le geste. `_derniere` évite de
+## rejouer la même ancre à chaque pixel.
+func _toucher(position: Vector2) -> void:
+	var g := geste(_coup)
+	var point := point_vise(position, g)
+	if point.is_empty() or cases() == null:
+		return
+	var cle := "%s|%s" % [Outils.ancre(g, point), point["normale"]]
+	if cle == _derniere:
+		return
+	_derniere = cle
+	var toutes := Outils.pinceau(Outils.ancre(g, point), point["normale"], taille, forme)
+	match g:
+		"selectionner", "deselectionner":
+			for c in toutes:
+				if g == "deselectionner":
+					selection.erase(c)
+				elif _occupe_actif(c):
+					selection[c] = true
+			_dessiner_selection()
+			selection_changee.emit()
+		_:
+			var modif: Dictionary = Outils.modification(g, toutes, _occupe_actif)
+			if g == "ajouter":
+				for c in modif["poser"]:
+					_pose_du_coup[c] = true
+			if not modif["poser"].is_empty() or not modif["effacer"].is_empty():
+				touche.emit(modif, "Add" if g == "ajouter" else "Dig")
+	_survoler(position)
+
+
+func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
+	_coup = bouton
+	_derniere = ""
+	_pose_du_coup = {}
+	# ⚠ Un clic de sélection SANS Maj repart de zéro ; avec Maj, il ajoute — le réflexe de Blender.
+	if outil == "selectionner" and bouton == MOUSE_BUTTON_LEFT and not maj:
+		vider_selection()
+	coup_commence.emit()
+	_toucher(position)
+
+
+func vider_selection() -> void:
+	if selection.is_empty():
+		return
+	selection = {}
+	_dessiner_selection()
+	selection_changee.emit()
+
+
+func regler_selection(nouvelle: Dictionary) -> void:
+	selection = nouvelle
+	_dessiner_selection()
+	selection_changee.emit()
+
+
+## ⚠ ON NE MONTRE QUE LA SÉLECTION QUI EST ENCORE DE LA MATIÈRE : un Ctrl+Z peut avoir retiré des cases
+## sous elle.
+func _dessiner_selection() -> void:
+	if _selection_vue == null:
+		return
+	var vivantes: Array = selection.keys().filter(_occupe_actif) if mode == "monde" else []
+	_remplir(_selection_vue, vivantes, TEINTE_SELECTION)
+
+
+## Rafraîchit ce qui dépend des cases : à rappeler après chaque changement de monde.
+func rafraichir() -> void:
+	_dessiner_selection()
+	if _derniere_souris.x >= 0.0 and mode == "monde":
+		_survoler(_derniere_souris)
+
+
+## Un nuage de cubes translucides, UN SEUL appel de dessin quel que soit leur nombre.
+func _nuage_de_cases(cote: float) -> MultiMeshInstance3D:
+	var boite := BoxMesh.new()
+	boite.size = Vector3.ONE * cote
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	boite.material = m
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = boite
+	var instance := MultiMeshInstance3D.new()
+	instance.multimesh = mm
+	instance.visible = false
+	_vue.add_child(instance)
+	return instance
+
+
+func _remplir(nuage: MultiMeshInstance3D, liste: Array, teinte: Color) -> void:
+	var mm := nuage.multimesh
+	mm.instance_count = liste.size()
+	for i in liste.size():
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, Vector3(liste[i]) + Vector3.ONE * 0.5))
+		mm.set_instance_color(i, teinte)
+	nuage.visible = not liste.is_empty()
 
 
 ## La case est-elle couverte par la grille centrale ? Les lignes vont de −DEMI_GRILLE à +DEMI_GRILLE,
 ## donc les cases de −DEMI_GRILLE à DEMI_GRILLE − 1.
 static func sur_la_grille_centrale(c: Vector3i) -> bool:
 	return c.x >= -DEMI_GRILLE and c.x < DEMI_GRILLE and c.z >= -DEMI_GRILLE and c.z < DEMI_GRILLE
-
-
-func _toucher(position: Vector2) -> void:
-	var c = case_sous(position)
-	if c == null or c == _derniere:
-		return
-	_derniere = c
-	case_touchee.emit(c, _coup == MOUSE_BUTTON_LEFT)
 
 
 # ── la grille de l'étage ─────────────────────────────────────────────────────────────────────────────

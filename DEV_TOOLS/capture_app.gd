@@ -15,11 +15,28 @@ var _dossier := "D:/MarchingBlocks/ART/app"
 var _ecran: Control
 
 
+const Projet := preload("res://app/projet.gd")
+const REGLAGES := "user://reglages.cfg"
+const JETABLE := "user://capture/capture.mbproj"
+var _reglages_avant := ""
+
+
+## ⚠ LE PROJET DE L'UTILISATEUR N'EST JAMAIS TOUCHÉ : l'appli rouvre le dernier projet et s'enregistre
+## à chaque geste. On la pointe sur un projet jetable, et on rend `reglages.cfg` tel quel à la fin.
 func _initialize() -> void:
 	for option in OS.get_cmdline_user_args():
 		if option.begins_with("--dossier="):
 			_dossier = option.substr("--dossier=".length())
 	DirAccess.make_dir_recursive_absolute(_dossier)
+	if FileAccess.file_exists(REGLAGES):
+		_reglages_avant = FileAccess.get_file_as_string(REGLAGES)
+	DirAccess.make_dir_recursive_absolute("user://capture")
+	var f := FileAccess.open(JETABLE, FileAccess.WRITE)
+	f.store_string(Projet.vers_texte([Projet.couche("Rock")], 0))
+	f.close()
+	var r := ConfigFile.new()
+	r.set_value("projet", "dernier", JETABLE)
+	r.save(REGLAGES)
 	_ecran = load("res://app/editor.tscn").instantiate()
 	root.add_child(_ecran)
 	_derouler()
@@ -30,29 +47,55 @@ func _derouler() -> void:
 	_photo("1_temoin")
 
 	await _ecran._trancher_temoin()
-	# Un petit monde peint à la main : un plateau, une marche, un trou.
-	var cases: GridMap = _ecran._vue.cases()
-	var id: int = _ecran._id_case()
+	# Un petit monde : un plateau, une marche, un trou — posé par la seule entrée, `_appliquer`.
+	var poser := {}
 	for x in range(0, 8):
 		for z in range(0, 6):
-			cases.set_cell_item(Vector3i(x, 0, z), id)
+			poser[Vector3i(x, 0, z)] = true
 	for x in range(2, 6):
 		for z in range(1, 4):
-			cases.set_cell_item(Vector3i(x, 1, z), id)
-	cases.set_cell_item(Vector3i(3, 1, 2), -1)
-	cases.set_cell_item(Vector3i(3, 0, 2), -1)
-	_ecran._reconstruire()
+			poser[Vector3i(x, 1, z)] = true
+	poser.erase(Vector3i(3, 1, 2))
+	poser.erase(Vector3i(3, 0, 2))
+	_ecran._appliquer({"poser": poser, "effacer": {}}, "Capture")
 	await _images(20)
 	_photo("2_monde")
 
-	_ecran._pbr.button_pressed = true
-	await _ecran._trancher_temoin()
-	for x in range(0, 8):
-		for z in range(0, 6):
-			cases.set_cell_item(Vector3i(x, 0, z), id)
-	_ecran._reconstruire()
-	await _images(30)
-	_photo("3_monde_pbr")
+	# La barre d'outils : visée Sculpt, une sélection, et l'aperçu d'un pinceau sous une souris posée.
+	_ecran._choisir_visee("sculpt")
+	_ecran._vue.regler_selection({Vector3i(2, 1, 1): true, Vector3i(3, 1, 1): true, Vector3i(4, 1, 1): true})
+	_ecran._taille.value = 2
+	var cam: Camera3D = _ecran._vue._camera
+	_ecran._vue._survoler(cam.unproject_position(Vector3(6.5, 0.9, 3.5)))
+	await _images(20)
+	_photo("3_sculpt_selection")
+
+	_ecran._choisir_outil("creuser")
+	_ecran._vue._survoler(cam.unproject_position(Vector3(4.5, 1.9, 2.5)))
+	await _images(20)
+	_photo("4_sculpt_creuser")
+
+	_ecran._choisir_visee("grille")
+	_ecran._choisir_outil("ajouter")
+	_ecran._taille.value = 1
+	# ⚠ On RECULE la caméra : à la distance par défaut, x = 30 tombe hors du cadre.
+	_ecran._vue._distance = 75.0
+	_ecran._vue._caler()
+	var hors: Vector2 = cam.unproject_position(Vector3(30.5, 0.0, 4.5))
+	_ecran._vue._survoler(hors)
+	print("grille locale visible : %s, sous %s" % [_ecran._vue._grille_locale.visible, hors])
+	await _images(20)
+	_photo("5_grille_locale")
+
+	_ecran.queue_free()
+	await process_frame
+	if _reglages_avant == "":
+		DirAccess.remove_absolute(REGLAGES)
+	else:
+		var g := FileAccess.open(REGLAGES, FileAccess.WRITE)
+		g.store_string(_reglages_avant)
+		g.close()
+	DirAccess.remove_absolute(JETABLE)
 	quit(0)
 
 

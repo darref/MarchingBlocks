@@ -30,6 +30,7 @@ const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd"
 const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
 const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
+const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")
@@ -48,7 +49,9 @@ const SECONDES_CONSEIL := 7.0
 const CONSEILS: Array[String] = [
 	"One witness block carries every tile. Sculpt it, bring it back, paint with it.",
 	"The witness is proven complete: 52 tiles, not one missing, not one extra.",
-	"Test world: left click paints a cell, right click erases it. Ctrl+Z undoes a whole stroke.",
+	"Test world: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
+	"Tab switches between Grid (paint on the floor plane) and Sculpt (paint against the matter).",
+	"A, D, S pick Add, Dig, Select. [ and ] change the brush size.",
 	"Middle mouse turns the view, Shift + middle slides it, the wheel zooms.",
 	"A red cube is a tile your library does not have. Nothing is ever filled in for you.",
 	"Keep your relief inside its cell: the slicer cuts straight through the cell centres.",
@@ -103,6 +106,25 @@ var _detachees: Array = []
 var _histoire := UndoRedo.new()
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
+var _coup_nom := ""
+
+var _boutons_visee := {}
+var _boutons_outil := {}
+var _taille: SpinBox
+var _forme: OptionButton
+var _compteur_etage: SpinBox
+var _section_selection: Control
+var _etiquette_selection: Label
+var _etiquette_portee: Label
+
+
+## ⚠ `UndoRedo` N'EST PAS COMPTÉ PAR RÉFÉRENCE : il fuit si on ne le libère pas, avec les couches
+## supprimées qu'il garde en vie.
+func _notification(quoi: int) -> void:
+	if quoi == NOTIFICATION_PREDELETE:
+		for m in _detachees:
+			m.free()
+		_histoire.free()
 
 
 func _ready() -> void:
@@ -167,7 +189,8 @@ func _batir() -> void:
 	_vue = Vue.new()
 	_vue.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_vue.coup_commence.connect(_coup_commence)
-	_vue.case_touchee.connect(_case_touchee)
+	_vue.touche.connect(_touche)
+	_vue.selection_changee.connect(_selection_changee)
 	_vue.coup_fini.connect(_coup_fini)
 	corps.add_child(_vue)
 
@@ -395,28 +418,93 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		"Re-reads the imported work, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
 		+ "Its painted cells stay as they are.", _trancher_travail))
 
-	var etage := Section.new("Floor")
-	pile.add_child(etage)
-	_sections_monde.append(etage)
+	var outils := Section.new("Tools")
+	pile.add_child(outils)
+	_sections_monde.append(outils)
+	outils.contenu.add_child(_petit_titre("AIM  (Tab)"))
+	outils.contenu.add_child(_rangee_de_choix(_boutons_visee, [
+		["grille", "Grid", "Aims at the floor plane y — the grid. Good for laying out a map."],
+		["sculpt", "Sculpt", "Aims at the matter already there: Add builds on the face you point at, Dig "
+			+ "and Select act on the cell you point at.\nWhere the ray meets no matter, it falls back on "
+			+ "the floor plane."],
+	], _choisir_visee))
+	outils.contenu.add_child(_petit_titre("TOOL"))
+	outils.contenu.add_child(_rangee_de_choix(_boutons_outil, [
+		["ajouter", "Add", "A — adds matter. Right click digs."],
+		["creuser", "Dig", "D — removes matter. Right click adds."],
+		["selectionner", "Select", "S — selects matter (Shift adds to the selection). Right click "
+			+ "deselects."],
+	], _choisir_outil))
+	var pinceau := HBoxContainer.new()
+	pinceau.add_child(_texte("brush", 12))
+	_taille = SpinBox.new()
+	_taille.min_value = 1
+	_taille.max_value = 7
+	_taille.tooltip_text = "[ and ] — brush size. 1 is a single cell."
+	_taille.value_changed.connect(func(v: float) -> void:
+		_vue.taille = int(v)
+		_vue.rafraichir())
+	pinceau.add_child(_taille)
+	_forme = OptionButton.new()
+	for f in [["Sphere", "sphere"], ["Cube", "cube"], ["Disc", "disque"]]:
+		_forme.add_item(f[0])
+		_forme.set_item_metadata(_forme.item_count - 1, f[1])
+	_forme.tooltip_text = ("Disc: flat, across the face you point at — fills or digs a wall without "
+		+ "thickening it.")
+	_forme.item_selected.connect(func(i: int) -> void:
+		_vue.forme = str(_forme.get_item_metadata(i))
+		_vue.rafraichir())
+	pinceau.add_child(_forme)
+	outils.contenu.add_child(pinceau)
 	var ligne := HBoxContainer.new()
 	ligne.add_child(_texte("floor y =", 12))
-	var compteur := SpinBox.new()
-	compteur.min_value = -64
-	compteur.max_value = 64
-	compteur.value_changed.connect(func(v: float) -> void:
+	_compteur_etage = SpinBox.new()
+	_compteur_etage.min_value = -64
+	_compteur_etage.max_value = 64
+	_compteur_etage.tooltip_text = "PgUp / PgDn. The Grid aims at this plane; Sculpt falls back on it."
+	_compteur_etage.value_changed.connect(func(v: float) -> void:
 		_vue.regler_etage(int(v))
 		_dire_l_etage())
-	ligne.add_child(compteur)
-	etage.contenu.add_child(ligne)
+	ligne.add_child(_compteur_etage)
+	outils.contenu.add_child(ligne)
 	_etiquette_etage = _texte("", 11, Palette.GRIS)
-	etage.contenu.add_child(_etiquette_etage)
+	outils.contenu.add_child(_etiquette_etage)
+
+	var sel := Section.new("Selection")
+	pile.add_child(sel)
+	_section_selection = sel
+	_etiquette_selection = _texte("", 11, Palette.GRIS)
+	sel.contenu.add_child(_etiquette_selection)
+	var grille_sel := GridContainer.new()
+	grille_sel.columns = 2
 	for op in [
-		["Extend up", "haut", "copies this floor one cell higher"],
-		["Extend down", "bas", "copies this floor one cell lower"],
-		["Widen", "elargir", "adds a ring around this floor's footprint"],
+		["Delete", "supprimer", "Del — removes the selected matter."],
+		["Clear", "", "Esc — forgets the selection. No cell changes."],
+		["Extrude ↑", "extruder_haut", "Adds the layer above; the selection follows it. Repeat to "
+			+ "raise a wall."],
+		["Extrude ↓", "extruder_bas", "Adds the layer below; the selection follows it."],
+		["Grow", "grandir", "Selects the matter touching the selection by a face."],
+		["Shrink", "retrecir", "Drops the selected cells that touch an unselected one."],
+		["Connected", "connexe", "Selects all the matter linked to the selection by faces."],
+	]:
+		var bouton := _bouton(op[0], op[2], _operer_selection.bind(op[1]))
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		grille_sel.add_child(bouton)
+	sel.contenu.add_child(grille_sel)
+
+	var etage := Section.new("Floor / selection")
+	pile.add_child(etage)
+	_sections_monde.append(etage)
+	_etiquette_portee = _texte("", 11, Palette.GRIS)
+	etage.contenu.add_child(_etiquette_portee)
+	for op in [
+		["Extend up", "haut", "copies the cells one cell higher"],
+		["Extend down", "bas", "copies the cells one cell lower"],
+		["Widen", "elargir", "adds a ring around the cells, in their plane"],
 		["Hollow", "creuser", "removes the cells whose four horizontal neighbours are full"],
 	]:
-		etage.contenu.add_child(_bouton(op[0], op[2], _operer.bind(op[1])))
+		etage.contenu.add_child(_bouton(op[0], op[2] + " — the selection if there is one, otherwise "
+			+ "floor y.", _operer.bind(op[1])))
 	etage.contenu.add_child(_bouton("Paint the witness shape",
 		"Replaces this layer's cells with the witness's own cells (Ctrl+Z brings yours back).\n"
 		+ "Sliced from your work, the result must give your block back: that is the proof that "
@@ -481,6 +569,7 @@ func _aller_a(atelier: String) -> void:
 	for s in _sections_monde:
 		s.visible = atelier == "monde"
 	_vue.montrer("monde" if atelier == "monde" else "temoin")
+	_selection_changee()
 	_dire_l_etage()
 
 
@@ -696,69 +785,106 @@ func _id_case() -> int:
 
 func _coup_commence() -> void:
 	_coup = {}
+	_coup_nom = ""
 
 
-func _case_touchee(c: Vector3i, poser: bool) -> void:
+## Un morceau de coup : les cases sont posées TOUT DE SUITE, pour qu'on voie ce qu'on peint.
+func _touche(modif: Dictionary, nom: String) -> void:
 	var cases: GridMap = _vue.cases()
 	var id: int = _id_case()
 	if id < 0:
 		return
-	var avant: int = cases.get_cell_item(c)
-	var apres: int = id if poser else -1
-	if avant == apres:
-		return
-	if not _coup.has(c):
-		_coup[c] = [avant, apres]
-	else:
-		_coup[c][1] = apres
-	cases.set_cell_item(c, apres)
+	_coup_nom = nom if _coup_nom == "" or _coup_nom == nom else "Stroke"
+	var changements := _changements(modif, cases, id)
+	for c in changements:
+		if not _coup.has(c):
+			_coup[c] = changements[c].duplicate()
+		else:
+			_coup[c][1] = changements[c][1]
+		cases.set_cell_item(c, changements[c][1])
 	_vue.monde().reconstruire()
+	_vue.rafraichir()
 
 
 ## ⚠ UN COUP ENTIER S'ANNULE D'UN SEUL Ctrl+Z — c'est ce qu'on attend d'un pinceau. Les cases sont déjà
-## posées pendant le glissé ; l'action est donc enregistrée SANS être rejouée (`commit_action(false)`).
+## posées pendant le glissé ; l'action est donc enregistrée SANS être rejouée.
 func _coup_fini() -> void:
-	if _coup.is_empty():
-		return
-	var cases: GridMap = _vue.cases()
-	_histoire.create_action("Stroke")
+	var fait := {}
 	for c in _coup:
-		_histoire.add_do_method(cases.set_cell_item.bind(c, _coup[c][1]))
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, _coup[c][0]))
-	_histoire.add_do_method(_reconstruire)
-	_histoire.add_undo_method(_reconstruire)
-	_histoire.commit_action(false)
+		if _coup[c][0] != _coup[c][1]:
+			fait[c] = _coup[c]
 	_coup = {}
+	if not fait.is_empty():
+		_enregistrer_action(fait, _coup_nom if _coup_nom != "" else "Stroke", true)
 	_dire_l_etage()
 
 
-func _reconstruire() -> void:
-	_vue.monde().reconstruire()
-	_dire_l_etage()
+## {case: [avant, après]} pour une modification {poser, effacer} sur cette grille. Rien pour ce qui ne
+## change pas.
+func _changements(modif: Dictionary, cases: GridMap, id: int) -> Dictionary:
+	var ch := {}
+	for c in modif.get("effacer", {}):
+		var avant: int = cases.get_cell_item(c)
+		if avant != -1:
+			ch[c] = [avant, -1]
+	for c in modif.get("poser", {}):
+		var avant: int = cases.get_cell_item(c)
+		if avant != id:
+			ch[c] = [avant, id]
+	return ch
 
 
-## Remplace toutes les cases du monde, en UNE action annulable.
-func _remplacer_le_monde(nouvelles: Dictionary, nom: String) -> void:
+## ⚠ LA SEULE ENTRÉE DE TOUT CE QUI CHANGE DES CASES (plan de la barre d'outils) : pinceau, opérations
+## d'étage et de sélection, remplacement du monde. Elles passaient par trois routes, qui écrivaient
+## chacune leur annulation — une seconde description d'un même fait diverge toujours (charte §6).
+## Rend le nombre de cases changées.
+func _appliquer(modif: Dictionary, nom: String) -> int:
 	var cases: GridMap = _vue.cases()
 	var id: int = _id_case()
 	if id < 0:
-		return
-	var anciennes: Array = cases.get_used_cells()
+		return 0
+	var ch := _changements(modif, cases, id)
+	if not ch.is_empty():
+		_enregistrer_action(ch, nom, false)
+	return ch.size()
+
+
+## ⚠ L'ACTION NOMME SA GRILLE ET SON MASSIF, jamais « la couche active » : un Ctrl+Z après avoir changé
+## de couche doit reconstruire la couche qu'il touche, pas celle qu'on regarde.
+func _enregistrer_action(ch: Dictionary, nom: String, deja_fait: bool) -> void:
+	var cases: GridMap = _vue.cases()
+	var massif: Node = _vue.monde()
 	_histoire.create_action(nom)
-	for c in anciennes:
-		_histoire.add_do_method(cases.set_cell_item.bind(c, -1))
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, id))
-	for c in nouvelles:
-		_histoire.add_do_method(cases.set_cell_item.bind(c, id))
-	# ⚠ L'annulation doit effacer ce que le « faire » a posé AVANT de reposer l'ancien monde : sinon
-	# les cases nouvelles qui n'existaient pas avant resteraient.
-	for c in nouvelles:
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, -1))
-	for c in anciennes:
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, id))
-	_histoire.add_do_method(_reconstruire)
-	_histoire.add_undo_method(_reconstruire)
-	_histoire.commit_action()
+	for c in ch:
+		_histoire.add_do_method(cases.set_cell_item.bind(c, ch[c][1]))
+		_histoire.add_undo_method(cases.set_cell_item.bind(c, ch[c][0]))
+	_histoire.add_do_method(_reconstruire.bind(massif))
+	_histoire.add_undo_method(_reconstruire.bind(massif))
+	_histoire.commit_action(not deja_fait)
+
+
+func _reconstruire(massif: Node) -> void:
+	massif.reconstruire()
+	_vue.rafraichir()
+	_dire_l_etage()
+
+
+func _occupees() -> Dictionary:
+	var occupees := {}
+	var cases: GridMap = _vue.cases()
+	if cases != null:
+		for c in cases.get_used_cells():
+			occupees[c] = true
+	return occupees
+
+
+## Remplace toutes les cases de la couche, en UNE action annulable.
+func _remplacer_le_monde(nouvelles: Dictionary, nom: String) -> void:
+	var effacer := {}
+	for c in _occupees():
+		if not nouvelles.has(c):
+			effacer[c] = true
+	_appliquer({"poser": nouvelles, "effacer": effacer}, nom)
 
 
 func _effacer_tout() -> void:
@@ -770,34 +896,72 @@ func _peindre_la_forme_du_temoin() -> void:
 	_aller_a("monde")
 
 
-## LES OPÉRATIONS D'ÉTAGE — la règle vit dans `etages.gd`, partagée avec le greffon.
+## LES OPÉRATIONS D'ÉTAGE — la règle vit dans `etages.gd`, partagée avec le greffon. Elles portent sur
+## la SÉLECTION s'il y en a une, sinon sur l'étage : la même opération, sur un autre ensemble.
 func _operer(quoi: String) -> void:
-	var cases: GridMap = _vue.cases()
-	var id: int = _id_case()
-	if id < 0:
+	var sur: String = ("the selection (%d cells)" % _vue.selection.size()) if not _vue.selection.is_empty() \
+		else "floor y = %d" % _vue.etage
+	var n := _appliquer(Etages.operer(_occupees(), _vue.etage, quoi, _vue.selection), quoi)
+	if n == 0:
+		_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
 		return
-	var occupees := {}
-	for c in cases.get_used_cells():
-		occupees[c] = true
-	var ops: Dictionary = Etages.operer(occupees, _vue.etage, quoi)
-	var a_poser: Dictionary = ops["poser"]
-	var a_effacer: Dictionary = ops["effacer"]
-	if a_poser.is_empty() and a_effacer.is_empty():
-		_dire("[i]Nothing to do on floor y = %d.[/i] The floor is empty, or the operation found nothing "
-			% _vue.etage + "to change.")
+	_dire("[b]%s[/b] on %s — %d cell(s) changed. [i]Ctrl+Z undoes it.[/i]" % [quoi, sur, n])
+
+
+func _operer_selection(quoi: String) -> void:
+	if quoi == "":
+		_vue.vider_selection()
 		return
-	_histoire.create_action(quoi)
-	for c in a_poser:
-		_histoire.add_do_method(cases.set_cell_item.bind(c, id))
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, -1))
-	for c in a_effacer:
-		_histoire.add_do_method(cases.set_cell_item.bind(c, -1))
-		_histoire.add_undo_method(cases.set_cell_item.bind(c, id))
-	_histoire.add_do_method(_reconstruire)
-	_histoire.add_undo_method(_reconstruire)
-	_histoire.commit_action()
-	_dire("[b]%s[/b] on floor y = %d — %d cell(s) added, %d removed. [i]Ctrl+Z undoes it.[/i]"
-		% [quoi, _vue.etage, a_poser.size(), a_effacer.size()])
+	if _vue.selection.is_empty():
+		_dire("[i]Nothing selected.[/i] Pick Select (S) and paint over the matter.")
+		return
+	var op: Dictionary = Outils.operer_selection(_occupees(), _vue.selection, quoi)
+	var n := _appliquer(op, quoi)
+	_vue.regler_selection(op["selection"])
+	_dire("[b]%s[/b] — %d cell(s) changed, %d selected. [i]Ctrl+Z undoes the cells.[/i]"
+		% [quoi, n, _vue.selection.size()])
+
+
+# ── LA BARRE D'OUTILS ────────────────────────────────────────────────────────────────────────────────
+
+## Une rangée de boutons exclusifs. `choix` : [clé, libellé, infobulle].
+func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable) -> Control:
+	var ligne := HBoxContainer.new()
+	var groupe := ButtonGroup.new()
+	for c in choix:
+		var b := Button.new()
+		b.text = c[1]
+		b.tooltip_text = c[2]
+		b.toggle_mode = true
+		b.button_group = groupe
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(action.bind(c[0]))
+		ligne.add_child(b)
+		boutons[c[0]] = b
+	(boutons[choix[0][0]] as Button).button_pressed = true
+	return ligne
+
+
+func _choisir_visee(v: String) -> void:
+	_vue.visee = v
+	(_boutons_visee[v] as Button).button_pressed = true
+	_vue.rafraichir()
+
+
+func _choisir_outil(o: String) -> void:
+	_vue.outil = o
+	(_boutons_outil[o] as Button).button_pressed = true
+	_vue.rafraichir()
+
+
+func _selection_changee() -> void:
+	if _section_selection == null:
+		return
+	var n: int = _vue.selection.size()
+	_section_selection.visible = _atelier == "monde" and n > 0
+	_etiquette_selection.text = "%d cell(s) selected" % n
+	_etiquette_portee.text = ("acts on the selection (%d cells)" % n) if n > 0 \
+		else "acts on floor y = %d" % _vue.etage
 
 
 func _dire_l_etage() -> void:
@@ -814,6 +978,7 @@ func _dire_l_etage() -> void:
 		haut = maxi(haut, p.y)
 	_etiquette_etage.text = ("%d cell(s) here · painted from y=%d to y=%d" % [combien, bas, haut]) \
 		if bas <= haut else "nothing painted yet"
+	_selection_changee()
 
 
 # ── LES COUCHES ──────────────────────────────────────────────────────────────────────────────────────
@@ -1088,16 +1253,58 @@ func _dire_le_projet() -> void:
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	var k := event as InputEventKey
-	if k == null or not k.pressed or k.echo or not k.ctrl_pressed:
+	if k == null or not k.pressed or k.echo:
 		return
-	if k.keycode == KEY_Z and not k.shift_pressed:
-		if _histoire.undo():
-			_dire("[i]Undone: %s[/i]" % _histoire.get_current_action_name())
+	if k.ctrl_pressed:
+		if k.keycode == KEY_Z and not k.shift_pressed:
+			if _histoire.undo():
+				_dire("[i]Undone: %s[/i]" % _histoire.get_current_action_name())
+			get_viewport().set_input_as_handled()
+		elif k.keycode == KEY_Y or (k.keycode == KEY_Z and k.shift_pressed):
+			if _histoire.redo():
+				_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
+			get_viewport().set_input_as_handled()
+		return
+	if _atelier != "monde":
+		return
+	var fait := true
+	match k.keycode:
+		KEY_A:
+			_choisir_outil("ajouter")
+		KEY_D:
+			_choisir_outil("creuser")
+		KEY_S:
+			_choisir_outil("selectionner")
+		KEY_BRACKETLEFT:
+			_taille.value -= 1
+		KEY_BRACKETRIGHT:
+			_taille.value += 1
+		KEY_PAGEUP:
+			_compteur_etage.value += 1
+		KEY_PAGEDOWN:
+			_compteur_etage.value -= 1
+		KEY_DELETE:
+			_operer_selection("supprimer")
+		KEY_ESCAPE:
+			_vue.vider_selection()
+		_:
+			fait = false
+	if fait:
 		get_viewport().set_input_as_handled()
-	elif k.keycode == KEY_Y or (k.keycode == KEY_Z and k.shift_pressed):
-		if _histoire.redo():
-			_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
-		get_viewport().set_input_as_handled()
+
+
+## ⚠ TAB PASSE PAR `_input`, PAS PAR `_unhandled_key_input` : l'interface le consomme d'abord pour
+## déplacer le focus d'un bouton à l'autre, et le raccourci ne serait jamais arrivé. On ne le prend que
+## si aucun champ de texte n'a la main — le nom d'une couche se tape au clavier.
+func _input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo or k.keycode != KEY_TAB or _atelier != "monde":
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return
+	_choisir_visee("sculpt" if _vue.visee == "grille" else "grille")
+	get_viewport().set_input_as_handled()
 
 
 func _dire(texte: String) -> void:

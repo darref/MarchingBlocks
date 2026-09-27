@@ -12,7 +12,10 @@ const VOISINES := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vec
 
 
 ## `occupees` — {Vector3i: true}. Rend {"poser": {Vector3i: true}, "effacer": {Vector3i: true}}.
-static func operer(occupees: Dictionary, etage: int, quoi: String) -> Dictionary:
+## `portee` — les cases sur lesquelles on opère. VIDE (le défaut, et le greffon) : toutes celles de
+## l'étage. Sinon la SÉLECTION de l'appli (charte §5) : c'est la même opération, sur un autre ensemble —
+## pas une seconde règle.
+static func operer(occupees: Dictionary, etage: int, quoi: String, portee: Dictionary = {}) -> Dictionary:
 	var a_poser := {}
 	var a_effacer := {}
 	match quoi:
@@ -20,13 +23,13 @@ static func operer(occupees: Dictionary, etage: int, quoi: String) -> Dictionary
 			var pas := Vector3i.UP if quoi == "haut" else Vector3i.DOWN
 			for c in occupees:
 				var p: Vector3i = c
-				if p.y == etage and not occupees.has(p + pas):
+				if _dans(p, etage, portee) and not occupees.has(p + pas):
 					a_poser[p + pas] = true
 		"elargir":
 			# ⚠ Une couronne dans le PLAN, pas en hauteur : extruder vers le haut, c'est « étendre ».
 			for c in occupees:
 				var p: Vector3i = c
-				if p.y != etage:
+				if not _dans(p, etage, portee):
 					continue
 				for d in VOISINES:
 					if not occupees.has(p + d):
@@ -36,7 +39,7 @@ static func operer(occupees: Dictionary, etage: int, quoi: String) -> Dictionary
 			# gomme fait déjà « effacer », ce bouton n'aurait aucune raison d'être sinon.
 			for c in occupees:
 				var p: Vector3i = c
-				if p.y != etage:
+				if not _dans(p, etage, portee):
 					continue
 				var entoure := true
 				for d in VOISINES:
@@ -46,3 +49,7 @@ static func operer(occupees: Dictionary, etage: int, quoi: String) -> Dictionary
 				if entoure:
 					a_effacer[p] = true
 	return {"poser": a_poser, "effacer": a_effacer}
+
+
+static func _dans(p: Vector3i, etage: int, portee: Dictionary) -> bool:
+	return portee.has(p) if not portee.is_empty() else p.y == etage

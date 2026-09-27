@@ -404,6 +404,39 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
 
 ---
 
+### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
+
+- **LE MONDE PEINT NE DÉPEND PLUS DU TRAVAIL QUI L'HABILLE.** Une **couche** = une source de tuiles
+  (le témoin calculé ou un `.glb`) et SES cases, dans son propre `MassifPeint` : son voisinage ne
+  regarde que ses cases. Trancher change les tuiles de la couche ACTIVE, **jamais ses cases**.
+  ⚠ « Slice the work » peignait jusque-là les cases du témoin en les remplaçant : c'était la preuve de
+  l'aller-retour. Elle vit désormais dans un bouton à part, **« Paint the witness shape »**.
+  ⚠ **ET CETTE PREUVE N'EST PLUS À L'IDENTIQUE DEPUIS LES EXEMPLAIRES** (§3) : le peintre tire
+  l'exemplaire d'un sommet par hachage de sa position, pas d'après l'endroit où il fut sculpté. Même
+  forme, mêmes classes ; un coin sculpté ici peut reparaître là.
+- **LE PROJET** (`app/projet.gd`, `.mbproj` en JSON) porte les couches et leurs cases, **s'enregistre
+  après chaque changement** (branché sur l'historique) et se rouvre au lancement. On écrit à côté puis
+  on remplace. ⚠ Un projet qui ne s'ouvre pas n'est jamais écrasé : on en commence un autre.
+- **LE LOT TRANCHÉ N'EST QU'EN CACHE** (`user://cache`), marqué de l'empreinte de sa source — le MD5
+  du `.glb`, pas sa date, précise à la seconde seulement. Source changée : on retranche. Source
+  disparue : l'ancien lot en le DISANT, sinon un lot vide, donc des cubes rouges — jamais le repli.
+- **LA BARRE D'OUTILS** (règle pure : `addons/.../outils.gd`, partagée avec le greffon) : deux VISÉES,
+  **Grid** (le plan de l'étage) et **Sculpt** (la matière, par un rayon case à case contre
+  l'OCCUPATION, jamais contre le rendu), les mêmes OUTILS (Add, Dig, Select — le clic droit fait
+  l'inverse), un pinceau sphère / cube / disque de taille 1 à 7, et un aperçu des cases exactes qui
+  changeront. La sélection (un état d'écran, ni enregistré ni annulable) a ses opérations, et **les
+  opérations d'étage portent sur elle quand elle existe**.
+  - ⚠ **Add voit toutes les couches visibles, Dig et Select la seule active.**
+  - ⚠ **LE VERROU DE COUP** : ce qu'un coup d'ajout pose est transparent à son propre rayon, sinon
+    glisser bâtit une tour vers la caméra.
+  - ⚠ **TOUT CE QUI CHANGE DES CASES PASSE PAR `_appliquer`.** Trois routes écrivaient chacune leur
+    annulation, et l'une reconstruisait la couche ACTIVE au lieu de celle qu'elle touchait : un Ctrl+Z
+    après avoir changé de couche laissait un rendu faux. **Vu rougir** dans `fumee_appli`.
+  - **RESTE À FAIRE** (phase 3) : la sélection en boîte, déplacer, copier.
+- ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
+  panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
+  en main.
+
 ## 6. Méthode — ce qui a été payé cher
 
 ⚠ **UN TEST QU'ON N'A PAS VU ROUGIR NE GARDE RIEN.** Toute propriété se garde par un scénario
@@ -483,9 +516,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **7 512 vérifications, 0 échec** (27 septembre 2026, recomptées après les exemplaires) :
+  Dix suites, **7 611 vérifications, 0 échec** (27 septembre 2026, recomptées après la barre d'outils) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 422,
-  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15.
+  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
+  `test_outils` 33, `fumee_appli` 25.
+  ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
+  projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
+  le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
   ⚠ Les trois suites qui ont grossi portent les gardes des exemplaires : `test_marching_blocks` §16
   (nommage et tirage), `test_massif_peint` §10 (le peintre les pose, et un lot sans exemplaires marche
   encore), `test_blocs_maitres` §14 (aucun morceau sculpté n'est jeté). **Onze mutations délibérées,

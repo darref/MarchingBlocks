@@ -1,0 +1,172 @@
+@tool
+extends RefCounted
+## LES OUTILS DE PEINTURE — viser, choisir les cases d'un pinceau, et dire ce qu'un geste change.
+##
+## **DÉCIDÉ (Jordan, 27 septembre 2026)** — le plan de la barre d'outils (charte §5) : deux VISÉES
+## (grille, sculpture), les mêmes OUTILS (ajouter, creuser, sélectionner), un pinceau à taille et forme.
+## La visée ne décide que de la façon de trouver le point ; l'outil, de ce qu'on en fait.
+##
+## ⚠ **ICI VIT LA RÈGLE, ET RIEN QUE LA RÈGLE.** Comme `etages.gd` : des fonctions pures qui lisent des
+## cases et rendent `{poser, effacer}`. Aucun nœud, aucune annulation — chaque appelant applique avec
+## SON historique. C'est ce qui les rend gardables en headless (`DEV_TOOLS/test_outils.gd`), et
+## partageables avec le greffon, dont la sélection maison est encore OUVERTE (charte §5).
+
+const FACES := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0),
+	Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
+
+const FORMES := ["sphere", "cube", "disque"]
+
+
+## LE RAYON CONTRE LA MATIÈRE — un parcours case par case (Amanatides & Woo).
+##
+## `occupe(c: Vector3i) -> bool` dit si une case est pleine. Rend {"touche": bool, "case": Vector3i,
+## "normale": Vector3i} — la normale est celle de la FACE par laquelle le rayon est entré.
+##
+## ⚠ **ON VISE L'OCCUPATION, PAS LE RENDU** : le rendu est aminci, sculpté, et déborde de sa case ; un
+## relief peut appartenir au sommet voisin. L'occupation est la seule vérité (charte §3).
+## ⚠ **LA CASE DE DÉPART EST SAUTÉE** : une caméra entrée dans la matière toucherait sinon sa propre case,
+## sans normale, à chaque clic.
+## ⚠ `ignorer` — les cases que le rayon traverse comme du vide : ce qu'un coup d'ajout vient de poser.
+## Sans ce verrou, glisser en ajoutant bâtit une tour vers la caméra au lieu d'une peau sur la surface.
+static func rayon(occupe: Callable, origine: Vector3, sens: Vector3, portee: float,
+		ignorer: Dictionary = {}) -> Dictionary:
+	var rien := {"touche": false, "case": Vector3i.ZERO, "normale": Vector3i.ZERO}
+	if sens.length_squared() < 1e-12:
+		return rien
+	sens = sens.normalized()
+	var c := Vector3i(floori(origine.x), floori(origine.y), floori(origine.z))
+	var pas := Vector3i.ZERO
+	var t_max := Vector3(INF, INF, INF)
+	var t_delta := Vector3(INF, INF, INF)
+	for axe in 3:
+		if absf(sens[axe]) < 1e-12:
+			continue
+		pas[axe] = 1 if sens[axe] > 0.0 else -1
+		var bord: float = float(c[axe] + 1) if sens[axe] > 0.0 else float(c[axe])
+		t_max[axe] = (bord - origine[axe]) / sens[axe]
+		t_delta[axe] = absf(1.0 / sens[axe])
+	while true:
+		var axe := 0
+		if t_max.y < t_max[axe]:
+			axe = 1
+		if t_max.z < t_max[axe]:
+			axe = 2
+		var t: float = t_max[axe]
+		if t > portee:
+			return rien
+		c[axe] += pas[axe]
+		t_max[axe] += t_delta[axe]
+		if not ignorer.has(c) and occupe.call(c):
+			var n := Vector3i.ZERO
+			n[axe] = -pas[axe]
+			return {"touche": true, "case": c, "normale": n}
+	return rien
+
+
+## Le point d'ANCRAGE du pinceau. `point` = {"touche", "case", "normale"} : en sculpture, ce que le
+## rayon a touché ; sinon (grille, ou rayon perdu) la case du plan d'étage, `touche` à faux.
+## ⚠ AJOUTER POSE CONTRE LA FACE VISÉE, les autres outils agissent SUR la case touchée.
+static func ancre(outil: String, point: Dictionary) -> Vector3i:
+	var c: Vector3i = point["case"]
+	if outil == "ajouter" and point["touche"]:
+		return c + (point["normale"] as Vector3i)
+	return c
+
+
+## Les cases d'un pinceau, triées. `taille` 1 = une case ; le rayon est `taille - 1`.
+##   sphère — |d|² ≤ r² : 1, 7, 33… cases ;
+##   cube   — tout le cube : 1, 27, 125… ;
+##   disque — la sphère COUPÉE au plan perpendiculaire à la normale : le pinceau de façade, qui garnit
+##            ou creuse une paroi sans l'épaissir. Sans normale (la grille), le plan est horizontal.
+static func pinceau(ancre_: Vector3i, normale: Vector3i, taille: int, forme: String) -> Array[Vector3i]:
+	var r: int = maxi(0, taille - 1)
+	var n: Vector3i = normale if normale != Vector3i.ZERO else Vector3i.UP
+	var cases: Array[Vector3i] = []
+	for x in range(-r, r + 1):
+		for y in range(-r, r + 1):
+			for z in range(-r, r + 1):
+				var d := Vector3i(x, y, z)
+				var dedans: bool
+				match forme:
+					"cube":
+						dedans = true
+					"disque":
+						dedans = d.length_squared() <= r * r and d.x * n.x + d.y * n.y + d.z * n.z == 0
+					_:
+						dedans = d.length_squared() <= r * r
+				if dedans:
+					cases.append(ancre_ + d)
+	cases.sort()
+	return cases
+
+
+## Ce qu'un outil CHANGE sur ces cases : ajouter ne pose que dans le vide, creuser n'efface que la
+## matière. Sélectionner ne change rien aux cases — elle n'a pas d'entrée ici.
+static func modification(outil: String, cibles: Array, occupe: Callable) -> Dictionary:
+	var poser := {}
+	var effacer := {}
+	for c in cibles:
+		var plein: bool = occupe.call(c)
+		if outil == "ajouter" and not plein:
+			poser[c] = true
+		elif outil == "creuser" and plein:
+			effacer[c] = true
+	return {"poser": poser, "effacer": effacer}
+
+
+## LES OPÉRATIONS SUR LA SÉLECTION. Rend {"poser", "effacer", "selection"} — la sélection d'APRÈS.
+##   supprimer         — efface la matière sélectionnée ;
+##   extruder_haut/bas — pose la couche d'à côté, et la sélection LA SUIT : on répète pour monter une
+##                       paroi ;
+##   grandir           — ajoute la matière qui touche la sélection par une face ;
+##   retrecir          — retire ce qui touche une case non sélectionnée ;
+##   connexe           — toute la matière reliée à la sélection par des faces.
+## ⚠ La sélection rendue ne porte que de la MATIÈRE : une case vide sélectionnée ne sert à rien.
+static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: String) -> Dictionary:
+	var poser := {}
+	var effacer := {}
+	var apres := {}
+	match quoi:
+		"supprimer":
+			for c in selection:
+				if occupees.has(c):
+					effacer[c] = true
+		"extruder_haut", "extruder_bas":
+			var pas := Vector3i.UP if quoi == "extruder_haut" else Vector3i.DOWN
+			for c in selection:
+				var p: Vector3i = c + pas
+				if not occupees.has(p):
+					poser[p] = true
+				apres[p] = true
+		"grandir":
+			for c in selection:
+				if occupees.has(c):
+					apres[c] = true
+				for f in FACES:
+					if occupees.has(c + f):
+						apres[c + f] = true
+		"retrecir":
+			for c in selection:
+				if not occupees.has(c):
+					continue
+				var interieur := true
+				for f in FACES:
+					if not selection.has(c + f):
+						interieur = false
+						break
+				if interieur:
+					apres[c] = true
+		"connexe":
+			var file: Array = []
+			for c in selection:
+				if occupees.has(c) and not apres.has(c):
+					apres[c] = true
+					file.append(c)
+			while not file.is_empty():
+				var c: Vector3i = file.pop_back()
+				for f in FACES:
+					var v: Vector3i = c + f
+					if occupees.has(v) and not apres.has(v):
+						apres[v] = true
+						file.append(v)
+	return {"poser": poser, "effacer": effacer, "selection": apres}
