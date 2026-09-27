@@ -29,6 +29,7 @@ const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
 # ⚠ Pour la LÉGENDE sous la vue, qui lit les six teintes à leur source au lieu de les recopier.
 const RP := preload("res://addons/undermend/repli_procedural.gd")
 const PBR := preload("res://addons/undermend/pbr_monde.gd")
+const Etages := preload("res://addons/undermend/etages.gd")
 
 ## ⚠ **UN SEUL LOT, PARCE QU'IL N'Y A PLUS QU'UN MODE (Jordan, 25 septembre 2026).** Il y en avait deux,
 ## `marching_blocks_9.tres` et `marching_blocks_moitie.tres`, que la case à cocher départageait. Le « 9 »
@@ -700,39 +701,10 @@ func _operer(quoi: String) -> void:
 	var occupees := {}
 	for c in cases.get_used_cells():
 		occupees[c] = true
-	var a_poser := {}
-	var a_effacer := {}
-
-	match quoi:
-		"haut", "bas":
-			var pas := Vector3i.UP if quoi == "haut" else Vector3i.DOWN
-			for c in occupees:
-				var p: Vector3i = c
-				if p.y == _etage and not occupees.has(p + pas):
-					a_poser[p + pas] = true
-		"elargir":
-			# ⚠ Une couronne dans le PLAN, pas en hauteur : extruder vers le haut, c'est « étendre ».
-			for c in occupees:
-				var p: Vector3i = c
-				if p.y != _etage:
-					continue
-				for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
-					if not occupees.has(p + d):
-						a_poser[p + d] = true
-		"creuser":
-			# ⚠ Évider, pas effacer : on ne retire que ce qui est entouré, donc le pourtour reste. La
-			# gomme du GridMap fait déjà « effacer », ce bouton n'aurait aucune raison d'être sinon.
-			for c in occupees:
-				var p: Vector3i = c
-				if p.y != _etage:
-					continue
-				var entoure := true
-				for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
-					if not occupees.has(p + d):
-						entoure = false
-						break
-				if entoure:
-					a_effacer[p] = true
+	# ⚠ LA RÈGLE VIT DANS `etages.gd`, partagée avec le logiciel MarchingBlocks.
+	var ops: Dictionary = Etages.operer(occupees, _etage, quoi)
+	var a_poser: Dictionary = ops["poser"]
+	var a_effacer: Dictionary = ops["effacer"]
 
 	if a_poser.is_empty() and a_effacer.is_empty():
 		_dire("[i]Rien à faire à l'étage y = %d.[/i]\n\n%s" % [_etage,

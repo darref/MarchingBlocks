@@ -14,6 +14,32 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 
 ---
 
+## 0. Le produit : le logiciel MarchingBlocks — DÉCIDÉ (Jordan, 27 septembre 2026)
+
+> **Le projet devient un LOGICIEL, MarchingBlocks, vendu 60 € en UN exécutable chiffré.** Il fait
+> tout ce que fait le greffon, reprend l'écran de SoluTiles (`D:/AbsoluTiles`, « le même genre de
+> projet, mais 3D au lieu de 2D »), et exportera vers TROIS greffons de peinture — Godot, Unity,
+> Unreal — **écrits APRÈS lui**.
+
+- **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
+  conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
+  qu'on regarde et l'aller-retour avec l'artiste, droite = la main), deux ateliers — **Witness** et
+  **Test world** —, panneau d'attente nommé. Chaînes d'écran en ANGLAIS (§7).
+- ⚠ **LE CŒUR N'EST PAS RECOPIÉ** : l'appli appelle `addons/undermend/` comme le greffon. Ce qui vivait
+  dans l'écran du greffon et doit servir aux deux en SORT (`etages.gd`, gardé par `test_etages`).
+- ⚠ **LE PINCEAU EST À NOUS** : sans l'éditeur Godot, plus de pinceau natif de GridMap. Un clic est un
+  rayon coupé contre le plan de l'étage courant (`vue.gd`), un coup entier s'annule d'un Ctrl+Z.
+- ⚠ **LE CHIFFREMENT DEMANDE DES MODÈLES D'EXPORT RECOMPILÉS.** L'onglet « Chiffrement » des presets
+  chiffre le PCK, mais les modèles officiels ne savent pas le lire : il faut les compiler avec la même
+  clé (`SCRIPT_AES256_ENCRYPTION_KEY`). Sources dans `D:/godot-src` (4.7-stable exact), script
+  `construire_modele.sh`, sans D3D12 ni AccessKit. **La clé vit HORS du dépôt**
+  (`C:/Users/jorda/.marchingblocks/cle_pck.hex`) et ne doit jamais y entrer.
+  ⚠ **CE QUE LE CHIFFREMENT NE FAIT PAS** : la clé est forcément dans l'exe, qui doit se déchiffrer
+  lui-même — des outils publics l'en extraient. Il arrête le curieux, pas le déterminé ; le rempart
+  commercial reste la licence.
+- **OUVERT** : le format neutre que liront les trois greffons ; la licence ; l'icône et le splash ; les
+  textures PBR de test viennent de HEART_WORLD — leur droit de revente n'est PAS établi.
+
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
 > **Peindre des tuiles 3D NON CUBIQUES dans un GridMap, à partir de blocs que l'artiste modélise
