@@ -1042,7 +1042,10 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 ## ⚠ **ET CE BLOC EST FAIT DE CUBES : aucun réglage ne lui donnera des formes.** C'est un TÉMOIN, qui
 ## montre où sont les tuiles ; ce qui donnera des formes, c'est le relief sculpté par l'artiste, d'où
 ## l'aller-retour `.glb` (`exporter_le_bloc` / `librairie_depuis_glb`).
-static func librairie() -> Dictionary:
+##
+## `matiere` — s'il est donné, il est posé sur le solide AVANT le tranchage, et la découpe le recopie
+## dans chaque tuile : c'est ainsi que le PBR espace monde « suit dans les tuiles » (`pbr_monde.gd`).
+static func librairie(matiere: Material = null) -> Dictionary:
 	var Tranchage := load("res://addons/undermend/tranchage.gd")
 	var pieces := {}
 	var provenance := {}
@@ -1054,6 +1057,8 @@ static func librairie() -> Dictionary:
 		# export, catalogue, repli — lisent donc le même appel, et changer de géométrie veut dire les
 		# changer tous les trois. Voir `maillage_lisse` pour le chanfrein, suspendu.
 		var solide: ArrayMesh = maillage_moitie(i)
+		if matiere != null:
+			solide.surface_set_material(0, matiere)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
 		var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,

@@ -7,10 +7,10 @@ extends Control
 ## Chaque pièce se justifiait seule ; ensemble elles noyaient ce qu'on veut faire. Ce qui reste est la
 ## BOUCLE COMPLÈTE, et rien d'autre :
 ##
-##   1. GÉNÉRER LES NŒUDS   le témoin calculé → tranchage → MeshLibrary → un MassifPeint vide, à peindre ;
+##   1. TRANCHER LE TÉMOIN  le témoin calculé → tranchage → MeshLibrary → un MassifPeint vide, à peindre ;
 ##   2. EXPORTER LE TÉMOIN  en UN .glb, n'importe où sur le disque, pour Blender ;
 ##   3. IMPORTER LE TRAVAIL relit le .glb sculpté et l'AFFICHE dans la vue — rien n'est encore tranché ;
-##   4. TRANCHER, GÉNÉRER ET PEINDRE  tranche ce travail, pose les nœuds, et peint les cases du témoin.
+##   4. TRANCHER LE TRAVAIL  tranche ce travail, pose les nœuds, et peint les cases du témoin.
 ##
 ## Le quatrième est le seul essai qui prouve quelque chose : le témoin repeint avec l'art réimporté doit
 ## redonner le témoin — toute la chaîne tient alors, export, modélisation, réimport, tranchage,
@@ -28,6 +28,7 @@ const MB := preload("res://addons/undermend/marching_blocks.gd")
 const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
 # ⚠ Pour la LÉGENDE sous la vue, qui lit les six teintes à leur source au lieu de les recopier.
 const RP := preload("res://addons/undermend/repli_procedural.gd")
+const PBR := preload("res://addons/undermend/pbr_monde.gd")
 
 ## ⚠ **UN SEUL LOT, PARCE QU'IL N'Y A PLUS QU'UN MODE (Jordan, 25 septembre 2026).** Il y en avait deux,
 ## `marching_blocks_9.tres` et `marching_blocks_moitie.tres`, que la case à cocher départageait. Le « 9 »
@@ -63,9 +64,12 @@ var _camera: Camera3D
 var _instance: MeshInstance3D
 ## Ce que la vue montre, écrit sous elle — sinon on ne sait pas si l'on regarde le témoin ou son art.
 var _etiquette_vue: Label
-## Le `.glb` importé, que « Trancher, générer et peindre » relira. ⚠ RELU au moment du clic, pas gardé
+## Le `.glb` importé, que « Trancher le travail » relira. ⚠ RELU au moment du clic, pas gardé
 ## en mémoire : l'artiste a pu réenregistrer entre les deux, et c'est son dernier état qu'on tranche.
 var _travail := ""
+var _pbr: CheckBox
+## Le matériau PBR, bâti une fois au premier besoin : il charge trois tableaux de textures.
+var _matiere_pbr: ShaderMaterial
 var _azimut := 0.7
 var _elevation := 0.6
 
@@ -99,18 +103,39 @@ func _batir() -> void:
 	titre.add_theme_color_override("font_color", OR)
 	colonne.add_child(titre)
 
+	# ── LE PBR ESPACE MONDE (Jordan, 27 septembre 2026) ─────────────────────────────────────────────────
+	#
+	# ⚠ **ELLE HABILLE LE TÉMOIN ET LES TUILES QU'ON EN TRANCHE, PAS LE TRAVAIL IMPORTÉ.** Le travail est
+	# l'art de l'artiste, avec ses propres matériaux : le recouvrir serait modifier l'art (charte §3).
+	# ⚠ Sans textures bâties, la case est GRISÉE et dit pourquoi — une case qui ne fait rien passerait
+	# pour une case cassée.
+	_pbr = CheckBox.new()
+	_pbr.text = "Texturer en PBR espace monde"
+	if PBR.disponible():
+		_pbr.tooltip_text = ("Un set PBR complet par teinte — albédo, normale, AO, rugosité, hauteur (POM) — "
+			+ "projeté dans l'espace MONDE : les tuiles se raccordent sans couture.\nS'applique au témoin "
+			+ "affiché et aux tuiles de « Trancher le témoin pour tester » : le matériau suit dans les "
+			+ "tuiles.\nLe travail importé garde ses propres matériaux.")
+	else:
+		_pbr.disabled = true
+		_pbr.tooltip_text = ("Textures absentes de %s.\nLes bâtir : DEV_TOOLS/batir_pbr_monde.gd, AVEC "
+			+ "fenêtre.") % PBR.DOSSIER
+	_pbr.toggled.connect(func(_actif): _habiller_la_vue())
+	colonne.add_child(_pbr)
+
 	_batir_la_vue(colonne)
 
 	# ⚠ **UNE CASE À COCHER A VÉCU ICI (retirée par Jordan, 25 septembre 2026).** Elle offrait le solide
 	# brut à la place de l'aminci. Ce n'était pas un réglage mais une manière de se tromper : l'aminci est
 	# ce qui part chez l'artiste, donc le seul mode qui décrive la réalité de ce qu'il va sculpter.
 	var generer := Button.new()
-	generer.text = "Générer les nœuds"
+	generer.text = "Trancher le témoin pour tester"
 	generer.tooltip_text = ("Le témoin calculé, passé par tout le pipeline, et un MassifPeint vide à "
 		+ "peindre.\nTuiles ramenées à la moitié de leur case : les faces qui donnent sur du VIDE "
 		+ "rentrent d'un quart.\nUne face partagée entre deux cases pleines reste intacte.")
 	generer.custom_minimum_size = Vector2(0, 36)
-	generer.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(), LOT, "catalogue"))
+	generer.pressed.connect(func(): _peindre_avec(BlocsMaitres.librairie(_matiere_voulue()), LOT,
+		"catalogue"))
 	colonne.add_child(generer)
 
 	colonne.add_child(HSeparator.new())
@@ -134,7 +159,7 @@ func _batir() -> void:
 	colonne.add_child(importer)
 
 	var trancher := Button.new()
-	trancher.text = "Trancher, générer et peindre"
+	trancher.text = "Trancher le travail"
 	trancher.tooltip_text = ("Relit le travail importé, le tranche, pose un MassifPeint avec ses tuiles, "
 		+ "et y peint les cases du témoin.\nLe résultat doit redonner le témoin : c'est la preuve que "
 		+ "l'aller-retour tient.\n⚠ Un bloc dont la boîte ressort vide garde sa version calculée, et "
@@ -359,6 +384,23 @@ func _tourner_la_vue(event: InputEvent) -> void:
 	_caler_la_camera()
 
 
+## Le matériau à poser sur le témoin avant tranchage : le PBR si la case est cochée, sinon `null` —
+## `librairie()` garde alors le sien.
+func _matiere_voulue() -> Material:
+	if _pbr == null or not _pbr.button_pressed:
+		return null
+	if _matiere_pbr == null:
+		_matiere_pbr = PBR.matiere()
+	return _matiere_pbr
+
+
+## Habille la vue selon la case. ⚠ Le travail importé n'est JAMAIS recouvert : c'est l'art de l'artiste.
+func _habiller_la_vue() -> void:
+	if _instance == null:
+		return
+	_instance.material_override = _matiere_voulue() if _travail == "" else null
+
+
 ## Place la caméra sur sa sphère, centrée sur le bloc.
 func _caler_la_camera() -> void:
 	if _camera == null:
@@ -439,13 +481,14 @@ func _importer(fichier: String) -> void:
 	_travail = fichier
 	_instance.mesh = travail
 	_etiquette_vue.text = "le travail importé — %s" % fichier.get_file()
+	_habiller_la_vue()
 	_dire(("[color=#6f9e4a][b]Travail importé[/b][/color] ← %s\n\n"
 		+ "La vue le montre tel que le trancheur le lira : ce qui dépasse la boîte du bloc n'y est plus.\n\n"
-		+ "[i]« Trancher, générer et peindre » le relira au moment du clic — réenregistrer dans Blender "
+		+ "[i]« Trancher le travail » le relira au moment du clic — réenregistrer dans Blender "
 		+ "entre-temps suffit.[/i]") % fichier)
 
 
-# ── 3. TRANCHER, GÉNÉRER ET PEINDRE ─────────────────────────────────────────────────────────────────
+# ── 3. TRANCHER LE TRAVAIL ───────────────────────────────────────────────────────────────────────────
 
 func _trancher_generer_et_peindre() -> void:
 	if _travail == "":

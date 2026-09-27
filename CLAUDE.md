@@ -304,11 +304,11 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
 - ⚠ **L'UI RESTE MINIMALE (Jordan, 24 septembre 2026).** Elle a compté deux onglets, une vue 3D
   orbitale, un catalogue et un panneau de tranchage : chaque pièce se justifiait seule, ensemble elles
   noyaient ce qu'on veut faire. Il reste la boucle complète et rien d'autre.
-- **DÉCIDÉ (Jordan, 27 septembre 2026) — la boucle a quatre boutons, et leurs noms** : « Générer les
-  nœuds » (le témoin calculé, un massif vide à peindre) · « Exporter le témoin… » · « Importer le
-  travail… », qui **l'AFFICHE seulement**, dans la vue et tel que le trancheur le lira
-  (`BlocsMaitres.travail_depuis_glb()`, la même lecture que le tranchage) · « Trancher, générer et
-  peindre », qui relit ce travail au moment du clic, pose les nœuds et **peint les cases du témoin**
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — la boucle a quatre boutons, et leurs noms** : « Trancher le
+  témoin pour tester » (le témoin calculé, un massif vide à peindre) · « Exporter le témoin… » ·
+  « Importer le travail… », qui **l'AFFICHE seulement**, dans la vue et tel que le trancheur le lira
+  (`BlocsMaitres.travail_depuis_glb()`, la même lecture que le tranchage) · « Trancher le travail »,
+  qui relit ce travail au moment du clic, pose les nœuds et **peint les cases du témoin**
   dans la même action d'annulation. Le résultat doit redonner le témoin : c'est la preuve de
   l'aller-retour, à l'œil. Tout est dans une **barre de défilement verticale** : le bas de la bande
   était inatteignable.
@@ -546,5 +546,27 @@ désormais le greffon.
 
 6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.
-7. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
-8. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
+7. **LE PBR ESPACE MONDE — EN COURS (Jordan, 27 septembre 2026).** Une case « Texturer en PBR espace
+   monde » sous le titre habille chaque teinte du témoin d'un set complet — albédo, normale, AO,
+   rugosité, hauteur en POM — projeté en TRIPLANAIRE dans l'espace monde (`pbr_monde.gdshader`).
+   - ⚠ **LA COULEUR DE SOMMET CHOISIT LE SET, ET C'EST CE QUI LE FAIT SUIVRE DANS LES TUILES** : le
+     tranchage fond tout en une surface, un matériau par surface s'y perdrait. Le matériau est posé
+     sur le solide AVANT le tranchage (`librairie(matiere)`) ; `test_blocs_maitres` exige qu'il se
+     retrouve sur les 52 tuiles avec leurs couleurs, **vu rougir** en ne le posant plus.
+   - ⚠ **LA NORMALE DE PROJECTION VIENT DES DÉRIVÉES DE LA POSITION**, pas du maillage : un maillage
+     soudé porte une normale moyenne, qui arrondirait les arêtes franches.
+   - Les textures : cinq sets de `D:/Spirit3D/HEART_WORLD/biomes/maps/`, `normal_gl` seulement, bâtis
+     par `DEV_TOOLS/batir_pbr_monde.gd` dans `ART/pbr_monde/` — **hors git**, régénérables.
+     ⚠ **EN HEADLESS, IL ÉCRIVAIT TROIS FICHIERS DE 324 OCTETS ET AFFICHAIT « ✓ »** : le serveur de rendu
+     factice ne garde pas les pixels qu'un `Texture2DArray` relit pour s'enregistrer. Il exige
+     désormais une taille plancher, et se lance AVEC fenêtre.
+   - Le travail IMPORTÉ n'est jamais recouvert : c'est l'art de l'artiste (§3).
+   - ⚠ **CE QUE LA PLANCHE A MONTRÉ (`planche_pbr_monde.gd`, `ART/pbr_monde.png`) : LES FALAISES DU
+     MONDE PEINT SONT RAYÉES.** Le PBR suit bien — aucune couture — mais `mb_plaque_b2h2_dehors`, la
+     paroi À L'AIR LIBRE, porte **135 couleurs de falaise et 135 de paroi de grotte** (mesuré). La
+     légende colore par `case_sous_roche()`, qui déclare souterraine toute case ayant la falaise
+     au-dessus d'elle : c'est le défaut de `sous_le_ciel()` d'avant le 26, resté dans la LÉGENDE.
+     **OUVERT** — à trancher avec Jordan : colorer chaque face selon que le VIDE qu'elle borde voit le
+     ciel, comme `sous_le_ciel()` corrigé ?
+8. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
+9. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.

@@ -23,3 +23,6 @@ mono_crash.*.json
 # Android et exports
 /android/
 /build/
+
+# Le PBR espace monde : des dérivés des textures de Spirit3D, rebâtis par DEV_TOOLS/batir_pbr_monde.gd.
+ART/pbr_monde/
