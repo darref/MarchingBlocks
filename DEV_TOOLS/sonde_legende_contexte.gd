@@ -3,15 +3,15 @@ extends SceneTree
 ## SONDE — la légende du témoin : ce que la couleur dit du contexte.
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/sonde_legende_contexte.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/sonde_legende_contexte.gd
 ##
 ## Elle ne conçoit rien : elle compte ce que `_coque_sous_voxels` peint réellement, et confronte le
 ## compte au critère lu à la source. Écrite parce que le commentaire de `_quad` avance « 76 % du bloc
 ## est souterrain » — un chiffre qu'aucun instrument ne rendait.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 
 
 func _initialize() -> void:

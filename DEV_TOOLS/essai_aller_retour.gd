@@ -3,7 +3,7 @@ extends SceneTree
 ## L'ESSAI D'ALLER-RETOUR — exporter le MasterBlockSet, le relire, et vérifier que RIEN n'a bougé.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/essai_aller_retour.gd -- --dossier=C:/chemin/hors/du/projet
 ##
 ## ── CE QU'IL PROUVE, ET CE QU'IL NE PROUVE PAS ──────────────────────────────────────────────────────
@@ -29,8 +29,8 @@ extends SceneTree
 ## Godot ; hors du projet, il faut `GLTFDocument.append_from_file()`. C'est le cas réel — celui où
 ## l'artiste range son travail où il veut — et c'est donc celui qu'on éprouve.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _dossier := ""
 

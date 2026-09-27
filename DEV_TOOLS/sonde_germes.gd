@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LE TÉMOIN MONTRE-T-IL TOUS LES RACCORDS POSSIBLES ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_germes.gd
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -33,9 +33,9 @@ extends SceneTree
 ## ⚠ Elle n'invente aucun germe : elle appelle `Tranchage.germe_canonique()`, la même fonction que le
 ## contrôle de couture. Une seconde description du repliage aurait divergé (charte §6).
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 ## ⚠ **QUEL BLOC — ET C'EST DEVENU LA QUESTION CENTRALE DEPUIS QU'IL Y EN A DEUX (Jordan, 25 septembre
 ## 2026).** Avec un témoin unique, « 22/22 » suffisait. Avec deux, la règle est que **chaque germe doit

@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LE LISSAGE TIENT-IL SES TROIS PROMESSES ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_lissage.gd
 ##
 ## ── LA PRÉDICTION DE JORDAN, QUI EST L'OBJET DE CETTE SONDE ─────────────────────────────────────────
@@ -31,9 +31,9 @@ extends SceneTree
 ## projet la couverture était parfaite et le rendu faux ; seule une image l'a montré. Voir
 ## `planche_lissage.gd`, à lancer AVEC fenêtre.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 
 ## De combien on lisse. ⚠ **LE DÉFAUT EST 1,0 ET C'ÉTAIT UN PIÈGE** : toute la table de topologie et la

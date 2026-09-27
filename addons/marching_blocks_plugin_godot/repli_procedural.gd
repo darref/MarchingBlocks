@@ -44,8 +44,8 @@ extends RefCounted
 ## opposés ne se touchent qu'en un point. Aucun pont ne se forme — `MB.pont_sur_face_ambigue()` vaut
 ## `false`, et cette géométrie EST cette décision.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
 
 ## Le côté d'un octant, en fraction de cellule.
 const OCTANT := 0.5

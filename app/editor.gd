@@ -21,15 +21,15 @@ extends Control
 ##   • TEST WORLD — un monde qu'on peint case par case avec les tuiles tranchées. C'est ce que faisait
 ##     le GridMap de l'éditeur Godot ; ici il faut notre propre pinceau (`vue.gd`).
 ##
-## ⚠ **LE CŒUR N'EST PAS RECOPIÉ.** Tout passe par `addons/undermend/` — le modèle, le témoin, le
+## ⚠ **LE CŒUR N'EST PAS RECOPIÉ.** Tout passe par `addons/marching_blocks_plugin_godot/` — le modèle, le témoin, le
 ## trancheur, le PBR, les opérations d'étage — exactement comme le greffon. Deux écrans, une seule
 ## vérité : c'est ce qui garantit que le logiciel fait CE QUE FAIT le greffon, et pas une imitation.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
-const PBR := preload("res://addons/undermend/pbr_monde.gd")
-const Etages := preload("res://addons/undermend/etages.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
+const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cr0mrpna2d06d"
-path="res://.godot/imported/icone_undermend.svg-4a66e35901f599c8bd7065d9acc6d40e.ctex"
+uid="uid://bc5ug0vibkl1o"
+path="res://.godot/imported/icone_marching_blocks.svg-d480d827db671ee1a63b9f3621a5db9c.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://addons/undermend/icone_undermend.svg"
-dest_files=["res://.godot/imported/icone_undermend.svg-4a66e35901f599c8bd7065d9acc6d40e.ctex"]
+source_file="res://addons/marching_blocks_plugin_godot/icone_marching_blocks.svg"
+dest_files=["res://.godot/imported/icone_marching_blocks.svg-d480d827db671ee1a63b9f3621a5db9c.ctex"]
 
 [params]
 

@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — quelle part des sommets tombe dans le cas « MIXTE », et que doit-on en faire ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_bouche_de_grotte.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -30,7 +30,7 @@ extends SceneTree
 ## car pour les 46 classes structurellement intérieures, la question ne se pose même pas : il n'existe
 ## qu'une variante, et le mixte se résout tout seul.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const N := 26
 const VOISINS := [

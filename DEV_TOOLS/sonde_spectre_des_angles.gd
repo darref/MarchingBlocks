@@ -16,8 +16,8 @@ extends SceneTree
 ## `Topologie.triangles_de()` porte désormais la règle, pour tout le monde.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend ##       --script res://DEV_TOOLS/sonde_spectre_des_angles.gd -- --fichier=C:/chemin/vers/le.glb
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks ##       --script res://DEV_TOOLS/sonde_spectre_des_angles.gd -- --fichier=C:/chemin/vers/le.glb
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")
 var _fichier := ""
 

@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DU REPLI — une COMPARAISON, pas une illustration.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend rien) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_repli.gd -- --sortie=D:/UnderMend/ART/planche_repli.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_repli.gd -- --sortie=D:/MarchingBlocks/ART/planche_repli.png
 ##
 ## ⚠ **POURQUOI LA VERSION PRÉCÉDENTE NE PROUVAIT RIEN (Jordan, 19 septembre 2026).** Elle coloriait
 ## chaque face d'après sa normale — vert vers le haut, bleu vers le bas, brun sur les flancs — puis on
@@ -32,8 +32,8 @@ extends SceneTree
 ##      Un run plat doit être d'UNE SEULE couleur ; des rayures trahiraient une orientation qui bat.
 ##      C'est la version visible du test « les tuiles de run rendent une orientation constante ».
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 
 const PANNEAU := Vector2i(700, 520)
 const FOND := Color("#101216")

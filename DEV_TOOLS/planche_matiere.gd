@@ -3,9 +3,9 @@ extends SceneTree
 ## LA PLANCHE DES MATIÈRES — que faut-il vraiment corriger pour qu'une tuile sculptée se voie ?
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/planche_matiere.gd \
-##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/UnderMend/ART/matiere.png
+##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/MarchingBlocks/ART/matiere.png
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
 ##
@@ -29,7 +29,7 @@ extends SceneTree
 ## ⚠ **ET LA MESURE NE DIRA PAS CE QUI EST BEAU** : elle dit ce qui est VISIBLE. Lequel des rendus
 ## convient reste un choix d'artiste, donc celui de Jordan.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

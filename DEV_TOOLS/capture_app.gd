@@ -3,7 +3,7 @@ extends SceneTree
 ## LA CAPTURE DU LOGICIEL — MarchingBlocks ouvert pour de vrai, photographié à trois moments.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/capture_app.gd -- --dossier=C:/chemin/des/captures
 ##
 ## ⚠ **UN LOGICIEL NE SE JUGE PAS SUR SES TESTS** (charte §6 : « un greffon d'éditeur ne se teste pas en
@@ -11,7 +11,7 @@ extends SceneTree
 ## VOIT. Ce harnais ne clique pas à la place de Jordan : il appelle les mêmes fonctions que les boutons,
 ## et photographie ce qui en sort.
 
-var _dossier := "D:/UnderMend/ART/app"
+var _dossier := "D:/MarchingBlocks/ART/app"
 var _ecran: Control
 
 

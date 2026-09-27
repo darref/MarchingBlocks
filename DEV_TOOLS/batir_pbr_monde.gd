@@ -3,7 +3,7 @@ extends SceneTree
 ## BÂTIR LE PBR ESPACE MONDE — trois tableaux de textures, une couche par teinte du témoin.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend --script res://DEV_TOOLS/batir_pbr_monde.gd
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks --script res://DEV_TOOLS/batir_pbr_monde.gd
 ##   ⚠ AVEC FENÊTRE : en headless, les couches ressortent VIDES (voir `_ecrire`).
 ##
 ## ── CE QU'IL FAIT ───────────────────────────────────────────────────────────────────────────────────
@@ -28,8 +28,8 @@ extends SceneTree
 ## sans convention déclarée : les prendre, c'était deviner le signe du vert — un relief inversé ne se
 ## voit qu'à l'image, et ne se signale nulle part.
 
-const RP := preload("res://addons/undermend/repli_procedural.gd")
-const PBR := preload("res://addons/undermend/pbr_monde.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
 
 const SOURCE := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
 const COTE := 1024

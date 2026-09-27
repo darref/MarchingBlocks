@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LA LECTURE D'UN `.glb` EST-ELLE REPRODUCTIBLE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_lecture_stable.gd -- --fichier=C:/chemin.glb [--fois=5]
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ extends SceneTree
 ## reconstruit les normales quand le fichier n'en porte pas). ⚠ Si seul le second varie, c'est notre
 ## code ; si les deux varient, c'est en dessous de nous.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 var _fois := 5

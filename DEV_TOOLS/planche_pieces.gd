@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DES PIÈCES — regarder une tuile SEULE, saillante contre rentrante.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE (le headless ne rend rien) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_pieces.gd -- --sortie=D:/UnderMend/ART/planche_pieces.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_pieces.gd -- --sortie=D:/MarchingBlocks/ART/planche_pieces.png
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
 ##
@@ -31,7 +31,7 @@ extends SceneTree
 ## Aucun compteur ne dit si une pièce est à l'endroit — trois fois la couverture fut parfaite et le rendu
 ## faux, et seule une image l'a montré (charte §6).
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

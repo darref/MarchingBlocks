@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — les VINGT-QUATRE orientations d'un GridMap sont-elles bien les 24 rotations du cube ?
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/sonde_orientations_gridmap.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/sonde_orientations_gridmap.gd
 ##
 ## ⚠ POURQUOI ELLE EXISTE, ET POURQUOI ELLE PASSE AVANT TOUT LE RESTE. « Marching Blocks » repose sur
 ## un pari : 256 configurations se replient en 23 classes PARCE QU'ON PEUT TOURNER une pièce de

@@ -40,11 +40,11 @@ extends SceneTree
 ## une prédiction qui porte sur CHAQUE face, pas sur une somme : une seule face verticale posée sur une
 ## chute de 1 suffit à la démentir, et aucun effet de bord ne peut la sauver.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 ## ⚠ Pour confronter la loi au TÉMOIN RÉEL — avec le même `_examiner()` que les cas construits, jamais
 ## une seconde mesure faite autrement : c'est la comparaison qui doit être valide, pas chaque moitié.
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")
 
 const COTE := 8

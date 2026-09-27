@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — pourquoi deux mutations du trancheur restent-elles MUETTES ?
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/sonde_tranchage.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/sonde_tranchage.gd
 ##
 ## ⚠ **QUATRE HYPOTHÈSES DÉMENTIES D'AFFILÉE, CHACUNE AU PRIX D'UN BANC COMPLET.** On arrête de deviner.
 ## Deux mutations résistent, et cette sonde mesure leur cause au lieu de la supposer :
@@ -18,9 +18,9 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle imprime.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 const CELLULE := 1.0
 

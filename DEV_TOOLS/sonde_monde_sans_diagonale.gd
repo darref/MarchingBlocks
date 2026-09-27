@@ -21,9 +21,9 @@ extends SceneTree
 ## reliefs que l'on aimait peut-être — c'est un appauvrissement volontaire du vocabulaire, et seul
 ## Jordan peut dire si le monde y perd quelque chose qu'il voulait.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 
 ## L'index d'une case dans le voisinage 2×2×2 vaut `x + 2y + 4z`.

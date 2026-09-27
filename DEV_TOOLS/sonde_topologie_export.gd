@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — le témoin exporté est-il SOUDÉ, MANIFOLD, et ses boucles d'arêtes ininterrompues ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_topologie_export.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -39,9 +39,9 @@ extends SceneTree
 ##                                des retraits différents (le commentaire du code avait raison)
 ##   l'AMINCI en SOUS-VOXELS      manifold ✓, 0 trou, 98 % de valence 4, récolte IDENTIQUE  → REMÈDE
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 ## ⚠ La coque en sous-voxels et le bilan vivent dans un module PARTAGÉ avec `verifier_bloc_unique.gd`.
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 

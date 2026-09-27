@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DU PBR ESPACE MONDE — le témoin habillé, et le monde peint avec ses tuiles.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_pbr_monde.gd -- --sortie=D:/UnderMend/ART/pbr_monde.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_pbr_monde.gd -- --sortie=D:/MarchingBlocks/ART/pbr_monde.png
 ##
 ## ⚠ **DEUX RANGÉES, PARCE QUE LA PROMESSE A DEUX MOITIÉS** (Jordan, 27 septembre 2026) :
 ##   • EN HAUT, le TÉMOIN d'un seul tenant, le matériau posé en `material_override` — ce que montre la
@@ -15,8 +15,8 @@ extends SceneTree
 ##     le matériau suit réellement dans les tuiles.
 ## ⚠ Même cadrage, même lumière, même fond (charte §6 : un rendu de contrôle doit reproduire le contexte).
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const PBR := preload("res://addons/undermend/pbr_monde.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
 
 const CASE := Vector2i(520, 520)
 const FOND := Color("#101216")
@@ -27,7 +27,7 @@ const ANGLES := [
 	{"quoi": "de près", "dir": Vector3(1.0, 0.6, 0.7), "zoom": 0.45},
 ]
 
-var _sortie := "D:/UnderMend/ART/pbr_monde.png"
+var _sortie := "D:/MarchingBlocks/ART/pbr_monde.png"
 var _vues: Array = []
 var _images := 0
 
@@ -58,7 +58,7 @@ func _initialize() -> void:
 
 ## Un `MassifPeint` réel, câblé sur le lot, et peint avec les cases du témoin.
 func _monde_peint(lot: MeshLibrary) -> Node3D:
-	var massif: Node3D = load("res://addons/undermend/massif_peint.gd").new()
+	var massif: Node3D = load("res://addons/marching_blocks_plugin_godot/massif_peint.gd").new()
 	massif.lot = lot
 	massif.preparer()
 	var cases: GridMap = massif.get_node("Cases")

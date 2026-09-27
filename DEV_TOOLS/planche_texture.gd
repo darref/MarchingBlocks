@@ -3,9 +3,9 @@ extends SceneTree
 ## LA PLANCHE DE LA TEXTURE — l'éclair vert vient-il du PLACAGE ou de la GÉOMÉTRIE ?
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE (elle rend une image ; le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/planche_texture.gd \
-##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/UnderMend/ART/texture.png
+##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/MarchingBlocks/ART/texture.png
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
 ##
@@ -30,7 +30,7 @@ extends SceneTree
 ## ⚠ **ON NE MODIFIE PAS LE MATÉRIAU DES MAILLAGES** : il est partagé par tout le lot. On surcharge sur
 ## l'instance, ce qui laisse la tuile intacte.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(340, 340)
 const FOND := Color("#101216")

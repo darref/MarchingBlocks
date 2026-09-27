@@ -1,6 +1,6 @@
 @tool
 extends EditorPlugin
-## LE GREFFON UNDERMEND — le panneau de peinture de tuiles 3D, dans la bande de droite de la vue 3D.
+## LE GREFFON MARCHINGBLOCKS — le panneau de peinture de tuiles 3D, dans la bande de droite de la vue 3D.
 ##
 ## ⚠ **IL A PORTÉ UN SECOND BOUTON, « FALAISES », ET IL EST PARTI AVEC LE VERSANT 2D** (Jordan,
 ## 24 septembre 2026). Il dérivait les parois sous les massifs peints d'un `TileMapLayer`, en s'appuyant
@@ -13,7 +13,7 @@ extends EditorPlugin
 ## recalcule finit par diverger de ce qu'il pilote — c'est ce qui était arrivé à la règle des falaises,
 ## écrite deux fois et déjà divergente à une heure d'intervalle.
 
-const ECRAN := preload("res://addons/undermend/ecran_edition.gd")
+const ECRAN := preload("res://addons/marching_blocks_plugin_godot/ecran_edition.gd")
 
 var _ecran: Control
 
@@ -25,7 +25,7 @@ func _enter_tree() -> void:
 	# ⚠ `CONTAINER_SPATIAL_EDITOR_SIDE_RIGHT` existe bien — vérifié, et non supposé
 	# (`DEV_TOOLS/sonde_api_editeur.gd` a listé les douze conteneurs, dont les quatre de l'éditeur 3D).
 	_ecran = ECRAN.new()
-	_ecran.name = "UndermendEdition"
+	_ecran.name = "MarchingBlocksEdition"
 	_ecran.custom_minimum_size = Vector2(320, 0)
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_SIDE_RIGHT, _ecran)
 

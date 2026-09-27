@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — une pièce tranchée est-elle FERMÉE sur ses faces de coupe ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_coupe_fermee.gd
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle imprime.
 
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const EPS := 0.0005
 

@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DU LISSAGE — la coque actuelle et la coque lissée, côte à côte.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_lissage.gd -- --sortie=D:/UnderMend/ART/planche_lissage.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_lissage.gd -- --sortie=D:/MarchingBlocks/ART/planche_lissage.png
 ##
 ## ── CE QU'ELLE RÉPOND, ET CE QU'ELLE NE PROUVE PAS ──────────────────────────────────────────────────
 ##
@@ -22,7 +22,7 @@ extends SceneTree
 ## différent de son témoin a déjà menti dans ce projet : une pièce rendue sur un fond qu'elle n'aurait
 ## jamais en place. Ici la seule chose qui change d'une case à l'autre est le MAILLAGE.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(620, 620)
 const FOND := Color("#101216")

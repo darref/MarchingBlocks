@@ -16,15 +16,15 @@
 set -u
 CLE="/c/Users/jorda/.marchingblocks/cle_pck.hex"
 GODOT="/c/Users/jorda/Desktop/Godot_v4.7-stable_win64.exe/Godot_v4.7-stable_win64_console.exe"
-SORTIE="D:/UnderMend/build/MarchingBlocks.exe"
+SORTIE="D:/MarchingBlocks/build/MarchingBlocks.exe"
 
 if [ ! -f "$CLE" ]; then
 	echo "⚠ clé introuvable : $CLE — sans elle, le modèle compilé ne lira pas le PCK."
 	exit 1
 fi
-mkdir -p /d/UnderMend/build
+mkdir -p /d/MarchingBlocks/build
 export GODOT_SCRIPT_ENCRYPTION_KEY=$(tr -d '\r\n' < "$CLE")
-"$GODOT" --headless --path D:/UnderMend --export-release "Windows Desktop" "$SORTIE" > /tmp/export_mb.log 2>&1
+"$GODOT" --headless --path D:/MarchingBlocks --export-release "Windows Desktop" "$SORTIE" > /tmp/export_mb.log 2>&1
 code=$?
 unset GODOT_SCRIPT_ENCRYPTION_KEY
 if [ $code -ne 0 ] || [ ! -f "$SORTIE" ]; then

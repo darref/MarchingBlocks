@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — D'OÙ VIENT CHAQUE TUILE, ET EN COMBIEN DE MORCEAUX EST-ELLE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_provenance_pieces.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -38,8 +38,8 @@ extends SceneTree
 ## exactement le même jeu de noms que `librairie()`. Si les deux jeux diffèrent, mon énumération ne
 ## décrit pas le balayage réel et la colonne « provenance » ne vaut rien.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 

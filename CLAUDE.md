@@ -1,4 +1,4 @@
-# Undermend — charte du greffon
+# MarchingBlocks — charte du greffon
 
 Elle porte les décisions transverses : celles qui doivent survivre à une session et à quelqu'un qui
 arrive six mois plus tard avec une bonne idée.
@@ -25,7 +25,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
   qu'on regarde et l'aller-retour avec l'artiste, droite = la main), deux ateliers — **Witness** et
   **Test world** —, panneau d'attente nommé. Chaînes d'écran en ANGLAIS (§7).
-- ⚠ **LE CŒUR N'EST PAS RECOPIÉ** : l'appli appelle `addons/undermend/` comme le greffon. Ce qui vivait
+- **RENOMMÉ (Jordan, 27 septembre 2026)** : le dépôt vit dans `D:/MarchingBlocks` (ex-`D:/UnderMend`) et le
+  greffon dans `addons/marching_blocks_plugin_godot/` (ex-`addons/undermend/`), script `PluginMarchingBlocks.gd`.
+- ⚠ **LE CŒUR N'EST PAS RECOPIÉ** : l'appli appelle `addons/marching_blocks_plugin_godot/` comme le greffon. Ce qui vivait
   dans l'écran du greffon et doit servir aux deux en SORT (`etages.gd`, gardé par `test_etages`).
 - ⚠ **LE PINCEAU EST À NOUS** : sans l'éditeur Godot, plus de pinceau natif de GridMap. Un clic est un
   rayon coupé contre le plan de l'étage courant (`vue.gd`), un coup entier s'annule d'un Ctrl+Z.
@@ -45,7 +47,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 > **Peindre des tuiles 3D NON CUBIQUES dans un GridMap, à partir de blocs que l'artiste modélise
 > librement.**
 
-Le GridMap de Godot pose des cubes. Undermend pose des morceaux de paysage — des coudes, des arches,
+Le GridMap de Godot pose des cubes. MarchingBlocks pose des morceaux de paysage — des coudes, des arches,
 des angles rentrants, des tunnels — en assemblant automatiquement, selon le voisinage, des tuiles
 découpées dans l'art de l'artiste.
 
@@ -480,7 +482,7 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 
 ### Outillage
 
-- **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
+- **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
   Six suites, **7 512 vérifications, 0 échec** (27 septembre 2026, recomptées après les exemplaires) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 422,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15.
@@ -529,7 +531,7 @@ acheteur du greffon peut la lire ?*
 
 ## 8. Ce que ce projet a été — et où le retrouver
 
-⚠ **Jusqu'au 24 septembre 2026, Undermend était un JEU** : un monde vu de dessus et des grottes vues de
+⚠ **Jusqu'au 24 septembre 2026, Undermend — le nom du projet jusqu'au 27 — était un JEU** : un monde vu de dessus et des grottes vues de
 côté en écran partagé, un moteur d'énigmes de lumière (miroirs, vitres, lasers, couleurs sur trois bits,
 activables), des nœuds et des ondes, un auto-tuilage 2D par Better Terrain.
 

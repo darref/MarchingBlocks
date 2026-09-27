@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — quel critère sépare VRAIMENT un intérieur d'un extérieur ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_critere_ciel.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.

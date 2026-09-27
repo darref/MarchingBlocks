@@ -3,7 +3,7 @@ extends SceneTree
 ## TEST — le bloc maître unique : la planète paysage de 12³, 52 tuiles du monde sans diagonale.
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_blocs_maitres.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_blocs_maitres.gd
 ##
 ## ⚠ **CE QUE CE TEST GARDE, ET POURQUOI IL EXISTE.** `blocs_maitres.gd` mêle deux natures : neuf
 ## remplissages ÉCRITS à la main (en couches ASCII) et tous les décomptes DÉRIVÉS d'eux. Le risque n'est
@@ -36,14 +36,14 @@ extends SceneTree
 ## Les trois blocs « érosion » passeraient ce test en étant illisibles — c'est précisément pourquoi ils
 ## sont nommés « érosion » et pas « massif ».
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 ## ⚠ On EMPRUNTE le bilan topologique plutôt que d'en recopier le calcul : deux descriptions d'un même
 ## fait divergent toujours, et celle-ci porte déjà deux pièges payés cher (charte §6).
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 ## Les trois teintes de base du témoin : tout le reste est une roche souterraine assombrie.
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 
 var _ok := 0
 var _echecs := 0

@@ -3,7 +3,7 @@ extends SceneTree
 ## TEST — la partie PEINTURE : on peint des cases, le greffon pose les pièces.
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_massif_peint.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_massif_peint.gd
 ##
 ## ⚠ CE QUE CE TEST GARDE, ET POURQUOI :
 ##
@@ -22,11 +22,11 @@ extends SceneTree
 ## principale n'a pas commencé. On appelle donc `preparer()` et `reconstruire()` à la main, ce que
 ## l'API rend possible exprès.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 ## ⚠ CHARGÉ PAR CHEMIN, jamais par `class_name` : un nom de classe tout neuf n'entre dans le cache
 ## global de l'éditeur qu'après régénération, et un test en `--script` tourne avant.
-const Peint := preload("res://addons/undermend/massif_peint.gd")
+const Peint := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
 
 var _ok := 0
 var _echecs := 0

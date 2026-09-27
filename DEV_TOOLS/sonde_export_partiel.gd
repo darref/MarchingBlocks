@@ -22,17 +22,17 @@ extends SceneTree
 ## place. Le contrôle qui manquait tient en une ligne — **le cumul par bloc**, ci-dessous.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend ##       --script res://DEV_TOOLS/sonde_export_partiel.gd
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks ##       --script res://DEV_TOOLS/sonde_export_partiel.gd
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 func _initialize() -> void:
 	print("le jeu compte %d bloc(s) :" % BM.nombre())
 	for i in BM.nombre():
 		print("   %d — « %s » : %d cases" % [i, BM.BLOCS[i]["nom"], BM.cases(i).size()])
 	print("")
-	var Tranchage := load("res://addons/undermend/tranchage.gd")
+	var Tranchage := load("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 	var cumul := {}
 	for i in BM.nombre():
 		var fautes: Array = []

@@ -26,10 +26,10 @@ extends SceneTree
 ## le modèle lui demande une hélice.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planete_paysage.gd -- --glb=D:/UnderMend/ART/planete_paysage.glb
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planete_paysage.gd -- --glb=D:/MarchingBlocks/ART/planete_paysage.glb
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const COTE := 12
 ## La roche de base : les couches 0 à SOCLE−1 sont pleines partout.
@@ -341,7 +341,7 @@ func _contacts_diagonaux(pleines: Dictionary) -> int:
 ## ⚠ Mêmes appels que `exporter_le_bloc` : amincissement, soudure, normales retirées. Une chaîne
 ## d'export parallèle divergerait de la vraie au premier réglage.
 func _exporter(pleines: Dictionary, chemin: String) -> void:
-	var BM := load("res://addons/undermend/blocs_maitres.gd")
+	var BM := load("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 	var brut: ArrayMesh = BM._coque_sous_voxels(pleines, 0.25)
 	if brut.get_surface_count() == 0:
 		print("⚠ rien à écrire")
@@ -539,7 +539,7 @@ func _fautifs() -> Array:
 # CONTEXTE change de source : « y a-t-il de la roche au-dessus de ma case » devient « cette face
 # voit-elle le ciel ». Changer les deux à la fois rendrait la comparaison illisible.
 func _colorier_par_occlusion(mesh: ArrayMesh, pleines: Dictionary) -> ArrayMesh:
-	var RP := load("res://addons/undermend/repli_procedural.gd")
+	var RP := load("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 	var arrays: Array = mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var couleurs := PackedColorArray()

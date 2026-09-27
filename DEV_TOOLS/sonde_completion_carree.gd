@@ -25,7 +25,7 @@ extends SceneTree
 ## vérificateur, cette sonde, et le pinceau. ⚠ Le contrôle qui valide le déménagement : cette sonde doit
 ## rendre EXACTEMENT les mêmes nombres qu'avant (×1,70 au hasard, ×1,00 sur les gestes contigus, ×2,67
 ## sur l'escalier). « Une extraction qui change sa sortie n'est pas une extraction » (charte §6).
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const COTE := 10
 const CREUSEMENTS := 60

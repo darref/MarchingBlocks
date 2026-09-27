@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — combien de tuiles faut-il VRAIMENT pour deux contextes, et quelle taille de bloc ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_partition_contexte.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -35,7 +35,7 @@ extends SceneTree
 ## recherche partant du vide ne trouve que de l'extérieur. On part donc d'un TERRAIN irrégulier posé sur
 ## un RÉSEAU DE GROTTES — la forme même de ce qu'on veut — et on améliore de là.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),

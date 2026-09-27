@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — QU'EST-CE QU'UNE TUILE EMPORTE VRAIMENT, UNE FOIS TRANCHÉE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_matiere_tuile.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -33,8 +33,8 @@ extends SceneTree
 ## ⚠ **AVEC SON CONTRÔLE NÉGATIF** : la même colonne pour le TÉMOIN, dont les tuiles rendent claires.
 ## Si le témoin perd les mêmes attributs au même étage, ce n'est pas ça — et l'instrument me l'aura dit.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
 
 var _fichier := ""
 

@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LE BALAYAGE CHOISIT-IL LE BON EXEMPLAIRE DE CHAQUE TUILE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_arbitrage.gd [-- --fichier=C:/chemin/vers/le.glb]
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -44,11 +44,11 @@ extends SceneTree
 ## nombre de triangles que l'item du lot.** Si les deux diffèrent, ma duplication ne décrit pas le vrai
 ## trancheur, et je le dis au lieu de continuer.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 var _fichier := ""
 

@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LE PROFIL RÉEL D'UN REBORD, EN COUPE
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_profil_rebord.gd -- --z=16
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -27,7 +27,7 @@ extends SceneTree
 ## plan n'en montre que la trace. Un sous-voxel marqué `/` est coupé en diagonale VU DANS CE PLAN — il
 ## peut l'être autrement dans un plan voisin. La sonde marque donc ce qui est COUPÉ, jamais « retiré ».
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 ## Le plan de coupe à imprimer, en SOUS-VOXELS sur z. Par défaut le milieu du bloc.
 var _z := -1

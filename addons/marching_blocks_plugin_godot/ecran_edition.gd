@@ -24,12 +24,12 @@ extends Control
 ## ⚠ UN GREFFON D'ÉDITEUR NE SE TESTE PAS EN HEADLESS (charte §6). On vérifie qu'il COMPILE et que les
 ## règles qu'il appelle sont justes ; qu'il apparaisse et que les boutons agissent se juge dans l'éditeur.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 # ⚠ Pour la LÉGENDE sous la vue, qui lit les six teintes à leur source au lieu de les recopier.
-const RP := preload("res://addons/undermend/repli_procedural.gd")
-const PBR := preload("res://addons/undermend/pbr_monde.gd")
-const Etages := preload("res://addons/undermend/etages.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
+const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
 
 ## ⚠ **UN SEUL LOT, PARCE QU'IL N'Y A PLUS QU'UN MODE (Jordan, 25 septembre 2026).** Il y en avait deux,
 ## `marching_blocks_9.tres` et `marching_blocks_moitie.tres`, que la case à cocher départageait. Le « 9 »
@@ -99,7 +99,7 @@ func _batir() -> void:
 	marge.add_child(colonne)
 
 	var titre := Label.new()
-	titre.text = "Undermend — tuiles 3D"
+	titre.text = "MarchingBlocks — tuiles 3D"
 	titre.add_theme_font_size_override("font_size", 18)
 	titre.add_theme_color_override("font_color", OR)
 	colonne.add_child(titre)
@@ -539,7 +539,7 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 		if Engine.is_editor_hint():
 			EditorInterface.get_resource_filesystem().scan()
 
-	var noeud: Node3D = load("res://addons/undermend/massif_peint.gd").new()
+	var noeud: Node3D = load("res://addons/marching_blocks_plugin_godot/massif_peint.gd").new()
 	# ⚠ UN NOM PAR ORIGINE : les deux massifs se posent au même endroit, et un travail biseauté, qui ne
 	# fait que RETIRER de la matière, disparaît entièrement sous un massif du témoin peint aux mêmes cases.
 	noeud.name = "MassifTravail" if quoi == "travail" else "MassifTemoin"
@@ -712,7 +712,7 @@ func _operer(quoi: String) -> void:
 		return
 
 	var histoire := EditorInterface.get_editor_undo_redo()
-	histoire.create_action("Undermend — %s (étage %d)" % [quoi, _etage])
+	histoire.create_action("MarchingBlocks — %s (étage %d)" % [quoi, _etage])
 	for c in a_poser:
 		histoire.add_do_method(cases, "set_cell_item", c, id)
 		histoire.add_undo_method(cases, "set_cell_item", c, -1)

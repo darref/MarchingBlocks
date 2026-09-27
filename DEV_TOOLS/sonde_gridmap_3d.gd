@@ -4,7 +4,7 @@ extends SceneTree
 ## ⚠ Ce fichier n'est pas un test du jeu : c'est une MESURE d'étude, écrite pour l'analyse de
 ## faisabilité du passage en 3D. À supprimer si la 3D n'est pas retenue.
 ##
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/sonde_gridmap_3d.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/sonde_gridmap_3d.gd
 ##
 ## CE QU'ELLE VÉRIFIE, ET POURQUOI CHAQUE POINT COMPTE :
 ##

@@ -31,10 +31,10 @@ extends SceneTree
 ## lit des cellules hors du cube, que le modèle tient pour vides : il récolterait la face de sciage.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_gestes_de_paysage.gd
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const COTE := 11
 ## La roche monte jusqu'à SOL−1 ; au-dessus c'est le ciel. Assez épaisse pour qu'une grotte ait un

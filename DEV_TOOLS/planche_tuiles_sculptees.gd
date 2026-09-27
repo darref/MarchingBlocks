@@ -3,9 +3,9 @@ extends SceneTree
 ## LA PLANCHE DES TUILES — celles du témoin et celles d'un sculpt, côte à côte.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/planche_tuiles_sculptees.gd \
-##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/UnderMend/ART/tuiles.png
+##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/MarchingBlocks/ART/tuiles.png
 ##
 ## ── LA QUESTION À LAQUELLE ELLE RÉPOND ──────────────────────────────────────────────────────────────
 ##
@@ -22,7 +22,7 @@ extends SceneTree
 ## `mb_arete_b2h0` (l'arête de falaise), `mb_coin_b1h0` (le coin saillant) — celle qu'une case peinte
 ## SEULE produit, donc exactement le cas que Jordan a essayé.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

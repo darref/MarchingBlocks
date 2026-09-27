@@ -17,7 +17,7 @@ signal coup_commence
 signal case_touchee(case: Vector3i, poser: bool)
 signal coup_fini
 
-const Massif := preload("res://addons/undermend/massif_peint.gd")
+const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
 
 var _vue: SubViewport
 var _camera: Camera3D

@@ -84,8 +84,8 @@ extends RefCounted
 ## `anomalies()` REFUSE de laisser diverger l'écrit et le dérivé, et `DEV_TOOLS/test_blocs_maitres.gd`
 ## l'appelle.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
 
 ## Le côté du bloc, en cellules. ⚠ 12 et non 8 : des formes qu'on RECONNAÎT — une arche visible comme
 ## une arche, un pont, une cheminée — coûtent de la place ; en tenir moins, c'est l'optimisation que
@@ -1071,7 +1071,7 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 ## `matiere` — s'il est donné, il est posé sur le solide AVANT le tranchage, et la découpe le recopie
 ## dans chaque tuile : c'est ainsi que le PBR espace monde « suit dans les tuiles » (`pbr_monde.gd`).
 static func librairie(matiere: Material = null) -> Dictionary:
-	var Tranchage := load("res://addons/undermend/tranchage.gd")
+	var Tranchage := load("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 	var pieces := {}
 	var provenance := {}
 	var erreurs: Array = []
@@ -1316,7 +1316,7 @@ static func exporter_le_bloc(chemin: String) -> String:
 ## toute cette boucle : si l'artiste déplace le bloc dans Blender, sa boîte se vide, le greffon retombe
 ## sur la version calculée, et tout semble marcher alors que son travail n'est pas dans le lot.
 static func librairie_depuis_glb(chemin: String) -> Dictionary:
-	var Tranchage := load("res://addons/undermend/tranchage.gd")
+	var Tranchage := load("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 	var journal: Array = []
 	var pieces := {}
 	var provenance := {}
@@ -1391,7 +1391,7 @@ static func ecart_au_temoin(travail: ArrayMesh) -> int:
 ## « Trancher, générer et peindre » le tranche : si l'un lisait autrement que l'autre, l'artiste verrait
 ## une chose et en peindrait une autre, sans qu'aucune erreur ne le dise (charte §6).
 static func travail_depuis_glb(chemin: String, journal: Array = []) -> ArrayMesh:
-	var Decoupe := load("res://addons/undermend/decoupe.gd")
+	var Decoupe := load("res://addons/marching_blocks_plugin_godot/decoupe.gd")
 	var relu: ArrayMesh = _lire_glb(chemin, journal)
 	if relu == null:
 		return null

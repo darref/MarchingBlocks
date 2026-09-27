@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — UN CHANFREIN TIENT-IL SANS TOUCHER AU CONTRAT DE COUTURE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_chanfrein.gd
 ##
 ## ── LA QUESTION, ET POURQUOI ELLE SE MESURE ─────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ extends SceneTree
 ## ⚠ Les normales sont **GÉOMÉTRIQUES** (produit vectoriel des sommets), jamais celles du tableau :
 ## souder force une normale MOYENNE par sommet, et s'y fier a déjà coûté 23 erreurs d'octant.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 ## La largeur naturelle d'un chanfrein : UN sous-voxel. ⚠ DÉRIVÉE de `SOUS`, jamais écrite en dur —
 ## changer la subdivision sans changer ce nombre ferait mesurer un chanfrein qui n'existe pas.

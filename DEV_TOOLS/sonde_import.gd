@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — pourquoi un `.glb` sculpté échoue-t-il au pipeline ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_import.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -22,10 +22,10 @@ extends SceneTree
 ## des sujets voisins ; ici les hypothèses plausibles sont au moins cinq — échelle en mètres, axe haut
 ## inversé, origine décalée, bloc déplacé, maillage multiple — et rien ne les départage sans mesure.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 

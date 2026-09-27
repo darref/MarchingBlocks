@@ -3,7 +3,7 @@ extends SceneTree
 ## TEST — le repli procédural : les 68 surfaces fabriquées par le calcul.
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_repli_procedural.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_repli_procedural.gd
 ##
 ## ⚠ L'INVARIANT CENTRAL, ET IL EST EXACT À LA VIRGULE :
 ##
@@ -18,9 +18,9 @@ extends SceneTree
 ## cube plein, le L, la plaque TROUÉE, le contact en DIAGONALE et la diagonale de corps — exactement les
 ## formes qui ont fait tomber le lot 2D.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const RP := preload("res://addons/undermend/repli_procedural.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
 
 ## Une face d'octant : 0,5 × 0,5.
 const AIRE_DE_FACE := 0.25

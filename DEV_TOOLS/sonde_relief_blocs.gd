@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — l'idée de Jordan : tester le relief sans modéliser, en déformant les blocs témoins.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_relief_blocs.gd
 ##
 ## ── LA QUESTION, ET POURQUOI ELLE EST BONNE ─────────────────────────────────────────────────────────
@@ -38,10 +38,10 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle imprime.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CELLULE := 1.0
 

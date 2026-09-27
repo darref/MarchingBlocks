@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — où un GridMap pose-t-il réellement ses cases ?
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/sonde_gridmap_centrage.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/sonde_gridmap_centrage.gd
 ##
 ## ⚠ POURQUOI, ET C'EST UN DÉCALAGE QUI NE SE VOIT PAS SUR UN SOL PLAT. Le greffon pose ses pièces sur
 ## les SOMMETS du réseau, pas sur les cases : une pièce est centrée sur le coin commun à huit cellules.
@@ -18,7 +18,7 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle mesure et elle imprime.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 
 func _initialize() -> void:

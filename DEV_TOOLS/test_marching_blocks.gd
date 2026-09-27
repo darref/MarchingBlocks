@@ -3,7 +3,7 @@ extends SceneTree
 ## TEST — le classificateur « Marching Blocks », en modèle ORIENTÉ.
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_marching_blocks.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_marching_blocks.gd
 ##
 ## ⚠ CE QUE CE TEST GARDE :
 ##
@@ -24,7 +24,7 @@ extends SceneTree
 ## Conséquence chiffrée : 70 classes au lieu de 23, 68 pièces à sculpter au lieu de 21 — et le sol plat
 ## cesse d'être le même objet que le mur plat.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 ## ⚠ LES CHIFFRES ATTENDUS SONT ÉCRITS ICI, EN DUR ET EXPRÈS. Ils viennent d'un calcul d'orbites mené
 ## HORS du moteur (Burnside vérifié sur les trois groupes). Si le module se met à en rendre d'autres,

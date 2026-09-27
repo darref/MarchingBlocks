@@ -3,8 +3,8 @@ extends SceneTree
 ## LA LÉGENDE DU TÉMOIN — le bloc a-t-il des régions lisibles, et à quoi ressemblent-elles ?
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE (elle rend une image ; le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_legende.gd -- --sortie=D:/UnderMend/ART/legende.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_legende.gd -- --sortie=D:/MarchingBlocks/ART/legende.png
 ##
 ## Avec `--brut`, le témoin est rendu AVEC SES PROPRES COULEURS — celles qui partent chez l'artiste —
 ## au lieu d'être repeint en deux teintes franches. C'est la seule façon de juger la légende livrée.
@@ -37,8 +37,8 @@ extends SceneTree
 ## jamais été rangé dans le module — il vivait dans des sondes. Si la légende est adoptée, il devra
 ## descendre dans `blocs_maitres.gd` pour n'exister qu'une fois.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 ## ⚠ La lecture des chutes vit LÀ-BAS, et `sonde_reste_t_il_des_marches.gd` lit la même : cette
 ## planche PEINT ce que la sonde COMPTE, et deux écritures auraient fini par ne plus s'accorder.
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")

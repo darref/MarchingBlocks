@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — le contexte d'un sommet est-il le MÊME dans le bloc maître et dans le monde peint ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_stabilite_contexte.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -26,7 +26,7 @@ extends SceneTree
 ##   (B) ROCHE AU-DESSUS — binaire, donc a priori stable à l'échelle ;
 ##   (C) CIEL VU > seuil — continu, donc a priori SENSIBLE à l'épaisseur de roche disponible.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const COTE := 7
 const MARGE := 7               # l'épaisseur de roche ajoutée autour, dans le grand monde

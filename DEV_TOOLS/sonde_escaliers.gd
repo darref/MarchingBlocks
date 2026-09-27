@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — DE QUELLE TAILLE SONT LES « PETITS ESCALIERS » ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_escaliers.gd
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ extends SceneTree
 ## ⚠ Elle lit `BlocsMaitres.sous_voxels()`, la même fonction que le mailleur — jamais une recopie de la
 ## règle du retrait.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 
 func _initialize() -> void:

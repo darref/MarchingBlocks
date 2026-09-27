@@ -3,7 +3,7 @@ extends SceneTree
 ## LE MONDE D'ESSAI — peindre pour de vrai, avec le lot des NEUF BLOCS et sans aucun repli.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/faire_monde_essai.gd -- --relief
 ##
 ##   --relief   applique le relief d'essai périodique aux neuf blocs (matière strictement entre le min
@@ -28,8 +28,8 @@ extends SceneTree
 ##   ART/marching_blocks.tres     la MeshLibrary tirée du bloc témoin
 ##   NIVEAUX/monde_essai_3d.tscn  une scène ouvrable, déjà peinte, et qu'on peut CONTINUER à peindre
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 ## ⚠ **LE DRAPEAU `--moitie` A DISPARU AVEC LE MODE (Jordan, 25 septembre 2026).** Les tuiles sont
 ## DÉSORMAIS TOUJOURS ramenées à la moitié de leur case avant le tranchage. C'est l'ordre qui compte —
@@ -183,7 +183,7 @@ func _ecrire_la_scene(lot: MeshLibrary, pleines: Dictionary) -> String:
 	var racine := Node3D.new()
 	racine.name = "MondeEssai3D"
 
-	var massif: Node3D = load("res://addons/undermend/massif_peint.gd").new()
+	var massif: Node3D = load("res://addons/marching_blocks_plugin_godot/massif_peint.gd").new()
 	massif.name = "MassifPeint"
 	massif.preparer()
 	massif.lot = lot

@@ -6,7 +6,7 @@ extends SceneTree
 ## et ce qu'une case peinte déclenche réellement.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend rien) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/planche_grille_duale.gd -- --sortie=D:/chemin/planche.png
 ##
 ## CE QU'ELLE DIT, ET C'EST TOUT LE SUJET :

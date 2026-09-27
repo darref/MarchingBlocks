@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — deux corrections à mes propres instruments.
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_bloc_et_ciel.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -22,7 +22,7 @@ extends SceneTree
 ## resserre l'écart avec le surplomb (25,6 %) jusqu'à rendre tout seuil fragile.
 ## ⚠ **Le ciel se regarde vers le HAUT.** On exige donc `dy ≥ 1`, et l'on voit si la séparation s'ouvre.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),

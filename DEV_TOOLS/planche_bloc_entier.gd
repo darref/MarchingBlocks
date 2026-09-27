@@ -3,9 +3,9 @@ extends SceneTree
 ## LA PLANCHE DU BLOC ENTIER — le témoin et un sculpt, côte à côte, sous quatre angles.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend RIEN) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/planche_bloc_entier.gd \
-##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/UnderMend/ART/bloc_entier.png
+##       -- --fichier=C:/chemin/vers/le.glb --sortie=D:/MarchingBlocks/ART/bloc_entier.png
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
 ##
@@ -25,7 +25,7 @@ extends SceneTree
 ## ⚠ Quatre angles, parce qu'un chapeau ne se voit pas de dessus. Même cadrage, même lumière, même fond
 ## pour les deux : un rendu de contrôle jugé dans un cadre différent de son témoin a déjà menti ici.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(380, 380)
 const FOND := Color("#101216")

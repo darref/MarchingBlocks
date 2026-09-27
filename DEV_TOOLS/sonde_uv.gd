@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — COMMENT LA TEXTURE D'UN SCULPT SE RÉPARTIT-ELLE SUR LES TUILES ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_uv.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ extends SceneTree
 ## ⚠ **ELLE NE DIT PAS SI C'EST BEAU.** Un fragment répété peut très bien passer sur une matière
 ## uniforme et sauter aux yeux sur une texture dirigée. Ça, seule l'image le dira.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 

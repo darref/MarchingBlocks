@@ -20,8 +20,8 @@ extends SceneTree
 ## On compare avec le MÊME `bilan()` des deux côtés : seule la coque change, donc tout écart lui est
 ## imputable et à rien d'autre.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 
 

@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — POURQUOI LES TUILES D'UN SCULPT RENDENT-ELLES NOIR ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_normales.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ extends SceneTree
 ##
 ## ⚠ **ELLE NE CORRIGE RIEN.** Elle compte.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 

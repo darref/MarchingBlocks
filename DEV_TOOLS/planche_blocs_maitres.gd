@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DES NEUF BLOCS MAÎTRES — ce que l'artiste devra sculpter, vu avant de le sculpter.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend rien) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_blocs_maitres.gd -- --sortie=D:/UnderMend/ART/planche_blocs.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_blocs_maitres.gd -- --sortie=D:/MarchingBlocks/ART/planche_blocs.png
 ##
 ## ── CE QUE CETTE PLANCHE MONTRE, ET CE QU'ELLE NE PROUVE PAS ────────────────────────────────────────
 ##
@@ -27,8 +27,8 @@ extends SceneTree
 ## flancs. ⚠ Elles ne prouvent rien non plus (le code les pose d'après la normale, l'image les répète) —
 ## elles servent à LIRE la forme, pas à la valider.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const CASE := Vector2i(430, 430)
 const COLONNES := 3

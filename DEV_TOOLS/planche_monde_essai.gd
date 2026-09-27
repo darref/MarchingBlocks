@@ -3,8 +3,8 @@ extends SceneTree
 ## LA PLANCHE DU MONDE D'ESSAI — regarder ce que la peinture a donné.
 ##
 ## LANCEMENT — ⚠ AVEC FENÊTRE, jamais en headless (le headless ne rend rien) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/UnderMend \
-##       --script res://DEV_TOOLS/planche_monde_essai.gd -- --sortie=D:/UnderMend/ART/planche_monde.png
+##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks \
+##       --script res://DEV_TOOLS/planche_monde_essai.gd -- --sortie=D:/MarchingBlocks/ART/planche_monde.png
 ##
 ## ── CE QU'ELLE MONTRE, ET CE QU'ELLE NE PROUVE PAS ──────────────────────────────────────────────────
 ##

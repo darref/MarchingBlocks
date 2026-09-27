@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — LES PIÈCES TIRÉES D'UN SCULPT TIENNENT-ELLES DANS LEUR CASE ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_pieces_sculptees.gd -- --fichier=C:/chemin/vers/le.glb
 ##
 ## ── POURQUOI ELLE EXISTE ────────────────────────────────────────────────────────────────────────────
@@ -28,7 +28,7 @@ extends SceneTree
 ## notre extraction — auquel cas les deux lots déborderaient pareil. Un contrôle qui s'inverse invalide
 ## l'instrument, pas le sujet.
 
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 var _fichier := ""
 

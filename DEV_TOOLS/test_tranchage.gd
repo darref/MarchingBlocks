@@ -3,7 +3,7 @@ extends SceneTree
 ## TEST — le tranchage d'un bloc maître (étape 6).
 ##
 ## LANCEMENT
-##   godot --headless --path D:/UnderMend --script res://DEV_TOOLS/test_tranchage.gd
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_tranchage.gd
 ##
 ## ⚠ **LE SUJET D'ESSAI EST BÂTI EN BOÎTES BRUTES, JAMAIS DEPUIS LE REPLI.** C'est la leçon que Jordan a
 ## donnée sur la planche : colorier une face d'après sa normale puis regarder la couleur pour conclure
@@ -53,9 +53,9 @@ extends SceneTree
 ##    surface horizontale d'une `mb_plaque_b4h0` tombe exactement sur le plan central de sa pièce. Le
 ##    contrôle par octants est, par nature, trop grossier pour un écart de cette taille.
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const Decoupe := preload("res://addons/undermend/decoupe.gd")
-const Tranchage := preload("res://addons/undermend/tranchage.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
 
 const CELLULE := 1.0
 

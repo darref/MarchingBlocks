@@ -3,7 +3,7 @@ extends SceneTree
 ## SONDE — le bloc maître UNIQUE est-il meilleur, et répare-t-il le défaut de contexte ?
 ##
 ## LANCEMENT
-##   Godot_v4.7-stable_win64_console.exe --headless --path D:/UnderMend \
+##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_bloc_unique.gd
 ##
 ## ⚠ ELLE NE MODIFIE RIEN.
@@ -25,8 +25,8 @@ extends SceneTree
 ##      déduisent par remplissage depuis le bord — et les classes à double contexte peuvent livrer
 ##      DEUX variantes, au lieu d'une liste écrite à la main (5 déclarées, 10 mesurées).
 
-const MB := preload("res://addons/undermend/marching_blocks.gd")
-const BM := preload("res://addons/undermend/blocs_maitres.gd")
+const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),
