@@ -60,6 +60,7 @@ func _initialize() -> void:
 	_la_partition_des_contextes_est_derivee()
 	_le_temoin_livre_exactement_le_monde()
 	_le_materiau_suit_dans_les_tuiles()
+	_le_temoin_revient_avec_ses_six_teintes()
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
@@ -237,6 +238,36 @@ func _le_materiau_suit_dans_les_tuiles() -> void:
 	_dire(fuite == 0, "%d tuile(s) portent encore le marqueur sans qu'on l'ait demandé" % fuite)
 	print("  matériau : il suit dans les %d tuiles, couleurs de sommet comprises"
 		% lot.get_item_list().size())
+
+
+## ⚠ **LE TÉMOIN EXPORTÉ DOIT REVENIR AVEC SES SIX TEINTES.** Il part en six surfaces nommées
+## (`par_teinte`) et sans normales ; relu, il passait par `normales_plates()`, qui fondait tout en UNE
+## surface sous « Floor - open air » — un réimport direct revenait entièrement vert. Aucune suite ne
+## relisait un export : c'est ce trou-là que ce contrôle bouche.
+func _le_temoin_revient_avec_ses_six_teintes() -> void:
+	var chemin: String = ProjectSettings.globalize_path("user://aller_retour_test.glb")
+	var raison: String = BlocsMaitres.exporter_le_bloc(chemin)
+	_dire(raison == "", "l'export du témoin échoue : %s" % raison)
+	if raison != "":
+		return
+	var relu: ArrayMesh = BlocsMaitres._lire_glb(chemin, [])
+	_dire(relu != null, "le témoin exporté ne se relit pas")
+	if relu == null:
+		return
+	var noms := {}
+	for s in relu.get_surface_count():
+		var m: Material = relu.surface_get_material(s)
+		if m != null:
+			noms[m.resource_name] = true
+	var manquent: Array = []
+	for t in RP.TEINTES:
+		if not noms.has(t["nom"]):
+			manquent.append(t["nom"])
+	_dire(relu.get_surface_count() == RP.TEINTES.size() and manquent.is_empty(),
+		"le témoin revient en %d surface(s) ; teintes perdues : %s"
+			% [relu.get_surface_count(), str(manquent)])
+	DirAccess.remove_absolute(chemin)
+	print("  aller-retour : %d surfaces, %d teintes nommées" % [relu.get_surface_count(), noms.size()])
 
 
 func _le_temoin_livre_exactement_le_monde() -> void:

@@ -482,10 +482,14 @@ func _importer(fichier: String) -> void:
 	_instance.mesh = travail
 	_etiquette_vue.text = "le travail importé — %s" % fichier.get_file()
 	_habiller_la_vue()
-	_dire(("[color=#6f9e4a][b]Travail importé[/b][/color] ← %s\n\n"
+	var ecart: int = BlocsMaitres.ecart_au_temoin(travail)
+	var ecart_dit: String = ("[color=#e0b84a]⚠ aucun sommet n'a bougé par rapport au témoin : le tranchage "
+		+ "rendra les tuiles du témoin.[/color]") if ecart == 0 \
+		else "%d position(s) de sommet nouvelles par rapport au témoin." % ecart
+	_dire(("[color=#6f9e4a][b]Travail importé[/b][/color] ← %s\n%s\n\n"
 		+ "La vue le montre tel que le trancheur le lira : ce qui dépasse la boîte du bloc n'y est plus.\n\n"
 		+ "[i]« Trancher le travail » le relira au moment du clic — réenregistrer dans Blender "
-		+ "entre-temps suffit.[/i]") % fichier)
+		+ "entre-temps suffit.[/i]") % [fichier, ecart_dit])
 
 
 # ── 3. TRANCHER LE TRAVAIL ───────────────────────────────────────────────────────────────────────────
@@ -535,7 +539,9 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 			EditorInterface.get_resource_filesystem().scan()
 
 	var noeud: Node3D = load("res://addons/undermend/massif_peint.gd").new()
-	noeud.name = "MassifPeint"
+	# ⚠ UN NOM PAR ORIGINE : les deux massifs se posent au même endroit, et un travail biseauté, qui ne
+	# fait que RETIRER de la matière, disparaît entièrement sous un massif du témoin peint aux mêmes cases.
+	noeud.name = "MassifTravail" if quoi == "travail" else "MassifTemoin"
 	noeud.lot = lot
 	# ⚠ LES TROIS GRILLES SONT BÂTIES AVANT LA POSE. Laissées au `_ready()`, elles naissent sans `owner` :
 	# elles existent dans l'arbre mais N'APPARAISSENT PAS dans le dock, donc rien à peindre.

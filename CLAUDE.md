@@ -396,8 +396,8 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **7 448 vérifications, 0 échec** (27 septembre 2026, recomptées) :
-  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 413,
+  Six suites, **7 451 vérifications, 0 échec** (27 septembre 2026, recomptées) :
+  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 416,
   `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
   ⚠ `test_blocs_maitres` a presque triplé avec le bloc de 12³, pour la même raison qu'en dessous : ses
   boucles par cellule et par pièce assertent une fois par élément, et il y a 820 cases.

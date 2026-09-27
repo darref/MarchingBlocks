@@ -1315,6 +1315,29 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	return resultat
 
 
+## DE COMBIEN LE TRAVAIL S'ÉCARTE DU TÉMOIN : les positions de sommets (au millième) qu'il porte et
+## que le témoin exporté n'a pas. 0 veut dire « aucun sommet n'a bougé » — le tranchage rendra alors
+## les tuiles du témoin, et c'est normal.
+##
+## ⚠ **ELLE EXISTE PARCE QU'UN « ÇA FAIT LA MÊME CHOSE » N'A PAS PU ÊTRE TRANCHÉ À L'ŒIL** (27 septembre
+## 2026) : le fichier importé avait d'abord une géométrie IDENTIQUE au témoin (0 position nouvelle),
+## puis, réexporté sept minutes plus tard avec un bevel, 7 123 positions nouvelles et 47 tuiles sur 52
+## différentes. Sans ce chiffre à l'écran, rien ne distinguait les deux cas.
+static func ecart_au_temoin(travail: ArrayMesh) -> int:
+	var temoin := {}
+	var ref: ArrayMesh = maillage_moitie(0)
+	for s in ref.get_surface_count():
+		for p in (ref.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			temoin[Vector3i(roundi(p.x * 1000.0), roundi(p.y * 1000.0), roundi(p.z * 1000.0))] = true
+	var nouvelles := {}
+	for s in travail.get_surface_count():
+		for p in (travail.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			var k := Vector3i(roundi(p.x * 1000.0), roundi(p.y * 1000.0), roundi(p.z * 1000.0))
+			if not temoin.has(k):
+				nouvelles[k] = true
+	return nouvelles.size()
+
+
 ## LE TRAVAIL DE L'ARTISTE tel que le trancheur le lira : le `.glb` relu, découpé dans la boîte
 ## tolérante du bloc. `null` si le fichier est illisible — le motif va alors dans `journal` — ou si la
 ## boîte ressort VIDE, et `journal` reste alors vide : un bloc absent n'est pas une erreur de lecture,
@@ -1379,12 +1402,15 @@ static func sans_normales(mesh: ArrayMesh) -> ArrayMesh:
 ##
 ## ⚠ Le maillage sort DÉ-INDEXÉ, et c'est nécessaire : l'ombrage plat demande une normale par FACE, ce
 ## qu'un sommet partagé entre trois faces ne peut pas porter.
+##
+## ⚠ **UNE SURFACE EN SORTIE PAR SURFACE EN ENTRÉE, CHACUNE AVEC SON MATÉRIAU — CORRIGÉ LE 27 SEPTEMBRE
+## 2026.** Elle fondait tout en UNE surface sous le matériau de la première. Or le témoin exporté porte
+## SIX surfaces, une par teinte nommée (`par_teinte`) : relu sans passer par Blender, il revenait
+## entièrement « Floor - open air », vert. Mesuré : 6 primitives dans le fichier, 1 surface relue.
+## Un `.glb` revenu de Blender, lui, porte ses normales et ne passe pas ici — c'est pourquoi le défaut
+## ne se voyait que sur nos propres exports.
 static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
-	var sommets := PackedVector3Array()
-	var normales := PackedVector3Array()
-	var couleurs := PackedColorArray()
-	var avait_des_couleurs := false
-
+	var sortie := ArrayMesh.new()
 	for s in mesh.get_surface_count():
 		var arrays: Array = mesh.surface_get_arrays(s)
 		if arrays.is_empty():
@@ -1394,13 +1420,15 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 			continue
 		var c: PackedColorArray = arrays[Mesh.ARRAY_COLOR] \
 			if arrays[Mesh.ARRAY_COLOR] != null else PackedColorArray()
-		if not c.is_empty():
-			avait_des_couleurs = true
+		var avait_des_couleurs: bool = not c.is_empty()
 		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] \
 			if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 		if idx.is_empty():
 			idx = PackedInt32Array(range(v.size()))
 
+		var sommets := PackedVector3Array()
+		var normales := PackedVector3Array()
+		var couleurs := PackedColorArray()
 		for t in range(0, idx.size() - 2, 3):
 			var a: Vector3 = v[idx[t]]
 			var b: Vector3 = v[idx[t + 1]]
@@ -1415,23 +1443,22 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 				normales.append(normale)
 				if avait_des_couleurs:
 					couleurs.append(c[idx[t + k]] if c.size() > idx[t + k] else Color.WHITE)
-
-	var sortie := ArrayMesh.new()
-	if sommets.is_empty():
-		return sortie
-	var res: Array = []
-	res.resize(Mesh.ARRAY_MAX)
-	res[Mesh.ARRAY_VERTEX] = sommets
-	res[Mesh.ARRAY_NORMAL] = normales
-	if avait_des_couleurs:
-		res[Mesh.ARRAY_COLOR] = couleurs
-	sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
-	# ⚠ **LE MATÉRIAU SUIT, ET SON OUBLI S'EST VU À L'IMAGE.** Sans lui, la planche est sortie
-	# entièrement GRISE : les couleurs de sommet étaient bien là, mais aucun matériau en
-	# `vertex_color_use_as_albedo` ne les lisait. ⚠ Et ce n'était pas qu'esthétique — cette fonction est
-	# aussi appelée à la LECTURE d'un `.glb`, donc les pièces d'un réimport auraient perdu leur matière.
-	var matiere: Material = mesh.surface_get_material(0) if mesh.get_surface_count() > 0 else null
-	sortie.surface_set_material(0, matiere if matiere != null else RP.matiere())
+		if sommets.is_empty():
+			continue
+		var res: Array = []
+		res.resize(Mesh.ARRAY_MAX)
+		res[Mesh.ARRAY_VERTEX] = sommets
+		res[Mesh.ARRAY_NORMAL] = normales
+		if avait_des_couleurs:
+			res[Mesh.ARRAY_COLOR] = couleurs
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
+		# ⚠ **LE MATÉRIAU SUIT, ET SON OUBLI S'EST VU À L'IMAGE.** Sans lui, la planche est sortie
+		# entièrement GRISE : les couleurs de sommet étaient bien là, mais aucun matériau en
+		# `vertex_color_use_as_albedo` ne les lisait. ⚠ Et ce n'était pas qu'esthétique — cette fonction
+		# est appelée à la LECTURE d'un `.glb`, donc les pièces d'un réimport auraient perdu leur matière.
+		var matiere: Material = mesh.surface_get_material(s)
+		sortie.surface_set_material(sortie.get_surface_count() - 1,
+			matiere if matiere != null else RP.matiere())
 	return sortie
 
 
