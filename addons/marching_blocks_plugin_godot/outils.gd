@@ -170,3 +170,78 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 						apres[v] = true
 						file.append(v)
 	return {"poser": poser, "effacer": effacer, "selection": apres}
+
+
+## LA SÉLECTION EN BOÎTE — la matière entre deux coins, bornes comprises.
+## ⚠ On parcourt la MATIÈRE, jamais le volume de la boîte : une boîte de 100³ ferait un million de
+## tours pour quelques centaines de cases pleines.
+static func dans_la_boite(occupees: Dictionary, a: Vector3i, b: Vector3i) -> Dictionary:
+	var bas := Vector3i(mini(a.x, b.x), mini(a.y, b.y), mini(a.z, b.z))
+	var haut := Vector3i(maxi(a.x, b.x), maxi(a.y, b.y), maxi(a.z, b.z))
+	var dedans := {}
+	for c in occupees:
+		var p: Vector3i = c
+		if p.x >= bas.x and p.x <= haut.x and p.y >= bas.y and p.y <= haut.y and p.z >= bas.z and p.z <= haut.z:
+			dedans[p] = true
+	return dedans
+
+
+## DÉPLACER la matière sélectionnée d'un décalage. Rend {"poser", "effacer", "selection"}.
+## ⚠ **UN DÉPLACEMENT QUI RECOUVRE SA SOURCE** (décaler de 1 une rangée de 3) ne doit ni effacer ce qu'il
+## vient de poser ni reposer ce qui reste : on n'efface que la source QUI N'EST PAS destination, on ne
+## pose que la destination QUI EST VIDE — ou qui ne l'est que par la source partie.
+## ⚠ La matière d'accueil reste : déplacer sur une paroi FUSIONNE, jamais n'écrase.
+static func deplacer(occupees: Dictionary, selection: Dictionary, decalage: Vector3i) -> Dictionary:
+	var source := {}
+	for c in selection:
+		if occupees.has(c):
+			source[c] = true
+	var destination := {}
+	for c in source:
+		destination[(c as Vector3i) + decalage] = true
+	var effacer := {}
+	for c in source:
+		if not destination.has(c):
+			effacer[c] = true
+	var poser := {}
+	for c in destination:
+		if not occupees.has(c) or effacer.has(c):
+			poser[c] = true
+	return {"poser": poser, "effacer": effacer, "selection": destination}
+
+
+## COPIER — la matière sélectionnée, ramenée à son point d'ANCRAGE : le milieu de sa face du dessous.
+## C'est là qu'elle se pose au collage, contre la face visée, comme une case qu'on ajoute.
+## Rend un tableau trié de décalages relatifs.
+static func copier(occupees: Dictionary, selection: Dictionary) -> Array[Vector3i]:
+	var cases: Array[Vector3i] = []
+	for c in selection:
+		if occupees.has(c):
+			cases.append(c)
+	if cases.is_empty():
+		return cases
+	var bas: Vector3i = cases[0]
+	var haut: Vector3i = cases[0]
+	for c in cases:
+		bas = Vector3i(mini(bas.x, c.x), mini(bas.y, c.y), mini(bas.z, c.z))
+		haut = Vector3i(maxi(haut.x, c.x), maxi(haut.y, c.y), maxi(haut.z, c.z))
+	# ⚠ `floori` sur la somme, pas une division entière : (−3 + 0) / 2 rendrait −1 en GDScript (vers
+	# zéro) là où le milieu est −2 — le collage glisserait d'une case selon le signe des coordonnées.
+	var ancrage := Vector3i(floori((bas.x + haut.x) / 2.0), bas.y, floori((bas.z + haut.z) / 2.0))
+	var relatives: Array[Vector3i] = []
+	for c in cases:
+		relatives.append(c - ancrage)
+	relatives.sort()
+	return relatives
+
+
+## COLLER un presse-papiers à une ancre. Ne pose que dans le vide ; la matière d'accueil reste.
+static func coller(occupees: Dictionary, presse_papiers: Array, ancre_: Vector3i) -> Dictionary:
+	var poser := {}
+	var apres := {}
+	for d in presse_papiers:
+		var c: Vector3i = ancre_ + (d as Vector3i)
+		apres[c] = true
+		if not occupees.has(c):
+			poser[c] = true
+	return {"poser": poser, "effacer": {}, "selection": apres}

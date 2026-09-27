@@ -87,6 +87,24 @@ func _derouler() -> void:
 	await _images(20)
 	_photo("5_grille_locale")
 
+	# Phase 3 : une boîte en cours de tracé, puis un collage qui suit la souris.
+	_ecran._vue._distance = 26.0
+	_ecran._vue._caler()
+	_ecran._choisir_visee("sculpt")
+	_ecran._choisir_outil("boite")
+	_ecran._vue.vider_selection()
+	_ecran._vue._coin_boite = Vector3i(1, 0, 0)
+	_ecran._vue._coin_fin = Vector3i(5, 1, 3)
+	_ecran._vue._survoler_boite(cam.unproject_position(Vector3(5.5, 2.0, 3.5)))
+	await _images(20)
+	_photo("6_boite")
+	_ecran._vue._finir_boite(MOUSE_BUTTON_LEFT)
+	_ecran._copier()
+	_ecran._coller()
+	_ecran._vue._survoler(cam.unproject_position(Vector3(-3.5, 0.0, 2.5)))
+	await _images(20)
+	_photo("7_collage")
+
 	_ecran.queue_free()
 	await process_frame
 	if _reglages_avant == "":

@@ -51,7 +51,8 @@ const CONSEILS: Array[String] = [
 	"The witness is proven complete: 52 tiles, not one missing, not one extra.",
 	"Test world: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
 	"Tab switches between Grid (paint on the floor plane) and Sculpt (paint against the matter).",
-	"A, D, S pick Add, Dig, Select. [ and ] change the brush size.",
+	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
+	"Arrow keys move the selection, Shift + Up / Down lifts it. Ctrl+C, Ctrl+X, Ctrl+V work across layers.",
 	"Middle mouse turns the view, Shift + middle slides it, the wheel zooms.",
 	"A red cube is a tile your library does not have. Nothing is ever filled in for you.",
 	"Keep your relief inside its cell: the slicer cuts straight through the cell centres.",
@@ -116,6 +117,9 @@ var _compteur_etage: SpinBox
 var _section_selection: Control
 var _etiquette_selection: Label
 var _etiquette_portee: Label
+## Le PRESSE-PAPIERS : des décalages relatifs (`Outils.copier`). Il n'appartient à aucune couche — on
+## copie dans la roche et on colle dans la glace.
+var _presse_papiers: Array = []
 
 
 ## ⚠ `UndoRedo` N'EST PAS COMPTÉ PAR RÉFÉRENCE : il fuit si on ne le libère pas, avec les couches
@@ -191,6 +195,7 @@ func _batir() -> void:
 	_vue.coup_commence.connect(_coup_commence)
 	_vue.touche.connect(_touche)
 	_vue.selection_changee.connect(_selection_changee)
+	_vue.colle.connect(_colle)
 	_vue.coup_fini.connect(_coup_fini)
 	corps.add_child(_vue)
 
@@ -434,7 +439,20 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["creuser", "Dig", "D — removes matter. Right click adds."],
 		["selectionner", "Select", "S — selects matter (Shift adds to the selection). Right click "
 			+ "deselects."],
+		["boite", "Box", "B — drag a box: the matter inside becomes the selection (Shift adds, right "
+			+ "drag removes).\nIn Sculpt, the two corners are on the matter, so the box is 3D."],
 	], _choisir_outil))
+	var presse := HBoxContainer.new()
+	for b in [
+		["Copy", "Ctrl+C — copies the selected matter. Paste it into any layer.", _copier],
+		["Cut", "Ctrl+X — copies, then deletes.", _couper],
+		["Paste", "Ctrl+V — the copy follows the mouse; click to place it against the face you point "
+			+ "at, right click or Esc to cancel.", _coller],
+	]:
+		var bouton := _bouton(b[0], b[1], b[2])
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		presse.add_child(bouton)
+	outils.contenu.add_child(presse)
 	var pinceau := HBoxContainer.new()
 	pinceau.add_child(_texte("brush", 12))
 	_taille = SpinBox.new()
@@ -491,6 +509,16 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		grille_sel.add_child(bouton)
 	sel.contenu.add_child(grille_sel)
+	sel.contenu.add_child(_petit_titre("MOVE  (arrows · Shift + Up / Down)"))
+	var bouger := GridContainer.new()
+	bouger.columns = 3
+	for m in [["X −", Vector3i(-1, 0, 0)], ["Y +", Vector3i(0, 1, 0)], ["X +", Vector3i(1, 0, 0)],
+			["Z −", Vector3i(0, 0, -1)], ["Y −", Vector3i(0, -1, 0)], ["Z +", Vector3i(0, 0, 1)]]:
+		var bouton := _bouton(m[0], "Moves the selected matter one cell. It merges with the matter it "
+			+ "lands on, never erases it.", _deplacer.bind(m[1]))
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bouger.add_child(bouton)
+	sel.contenu.add_child(bouger)
 
 	var etage := Section.new("Floor / selection")
 	pile.add_child(etage)
@@ -922,6 +950,66 @@ func _operer_selection(quoi: String) -> void:
 		% [quoi, n, _vue.selection.size()])
 
 
+func _deplacer(decalage: Vector3i) -> void:
+	if _vue.selection.is_empty():
+		_dire("[i]Nothing selected to move.[/i]")
+		return
+	var op: Dictionary = Outils.deplacer(_occupees(), _vue.selection, decalage)
+	_appliquer(op, "Move")
+	_vue.regler_selection(op["selection"])
+
+
+## ⚠ LES FLÈCHES SUIVENT LA CAMÉRA : « haut » éloigne de soi, quel que soit le côté d'où l'on regarde.
+## On arrondit à l'axe dominant — un déplacement en diagonale n'existe pas sur une grille.
+func _deplacer_a_l_ecran(ecran: Vector2i) -> void:
+	var base: Basis = _vue._camera.global_transform.basis
+	var devant := _axe_horizontal(-base.z)
+	var droite := _axe_horizontal(base.x)
+	_deplacer(droite * ecran.x + devant * -ecran.y)
+
+
+static func _axe_horizontal(v: Vector3) -> Vector3i:
+	if absf(v.x) >= absf(v.z):
+		return Vector3i(int(signf(v.x)), 0, 0)
+	return Vector3i(0, 0, int(signf(v.z)))
+
+
+func _copier() -> bool:
+	var pp: Array = Outils.copier(_occupees(), _vue.selection)
+	if pp.is_empty():
+		_dire("[i]Nothing selected to copy.[/i] Select some matter first (S or B).")
+		return false
+	_presse_papiers = pp
+	_dire("[b]Copied[/b] — %d cell(s). [i]Ctrl+V pastes, into this layer or any other.[/i]" % pp.size())
+	return true
+
+
+func _couper() -> void:
+	if _copier():
+		var op: Dictionary = Outils.operer_selection(_occupees(), _vue.selection, "supprimer")
+		_appliquer(op, "Cut")
+		_vue.regler_selection(op["selection"])
+		_dire("[b]Cut[/b] — %d cell(s). [i]Ctrl+V pastes them back, anywhere.[/i]" % _presse_papiers.size())
+
+
+func _coller() -> void:
+	if _presse_papiers.is_empty():
+		_dire("[i]Nothing to paste.[/i] Copy a selection first (Ctrl+C).")
+		return
+	_aller_a("monde")
+	_vue.commencer_collage(_presse_papiers)
+	_dire(("[b]Pasting[/b] %d cell(s) — click to place against the face you point at. [i]Right click or "
+		+ "Esc cancels.[/i]") % _presse_papiers.size())
+
+
+func _colle(ancre: Vector3i) -> void:
+	var op: Dictionary = Outils.coller(_occupees(), _presse_papiers, ancre)
+	var n := _appliquer(op, "Paste")
+	_vue.regler_selection(op["selection"])
+	_dire(("[b]Pasted[/b] — %d cell(s) added, the rest merged with the matter there. [i]Ctrl+Z undoes "
+		+ "it.[/i]") % n)
+
+
 # ── LA BARRE D'OUTILS ────────────────────────────────────────────────────────────────────────────────
 
 ## Une rangée de boutons exclusifs. `choix` : [clé, libellé, infobulle].
@@ -1264,6 +1352,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			if _histoire.redo():
 				_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
 			get_viewport().set_input_as_handled()
+		elif _atelier == "monde" and k.keycode in [KEY_C, KEY_X, KEY_V]:
+			match k.keycode:
+				KEY_C:
+					_copier()
+				KEY_X:
+					_couper()
+				KEY_V:
+					_coller()
+			get_viewport().set_input_as_handled()
 		return
 	if _atelier != "monde":
 		return
@@ -1275,6 +1372,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_choisir_outil("creuser")
 		KEY_S:
 			_choisir_outil("selectionner")
+		KEY_B:
+			_choisir_outil("boite")
 		KEY_BRACKETLEFT:
 			_taille.value -= 1
 		KEY_BRACKETRIGHT:
@@ -1286,7 +1385,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_DELETE:
 			_operer_selection("supprimer")
 		KEY_ESCAPE:
-			_vue.vider_selection()
+			if not _vue.collage.is_empty():
+				_vue.annuler_collage()
+				_dire("[i]Paste cancelled.[/i]")
+			else:
+				_vue.vider_selection()
 		_:
 			fait = false
 	if fait:
@@ -1296,14 +1399,27 @@ func _unhandled_key_input(event: InputEvent) -> void:
 ## ⚠ TAB PASSE PAR `_input`, PAS PAR `_unhandled_key_input` : l'interface le consomme d'abord pour
 ## déplacer le focus d'un bouton à l'autre, et le raccourci ne serait jamais arrivé. On ne le prend que
 ## si aucun champ de texte n'a la main — le nom d'une couche se tape au clavier.
+## ⚠ LES FLÈCHES AUSSI, et pour la même raison : elles déplacent le focus entre les boutons. Elles
+## répètent quand on les tient (`echo`), comme on l'attend d'un déplacement.
 func _input(event: InputEvent) -> void:
 	var k := event as InputEventKey
-	if k == null or not k.pressed or k.echo or k.keycode != KEY_TAB or _atelier != "monde":
+	if k == null or not k.pressed or _atelier != "monde" or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
-	_choisir_visee("sculpt" if _vue.visee == "grille" else "grille")
+	if k.keycode == KEY_TAB and not k.echo:
+		_choisir_visee("sculpt" if _vue.visee == "grille" else "grille")
+	elif k.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT] and not _vue.selection.is_empty():
+		var haut: int = 1 if k.keycode == KEY_UP else (-1 if k.keycode == KEY_DOWN else 0)
+		if k.shift_pressed:
+			if haut != 0:
+				_deplacer(Vector3i(0, haut, 0))
+		else:
+			var cote: int = 1 if k.keycode == KEY_RIGHT else (-1 if k.keycode == KEY_LEFT else 0)
+			_deplacer_a_l_ecran(Vector2i(cote, -haut))
+	else:
+		return
 	get_viewport().set_input_as_handled()
 
 

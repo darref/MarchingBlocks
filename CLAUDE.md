@@ -432,7 +432,13 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
   - ⚠ **TOUT CE QUI CHANGE DES CASES PASSE PAR `_appliquer`.** Trois routes écrivaient chacune leur
     annulation, et l'une reconstruisait la couche ACTIVE au lieu de celle qu'elle touchait : un Ctrl+Z
     après avoir changé de couche laissait un rendu faux. **Vu rougir** dans `fumee_appli`.
-  - **RESTE À FAIRE** (phase 3) : la sélection en boîte, déplacer, copier.
+  - **PHASE 3, FAITE** : la **boîte** (B — en Sculpt ses deux coins sont sur la matière, donc elle est
+    3D ; Maj ajoute, clic droit retire), **déplacer** (boutons X/Y/Z, et les flèches, qui SUIVENT LA
+    CAMÉRA — « haut » éloigne de soi ; Maj + haut/bas lève), **copier / couper / coller** (Ctrl+C/X/V ;
+    le presse-papiers n'appartient à aucune couche, le collage suit la souris et se pose d'un clic).
+    ⚠ Déplacer ou coller sur de la matière FUSIONNE, jamais n'écrase. ⚠ Un déplacement qui recouvre sa
+    source n'efface que sa queue et ne pose que sa tête. ⚠ Le milieu d'un presse-papiers s'arrondit
+    par `floori`, pas par division entière : en négatif, celle-ci décalait le collage d'une case.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
@@ -516,10 +522,10 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Dix suites, **7 611 vérifications, 0 échec** (27 septembre 2026, recomptées après la barre d'outils) :
+  Dix suites, **7 636 vérifications, 0 échec** (27 septembre 2026, recomptées après la phase 3) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 422,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 33, `fumee_appli` 25.
+  `test_outils` 43, `fumee_appli` 40.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.

@@ -121,6 +121,34 @@ func _initialize() -> void:
 	_egal(etage["poser"], {Vector3i(1, 1, 0): true, Vector3i(5, 1, 0): true},
 		"sans sélection, étendre porte sur tout l'étage (la colonne est déjà pleine au-dessus)")
 
+	# ── 7. Phase 3 : boîte, déplacer, copier, coller ─────────────────────────────────────────────
+	var semis := {Vector3i(0, 0, 0): true, Vector3i(2, 1, 2): true, Vector3i(3, 0, 0): true, Vector3i(-1, 0, 0): true}
+	_egal(Outils.dans_la_boite(semis, Vector3i(2, 1, 2), Vector3i(0, 0, 0)),
+		{Vector3i(0, 0, 0): true, Vector3i(2, 1, 2): true}, "la boîte prend ses deux coins, dans n'importe quel ordre")
+
+	# Une rangée de trois, décalée d'UNE case : elle recouvre sa source.
+	var rangee := {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true, Vector3i(2, 0, 0): true}
+	var dep: Dictionary = Outils.deplacer(rangee, rangee, Vector3i(1, 0, 0))
+	_egal(dep["effacer"], {Vector3i(0, 0, 0): true}, "déplacer d'une case n'efface que la queue")
+	_egal(dep["poser"], {Vector3i(3, 0, 0): true}, "et ne pose que la tête")
+	_egal(dep["selection"], {Vector3i(1, 0, 0): true, Vector3i(2, 0, 0): true, Vector3i(3, 0, 0): true},
+		"la sélection suit le déplacement")
+	var mur := {Vector3i(0, 0, 0): true, Vector3i(0, 1, 0): true}
+	dep = Outils.deplacer(mur, {Vector3i(0, 1, 0): true}, Vector3i(0, -1, 0))
+	_egal(dep["effacer"], {Vector3i(0, 1, 0): true}, "déplacer sur de la matière efface la source")
+	_egal(dep["poser"], {}, "et ne repose pas la matière d'accueil — elle FUSIONNE")
+
+	# Copier : ancrage au milieu de la face du dessous, en coordonnées NÉGATIVES (x de −3 à 0).
+	var bloc_neg := {Vector3i(-3, 4, 0): true, Vector3i(0, 4, 0): true, Vector3i(0, 5, 0): true}
+	# milieu x = floor(−1,5) = −2, y du bas = 4, z = 0.
+	_egal(Outils.copier(bloc_neg, bloc_neg), [Vector3i(-1, 0, 0), Vector3i(2, 0, 0), Vector3i(2, 1, 0)],
+		"copier ramène au milieu de la face du dessous — arrondi vers le bas, même en négatif")
+	var col: Dictionary = Outils.coller({Vector3i(10, 0, 0): true}, [Vector3i(0, 0, 0), Vector3i(1, 0, 0)],
+		Vector3i(9, 0, 0))
+	_egal(col["poser"], {Vector3i(9, 0, 0): true}, "coller ne pose que dans le vide")
+	_egal(col["selection"], {Vector3i(9, 0, 0): true, Vector3i(10, 0, 0): true}, "et sélectionne ce qu'il a collé")
+	_egal(Outils.copier(semis, {Vector3i(7, 7, 7): true}), [], "copier du vide rend un presse-papiers vide")
+
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)

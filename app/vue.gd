@@ -18,6 +18,8 @@ signal coup_commence
 signal touche(modif: Dictionary, nom: String)
 signal coup_fini
 signal selection_changee
+## Le clic qui pose le presse-papiers : l'ancre, contre la face visée comme une case qu'on ajoute.
+signal colle(ancre: Vector3i)
 
 const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
 const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
@@ -28,6 +30,7 @@ const TEINTE_AJOUTER := Color(0.55, 0.82, 0.45, 0.32)
 const TEINTE_CREUSER := Color(0.9, 0.38, 0.24, 0.36)
 const TEINTE_SELECTIONNER := Color(0.42, 0.62, 0.98, 0.3)
 const TEINTE_SELECTION := Color(0.42, 0.62, 0.98, 0.22)
+const TEINTE_BOITE := Color(0.42, 0.62, 0.98, 0.1)
 
 var _vue: SubViewport
 var _camera: Camera3D
@@ -58,6 +61,9 @@ var forme := "sphere"
 ## La SÉLECTION — des cases de la couche active. ⚠ Un état d'écran, pas une donnée : elle n'est ni
 ## enregistrée ni annulable, et se vide quand on change de couche.
 var selection := {}
+## LE COLLAGE EN COURS — le presse-papiers (décalages relatifs, `Outils.copier`) qui suit la souris
+## jusqu'au clic. Vide hors d'un collage.
+var collage: Array = []
 
 ## "temoin" ou "monde".
 var mode := "temoin"
@@ -68,6 +74,11 @@ var _derniere := ""
 ## Le verrou de coup : ce qu'un coup d'AJOUT a posé, que son rayon traverse (`Outils.rayon`).
 var _pose_du_coup := {}
 var _derniere_souris := Vector2(-1, -1)
+## La boîte en cours de tracé : ses deux coins, et si Maj était tenue au départ.
+var _coin_boite: Variant = null
+var _coin_fin: Variant = null
+var _maj_du_coup := false
+var _boite_vue: MeshInstance3D
 
 
 func _ready() -> void:
@@ -112,6 +123,17 @@ func _ready() -> void:
 
 	_apercu = _nuage_de_cases(1.03)
 	_selection_vue = _nuage_de_cases(1.01)
+	_boite_vue = MeshInstance3D.new()
+	var boite := BoxMesh.new()
+	var mb := StandardMaterial3D.new()
+	mb.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mb.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mb.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mb.albedo_color = TEINTE_BOITE
+	boite.material = mb
+	_boite_vue.mesh = boite
+	_boite_vue.visible = false
+	_vue.add_child(_boite_vue)
 
 	_camera = Camera3D.new()
 	_camera.fov = 45
@@ -129,6 +151,8 @@ func montrer(quoi: String) -> void:
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
 	_grille_locale.visible = false
+	if _boite_vue != null:
+		_boite_vue.visible = false
 	_dessiner_selection()
 	_placer_grille()
 
@@ -228,7 +252,10 @@ func _gui_input(event: InputEvent) -> void:
 			elif not b.pressed and b.button_index == _coup:
 				_coup = -1
 				_pose_du_coup = {}
-				coup_fini.emit()
+				if _coin_boite != null:
+					_finir_boite(b.button_index)
+				else:
+					coup_fini.emit()
 			accept_event()
 			return
 	if event is InputEventMouseMotion:
@@ -334,6 +361,12 @@ func _survoler(position: Vector2) -> void:
 		# ⚠ Calée sur les LIGNES de la grille, pas sur le centre de la case : la case `p` occupe
 		# `[p, p+1]`, donc son coin est en `p` et ses lignes tombent sur des entiers.
 		_grille_locale.position = Vector3(plan.x, etage + 0.002, plan.z)
+	if not collage.is_empty():
+		_survoler_collage(position)
+		return
+	if outil == "boite":
+		_survoler_boite(position)
+		return
 	if point.is_empty() or cases() == null:
 		_apercu.visible = false
 		return
@@ -355,6 +388,9 @@ func _survoler(position: Vector2) -> void:
 ## Une nouvelle case sous la souris pendant un coup : on applique le geste. `_derniere` évite de
 ## rejouer la même ancre à chaque pixel.
 func _toucher(position: Vector2) -> void:
+	if _coin_boite != null:
+		_survoler_boite(position)
+		return
 	var g := geste(_coup)
 	var point := point_vise(position, g)
 	if point.is_empty() or cases() == null:
@@ -384,6 +420,24 @@ func _toucher(position: Vector2) -> void:
 
 
 func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
+	# ⚠ UN COLLAGE N'EST PAS UN COUP : un clic le pose (gauche) ou l'abandonne (droit), et c'est fini.
+	if not collage.is_empty():
+		if bouton == MOUSE_BUTTON_LEFT:
+			var point := point_vise(position, "ajouter")
+			if not point.is_empty():
+				colle.emit(Outils.ancre("ajouter", point))
+		annuler_collage()
+		return
+	if outil == "boite":
+		var depart := point_vise(position, "selectionner")
+		if depart.is_empty():
+			return
+		_coup = bouton
+		_maj_du_coup = maj
+		_coin_boite = depart["case"]
+		_coin_fin = depart["case"]
+		_survoler_boite(position)
+		return
 	_coup = bouton
 	_derniere = ""
 	_pose_du_coup = {}
@@ -392,6 +446,78 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		vider_selection()
 	coup_commence.emit()
 	_toucher(position)
+
+
+## LA BOÎTE : un coin au clic, l'autre sous la souris ; au relâché, la matière entre les deux devient
+## la sélection. Maj ajoute, le clic droit retire — les mêmes réflexes que le pinceau de sélection.
+func _survoler_boite(position: Vector2) -> void:
+	var point := point_vise(position, "selectionner")
+	if _coin_boite == null:
+		# Pas encore de tracé : on montre la case où la boîte commencerait.
+		_boite_vue.visible = false
+		if point.is_empty():
+			_apercu.visible = false
+		else:
+			_remplir(_apercu, [point["case"]], TEINTE_SELECTIONNER)
+		return
+	if not point.is_empty():
+		_coin_fin = point["case"]
+	var a: Vector3i = _coin_boite
+	var b: Vector3i = _coin_fin
+	var bas := Vector3i(mini(a.x, b.x), mini(a.y, b.y), mini(a.z, b.z))
+	var haut := Vector3i(maxi(a.x, b.x), maxi(a.y, b.y), maxi(a.z, b.z))
+	var taille_boite := Vector3(haut - bas + Vector3i.ONE)
+	_boite_vue.scale = taille_boite
+	_boite_vue.position = Vector3(bas) + taille_boite * 0.5
+	_boite_vue.visible = true
+	_remplir(_apercu, Outils.dans_la_boite(_occupees_actives(), a, b).keys(), TEINTE_SELECTIONNER)
+
+
+func _finir_boite(bouton: int) -> void:
+	var dedans: Dictionary = Outils.dans_la_boite(_occupees_actives(), _coin_boite, _coin_fin)
+	var nouvelle: Dictionary = selection.duplicate() if _maj_du_coup or bouton == MOUSE_BUTTON_RIGHT else {}
+	for c in dedans:
+		if bouton == MOUSE_BUTTON_RIGHT:
+			nouvelle.erase(c)
+		else:
+			nouvelle[c] = true
+	_coin_boite = null
+	_coin_fin = null
+	_boite_vue.visible = false
+	regler_selection(nouvelle)
+
+
+func _occupees_actives() -> Dictionary:
+	var occupees := {}
+	var g := cases()
+	if g != null:
+		for c in g.get_used_cells():
+			occupees[c] = true
+	return occupees
+
+
+## LE COLLAGE : le presse-papiers suit la souris, contre la face visée, en vert là où il posera.
+func commencer_collage(presse_papiers: Array) -> void:
+	collage = presse_papiers
+	rafraichir()
+
+
+func annuler_collage() -> void:
+	collage = []
+	_apercu.visible = false
+	rafraichir()
+
+
+func _survoler_collage(position: Vector2) -> void:
+	var point := point_vise(position, "ajouter")
+	if point.is_empty():
+		_apercu.visible = false
+		return
+	var ancre_: Vector3i = Outils.ancre("ajouter", point)
+	var ou: Array = []
+	for d in collage:
+		ou.append(ancre_ + (d as Vector3i))
+	_remplir(_apercu, ou, TEINTE_AJOUTER)
 
 
 func vider_selection() -> void:
