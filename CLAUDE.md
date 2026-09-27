@@ -406,6 +406,13 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   `quarts_de_tour()` le DÉRIVE de la base au lieu de le recopier. ⚠ Un moteur d'un autre repère doit
   convertir la grille des cases par la MÊME application que son importeur glTF applique aux maillages ; un
   repère miroir inverse le sens des quarts de tour.
+- ⚠ **LE REPÈRE TÉMOIN : LA CONVERSION DE L'IMPORTEUR SE MESURE, ELLE NE SE SUPPOSE PAS.** Unity est
+  gaucher, Unreal gaucher en +Z et en centimètres, et chaque importeur glTF convertit à sa façon — dans
+  les sommets ou dans la pose des nœuds. `tiles.glb` porte un nœud `mb_frame`, un tétraèdre aux sommets
+  (0,0,0), (1,0,0), (0,2,0), (0,0,3) (`frame_marker` dans le manifeste) : le greffon lit où l'importeur
+  les a posés, les LONGUEURS 1, 2, 3 disent quel axe est lequel, la plus courte donne l'échelle. Cette
+  application F EST la conversion ; une pièce se pose en F(v + piece_offset), tournée de F·R·F⁻¹ —
+  une vraie rotation même quand F est un miroir. Ajouté avant toute publication, donc toujours v1.
 - ⚠ **LES NOMS SORTENT EN ANGLAIS ET EN `[a-z0-9_]`** (§7, et certains moteurs refusent `~` ou `.`) :
   `mb_arete_creuse_b2h2_dehors` → `edge_inner_b2h2_outdoor`, exemplaires `_2`, `_3`… La traduction vit
   dans `format_neutre.gd` ET NULLE PART AILLEURS ; les greffons ne décodent jamais un nom, ils lisent
@@ -433,10 +440,51 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   mutation ÉQUIVALENTE, pas un trou** : `outdoor_possible` exclut déjà toute classe dont une case vide du
   bas est coiffée dans les 8, donc la seule rangée que `v.y + 1` ajoute est vide pour toute classe qui
   atteint ce test. Bande 1 ou 2, même règle sur tout manifeste cohérent.
+- **LE GREFFON UNITY GRATUIT** : `engines/unity/com.marchingblocks.paint/`, un paquet UPM (manifeste,
+  `.asmdef`, `.meta` à GUID STABLES — sans eux Unity ignore les fichiers d'un paquet installé depuis git).
+  `engines/` porte un `.gdignore` : Godot ne le voit pas. La règle (`MBRule.cs`) et le lecteur JSON
+  (`MBJson.cs`) sont du C# PUR, sans `UnityEngine` ; `MBTileset.cs` charge un `.mbset` importé et MESURE
+  le repère ; `MarchingBlocksWorld.cs` est le composant (cellules en espace du FORMAT, tuiles régénérées,
+  jamais sauvées dans la scène) ; `MarchingBlocksWorldEditor.cs` est le pinceau de la Scene view (Unity
+  n'a pas de GridMap : un rayon coupé contre le plan de l'étage, converti par F ; Maj efface ; PgUp/PgDn).
+  **MESURÉ hors Unity** (`engines/unity/conformance-runner`, `dotnet run -c Release`, SDK .NET 10, les
+  MÊMES fichiers que le paquet) : **18 cas, 1 624 poses, 0 échec**. Mutations : hachage sans masque et
+  absence de repli sur le nom nu — rouges ; ⚠ **le hachage TRONQUÉ À 32 BITS est MUET, et c'est une
+  mutation ÉQUIVALENTE** : le masque ne garde que les 31 bits bas, et en complément à deux les bits bas
+  d'un produit ne dépendent pas de la largeur. Des entiers 32 bits qui débordent en boucle suffiraient
+  donc — mais en C++ un débordement SIGNÉ est indéfini : la règle garde « 64 bits » pour Unreal.
+  **MESURÉ DANS UNITY 6.6 (6000.6.3f1) avec glTFast 6.20.0, sur le VRAI témoin** —
+  `engines/unity/test-project/` (paquet référencé depuis le disque, manifeste minimal ; le témoin, ses
+  cases et l'attendu sont écrits par `DEV_TOOLS/preparer_essai_unity.gd`, hors git) : **6 tests sur 6**,
+  en mode batch. glTFast convertit par **X → −X** (mesuré par le repère : unité 1, +Y gardé) :
+  - le repère est une RÉFLEXION et garde le haut — une conversion droitier → gaucher l'est
+    NÉCESSAIREMENT, c'est de la géométrie, pas notre code ;
+  - **1 048 poses identiques** à celles de MarchingBlocks (tuile, position, quart de tour) ;
+  - **l'empreinte de la géométrie posée** — le centre de chaque triangle en espace du format, × 1 200
+    (des entiers EXACTS : le témoin est en multiples de 1/12), trié, MD5 — **est celle de Godot** :
+    90 651 triangles, `c3876f4f…`.
+  **Vu rougir DANS UNITY** : ôter la conjugaison F·R·F⁻¹ fait échouer exactement les trois tests qui en
+  dépendent (485 poses fausses, empreinte différente, quart de tour du miroir synthétique), et laisse
+  verts les trois qui n'en dépendent pas.
+  ⚠ **UN CONTRÔLE D'ÉTANCHÉITÉ A ÉTÉ ÉCRIT, PUIS JETÉ, PARCE QU'IL ÉTAIT AVEUGLE.** « Les tuiles posées se
+  referment : 0 arête ouverte » — mesuré 0 côté Godot… et encore 0 en annulant TOUTES les rotations.
+  Les tuiles du témoin aminci sont des boîtes CLOSES et DISJOINTES (sa matière rentre d'un quart de case
+  et ne traverse jamais un plan de coupe) : n'importe quelle rotation les laisse fermées. C'est le
+  §6 mot pour mot — un contrôle qui ne peut pas échouer ne garde rien —, et c'est l'empreinte qui l'a
+  remplacé. ⚠ Il faudra un témoin SCULPTÉ, dont la matière franchit les coupes, pour éprouver les
+  coutures elles-mêmes.
+  ⚠ **ET DEUX « BLOCAGES » N'EN ÉTAIENT PAS** : un script Godot planté dans `_initialize` (le `_ready()`
+  d'un nœud n'y a pas encore tourné) n'appelle jamais `quit()` et pend — sa sortie, tamponnée dans un
+  pipe, meurt avec lui. Lancer avec `--log-file` : l'erreur y est écrite.
+  ⚠ **CE QUI N'A PAS ÉTÉ TENU EN MAIN** : le pinceau de la Scene view (le clic, le glissé, PgUp/PgDn,
+  Ctrl+Z) et le rendu sous URP/HDRP. Unity lance aussi le test du paquet `TheFrameIsMeasured…` (repère
+  en miroir ×100, synthétique), vert.
+  ⚠ Unity RÉÉCRIT le manifeste d'un projet neuf avec son gabarit (une cinquantaine de modules) : il est
+  remis au minimum, et reste stable aux ouvertures suivantes.
 - **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
   option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
-  jusqu'à la hauteur de la case changent) — ni l'appli ni le greffon ne la font encore ; les greffons
-  Unity et Unreal.
+  jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
+  un GameObject par tuile : à mesurer sur une vraie carte) ; le greffon Unreal.
 
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
@@ -606,10 +654,11 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 685 vérifications, 0 échec** (27 septembre 2026, recomptées après le format neutre) :
+  Onze suites, **7 688 vérifications, 0 échec** (27 septembre 2026, recomptées après le repère témoin),
+  plus le banc C# du greffon Unity (`engines/unity/conformance-runner`, 18 cas) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 43, `fumee_appli` 41, `test_greffon_peinture` 42.
+  `test_outils` 43, `fumee_appli` 41, `test_greffon_peinture` 45.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.

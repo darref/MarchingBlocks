@@ -24,6 +24,15 @@ const FORMAT_EPREUVE := "marchingblocks-conformance"
 const VERSION := 1
 const SUFFIXE_DEHORS := "_outdoor"
 
+## LE REPÈRE TÉMOIN — un tétraèdre aux sommets (0,0,0), (1,0,0), (0,2,0), (0,0,3), livré dans `tiles.glb`.
+## ⚠ **ON MESURE LA CONVERSION DE L'IMPORTEUR AU LIEU DE LA SUPPOSER.** Unity est gaucher, Unreal gaucher
+## en +Z et en centimètres, et chaque importeur glTF (glTFast, UnityGLTF, Interchange…) convertit à sa
+## façon — dans les sommets ou dans la pose du nœud. Le greffon lit où l'importeur a posé ces quatre
+## points : les LONGUEURS 1, 2, 3 disent quel axe est lequel, le signe dit le miroir, la plus courte
+## l'échelle. Il convertit ensuite la grille des cases par cette même application (règle, ligne « Frame »).
+const MARQUEUR := "mb_frame"
+const POINTS_DU_MARQUEUR := [[0, 0, 0], [1, 0, 0], [0, 2, 0], [0, 0, 3]]
+
 ## Mot à mot, les mots des noms de classes. ⚠ Un mot absent d'ici passe tel quel : `id_anglais` vérifie
 ## que le résultat n'est fait que de `[a-z0-9_]`, et `table_des_ids` qu'aucun id n'est porté deux fois.
 const MOTS := {
@@ -126,6 +135,11 @@ static func regle() -> PackedStringArray:
 		"   up to y can change (their bits, or their context).",
 		"Engines with another frame must convert the cell grid with the SAME mapping their glTF importer",
 		"   applies to meshes. A mirroring conversion reverses the direction of the quarter turns.",
+		"Frame: tiles.glb carries a marker node, frame_marker.node, whose mesh has exactly the vertices",
+		"   frame_marker.points = (0,0,0), (1,0,0), (0,2,0), (0,0,3). Read where your importer put them",
+		"   (node pose included): the lengths 1, 2, 3 tell each axis apart, the shortest gives the scale.",
+		"   That linear map F is the conversion. Place a piece at F(v + piece_offset) * cell_size,",
+		"   rotated by F * R * F^-1 where R is the quarter-turn rotation. The marker is not a tile.",
 	])
 
 
@@ -142,6 +156,7 @@ static func regle_du_format() -> Dictionary:
 		"context": {"rule": "open-sky-above-empty-cells", "band": 2, "outdoor_suffix": SUFFIXE_DEHORS},
 		"copies": {"hash": [73856093, 19349663, 83492791], "mask": 2147483647},
 		"rules_text": Array(regle()),
+		"frame_marker": {"node": MARQUEUR, "points": POINTS_DU_MARQUEUR},
 	}
 
 
@@ -202,6 +217,11 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 			racine.add_child(inst)
 		tuiles[id_de_cle(cle)] = noms
 
+	var marqueur := MeshInstance3D.new()
+	marqueur.name = MARQUEUR
+	marqueur.mesh = maillage_du_marqueur()
+	racine.add_child(marqueur)
+
 	var doc := GLTFDocument.new()
 	var etat := GLTFState.new()
 	var err: int = doc.append_from_scene(racine, etat)
@@ -234,6 +254,21 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 			+ "read it. Made with %s.\n" % generateur)
 		r.close()
 	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes}
+
+
+## Le tétraèdre du repère témoin : quatre sommets, quatre faces, et rien d'autre — un importeur qui
+## soude ou réordonne garde les mêmes positions, et c'est tout ce que le greffon lit.
+static func maillage_du_marqueur() -> ArrayMesh:
+	var p := PackedVector3Array()
+	for q in POINTS_DU_MARQUEUR:
+		p.append(Vector3(q[0], q[1], q[2]))
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = p
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3])
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return m
 
 
 static func _maillage_exportable(mesh: Mesh, pose: Transform3D) -> ArrayMesh:

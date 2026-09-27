@@ -1,0 +1,7 @@
+{
+  "name": "MarchingBlocks.Paint.Editor",
+  "rootNamespace": "MarchingBlocks.Paint.EditorTools",
+  "references": ["MarchingBlocks.Paint"],
+  "includePlatforms": ["Editor"],
+  "autoReferenced": true
+}

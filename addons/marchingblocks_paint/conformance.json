@@ -15191,6 +15191,31 @@
     ]
   ],
   "format": "marchingblocks-conformance",
+  "frame_marker": {
+    "node": "mb_frame",
+    "points": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        3
+      ]
+    ]
+  },
   "piece_offset": [
     1,
     1,
@@ -15216,7 +15241,12 @@
     "Rebuilding after cell (x, y, z) changes: only the vertices of columns x-1..x, z-1..z at heights",
     "   up to y can change (their bits, or their context).",
     "Engines with another frame must convert the cell grid with the SAME mapping their glTF importer",
-    "   applies to meshes. A mirroring conversion reverses the direction of the quarter turns."
+    "   applies to meshes. A mirroring conversion reverses the direction of the quarter turns.",
+    "Frame: tiles.glb carries a marker node, frame_marker.node, whose mesh has exactly the vertices",
+    "   frame_marker.points = (0,0,0), (1,0,0), (0,2,0), (0,0,3). Read where your importer put them",
+    "   (node pose included): the lengths 1, 2, 3 tell each axis apart, the shortest gives the scale.",
+    "   That linear map F is the conversion. Place a piece at F(v + piece_offset) * cell_size,",
+    "   rotated by F * R * F^-1 where R is the quarter-turn rotation. The marker is not a tile."
   ],
   "table": [
     [

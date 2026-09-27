@@ -9,13 +9,18 @@ extends SceneTree
 ## `test_greffon_peinture` rougit si le fichier livré n'est plus celui que la référence produit.
 
 const FN := preload("res://addons/marching_blocks_plugin_godot/format_neutre.gd")
-const CIBLES := ["res://addons/marchingblocks_paint/conformance.json"]
+## ⚠ UN SEUL FICHIER, LIVRÉ À CHAQUE GREFFON : les trois doivent passer les MÊMES cas.
+const CIBLES := [
+	"res://addons/marchingblocks_paint/conformance.json",
+	"res://engines/unity/com.marchingblocks.paint/Tests/conformance.json",
+]
 
 
 func _initialize() -> void:
 	var cas: Dictionary = FN.cas_d_epreuve()
 	var texte := JSON.stringify(cas, "  ")
 	for cible in CIBLES:
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cible).get_base_dir())
 		var f := FileAccess.open(cible, FileAccess.WRITE)
 		f.store_string(texte)
 		f.close()

@@ -1,0 +1,13 @@
+# Unity makes these; the MarchingBlocks export makes the witness (DEV_TOOLS/preparer_essai_unity.gd).
+Library/
+Temp/
+Logs/
+UserSettings/
+obj/
+*.csproj
+*.sln
+Packages/packages-lock.json
+Assets/witness.mbset/
+Assets/witness.mbset.meta
+Assets/witness_*.json
+Assets/witness_*.json.meta

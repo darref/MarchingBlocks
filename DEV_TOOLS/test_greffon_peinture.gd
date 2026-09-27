@@ -19,6 +19,7 @@ const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
+const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -76,11 +77,13 @@ func _les_cas_livres_sont_a_jour() -> Dictionary:
 	if not FileAccess.file_exists(CAS):
 		_vrai(false, "conformance.json n'est pas livré avec le greffon")
 		return {}
-	var livre = JSON.parse_string(FileAccess.get_file_as_string(CAS))
 	var frais = JSON.parse_string(JSON.stringify(FN.cas_d_epreuve()))
-	_vrai(JSON.stringify(livre) == JSON.stringify(frais),
-		"conformance.json est PÉRIMÉ : la règle a changé — relancer DEV_TOOLS/generer_cas_d_epreuve.gd")
-	return livre
+	# ⚠ CHAQUE GREFFON reçoit sa copie : une copie oubliée ferait passer un greffon sur de vieux cas.
+	for cible in GENERATEUR.CIBLES:
+		var ici = JSON.parse_string(FileAccess.get_file_as_string(cible)) if FileAccess.file_exists(cible) else null
+		_vrai(ici != null and JSON.stringify(ici) == JSON.stringify(frais),
+			"%s est absent ou PÉRIMÉ : relancer DEV_TOOLS/generer_cas_d_epreuve.gd" % cible)
+	return JSON.parse_string(FileAccess.get_file_as_string(CAS))
 
 
 # ── 4. Le greffon reproduit chaque cas, à 100 % ─────────────────────────────────────────────────────
@@ -149,6 +152,16 @@ func _de_bout_en_bout() -> void:
 		return
 	_egal((charge["library"] as MeshLibrary).get_item_list().size(), lot.get_item_list().size(),
 		"le greffon relit autant de tuiles que l'appli en a exporté")
+	# Le repère témoin : présent, et lu par Godot sans conversion — ses quatre points exacts.
+	var maillages: Dictionary = Tileset._meshes_of(dossier.path_join("witness_rock.mbset/tiles.glb"))
+	var repere: Mesh = maillages.get(FN.MARQUEUR, null)
+	_vrai(repere != null, "tiles.glb ne porte pas le repère témoin « %s »" % FN.MARQUEUR)
+	if repere != null:
+		var lus := {}
+		for p in repere.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+			lus[Vector3i(roundi(p.x), roundi(p.y), roundi(p.z))] = true
+		_egal(lus, {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true, Vector3i(0, 2, 0): true,
+			Vector3i(0, 0, 3): true}, "les quatre points du repère témoin, relus dans Godot")
 
 	var monde: Node3D = World.new()
 	root.add_child(monde)
