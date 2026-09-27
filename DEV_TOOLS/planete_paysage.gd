@@ -531,7 +531,9 @@ func _fautifs() -> Array:
 # ── LA LÉGENDE PAR OCCLUSION ────────────────────────────────────────────────────────────────────────
 #
 # ⚠ **ELLE NE REMPLACE RIEN DANS LE GREFFON : elle repeint une copie, pour qu'on puisse comparer.**
-# `case_sous_roche()` reste l'unique critère du témoin livré tant que Jordan n'a pas tranché.
+# Jordan a tranché le 27 septembre 2026 — ni l'occlusion ni `case_sous_roche()` : le témoin livré se colore
+# par `MB.face_sous_le_ciel()`, « le VIDE que borde la face voit-il le ciel ? ». Cette option reste une
+# comparaison.
 #
 # ⚠ **ET L'ORIENTATION NE CHANGE PAS** — sol, paroi, plafond se lisent toujours à la normale. Seul le
 # CONTEXTE change de source : « y a-t-il de la roche au-dessus de ma case » devient « cette face

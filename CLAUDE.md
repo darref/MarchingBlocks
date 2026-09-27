@@ -396,8 +396,8 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **7 450 vérifications, 0 échec** (27 septembre 2026, recomptées) :
-  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 415,
+  Six suites, **7 448 vérifications, 0 échec** (27 septembre 2026, recomptées) :
+  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 413,
   `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
   ⚠ `test_blocs_maitres` a presque triplé avec le bloc de 12³, pour la même raison qu'en dessous : ses
   boucles par cellule et par pièce assertent une fois par élément, et il y a 820 cases.
@@ -497,10 +497,22 @@ désormais le greffon.
    d'une AUTRE TEINTE. ⚠ **La raison est un défaut observé, pas un ornement** : rien ne disait à
    l'artiste quelle part de son bloc est souterraine, et c'est ce qui lui a fait extruder le haut en
    croyant tenir le massif de base.
-   - **MESURÉ (`DEV_TOOLS/sonde_legende_contexte.gd`, 27 septembre 2026, sur la planète paysage de
-     820 cases)** : **676 sous roche — 82,4 %** — et l'aminci qui part chez l'artiste peint
-     **11 869 de ses 15 560 quads** en teinte souterraine (76,3 %). La légende suit le bloc translaté.
-     (Sur l'ancien 8³ : 75,6 % et 6 287 / 8 326.)
+   - **DÉCIDÉ (Jordan, 27 septembre 2026) — LA LÉGENDE EST PAR FACE : « le VIDE que borde la face
+     voit-il le ciel ? »** (`MB.face_sous_le_ciel()`). Elle était par CASE (`case_sous_roche()`) : une
+     case de falaise, ayant la falaise au-dessus d'elle, se disait souterraine — le défaut de
+     `sous_le_ciel()` d'avant le 26, resté dans la légende. Invisible en couleurs plates ; le PBR espace
+     monde l'a rendu flagrant, avec des falaises RAYÉES toutes les deux cases dans le monde peint, parce
+     que la paroi à l'air libre (`mb_plaque_b2h2_dehors`) portait 135 couleurs de falaise et 135 de
+     grotte. Un PLAFOND garde la question de sa dalle — dessous de surplomb contre plafond de grotte.
+     ⚠ **12 % DES FACES DE L'AMINCI (1 819 sur 15 560) NE BORDENT PAS LA CASE D'EN FACE** : ce sont les
+     marches que l'amincissement taille dans une case PLEINE voisine. Le vide bordé est alors la case
+     qui a causé la marche (`BlocsMaitres.vide_borde()`) ; l'ignorer rend exactement les 135 rayures.
+   - **MESURÉ (`sonde_legende_contexte.gd`, 27 septembre 2026, planète paysage)** : l'aminci peint
+     **6 370 de ses 15 560 quads** en teinte souterraine — **40,9 %**, contre 76,3 % par case : les
+     falaises ont cessé d'être comptées comme grotte. La légende suit le bloc translaté.
+   - **MESURÉ — `test_blocs_maitres` §10, réécrit à la face, a su échouer trois fois** : revenir à la
+     légende par case, `vide_borde` qui ignore les bandes de marche, les plafonds traités comme des
+     parois. L'attendu est un balayage écrit à la main, jugé sur la coque SANS retrait.
    - **DÉCIDÉ (Jordan, 25 septembre 2026) — SIX TEINTES FRANCHES, et c'est contre ma recommandation.**
      Trois orientations × deux contextes : vert / ocre pour les sols, beige-brun / mauve pour les
      parois, bleu / bleu profond pour les plafonds (`repli_procedural.gd`, qui reste leur unique
@@ -561,12 +573,18 @@ désormais le greffon.
      factice ne garde pas les pixels qu'un `Texture2DArray` relit pour s'enregistrer. Il exige
      désormais une taille plancher, et se lance AVEC fenêtre.
    - Le travail IMPORTÉ n'est jamais recouvert : c'est l'art de l'artiste (§3).
-   - ⚠ **CE QUE LA PLANCHE A MONTRÉ (`planche_pbr_monde.gd`, `ART/pbr_monde.png`) : LES FALAISES DU
-     MONDE PEINT SONT RAYÉES.** Le PBR suit bien — aucune couture — mais `mb_plaque_b2h2_dehors`, la
-     paroi À L'AIR LIBRE, porte **135 couleurs de falaise et 135 de paroi de grotte** (mesuré). La
-     légende colore par `case_sous_roche()`, qui déclare souterraine toute case ayant la falaise
-     au-dessus d'elle : c'est le défaut de `sous_le_ciel()` d'avant le 26, resté dans la LÉGENDE.
-     **OUVERT** — à trancher avec Jordan : colorer chaque face selon que le VIDE qu'elle borde voit le
-     ciel, comme `sous_le_ciel()` corrigé ?
+   - La planche (`planche_pbr_monde.gd`) a montré des falaises RAYÉES dans le monde peint : c'était la
+     LÉGENDE, corrigée à la face (point 5). Revue après correction (`ART/pbr_monde_face.png`) : le monde
+     peint redonne le témoin, falaises d'une seule teinte.
+   - ⚠ **LE POM N'A PAS BESOIN DE SOMMETS, ET C'EST MESURÉ** (Jordan pensait qu'il lui fallait « plus
+     de finesse dans les vertices ») : c'est un effet PAR PIXEL. Même gros plan, profondeur 0 contre
+     0,06 : **45 % des pixels changent** ; contre 0,25 : 64 %, et le relief bave déjà aux angles
+     rasants (`ART/pom_profondeurs.png`). Il était FAIBLE, pas absent. ⚠ **CE QU'AUCUN POM NE FERA :
+     changer une SILHOUETTE** — les arêtes restent droites. Pour cela il faut déplacer des sommets, donc
+     subdiviser : c'est le relief réel, que la charte §1 confie à l'ARTISTE. **OUVERT** : la profondeur
+     par défaut (0,06).
+   - ⚠ Une planche réécrite par-dessus un PNG verrouillé par l'éditeur ÉCHOUE (erreur 12) et laisse
+     l'ANCIENNE image en place : je l'ai lue une fois comme si c'était la nouvelle. Écrire ailleurs,
+     et vérifier la date du fichier avant de le regarder (§6, « le sujet a-t-il changé »).
 8. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
 9. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.

@@ -484,15 +484,35 @@ static func sous_voxels(pleines: Dictionary, retrait: float) -> Dictionary:
 	return pleins
 
 
+## LA CASE VIDE QUE BORDE un sous-voxel vide `sv` — celle dont la face de coque regarde le vide.
+##
+## ⚠ **CE N'EST PAS TOUJOURS LA CASE QUI CONTIENT `sv`, ET C'EST MESURÉ** : sur l'aminci, 1 819 faces
+## sur 15 560 (12 %) regardent un sous-voxel vide qui appartient à une case PLEINE — la bande que
+## l'amincissement a retirée à cette case, parce qu'une de SES voisines est vide. Le vide bordé est
+## alors cette voisine-là, et c'est elle qu'on rend.
+## ⚠ `sv` est VIDE, donc aucune case propriétaire n'a été notée pour lui (`sous_voxels`) : on la retrouve
+## par division — **par `floori`**, jamais par la division entière, qui tronque vers zéro et a déjà
+## décalé la légende d'un bloc translaté en x négatif (charte §9).
+static func vide_borde(pleines: Dictionary, sv: Vector3i, retrait: float) -> Vector3i:
+	var cas := Vector3i(floori(float(sv.x) / SOUS), floori(float(sv.y) / SOUS),
+		floori(float(sv.z) / SOUS))
+	if not pleines.has(cas):
+		return cas
+	var largeur: int = roundi(retrait * SOUS)
+	var local: Vector3i = sv - cas * SOUS
+	for axe in 3:
+		var d := Vector3i.ZERO
+		d[axe] = 1
+		if local[axe] < largeur and not pleines.has(cas - d):
+			return cas - d
+		if local[axe] >= SOUS - largeur and not pleines.has(cas + d):
+			return cas + d
+	return cas
+
+
 static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh:
 	var pleins: Dictionary = sous_voxels(pleines, retrait)
-
-	# ⚠ **LA CARTE DES CONTEXTES, CALCULÉE UNE FOIS.** La demander par face coûterait un balayage
-	# vertical sur les 8 364 quads du bloc ; ici c'est une fois par case pleine, soit 267.
 	var plafond: int = MB.plafond_de(pleines)
-	var dedans_de := {}
-	for c0 in pleines:
-		dedans_de[c0] = MB.case_sous_roche(pleines, c0, plafond)
 
 	var sommets := PackedVector3Array()
 	var normales := PackedVector3Array()
@@ -521,10 +541,15 @@ static func _coque_sous_voxels(pleines: Dictionary, retrait: float) -> ArrayMesh
 					q[autres[0]] = mini2[autres[0]] if pas2[0] == 0 else maxi2[autres[0]]
 					q[autres[1]] = mini2[autres[1]] if pas2[1] == 0 else maxi2[autres[1]]
 					quad.append(q)
+				# ⚠ LA LÉGENDE EST PAR FACE, PLUS PAR CASE (27 septembre 2026) : une case de falaise
+				# porte une paroi à l'air libre ET, s'il y a lieu, un sol de grotte. Voir
+				# `MB.face_sous_le_ciel()` pour la règle, et pourquoi la version par case rayait les
+				# falaises du monde peint.
+				var vide: Vector3i = vide_borde(pleines, s + d, retrait)
+				var dehors: bool = MB.face_sous_le_ciel(pleines, pleins[s], d, vide, plafond)
 				# ⚠ On passe par `_quad` et non par une émission directe : c'est lui qui porte
 				# l'enroulement HORAIRE de Godot et le codage couleur par normale.
-				_quad(sommets, normales, couleurs, quad, normale,
-						bool(dedans_de.get(pleins[s], false)))
+				_quad(sommets, normales, couleurs, quad, normale, not dehors)
 
 	var mesh := ArrayMesh.new()
 	if sommets.is_empty():

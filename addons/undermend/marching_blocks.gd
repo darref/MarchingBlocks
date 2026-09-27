@@ -917,6 +917,36 @@ static func case_sous_roche(pleines: Dictionary, case: Vector3i, plafond: int) -
 	return false
 
 
+## Cette FACE est-elle à l'air libre ? `case` est la case pleine qui la porte, `direction` le côté vers
+## lequel elle regarde (un vecteur unitaire d'axe).
+##
+## ⚠ **C'EST LA LÉGENDE DU TÉMOIN, CORRIGÉE LE 27 SEPTEMBRE 2026 (Jordan : « oui »).** Elle colorait par
+## CASE avec `case_sous_roche()` : toute case ayant de la roche au-dessus d'elle était souterraine. Sur
+## une falaise, cette roche est la falaise elle-même — c'est exactement le défaut que `sous_le_ciel()`
+## portait jusqu'au 26, resté dans la légende. Il ne s'y voyait pas ; le PBR espace monde l'a rendu
+## flagrant : la paroi À L'AIR LIBRE (`mb_plaque_b2h2_dehors`) portait 135 couleurs de falaise et 135
+## de grotte, et les falaises du monde peint sortaient RAYÉES toutes les deux cases.
+##
+## La question juste est la même que pour le lieu de pose : **le VIDE que borde cette face voit-il le
+## ciel ?** Donc :
+##   • une PAROI ou un SOL : le vide est `case + direction` ; à l'air libre si rien de plein n'est
+##     au-dessus de lui dans sa colonne ;
+##   • un PLAFOND : le vide est dessous, et au-dessus de lui il y a… la face elle-même. La question qui
+##     reste est « la dalle est-elle sous le ciel ? » — dessous de surplomb contre plafond de grotte —,
+##     c'est-à-dire `case_sous_roche()`, qui y répond déjà.
+## ⚠ Un oui-ou-non, comme `sous_le_ciel()` : on ne demande pas COMBIEN de ciel (charte §2).
+## ⚠ `vide` est la case vide bordée. C'est `case + direction` sur un solide brut ; sur l'aminci, une
+## face sur huit borde en fait une autre case (`BlocsMaitres.vide_borde()`), d'où le paramètre.
+static func face_sous_le_ciel(pleines: Dictionary, case: Vector3i, direction: Vector3i,
+		vide: Vector3i, plafond: int) -> bool:
+	if direction.y < 0:
+		return not case_sous_roche(pleines, case, plafond)
+	for y in range(vide.y + 1, plafond + 1):
+		if pleines.has(Vector3i(vide.x, y, vide.z)):
+			return false
+	return true
+
+
 ## Le plus haut `y` occupé. ⚠ DÉRIVÉ de l'occupation, jamais déclaré : un plafond écrit en dur rendrait
 ## le contexte faux dès qu'on peint plus haut que prévu.
 static func plafond_de(pleines: Dictionary) -> int:

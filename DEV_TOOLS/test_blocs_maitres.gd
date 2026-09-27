@@ -459,33 +459,28 @@ func _borne(boite: AABB, mini: float, maxi: float, quoi: String) -> void:
 
 # ── la légende du témoin ────────────────────────────────────────────────────────────────────────────
 
-## ⚠ **CE QUE CETTE VÉRIFICATION GARDE.** Le solide qui part chez l'artiste peint sa roche SOUTERRAINE
-## plus sombre — mesuré, 76 % du bloc unique l'est, et rien ne le disait auparavant. Deux propriétés,
-## et aucune des deux ne se voit sur un compteur :
+## ⚠ **CE QUE CETTE VÉRIFICATION GARDE — LA LÉGENDE EST PAR FACE DEPUIS LE 27 SEPTEMBRE 2026.** Elle
+## était par CASE (`case_sous_roche`) : une case de falaise ayant la falaise au-dessus d'elle était
+## « souterraine », et le PBR espace monde a montré les falaises du monde peint RAYÉES. La règle est
+## désormais `MB.face_sous_le_ciel()` : le VIDE que borde la face voit-il le ciel ? Trois propriétés :
 ##
-##   1. **LA COULEUR DIT LE CRITÈRE.** Un quad est sombre si et seulement si SA case porte de la roche
-##      au-dessus d'elle. ⚠ L'attendu est recalculé ICI, par un balayage écrit à la main — appeler
-##      `MB.case_sous_roche()` ferait bouger l'attendu ET le mesuré ensemble, et la mutation resterait
-##      MUETTE (charte §6, la leçon payée par `test_massif_peint`).
+##   1. **LA COULEUR DIT LE CRITÈRE, FACE PAR FACE.** ⚠ L'attendu est recalculé ICI, par un balayage
+##      écrit à la main — appeler le module ferait bouger l'attendu ET le mesuré ensemble (charte §6).
+##      Il est jugé sur la coque SANS retrait, où le vide bordé est exactement `case + direction` :
+##      sur l'aminci, 12 % des faces bordent une autre case (`vide_borde`), et l'écrire ici en ferait
+##      une seconde description.
 ##   2. **LA LÉGENDE SUIT LE BLOC.** Translater l'occupation translate le maillage et rien d'autre.
-##      ⚠ Ce n'est pas un ornement : la coque a retrouvé sa case par une DIVISION ENTIÈRE, qui tronque
-##      VERS ZÉRO en GDScript. Mesuré sur le bloc unique déplacé en x négatif — 3 926 quads sombres au
-##      lieu de 6 405. Le bloc écrit en couches ASCII n'ayant que des coordonnées positives, RIEN dans
-##      le projet ne pouvait le montrer : il fallait construire le scénario.
+##      ⚠ La coque a déjà retrouvé ses cases par une DIVISION ENTIÈRE, qui tronque VERS ZÉRO en
+##      GDScript : seul un bloc en coordonnées négatives pouvait le montrer.
+##   3. **LES FALAISES NE SONT PLUS RAYÉES** — le symptôme lui-même, sur le vrai lot : la paroi à l'air
+##      libre ne porte plus aucune couleur de grotte.
 func _la_legende_du_temoin_dit_le_contexte() -> void:
-	# ⚠ **« PLUS SOMBRE » A ÉTÉ CORRIGÉ EN « UNE AUTRE TEINTE » (25 septembre 2026), et le test n'a pas
-	# bougé d'une ligne.** La légende modulait autrefois les trois couleurs vers du sombre ; elle porte
-	# maintenant SIX teintes franches, dont l'ocre des sols de grotte, PLUS CLAIR que le vert qu'il
-	# remplace. Le mécanisme tenait déjà — `_verdicts_par_quad` reconnaît les trois teintes de plein air
-	# par égalité, jamais par un seuil de luminosité — mais l'énoncé, lui, était devenu faux.
-	# Un test vert dont le titre ment est un test qu'on cessera de lire (charte §6 : un mot, une chose).
-	print("\n10. la légende du témoin : la roche souterraine porte une AUTRE TEINTE")
+	print("\n10. la légende du témoin : chaque FACE dit si le vide qu'elle borde voit le ciel")
 
-	# Un relief écrit à la main, choisi pour porter les trois cas : une colonne coiffée, une case à
-	# l'air libre, et un TROU dans la colonne — la roche au-dessus compte même à distance.
+	# Un relief écrit à la main :
 	#
-	#     y=3            #..        (3,0,0) seule
-	#     y=2            ...        rien : le trou
+	#     y=3            #..        (0,3,0) seule : elle coiffe la colonne x = 0 par-dessus un trou
+	#     y=2            ...        le trou
 	#     y=1            ##.
 	#     y=0            ###
 	var pleines := {}
@@ -495,78 +490,87 @@ func _la_legende_du_temoin_dit_le_contexte() -> void:
 		pleines[Vector3i(x, 1, 0)] = true
 	pleines[Vector3i(0, 3, 0)] = true
 
-	var attendu := {}
-	for c in pleines:
-		attendu[c] = _roche_au_dessus_a_la_main(pleines, c)
-	_dire(attendu[Vector3i(0, 0, 0)] and attendu[Vector3i(1, 0, 0)],
-		"le socle sous la colonne doit être sous roche")
-	_dire(not attendu[Vector3i(2, 0, 0)],
-		"la case (2,0,0) n'a rien au-dessus : elle doit être à l'air libre")
-	_dire(attendu[Vector3i(0, 1, 0)],
-		"la case (0,1,0) est coiffée PAR-DESSUS UN TROU : elle doit être sous roche")
-	_dire(not attendu[Vector3i(1, 1, 0)] and not attendu[Vector3i(0, 3, 0)],
-		"les sommets de colonne doivent être à l'air libre")
-
-	var a_l_origine: Dictionary = _verdicts_par_quad(BlocsMaitres._coque_sous_voxels(pleines, 0.25))
-	_dire(not a_l_origine.is_empty(), "la coque du relief d'essai ne rend aucun quad")
-	var sombres := 0
+	var nette: Dictionary = _verdicts_par_face(BlocsMaitres._coque_sous_voxels(pleines, 0.0), true)
+	_dire(not nette.is_empty(), "la coque du relief d'essai ne rend aucun quad")
 	var faux := 0
-	for cle in a_l_origine:
-		var case: Vector3i = cle
-		if a_l_origine[cle]["sombre"]:
-			sombres += a_l_origine[cle]["quads"]
-		if a_l_origine[cle]["sombre"] != bool(attendu.get(case, false)):
+	for cle in nette:
+		if nette[cle]["sombre"] != _souterraine_a_la_main(pleines, cle[0], cle[1]):
 			faux += 1
-	_dire(faux == 0, "%d case(s) peintes à l'envers de ce que le critère dit" % faux)
-	_dire(a_l_origine.size() == pleines.size(),
-		"la coque peint %d cases, le relief en porte %d" % [a_l_origine.size(), pleines.size()])
-	_dire(sombres > 0, "aucun quad sombre : la légende ne dit plus rien")
+	_dire(faux == 0, "%d face(s) peintes à l'envers de ce que le critère dit" % faux)
+	# ⚠ LES ASSERTIONS QU'UN HUMAIN LIT — dont celle qui a changé avec la règle.
+	var ouest := [Vector3i(0, 1, 0), Vector3i(-1, 0, 0)]
+	var sol := [Vector3i(0, 1, 0), Vector3i(0, 1, 0)]
+	_dire(nette.has(ouest) and not nette[ouest]["sombre"],
+		"(0,1,0) est coiffée par (0,3,0), mais sa paroi OUEST borde un vide à ciel ouvert : FALAISE")
+	_dire(nette.has(sol) and nette[sol]["sombre"],
+		"le dessus de (0,1,0) donne sur le trou, coiffé par (0,3,0) : c'est un sol de GROTTE")
+	var dessous := [Vector3i(0, 3, 0), Vector3i(0, -1, 0)]
+	_dire(nette.has(dessous) and not nette[dessous]["sombre"],
+		"le dessous de (0,3,0) n'a rien au-dessus de sa dalle : dessous de surplomb, à l'air libre")
 
-	# ⚠ ET LE SCÉNARIO QUI A TROUVÉ LE DÉFAUT : le MÊME relief, en coordonnées négatives.
+	# ⚠ ET LE SCÉNARIO QUI A TROUVÉ LA DIVISION ENTIÈRE : le MÊME relief, aminci, en coordonnées négatives.
+	var a_l_origine: Dictionary = _verdicts_par_face(BlocsMaitres._coque_sous_voxels(pleines, 0.25), false)
+	var sombres := 0
+	for cle in a_l_origine:
+		sombres += a_l_origine[cle]["sombres"]
+	_dire(sombres > 0, "aucun quad souterrain : la légende ne dit plus rien")
 	for decalage in [Vector3i(-8, 0, 0), Vector3i(-3, 0, -5), Vector3i(0, -4, 0)]:
 		var deplace := {}
 		for c in pleines:
 			deplace[Vector3i(c) + decalage] = true
-		var la_bas: Dictionary = _verdicts_par_quad(BlocsMaitres._coque_sous_voxels(deplace, 0.25))
-		_dire(la_bas.size() == a_l_origine.size(),
-			"translaté de %s : %d cases peintes au lieu de %d"
-				% [str(decalage), la_bas.size(), a_l_origine.size()])
+		var la_bas: Dictionary = _verdicts_par_face(BlocsMaitres._coque_sous_voxels(deplace, 0.25), false)
 		var divergentes := 0
 		for cle in a_l_origine:
-			var ici: Dictionary = a_l_origine[cle]
-			var ailleurs = la_bas.get(Vector3i(cle) + decalage, null)
-			if ailleurs == null or ailleurs["sombre"] != ici["sombre"] \
-					or ailleurs["quads"] != ici["quads"]:
+			var ailleurs = la_bas.get([Vector3i(cle[0]) + decalage, cle[1]], null)
+			if ailleurs == null or ailleurs["sombres"] != a_l_origine[cle]["sombres"] \
+					or ailleurs["quads"] != a_l_origine[cle]["quads"]:
 				divergentes += 1
-		_dire(divergentes == 0,
-			"translaté de %s : %d case(s) changent de légende" % [str(decalage), divergentes])
-	print("   → %d cases peintes, %d quads sombres, et la légende suit le bloc en x, y et z négatifs"
-		% [a_l_origine.size(), sombres])
+		_dire(la_bas.size() == a_l_origine.size() and divergentes == 0,
+			"translaté de %s : %d face(s) changent de légende" % [str(decalage), divergentes])
+
+	# ⚠ LE SYMPTÔME, sur le vrai lot : `mb_plaque_b2h2_dehors` portait 135 couleurs de falaise et 135
+	# de grotte. Une paroi posée à l'air libre ne doit plus porter une seule couleur de grotte.
+	var lot: MeshLibrary = BlocsMaitres.librairie()["lot"]
+	var id: int = lot.find_item_by_name("mb_plaque_b2h2_dehors")
+	_dire(id >= 0, "le lot ne livre plus mb_plaque_b2h2_dehors")
+	if id >= 0:
+		var grotte := 0
+		var total := 0
+		for c in lot.get_item_mesh(id).surface_get_arrays(0)[Mesh.ARRAY_COLOR]:
+			total += 1
+			if Color(c).is_equal_approx(RP.COULEUR_PAROI_DEDANS):
+				grotte += 1
+		_dire(grotte == 0, ("la paroi À L'AIR LIBRE porte %d sommet(s) de paroi de GROTTE sur %d — "
+			+ "les falaises du monde peint seront rayées") % [grotte, total])
+	print("   → %d faces jugées une à une, la légende suit le bloc, et la falaise est d'une seule teinte"
+		% nette.size())
 
 
-## LE BALAYAGE VERTICAL, RÉÉCRIT ICI EXPRÈS — voir le ⚠ ci-dessus. Il ne borne rien par un plafond :
-## il regarde toute la colonne, ce qui rend le même verdict et ne partage pas une ligne avec le module.
-func _roche_au_dessus_a_la_main(pleines: Dictionary, case: Vector3i) -> bool:
-	var haut := case.y
+## LE BALAYAGE, RÉÉCRIT ICI EXPRÈS — voir le ⚠ ci-dessus. Il ne borne rien par un plafond : il regarde
+## toute la colonne, ce qui rend le même verdict et ne partage pas une ligne avec le module.
+## Un PLAFOND demande si SA dalle est sous la roche ; une paroi ou un sol, si le VIDE d'en face l'est.
+func _souterraine_a_la_main(pleines: Dictionary, case: Vector3i, direction: Vector3i) -> bool:
+	var colonne: Vector3i = case if direction.y < 0 else case + direction
+	var haut := colonne.y
 	for c in pleines:
 		haut = maxi(haut, Vector3i(c).y)
-	for y in range(case.y + 1, haut + 1):
-		if pleines.has(Vector3i(case.x, y, case.z)):
+	for y in range(colonne.y + 1, haut + 1):
+		if pleines.has(Vector3i(colonne.x, y, colonne.z)):
 			return true
 	return false
 
 
-## Pour chaque case du relief, ce que la coque a peint dessus : {case: {sombre, quads}}.
+## Pour chaque FACE du relief — [case, direction] —, ce que la coque a peint :
+## {[case, direction]: {sombre, sombres, quads}}.
 ##
 ## ⚠ **LA CASE D'UN QUAD EST RETROUVÉE PAR SA GÉOMÉTRIE, JAMAIS PAR LA DIVISION DU MODULE** : on recule
-## d'un cheveu le long de la normale pour rentrer dans la matière, puis on prend le plancher. Emprunter
-## le calcul du mailleur reviendrait à lui demander de se juger lui-même.
-## ⚠ Et l'on EXIGE qu'une case ne porte qu'une seule couleur : deux teintes sur une même case
-## signeraient que la carte des contextes s'est décalée en route.
-func _verdicts_par_quad(mesh: ArrayMesh) -> Dictionary:
-	var par_case := {}
+## d'un cheveu le long de la normale pour rentrer dans la matière, puis on prend le plancher.
+## ⚠ `unique` exige qu'une face ne porte qu'une couleur — vrai sans retrait, où une face borde un seul
+## vide ; FAUX sur l'aminci, où une bande de marche peut border une autre case que le reste de la face.
+func _verdicts_par_face(mesh: ArrayMesh, unique: bool) -> Dictionary:
+	var par_face := {}
 	if mesh.get_surface_count() == 0:
-		return par_case
+		return par_face
 	var tout: Array = mesh.surface_get_arrays(0)
 	var sommets: PackedVector3Array = tout[Mesh.ARRAY_VERTEX]
 	var normales: PackedVector3Array = tout[Mesh.ARRAY_NORMAL]
@@ -579,19 +583,23 @@ func _verdicts_par_quad(mesh: ArrayMesh) -> Dictionary:
 			+ sommets[i + 3] + sommets[i + 4] + sommets[i + 5]) / 6.0
 		var dedans: Vector3 = centre - normales[i] * 0.01
 		var case := Vector3i(floori(dedans.x), floori(dedans.y), floori(dedans.z))
+		var direction := Vector3i(roundi(normales[i].x), roundi(normales[i].y), roundi(normales[i].z))
 		var sombre := true
 		for base in claires:
 			if couleurs[i].is_equal_approx(base):
 				sombre = false
-		if par_case.has(case):
-			if par_case[case]["sombre"] != sombre:
-				partagees[case] = true
-			par_case[case]["quads"] += 1
+		var cle := [case, direction]
+		if par_face.has(cle):
+			if par_face[cle]["sombre"] != sombre:
+				partagees[cle] = true
+			par_face[cle]["quads"] += 1
+			par_face[cle]["sombres"] += 1 if sombre else 0
 		else:
-			par_case[case] = {"sombre": sombre, "quads": 1}
+			par_face[cle] = {"sombre": sombre, "sombres": 1 if sombre else 0, "quads": 1}
 		i += 6
 	# ⚠ UNE SEULE vérification, pas une par quad : un compteur que 8 000 quads gonflent ne dit plus
 	# rien de ce qui est gardé.
-	_dire(partagees.is_empty(),
-		"%d case(s) portent DEUX légendes à la fois : %s" % [partagees.size(), str(partagees.keys())])
-	return par_case
+	if unique:
+		_dire(partagees.is_empty(),
+			"%d face(s) portent DEUX légendes à la fois : %s" % [partagees.size(), str(partagees.keys())])
+	return par_face
