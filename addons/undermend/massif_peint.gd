@@ -250,10 +250,16 @@ func reconstruire() -> Dictionary:
 	# de la roche au-dessus, et recalculer ce plafond par sommet coûterait le monde entier à chaque pièce.
 	var plafond: int = MB.plafond_de(pleines)
 
+	# ⚠ **L'INDEX DES FAMILLES SE BÂTIT UNE FOIS PAR RECONSTRUCTION, PAS PAR CASE.**
+	# `find_item_by_name()` est un balayage linéaire du lot ; le chercher par case et par exemplaire
+	# coûterait items × cases à chaque touche de pinceau. Un passage sur le lot, puis un accès direct.
+	var familles: Dictionary = _familles(rendu.mesh_library)
+
 	var poses := 0
 	var manquantes := 0
 	var muets := 0
 	var dehors_poses := 0
+	var exemplaires_poses := 0
 	for k in sommets:
 		var sommet: Vector3i = k
 		var bits: int = MB.bits(pleines, sommet)
@@ -266,14 +272,23 @@ func reconstruire() -> Dictionary:
 		# mot pour mot : ne chercher QUE la variante ferait apparaître des cubes rouges partout sur des
 		# lots parfaitement valides. Le nom nu reste donc l'item par défaut.
 		var dehors: bool = MB.exterieur_possible(bits) and MB.sous_le_ciel(pleines, sommet, plafond)
+		# ⚠ **LE TIRAGE D'EXEMPLAIRE EST DÉTERMINÉ PAR LA POSITION** (`MB.exemplaire_du_sommet`) : le
+		# massif se reconstruit à chaque case peinte et à chaque Ctrl+Z, et un tirage aléatoire
+		# redessinerait un autre monde à chaque fois.
 		var id := -1
-		if rendu.mesh_library != null:
-			if dehors:
-				id = rendu.mesh_library.find_item_by_name(MB.nom_en_contexte(r["nom"], true))
-				if id >= 0:
-					dehors_poses += 1
-			if id < 0:
-				id = rendu.mesh_library.find_item_by_name(r["nom"])
+		var indice := 0
+		if dehors:
+			var tire: Array = _tirer(familles, MB.nom_en_contexte(r["nom"], true), sommet)
+			id = tire[0]
+			indice = tire[1]
+			if id >= 0:
+				dehors_poses += 1
+		if id < 0:
+			var tire: Array = _tirer(familles, r["nom"], sommet)
+			id = tire[0]
+			indice = tire[1]
+		if indice > 0:
+			exemplaires_poses += 1
 		if id < 0:
 			# ⚠ UNE PIÈCE QUE LES RÈGLES DEMANDENT ET QUE LE LOT N'A PAS : c'est une FAUTE DE LOT, jamais
 			# une faute de peinture. Avec le repli par défaut, elle ne peut pas se produire.
@@ -288,8 +303,57 @@ func reconstruire() -> Dictionary:
 	# ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
 	# variantes il vaut 0 alors que le monde est plein de ciel — et c'est exactement ce qu'il doit dire :
 	# « ce lot n'a rien de spécifique au dehors ». Compter les sommets ferait croire l'inverse.
-	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses}
+	# ⚠ `exemplaires` COMPTE LES CASES QUI ONT REÇU AUTRE CHOSE QUE L'EXEMPLAIRE DE NOM NU. Sur un lot
+	# sans exemplaires il vaut 0, comme `dehors` sur un lot sans variantes — et c'est ce qu'il doit dire.
+	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses,
+		"exemplaires": exemplaires_poses}
 	return _dernier_bilan
+
+
+## Le bilan de la dernière reconstruction, SANS en déclencher une.
+## ⚠ `reconstruire()` rend déjà ce bilan, mais l'éditeur l'appelle par `add_do_method()`, qui jette
+## la valeur de retour. Un accesseur vaut mieux que reconstruire une seconde fois pour lire un compte.
+func dernier_bilan() -> Dictionary:
+	return _dernier_bilan
+
+
+## L'INDEX DES FAMILLES D'UN LOT — {clé: [id de l'exemplaire 0, du 1, …]}.
+##
+## ⚠ **UN LOT SANS EXEMPLAIRES REND DES FAMILLES D'UN SEUL ÉLÉMENT**, et le tirage y rend toujours
+## l'indice 0 : le repli procédural et les lots d'avant cette version passent par ce chemin mot pour
+## mot, sans branche séparée qui pourrait diverger (charte §9.4).
+static func _familles(lot: MeshLibrary) -> Dictionary:
+	var familles := {}
+	if lot == null:
+		return familles
+	for id in lot.get_item_list():
+		var nom: String = lot.get_item_name(id)
+		var cle: String = MB.cle_sans_exemplaire(nom)
+		var k: int = MB.indice_d_exemplaire(nom)
+		if not familles.has(cle):
+			familles[cle] = []
+		var liste: Array = familles[cle]
+		while liste.size() <= k:
+			liste.append(-1)
+		liste[k] = id
+	# ⚠ **ON TASSE LES TROUS.** Un lot bâti à la main peut porter « ...~3 » sans « ...~2 » ; laisser
+	# un −1 dans la liste ferait poser un cube rouge pour un lot qui a pourtant la tuile.
+	for cle in familles:
+		var propre: Array = []
+		for id in familles[cle]:
+			if id >= 0:
+				propre.append(id)
+		familles[cle] = propre
+	return familles
+
+
+## L'exemplaire à poser à ce sommet pour cette clé. Rend [id, indice] — [−1, 0] si la clé manque.
+static func _tirer(familles: Dictionary, cle: String, sommet: Vector3i) -> Array:
+	var liste: Array = familles.get(cle, [])
+	if liste.is_empty():
+		return [-1, 0]
+	var k: int = MB.exemplaire_du_sommet(sommet, liste.size())
+	return [int(liste[k]), k]
 
 
 ## ⚠ UNE EMPREINTE, PAS UNE COPIE. Comparer deux listes de milliers de cases à chaque image coûterait

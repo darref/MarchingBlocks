@@ -65,6 +65,7 @@ func _initialize() -> void:
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
 	_la_legende_du_temoin_dit_le_contexte()
+	_aucun_morceau_sculpte_n_est_jete()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -300,9 +301,17 @@ func _le_temoin_livre_exactement_le_monde() -> void:
 	_dire((resultat["manquantes"] as Array).is_empty(), "librairie() se déclare incomplète : %s"
 		% str(resultat["manquantes"]))
 	var lot: MeshLibrary = resultat["lot"]
+	# ⚠ **ON COMPARE LES CLÉS, PAS LES NOMS D'ITEM — et ce n'est pas un desserrage.** Depuis les
+	# exemplaires, le lot porte plusieurs items par clé (« mb_coin_b1h0 », « mb_coin_b1h0~1 »…). La
+	# propriété gardée reste la même : le lot livre EXACTEMENT les 52 clés du monde, aucune en trop.
+	# Un exemplaire d'une clé hors du monde ferait donc toujours rougir, puisque sa clé rougirait.
 	var livre := {}
+	var items_par_cle := {}
 	for id in lot.get_item_list():
-		livre[lot.get_item_name(id)] = true
+		var nom: String = lot.get_item_name(id)
+		var cle: String = MB.cle_sans_exemplaire(nom)
+		livre[cle] = true
+		items_par_cle[cle] = int(items_par_cle.get(cle, 0)) + 1
 	var manque: Array = []
 	for nom in attendu:
 		if not livre.has(nom):
@@ -313,6 +322,27 @@ func _le_temoin_livre_exactement_le_monde() -> void:
 			en_trop.append(nom)
 	_dire(manque.is_empty(), "%d tuile(s) du monde que librairie() ne livre pas : %s"
 		% [manque.size(), str(manque.slice(0, 6))])
+	# — LA TUILE DE NOM NU EXISTE POUR CHAQUE CLÉ LIVRÉE (charte §9.4 : un peintre qui ignore les
+	#   exemplaires doit trouver sa tuile). Recompté sur les noms d'item, pas sur les clés.
+	var noms_bruts := {}
+	for id in lot.get_item_list():
+		noms_bruts[lot.get_item_name(id)] = true
+	var sans_nom_nu: Array = []
+	for cle in livre:
+		if not noms_bruts.has(cle):
+			sans_nom_nu.append(cle)
+	_dire(sans_nom_nu.is_empty(),
+		"%d clé(s) n'ont AUCUNE tuile de nom nu — un lot sans exemplaires poserait des cubes rouges : %s"
+		% [sans_nom_nu.size(), str(sans_nom_nu.slice(0, 6))])
+
+	# — LE COMPTE D'EXEMPLAIRES ANNONCÉ CORRESPOND AUX ITEMS RÉELLEMENT POSÉS.
+	var en_plus_reel := lot.get_item_list().size() - livre.size()
+	_dire(int(resultat["exemplaires_en_plus"]) == en_plus_reel,
+		"librairie() annonce %d exemplaire(s) en plus, le lot en porte %d"
+		% [int(resultat["exemplaires_en_plus"]), en_plus_reel])
+	print("   %d clé(s), %d item(s) au total — %d exemplaire(s) en plus"
+		% [livre.size(), lot.get_item_list().size(), en_plus_reel])
+
 	_dire(en_trop.is_empty(), "%d tuile(s) livrées HORS du monde : %s"
 		% [en_trop.size(), str(en_trop.slice(0, 6))])
 
@@ -634,3 +664,74 @@ func _verdicts_par_face(mesh: ArrayMesh, unique: bool) -> Dictionary:
 		_dire(partagees.is_empty(),
 			"%d face(s) portent DEUX légendes à la fois : %s" % [partagees.size(), str(partagees.keys())])
 	return par_face
+
+
+# ── 14. aucun morceau sculpté n'est jeté ───────────────────────────────────────────
+#
+# ⚠ **LE DÉFAUT QUE CETTE SECTION GARDE A VÉCU DANS `tranchage.gd` JUSQU'AU 27 SEPTEMBRE 2026.** La
+# récolte tenait un `if pieces.has(cle): continue` : elle s'arrêtait au PREMIER sommet de chaque clé.
+# Mesuré sur la planète paysage : **541 sommets récoltables pour 52 clés, donc 489 morceaux sculptés
+# jetés sans une erreur ni une remarque** — et le survivant n'était pas le meilleur, seulement le plus
+# petit `vx` de la boucle. Tout ce que l'artiste sculptait au fond du bloc était perdu en silence.
+#
+# ⚠ **L'ATTENDU EST RECOMPTÉ ICI, SOMMET PAR SOMMET, SANS APPELER LE TRANCHEUR** (charte §6 : un test
+# ne calcule jamais son attendu avec la fonction qu'il éprouve). Comparer « exemplaires en plus » au
+# nombre d'items du lot serait une TAUTOLOGIE : remettre le `continue` rendrait 0 = 0, et la mutation
+# resterait muette. L'autorité est le MODÈLE — chaque sommet intérieur qui porte une surface doit
+# livrer son morceau, un et un seul.
+
+func _aucun_morceau_sculpte_n_est_jete() -> void:
+	print("\n14. tout sommet récoltable livre son morceau — aucun n'est jeté en silence")
+
+	# L'attendu, dérivé du modèle seul : les sommets INTÉRIEURS qui portent une surface.
+	var pleines: Dictionary = BlocsMaitres.cases(0)
+	var attendus := 0
+	var par_cle := {}
+	for vx in range(0, BlocsMaitres.COTE - 1):
+		for vy in range(0, BlocsMaitres.COTE - 1):
+			for vz in range(0, BlocsMaitres.COTE - 1):
+				var v := Vector3i(vx, vy, vz)
+				var r: Dictionary = MB.classer(MB.bits(pleines, v))
+				if not r["surface"]:
+					continue
+				attendus += 1
+				par_cle[r["nom"]] = int(par_cle.get(r["nom"], 0)) + 1
+
+	var resultat: Dictionary = BlocsMaitres.librairie()
+	var lot: MeshLibrary = resultat["lot"]
+	var items: int = lot.get_item_list().size()
+	_dire(items == attendus,
+		"le modèle rend %d sommet(s) récoltable(s), le lot ne porte que %d item(s) — %d morceau(x) "
+		% [attendus, items, attendus - items] + "sculpté(s) sont jeté(s) en silence")
+
+	# — ET IL Y EN A VRAIMENT PLUSIEURS PAR CLÉ. Sans ce contrôle, un témoin où chaque classe n'apparaît
+	#   qu'une fois rendrait la section verte sans rien éprouver.
+	var multiples := 0
+	var le_plus := 0
+	for cle in par_cle:
+		if int(par_cle[cle]) > 1:
+			multiples += 1
+		le_plus = maxi(le_plus, int(par_cle[cle]))
+	_dire(multiples > 10,
+		"seules %d classe(s) apparaissent plus d'une fois dans le témoin : la règle des exemplaires "
+		% multiples + "n'est pas réellement éprouvée")
+	_dire(le_plus > 20,
+		"la classe la plus répétée n'apparaît que %d fois : trop peu pour éprouver le tirage" % le_plus)
+
+	# — CHAQUE CLÉ LIVRÉE A AUTANT D'ITEMS QUE LE MODÈLE LUI DONNE DE SOMMETS. C'est le contrôle qui
+	#   attrape un jet PARTIEL — un plafond d'exemplaires posé en douce, par exemple.
+	var items_par_cle := {}
+	for id in lot.get_item_list():
+		var classe: String = MB.nom_nu(lot.get_item_name(id))
+		items_par_cle[classe] = int(items_par_cle.get(classe, 0)) + 1
+	var depareillees: Array = []
+	for classe in par_cle:
+		if int(items_par_cle.get(classe, 0)) != int(par_cle[classe]):
+			depareillees.append("%s : %d sommets, %d items"
+				% [classe, int(par_cle[classe]), int(items_par_cle.get(classe, 0))])
+	_dire(depareillees.is_empty(),
+		"%d classe(s) ne livrent pas autant d'items que le modèle leur donne de sommets : %s"
+		% [depareillees.size(), str(depareillees.slice(0, 4))])
+
+	print("   → %d sommets récoltables, %d items livrés, %d classes répétées (la plus vue : %d fois)"
+		% [attendus, items, multiples, le_plus])

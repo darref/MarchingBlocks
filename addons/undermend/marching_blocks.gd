@@ -831,10 +831,74 @@ static func nom_en_contexte(nom: String, dehors: bool) -> String:
 	return (nom + SUFFIXE_DEHORS) if dehors else nom
 
 
-## Le nom de CLASSE d'une tuile, suffixe retiré. ⚠ C'est par là que les contrôles existants comparent
+## ── LES EXEMPLAIRES ────────────────────────────────────────────────────
+##
+## ⚠ **CE NOMMAGE VIT ICI ET NULLE PART AILLEURS.** Le trancheur l'écrit, le peintre le lit ; deux
+## descriptions du même fait divergeraient, et le jour où elles divergent le peintre cherche une tuile
+## que le lot n'a pas — donc un cube rouge sur un lot parfaitement valide (charte §6).
+const SUFFIXE_EXEMPLAIRE := "~"
+
+
+## Le nom du k-ième EXEMPLAIRE d'une clé — un des N morceaux que l'artiste a sculptés pour cette
+## même classe, à N endroits du bloc.
+##
+## ⚠ **« EXEMPLAIRE » ET NON « VARIANTE », ET LE MOT EST LE FOND.** « Variante » désigne déjà dans ce
+## greffon la variante d'AIR LIBRE, qui est une autre CLASSE de tuile (`_dehors`). Un exemplaire est
+## la même classe, le même contexte, une autre SCULPTURE. Deux sens pour un mot, c'est peindre
+## l'inverse de ce qu'on croit sans qu'aucune erreur ne le signale (charte §6).
+##
+## ⚠ **k = 0 REND LE NOM NU, ET CE N'EST PAS UNE COMMODITÉ.** C'est ce qui fait qu'un lot à variantes
+## reste lisible MOT POUR MOT par un peintre qui n'en connaît aucune — le repli procédural, un lot
+## d'avant cette version (charte §9.4). Nommer la première « ...~0 » suffirait à faire apparaître des
+## cubes rouges partout sur des lots sains.
+static func nom_d_exemplaire(cle: String, k: int) -> String:
+	return cle if k <= 0 else cle + SUFFIXE_EXEMPLAIRE + str(k)
+
+
+## La clé (classe + contexte) que porte un nom d'exemplaire, le suffixe retiré.
+## ⚠ On n'ampute QUE si ce qui suit le `~` est un entier STRICTEMENT POSITIF : un nom de classe qui
+## contiendrait un `~` par ailleurs ne doit pas se faire couper en deux.
+static func cle_sans_exemplaire(nom: String) -> String:
+	var i: int = nom.rfind(SUFFIXE_EXEMPLAIRE)
+	if i < 0:
+		return nom
+	var queue: String = nom.substr(i + 1)
+	return nom.substr(0, i) if queue.is_valid_int() and queue.to_int() > 0 else nom
+
+
+## L'indice d'exemplaire que porte un nom — 0 s'il n'en porte pas, donc pour la tuile de nom nu.
+static func indice_d_exemplaire(nom: String) -> int:
+	var i: int = nom.rfind(SUFFIXE_EXEMPLAIRE)
+	if i < 0:
+		return 0
+	var queue: String = nom.substr(i + 1)
+	return queue.to_int() if queue.is_valid_int() and queue.to_int() > 0 else 0
+
+
+## QUEL EXEMPLAIRE POSER À CE SOMMET — un tirage DÉTERMINÉ par la position, jamais aléatoire.
+##
+## ⚠ **`randi()` AURAIT ÉTÉ UN DÉFAUT, PAS UN RACCOURCI.** Le massif se reconstruit à chaque case
+## peinte, à chaque Ctrl+Z et à chaque rechargement de la scène : un tirage aléatoire redessinerait un
+## AUTRE monde à chaque reconstruction, et l'artiste ne pourrait jamais juger ce qu'il voit ni le
+## retrouver demain. La position est la seule graine qui ne bouge pas.
+##
+## ⚠ Hachage spatial de Teschner — trois grands premiers, mêlés par OU-exclusif. Multiplier sans
+## mêler (`x + y * n + z * n * n`) rendrait des exemplaires en BANDES RÉGULIÈRES, c'est-à-dire le motif
+## visible qu'on cherche précisément à casser.
+static func exemplaire_du_sommet(sommet: Vector3i, combien: int) -> int:
+	if combien <= 1:
+		return 0
+	var h: int = (sommet.x * 73856093) ^ (sommet.y * 19349663) ^ (sommet.z * 83492791)
+	return (h & 0x7fffffff) % combien
+
+
+## Le nom de CLASSE d'une tuile, suffixes retirés. ⚠ C'est par là que les contrôles existants comparent
 ## ce qui est POSÉ à ce que les règles DISENT, sans être desserrés pour autant.
+## ⚠ **LES DEUX SUFFIXES, ET DANS CET ORDRE** : un nom s'écrit `<classe>[_dehors][~k]`, donc la
+## l'exemplaire se retire AVANT le contexte. Ne retirer que `_dehors` laissait les contrôles d'octants et
+## de couture chercher des bits sous « mb_x_dehors~3 », qu'aucune table ne porte.
 static func nom_nu(nom: String) -> String:
-	return nom.trim_suffix(SUFFIXE_DEHORS)
+	return cle_sans_exemplaire(nom).trim_suffix(SUFFIXE_DEHORS)
 
 
 ## Ce sommet est-il sous le ciel ? `plafond` borne le balayage vers le haut.

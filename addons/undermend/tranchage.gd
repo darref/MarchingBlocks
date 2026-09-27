@@ -132,8 +132,11 @@ static func boite_d_octant(t: int) -> AABB:
 ## l'artiste pour satisfaire un contrôle qui n'avait pas lieu d'être. `verifier_octants`, lui, reste dans
 ## `erreurs` : un octant plein qui borde le vide et ne porte aucune surface, c'est bien la COUPE qui a
 ## déplacé la matière.
+## `exemplaires` — panier de SORTIE, {clé: [{mesh, sommet}, …]} dans l'ordre du balayage. Il porte TOUS
+## les morceaux récoltés ; `pieces` n'en garde que le premier de chaque clé et en est DÉRIVÉ.
 static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
-		erreurs: Array, peau := true, remarques: Array = []) -> Dictionary:
+		erreurs: Array, peau := true, remarques: Array = [],
+		exemplaires: Dictionary = {}) -> Dictionary:
 	var pieces := {}
 	if mesh == null:
 		erreurs.append("aucun bloc fourni")
@@ -231,8 +234,13 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 				var dehors: bool = MB.exterieur_possible(bits) \
 					and MB.sous_le_ciel(pleines, v, plafond)
 				var cle: String = MB.nom_en_contexte(r["nom"], dehors)
-				if pieces.has(cle):
-					continue
+
+				# ⚠ **ON NE S'ARRÊTE PLUS AU PREMIER SOMMET D'UNE CLÉ, ET C'ÉTAIT UN DÉFAUT MUET.** Un
+				# `if pieces.has(cle): continue` vivait ici. Mesuré sur la planète paysage : 541 sommets
+				# récoltables pour 52 clés, donc **489 morceaux sculptés jetés sans un mot** — et le survivant
+				# n'était pas le meilleur, seulement le plus petit `vx` de la boucle. Tout ce que l'artiste
+				# sculptait au fond du bloc était perdu, sans erreur ni remarque.
+				# ⚠ Le coût est réel : on découpe désormais 541 fois au lieu de 52.
 
 				var morceau: ArrayMesh = Decoupe.trancher(normalise, boite_du_sommet(v, cellule))
 				if morceau.get_surface_count() == 0:
@@ -252,14 +260,39 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 				var reference: ArrayMesh = Decoupe.poser(recentre,
 					Transform3D(base.transposed(), Vector3.ZERO))
 
-				pieces[cle] = reference
+				if not exemplaires.has(cle):
+					exemplaires[cle] = []
+				exemplaires[cle].append({"mesh": reference, "sommet": v})
 				vues[cle] = MB.classes()[r["classe"]]["bits"]
 
 	grille.free()
+
+	# ⚠ **`pieces` EST DÉRIVÉ DE `exemplaires`, JAMAIS REMPLI EN PARALLÈLE** (charte §6 : une seconde
+	# description d'un même fait diverge toujours). La règle « le premier du balayage représente la
+	# clé » vit donc à UN seul endroit, et un appelant qui ignore les exemplaires reçoit exactement ce
+	# qu'il recevait avant.
+	for cle in exemplaires:
+		pieces[cle] = exemplaires[cle][0]["mesh"]
+
+	# ⚠ **LES CONTRÔLES PORTENT SUR TOUTES LES VARIANTES, PAS SUR LES SEULES REPRÉSENTANTES.** Une
+	# rotation fausse ou une couture cassée dans la variante n°7 part chez le peintre comme les autres :
+	# ne vérifier que la première rendrait le contrôle aveugle sur 90 % de ce qui est livré.
+	var a_plat := {}
+	var bits_a_plat := {}
+	for cle in exemplaires:
+		for k in exemplaires[cle].size():
+			var nom: String = MB.nom_d_exemplaire(cle, k)
+			a_plat[nom] = exemplaires[cle][k]["mesh"]
+			bits_a_plat[nom] = vues[cle]
+
 	# ⚠ L'UN REFUSE, L'AUTRE SIGNALE. Les octants vérifient la COUPE ; la couture juge l'ART, et l'art
 	# appartient à l'artiste.
-	verifier_octants(pieces, vues, erreurs)
-	verifier_couture(pieces, vues, remarques)
+	# ⚠ **ET C'EST LA COUTURE QUI GARDE LES VARIANTES.** Deux exemplaires d'une même clé tombent dans le
+	# MÊME seau de germe : si l'artiste les a sculptées différemment à leurs plans de coupe, l'écart
+	# d'aire le dit. C'est ce qui évite de comparer N×M paires de voisins — si toutes les exemplaires
+	# d'une clé s'accordent entre elles, l'accord des clés voisines suffit.
+	verifier_octants(a_plat, bits_a_plat, erreurs)
+	verifier_couture(a_plat, bits_a_plat, remarques)
 	return pieces
 
 

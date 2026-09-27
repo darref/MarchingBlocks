@@ -582,8 +582,14 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	EditorInterface.get_selection().add_node(noeud)
 
 	var texte := entete
-	texte += "[color=#6f9e4a][b]Massif posé[/b][/color] (%s) — %d item(s) sur %d classes" \
-		% [quoi, lot.get_item_list().size(), MB.pieces_a_sculpter().size()]
+	# ⚠ **ON SÉPARE LES TUILES DES EXEMPLAIRES, sinon le compte ment.** Le lot porte désormais 52 tuiles
+	# ET leurs exemplaires ; afficher « 541 item(s) sur 35 classes » ferait croire à une couverture
+	# quinze fois trop grande.
+	var en_plus: int = int(bilan.get("exemplaires_en_plus", 0))
+	texte += "[color=#6f9e4a][b]Massif posé[/b][/color] (%s) — %d tuile(s) sur %d classes" \
+		% [quoi, lot.get_item_list().size() - en_plus, MB.pieces_a_sculpter().size()]
+	if en_plus > 0:
+		texte += ", + %d exemplaire(s)" % en_plus
 	texte += "  ·  tuiles à la MOITIÉ\n"
 	if peintes > 0:
 		texte += "%d case(s) du témoin peintes : le massif doit redonner le témoin, avec ton art.\n" % peintes
@@ -598,6 +604,23 @@ func _peindre_avec(bilan: Dictionary, chemin_du_lot: String, quoi: String, entet
 	if not erreurs.is_empty():
 		texte += "\n[color=#e0603c]%d erreur(s) de tranchage :[/color]\n  %s\n" \
 			% [erreurs.size(), "\n  ".join(PackedStringArray(erreurs.slice(0, 5)))]
+
+	# ⚠ **LES REMARQUES DE COUTURE S'AFFICHENT ENFIN, ET ELLES N'ONT JAMAIS ÉTÉ LUES JUSQU'ICI.**
+	# `verifier_couture` écrivait dans un tableau par défaut que personne ne passait. C'est le SEUL
+	# contrôle qui dit si deux exemplaires d'une même classe se recollent — muet, il laissait partir
+	# des fissures invisibles. Il SIGNALE, il ne refuse pas : la couture juge l'art, et l'art appartient
+	# à l'artiste (charte §3).
+	var remarques: Array = bilan.get("remarques", [])
+	if not remarques.is_empty():
+		texte += ("\n[color=#c8a13a]%d remarque(s) de couture[/color] — deux tuiles de même germe ne "
+			+ "portent pas la même matière à leur plan de coupe. Ça ne bloque rien, mais c'est ce qui "
+			+ "fait les fissures entre tuiles voisines :\n  %s\n") \
+			% [remarques.size(), "\n  ".join(PackedStringArray(remarques.slice(0, 4)))]
+
+	var pose: Dictionary = noeud.dernier_bilan() if noeud.has_method("dernier_bilan") else {}
+	if int(pose.get("exemplaires", 0)) > 0:
+		texte += ("%d case(s) ont reçu un exemplaire autre que le premier — tiré par POSITION, donc le "
+			+ "même à chaque reconstruction.\n") % int(pose["exemplaires"])
 	if manquantes.is_empty() and erreurs.is_empty():
 		texte += "[i]Aucune classe manquante, aucune erreur de tranchage.[/i]\n"
 	texte += "\n[i]Sélectionne « Cases » dans l'arbre et peins avec l'éditeur GridMap.[/i]"

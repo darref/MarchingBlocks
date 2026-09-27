@@ -1075,6 +1075,12 @@ static func librairie(matiere: Material = null) -> Dictionary:
 	var pieces := {}
 	var provenance := {}
 	var erreurs: Array = []
+	# ⚠ **LES REMARQUES REMONTENT DÉSORMAIS, ET ELLES ÉCRIVAIENT DANS LE VIDE.** Les deux appels ne
+	# passaient pas ce paramètre : `verifier_couture` calculait ses relevés dans le tableau par DÉFAUT,
+	# neuf à chaque appel et lu par personne. Le seul contrôle qui juge l'accord des coutures tournait
+	# donc pour rien. Avec les exemplaires il devient la garde principale (charte §3).
+	var remarques: Array = []
+	var exemplaires := {}
 
 	for i in BLOCS.size():
 		# ⚠ LA MÊME GÉOMÉTRIE QUE L'EXPORT : le catalogue avec lequel on peint doit être celui que
@@ -1086,18 +1092,23 @@ static func librairie(matiere: Material = null) -> Dictionary:
 			solide.surface_set_material(0, matiere)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
+		var du_bloc := {}
 		var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
-			creuses(i), fautes, false)
+			creuses(i), fautes, false, remarques, du_bloc)
 		for f in fautes:
 			erreurs.append("« %s » : %s" % [BLOCS[i]["nom"], f])
 		for nom in recolte:
 			if pieces.has(nom):
 				continue   # le premier bloc gagne
 			pieces[nom] = recolte[nom]
+			# ⚠ LA FAMILLE SUIT SA REPRÉSENTANTE. Prendre les exemplaires d'un bloc et la tuile d'un autre
+			# donnerait des coutures qui ne s'accordent avec rien — et ce serait muet.
+			exemplaires[nom] = du_bloc[nom]
 			provenance[nom] = BLOCS[i]["nom"]
 
-	var resultat: Dictionary = _assembler(pieces)
+	var resultat: Dictionary = _assembler(pieces, exemplaires)
 	resultat["erreurs"] = erreurs
+	resultat["remarques"] = remarques
 	resultat["provenance"] = provenance
 	return resultat
 
@@ -1105,10 +1116,13 @@ static func librairie(matiere: Material = null) -> Dictionary:
 ## Monte la `MeshLibrary` à partir des pièces récoltées. ⚠ PARTAGÉ par `librairie()` et
 ## `librairie_depuis_glb()` : deux montages séparés auraient divergé, et l'un des deux aurait fini
 ## par remettre un repli que l'autre refuse.
-static func _assembler(pieces: Dictionary) -> Dictionary:
+## `exemplaires` — {clé: [{mesh, sommet}, …]} tel que le trancheur le rend. Chaque clé posée y prend
+## ses exemplaires 1..N−1 en plus de la tuile de nom nu.
+static func _assembler(pieces: Dictionary, exemplaires: Dictionary = {}) -> Dictionary:
 	var lot := MeshLibrary.new()
 	var manquantes: Array = []
 	var variantes := 0
+	var comptes := {}
 	var id := 0
 	for c in MB.classes():
 		# ⚠ **UNE CLASSE EN CONTACT DIAGONAL N'EST PAS « MANQUANTE » : ELLE EST HORS DU MONDE.** Le
@@ -1120,11 +1134,7 @@ static func _assembler(pieces: Dictionary) -> Dictionary:
 		if mesh == null or mesh.get_surface_count() == 0:
 			manquantes.append(c["nom"])   # ⚠ PAS de repli : l'absence doit se voir
 		else:
-			lot.create_item(id)
-			lot.set_item_name(id, c["nom"])
-			lot.set_item_mesh(id, mesh)
-			lot.set_item_shapes(id, RP.collision(c["bits"]))
-			id += 1
+			id = _poser_la_famille(lot, id, c["nom"], mesh, c["bits"], exemplaires, comptes)
 
 		# ── LA VARIANTE D'AIR LIBRE ─────────────────────────────────────────────────────────────────
 		#
@@ -1138,15 +1148,46 @@ static func _assembler(pieces: Dictionary) -> Dictionary:
 		var dehors: ArrayMesh = pieces.get(MB.nom_en_contexte(c["nom"], true), null)
 		if dehors == null or dehors.get_surface_count() == 0:
 			continue
-		lot.create_item(id)
-		lot.set_item_name(id, MB.nom_en_contexte(c["nom"], true))
-		lot.set_item_mesh(id, dehors)
-		# ⚠ MÊME COLLISION QUE LA CLASSE : la variante ne change que l'ASPECT, jamais la forme de
-		# collision — sinon deux mondes identiques ne se traverseraient pas pareil selon le contexte.
-		lot.set_item_shapes(id, RP.collision(c["bits"]))
-		id += 1
+		id = _poser_la_famille(lot, id, MB.nom_en_contexte(c["nom"], true), dehors, c["bits"],
+			exemplaires, comptes)
 		variantes += 1
-	return {"lot": lot, "manquantes": manquantes, "variantes": variantes}
+
+	var en_trop := 0
+	for cle in comptes:
+		en_trop += int(comptes[cle]) - 1
+	return {"lot": lot, "manquantes": manquantes, "variantes": variantes,
+		"exemplaires": comptes, "exemplaires_en_plus": en_trop}
+
+
+## Pose la tuile d'une clé ET tous ses exemplaires. Rend l'`id` suivant.
+##
+## ⚠ **LE NOM NU RESTE L'EXEMPLAIRE 0**, jamais « ...~0 » : c'est ce qui fait qu'un peintre qui ignore
+## les exemplaires — le repli procédural, un lot d'avant cette version — trouve toujours sa tuile
+## (charte §9.4). Le repli n'est pas une commodité : sans lui, des cubes rouges sur des lots sains.
+##
+## ⚠ **MÊME COLLISION POUR TOUTE LA FAMILLE.** Un exemplaire ne change que l'ASPECT ; lui donner sa
+## propre forme de collision ferait que deux mondes identiques ne se traversent pas pareil selon le
+## tirage — et le tirage n'est pas quelque chose que le joueur peut voir.
+static func _poser_la_famille(lot: MeshLibrary, id: int, cle: String, mesh: ArrayMesh, bits: int,
+		exemplaires: Dictionary, comptes: Dictionary) -> int:
+	lot.create_item(id)
+	lot.set_item_name(id, cle)
+	lot.set_item_mesh(id, mesh)
+	lot.set_item_shapes(id, RP.collision(bits))
+	id += 1
+	var famille: Array = exemplaires.get(cle, [])
+	for k in range(1, famille.size()):
+		var autre: ArrayMesh = famille[k]["mesh"]
+		if autre == null or autre.get_surface_count() == 0:
+			continue
+		lot.create_item(id)
+		lot.set_item_name(id, MB.nom_d_exemplaire(cle, k))
+		lot.set_item_mesh(id, autre)
+		lot.set_item_shapes(id, RP.collision(bits))
+		id += 1
+	if famille.size() > 1:
+		comptes[cle] = famille.size()
+	return id
 
 
 ## ── L'ALLER-RETOUR : UN SEUL `.glb` ─────────────────────────────────────────────────────────────────
@@ -1299,16 +1340,19 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		solide = maillage_moitie(0)
 
 	var fautes: Array = []
+	var remarques: Array = []
+	var exemplaires := {}
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
-		creuses(0), fautes, false)
+		creuses(0), fautes, false, remarques, exemplaires)
 	for f in fautes:
 		erreurs.append("« %s » : %s" % [BLOCS[0]["nom"], f])
 	for nom in recolte:
 		pieces[nom] = recolte[nom]
 		provenance[nom] = BLOCS[0]["nom"]
 
-	var resultat: Dictionary = _assembler(pieces)
+	var resultat: Dictionary = _assembler(pieces, exemplaires)
 	resultat["erreurs"] = erreurs
+	resultat["remarques"] = remarques
 	resultat["provenance"] = provenance
 	resultat["sculptes"] = sculptes
 	resultat["absents"] = absents

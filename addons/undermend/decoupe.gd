@@ -63,6 +63,15 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 		var c_out := PackedColorArray()
 
 		for t in range(0, indices.size() - 2, 3):
+			# ⚠ **REJET PAR BOÎTE AVANT DE CONSTRUIRE QUOI QUE CE SOIT — ET C'EST 99 % DU COÛT.** La boucle
+			# bâtissait TROIS dictionnaires par triangle, puis découvrait dans Sutherland-Hodgman que le
+			# triangle était à dix cases de la boîte. Mesuré : trancher la planète paysage en ses 541
+			# morceaux demandait 203 s, soit ~50 millions de dictionnaires dont presque aucun ne servait.
+			# ⚠ Le test est CONSERVATEUR (boîte contre boîte, marge `EPS`) : il ne peut écarter un triangle
+			# qui contribuerait, donc la sortie est identique — c'est une accélération, pas une règle.
+			if not _peut_toucher(sommets[indices[t]], sommets[indices[t + 1]], sommets[indices[t + 2]],
+					boite):
+				continue
 			var triangle: Array = []
 			for k in 3:
 				var i: int = indices[t + k]
@@ -100,6 +109,18 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 		if matiere != null:
 			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
 	return sortie
+
+
+## Ce triangle peut-il toucher la boîte ? Réponse CONSERVATRICE : « non » est certain, « oui » ne
+## promet rien. C'est tout ce qu'un rejet précoce demande.
+static func _peut_toucher(a: Vector3, b: Vector3, c: Vector3, boite: AABB) -> bool:
+	var fin: Vector3 = boite.position + boite.size
+	for axe in 3:
+		if minf(a[axe], minf(b[axe], c[axe])) > fin[axe] + EPS:
+			return false
+		if maxf(a[axe], maxf(b[axe], c[axe])) < boite.position[axe] - EPS:
+			return false
+	return true
 
 
 ## Le polygone qui reste après passage par les six demi-espaces de la boîte (Sutherland-Hodgman).

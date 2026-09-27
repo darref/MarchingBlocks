@@ -154,6 +154,51 @@ C'est le partage de responsabilité, et il a été énoncé par Jordan mot pour 
 - ⚠ **L'OCCUPATION DES CASES N'APPARTIENT PAS À L'ARTISTE.** Il sculpte le relief ; c'est le
   remplissage qui fixe les classes, et le changer changerait la couverture sans prévenir.
 
+### La moitié du contrat qui n'était PAS écrite : les EXEMPLAIRES — DÉCIDÉ (Jordan, 27 septembre 2026)
+
+Le contrat disait « toute liberté pour chaque tuile, à l'intérieur de sa case ». Il ne disait pas ce
+qu'il advient de **deux cases de MÊME CLASSE sculptées différemment** — et c'est la première chose
+qu'un artiste fait, puisque « sculpter un paysage » veut dire rendre ce coin-ci différent de celui-là.
+
+⚠ **LA RÉPONSE ÉTAIT : ON JETTE, EN SILENCE.** `tranchage.gd` tenait un `if pieces.has(cle): continue`
+— il s'arrêtait au PREMIER sommet de chaque clé. **MESURÉ sur la planète paysage : 541 sommets
+récoltables pour 52 clés, donc 489 morceaux sculptés jetés sans une erreur ni une remarque.** Et le
+survivant n'était pas le meilleur : le balayage étant `vx, vy, vz` croissants, c'était **le plus petit
+`vx`**. Tout ce que l'artiste sculptait au fond du bloc était perdu.
+
+**DÉCIDÉ — ON GARDE TOUT.** Chaque sommet récoltable livre son morceau ; une clé porte autant
+d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire un par la POSITION**.
+
+- ⚠ **« EXEMPLAIRE » ET NON « VARIANTE », ET LE MOT EST LE FOND** (§6, un mot une chose).
+  « Variante » désigne déjà la variante d'AIR LIBRE, qui est une autre CLASSE de tuile (`_dehors`).
+  Un exemplaire, c'est la même classe, le même contexte, une autre SCULPTURE.
+- ⚠ **LE NOM NU EST L'EXEMPLAIRE 0, ET CE N'EST PAS UNE COMMODITÉ.** Un nom s'écrit
+  `<classe>[_dehors][~k]` ; nommer la première « ...~0 » ferait poser des cubes rouges sur des lots
+  parfaitement sains — le repli procédural, tout lot d'avant cette version (même raison qu'au §9.4).
+- ⚠ **LE TIRAGE EST DÉTERMINÉ PAR LA POSITION, JAMAIS `randi()`.** Le massif se reconstruit à chaque
+  case peinte, à chaque Ctrl+Z et à chaque rechargement : un tirage aléatoire redessinerait un AUTRE
+  monde à chaque fois, et l'artiste ne pourrait ni juger ce qu'il voit ni le retrouver demain. Hachage
+  spatial de Teschner — trois grands premiers mêlés par OU-exclusif ; ne pas mêler les axes rendrait
+  des exemplaires en **bandes régulières**, c'est-à-dire le motif visible qu'on cherche à casser.
+- ⚠ **LE RISQUE EST LA FISSURE, ET IL EXISTAIT DÉJÀ.** Deux exemplaires d'une même clé dont les plans
+  de coupe ne s'accordent pas font une fissure là où ils se rencontrent. Ce n'est pas nouveau — les 52
+  tuiles venaient déjà de 52 endroits différents — mais les exemplaires multiplient les occasions de
+  la rencontrer. **C'est `verifier_couture` qui la voit**, parce que deux exemplaires d'une clé tombent
+  dans le MÊME seau de germe. Si toutes les variantes d'une clé s'accordent entre elles, l'accord des
+  clés voisines suffit : pas besoin de comparer N×M paires.
+- ⚠ **ET `verifier_couture` N'AVAIT JAMAIS ÉTÉ LUE DE SA VIE.** Les deux appelants de `trancher()` ne
+  passaient pas le paramètre `remarques` : elle écrivait dans le tableau par DÉFAUT, neuf à chaque
+  appel et relu par personne. **Le seul contrôle qui juge l'accord des coutures tournait pour rien**,
+  et c'est précisément celui dont les exemplaires ont besoin. Il s'affiche désormais dans le panneau.
+- **MESURÉ (27 septembre 2026)** : `librairie()` rend **52 clés, 541 items, 489 exemplaires en plus**,
+  et **0 remarque de couture** — sur le témoin procédural, tous les exemplaires d'une clé s'accordent
+  à leurs plans de coupe. ⚠ C'est mesuré sur le maillage CALCULÉ ; sur de l'art sculpté, c'est ce
+  chiffre-là qu'il faut regarder, et il n'a été mesuré sur AUCUN `.glb` réel.
+- ⚠ **CE QUE ÇA NE RÈGLE PAS** : un détail UNIQUE reste impossible. Une clé vue 81 fois porte 81
+  exemplaires, pas 81 emplacements : le tirage choisit lequel, jamais où. Une clé de voûte sculptée à
+  UN endroit réapparaîtra ailleurs. **Un atlas ne porte pas d'unicité** — c'est le modèle, pas un
+  défaut, et l'acheteur doit le lire AVANT d'acheter.
+
 ---
 
 ## 4. Le pipeline — l'aller-retour qui prouve tout
@@ -270,6 +315,14 @@ qui ajoute une arête à ses deux bouts : un sommet de valence 4 y apparaît en 
   Mesuré : revenir à la normale stockée fait réapparaître exactement 23 erreurs.
 - ⚠ **`decoupe.gd` doit transporter `ARRAY_COLOR`** de bout en bout. L'oublier tout en gardant le
   matériau donne une planche blanche, sans une seule erreur.
+- ⚠ **LE COÛT DU TRANCHAGE ÉTAIT DANS L'ALLOCATION, PAS DANS LA GÉOMÉTRIE — MESURÉ (27 septembre
+  2026).** `Decoupe.trancher` bâtissait **trois dictionnaires par triangle** avant de découvrir dans
+  Sutherland-Hodgman que le triangle était à dix cases de la boîte. Avec les exemplaires (541 découpes
+  au lieu de 52), un `trancher()` complet demandait **203 s** — l'éditeur aurait gelé trois minutes et
+  demie sur un clic. Un rejet par boîte englobante AVANT de construire quoi que ce soit le ramène à
+  **17,7 s**, sortie identique. ⚠ Le test est CONSERVATEUR (boîte contre boîte) : il ne peut écarter
+  un triangle qui contribuerait, donc c'est une accélération et **pas une règle**. Il profite aussi à
+  l'ancien chemin. ⚠ **Et 17,7 s reste long** : ça n'a été mesuré que sur le témoin de 12³.
 
 ---
 
@@ -376,6 +429,12 @@ faisait coiffer chaque pièce par sa propre couche haute, donc 5 classes extéri
 de mesurer si ce qu'on cherche est seulement ATTEIGNABLE — ici, l'énumération exhaustive tenait en
 vingt lignes et aurait tout tranché d'emblée.
 
+⚠ **UNE SUITE QUI NE SE CHARGE PAS NE ROUGIT PAS — ELLE SE TAIT.** Une erreur de parsing dans
+`massif_peint.gd` (un `var k` éclipsant un itérateur `for k` plus bas) a rendu `test_massif_peint`
+**muet** dans la boucle des six suites : aucune ligne, aucun compte, et **le tout a fini en code 0**.
+C'est le piège du `--check-only` sous un autre masque : l'absence de verdict se lit comme un verdict.
+Une boucle de test doit dire **« MUET »** quand une suite ne rend pas son compte, jamais l'omettre.
+
 ⚠ **UN CONTRÔLE NÉGATIF TRANCHE CE QU'UNE IMPRESSION NE TRANCHE PAS.** Huit erreurs « already has a
 parent » ont été attribuées à nos modifications ; greffon désactivé, il y en avait **huit aussi**. Elles
 ne sont pas à nous.
@@ -396,9 +455,17 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/UnderMend --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Six suites, **7 451 vérifications, 0 échec** (27 septembre 2026, recomptées) :
-  `test_marching_blocks` 1 980, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 416,
-  `test_massif_peint` 78, `test_tranchage` 40, `test_decoupe` 15.
+  Six suites, **7 512 vérifications, 0 échec** (27 septembre 2026, recomptées après les exemplaires) :
+  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 422,
+  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15.
+  ⚠ Les trois suites qui ont grossi portent les gardes des exemplaires : `test_marching_blocks` §16
+  (nommage et tirage), `test_massif_peint` §10 (le peintre les pose, et un lot sans exemplaires marche
+  encore), `test_blocs_maitres` §14 (aucun morceau sculpté n'est jeté). **Onze mutations délibérées,
+  toutes rouges** — dont la seule qui compte vraiment : remettre le `if pieces.has(cle): continue`
+  rend « le modèle rend 541 sommets récoltables, le lot ne porte que 52 items ».
+  ⚠ **L'ATTENDU DU §14 EST RECOMPTÉ SOMMET PAR SOMMET, SANS LE TRANCHEUR.** Comparer « exemplaires en
+  plus » au nombre d'items du lot aurait été une TAUTOLOGIE : remettre le `continue` rendrait 0 = 0,
+  et la mutation serait restée muette. L'autorité est le MODÈLE (charte §6).
   ⚠ `test_blocs_maitres` a presque triplé avec le bloc de 12³, pour la même raison qu'en dessous : ses
   boucles par cellule et par pièce assertent une fois par élément, et il y a 820 cases.
   ⚠ **`test_blocs_maitres` EST PASSÉ DE 597 À 589 SANS QU'AUCUNE ASSERTION NE SOIT TOUCHÉE**, en
@@ -556,9 +623,21 @@ désormais le greffon.
    - ⚠ **UN `.glb` SCULPTÉ SUR L'ANCIEN 8³ NE REVIENT PLUS** : le bloc est retrouvé par sa POSITION
      dans une boîte de 12³ (§4), et sa forme a changé. Il faut réexporter le témoin avant de sculpter.
 
-6. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
+6. ~~**LES EXEMPLAIRES**~~ — **FAITS** (27 septembre 2026). Le trancheur ne jette plus rien : **52 clés,
+   541 items, 489 exemplaires** là où 489 morceaux sculptés partaient à la poubelle sans un mot
+   (§3). Le peintre en tire un par hachage de la POSITION, donc identique à chaque reconstruction.
+   Les remarques de couture s'affichent pour la première fois.
+   ⚠ **TROIS RÉSERVES QUI SURVIVENT À LA TÂCHE** :
+   - **rien n'a été vu à l'image.** Les exemplaires changent l'aspect d'un monde peint et aucun
+     compteur ne dira si c'est mieux — c'est déjà ce qui a tranché la force du chanfrein (§6) ;
+   - **les 0 remarques de couture sont mesurées sur le témoin PROCÉDURAL**, jamais sur un `.glb`
+     sculpté. C'est là que les fissures apparaîtront, s'il y en a ;
+   - **`librairie()` coûte 17,7 s** après le rejet précoce de `decoupe.gd` (203 s avant). Mesuré sur
+     le témoin de 12³ seulement ; un bloc plus gros n'a pas été essayé.
+
+7. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.
-7. **LE PBR ESPACE MONDE — EN COURS (Jordan, 27 septembre 2026).** Une case « Texturer en PBR espace
+8. **LE PBR ESPACE MONDE — EN COURS (Jordan, 27 septembre 2026).** Une case « Texturer en PBR espace
    monde » sous le titre habille chaque teinte du témoin d'un set complet — albédo, normale, AO,
    rugosité, hauteur en POM — projeté en TRIPLANAIRE dans l'espace monde (`pbr_monde.gdshader`).
    - ⚠ **LA COULEUR DE SOMMET CHOISIT LE SET, ET C'EST CE QUI LE FAIT SUIVRE DANS LES TUILES** : le
@@ -586,5 +665,14 @@ désormais le greffon.
    - ⚠ Une planche réécrite par-dessus un PNG verrouillé par l'éditeur ÉCHOUE (erreur 12) et laisse
      l'ANCIENNE image en place : je l'ai lue une fois comme si c'était la nouvelle. Écrire ailleurs,
      et vérifier la date du fichier avant de le regarder (§6, « le sujet a-t-il changé »).
-8. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
-9. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
+9. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
+10. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
+    ⚠ **ET UNE LIMITE À ÉCRIRE AVANT LA VENTE, PAS APRÈS** : un atlas ne porte pas d'unicité
+    (§3). Une clé vue 81 fois porte 81 exemplaires, pas 81 emplacements — un détail sculpté à UN
+    endroit réapparaît ailleurs. L'acheteur doit le lire avant d'acheter, jamais le découvrir.
+    ⚠ **MARCHÉ — MESURÉ À MOITIÉ, PROPOSÉ pour le reste** : l'Asset Library officielle de Godot
+    est GRATUITE uniquement (un registre de liens, elle n'encaisse rien), donc un addon payant
+    passe par itch.io ou Gumroad. ⚠ **La vraie différence n'est pas la commission, c'est la
+    DÉCOUVERTE** : l'Asset Store Unity prend 30 % mais met l'outil devant des gens qui le
+    cherchent ; sur itch on amène son public soi-même. **OUVERT** — le nouveau « Godot Asset
+    Store » accepte-t-il le payant ? À vérifier chez eux, pas de mémoire.

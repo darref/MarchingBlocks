@@ -44,6 +44,7 @@ func _initialize() -> void:
 	_effacer_efface()
 	_l_empreinte_suit_les_cases()
 	_le_contexte_choisit_la_variante()
+	_le_peintre_tire_un_exemplaire_par_position()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -464,3 +465,98 @@ func _l_empreinte_suit_les_cases() -> void:
 
 	m.free()
 	print("   → l'empreinte distingue l'ajout, le retrait ET le déplacement à nombre constant")
+
+
+# ── 10. le peintre tire un exemplaire par position ───────────────────────────────────
+#
+# ⚠ **LE DÉFAUT QUE CETTE SECTION GARDE A COÛTÉ 489 MORCEAUX SCULPTÉS.** Le trancheur s'arrêtait au
+# PREMIER sommet de chaque clé (`if pieces.has(cle): continue`) : sur la planète paysage, 541 sommets
+# récoltables pour 52 clés, donc 489 morceaux jetés sans un mot — et le survivant n'était pas le
+# meilleur, seulement le plus petit `vx` de la boucle.
+#
+# TROIS PROPRIÉTÉS, ET LA PREMIÈRE EST LA PLUS IMPORTANTE :
+#
+#   1. **un lot SANS exemplaires peint exactement comme avant** (charte §9.4). Le repli procédural et
+#      tout lot d'avant cette version passent par le même chemin, sans branche séparée ;
+#   2. **un lot AVEC exemplaires les pose réellement**, et pas un seul d'entre eux ;
+#   3. **le tirage se répète à l'identique** — le massif se reconstruit à chaque case peinte et à
+#      chaque Ctrl+Z ; un tirage aléatoire redessinerait un autre monde à chaque fois, et l'artiste ne
+#      pourrait ni juger ce qu'il voit ni le retrouver demain.
+
+## Le lot du repli, augmenté de `combien` exemplaires pour CHAQUE tuile qu'il porte.
+## ⚠ Les maillages sont ceux de la tuile d'origine : ce qu'on éprouve ici est le TIRAGE, pas la forme.
+func _lot_a_exemplaires(combien: int) -> MeshLibrary:
+	var source: MeshLibrary = RP.librairie()
+	var lot := MeshLibrary.new()
+	var id := 0
+	for vieux in source.get_item_list():
+		var nom: String = source.get_item_name(vieux)
+		for k in range(0, combien + 1):
+			lot.create_item(id)
+			lot.set_item_name(id, MB.nom_d_exemplaire(nom, k))
+			lot.set_item_mesh(id, source.get_item_mesh(vieux))
+			lot.set_item_shapes(id, source.get_item_shapes(vieux))
+			id += 1
+	return lot
+
+
+func _le_peintre_tire_un_exemplaire_par_position() -> void:
+	print("\n10. le peintre tire un exemplaire par position, et un lot sans exemplaires marche encore")
+	var cellules: Array = _pave(0, 5, 0, 3, 0, 5)
+
+	# — 1. LE LOT SANS EXEMPLAIRES : rien ne change, et rien ne rougit
+	var nu := _massif()
+	_peindre(nu, cellules)
+	var b_nu: Dictionary = nu.reconstruire()
+	_dire(int(b_nu["fautes"]) == 0,
+		"un lot SANS exemplaires doit peindre sans faute, il en produit %d" % int(b_nu["fautes"]))
+	_dire(int(b_nu.get("exemplaires", -1)) == 0,
+		"un lot SANS exemplaires ne doit poser aucun exemplaire, il en pose %d"
+		% int(b_nu.get("exemplaires", -1)))
+	_dire(int(b_nu["pieces"]) > 0, "le témoin nu doit poser des pièces, il en pose %d" % int(b_nu["pieces"]))
+	var poses_nu: int = int(b_nu["pieces"])
+	nu.free()
+
+	# — 2. LE LOT AVEC EXEMPLAIRES : autant de pièces, aucune faute, et des exemplaires vraiment posés
+	var m := _massif()
+	m.lot = _lot_a_exemplaires(3)
+	_peindre(m, cellules)
+	var b: Dictionary = m.reconstruire()
+	_dire(int(b["fautes"]) == 0,
+		"un lot AVEC exemplaires ne doit produire aucune faute, il en produit %d" % int(b["fautes"]))
+	_dire(int(b["pieces"]) == poses_nu,
+		"le même monde doit poser le même nombre de pièces : %d sans exemplaires, %d avec"
+		% [poses_nu, int(b["pieces"])])
+	_dire(int(b.get("exemplaires", 0)) > 0,
+		"avec 4 exemplaires par tuile, le peintre doit en poser autre chose que le premier — il en pose %d"
+		% int(b.get("exemplaires", 0)))
+
+	# ⚠ — LE TIRAGE N'EST PAS DÉGÉNÉRÉ : les quatre indices doivent tous apparaître. Un hachage qui
+	#   rendrait toujours 0 passerait les trois contrôles précédents sauf celui-ci.
+	var rendu: GridMap = m.get_node("Rendu")
+	var indices := {}
+	for c in rendu.get_used_cells():
+		indices[MB.indice_d_exemplaire(m.lot.get_item_name(rendu.get_cell_item(c)))] = true
+	_dire(indices.size() == 4,
+		"les 4 exemplaires doivent tous être posés quelque part, %d le sont : %s"
+		% [indices.size(), str(indices.keys())])
+
+	# ⚠ — ET LE TIRAGE SE RÉPÈTE. On reconstruit à l'identique et on compare case par case.
+	var avant := {}
+	for c in rendu.get_used_cells():
+		avant[c] = rendu.get_cell_item(c)
+	m.forcer_reconstruction() if m.has_method("forcer_reconstruction") else null
+	for c in rendu.get_used_cells():
+		rendu.set_cell_item(c, -1)
+	m.reconstruire()
+	var bouges := 0
+	for c in avant:
+		if rendu.get_cell_item(c) != avant[c]:
+			bouges += 1
+	_dire(bouges == 0,
+		"%d case(s) changent d'exemplaire d'une reconstruction à l'autre — le tirage doit être déterminé "
+		% bouges + "par la POSITION, jamais aléatoire")
+	m.free()
+
+	print("   → %d pièces, %d exemplaire(s) autres que le premier, 4 indices tous posés, 0 case instable"
+		% [int(b["pieces"]), int(b.get("exemplaires", 0))])
