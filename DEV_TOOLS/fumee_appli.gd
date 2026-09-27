@@ -115,23 +115,69 @@ func _mener() -> void:
 		_egal(relu["couches"][0]["cases"].size(), 3, "avec les cases de la couche 0")
 		_egal(relu["couches"][1]["cases"].size(), 1, "et celle de la couche 1")
 
-	# ── Phase 3 : la boîte, par la vue ────────────────────────────────────────────────────────────
+	# ── La boîte et le rectangle, par la vue ─────────────────────────────────────────────────────
+	#
+	# ⚠ **LA BOÎTE PRENAIT LA MATIÈRE, ELLE PREND LE VOLUME — ET CES TROIS TESTS DISAIENT L'ANCIEN
+	# COMPORTEMENT.** On ne les desserre pas : on les remplace par la propriété VOULUE. Un pavé vide
+	# n'existait pas, donc ni Fill ni Extrude n'avaient de prise sur une pièce à bâtir (Jordan,
+	# 28 septembre 2026).
 	# La couche 0 porte la rangée (0,0,0) (1,0,0) (2,0,0).
 	ed._activer(0)
 	var vue = ed._vue
-	vue._coin_boite = Vector3i(1, -3, -3)
-	vue._coin_fin = Vector3i(5, 3, 3)
+	var cases0 := ed._vue.couche(0).get_node("Cases") as GridMap
+	vue.outil = "boite"
+	vue._maj_du_coup = false
+	vue._coin_boite = Vector3i(1, 0, 0)
+	vue._coin_fin = Vector3i(3, 1, 0)
 	vue._finir_boite(MOUSE_BUTTON_LEFT)
-	_egal(vue.selection, {Vector3i(1, 0, 0): true, Vector3i(2, 0, 0): true}, "la boîte sélectionne la matière entre ses coins")
-	vue._coin_boite = Vector3i(0, 0, 0)
-	vue._coin_fin = Vector3i(0, 0, 0)
+	_egal(vue.selection.size(), 6, "la boîte prend tout le VOLUME entre ses coins, cases vides comprises")
+	_vrai(vue.selection.has(Vector3i(3, 1, 0)), "y compris une case où il n'y a rien")
+	vue._coin_boite = Vector3i(7, 0, 0)
+	vue._coin_fin = Vector3i(7, 0, 0)
 	vue._maj_du_coup = true
 	vue._finir_boite(MOUSE_BUTTON_LEFT)
-	_egal(vue.selection.size(), 3, "une boîte avec Maj AJOUTE à la sélection")
-	vue._coin_boite = Vector3i(2, 0, 0)
-	vue._coin_fin = Vector3i(2, 0, 0)
+	_egal(vue.selection.size(), 7, "une boîte avec Maj AJOUTE à la sélection")
+	vue._maj_du_coup = false
+	vue._coin_boite = Vector3i(7, 0, 0)
+	vue._coin_fin = Vector3i(7, 0, 0)
 	vue._finir_boite(MOUSE_BUTTON_RIGHT)
-	_egal(vue.selection.size(), 2, "une boîte au clic droit RETIRE de la sélection")
+	_egal(vue.selection.size(), 6, "une boîte au clic droit RETIRE de la sélection")
+
+	# ⚠ LE CREUX NE VAUT QUE POUR LA BOÎTE : un rectangle plat n'a pas de dedans.
+	vue.creux = true
+	vue._coin_boite = Vector3i(0, 0, 0)
+	vue._coin_fin = Vector3i(2, 2, 2)
+	vue._finir_boite(MOUSE_BUTTON_LEFT)
+	_egal(vue.selection.size(), 26, "une boîte CREUSE de 3³ rend sa peau, 27 moins le cœur")
+	_vrai(not vue.selection.has(Vector3i(1, 1, 1)), "et son cœur est bien vide")
+
+	# LE RECTANGLE : toujours à plat, et le creux ne s'y applique pas.
+	vue.outil = "rect"
+	vue._coin_boite = Vector3i(0, 4, 0)
+	vue._coin_fin = Vector3i(2, 4, 2)
+	vue._finir_boite(MOUSE_BUTTON_LEFT)
+	_egal(vue.selection.size(), 9, "le rectangle prend ses 3×3 cases, et le creux ne s'y applique pas")
+	vue.creux = false
+
+	# FILL puis EXTRUDE : le geste qui monte une pièce, et l'étage qui suit.
+	var avant := cases0.get_used_cells().size()
+	ed._operer_selection("remplir")
+	_egal(cases0.get_used_cells().size(), avant + 9, "Fill pose de la matière dans les 9 cases du rectangle")
+	var avant_etage: int = ed._vue.etage
+	ed._operer_selection("extruder_haut")
+	_egal(cases0.get_used_cells().size(), avant + 18, "Extrude ↑ pose la couche du dessus")
+	_egal(ed._vue.etage, avant_etage + 1, "et le plan de visée MONTE avec elle, pour continuer à cliquer")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	_egal(cases0.get_used_cells().size(), avant, "deux Ctrl+Z rendent la couche telle qu'elle était")
+	# ⚠ ON REND L'ÉTAT QUE LA SUITE ATTEND — sélection {(0,0,0), (1,0,0)} — PAR LE MÊME GESTE, jamais
+	# en posant `selection` à la main : un test qui se met lui-même dans l'état qu'il prétend mesurer
+	# ne mesure plus rien.
+	vue.outil = "boite"
+	vue._coin_boite = Vector3i(0, 0, 0)
+	vue._coin_fin = Vector3i(1, 0, 0)
+	vue._finir_boite(MOUSE_BUTTON_LEFT)
+	vue.outil = "ajouter"
 	_vrai(not vue._boite_vue.visible, "la boîte disparaît au relâché")
 
 	# ── Déplacer : par le bouton, puis par les flèches, qui suivent la caméra ─────────────────────

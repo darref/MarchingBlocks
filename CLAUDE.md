@@ -523,6 +523,16 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
     ⚠ Déplacer ou coller sur de la matière FUSIONNE, jamais n'écrase. ⚠ Un déplacement qui recouvre sa
     source n'efface que sa queue et ne pose que sa tête. ⚠ Le milieu d'un presse-papiers s'arrondit
     par `floori`, pas par division entière : en négatif, celle-ci décalait le collage d'une case.
+- **LA BOÎTE PREND LE VOLUME, PLUS LA MATIÈRE (Jordan, 28 septembre 2026).** Un pavé vide n'existait
+  pas : on ne pouvait désigner une pièce avant de la bâtir. `Outils.volume_de_la_boite` rend toutes
+  les cases entre deux coins, avec **Hollow** (la peau seule, pour une salle) ; le **Rect** (R) se pose
+  toujours à plat sur l'étage, quelle que soit la visée. **Fill** pose la matière dans les cases vides
+  de la sélection sans la déplacer, et **Extrude** fait monter l'étage avec elle : Fill, Extrude, Fill.
+  ⚠ Le volume est BORNÉ (`VOLUME_MAXI`, 64³) : au-delà la boîte rend vide et l'écran le DIT — deux
+  coins perdus à l'horizon gèleraient l'appli. ⚠ La sélection se DESSINE cases vides comprises.
+- **LES QUATRE ÉTAPES À GAUCHE (Jordan, 28 septembre 2026)** : Export · Import · Slice · Export to
+  engines, numérotées, et les imports gardés en LISTE (réimporter un même fichier le remplace). La
+  liste ne survit pas à la session : OUVERT.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
@@ -606,10 +616,10 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 685 vérifications, 0 échec** (27 septembre 2026, recomptées après le format neutre) :
+  Onze suites, **7 707 vérifications, 0 échec** (28 septembre 2026, recomptées après la boîte de volume) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 43, `fumee_appli` 41, `test_greffon_peinture` 42.
+  `test_outils` 57, `fumee_appli` 49, `test_greffon_peinture` 42.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
