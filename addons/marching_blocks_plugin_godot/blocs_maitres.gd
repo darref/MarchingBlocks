@@ -1297,11 +1297,24 @@ static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
 	return sortie
 
 
+##
+## ⚠ **LE TÉMOIN PART EN OBJ (Jordan, 27 septembre 2026), ET LE RETOUR RESTE EN .glb.** Mesuré dans
+## Blender 5.1 : en glTF, un matériau est une primitive et Blender ne partage aucun sommet entre
+## primitives — 6 610 coutures aux bords de couleur, même quand les six primitives lisent le MÊME tampon
+## de sommets. Un sommet glTF porte une seule valeur par attribut ; tout ce qui change d'une face à
+## l'autre (matériau, UV, couleur) coupe le maillage. L'OBJ, lui, fait référencer par ses faces une
+## liste de sommets COMMUNE, matériau par face : 15 546 sommets, 0 couture, six matériaux nommés.
+## Le témoin n'est qu'une ébauche — de la géométrie et six teintes — donc l'OBJ ne lui coûte rien.
+## Le TRAVAIL revient en .glb, avec tout ce que le glTF porte (textures, UV, normales, PBR).
+## ⚠ `.glb` reste accepté ici pour les outils de `DEV_TOOLS/` qui relisent leur propre export : même
+## maillage, même appel — seule l'écriture change.
 static func exporter_le_bloc(chemin: String) -> String:
 	var brut: ArrayMesh = maillage_moitie(0)
 	var mesh: ArrayMesh = par_teinte(sans_normales(souder(brut)))
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
+	if chemin.get_extension().to_lower() == "obj":
+		return _ecrire_obj(mesh, chemin)
 	var instance := MeshInstance3D.new()
 	instance.name = "MasterBlock"
 	instance.mesh = mesh
@@ -1316,6 +1329,135 @@ static func exporter_le_bloc(chemin: String) -> String:
 	if err != OK:
 		return "write_to_filesystem a rendu %d pour « %s »" % [err, chemin]
 	return ""
+
+
+## L'OBJ DU TÉMOIN : une liste de sommets COMMUNE, puis les faces de chaque teinte sous son `usemtl`.
+## Le `.mtl` voisin porte les six teintes, NOMMÉES comme la légende (« Wall - underground »).
+##
+## ⚠ **SOUDÉ PAR CONSTRUCTION** : un sommet par POSITION (clé quantifiée, comme `souder()`), sur tout le
+## fichier et pas surface par surface — c'est tout l'intérêt du format.
+## ⚠ **L'ENROULEMENT EST RETOURNÉ** : Godot tient ses faces avant dans le sens HORAIRE, l'OBJ et Blender
+## dans le sens trigonométrique. Le glTF de Godot le retournait sans le dire ; ici on le fait.
+## ⚠ **AUCUNE NORMALE** (`vn`) : sans elles, Blender importe en ombrage PLAT — mesuré, comme le .glb.
+## ⚠ Des TRIANGLES, comme le .glb d'avant : « Tris to Quads » (Alt+J) rend les boucles d'arêtes.
+static func _ecrire_obj(mesh: ArrayMesh, chemin: String) -> String:
+	var mtl_chemin: String = chemin.get_basename() + ".mtl"
+	var lignes := PackedStringArray()
+	lignes.append("# MarchingBlocks — the witness block. Sculpt it, keep it at the origin.")
+	lignes.append("mtllib " + mtl_chemin.get_file())
+	lignes.append("o MasterBlock")
+	var index_de := {}
+	var sommets := PackedStringArray()
+	var faces := PackedStringArray()
+	var matieres := PackedStringArray()
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+			else PackedInt32Array(range(v.size()))
+		var m: Material = mesh.surface_get_material(s)
+		var nom: String = m.resource_name if m != null and m.resource_name != "" else "surface_%d" % s
+		var couleur: Color = (m as StandardMaterial3D).albedo_color if m is StandardMaterial3D else Color.WHITE
+		matieres.append("newmtl %s\nKd %.4f %.4f %.4f\nKa 0 0 0\nKs 0 0 0\nd 1\nillum 1\n"
+			% [nom, couleur.r, couleur.g, couleur.b])
+		faces.append("usemtl " + nom)
+		for t in range(0, ordre.size() - 2, 3):
+			var n := PackedInt32Array()
+			for k in 3:
+				var p: Vector3 = v[ordre[t + k]]
+				var cle := "%d,%d,%d" % [roundi(p.x * 100000.0), roundi(p.y * 100000.0), roundi(p.z * 100000.0)]
+				if not index_de.has(cle):
+					index_de[cle] = index_de.size() + 1
+					sommets.append("v %.6f %.6f %.6f" % [p.x, p.y, p.z])
+				n.append(index_de[cle])
+			faces.append("f %d %d %d" % [n[0], n[2], n[1]])
+	lignes.append_array(sommets)
+	lignes.append_array(faces)
+	var f := FileAccess.open(chemin, FileAccess.WRITE)
+	if f == null:
+		return "« %s » ne s'écrit pas (erreur %d)" % [chemin, FileAccess.get_open_error()]
+	f.store_string("\n".join(lignes) + "\n")
+	f.close()
+	var g := FileAccess.open(mtl_chemin, FileAccess.WRITE)
+	if g == null:
+		return "« %s » ne s'écrit pas (erreur %d)" % [mtl_chemin, FileAccess.get_open_error()]
+	g.store_string("# MarchingBlocks — the six tile families of the witness.\n" + "\n".join(matieres))
+	g.close()
+	return ""
+
+
+## LIRE UN OBJ — celui qu'on a écrit, ou celui qu'un artiste renverrait. Une surface par `usemtl`,
+## sa couleur lue dans le `.mtl` voisin s'il existe ; des normales PLATES reconstruites (`normales_plates`).
+## ⚠ Les faces à plus de trois sommets sont découpées en éventail, et les références `v/vt/vn` ne gardent
+## que la position : le trancheur ne lit que la géométrie. ⚠ Les indices NÉGATIFS (relatifs à la fin)
+## sont permis par le format, donc lus. ⚠ L'enroulement est retourné vers la convention HORAIRE de Godot.
+static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
+	var texte := FileAccess.get_file_as_string(chemin)
+	if texte == "":
+		journal.append("le fichier OBJ est vide ou illisible : %s" % chemin)
+		return null
+	var positions := PackedVector3Array()
+	var couleurs := {}
+	var par_matiere := {}
+	var ordre_matieres: Array = []
+	var courante := ""
+	for ligne in texte.split("\n"):
+		var l := ligne.strip_edges()
+		if l.begins_with("mtllib "):
+			couleurs.merge(_lire_mtl(chemin.get_base_dir().path_join(l.substr(7).strip_edges())))
+		elif l.begins_with("v "):
+			var c := l.substr(2).split(" ", false)
+			if c.size() >= 3:
+				positions.append(Vector3(float(c[0]), float(c[1]), float(c[2])))
+		elif l.begins_with("usemtl "):
+			courante = l.substr(7).strip_edges()
+		elif l.begins_with("f "):
+			var ids := PackedInt32Array()
+			for jeton in l.substr(2).split(" ", false):
+				var i := int(jeton.split("/")[0])
+				ids.append(i - 1 if i > 0 else positions.size() + i)
+			if not par_matiere.has(courante):
+				par_matiere[courante] = PackedVector3Array()
+				ordre_matieres.append(courante)
+			var sac: PackedVector3Array = par_matiere[courante]
+			for k in range(1, ids.size() - 1):
+				for i in [ids[0], ids[k + 1], ids[k]]:
+					if i < 0 or i >= positions.size():
+						journal.append("une face de l'OBJ cite un sommet qui n'existe pas (%d)" % (i + 1))
+						return null
+					sac.append(positions[i])
+			par_matiere[courante] = sac
+	if ordre_matieres.is_empty():
+		journal.append("l'OBJ ne contient aucune face : %s" % chemin)
+		return null
+	var mesh := ArrayMesh.new()
+	for nom in ordre_matieres:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = par_matiere[nom]
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var m := StandardMaterial3D.new()
+		m.resource_name = nom
+		m.albedo_color = couleurs.get(nom, Color.WHITE)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, m)
+	return normales_plates(mesh)
+
+
+static func _lire_mtl(chemin: String) -> Dictionary:
+	var couleurs := {}
+	if not FileAccess.file_exists(chemin):
+		return couleurs
+	var courante := ""
+	for ligne in FileAccess.get_file_as_string(chemin).split("\n"):
+		var l := ligne.strip_edges()
+		if l.begins_with("newmtl "):
+			courante = l.substr(7).strip_edges()
+		elif l.begins_with("Kd ") and courante != "":
+			var c := l.substr(3).split(" ", false)
+			if c.size() >= 3:
+				couleurs[courante] = Color(float(c[0]), float(c[1]), float(c[2]))
+	return couleurs
 
 
 ## LA BIBLIOTHÈQUE BÂTIE DEPUIS LE BLOC SCULPTÉ — le retour de Blender.
@@ -1529,6 +1671,10 @@ static func _lire_glb(chemin: String, journal: Array = []) -> ArrayMesh:
 	if not FileAccess.file_exists(chemin):
 		journal.append("le fichier n'existe pas : %s" % chemin)
 		return null
+	# ⚠ UN OBJ EST ACCEPTÉ AU RETOUR, en plus du .glb : c'est le format dans lequel le témoin part, et un
+	# artiste peut le renvoyer tel quel. Le .glb reste le retour normal — il porte textures et UV.
+	if chemin.get_extension().to_lower() == "obj":
+		return _lire_obj(chemin, journal)
 	var document := GLTFDocument.new()
 	var etat := GLTFState.new()
 	var err: int = document.append_from_file(chemin, etat)
@@ -1589,17 +1735,78 @@ static func _tous_les_noeuds(racine: Node) -> Array:
 ## échec silencieux le jour où ce type n'est pas exposé, ou change. On cherche donc n'importe quel nœud
 ## portant une propriété `mesh`, et on convertit ce qu'on y trouve — c'est la propriété qui compte, pas
 ## la classe qui la porte.
-static func _premier_maillage(noeud: Node) -> ArrayMesh:
+##
+## ⚠ **LA TRANSFORMATION DU NŒUD EST CUITE DANS LES SOMMETS — CORRIGÉ LE 27 SEPTEMBRE 2026.** On rendait
+## le maillage BRUT, en ignorant où son nœud le pose. Or l'importeur OBJ de Blender convertit les axes
+## par une ROTATION D'OBJET (+90° en X) et non dans les sommets ; le .glb qu'il réécrit garde cette
+## rotation sur le nœud. Relu sans elle, le travail revenait couché : 41 erreurs de tranchage, 2 393
+## sommets déplacés (mesuré, aller-retour OBJ → Blender → .glb). Le même piège attendait tout artiste
+## qui tourne ou déplace son objet sans « Apply ». On lit désormais ce qu'il VOIT dans sa vue.
+static func _premier_maillage(noeud: Node, racine: Node = null) -> ArrayMesh:
+	if racine == null:
+		racine = noeud
 	var brut: Variant = noeud.get("mesh")
 	if brut != null:
 		var converti: ArrayMesh = _en_array_mesh(brut)
 		if converti != null and converti.get_surface_count() > 0:
-			return converti
+			return _transformer(converti, _pose_dans_la_scene(noeud, racine))
 	for enfant in noeud.get_children():
-		var trouve: ArrayMesh = _premier_maillage(enfant)
+		var trouve: ArrayMesh = _premier_maillage(enfant, racine)
 		if trouve != null:
 			return trouve
 	return null
+
+
+## La pose d'un nœud dans sa scène, de proche en proche jusqu'à la racine INCLUSE. ⚠ Pas de
+## `global_transform` : la scène importée n'est pas dans l'arbre, il rendrait l'identité en se plaignant.
+static func _pose_dans_la_scene(noeud: Node, racine: Node) -> Transform3D:
+	var pose := Transform3D.IDENTITY
+	var n: Node = noeud
+	while n != null:
+		if n is Node3D:
+			pose = (n as Node3D).transform * pose
+		if n == racine:
+			break
+		n = n.get_parent()
+	return pose
+
+
+## Cuit une transformation dans les sommets et les normales, surface par surface, matériau compris.
+## ⚠ Une transformation MIROIR (déterminant négatif) retourne les faces : on inverse alors l'enroulement,
+## sinon le trancheur verrait toutes les normales à l'envers.
+static func _transformer(mesh: ArrayMesh, pose: Transform3D) -> ArrayMesh:
+	if pose.is_equal_approx(Transform3D.IDENTITY):
+		return mesh
+	var miroir: bool = pose.basis.determinant() < 0.0
+	var normale: Basis = pose.basis.inverse().transposed()
+	var sortie := ArrayMesh.new()
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		for i in v.size():
+			v[i] = pose * v[i]
+		arrays[Mesh.ARRAY_VERTEX] = v
+		if arrays[Mesh.ARRAY_NORMAL] != null:
+			var n: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+			for i in n.size():
+				n[i] = (normale * n[i]).normalized()
+			arrays[Mesh.ARRAY_NORMAL] = n
+		# Les tangentes suivraient la même règle ; on les retire plutôt que de les laisser fausses —
+		# Godot les recalcule, et le trancheur n'en lit aucune.
+		arrays[Mesh.ARRAY_TANGENT] = null
+		if miroir:
+			var idx = arrays[Mesh.ARRAY_INDEX]
+			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null 				else PackedInt32Array(range(v.size()))
+			for t in range(0, ordre.size() - 2, 3):
+				var tmp: int = ordre[t + 1]
+				ordre[t + 1] = ordre[t + 2]
+				ordre[t + 2] = tmp
+			arrays[Mesh.ARRAY_INDEX] = ordre
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var matiere: Material = mesh.surface_get_material(s)
+		if matiere != null:
+			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
+	return sortie
 
 
 ## Ramène à un `ArrayMesh` ce qu'un nœud importé porte comme maillage.

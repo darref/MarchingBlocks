@@ -483,14 +483,15 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 
 	var echange := Section.new("Artist round trip", true, Icones.icone("exporter"))
 	pile.add_child(echange)
-	echange.contenu.add_child(_texte("Send the witness to Blender, bring the sculpted .glb back.", 11,
+	echange.contenu.add_child(_texte("Send the witness to Blender (.obj), bring the sculpted .glb back.", 11,
 		Palette.GRIS))
 	echange.contenu.add_child(_bouton("Export the witness…",
-		"Writes the witness as ONE .glb for Blender.\nDo not MOVE it: its position identifies it "
+		"Writes the witness as ONE .obj (+ its .mtl) for Blender — fully welded, six named materials.\n"
+		+ "Do not MOVE it: its position identifies it "
 		+ "when it comes back, not its name.\nTiles are already shrunk to half their cell, to show "
 		+ "the margin you have.", func() -> void: _demander("exporter"), "exporter", Palette.PRINCIPAL))
 	echange.contenu.add_child(_bouton("Import the work…",
-		"Reads the sculpted .glb and SHOWS it, as the slicer will read it.\nNothing is sliced yet.",
+		"Reads the sculpted .glb (or .obj) and SHOWS it, as the slicer will read it.\nNothing is sliced yet.",
 		func() -> void: _demander("importer"), "importer"))
 
 	var aide := Section.new("Shortcuts", false, Icones.icone("clavier"))
@@ -856,9 +857,13 @@ func _demander(quoi: String) -> void:
 		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
 		_dialogue.current_file = _projet.get_file() if quoi == "enregistrer" else ""
 	else:
-		_dialogue.add_filter("*.glb", "glTF binary")
+		# ⚠ LE TÉMOIN PART EN .obj (soudé), LE TRAVAIL REVIENT EN .glb — ou en .obj (charte §4).
+		if quoi == "exporter":
+			_dialogue.add_filter("*.obj", "Wavefront OBJ")
+		else:
+			_dialogue.add_filter("*.glb, *.obj", "Sculpted work")
 		_dialogue.title = "Export the witness" if quoi == "exporter" else "Import the work"
-		_dialogue.current_file = "marchingblocks_witness.glb" if quoi == "exporter" else ""
+		_dialogue.current_file = "marchingblocks_witness.obj" if quoi == "exporter" else ""
 	_dialogue.popup_centered_ratio(0.6)
 
 

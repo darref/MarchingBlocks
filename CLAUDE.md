@@ -232,12 +232,12 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
 ## 4. Le pipeline — l'aller-retour qui prouve tout
 
 ```
-  exporter_le_bloc()  →  UN .glb, le bloc à l'origine  →  Blender  →  librairie_depuis_glb()
+  exporter_le_bloc()  →  UN .obj, le bloc à l'origine  →  Blender  →  .glb  →  librairie_depuis_glb()
                                                                           ↓
                                    trancher() par case  →  classer  →  MeshLibrary  →  le pinceau
 ```
 
-- ⚠ **LE BLOC EST RETROUVÉ PAR SA POSITION, PAS PAR SON NOM.** Dans un modeleur on renomme, on joint,
+- ⚠ **LE BLOC EST RETROUVÉ PAR SA POSITION — DANS LA SCÈNE, POSE DU NŒUD COMPRISE —, PAS PAR SON NOM.** Dans un modeleur on renomme, on joint,
   on fusionne sans y penser : un nom ne survit pas à une séance de travail, une place fixée si. C'est
   aussi la doctrine générale — **on DÉDUIT plutôt qu'on déclare**. Le bloc est à l'origine, et la
   réimportation le redécoupe dans une boîte **tolérante au relief** (`DEBORD_TOLERE`) : découper pile
@@ -251,7 +251,20 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
   primitives lisent le MÊME tampon de sommets (mesuré). Un sommet glTF porte UNE valeur de chaque
   attribut : tout ce qui change d'une face à l'autre (matériau, UV, couleur) coupe le maillage. Soudé à
   100 % mesuré dans Blender : l'OBJ (15 546 sommets, 0 couture, six matériaux) ou le .glb importé avec
-  « Merge Vertices ». **OUVERT** — le choix est à Jordan.
+  « Merge Vertices ».
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — LE TÉMOIN PART EN OBJ, LE TRAVAIL REVIENT EN .glb.** Le témoin
+  n'est qu'une ébauche (de la géométrie, six teintes) : l'OBJ ne lui coûte rien et arrive soudé. Le
+  retour garde tout ce que le glTF porte — textures, UV, normales, PBR. Un `.obj` est accepté au retour
+  aussi. `.glb` reste écrit par `exporter_le_bloc` quand on le lui demande, pour `DEV_TOOLS/`.
+  **MESURÉ, aller-retour complet OBJ → Blender 5.1 → .glb → trancheur : 541 items, 0 erreur de
+  tranchage, 0 remarque de couture, 0 sommet déplacé.** Gardé par `test_blocs_maitres`
+  (`_le_temoin_part_soude`, lu dans le TEXTE du fichier, sans le lecteur du module), vu rougir.
+- ⚠ **ET CET ALLER-RETOUR A DÉBUSQUÉ UN DÉFAUT DU LECTEUR, PAS DE L'OBJ.** L'importeur OBJ de Blender
+  convertit les axes par une ROTATION D'OBJET (+90° en X), et le .glb qu'il réécrit la garde sur le
+  nœud. `_premier_maillage` rendait le maillage BRUT, sans la pose de son nœud : l'œuvre revenait
+  couchée — 41 erreurs, 2 393 sommets déplacés. La pose est désormais cuite dans les sommets
+  (`_transformer`, miroir compris) : **on lit ce que l'artiste VOIT**, et un objet tourné ou déplacé sans
+  « Apply » n'est plus un piège. Gardé par `_la_pose_du_noeud_est_lue`, vu rougir.
 - ⚠ **LE .glb PART SANS NORMALES NI TANGENTES.** Sans normales, la spécification glTF impose
   l'ombrage PLAT : on obtient à la fois la topologie soudée (modifiable dans Blender) et des arêtes
   franches. ⚠ Nuller `ARRAY_NORMAL` **sans** `ARRAY_TANGENT` ne suffit pas.
@@ -532,8 +545,8 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Dix suites, **7 636 vérifications, 0 échec** (27 septembre 2026, recomptées après la phase 3) :
-  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 422,
+  Dix suites, **7 642 vérifications, 0 échec** (27 septembre 2026, recomptées après l'export OBJ) :
+  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
   `test_outils` 43, `fumee_appli` 40.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un

@@ -143,7 +143,7 @@ func _batir() -> void:
 
 	var exporter := Button.new()
 	exporter.text = "Exporter le témoin…"
-	exporter.tooltip_text = ("Écrit le témoin dans UN .glb, pour le modéliser et le texturer dans "
+	exporter.tooltip_text = ("Écrit le témoin dans UN .obj soudé (et son .mtl), pour le modéliser et le texturer dans "
 		+ "Blender.\n"
 		+ "⚠ Ne le DÉPLACE pas : c'est sa position qui l'identifie au retour, pas son nom.\n"
 		+ "Tuiles déjà ramenées à la moitié de leur case, pour montrer la marge disponible.")
@@ -234,7 +234,7 @@ func _batir() -> void:
 	# à réexporter un par un n'était pas tenable. Le set part et revient en UN fichier.
 	_dialogue = EditorFileDialog.new()
 	_dialogue.access = EditorFileDialog.ACCESS_FILESYSTEM
-	_dialogue.add_filter("*.glb", "MasterBlockSet")
+	_dialogue.add_filter("*.glb, *.obj", "MasterBlock")
 	_dialogue.file_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
 
@@ -417,7 +417,8 @@ func _demander_un_fichier(quoi: String) -> void:
 	_action = quoi
 	_dialogue.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE if quoi == "exporter" \
 		else EditorFileDialog.FILE_MODE_OPEN_FILE
-	_dialogue.current_file = "masterblockset.glb"
+	# ⚠ LE TÉMOIN PART EN .obj, SOUDÉ ; le travail revient en .glb ou en .obj (charte §4).
+	_dialogue.current_file = "masterblock.obj" if quoi == "exporter" else ""
 	_dialogue.popup_centered_ratio(0.6)
 
 

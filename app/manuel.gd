@@ -161,7 +161,7 @@ func _demarrer() -> String:
 	l.append("Then paint: [b]left click[/b] applies the tool, [b]right click[/b] does the opposite. "
 		+ "Every stroke is undone by one " + _touche("Ctrl+Z") + ".")
 	l.append(_titre("3. Bring your own art"))
-	l.append("[b]Export the witness…[/b] writes one .glb for Blender. Sculpt it, save it, then "
+	l.append("[b]Export the witness…[/b] writes one .obj for Blender. Sculpt it, export it as .glb, then "
 		+ "[b]Import the work…[/b] to see it as the slicer will read it, and [b]Slice the work[/b] to "
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
 	l.append(_note("A red cube is a tile your library does not have. Nothing is ever filled in for you: "
@@ -230,11 +230,20 @@ func _couches() -> String:
 func _aller_retour() -> String:
 	var l := PackedStringArray()
 	l.append(_titre("What the artist receives"))
-	l.append("[b]One .glb[/b]: the whole witness, at the origin, tiles already shrunk to half their "
-		+ "cell to show the margin. No normals — Blender opens it flat-shaded and welded.")
+	l.append("[b]One .obj[/b] (and its .mtl): the whole witness, at the origin, tiles already shrunk to "
+		+ "half their cell to show the margin. [b]Fully welded[/b] — one vertex per position, the six "
+		+ "families as six named materials — and flat-shaded in Blender. " + _touche("Alt+J")
+		+ " (Tris to Quads) brings back the edge loops.")
+	l.append("[b]Bring it back as .glb[/b] (File → Export → glTF 2.0): it carries your textures, UVs "
+		+ "and materials. An .obj is accepted too. Moving or rotating the OBJECT is fine — what counts "
+		+ "is where the block sits in the viewport.")
+	l.append(_note("Why an .obj on the way out: in glTF every material is a separate primitive, and "
+		+ "Blender shares no vertex between primitives — the witness would arrive cut along every "
+		+ "colour border. OBJ faces share one vertex list, whatever their material."))
 	l.append(_titre("The contract"))
 	l.append("[b]Total freedom inside each cell.[/b] Relief may spill half a cell around the block.")
-	l.append("[b]Do not move the block[/b]: its position identifies it when it comes back, not its name.")
+	l.append("[b]Do not move the block[/b]: its position identifies it when it comes back, not its name. "
+		+ "(Blender's own axis conversion is taken into account: the block is read where you see it.)")
 	l.append("[b]Do not change which cells are full[/b]: the filling fixes the tile classes.")
 	l.append("[b]The seams are the artist's responsibility.[/b] The slicer cuts straight through the "
 		+ "cell centres and judges nothing else — the report lists the seam remarks.")

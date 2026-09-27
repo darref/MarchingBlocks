@@ -61,6 +61,8 @@ func _initialize() -> void:
 	_le_temoin_livre_exactement_le_monde()
 	_le_materiau_suit_dans_les_tuiles()
 	_le_temoin_revient_avec_ses_six_teintes()
+	_le_temoin_part_soude()
+	_la_pose_du_noeud_est_lue()
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
@@ -246,7 +248,7 @@ func _le_materiau_suit_dans_les_tuiles() -> void:
 ## surface sous « Floor - open air » — un réimport direct revenait entièrement vert. Aucune suite ne
 ## relisait un export : c'est ce trou-là que ce contrôle bouche.
 func _le_temoin_revient_avec_ses_six_teintes() -> void:
-	var chemin: String = ProjectSettings.globalize_path("user://aller_retour_test.glb")
+	var chemin: String = ProjectSettings.globalize_path("user://aller_retour_test.obj")
 	var raison: String = BlocsMaitres.exporter_le_bloc(chemin)
 	_dire(raison == "", "l'export du témoin échoue : %s" % raison)
 	if raison != "":
@@ -268,7 +270,92 @@ func _le_temoin_revient_avec_ses_six_teintes() -> void:
 		"le témoin revient en %d surface(s) ; teintes perdues : %s"
 			% [relu.get_surface_count(), str(manquent)])
 	DirAccess.remove_absolute(chemin)
+	DirAccess.remove_absolute(chemin.get_basename() + ".mtl")
 	print("  aller-retour : %d surfaces, %d teintes nommées" % [relu.get_surface_count(), noms.size()])
+
+
+## ⚠ **LE TÉMOIN PART SOUDÉ, ET ÇA SE LIT DANS LE FICHIER.** Il a quitté le logiciel en soupe de
+## triangles pendant une journée alors que la charte le disait soudé : aucun contrôle ne regardait le
+## FICHIER. Celui-ci lit l'OBJ tel quel, sans le lecteur du module — l'attendu ne vient pas de la fonction
+## éprouvée (charte §6) : une position n'est écrite qu'une fois, et chaque arête borde EXACTEMENT deux
+## faces, par INDICE de sommet (ce que Blender verra). Mesuré dans Blender 5.1 : 15 546 sommets, 0 bord.
+func _le_temoin_part_soude() -> void:
+	var chemin: String = ProjectSettings.globalize_path("user://soudure_test.obj")
+	var raison: String = BlocsMaitres.exporter_le_bloc(chemin)
+	_dire(raison == "", "l'export OBJ échoue : %s" % raison)
+	if raison != "":
+		return
+	var positions := {}
+	var n_sommets := 0
+	var aretes := {}
+	var n_faces := 0
+	for ligne in FileAccess.get_file_as_string(chemin).split("
+"):
+		if ligne.begins_with("v "):
+			n_sommets += 1
+			positions[ligne.substr(2)] = true
+		elif ligne.begins_with("f "):
+			n_faces += 1
+			var ids: Array = []
+			for j in ligne.substr(2).split(" ", false):
+				ids.append(int(j.split("/")[0]))
+			for k in ids.size():
+				var a: int = ids[k]
+				var b: int = ids[(k + 1) % ids.size()]
+				var e := Vector2i(mini(a, b), maxi(a, b))
+				aretes[e] = int(aretes.get(e, 0)) + 1
+	var bords := 0
+	var surchargees := 0
+	for e in aretes:
+		if aretes[e] == 1:
+			bords += 1
+		elif aretes[e] > 2:
+			surchargees += 1
+	_dire(n_sommets == positions.size(), "l'OBJ écrit %d sommets pour %d positions : des sommets en double"
+		% [n_sommets, positions.size()])
+	_dire(bords == 0, "l'OBJ a %d arête(s) de bord : des coutures chez l'artiste" % bords)
+	_dire(surchargees == 0, "l'OBJ a %d arête(s) à trois faces ou plus" % surchargees)
+	DirAccess.remove_absolute(chemin)
+	DirAccess.remove_absolute(chemin.get_basename() + ".mtl")
+	print("  soudure : %d sommets, %d faces, %d bord(s)" % [n_sommets, n_faces, bords])
+
+
+## ⚠ **LA POSE DU NŒUD EST LUE.** L'importeur OBJ de Blender tourne l'OBJET de 90° au lieu de convertir
+## les sommets, et le .glb qu'il réécrit garde cette rotation : lue sans elle, l'œuvre revenait couchée
+## (41 erreurs de tranchage). Scénario CONSTRUIT : un cube unité posé par un nœud tourné de −90° en X et
+## translaté de (5, 0, 0) — l'attendu est calculé à la main : x ∈ [5, 6], y ∈ [0, 1], z ∈ [−1, 0].
+func _la_pose_du_noeud_est_lue() -> void:
+	var boite := BoxMesh.new()
+	var cube := ArrayMesh.new()
+	cube.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, boite.get_mesh_arrays())
+	var racine := Node3D.new()
+	racine.name = "Racine"
+	var porteur := MeshInstance3D.new()
+	porteur.name = "Tourne"
+	porteur.mesh = cube
+	# Le cube de Godot est centré : on le pose d'abord sur [0, 1]³ par un parent, puis on tourne.
+	var decale := Node3D.new()
+	decale.name = "Decale"
+	decale.position = Vector3(5, 0, 0)
+	decale.rotation = Vector3(-PI / 2.0, 0, 0)
+	porteur.position = Vector3(0.5, 0.5, 0.5)
+	racine.add_child(decale)
+	decale.add_child(porteur)
+	var chemin: String = ProjectSettings.globalize_path("user://pose_test.glb")
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	doc.append_from_scene(racine, etat)
+	doc.write_to_filesystem(etat, chemin)
+	racine.free()
+	var relu: ArrayMesh = BlocsMaitres._lire_glb(chemin, [])
+	DirAccess.remove_absolute(chemin)
+	_dire(relu != null, "le cube tourné ne se relit pas")
+	if relu == null:
+		return
+	var a := relu.get_aabb()
+	var attendu := AABB(Vector3(5, 0, -1), Vector3.ONE)
+	_dire(a.position.is_equal_approx(attendu.position) and a.size.is_equal_approx(attendu.size),
+		"le nœud tourné est relu en %s, attendu %s — sa pose est ignorée" % [a, attendu])
 
 
 func _le_temoin_livre_exactement_le_monde() -> void:
