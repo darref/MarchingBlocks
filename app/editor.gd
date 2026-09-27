@@ -34,6 +34,10 @@ const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
+const Projet := preload("res://app/projet.gd")
+
+## Ce qui survit au projet lui-même : le dernier ouvert.
+const REGLAGES := "user://reglages.cfg"
 
 const PART_ECRAN := 0.95
 const LARGEUR_GAUCHE := 272
@@ -51,6 +55,8 @@ const CONSEILS: Array[String] = [
 	"Import your work to SEE what the slicer will read, before slicing anything.",
 	"The six colours of the witness are six tile families: open air or underground, floor, wall, ceiling.",
 	"World-space PBR follows the tiles: no seam where the slicer cut.",
+	"Each layer has its own tiles and its own cells. Slicing a new work into a layer keeps its painting.",
+	"Your project saves itself after every change, and reopens when you come back.",
 ]
 
 var _vue: Vue
@@ -79,6 +85,21 @@ var _action_fichier := ""
 var _travail := ""
 var _travail_maillage: ArrayMesh
 
+## LES COUCHES (`projet.gd`), dans l'ordre des massifs de la vue : {nom, source, pbr, visible}.
+## ⚠ LEURS CASES N'Y SONT PAS : elles vivent dans la grille `Cases` de chaque massif, seule autorité ;
+## on ne les recopie qu'au moment d'écrire le fichier.
+var _couches: Array = []
+var _active := 0
+var _liste_couches: VBoxContainer
+var _nom_couche: LineEdit
+## Le fichier du projet, réécrit après chaque changement.
+var _projet := ""
+var _etiquette_projet: Label
+## Vrai pendant qu'on rebâtit un projet : rien ne s'enregistre d'un monde à moitié relu.
+var _ouverture := false
+## Les couches supprimées, gardées vivantes tant qu'un Ctrl+Z peut les rendre.
+var _detachees: Array = []
+
 var _histoire := UndoRedo.new()
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
@@ -91,8 +112,10 @@ func _ready() -> void:
 	_montrer_temoin()
 	_aller_a("witness")
 	_dire("[i]Look at the witness, export it for your artist, or open the Test world and paint.[/i]")
+	_histoire.version_changed.connect(_enregistrer)
 	await get_tree().process_frame
 	_regler_fenetre()
+	await _ouvrir_au_lancement()
 
 
 ## ⚠ LA FENÊTRE OCCUPE 95 % DE L'ÉCRAN, CENTRÉE — comme SoluTiles, et reposée après la première image :
@@ -157,7 +180,6 @@ func _batir() -> void:
 	_dialogue = FileDialog.new()
 	_dialogue.access = FileDialog.ACCESS_FILESYSTEM
 	_dialogue.use_native_dialog = true
-	_dialogue.add_filter("*.glb", "glTF binary")
 	_dialogue.file_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
 
@@ -257,6 +279,23 @@ func _bouton(texte: String, infobulle: String, action: Callable) -> Button:
 
 
 func _batir_gauche(pile: VBoxContainer) -> void:
+	var projet := Section.new("Project")
+	pile.add_child(projet)
+	_etiquette_projet = _texte("", 11, Palette.GRIS)
+	projet.contenu.add_child(_etiquette_projet)
+	var ligne := HBoxContainer.new()
+	for b in [
+		["New", "Starts an empty project with one layer. The current one is already saved.",
+			_nouveau_projet],
+		["Open…", "Opens a MarchingBlocks project (.mbproj).", func() -> void: _demander("ouvrir")],
+		["Save as…", "Writes the project where you want it. It keeps saving itself there.",
+			func() -> void: _demander("enregistrer")],
+	]:
+		var bouton := _bouton(b[0], b[1], b[2])
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ligne.add_child(bouton)
+	projet.contenu.add_child(ligne)
+
 	pile.add_child(_petit_titre("WORKSPACE"))
 	var ateliers := HBoxContainer.new()
 	var groupe := ButtonGroup.new()
@@ -327,15 +366,34 @@ func _legende() -> Control:
 
 
 func _batir_droite(pile: VBoxContainer) -> void:
-	var trancher := Section.new("Slice")
+	var couches := Section.new("Layers")
+	pile.add_child(couches)
+	_liste_couches = VBoxContainer.new()
+	_liste_couches.add_theme_constant_override("separation", 4)
+	couches.contenu.add_child(_liste_couches)
+	_nom_couche = LineEdit.new()
+	_nom_couche.placeholder_text = "layer name"
+	_nom_couche.text_submitted.connect(func(_t: String) -> void: _renommer_couche())
+	_nom_couche.focus_exited.connect(_renommer_couche)
+	couches.contenu.add_child(_nom_couche)
+	var gestes := HBoxContainer.new()
+	for b in [
+		["New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche],
+		["Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche],
+	]:
+		var bouton := _bouton(b[0], b[1], b[2])
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gestes.add_child(bouton)
+	couches.contenu.add_child(gestes)
+
+	var trancher := Section.new("Slice into the active layer")
 	pile.add_child(trancher)
-	trancher.contenu.add_child(_bouton("Slice the witness (test)",
-		"Slices the computed witness into its 52 tiles and paints the Test world with them.",
-		_trancher_temoin))
+	trancher.contenu.add_child(_bouton("Slice the witness",
+		"Slices the computed witness into its 52 tiles and dresses the ACTIVE layer with them.\n"
+		+ "Its painted cells stay as they are.", _trancher_temoin))
 	trancher.contenu.add_child(_bouton("Slice the work",
-		"Re-reads the imported work, slices it, and paints the witness cells with YOUR tiles.\nThe "
-		+ "result must give the witness back: that is the proof that the round trip holds.",
-		_trancher_travail))
+		"Re-reads the imported work, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
+		+ "Its painted cells stay as they are.", _trancher_travail))
 
 	var etage := Section.new("Floor")
 	pile.add_child(etage)
@@ -359,8 +417,12 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["Hollow", "creuser", "removes the cells whose four horizontal neighbours are full"],
 	]:
 		etage.contenu.add_child(_bouton(op[0], op[2], _operer.bind(op[1])))
-	etage.contenu.add_child(_bouton("Clear the world", "Erases every cell (Ctrl+Z brings them back).",
-		_effacer_tout))
+	etage.contenu.add_child(_bouton("Paint the witness shape",
+		"Replaces this layer's cells with the witness's own cells (Ctrl+Z brings yours back).\n"
+		+ "Sliced from your work, the result must give your block back: that is the proof that "
+		+ "the round trip holds.", _peindre_la_forme_du_temoin))
+	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
+		+ "brings them back).", _effacer_tout))
 
 	var rapport := Section.new("Report")
 	pile.add_child(rapport)
@@ -425,7 +487,11 @@ func _aller_a(atelier: String) -> void:
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
 
 func _matiere_voulue() -> Material:
-	if _pbr == null or not _pbr.button_pressed:
+	return _matiere(_pbr != null and _pbr.button_pressed)
+
+
+func _matiere(pbr: bool) -> Material:
+	if not pbr:
 		return null
 	if _matiere_pbr == null:
 		_matiere_pbr = PBR.matiere()
@@ -455,10 +521,17 @@ func _travail_vu(oui: bool) -> void:
 
 func _demander(quoi: String) -> void:
 	_action_fichier = quoi
-	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if quoi == "exporter" \
-		else FileDialog.FILE_MODE_OPEN_FILE
-	_dialogue.title = "Export the witness" if quoi == "exporter" else "Import the work"
-	_dialogue.current_file = "marchingblocks_witness.glb"
+	var ecrire: bool = quoi in ["exporter", "enregistrer"]
+	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if ecrire else FileDialog.FILE_MODE_OPEN_FILE
+	_dialogue.clear_filters()
+	if quoi in ["ouvrir", "enregistrer"]:
+		_dialogue.add_filter("*." + Projet.EXTENSION, "MarchingBlocks project")
+		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
+		_dialogue.current_file = _projet.get_file() if quoi == "enregistrer" else ""
+	else:
+		_dialogue.add_filter("*.glb", "glTF binary")
+		_dialogue.title = "Export the witness" if quoi == "exporter" else "Import the work"
+		_dialogue.current_file = "marchingblocks_witness.glb" if quoi == "exporter" else ""
 	_dialogue.popup_centered_ratio(0.6)
 
 
@@ -468,6 +541,10 @@ func _fichier_choisi(fichier: String) -> void:
 			_exporter(fichier)
 		"importer":
 			_importer(fichier)
+		"ouvrir":
+			_ouvrir(fichier)
+		"enregistrer":
+			_enregistrer_sous(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
@@ -522,29 +599,49 @@ func _importer(fichier: String) -> void:
 
 # ── TRANCHER ─────────────────────────────────────────────────────────────────────────────────────────
 
+## ⚠ ON TRANCHE DANS LA COUCHE ACTIVE, ET SES CASES NE BOUGENT PAS (Jordan, 27 septembre 2026) : le
+## monde peint est indépendant du travail qui l'habille. Retrancher, c'est changer de tuiles.
 func _trancher_temoin() -> void:
-	await _attendre("Slicing the witness", "52 tiles, every sculpted copy kept")
-	var bilan: Dictionary = BM.librairie(_matiere_voulue())
-	_fin_attente()
-	_poser_lot(bilan, "witness", {})
+	if _vue.monde() == null:
+		return
+	var pbr: bool = _pbr != null and _pbr.button_pressed
+	var bilan: Dictionary = await _trancher_source(Projet.TEMOIN, pbr)
+	_poser_lot(bilan, "witness", Projet.TEMOIN, pbr)
 
 
 func _trancher_travail() -> void:
+	if _vue.monde() == null:
+		return
 	if _travail == "":
 		_dire("No work imported.\n\n[i]« Import the work… » first: you slice what you have seen.[/i]")
 		return
-	await _attendre("Slicing your work", _travail.get_file())
-	var bilan: Dictionary = BM.librairie_depuis_glb(_travail)
-	_fin_attente()
+	var bilan: Dictionary = await _trancher_source(_travail, false)
 	var entete := "[b]Sliced from[/b] %s\n" % _travail
 	var absents: Array = bilan.get("absents", [])
 	if not absents.is_empty():
 		entete += "[color=#f2ca79]Block MISSING from the file, computed witness kept.[/color]\n"
-	_poser_lot(bilan, "work", BM.cases(0), entete)
+	_poser_lot(bilan, "work", _travail, false, entete)
 
 
-## Câble le lot sur le monde de test, et DIT tout ce que le bilan contient.
-func _poser_lot(bilan: Dictionary, quoi: String, a_peindre: Dictionary, entete := "") -> void:
+## Tranche une source et met le lot en cache. ⚠ UNE SEULE ROUTE pour le bouton et pour la réouverture
+## d'un projet dont la source a changé : deux routes finiraient par trancher différemment.
+func _trancher_source(source: String, pbr: bool) -> Dictionary:
+	var bilan: Dictionary
+	if source == Projet.TEMOIN:
+		await _attendre("Slicing the witness", "52 tiles, every sculpted copy kept")
+		bilan = BM.librairie(_matiere(pbr))
+	else:
+		await _attendre("Slicing your work", source.get_file())
+		bilan = BM.librairie_depuis_glb(source)
+	_fin_attente()
+	var lot: MeshLibrary = bilan.get("lot", null)
+	if lot != null and BM.anomalies().is_empty():
+		bilan["cache"] = Projet.mettre_en_cache(lot, source, pbr)
+	return bilan
+
+
+## Habille la couche active du lot, et DIT tout ce que le bilan contient.
+func _poser_lot(bilan: Dictionary, quoi: String, source: String, pbr: bool, entete := "") -> void:
 	var fautes: Array = BM.anomalies()
 	if not fautes.is_empty():
 		_dire("[color=#e0603c]REFUSED — %d problem(s) in the witness:[/color]\n  %s"
@@ -552,14 +649,17 @@ func _poser_lot(bilan: Dictionary, quoi: String, a_peindre: Dictionary, entete :
 		return
 	var lot: MeshLibrary = bilan["lot"]
 	_vue.monde().lot = lot
-	if not a_peindre.is_empty():
-		_remplacer_le_monde(a_peindre, "Paint the witness cells")
+	_couches[_active]["source"] = source
+	_couches[_active]["pbr"] = pbr
+	_rafraichir_couches()
+	_enregistrer()
 	_aller_a("monde")
 
 	var en_plus: int = int(bilan.get("exemplaires_en_plus", 0))
 	var texte := entete
-	texte += "[color=#b4bd85][b]Library ready[/b][/color] (%s) — %d tile(s) for %d classes" \
-		% [quoi, lot.get_item_list().size() - en_plus, MB.pieces_a_sculpter().size()]
+	texte += "[color=#b4bd85][b]Library ready[/b][/color] (%s → layer « %s ») — %d tile(s) for %d classes" \
+		% [quoi, _couches[_active]["nom"], lot.get_item_list().size() - en_plus,
+		MB.pieces_a_sculpter().size()]
 	if en_plus > 0:
 		texte += ", + %d sculpted copy(ies)" % en_plus
 	texte += "\n"
@@ -579,6 +679,8 @@ func _poser_lot(bilan: Dictionary, quoi: String, a_peindre: Dictionary, entete :
 			% [remarques.size(), "\n  ".join(PackedStringArray(remarques.slice(0, 4)))]
 	if manquantes.is_empty() and erreurs.is_empty():
 		texte += "[i]No missing class, no slicing error.[/i]\n"
+	if str(bilan.get("cache", "")) != "":
+		texte += "\n[color=#f2ca79]%s[/color] — the layer will be sliced again next time.\n" % bilan["cache"]
 	texte += "\n[i]Paint on the grid: left click adds, right click erases.[/i]"
 	_dire(texte)
 
@@ -587,7 +689,9 @@ func _poser_lot(bilan: Dictionary, quoi: String, a_peindre: Dictionary, entete :
 
 func _id_case() -> int:
 	var cases: GridMap = _vue.cases()
-	return cases.mesh_library.find_item_by_name("case") if cases.mesh_library != null else -1
+	if cases == null or cases.mesh_library == null:
+		return -1
+	return cases.mesh_library.find_item_by_name("case")
 
 
 func _coup_commence() -> void:
@@ -658,7 +762,12 @@ func _remplacer_le_monde(nouvelles: Dictionary, nom: String) -> void:
 
 
 func _effacer_tout() -> void:
-	_remplacer_le_monde({}, "Clear the world")
+	_remplacer_le_monde({}, "Clear the layer")
+
+
+func _peindre_la_forme_du_temoin() -> void:
+	_remplacer_le_monde(BM.cases(0), "Paint the witness shape")
+	_aller_a("monde")
 
 
 ## LES OPÉRATIONS D'ÉTAGE — la règle vit dans `etages.gd`, partagée avec le greffon.
@@ -692,7 +801,7 @@ func _operer(quoi: String) -> void:
 
 
 func _dire_l_etage() -> void:
-	if _etiquette_etage == null or _vue == null:
+	if _etiquette_etage == null or _vue == null or _vue.cases() == null:
 		return
 	var combien := 0
 	var bas := 1 << 20
@@ -705,6 +814,274 @@ func _dire_l_etage() -> void:
 		haut = maxi(haut, p.y)
 	_etiquette_etage.text = ("%d cell(s) here · painted from y=%d to y=%d" % [combien, bas, haut]) \
 		if bas <= haut else "nothing painted yet"
+
+
+# ── LES COUCHES ──────────────────────────────────────────────────────────────────────────────────────
+
+## Une couche neuve au bout de la pile, sans source ni case. Rend son indice.
+func _ajouter_couche(etat: Dictionary) -> int:
+	var massif: Node = _vue.ajouter_couche()
+	massif.visible = etat["visible"]
+	_couches.append({"nom": etat["nom"], "source": etat["source"], "pbr": etat["pbr"],
+		"visible": etat["visible"]})
+	return _couches.size() - 1
+
+
+func _activer(i: int) -> void:
+	_active = clampi(i, 0, _couches.size() - 1)
+	_vue.activer(_active)
+	_rafraichir_couches()
+	_dire_l_etage()
+	_enregistrer()
+
+
+func _nouvelle_couche() -> void:
+	_activer(_ajouter_couche(Projet.couche("Layer %d" % (_couches.size() + 1))))
+	_aller_a("monde")
+	_dire("[b]New layer[/b] — empty, and the one you paint on now.\n[i]Slice the witness or your "
+		+ "work into it to give it tiles.[/i]")
+
+
+## ⚠ SUPPRIMER S'ANNULE, COMME TOUT LE RESTE (charte §5) : la couche est DÉTACHÉE, pas détruite — ses
+## cases sont dans sa grille, et l'historique garde des appels sur cette grille. La détruire rendrait
+## chaque Ctrl+Z antérieur fatal.
+func _supprimer_couche() -> void:
+	if _couches.size() <= 1:
+		_dire("[i]A project keeps at least one layer.[/i] Clear it instead.")
+		return
+	var massif: Node = _vue.monde()
+	var etat: Dictionary = _couches[_active]
+	_histoire.create_action("Delete layer « %s »" % etat["nom"])
+	_histoire.add_do_method(_detacher_couche.bind(massif))
+	_histoire.add_undo_method(_rattacher_couche.bind(massif, etat, _active))
+	_histoire.commit_action()
+
+
+func _detacher_couche(massif: Node) -> void:
+	var i: int = massif.get_index()
+	_vue.detacher_couche(massif)
+	_couches.remove_at(i)
+	_detachees.append(massif)
+	_activer(mini(i, _couches.size() - 1))
+
+
+func _rattacher_couche(massif: Node, etat: Dictionary, i: int) -> void:
+	_detachees.erase(massif)
+	_vue.inserer_couche(massif, i)
+	_couches.insert(i, etat)
+	_activer(i)
+
+
+func _renommer_couche() -> void:
+	var nom := _nom_couche.text.strip_edges()
+	if _couches.is_empty() or nom == "" or nom == _couches[_active]["nom"]:
+		return
+	_couches[_active]["nom"] = nom
+	_rafraichir_couches()
+	_enregistrer()
+
+
+func _montrer_couche(i: int, oui: bool) -> void:
+	_couches[i]["visible"] = oui
+	_vue.couche(i).visible = oui
+	_enregistrer()
+
+
+func _rafraichir_couches() -> void:
+	if _liste_couches == null:
+		return
+	for enfant in _liste_couches.get_children():
+		_liste_couches.remove_child(enfant)
+		enfant.queue_free()
+	var groupe := ButtonGroup.new()
+	for i in _couches.size():
+		var c: Dictionary = _couches[i]
+		var ligne := HBoxContainer.new()
+		var vue := CheckBox.new()
+		vue.button_pressed = c["visible"]
+		vue.tooltip_text = "Show this layer"
+		vue.toggled.connect(_montrer_couche.bind(i))
+		ligne.add_child(vue)
+		var choix := Button.new()
+		choix.toggle_mode = true
+		choix.button_group = groupe
+		choix.button_pressed = i == _active
+		choix.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		choix.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		choix.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choix.text = "%s\n%s" % [c["nom"], _dire_la_source(c)]
+		choix.tooltip_text = "Paint on this layer.\nTiles: %s" % (c["source"] if c["source"] != "" else "none yet")
+		choix.pressed.connect(_activer.bind(i))
+		ligne.add_child(choix)
+		_liste_couches.add_child(ligne)
+	if _nom_couche != null and not _couches.is_empty():
+		_nom_couche.text = _couches[_active]["nom"]
+
+
+func _dire_la_source(c: Dictionary) -> String:
+	match c["source"]:
+		"":
+			return "no tiles yet"
+		Projet.TEMOIN:
+			return "computed witness" + (" · PBR" if c["pbr"] else "")
+	return str(c["source"]).get_file()
+
+
+# ── LE PROJET ────────────────────────────────────────────────────────────────────────────────────────
+
+## ⚠ UN PROJET QUI NE S'OUVRE PAS N'EST JAMAIS ÉCRASÉ : on en commence un autre, à côté. L'enregistrement
+## automatique réécrirait sinon, au premier coup de pinceau, le seul exemplaire d'un monde abîmé.
+func _ouvrir_au_lancement() -> void:
+	var reglages := ConfigFile.new()
+	reglages.load(REGLAGES)
+	var dernier: String = reglages.get_value("projet", "dernier", "")
+	if dernier != "" and FileAccess.file_exists(dernier) and await _ouvrir(dernier):
+		return
+	_nouveau_projet()
+
+
+func _nouveau_projet() -> void:
+	_vider_le_projet()
+	_projet = _chemin_libre()
+	_ajouter_couche(Projet.couche("Layer 1"))
+	_activer(0)
+	_retenir_le_projet()
+	_enregistrer()
+
+
+## Un nom de projet libre dans les données de l'appli : `untitled.mbproj`, puis `untitled 2`…
+func _chemin_libre() -> String:
+	var n := 1
+	while true:
+		var chemin := "user://untitled%s.%s" % ["" if n == 1 else " %d" % n, Projet.EXTENSION]
+		if not FileAccess.file_exists(chemin):
+			return chemin
+		n += 1
+	return ""
+
+
+func _vider_le_projet() -> void:
+	_histoire.clear_history()
+	for m in _detachees:
+		m.free()
+	_detachees.clear()
+	_vue.vider_couches()
+	_couches.clear()
+	_active = 0
+
+
+## Rend vrai si le projet est ouvert. ⚠ Chaque couche est habillée de son lot EN CACHE s'il est à jour,
+## sinon RETRANCHÉE depuis sa source : c'est ce qui suit un `.glb` réenregistré dans Blender entre deux
+## sessions.
+func _ouvrir(chemin: String) -> bool:
+	var erreurs: Array = []
+	var etat: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(chemin), erreurs)
+	if etat.is_empty():
+		_dire("[color=#e0603c]Cannot open[/color] %s\n  %s" % [chemin, "\n  ".join(PackedStringArray(erreurs))])
+		return false
+	_ouverture = true
+	_vider_le_projet()
+	_projet = chemin
+	var notes: Array = []
+	for c in etat["couches"]:
+		var i := _ajouter_couche(c)
+		_vue.activer(i)
+		var cases: GridMap = _vue.cases()
+		var id: int = _id_case()
+		for p in c["cases"]:
+			cases.set_cell_item(p, id)
+		var note: String = await _habiller_couche(i)
+		if note != "":
+			notes.append(note)
+	_ouverture = false
+	_activer(etat["active"])
+	_retenir_le_projet()
+	_aller_a("monde")
+	_dire("[color=#b4bd85][b]Project opened[/b][/color] ← %s\n%d layer(s).%s" % [chemin, _couches.size(),
+		"" if notes.is_empty() else "\n\n" + "\n".join(PackedStringArray(notes))])
+	return true
+
+
+## Pose le lot d'une couche relue. Rend une ligne de rapport, vide si tout va bien.
+## ⚠ UNE SOURCE ABSENTE SE VOIT (charte §3) : l'ancien lot s'il en reste un, en le DISANT ; sinon un lot
+## vide, donc des cubes rouges partout — jamais le repli procédural, qui ferait croire la couche saine.
+func _habiller_couche(i: int) -> String:
+	var c: Dictionary = _couches[i]
+	var massif: Node = _vue.couche(i)
+	if c["source"] == "":
+		return ""
+	var cache: Dictionary = Projet.lire_cache(c["source"], c["pbr"])
+	if cache["a_jour"]:
+		massif.lot = cache["lot"]
+		return ""
+	var presente: bool = c["source"] == Projet.TEMOIN or FileAccess.file_exists(c["source"])
+	if presente:
+		var bilan: Dictionary = await _trancher_source(c["source"], c["pbr"])
+		if bilan.get("lot", null) != null:
+			massif.lot = bilan["lot"]
+			return "« %s » sliced again: its source changed since last time." % c["nom"]
+	if cache["lot"] != null:
+		massif.lot = cache["lot"]
+		return ("[color=#f2ca79]« %s »: %s is missing[/color] — showing the tiles last sliced from it."
+			% [c["nom"], c["source"]])
+	massif.lot = MeshLibrary.new()
+	return ("[color=#e0603c]« %s »: %s is missing and was never cached[/color] — every tile is a red cube."
+		% [c["nom"], c["source"]])
+
+
+## ⚠ L'ENREGISTREMENT EST AUTOMATIQUE, APRÈS CHAQUE CHANGEMENT — branché sur l'historique, donc sur
+## chaque coup, chaque opération, chaque Ctrl+Z. On écrit À CÔTÉ puis on remplace : un logiciel coupé
+## en pleine écriture ne doit pas laisser un projet à moitié écrit.
+func _enregistrer() -> void:
+	if _ouverture or _projet == "" or _couches.is_empty():
+		return
+	_dire_le_projet()
+	var sorties: Array = []
+	for i in _couches.size():
+		var etat: Dictionary = _couches[i].duplicate()
+		var cases := {}
+		for p in (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
+			cases[p] = true
+		etat["cases"] = cases
+		sorties.append(etat)
+	var provisoire := _projet + ".tmp"
+	var f := FileAccess.open(provisoire, FileAccess.WRITE)
+	if f == null:
+		_dire("[color=#e0603c]Project NOT saved[/color] — %s cannot be written (error %d)."
+			% [_projet, FileAccess.get_open_error()])
+		return
+	f.store_string(Projet.vers_texte(sorties, _active))
+	f.close()
+	var e: int = DirAccess.rename_absolute(provisoire, _projet)
+	if e != OK:
+		_dire("[color=#e0603c]Project NOT saved[/color] — %s could not replace the old file (error %d)."
+			% [_projet, e])
+
+
+func _enregistrer_sous(chemin: String) -> void:
+	if chemin.get_extension() != Projet.EXTENSION:
+		chemin += "." + Projet.EXTENSION
+	_projet = chemin
+	_enregistrer()
+	_retenir_le_projet()
+	_dire("[color=#b4bd85][b]Project saved[/b][/color] → %s\n[i]It saves itself there from now on.[/i]"
+		% chemin)
+
+
+func _retenir_le_projet() -> void:
+	var reglages := ConfigFile.new()
+	reglages.load(REGLAGES)
+	reglages.set_value("projet", "dernier", _projet)
+	reglages.save(REGLAGES)
+	_dire_le_projet()
+
+
+func _dire_le_projet() -> void:
+	if _etiquette_projet == null:
+		return
+	_etiquette_projet.text = _projet.get_file().get_basename() + (" — autosaved in the app data, "
+		+ "« Save as… » to keep it elsewhere" if _projet.begins_with("user://") else " — autosaved")
+	get_window().title = "MarchingBlocks — " + _projet.get_file().get_basename()
 
 
 # ── LES RACCOURCIS ───────────────────────────────────────────────────────────────────────────────────

@@ -27,8 +27,14 @@ var _elevation := 0.55
 var _distance := 26.0
 
 var _temoin: MeshInstance3D
-var _monde: Node3D
+## Un `MassifPeint` par COUCHE du monde (`projet.gd`). On peint sur la couche ACTIVE ; les autres restent
+## visibles, chacune rendue avec SON lot et selon SES cases seulement.
+var _couches: Node3D
+var _active := -1
 var _grille: MeshInstance3D
+## La grille LOCALE : un morceau de grille qui suit le curseur quand il sort de la grille centrale —
+## sans elle, on peint à l'aveugle dès qu'on s'éloigne du centre du monde.
+var _grille_locale: MeshInstance3D
 var _fantome: MeshInstance3D
 
 ## "temoin" ou "monde".
@@ -66,18 +72,18 @@ func _ready() -> void:
 	_temoin = MeshInstance3D.new()
 	_vue.add_child(_temoin)
 
-	_monde = Massif.new()
-	_monde.name = "MondeDeTest"
-	_monde.preparer()
-	# ⚠ LA GRILLE DES CASES NE SE MONTRE PAS : elle porte la palette de peinture (des cubes), et c'est
-	# le RENDU — les tuiles tranchées — qu'on veut voir. Les fautes, elles, restent visibles : un cube
-	# rouge est précisément ce qu'on doit voir.
-	(_monde.get_node("Cases") as Node3D).visible = false
-	_vue.add_child(_monde)
+	_couches = Node3D.new()
+	_couches.name = "MondeDeTest"
+	_vue.add_child(_couches)
 
 	_grille = MeshInstance3D.new()
 	_grille.mesh = _maillage_grille()
 	_vue.add_child(_grille)
+
+	_grille_locale = MeshInstance3D.new()
+	_grille_locale.mesh = _maillage_grille_locale()
+	_grille_locale.visible = false
+	_vue.add_child(_grille_locale)
 
 	_fantome = MeshInstance3D.new()
 	var boite := BoxMesh.new()
@@ -103,9 +109,10 @@ func _ready() -> void:
 func montrer(quoi: String) -> void:
 	mode = quoi
 	_temoin.visible = quoi == "temoin"
-	_monde.visible = quoi == "monde"
+	_couches.visible = quoi == "monde"
 	_grille.visible = quoi == "monde"
 	_fantome.visible = false
+	_grille_locale.visible = false
 	_placer_grille()
 
 
@@ -114,12 +121,61 @@ func montrer_maillage(mesh: Mesh, surcharge: Material) -> void:
 	_temoin.material_override = surcharge
 
 
+## La couche ACTIVE — celle que le pinceau touche.
 func monde() -> Node:
-	return _monde
+	return couche(_active)
+
+
+func couche(i: int) -> Node:
+	if i < 0 or i >= _couches.get_child_count():
+		return null
+	return _couches.get_child(i)
 
 
 func cases() -> GridMap:
-	return _monde.get_node("Cases") as GridMap
+	var m := monde()
+	return m.get_node("Cases") as GridMap if m != null else null
+
+
+func nombre_de_couches() -> int:
+	return _couches.get_child_count()
+
+
+func ajouter_couche() -> Node:
+	var massif := Massif.new()
+	massif.name = "Couche"
+	massif.preparer()
+	# ⚠ LA GRILLE DES CASES NE SE MONTRE PAS : elle porte la palette de peinture (des cubes), et c'est
+	# le RENDU — les tuiles tranchées — qu'on veut voir. Les fautes, elles, restent visibles : un cube
+	# rouge est précisément ce qu'on doit voir.
+	(massif.get_node("Cases") as Node3D).visible = false
+	_couches.add_child(massif)
+	return massif
+
+
+## Sort une couche de la vue SANS la détruire : l'historique peut la rendre (`inserer_couche`).
+func detacher_couche(m: Node) -> void:
+	_couches.remove_child(m)
+	_active = mini(_active, _couches.get_child_count() - 1)
+
+
+func inserer_couche(m: Node, i: int) -> void:
+	_couches.add_child(m)
+	_couches.move_child(m, clampi(i, 0, _couches.get_child_count() - 1))
+
+
+## ⚠ `free()` ET NON `queue_free()` : les couches du projet suivant se posent DANS LA MÊME IMAGE, et
+## une couche en sursis garderait son indice d'ici là.
+func vider_couches() -> void:
+	while _couches.get_child_count() > 0:
+		var m := _couches.get_child(0)
+		_couches.remove_child(m)
+		m.free()
+	_active = -1
+
+
+func activer(i: int) -> void:
+	_active = clampi(i, -1, _couches.get_child_count() - 1)
 
 
 func regler_etage(y: int) -> void:
@@ -204,8 +260,18 @@ func case_sous(position: Vector2) -> Variant:
 func _survoler(position: Vector2) -> void:
 	var c = case_sous(position)
 	_fantome.visible = c != null
+	_grille_locale.visible = c != null and not sur_la_grille_centrale(c)
 	if c != null:
 		_fantome.position = Vector3(c) + Vector3.ONE * 0.5
+		# ⚠ Calée sur les LIGNES de la grille, pas sur le centre de la case : la case `p` occupe
+		# `[p, p+1]`, donc son coin est en `p` et ses lignes tombent sur des entiers.
+		_grille_locale.position = Vector3(c.x, etage + 0.002, c.z)
+
+
+## La case est-elle couverte par la grille centrale ? Les lignes vont de −DEMI_GRILLE à +DEMI_GRILLE,
+## donc les cases de −DEMI_GRILLE à DEMI_GRILLE − 1.
+static func sur_la_grille_centrale(c: Vector3i) -> bool:
+	return c.x >= -DEMI_GRILLE and c.x < DEMI_GRILLE and c.z >= -DEMI_GRILLE and c.z < DEMI_GRILLE
 
 
 func _toucher(position: Vector2) -> void:
@@ -233,6 +299,32 @@ func _maillage_grille() -> ImmediateMesh:
 		mesh.surface_add_vertex(Vector3(i, 0, DEMI_GRILLE))
 		mesh.surface_add_vertex(Vector3(-DEMI_GRILLE, 0, i))
 		mesh.surface_add_vertex(Vector3(DEMI_GRILLE, 0, i))
+	mesh.surface_end()
+	return mesh
+
+
+## Un carré de grille autour de la case survolée, qui S'EFFACE vers ses bords : il dit où l'on est
+## sans prétendre être un plancher. ⚠ L'alpha vient de la couleur de SOMMET — un seul maillage, calé
+## une fois, déplacé à chaque survol ; rien ne se reconstruit en suivant la souris.
+const RAYON_LOCAL := 6
+
+
+func _maillage_grille_locale() -> ImmediateMesh:
+	var mesh := ImmediateMesh.new()
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
+	var r := float(RAYON_LOCAL)
+	# La case survolée va de 0 à 1 : le carré est centré sur son MILIEU, en (0,5 ; 0,5).
+	for i in range(-RAYON_LOCAL, RAYON_LOCAL + 2):
+		for k in range(-RAYON_LOCAL, RAYON_LOCAL + 1):
+			for seg in [[Vector3(i, 0, k), Vector3(i, 0, k + 1)], [Vector3(k, 0, i), Vector3(k + 1, 0, i)]]:
+				for sommet in seg:
+					var d: float = (Vector2(sommet.x, sommet.z) - Vector2(0.5, 0.5)).length() / (r + 0.5)
+					mesh.surface_set_color(Color(0.706, 0.741, 0.522, 0.3 * clampf(1.0 - d, 0.0, 1.0)))
+					mesh.surface_add_vertex(sommet)
 	mesh.surface_end()
 	return mesh
 
