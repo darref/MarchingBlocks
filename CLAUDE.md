@@ -318,6 +318,25 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
 - **PROPOSÉ, non tranché** : le MODE CANONIQUE — griser au témoin tous les exemplaires sauf un par clé
   (52 à peindre au lieu de 541), le choix canonique vivant à UN endroit du cœur (« quart de tour 0
   d'abord » à mesurer). Il réduit le nombre de raccords à tenir ; il ne les supprime pas.
+- **PROPOSÉ, ÉCRIT ET MESURÉ (28 septembre 2026) — LES UV CANONIQUES, la forme du mode canonique qui ne
+  grise rien.** Le témoin part en OBJ avec des UV où chaque point ne dépend que de sa CLÉ, de sa position
+  ramenée à la RÉFÉRENCE de sa pièce (la rotation inverse du trancheur) et du sens de sa face
+  (`BlocsMaitres._uv_du_temoin`). Peindre une copie peint donc les 541 : 52 tuiles à peindre, chacune
+  identique partout où elle revient. L'atlas : six carrés par clé (un par sens), clés dans l'ordre de
+  `MB.classes()`, le nom nu avant l'air libre, un carré de plus pour les sommets de bord non récoltés.
+  - ⚠ **LA CLÉ D'UN SOMMET EST SORTIE DU TRANCHEUR** (`Tranchage.cle_du_sommet`) pour que l'export lise la
+    même règle que la récolte ; `trancher()` l'appelle, sortie inchangée.
+  - ⚠ **L'OBJ SE RELIT AVEC SES UV** (`vt`), et `normales_plates` les transporte : jusqu'ici le retour
+    OBJ gardait la seule position, donc un `.obj` peint revenait sans sa peinture, sans un mot. Le
+    `.glb` écrit pour `DEV_TOOLS/` part toujours SANS UV.
+  - **MESURÉ** (`test_blocs_maitres` §15, par le VRAI trancheur sur l'OBJ relu) : 541 items, **0 coin où
+    deux exemplaires d'une clé divergent, 0 triangle chez une autre clé, 0 recouvrement dans un
+    exemplaire**. Quatre mutations, toutes rouges : UV prises dans le repère du monde (27 410 coins
+    incohérents), une seule clé pour tout l'atlas, le sens de face ignoré, le lecteur qui oublie `vt`.
+  - ⚠ **CE QUE ÇA NE FAIT PAS** : supprimer les raccords (voir plus haut), ni donner de la variété aux
+    exemplaires — ils partagent la même peinture tant que l'artiste ne redéplie pas l'un d'eux, ce que
+    le trancheur accepte. **OUVERT** : livrer une image-guide de l'atlas (le nom de chaque clé dans ses
+    carrés) ; rien n'a été vu dans Blender ni à l'image.
 
 ---
 
@@ -831,12 +850,17 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 761 vérifications, 0 échec** (28 septembre 2026, recomptées après le renommage du cœur
-  et la parité du greffon Godot : Move ±X/Y/Z, World → Clear cells annulable, le compteur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
+  Onze suites, **7 769 vérifications, 0 échec** (28 septembre 2026, recomptées après les UV canoniques
+  du témoin), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
   69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6 (9 tests) :
-  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
+  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 436,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
   `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 87.
+  ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
+  hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
+  vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
+  2026, aussi sans les changements du jour. Remède : `godot --headless --editor --quit` une fois, puis
+  rendre ce qu'il a réimporté (`git status`).
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.

@@ -1314,7 +1314,7 @@ static func exporter_le_bloc(chemin: String) -> String:
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
 	if chemin.get_extension().to_lower() == "obj":
-		return _ecrire_obj(mesh, chemin)
+		return _ecrire_obj(mesh, chemin, _uv_du_temoin(0))
 	var instance := MeshInstance3D.new()
 	instance.name = "MasterBlock"
 	instance.mesh = mesh
@@ -1331,6 +1331,100 @@ static func exporter_le_bloc(chemin: String) -> String:
 	return ""
 
 
+## ── LES UV CANONIQUES DU TÉMOIN — PROPOSÉ (28 septembre 2026) ──────────────────────────────────────
+##
+## ⚠ **TOUS LES EXEMPLAIRES D'UNE CLÉ PARTAGENT LES MÊMES UV.** L'UV d'un point ne dépend que de sa clé,
+## de sa position ramenée à la RÉFÉRENCE de la pièce (la rotation inverse que le trancheur applique) et du
+## sens de sa face. Peindre une copie peint donc les 541 — c'est le « mode canonique » de la charte §3,
+## sans rien griser : 52 tuiles à peindre, et chacune identique partout où elle revient.
+## ⚠ **CE QUE ÇA NE FAIT PAS : SUPPRIMER LES RACCORDS.** La région d'une clé touche celles de TOUTES ses
+## voisines possibles ; le long des coupes, la texture doit rester la même pour toutes (charte §3, la
+## discipline de l'artiste). Ce qui disparaît, c'est la texture qui doit se répéter PARTOUT.
+##
+## L'atlas : un carré de `n × n` tuiles, six par clé (une par sens de face : +X, −X, +Y, −Y, +Z, −Z),
+## rangées clé après clé ; la DERNIÈRE clé est réservée aux sommets de bord, que le trancheur ne récolte
+## pas (`peau = false`) — ils ont besoin d'une UV, pas d'une place qui en volerait une à une vraie tuile.
+## ⚠ La coque amincie est faite de faces ALIGNÉES sur les axes, en sous-voxels : une face n'a qu'un sens, et
+## dans une pièce, une colonne n'a qu'une transition de chaque signe — les six projections ne se
+## recouvrent pas. Gardé par `test_blocs_maitres`, pas par ce commentaire.
+
+## La marge intérieure de chaque tuile d'atlas, en fraction de tuile : le filtrage ne bave pas sur la voisine.
+const UV_MARGE := 1.0 / 16.0
+
+## Les clés du bloc `i`, dans l'ordre de l'atlas : ordre de `MB.classes()`, le nom nu avant l'air libre.
+## ⚠ DÉRIVÉ du trancheur (`cle_du_sommet`), jamais écrit : deux listes de clés finiraient par diverger.
+static func cles_de_l_atlas(i: int) -> Array:
+	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
+	var pleines: Dictionary = cases(i)
+	var plafond: int = MB.plafond_de(pleines)
+	var vues := {}
+	for vx in COTE - 1:
+		for vy in COTE - 1:
+			for vz in COTE - 1:
+				var r: Dictionary = Tranchage.cle_du_sommet(pleines, Vector3i(vx, vy, vz), plafond)
+				if not r.is_empty():
+					vues[r["cle"]] = true
+	var ordre: Array = []
+	for c in MB.classes():
+		for cle in [c["nom"], MB.nom_en_contexte(c["nom"], true)]:
+			if vues.has(cle) and not ordre.has(cle):
+				ordre.append(cle)
+	return ordre
+
+
+## La fonction qui donne ses trois UV à un triangle du témoin `i` (sommets dans l'ordre HORAIRE de Godot).
+## ⚠ **LE BLOC EST À L'ORIGINE** (§4) : la case `p` occupe [p ; p+1], et le sommet `v` a pour boîte le
+## cube d'une case centré en `v + (1,1,1)` — les mêmes conventions que `Tranchage.boite_du_sommet`.
+static func _uv_du_temoin(i: int) -> Callable:
+	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
+	var pleines: Dictionary = cases(i)
+	var plafond: int = MB.plafond_de(pleines)
+	var cles: Array = cles_de_l_atlas(i)
+	var rang := {}
+	for k in cles.size():
+		rang[cles[k]] = k
+	var reservee: int = cles.size()
+	var n: int = ceili(sqrt(float((cles.size() + 1) * 6)))
+	n += (6 - n % 6) % 6   # les six sens d'une clé sur une même ligne
+	var grille := GridMap.new()
+	var bases := {}
+	for o in 24:
+		bases[o] = grille.get_basis_with_orthogonal_index(o)
+	grille.free()
+	return func(a: Vector3, b: Vector3, c: Vector3) -> PackedVector2Array:
+		var centre: Vector3 = (a + b + c) / 3.0
+		var v := Vector3i(floori(centre.x - 0.5), floori(centre.y - 0.5), floori(centre.z - 0.5))
+		var interieur: bool = v.x >= 0 and v.y >= 0 and v.z >= 0 \
+			and v.x < COTE - 1 and v.y < COTE - 1 and v.z < COTE - 1
+		var r: Dictionary = Tranchage.cle_du_sommet(pleines, v, plafond) if interieur else {}
+		var k: int = rang.get(r.get("cle", ""), reservee)
+		var inverse: Basis = (bases[r["orientation"]] as Basis).transposed() if not r.is_empty() \
+			else Basis()
+		# Godot enroule en HORAIRE : la normale sortante est l'OPPOSÉ du produit vectoriel.
+		var normale: Vector3 = inverse * -(b - a).cross(c - a)
+		var axe: int = 0
+		for j in 3:
+			if absf(normale[j]) > absf(normale[axe]):
+				axe = j
+		var sens: int = axe * 2 + (0 if normale[axe] > 0.0 else 1)
+		var tuile: int = k * 6 + sens
+		var coin := Vector2(tuile % n, tuile / n)
+		var sortie := PackedVector2Array()
+		for p in [a, b, c]:
+			var q: Vector3 = inverse * (p - (Vector3(v) + Vector3.ONE))
+			var st: Vector2
+			match sens:
+				0: st = Vector2(-q.z, q.y)
+				1: st = Vector2(q.z, q.y)
+				2: st = Vector2(q.x, -q.z)
+				3: st = Vector2(q.x, q.z)
+				4: st = Vector2(q.x, q.y)
+				_: st = Vector2(-q.x, q.y)
+			var dans: Vector2 = (st + Vector2.ONE * 0.5).clamp(Vector2.ZERO, Vector2.ONE)
+			sortie.append((coin + Vector2.ONE * UV_MARGE + dans * (1.0 - 2.0 * UV_MARGE)) / float(n))
+		return sortie
+
+
 ## L'OBJ DU TÉMOIN : une liste de sommets COMMUNE, puis les faces de chaque teinte sous son `usemtl`.
 ## Le `.mtl` voisin porte les six teintes, NOMMÉES comme la légende (« Wall - underground »).
 ##
@@ -1340,7 +1434,10 @@ static func exporter_le_bloc(chemin: String) -> String:
 ## dans le sens trigonométrique. Le glTF de Godot le retournait sans le dire ; ici on le fait.
 ## ⚠ **AUCUNE NORMALE** (`vn`) : sans elles, Blender importe en ombrage PLAT — mesuré, comme le .glb.
 ## ⚠ Des TRIANGLES, comme le .glb d'avant : « Tris to Quads » (Alt+J) rend les boucles d'arêtes.
-static func _ecrire_obj(mesh: ArrayMesh, chemin: String) -> String:
+## ⚠ **`uv_de` DONNE LES UV D'UN TRIANGLE** (`_uv_du_temoin`) : elles s'écrivent en `vt`, par COIN de face.
+## C'est ce qui garde la soudure — un sommet sur un plan de coupe porte deux UV, une par pièce, sans être
+## dédoublé. Le glTF, lui, l'aurait coupé en deux (charte §4).
+static func _ecrire_obj(mesh: ArrayMesh, chemin: String, uv_de := Callable()) -> String:
 	var mtl_chemin: String = chemin.get_basename() + ".mtl"
 	var lignes := PackedStringArray()
 	lignes.append("# MarchingBlocks — the witness block. Sculpt it, keep it at the origin.")
@@ -1348,6 +1445,8 @@ static func _ecrire_obj(mesh: ArrayMesh, chemin: String) -> String:
 	lignes.append("o MasterBlock")
 	var index_de := {}
 	var sommets := PackedStringArray()
+	var index_uv := {}
+	var coords := PackedStringArray()
 	var faces := PackedStringArray()
 	var matieres := PackedStringArray()
 	for s in mesh.get_surface_count():
@@ -1371,8 +1470,20 @@ static func _ecrire_obj(mesh: ArrayMesh, chemin: String) -> String:
 					index_de[cle] = index_de.size() + 1
 					sommets.append("v %.6f %.6f %.6f" % [p.x, p.y, p.z])
 				n.append(index_de[cle])
-			faces.append("f %d %d %d" % [n[0], n[2], n[1]])
+			if not uv_de.is_valid():
+				faces.append("f %d %d %d" % [n[0], n[2], n[1]])
+				continue
+			var uv: PackedVector2Array = uv_de.call(v[ordre[t]], v[ordre[t + 1]], v[ordre[t + 2]])
+			var m_uv := PackedInt32Array()
+			for k in 3:
+				var cle_uv := "%.6f %.6f" % [uv[k].x, uv[k].y]
+				if not index_uv.has(cle_uv):
+					index_uv[cle_uv] = index_uv.size() + 1
+					coords.append("vt " + cle_uv)
+				m_uv.append(index_uv[cle_uv])
+			faces.append("f %d/%d %d/%d %d/%d" % [n[0], m_uv[0], n[2], m_uv[2], n[1], m_uv[1]])
 	lignes.append_array(sommets)
+	lignes.append_array(coords)
 	lignes.append_array(faces)
 	var f := FileAccess.open(chemin, FileAccess.WRITE)
 	if f == null:
@@ -1389,8 +1500,9 @@ static func _ecrire_obj(mesh: ArrayMesh, chemin: String) -> String:
 
 ## LIRE UN OBJ — celui qu'on a écrit, ou celui qu'un artiste renverrait. Une surface par `usemtl`,
 ## sa couleur lue dans le `.mtl` voisin s'il existe ; des normales PLATES reconstruites (`normales_plates`).
-## ⚠ Les faces à plus de trois sommets sont découpées en éventail, et les références `v/vt/vn` ne gardent
-## que la position : le trancheur ne lit que la géométrie. ⚠ Les indices NÉGATIFS (relatifs à la fin)
+## ⚠ Les faces à plus de trois sommets sont découpées en éventail. Des références `v/vt/vn`, on garde la
+## position et l'UV — le trancheur les transporte (`decoupe.gd`), et une UV perdue au retour, c'est une
+## texture perdue sans un mot. Une surface dont une face n'a pas d'UV sort SANS UV. ⚠ Les indices NÉGATIFS (relatifs à la fin)
 ## sont permis par le format, donc lus. ⚠ L'enroulement est retourné vers la convention HORAIRE de Godot.
 static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
 	var texte := FileAccess.get_file_as_string(chemin)
@@ -1398,8 +1510,11 @@ static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
 		journal.append("le fichier OBJ est vide ou illisible : %s" % chemin)
 		return null
 	var positions := PackedVector3Array()
+	var coords := PackedVector2Array()
 	var couleurs := {}
 	var par_matiere := {}
+	var uv_par_matiere := {}
+	var sans_uv := {}
 	var ordre_matieres: Array = []
 	var courante := ""
 	for ligne in texte.split("\n"):
@@ -1410,24 +1525,42 @@ static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
 			var c := l.substr(2).split(" ", false)
 			if c.size() >= 3:
 				positions.append(Vector3(float(c[0]), float(c[1]), float(c[2])))
+		elif l.begins_with("vt "):
+			var c := l.substr(3).split(" ", false)
+			if c.size() >= 2:
+				coords.append(Vector2(float(c[0]), float(c[1])))
 		elif l.begins_with("usemtl "):
 			courante = l.substr(7).strip_edges()
 		elif l.begins_with("f "):
 			var ids := PackedInt32Array()
+			var ids_uv := PackedInt32Array()
 			for jeton in l.substr(2).split(" ", false):
-				var i := int(jeton.split("/")[0])
+				var morceaux := jeton.split("/")
+				var i := int(morceaux[0])
 				ids.append(i - 1 if i > 0 else positions.size() + i)
+				var j := int(morceaux[1]) if morceaux.size() > 1 and morceaux[1] != "" else 0
+				ids_uv.append(j - 1 if j > 0 else (coords.size() + j if j < 0 else -1))
 			if not par_matiere.has(courante):
 				par_matiere[courante] = PackedVector3Array()
+				uv_par_matiere[courante] = PackedVector2Array()
 				ordre_matieres.append(courante)
 			var sac: PackedVector3Array = par_matiere[courante]
+			var sac_uv: PackedVector2Array = uv_par_matiere[courante]
 			for k in range(1, ids.size() - 1):
-				for i in [ids[0], ids[k + 1], ids[k]]:
+				for c in [0, k + 1, k]:
+					var i: int = ids[c]
 					if i < 0 or i >= positions.size():
 						journal.append("une face de l'OBJ cite un sommet qui n'existe pas (%d)" % (i + 1))
 						return null
 					sac.append(positions[i])
+					var j: int = ids_uv[c]
+					if j < 0 or j >= coords.size():
+						sans_uv[courante] = true
+						sac_uv.append(Vector2.ZERO)
+					else:
+						sac_uv.append(coords[j])
 			par_matiere[courante] = sac
+			uv_par_matiere[courante] = sac_uv
 	if ordre_matieres.is_empty():
 		journal.append("l'OBJ ne contient aucune face : %s" % chemin)
 		return null
@@ -1436,6 +1569,8 @@ static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
 		var arrays: Array = []
 		arrays.resize(Mesh.ARRAY_MAX)
 		arrays[Mesh.ARRAY_VERTEX] = par_matiere[nom]
+		if not sans_uv.has(nom):
+			arrays[Mesh.ARRAY_TEX_UV] = uv_par_matiere[nom]
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		var m := StandardMaterial3D.new()
 		m.resource_name = nom
@@ -1617,6 +1752,11 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 		var c: PackedColorArray = arrays[Mesh.ARRAY_COLOR] \
 			if arrays[Mesh.ARRAY_COLOR] != null else PackedColorArray()
 		var avait_des_couleurs: bool = not c.is_empty()
+		# ⚠ LES UV SUIVENT, comme les couleurs : cette fonction est sur le chemin du RETOUR, et une UV
+		# perdue ici, c'est la peinture de l'artiste perdue sans un mot.
+		var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] \
+			if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		var avait_des_uv: bool = not uv.is_empty()
 		var idx: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] \
 			if arrays[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 		if idx.is_empty():
@@ -1625,6 +1765,7 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 		var sommets := PackedVector3Array()
 		var normales := PackedVector3Array()
 		var couleurs := PackedColorArray()
+		var coords := PackedVector2Array()
 		for t in range(0, idx.size() - 2, 3):
 			var a: Vector3 = v[idx[t]]
 			var b: Vector3 = v[idx[t + 1]]
@@ -1639,6 +1780,8 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 				normales.append(normale)
 				if avait_des_couleurs:
 					couleurs.append(c[idx[t + k]] if c.size() > idx[t + k] else Color.WHITE)
+				if avait_des_uv:
+					coords.append(uv[idx[t + k]] if uv.size() > idx[t + k] else Vector2.ZERO)
 		if sommets.is_empty():
 			continue
 		var res: Array = []
@@ -1647,6 +1790,8 @@ static func normales_plates(mesh: ArrayMesh) -> ArrayMesh:
 		res[Mesh.ARRAY_NORMAL] = normales
 		if avait_des_couleurs:
 			res[Mesh.ARRAY_COLOR] = couleurs
+		if avait_des_uv:
+			res[Mesh.ARRAY_TEX_UV] = coords
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
 		# ⚠ **LE MATÉRIAU SUIT, ET SON OUBLI S'EST VU À L'IMAGE.** Sans lui, la planche est sortie
 		# entièrement GRISE : les couleurs de sommet étaient bien là, mais aucun matériau en

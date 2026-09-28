@@ -222,18 +222,10 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 		for vy in range(premier, cases.y if peau else cases.y - 1):
 			for vz in range(premier, cases.z if peau else cases.z - 1):
 				var v := Vector3i(vx, vy, vz)
-				var bits: int = MB.bits(pleines, v)
-				var r: Dictionary = MB.classer(bits)
-				if not r["surface"]:
+				var r: Dictionary = cle_du_sommet(pleines, v, plafond)
+				if r.is_empty():
 					continue
-				# ⚠ **ON RÉCOLTE PAR (CLASSE, CONTEXTE), PLUS PAR CLASSE SEULE.** Le module annonçait
-				# 90 tuiles — les 68 classes plus les 22 qui peuvent AUSSI être à l'air libre — et n'en
-				# livrait que 68 : « sol de grotte » et « sol de massif » étaient la MÊME tuile, alors
-				# que c'est exactement la distinction pour laquelle le modèle ORIENTÉ a été choisi.
-				# ⚠ Une variante n'existe que si la classe PEUT être dehors ET que ce sommet-ci l'EST.
-				var dehors: bool = MB.exterieur_possible(bits) \
-					and MB.sous_le_ciel(pleines, v, plafond)
-				var cle: String = MB.nom_en_contexte(r["nom"], dehors)
+				var cle: String = r["cle"]
 
 				# ⚠ **ON NE S'ARRÊTE PLUS AU PREMIER SOMMET D'UNE CLÉ, ET C'ÉTAIT UN DÉFAUT MUET.** Un
 				# `if pieces.has(cle): continue` vivait ici. Mesuré sur la planète paysage : 541 sommets
@@ -294,6 +286,27 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	verifier_octants(a_plat, bits_a_plat, erreurs)
 	verifier_couture(a_plat, bits_a_plat, remarques)
 	return pieces
+
+
+## LA CLÉ D'UN SOMMET, et la rotation qui ramène sa pièce à la référence. `{}` s'il ne porte aucune surface.
+## Rend {"cle", "classe", "bits", "orientation"} — `orientation` est l'index de GridMap de `MB.classer`.
+##
+## ⚠ **EXTRAITE DE `trancher()` POUR QUE L'EXPORT LISE LA MÊME RÈGLE (28 septembre 2026).** Les UV du
+## témoin (`BlocsMaitres._uv_du_temoin`) doivent tomber sur la clé que le trancheur donnera au morceau ;
+## une seconde description du contexte aurait fini par diverger (charte §6). Sortie inchangée.
+## ⚠ **ON RÉCOLTE PAR (CLASSE, CONTEXTE), PLUS PAR CLASSE SEULE.** Le module annonçait 90 tuiles — les 68
+## classes plus les 22 qui peuvent AUSSI être à l'air libre — et n'en livrait que 68 : « sol de grotte »
+## et « sol de massif » étaient la MÊME tuile, alors que c'est exactement la distinction pour laquelle le
+## modèle ORIENTÉ a été choisi. ⚠ Une variante n'existe que si la classe PEUT être dehors ET que ce
+## sommet-ci l'EST.
+static func cle_du_sommet(pleines: Dictionary, v: Vector3i, plafond: int) -> Dictionary:
+	var bits: int = MB.bits(pleines, v)
+	var r: Dictionary = MB.classer(bits)
+	if not r["surface"]:
+		return {}
+	var dehors: bool = MB.exterieur_possible(bits) and MB.sous_le_ciel(pleines, v, plafond)
+	return {"cle": MB.nom_en_contexte(r["nom"], dehors), "classe": r["classe"], "bits": bits,
+		"orientation": r["orientation"]}
 
 
 ## CONTRÔLE 1 — LES OCTANTS VIDES SONT VIDES.

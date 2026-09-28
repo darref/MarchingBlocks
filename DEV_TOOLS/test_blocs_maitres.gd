@@ -62,6 +62,7 @@ func _initialize() -> void:
 	_le_materiau_suit_dans_les_tuiles()
 	_le_temoin_revient_avec_ses_six_teintes()
 	_le_temoin_part_soude()
+	_les_uv_sont_canoniques()
 	_la_pose_du_noeud_est_lue()
 	_le_cumul_est_croissant()
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
@@ -324,6 +325,106 @@ func _le_temoin_part_soude() -> void:
 ## les sommets, et le .glb qu'il réécrit garde cette rotation : lue sans elle, l'œuvre revenait couchée
 ## (41 erreurs de tranchage). Scénario CONSTRUIT : un cube unité posé par un nœud tourné de −90° en X et
 ## translaté de (5, 0, 0) — l'attendu est calculé à la main : x ∈ [5, 6], y ∈ [0, 1], z ∈ [−1, 0].
+## §15 — LES UV CANONIQUES : tous les exemplaires d'une clé portent les mêmes UV, et deux clés jamais.
+##
+## ⚠ **L'AUTORITÉ EST LE TRANCHEUR, PAS LA FONCTION D'UV.** On exporte l'OBJ, on le RELIT et on le
+## TRANCHE comme un travail revenu de Blender ; ce qui fait foi, ce sont les tuiles du lot. Aucune
+## formule d'atlas n'est recalculée ici : l'attendu est une COHÉRENCE (« même point de référence, même
+## UV »), que la fonction ne peut pas satisfaire en se trompant de repère.
+## ⚠ Et ça garde du même coup l'aller-retour des UV : écrites en `vt`, relues, transportées par la découpe.
+func _les_uv_sont_canoniques() -> void:
+	var chemin: String = ProjectSettings.globalize_path("user://uv_test.obj")
+	var raison: String = BlocsMaitres.exporter_le_bloc(chemin)
+	_dire(raison == "", "l'export OBJ échoue : %s" % raison)
+	if raison != "":
+		return
+	var faces_sans_uv := 0
+	var n_vt := 0
+	for ligne in FileAccess.get_file_as_string(chemin).split("\n"):
+		if ligne.begins_with("vt "):
+			n_vt += 1
+		elif ligne.begins_with("f "):
+			for j in ligne.substr(2).split(" ", false):
+				if j.split("/").size() < 2 or j.split("/")[1] == "":
+					faces_sans_uv += 1
+					break
+	_dire(n_vt > 0 and faces_sans_uv == 0,
+		"l'OBJ du témoin porte %d vt, et %d face(s) sans UV" % [n_vt, faces_sans_uv])
+
+	var resultat: Dictionary = BlocsMaitres.librairie_depuis_glb(chemin)
+	DirAccess.remove_absolute(chemin)
+	DirAccess.remove_absolute(chemin.get_basename() + ".mtl")
+	_dire((resultat["erreurs"] as Array).is_empty(),
+		"l'OBJ à UV se tranche avec %d erreur(s)" % (resultat["erreurs"] as Array).size())
+	var lot: MeshLibrary = resultat["lot"]
+	var par_cle := {}           # clé → {point de référence : UV}
+	var proprietaire := {}      # centre d'UV d'un triangle → clé
+	var incoherents := 0
+	var partages := 0
+	var recouvrements := 0
+	var items_sans_uv := 0
+	var cles := {}
+	for id in lot.get_item_list():
+		var cle: String = MB.cle_sans_exemplaire(lot.get_item_name(id))
+		cles[cle] = true
+		if not par_cle.has(cle):
+			par_cle[cle] = {}
+		var dans_l_item := {}   # centre d'UV → centre de position, dans cet exemplaire
+		var mesh: Mesh = lot.get_item_mesh(id)
+		for s in mesh.get_surface_count():
+			var arrays: Array = mesh.surface_get_arrays(s)
+			if arrays[Mesh.ARRAY_TEX_UV] == null:
+				items_sans_uv += 1
+				continue
+			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+			var idx = arrays[Mesh.ARRAY_INDEX]
+			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+				else PackedInt32Array(range(v.size()))
+			for t in range(0, ordre.size() - 2, 3):
+				var a: Vector3 = v[ordre[t]]
+				var b: Vector3 = v[ordre[t + 1]]
+				var c: Vector3 = v[ordre[t + 2]]
+				var geo: Vector3 = -(b - a).cross(c - a)
+				if geo.length_squared() < 1e-10:
+					continue
+				var axe := 0
+				for j in 3:
+					if absf(geo[j]) > absf(geo[axe]):
+						axe = j
+				var sens: int = axe * 2 + (0 if geo[axe] > 0.0 else 1)
+				for k in 3:
+					var p: Vector3 = v[ordre[t + k]]
+					var point := "%d,%d,%d|%d" % [roundi(p.x * 1000.0), roundi(p.y * 1000.0),
+						roundi(p.z * 1000.0), sens]
+					var u: Vector2 = uv[ordre[t + k]]
+					if par_cle[cle].has(point):
+						if not (par_cle[cle][point] as Vector2).is_equal_approx(u):
+							incoherents += 1
+					else:
+						par_cle[cle][point] = u
+				var cu: Vector2 = (uv[ordre[t]] + uv[ordre[t + 1]] + uv[ordre[t + 2]]) / 3.0
+				var cle_uv := Vector2i(roundi(cu.x * 100000.0), roundi(cu.y * 100000.0))
+				if proprietaire.has(cle_uv) and proprietaire[cle_uv] != cle:
+					partages += 1
+				proprietaire[cle_uv] = cle
+				var cp: Vector3 = (a + b + c) / 3.0
+				var cle_p := Vector3i(roundi(cp.x * 1000.0), roundi(cp.y * 1000.0), roundi(cp.z * 1000.0))
+				if dans_l_item.has(cle_uv) and dans_l_item[cle_uv] != cle_p:
+					recouvrements += 1
+				dans_l_item[cle_uv] = cle_p
+	_dire(lot.get_item_list().size() > cles.size(),
+		"le lot à UV ne porte que %d items pour %d clés : les exemplaires ne sont pas éprouvés"
+		% [lot.get_item_list().size(), cles.size()])
+	_dire(items_sans_uv == 0, "%d surface(s) du lot sont revenues SANS UV" % items_sans_uv)
+	_dire(incoherents == 0, "%d coin(s) où deux exemplaires d'une clé n'ont pas la même UV" % incoherents)
+	_dire(partages == 0, "%d triangle(s) dont l'UV tombe dans la région d'une AUTRE clé" % partages)
+	_dire(recouvrements == 0, "%d triangle(s) qui se recouvrent en UV dans un même exemplaire"
+		% recouvrements)
+	print("  uv : %d vt, %d items, %d clés, %d incohérent(s), %d partagé(s), %d recouvrement(s)"
+		% [n_vt, lot.get_item_list().size(), cles.size(), incoherents, partages, recouvrements])
+
+
 func _la_pose_du_noeud_est_lue() -> void:
 	var boite := BoxMesh.new()
 	var cube := ArrayMesh.new()
