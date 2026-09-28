@@ -17,6 +17,8 @@ const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.g
 const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
+const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
+const Editeur := preload("res://addons/marchingblocks_paint/mb_editor.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
 const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
@@ -35,6 +37,7 @@ func _initialize() -> void:
 		_le_greffon_passe_les_cas(cas)
 	_un_format_plus_recent_est_refuse()
 	_les_cas_d_outils()
+	_le_greffon_passe_les_cas_d_outils()
 	_de_bout_en_bout.call_deferred()
 
 
@@ -185,8 +188,202 @@ func _les_cas_d_outils() -> void:
 		touches, manques])
 
 
+# ── 4 ter. Le greffon Godot reproduit chaque cas d'OUTILS, à 100 % ──────────────────────────────────
+#
+# ⚠ **L'ATTENDU VIENT DE `outils.gd`, LE MESURÉ DE `mb_tools.gd`** : deux implémentations, jamais la même
+# fonction des deux côtés (charte §6). Le greffon ne charge rien du cœur.
+func _le_greffon_passe_les_cas_d_outils() -> void:
+	var chemin := "res://addons/marchingblocks_paint/tools_conformance.json"
+	var cas = JSON.parse_string(FileAccess.get_file_as_string(chemin)) if FileAccess.file_exists(chemin) else null
+	_vrai(cas != null, "tools_conformance.json n'est pas livré avec le greffon Godot")
+	if cas == null:
+		return
+	_egal(int(cas["limits"]["box_volume_max"]), Tools.BOX_VOLUME_MAX, "la borne des boîtes du greffon")
+	var monde := _ensemble(cas["world"])
+	var rouges := 0
+	for c in cas["cases"]:
+		var pourquoi := _cas_d_outil(c, monde)
+		if pourquoi != "":
+			rouges += 1
+			_vrai(false, "outil « %s » — %s" % [c["name"], pourquoi])
+	_egal(rouges, 0, "cas d'outils où le greffon Godot diverge de l'appli")
+	print("  outils du greffon Godot : %d cas, %d divergence(s)" % [(cas["cases"] as Array).size(), rouges])
+
+
+func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
+	var i: Dictionary = c["input"]
+	var e: Dictionary = c["expected"]
+	var ici: Dictionary = monde if i.get("cells", null) is String else _ensemble(i.get("cells", []))
+	var plein := func(v: Vector3i) -> bool: return ici.has(v)
+	match c["kind"]:
+		"ray":
+			var r: Dictionary = Tools.ray(plein, _v3(i["origin"]), _v3(i["direction"]), float(i["reach"]),
+				_ensemble(i["ignore"]))
+			var obtenu := [r["hit"], r["cell"], r["normal"]]
+			var voulu := [e["hit"], _vi(e["cell"]), _vi(e["normal"])]
+			return "" if obtenu == voulu else "attendu %s, rendu %s" % [voulu, obtenu]
+		"anchor":
+			var a := Tools.anchor(i["tool"], {"hit": i["hit"], "cell": _vi(i["cell"]), "normal": _vi(i["normal"])})
+			return "" if a == _vi(e["anchor"]) else "attendu %s, rendu %s" % [_vi(e["anchor"]), a]
+		"brush":
+			var b: Array = Tools.brush(_vi(i["anchor"]), _vi(i["normal"]), int(i["size"]), i["shape"])
+			return _meme_liste(b, e["cells"])
+		"change":
+			var m: Dictionary = Tools.modify(i["tool"], _liste(i["targets"]), plein)
+			return _meme_ensemble("set", m["set"], e["set"]) + _meme_ensemble("clear", m["clear"], e["clear"])
+		"selection":
+			return _meme_changement(Tools.operate(ici, _ensemble(i["selection"]), i["op"]), e)
+		"box":
+			var bx: Dictionary = Tools.box(_vi(i["a"]), _vi(i["b"]), i["hollow"])
+			if bx.size() != int(e["count"]):
+				return "attendu %d cases, rendu %d" % [int(e["count"]), bx.size()]
+			return _meme_ensemble("cells", bx, e["cells"]) if e.has("cells") else ""
+		"move":
+			return _meme_changement(Tools.move(ici, _ensemble(i["selection"]), _vi(i["offset"])), e)
+		"copy":
+			return _meme_liste(Tools.copy(ici, _ensemble(i["selection"])), e["clipboard"])
+		"paste":
+			return _meme_changement(Tools.paste(ici, _liste(i["clipboard"]), _vi(i["anchor"])), e)
+	return "sorte inconnue " + str(c["kind"])
+
+
+func _meme_changement(r: Dictionary, e: Dictionary) -> String:
+	return _meme_ensemble("set", r["set"], e["set"]) + _meme_ensemble("clear", r["clear"], e["clear"]) \
+		+ _meme_ensemble("selection", r["selection"], e["selection"])
+
+
+func _meme_ensemble(quoi: String, obtenu: Dictionary, voulu: Array) -> String:
+	return "" if obtenu == _ensemble(voulu) else "%s : attendu %d cases, rendu %d ; " % [quoi, voulu.size(), obtenu.size()]
+
+
+## ⚠ Une LISTE (pinceau, presse-papiers) doit sortir dans le même ORDRE, pas seulement les mêmes cases.
+func _meme_liste(obtenu: Array, voulu: Array) -> String:
+	return "" if obtenu == _liste(voulu) else "attendu %s, rendu %s" % [_liste(voulu), obtenu]
+
+
+func _vi(a: Array) -> Vector3i:
+	return Vector3i(int(a[0]), int(a[1]), int(a[2]))
+
+
+func _v3(a: Array) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2]))
+
+
+func _liste(a: Array) -> Array[Vector3i]:
+	var l: Array[Vector3i] = []
+	for p in a:
+		l.append(_vi(p))
+	return l
+
+
+func _ensemble(a: Array) -> Dictionary:
+	var d := {}
+	for p in a:
+		d[_vi(p)] = true
+	return d
+
+
+# ── 4 quater. Les outils DANS LA VUE : des clics réels, une caméra réelle, une annulation réelle ─────
+#
+# ⚠ **CE QUI N'EST PAS ÉPROUVÉ ICI** : le greffon d'éditeur lui-même (`plugin.gd`, sa barre, le relais
+# de `_forward_3d_gui_input`) — un greffon d'éditeur ne se teste pas en headless (charte §6). Ce qui
+# l'est : tout ce qu'il relaie, `mb_editor.gd`, mené par les mêmes événements que l'éditeur lui passe.
+func _les_outils_dans_la_vue() -> void:
+	# ⚠ **UN SCRIPT QUI NE COMPILE PAS FAISAIT SAUTER CETTE SECTION EN SILENCE, ET LA SUITE FINISSAIT
+	# « OK »** — mesuré le 28 septembre 2026 : `Editeur.new()` a levé une erreur d'exécution, Godot a
+	# abandonné la fonction, et le reste a continué. On exige d'abord que chaque script se charge.
+	var tous_charges := true
+	for nom in ["mb_tools.gd", "mb_editor.gd", "mb_world.gd", "mb_rule.gd", "mb_tileset.gd", "plugin.gd"]:
+		var script := load("res://addons/marchingblocks_paint/" + nom) as GDScript
+		var charge := script != null and script.can_instantiate()
+		_vrai(charge, "addons/marchingblocks_paint/%s ne compile pas" % nom)
+		tous_charges = tous_charges and charge
+	if not tous_charges:
+		return
+	var monde: Node3D = World.new()
+	root.add_child(monde)
+	var cam := Camera3D.new()
+	root.add_child(cam)
+	cam.current = true
+	cam.look_at_from_position(Vector3(2.5, 12, 2.5), Vector3(2.5, 0, 2.5), Vector3.FORWARD)
+	var ed: Node = Editeur.new()
+	root.add_child(ed)
+	var annul := UndoRedo.new()
+	ed.undo = annul
+	ed.world = monde
+	var ecran := func(case_: Vector3i) -> Vector2:
+		return cam.unproject_position(Vector3(case_) + Vector3(0.5, 0.0, 0.5))
+	var clic := func(pos: Vector2, appuye: bool, maj := false) -> bool:
+		var b := InputEventMouseButton.new()
+		b.button_index = MOUSE_BUTTON_LEFT
+		b.pressed = appuye
+		b.position = pos
+		b.shift_pressed = maj
+		return ed.input(cam, b)
+	var bouge := func(pos: Vector2) -> bool:
+		var m := InputEventMouseMotion.new()
+		m.position = pos
+		return ed.input(cam, m)
+	var nb := func() -> int: return (monde.cells() as Dictionary).size()
+
+	# Grid : un clic pose la case du sol, et Ctrl+Z la reprend.
+	_vrai(clic.call(ecran.call(Vector3i(2, 0, 2)), true), "un clic d'outil est PRIS : l'éditeur ne doit pas sélectionner")
+	clic.call(ecran.call(Vector3i(2, 0, 2)), false)
+	_egal(monde.cells(), {Vector3i(2, 0, 2): true}, "Grid + Add : un clic pose la case visée sur le sol")
+	annul.undo()
+	_egal(nb.call(), 0, "Ctrl+Z reprend le coup entier")
+	annul.redo()
+	_egal(nb.call(), 1, "Ctrl+Y le rend")
+
+	# Sculpt : contre la face visée ; et le VERROU DE COUP — glisser sur place ne bâtit pas une tour.
+	ed.set_aim("sculpt")
+	var centre: Vector2 = ecran.call(Vector3i(2, 0, 2))
+	clic.call(centre, true)
+	bouge.call(centre + Vector2(0.4, 0))
+	bouge.call(centre + Vector2(0.8, 0))
+	clic.call(centre, false)
+	_egal(monde.cells(), {Vector3i(2, 0, 2): true, Vector3i(2, 1, 2): true},
+		"Sculpt + Add pose CONTRE la face du dessus, et glisser sur place n'empile rien (verrou de coup)")
+	annul.undo()
+	_egal(nb.call(), 1, "le coup de sculpture s'annule d'un bloc")
+
+	# Rect → Fill → Extrude : l'étage suit, et Ctrl+Z le rend.
+	ed.set_aim("grid")
+	ed.set_mode("rect")
+	clic.call(ecran.call(Vector3i(1, 0, 1)), true)
+	bouge.call(ecran.call(Vector3i(3, 0, 2)))
+	clic.call(ecran.call(Vector3i(3, 0, 2)), false)
+	_egal(ed.selection.size(), 6, "le Rect prend ses 3 × 2 cases, vides comprises")
+	ed.operate("fill")
+	_egal(nb.call(), 6, "Fill remplit le rectangle (la case déjà pleine reste)")
+	ed.operate("extrude_up")
+	_egal(nb.call(), 12, "Extrude pose l'étage du dessus")
+	_egal(monde.floor_y, 1, "et le plan de visée MONTE avec lui")
+	annul.undo()
+	_egal(monde.floor_y, 0, "Ctrl+Z rend l'étage avec les cases")
+	_egal(nb.call(), 6, "et reprend l'extrusion")
+
+	# Navigate : aucun clic ne peint, Tab revient à Grid.
+	ed.set_aim("navigate")
+	ed.set_mode("add")
+	_vrai(not clic.call(ecran.call(Vector3i(0, 0, 0)), true), "en Navigate, le clic est LAISSÉ à l'éditeur")
+	clic.call(ecran.call(Vector3i(0, 0, 0)), false)
+	_egal(nb.call(), 6, "en Navigate, un clic ne peint rien")
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.pressed = true
+	_vrai(ed.input(cam, tab), "Tab est pris en Navigate")
+	_egal(ed.aim, "grid", "et revient à Grid")
+
+	ed.world = null
+	for n in [ed, cam, monde]:
+		n.queue_free()
+	annul.free()
+
+
 # ── 5. De bout en bout : l'appli exporte, le greffon charge, pose, et redonne ce que l'appli pose ────
 func _de_bout_en_bout() -> void:
+	_les_outils_dans_la_vue()
 	var bilan: Dictionary = BM.librairie()
 	var lot: MeshLibrary = bilan["lot"]
 	var dossier := ProjectSettings.globalize_path("user://test_format")

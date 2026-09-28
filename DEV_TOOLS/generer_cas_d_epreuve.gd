@@ -2,8 +2,8 @@ extends SceneTree
 ##
 ## ÉCRIT LES CAS D'ÉPREUVE à côté de chaque greffon :
 ##   - ceux de la RÈGLE DE POSE (`FormatNeutre.cas_d_epreuve()`) → `conformance.json`, les trois greffons ;
-##   - ceux des OUTILS D'ÉDITION (`EpreuveOutils.cas_d_epreuve()`) → `tools_conformance.json`, Unity et
-##     Unreal. Le greffon Godot gratuit peint au pinceau natif du GridMap : il n'a pas ces outils.
+##   - ceux des OUTILS D'ÉDITION (`EpreuveOutils.cas_d_epreuve()`) → `tools_conformance.json`, les trois
+##     greffons (Godot depuis le 28 septembre 2026).
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/generer_cas_d_epreuve.gd
@@ -20,6 +20,7 @@ const CIBLES := [
 	"res://engines/unreal/MarchingBlocksPaint/Tests/conformance.json",
 ]
 const CIBLES_OUTILS := [
+	"res://addons/marchingblocks_paint/tools_conformance.json",
 	"res://engines/unity/com.marchingblocks.paint/Tests/tools_conformance.json",
 	"res://engines/unreal/MarchingBlocksPaint/Tests/tools_conformance.json",
 ]

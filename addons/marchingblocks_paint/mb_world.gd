@@ -29,6 +29,9 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 ## Rebuild while painting in the editor. Turn off for huge maps and call rebuild() yourself.
 @export var live_update := true
 
+## The floor the Grid aim paints on, in cells (Page Up / Page Down with the MarchingBlocks toolbar).
+@export var floor_y := 0
+
 var _loaded := {}
 var _fingerprint := -1
 var _last := {"tiles": 0, "missing": 0, "error": ""}
@@ -90,6 +93,51 @@ func rebuild() -> Dictionary:
 		placed += 1
 	_last = {"tiles": placed, "missing": missing, "error": ""}
 	return _last
+
+
+## The painted cells, {Vector3i: true} — read from the Cells grid, the only truth.
+func cells() -> Dictionary:
+	var d := {}
+	var grid := get_node_or_null("Cells") as GridMap
+	if grid != null:
+		for c in grid.get_used_cells():
+			d[c] = true
+	return d
+
+
+## Applies what a tool returned: clears, then sets, then rebuilds once. Arrays or Dictionaries of
+## Vector3i. The editor calls it from its undo actions — undoing is apply_cells(clear, set).
+func apply_cells(set_cells: Variant, clear_cells: Variant) -> void:
+	_build_children()
+	var grid := get_node("Cells") as GridMap
+	for c in clear_cells:
+		grid.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+	for c in set_cells:
+		grid.set_cell_item(c, 0)
+	rebuild()
+
+
+## A world-space point or direction in CELL space (cell c covers [c, c+1]).
+func world_to_cells(p: Vector3) -> Vector3:
+	return (global_transform.affine_inverse() * p) / cell_size
+
+
+func world_direction_to_cells(d: Vector3) -> Vector3:
+	return (global_transform.affine_inverse().basis * d) / cell_size
+
+
+## The cell of the floor plane under a world ray, or null.
+func cell_under_ray(origin: Vector3, direction: Vector3) -> Variant:
+	var o := world_to_cells(origin)
+	var d := world_direction_to_cells(direction)
+	if absf(d.y) < 1e-6:
+		return null
+	var t := (floor_y - o.y) / d.y
+	if t <= 0.0:
+		return null
+	var hit := o + d * t
+	# Cell c covers [c, c+1]: the FLOOR of the hit, never a rounding.
+	return Vector3i(floori(hit.x), floor_y, floori(hit.z))
 
 
 func _build_children() -> void:

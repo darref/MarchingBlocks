@@ -481,14 +481,14 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   en miroir ×100, synthétique), vert.
   ⚠ Unity RÉÉCRIT le manifeste d'un projet neuf avec son gabarit (une cinquantaine de modules) : il est
   remis au minimum, et reste stable aux ouvertures suivantes.
-- **LES OUTILS D'ÉDITION DE MONDE DANS LES GREFFONS — DEMANDÉ PAR JORDAN (28 septembre 2026).** Unity et
-  Unreal reçoivent les outils de l'appli : visée Grid / Sculpt / Navigate, Add, Dig, Select, Rect, Box
+- **LES OUTILS D'ÉDITION DE MONDE DANS LES GREFFONS — DEMANDÉ PAR JORDAN (28 septembre 2026).** Godot,
+  Unity et Unreal reçoivent les outils de l'appli : visée Grid / Sculpt / Navigate, Add, Dig, Select, Rect, Box
   (creuse ou non), pinceau sphère / cube / disque de 1 à 7, Fill, Delete, Extrude ↑ ↓ (l'étage suit),
   Grow, Shrink, Connected, déplacer (les flèches suivent la caméra), copier / couper / coller.
   ⚠ **TROIS IMPLÉMENTATIONS, UNE RÉFÉRENCE : `outils.gd`.** Même parade que pour la règle de pose :
   `epreuve_outils.gd` CALCULE les cas avec `outils.gd` et les écrit en anglais dans
   `tools_conformance.json` (69 cas : rayons, ancre, pinceaux, modifications, sept opérations de
-  sélection, boîtes, déplacer, copier, coller), livré avec Unity et Unreal. `test_greffon_peinture`
+  sélection, boîtes, déplacer, copier, coller), livré avec les TROIS greffons. `test_greffon_peinture`
   rougit s'il est PÉRIMÉ, et vérifie qu'il exerce ce qu'il nomme — rayons qui touchent ET qui manquent,
   égalité exacte, borne dépassée, boîte réellement évidée, chaque opération. La traduction des noms
   (`remplir` → `fill`…) vit dans `epreuve_outils.gd` ET NULLE PART AILLEURS.
@@ -499,6 +499,22 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   ne changeait aucun cas, parce que les seules égalités exercées étaient celles d'un rayon parallèle à
   un axe, où deux composantes sont à l'infini. Un rayon diagonal (|dx| = |dy|) départage bel et bien un
   franchissement simultané — ajouté, il rougit.
+  - **Godot** : `mb_tools.gd` (les outils, en anglais, sans rien charger du cœur), `mb_editor.gd` (visée,
+    coups, boîte, collage, touches, aperçu — un nœud autonome, donc éprouvable en headless) et
+    `plugin.gd` (la barre au-dessus de la vue 3D, le relais de `_forward_3d_gui_input`). Le pinceau natif
+    du GridMap reste, sur l'enfant `Cells`. **MESURÉ** (`test_greffon_peinture`) : 69 cas sur 69, et les
+    GESTES menés par une vraie caméra et de vrais événements — un clic Grid pose, Ctrl+Z et Ctrl+Y,
+    Sculpt contre la face, le verrou de coup, Rect → Fill → Extrude avec l'étage qui suit et revient à
+    l'annulation, Navigate qui laisse le clic à l'éditeur. **Huit mutations, toutes rouges.**
+    ⚠ **LES DEUX ANNULATIONS DE GODOT NE PARLENT PAS PAREIL** : `UndoRedo.add_do_method` prend un
+    `Callable`, `EditorUndoRedoManager.add_do_method` prend (objet, méthode, arguments). Supposé
+    identique, vu faux au premier essai ; `_call_in_undo` parle à chacune sa langue.
+    ⚠ **UNE SECTION DE TEST A SAUTÉ EN SILENCE ET LA SUITE A DIT « OK »** : `mb_editor.gd` ne compilait
+    pas, `.new()` a levé une erreur d'exécution, Godot a abandonné la fonction et continué le reste. La
+    suite exige désormais que chaque script du greffon se CHARGE avant de l'éprouver — et cette garde a
+    aussitôt attrapé un `match` en ligne que `plugin.gd` ne savait pas lire.
+    ⚠ **CE QUI N'EST PAS ÉPROUVÉ** : `plugin.gd` dans l'éditeur (la barre, le relais) — un greffon
+    d'éditeur ne se teste pas en headless ; il se juge souris en main.
   - **Unity** : `MBTools.cs` (C# pur, classe `MBTools` et enum `BrushTool` — ⚠ `Tools` et `Tool` entrent
     en collision avec `UnityEditor.Tools` et `UnityEditor.Tool`, mesuré à la compilation : le code d'un
     acheteur qui écrit `using UnityEditor; using MarchingBlocks.Paint;` aurait buté dessus). Le
@@ -538,8 +554,7 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
   un GameObject par tuile : à mesurer sur une vraie carte) ; **compiler le greffon Unreal** (il faut un
-  Unreal 5.3+ et Visual Studio) ; les outils d'édition dans le greffon GODOT gratuit, qui peint encore au
-  pinceau natif du GridMap.
+  Unreal 5.3+ et Visual Studio).
 
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
@@ -730,12 +745,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 731 vérifications, 0 échec** (28 septembre 2026, recomptées après les outils des greffons
-  et Navigate), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
+  Onze suites, **7 757 vérifications, 0 échec** (28 septembre 2026, recomptées après les outils du greffon
+  Godot), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
   69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6 (9 tests) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 57.
+  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 83.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
