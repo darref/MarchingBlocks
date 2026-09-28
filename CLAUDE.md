@@ -240,6 +240,85 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
   UN endroit réapparaîtra ailleurs. **Un atlas ne porte pas d'unicité** — c'est le modèle, pas un
   défaut, et l'acheteur doit le lire AVANT d'acheter.
 
+### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
+
+La question posée : un rocher sculpté À CHEVAL sur un plan de coupe peut-il se retrouver dans le monde
+peint tel qu'il était dans le témoin ? Aujourd'hui, NON : le trancheur le coupe en deux, la découpe ne
+referme pas la coupe (§4, voulu), et chaque moitié part avec son exemplaire. Posée à côté d'une voisine
+qui n'a pas l'autre moitié, elle fait une **demi-coque ouverte**, et sa matière devient du « sol de
+roche » de la clé qui l'a reçue.
+
+⚠ **« QUEL QUE SOIT L'AGENCEMENT » EST IMPOSSIBLE, ET CE N'EST PAS UNE AFFAIRE DE CODE.** Une tuile ne
+connaît que ses 8 cases ; ce qui traverse une coupe dépend des DEUX côtés. Si le monde met côte à côte
+deux voisinages qui ne se sont jamais rencontrés dans le témoin, personne n'a sculpté ce qui va là.
+Élargir le voisinage (3³ cases) ferait passer de 2⁸ à 2²⁷ configurations. Ce qu'on peut tenir :
+**exact partout où le monde reprend un voisinage du témoin, absent ailleurs.**
+
+**DÉCIDÉ — deux sortes de matière dans le travail :**
+
+- **LE TERRAIN est MONOLITHIQUE** : une seule coque connexe, qui respecte le contrat de couture sur les
+  plans de coupe. Il est tranché comme aujourd'hui ; **la règle de pose des tuiles ne change pas**.
+- **TOUT LE RESTE EST UN PROP** : rochers, souches, décor. Jamais tranché, il part ENTIER, peut
+  traverser les coupes et déborder sur les voisines.
+- ⚠ **LE MONOLITHE REND LES PROPS DÉDUCTIBLES — c'est ce qui le justifie.** Toute composante connexe
+  du `.glb` autre que la coque de terrain est un prop, quels que soient son nom et l'objet Blender qui
+  la porte (§4 : on déduit, on ne déclare pas ; un nom ne survit pas à une séance de travail).
+- ⚠ **UN ROCHER FUSIONNÉ PAR BOOLÉEN EST DU TERRAIN** : il sera tranché, et la demi-coque revient —
+  `verifier_couture` le voit en remarque. On le dit à l'artiste : *garde tes props séparés*.
+
+**DÉCIDÉ — le rattachement, « niveau 2 » :**
+
+- Un prop est rattaché au **sommet dont la région contient son ANCRE** et voyage avec la clé,
+  l'exemplaire et le quart de tour de cette tuile. L'ancre (centre de sa boîte, ou point le plus bas)
+  est **OUVERTE, à mesurer**.
+- ⚠ **IL RETIENT LES CLÉS DES SOMMETS SUR LESQUELS IL DÉBORDE dans le témoin, et ne se pose que si le
+  monde porte les mêmes** (au quart de tour du rattachement près). Un rocher ABSENT vaut mieux qu'un
+  rocher planté dans une falaise qui n'était pas là au témoin — c'est la ligne du §3 : l'absence se
+  voit, jamais un faux.
+- ⚠ **LA CONDITION PORTE SUR LES CLÉS, PAS SUR LES EXEMPLAIRES.** Le tirage étant haché par position,
+  une condition d'exemplaire n'aboutirait presque jamais ; près d'une coupe, le contrat de couture rend
+  les exemplaires d'une clé interchangeables. ⚠ Le risque restant : un exemplaire qui s'écarte beaucoup
+  de son profil LOIN de la coupe laisse flotter un prop qui déborde jusque-là. Responsabilité de
+  l'artiste, comme la connectivité.
+- ⚠ **UN PROP S'AJOUTE, IL NE REMPLACE RIEN** : aucun arbitrage entre candidats, aucune tuile ne
+  change, et la reconstruction reste déterministe et locale (§3, « le tirage est déterminé par la
+  position »). C'est pourquoi ce niveau a été préféré aux « ensembles » de tuiles posés d'un bloc, qui
+  demandaient de changer la règle de pose et une résolution de conflits.
+- **Le pipeline qui doit suivre** : l'import sépare les composantes ; le tranchage ne voit que le
+  terrain ; la récolte des props se fait par exemplaire (ancre, sommet, clés débordées) ; le format
+  neutre les porte (props et condition dans `tileset.json`, maillages dans `tiles.glb` — encore v1,
+  rien n'est publié) ; **les trois greffons posent les props dont la condition tient**, et
+  `conformance.json` le garde, avec les trois bancs. Preuve de bout en bout : sur la forme du témoin,
+  chaque prop se retrouve triangle pour triangle (l'empreinte, §4).
+- **Deux mesures AVANT le code** : (1) le témoin exporté est-il lui-même d'UN SEUL TENANT ? S'il part
+  en plusieurs composantes, « tout le reste est un prop » prendrait des morceaux de terrain pour des
+  rochers ; (2) un `.glb` d'essai portant un rocher à cheval sur une coupe : l'import l'isole-t-il, et
+  le terrain se tranche-t-il comme avant ?
+
+### La TEXTURE : la discipline de l'artiste — DÉCIDÉ (Jordan, 28 septembre 2026)
+
+Ce que l'artiste peint au CŒUR d'une tuile arrive tel quel dans le monde : `decoupe.gd` transporte les
+UV, chaque tuile emporte sa part du dessin. Tout se joue aux COUPES, où la voisine du monde n'est pas
+celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour.
+
+- **DÉCIDÉ — pas de fondu, pas de projection en jeu : c'est la DISCIPLINE DE L'ARTISTE.** Écartées :
+  une bande de fondu vers une matière de base projetée en espace monde (elle demandait un shader dans
+  chacun des trois greffons) et la texture entièrement projetée (elle interdisait tout dessin propre à
+  une tuile).
+- **LA RÈGLE À LUI ÉCRIRE** : *le long de chaque plan de coupe, la texture doit être la MÊME pour toutes
+  les tuiles — sur les quatre bords, dans les deux sens.* En pratique : près des coupes, une matière
+  tuilable projetée ; le dessin libre au cœur. Les props, entiers, n'y sont pas soumis.
+- ⚠ **ON PRÉVIENT : LE TÉMOIN NE S'ENVOIE PAS À UN TEXTUREUR AUTOMATIQUE (Tripo et semblables).** Un tel
+  outil peint le bloc comme UN objet : la texture est continue à travers les coupes, donc parfaite dans
+  le témoin et cassée à chaque couture du monde peint. Le témoin MENT alors sur le rendu. Ça s'écrit
+  dans la documentation de l'artiste et sur la page de vente, AVANT l'achat (§10).
+- **PROPOSÉ** : une remarque de couture de TEXTURE — échantillonner l'image de chaque tuile le long de
+  ses bords de coupe et comparer entre voisines possibles, comme `verifier_couture` le fait pour la
+  géométrie. Une remarque, jamais une erreur : le trancheur ne juge pas l'art (§3).
+- **PROPOSÉ, non tranché** : le MODE CANONIQUE — griser au témoin tous les exemplaires sauf un par clé
+  (52 à peindre au lieu de 541), le choix canonique vivant à UN endroit du cœur (« quart de tour 0
+  d'abord » à mesurer). Il réduit le nombre de raccords à tenir ; il ne les supprime pas.
+
 ---
 
 ## 4. Le pipeline — l'aller-retour qui prouve tout
@@ -976,7 +1055,12 @@ désormais le greffon.
      l'ANCIENNE image en place : je l'ai lue une fois comme si c'était la nouvelle. Écrire ailleurs,
      et vérifier la date du fichier avant de le regarder (§6, « le sujet a-t-il changé »).
 9. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
+9 bis. **LE TERRAIN MONOLITHIQUE ET LES PROPS RATTACHÉS** (§3) — DÉCIDÉ, pas écrit. D'abord les deux
+   mesures (le témoin est-il d'un seul tenant ; un `.glb` d'essai avec un rocher sur une coupe), puis
+   l'import et la récolte, puis le format et les trois greffons.
 10. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
+    ⚠ **ET LA TEXTURE : LE TÉMOIN NE S'ENVOIE PAS À TRIPO** ni à aucun textureur automatique (§3) —
+    à écrire sur la page avant la vente.
     ⚠ **ET UNE LIMITE À ÉCRIRE AVANT LA VENTE, PAS APRÈS** : un atlas ne porte pas d'unicité
     (§3). Une clé vue 81 fois porte 81 exemplaires, pas 81 emplacements — un détail sculpté à UN
     endroit réapparaît ailleurs. L'acheteur doit le lire avant d'acheter, jamais le découvrir.
