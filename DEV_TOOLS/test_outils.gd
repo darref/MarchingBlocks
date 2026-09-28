@@ -149,6 +149,50 @@ func _initialize() -> void:
 	_egal(col["selection"], {Vector3i(9, 0, 0): true, Vector3i(10, 0, 0): true}, "et sélectionne ce qu'il a collé")
 	_egal(Outils.copier(semis, {Vector3i(7, 7, 7): true}), [], "copier du vide rend un presse-papiers vide")
 
+	# ── LE VOLUME D'UNE BOÎTE, ET REMPLIR ──────────────────────────────────────
+	#
+	# ⚠ **CE QUI EST GARDÉ, ET POURQUOI.** `dans_la_boite` ne rendait que la MATIÈRE : un pavé vide
+	# n'avait aucune existence, donc on ne pouvait pas désigner une pièce AVANT de la bâtir, et ni Fill
+	# ni Extrude n'avaient de prise (Jordan, 28 septembre 2026). `volume_de_la_boite` rend les cases,
+	# pleines ou vides ; `remplir` y pose la matière.
+	# ⚠ **L'ATTENDU EST ÉCRIT À LA MAIN**, jamais recomposé par la fonction éprouvée (charte §6).
+	print("\n── le volume d'une boîte, et remplir")
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 0, 0), Vector3i(1, 1, 1)).size(), 8,
+		"un pavé de 2³ porte 8 cases, pleines ou vides")
+	_egal(Outils.volume_de_la_boite(Vector3i(2, 5, -3), Vector3i(2, 5, -3)),
+		{Vector3i(2, 5, -3): true}, "un pavé d'une seule case, en coordonnées négatives")
+	_egal(Outils.volume_de_la_boite(Vector3i(3, 0, 0), Vector3i(0, 0, 0)).size(), 4,
+		"les coins se donnent dans n'importe quel ordre")
+	# ⚠ LE RECTANGLE PLAT : une seule épaisseur en y, donc 3×3 cases et pas 27.
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 4, 0), Vector3i(2, 4, 2)).size(), 9,
+		"un rectangle à plat sur un étage rend ses 3×3 cases")
+
+	var creux3: Dictionary = Outils.volume_de_la_boite(Vector3i(0, 0, 0), Vector3i(2, 2, 2), true)
+	_egal(creux3.size(), 26, "une boîte creuse de 3³ rend 27 cases moins son cœur")
+	_vrai(not creux3.has(Vector3i(1, 1, 1)), "et le cœur retiré est bien le centre")
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 0, 0), Vector3i(4, 4, 4), true).size(), 125 - 27,
+		"une boîte creuse de 5³ retire son cube intérieur de 3³")
+	# ⚠ **UNE BOÎTE SANS DEDANS RESTE PLEINE**, et c'est juste : la vider rendrait un geste sans effet
+	# que rien n'expliquerait à l'écran.
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 4, 0), Vector3i(2, 4, 2), true).size(), 9,
+		"un rectangle plat n'a pas d'intérieur : le creux le laisse entier")
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 0, 0), Vector3i(1, 1, 1), true).size(), 8,
+		"un pavé de 2³ non plus")
+	# ⚠ LA BORNE : deux coins éloignés par un rayon perdu ne doivent pas gêler l'écran.
+	_egal(Outils.volume_de_la_boite(Vector3i(0, 0, 0), Vector3i(999, 999, 999)), {},
+		"un volume déraisonnable rend vide plutôt que de ramer")
+
+	var rangee2 := {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true}
+	var rangee3 := {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true, Vector3i(2, 0, 0): true}
+	var rempli: Dictionary = Outils.operer_selection(rangee2, rangee3, "remplir")
+	_egal(rempli["poser"], {Vector3i(2, 0, 0): true},
+		"remplir ne pose que dans les cases VIDES de la sélection")
+	_egal(rempli["effacer"], {}, "remplir n'efface jamais rien")
+	_egal(rempli["selection"], rangee3,
+		"et la sélection ne bouge pas : remplir, extruder, remplir est le geste qui monte une pièce")
+	_egal(Outils.operer_selection(rangee3, rangee3, "remplir")["poser"], {},
+		"remplir une sélection déjà pleine ne pose rien")
+
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)

@@ -20,6 +20,9 @@ signal coup_fini
 signal selection_changee
 ## Le clic qui pose le presse-papiers : l'ancre, contre la face visée comme une case qu'on ajoute.
 signal colle(ancre: Vector3i)
+## Une boîte au-delà de `Outils.VOLUME_MAXI` cases rend vide : l'écran doit le DIRE, sinon le glissé
+## semble ne rien faire.
+signal boite_trop_grande
 
 const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
 const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
@@ -62,6 +65,9 @@ var visee := "grille"
 var outil := "ajouter"
 var taille := 1
 var forme := "sphere"
+## ⚠ **HOLLOW NE VAUT QUE POUR LA BOÎTE 3D.** Un rectangle du plan n'a pas de dedans : l'évidemment
+## d'une boîte de moins de trois cases d'épaisseur la laisse pleine (`Outils.volume_de_la_boite`).
+var creux := false
 ## La SÉLECTION — des cases de la couche active. ⚠ Un état d'écran, pas une donnée : elle n'est ni
 ## enregistrée ni annulable, et se vide quand on change de couche.
 var selection := {}
@@ -424,7 +430,7 @@ func _survoler(position: Vector2) -> void:
 	if not collage.is_empty():
 		_survoler_collage(position)
 		return
-	if outil == "boite":
+	if outil == "boite" or outil == "rect":
 		_survoler_boite(position)
 		return
 	if point.is_empty() or cases() == null:
@@ -488,8 +494,8 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 				colle.emit(Outils.ancre("ajouter", point))
 		annuler_collage()
 		return
-	if outil == "boite":
-		var depart := point_vise(position, "selectionner")
+	if outil == "boite" or outil == "rect":
+		var depart := _coin_vise(position)
 		if depart.is_empty():
 			return
 		_coup = bouton
@@ -508,10 +514,30 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 	_toucher(position)
 
 
-## LA BOÎTE : un coin au clic, l'autre sous la souris ; au relâché, la matière entre les deux devient
-## la sélection. Maj ajoute, le clic droit retire — les mêmes réflexes que le pinceau de sélection.
+## LE COIN VISÉ PAR UN GLISSÉ DE BOÎTE OU DE RECTANGLE.
+##
+## ⚠ **LE RECTANGLE IGNORE LA VISÉE, ET C'EST TOUT SON INTÉRÊT.** Il se pose toujours à PLAT sur le
+## plan de l'étage courant, même en visée Sculpt : c'est le geste qui trace le sol d'une pièce, puis
+## qu'on extrude étage par étage. Le laisser suivre la matière le rendrait bosselé, donc inutilisable
+## pour poser un plan.
+func _coin_vise(position: Vector2) -> Dictionary:
+	if outil == "rect":
+		var c = case_sous(position)
+		if c == null:
+			return {}
+		return {"touche": false, "case": c, "normale": Vector3i.ZERO}
+	return point_vise(position, "selectionner")
+
+
+## LA BOÎTE : un coin au clic, l'autre sous la souris ; au relâché, le VOLUME entre les deux devient la
+## sélection. Maj ajoute, le clic droit retire — les mêmes réflexes que le pinceau de sélection.
+##
+## ⚠ **ELLE PRENAIT LA MATIÈRE, ELLE PREND DÉSORMAIS LE VOLUME** (`volume_de_la_boite`). C'est ce qui
+## permet de désigner une pièce AVANT de la bâtir : un pavé vide n'avait aucune existence, donc ni
+## Fill ni Extrude n'avaient de prise. Les opérations qui veulent de la matière la filtrent à l'usage,
+## donc rien de ce qui marchait ne change (Delete efface toujours la seule matière du pavé).
 func _survoler_boite(position: Vector2) -> void:
-	var point := point_vise(position, "selectionner")
+	var point := _coin_vise(position)
 	if _coin_boite == null:
 		# Pas encore de tracé : on montre la case où la boîte commencerait.
 		_boite_vue.visible = false
@@ -530,11 +556,19 @@ func _survoler_boite(position: Vector2) -> void:
 	_boite_vue.scale = taille_boite
 	_boite_vue.position = Vector3(bas) + taille_boite * 0.5
 	_boite_vue.visible = true
-	_remplir(_apercu, Outils.dans_la_boite(_occupees_actives(), a, b).keys(), TEINTE_SELECTIONNER)
+	_remplir(_apercu, _volume_vise(a, b).keys(), TEINTE_SELECTIONNER)
+
+
+## Le volume que ce glissé désigne. ⚠ `creux` ne s'applique qu'à la boîte : évider un rectangle plat
+## n'aurait aucun sens, et `volume_de_la_boite` le rendrait plein de toute façon.
+func _volume_vise(a: Vector3i, b: Vector3i) -> Dictionary:
+	return Outils.volume_de_la_boite(a, b, creux and outil == "boite")
 
 
 func _finir_boite(bouton: int) -> void:
-	var dedans: Dictionary = Outils.dans_la_boite(_occupees_actives(), _coin_boite, _coin_fin)
+	var dedans: Dictionary = _volume_vise(_coin_boite, _coin_fin)
+	if dedans.is_empty():
+		boite_trop_grande.emit()
 	var nouvelle: Dictionary = selection.duplicate() if _maj_du_coup or bouton == MOUSE_BUTTON_RIGHT else {}
 	for c in dedans:
 		if bouton == MOUSE_BUTTON_RIGHT:
@@ -594,13 +628,15 @@ func regler_selection(nouvelle: Dictionary) -> void:
 	selection_changee.emit()
 
 
-## ⚠ ON NE MONTRE QUE LA SÉLECTION QUI EST ENCORE DE LA MATIÈRE : un Ctrl+Z peut avoir retiré des cases
-## sous elle.
+## ⚠ **ON MONTRE TOUTE LA SÉLECTION, CASES VIDES COMPRISES — ET C'ÉTAIT L'INVERSE.** Elle ne montrait
+## que ce qui était encore de la MATIÈRE, ce qui avait un sens quand une sélection ne pouvait en porter
+## d'autre. Depuis le rectangle et le pavé, tracer une pièce vide ne dessinait **rien** : on désignait
+## un volume sans le voir, donc on ne pouvait ni le remplir ni l'extruder avec confiance.
 func _dessiner_selection() -> void:
 	if _selection_vue == null:
 		return
-	var vivantes: Array = selection.keys().filter(_occupe_actif) if mode == "monde" else []
-	_remplir(_selection_vue, vivantes, TEINTE_SELECTION)
+	var vues: Array = selection.keys() if mode == "monde" else []
+	_remplir(_selection_vue, vues, TEINTE_SELECTION)
 
 
 ## Rafraîchit ce qui dépend des cases : à rappeler après chaque changement de monde.

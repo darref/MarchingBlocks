@@ -120,8 +120,16 @@ static func modification(outil: String, cibles: Array, occupe: Callable) -> Dict
 ##                       paroi ;
 ##   grandir           — ajoute la matière qui touche la sélection par une face ;
 ##   retrecir          — retire ce qui touche une case non sélectionnée ;
-##   connexe           — toute la matière reliée à la sélection par des faces.
-## ⚠ La sélection rendue ne porte que de la MATIÈRE : une case vide sélectionnée ne sert à rien.
+##   connexe           — toute la matière reliée à la sélection par des faces ;
+##   remplir           — POSE de la matière dans chaque case sélectionnée qui est vide.
+##
+## ⚠ **UNE SÉLECTION EST UN ENSEMBLE DE CASES, PLEINES OU VIDES — ET CE COMMENTAIRE DISAIT L'INVERSE.**
+## Il annonçait « la sélection rendue ne porte que de la MATIÈRE : une case vide ne sert à rien »,
+## alors que `extruder_haut` posait déjà `apres[p]` sans regarder `occupees`. La phrase était une
+## seconde description qui avait divergé de son code (charte §6) — et elle empêchait de concevoir
+## `remplir`, qui n'a de sens que sur des cases VIDES.
+## ⚠ Les opérations qui ont besoin de matière la filtrent à l'usage (`supprimer`, `copier`,
+## `deplacer`, `grandir`, `connexe`) : une sélection de VOLUME ne leur enlève rien.
 static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: String) -> Dictionary:
 	var poser := {}
 	var effacer := {}
@@ -156,6 +164,13 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 						break
 				if interieur:
 					apres[c] = true
+		"remplir":
+			# ⚠ **ON NE TOUCHE PAS À LA SÉLECTION** : remplir puis extruder puis remplir est le geste
+			# qui monte une pièce, et il demande que la sélection reste où elle est.
+			for c in selection:
+				apres[c] = true
+				if not occupees.has(c):
+					poser[c] = true
 		"connexe":
 			var file: Array = []
 			for c in selection:
@@ -170,6 +185,41 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 						apres[v] = true
 						file.append(v)
 	return {"poser": poser, "effacer": effacer, "selection": apres}
+
+
+## LE VOLUME D'UNE BOÎTE — TOUTES les cases entre deux coins, bornes comprises, pleines ou vides.
+##
+## ⚠ **C'EST CE QUI DISTINGUE UNE BOÎTE D'UN PINCEAU DE SÉLECTION**, et ce qui rend `remplir` possible :
+## on désigne un VOLUME à bâtir, pas une matière à reprendre. `dans_la_boite` (qui ne rend que la
+## matière) reste pour qui veut l'autre question.
+##
+## `creux` — ne garde que la PEAU du pavé : la salle creuse de Jordan. ⚠ Une boîte de moins de trois
+## cases d'épaisseur sur un axe n'a pas d'intérieur : elle est alors pleine, et c'est juste — vider ce
+## qui n'a pas de dedans rendrait une boîte VIDE, donc un geste sans effet que rien n'expliquerait.
+##
+## ⚠ **ON BORNE LE VOLUME**, parce qu'ici on parcourt la BOÎTE et non la matière : deux coins éloignés
+## par accident (un rayon perdu à l'horizon) demanderaient des millions de cases et gèleraient l'écran.
+## Au-delà, on rend vide plutôt que de ramer — l'appelant le DIT.
+const VOLUME_MAXI := 262144
+
+
+static func volume_de_la_boite(a: Vector3i, b: Vector3i, creux := false) -> Dictionary:
+	var bas := Vector3i(mini(a.x, b.x), mini(a.y, b.y), mini(a.z, b.z))
+	var haut := Vector3i(maxi(a.x, b.x), maxi(a.y, b.y), maxi(a.z, b.z))
+	var etendue: Vector3i = haut - bas + Vector3i.ONE
+	if etendue.x * etendue.y * etendue.z > VOLUME_MAXI:
+		return {}
+	var dedans := {}
+	for x in range(bas.x, haut.x + 1):
+		for y in range(bas.y, haut.y + 1):
+			for z in range(bas.z, haut.z + 1):
+				if creux \
+						and x > bas.x and x < haut.x \
+						and y > bas.y and y < haut.y \
+						and z > bas.z and z < haut.z:
+					continue
+				dedans[Vector3i(x, y, z)] = true
+	return dedans
 
 
 ## LA SÉLECTION EN BOÎTE — la matière entre deux coins, bornes comprises.

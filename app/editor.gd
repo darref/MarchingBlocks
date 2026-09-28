@@ -90,8 +90,17 @@ var _dialogue: FileDialog
 var _action_fichier := ""
 
 ## Le `.glb` importé, RELU au moment de trancher : l'artiste a pu réenregistrer entre-temps.
-var _travail := ""
-var _travail_maillage: ArrayMesh
+## ⚠ **UNE GRILLE DE TRAVAUX, PAS UN SEUL — DEMANDÉ PAR JORDAN (28 septembre 2026).** Un seul travail
+## tenait dans `_travail` : réimporter en écrasait la mémoire, et comparer deux sculptures demandait
+## de réimporter à chaque fois. Chaque import s'ajoute désormais à la liste ; on en choisit un, on le
+## voit, puis on le tranche.
+## ⚠ **LA LISTE NE SURVIT PAS À LA SESSION** — `projet.gd` porte les couches et leurs cases, pas les
+## fichiers sources. C'est OUVERT : les y mettre demanderait de traiter un chemin devenu invalide.
+var _travaux: Array = []
+var _travail_actif := -1
+var _liste_travaux: VBoxContainer
+var _vide_travaux: Label
+var _etiquette_cible: Label
 
 ## LES COUCHES (`projet.gd`), dans l'ordre des massifs de la vue : {nom, source, pbr, visible}.
 ## ⚠ LEURS CASES N'Y SONT PAS : elles vivent dans la grille `Cases` de chaque massif, seule autorité ;
@@ -119,6 +128,7 @@ var _boutons_outil := {}
 var _taille: HSlider
 var _valeur_taille: Label
 var _boutons_forme := {}
+var _creux: CheckButton
 var _bouton_coller: Button
 var _compteur_etage: SpinBox
 var _section_selection: Control
@@ -214,6 +224,9 @@ func _batir() -> void:
 	_vue.touche.connect(_touche)
 	_vue.selection_changee.connect(_selection_changee)
 	_vue.colle.connect(_colle)
+	_vue.boite_trop_grande.connect(func() -> void:
+		_dire("[color=#e0603c]Box too large[/color] — more than %d cells. Draw a smaller one." \
+			% Outils.VOLUME_MAXI))
 	corps.add_child(_vue)
 
 	_gauche = _panneau(corps, true, LARGEUR_GAUCHE)
@@ -483,18 +496,80 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	temoin.contenu.add_child(_bouton("Show the witness", "Back to the computed witness.",
 		func() -> void: _travail_vu(false), "cube"))
 
-	var echange := Section.new("Artist round trip", true, Icones.icone("exporter"))
-	pile.add_child(echange)
-	echange.contenu.add_child(_texte("Send the witness to Blender (.obj), bring the sculpted .glb back.", 11,
-		Palette.GRIS))
-	echange.contenu.add_child(_bouton("Export the witness…",
+	# ── LES COUCHES — où tout atterrit, donc AVANT les étapes qui y déposent.
+	var couches := Section.new("Layers", true, Icones.icone("couches"))
+	pile.add_child(couches)
+	_sections_monde.append(couches)
+	couches.contenu.add_child(_texte("A layer holds its own cells AND its own tiles. Slicing dresses "
+		+ "the ACTIVE one.", 11, Palette.GRIS))
+	_liste_couches = VBoxContainer.new()
+	_liste_couches.add_theme_constant_override("separation", 4)
+	couches.contenu.add_child(_liste_couches)
+	_nom_couche = LineEdit.new()
+	_nom_couche.placeholder_text = "rename the active layer"
+	_nom_couche.text_submitted.connect(func(_t: String) -> void: _renommer_couche())
+	_nom_couche.focus_exited.connect(_renommer_couche)
+	couches.contenu.add_child(_nom_couche)
+	couches.contenu.add_child(_rangee([
+		_bouton("New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche,
+			"plus"),
+		_bouton("Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche,
+			"poubelle", Palette.DANGER),
+	]))
+
+	# ── LES QUATRE ÉTAPES — DEMANDÉ PAR JORDAN (28 septembre 2026).
+	#
+	# ⚠ **L'ORDRE EST LE MODE D'EMPLOI.** Les mêmes boutons étaient là, mais répartis entre « Artist
+	# round trip » à gauche et « Slice » / « Export to engines » à droite, au milieu des outils : rien
+	# ne disait qu'ils formaient UNE chaîne, ni dans quel sens la parcourir. Numérotés et mis bout à
+	# bout, ils se lisent sans manuel — et la barre de droite ne garde que ce qui édite.
+	pile.add_child(_petit_titre("THE ROUND TRIP"))
+
+	var etape1 := Section.new("1 · Export the witness", true, Icones.icone("exporter"))
+	pile.add_child(etape1)
+	etape1.contenu.add_child(_texte("Send the block to Blender as one welded .obj.", 11, Palette.GRIS))
+	etape1.contenu.add_child(_bouton("Export the witness…",
 		"Writes the witness as ONE .obj (+ its .mtl) for Blender — fully welded, six named materials.\n"
 		+ "Do not MOVE it: its position identifies it "
 		+ "when it comes back, not its name.\nTiles are already shrunk to half their cell, to show "
 		+ "the margin you have.", func() -> void: _demander("exporter"), "exporter", Palette.PRINCIPAL))
-	echange.contenu.add_child(_bouton("Import the work…",
-		"Reads the sculpted .glb (or .obj) and SHOWS it, as the slicer will read it.\nNothing is sliced yet.",
-		func() -> void: _demander("importer"), "importer"))
+
+	var etape2 := Section.new("2 · Import your work", true, Icones.icone("importer"))
+	pile.add_child(etape2)
+	etape2.contenu.add_child(_texte("Bring the sculpted .glb back. Each import is kept here — pick "
+		+ "the one you want to slice.", 11, Palette.GRIS))
+	etape2.contenu.add_child(_bouton("Import the work…",
+		"Reads the sculpted .glb (or .obj) and SHOWS it, as the slicer will read it.\nNothing is "
+		+ "sliced yet.", func() -> void: _demander("importer"), "importer"))
+	_liste_travaux = VBoxContainer.new()
+	_liste_travaux.add_theme_constant_override("separation", 4)
+	etape2.contenu.add_child(_liste_travaux)
+	_vide_travaux = _texte("No work imported yet.", 11, Palette.GRIS)
+	etape2.contenu.add_child(_vide_travaux)
+
+	var etape3 := Section.new("3 · Slice into the active layer", true, Icones.icone("couteau"))
+	pile.add_child(etape3)
+	_sections_monde.append(etape3)
+	_etiquette_cible = _texte("", 11, Palette.OLIVE)
+	etape3.contenu.add_child(_etiquette_cible)
+	etape3.contenu.add_child(_texte("Gives the ACTIVE layer its tiles. Its painted cells never move.",
+		11, Palette.GRIS))
+	etape3.contenu.add_child(_bouton("Slice the selected work",
+		"Re-reads the work you picked above, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
+		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL))
+	etape3.contenu.add_child(_bouton("Slice the witness",
+		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
+		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
+
+	var etape4 := Section.new("4 · Export to engines", true, Icones.icone("exporter"))
+	pile.add_child(etape4)
+	_sections_monde.append(etape4)
+	etape4.contenu.add_child(_texte("Writes the ACTIVE layer's tiles as a .mbset folder — read by the "
+		+ "free MarchingBlocks Paint plugins for Godot, Unity and Unreal.", 11, Palette.GRIS))
+	etape4.contenu.add_child(_bouton("Export the tileset…",
+		"Writes <layer>.mbset/ : tileset.json (the placement rule and the tile list), tiles.glb (every "
+		+ "tile, with its materials) and README.txt.\nOpen format: the tiles you make are yours.",
+		func() -> void: _demander("tileset"), "exporter", Palette.PRINCIPAL))
 
 	var aide := Section.new("Shortcuts", false, Icones.icone("clavier"))
 	pile.add_child(aide)
@@ -502,7 +577,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	raccourcis.columns = 2
 	raccourcis.add_theme_constant_override("h_separation", 10)
 	raccourcis.add_theme_constant_override("v_separation", 4)
-	for r in [["Tab", "Grid ↔ Sculpt"], ["A D S B", "Add Dig Select Box"], ["[  ]", "Brush size"],
+	for r in [["Tab", "Grid ↔ Sculpt"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
 			["PgUp PgDn", "Floor y"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
 			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
 			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
@@ -608,9 +683,24 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["creuser", "Dig", "creuser", "D — removes matter. Right click adds."],
 		["selectionner", "Select", "selectionner", "S — selects matter (Shift adds to the selection). "
 			+ "Right click deselects."],
-		["boite", "Box", "boite", "B — drag a box: the matter inside becomes the selection (Shift adds, "
-			+ "right drag removes).\nIn Sculpt, the two corners are on the matter, so the box is 3D."],
+		["rect", "Rect", "rect", "R — drag a FLAT rectangle on the floor plane y, whatever the aim.\n"
+			+ "It takes the whole area, empty cells included: draw a room's floor, then Fill it and "
+			+ "Extrude it.\nShift adds to the selection, right drag removes."],
+		["boite", "Box", "boite", "B — drag a 3D box: the whole VOLUME becomes the selection, empty "
+			+ "cells included.\nIn Sculpt the two corners sit on the matter; in Grid they sit on the "
+			+ "floor plane.\nShift adds, right drag removes. Tick Hollow for a room with walls only."],
 	], _choisir_outil, Palette.OUTIL))
+	_creux = CheckButton.new()
+	_creux.text = "Hollow box"
+	_creux.icon = Icones.icone("evider")
+	_creux.add_theme_constant_override("icon_max_width", 16)
+	_creux.tooltip_text = ("Box only: keeps just the SKIN of the box — walls, floor and ceiling, nothing "
+		+ "inside. That is a room.\nA box thinner than three cells on any axis has no inside, so it "
+		+ "stays solid.")
+	_creux.toggled.connect(func(v: bool) -> void:
+		_vue.creux = v
+		_vue.rafraichir())
+	outils.contenu.add_child(_creux)
 
 	outils.contenu.add_child(_petit_titre("BRUSH  ·  [ ]"))
 	var taille := HBoxContainer.new()
@@ -673,13 +763,17 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	_etiquette_selection = _texte("", 12, Palette.OLIVE)
 	sel.contenu.add_child(_etiquette_selection)
 	sel.contenu.add_child(_grille([
+		_bouton("Fill", "Fills every selected cell with matter. Draw a Rect or a Box, then Fill it.",
+			_operer_selection.bind("remplir"), "remplir", Palette.PRINCIPAL),
 		_bouton("Delete", "Del — removes the selected matter.", _operer_selection.bind("supprimer"),
 			"poubelle", Palette.DANGER),
 		_bouton("Clear", "Esc — forgets the selection. No cell changes.", _operer_selection.bind(""),
 			"croix"),
-		_bouton("Extrude ↑", "Adds the layer above; the selection follows it. Repeat to raise a wall.",
+		_bouton("Extrude ↑", "Adds the layer above, the selection follows it, AND the floor plane y "
+			+ "goes up with it — so you can keep drawing at the new level without touching PgUp.",
 			_operer_selection.bind("extruder_haut"), "extruder_haut"),
-		_bouton("Extrude ↓", "Adds the layer below; the selection follows it.",
+		_bouton("Extrude ↓", "Adds the layer below, the selection follows it, and the floor plane y "
+			+ "goes down with it.",
 			_operer_selection.bind("extruder_bas"), "extruder_bas"),
 		_bouton("Grow", "Selects the matter touching the selection by a face.",
 			_operer_selection.bind("grandir"), "grandir"),
@@ -705,47 +799,7 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		_bouton_coller,
 	], 4))
 
-	# ── 3. LES COUCHES.
-	var couches := Section.new("Layers", true, Icones.icone("couches"))
-	pile.add_child(couches)
-	_liste_couches = VBoxContainer.new()
-	_liste_couches.add_theme_constant_override("separation", 4)
-	couches.contenu.add_child(_liste_couches)
-	_nom_couche = LineEdit.new()
-	_nom_couche.placeholder_text = "rename the active layer"
-	_nom_couche.text_submitted.connect(func(_t: String) -> void: _renommer_couche())
-	_nom_couche.focus_exited.connect(_renommer_couche)
-	couches.contenu.add_child(_nom_couche)
-	couches.contenu.add_child(_rangee([
-		_bouton("New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche,
-			"plus"),
-		_bouton("Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche,
-			"poubelle", Palette.DANGER),
-	]))
-
-	# ── 4. LE TRANCHAGE.
-	var trancher := Section.new("Slice", true, Icones.icone("couteau"))
-	pile.add_child(trancher)
-	trancher.contenu.add_child(_texte("Gives the ACTIVE layer its tiles. Its painted cells stay.", 11,
-		Palette.GRIS))
-	trancher.contenu.add_child(_bouton("Slice the work",
-		"Re-reads the imported work, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
-		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL))
-	trancher.contenu.add_child(_bouton("Slice the witness",
-		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
-		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
-
-	# ── 5. L'EXPORT VERS LES MOTEURS — le format neutre, ouvert (charte §4).
-	var export := Section.new("Export to engines", true, Icones.icone("exporter"))
-	pile.add_child(export)
-	export.contenu.add_child(_texte("Writes the ACTIVE layer's tiles as a .mbset folder — read by the "
-		+ "free MarchingBlocks Paint plugins for Godot, Unity and Unreal.", 11, Palette.GRIS))
-	export.contenu.add_child(_bouton("Export the tileset…",
-		"Writes <layer>.mbset/ : tileset.json (the placement rule and the tile list), tiles.glb (every "
-		+ "tile, with its materials) and README.txt.\nOpen format: the tiles you make are yours.",
-		func() -> void: _demander("tileset"), "exporter", Palette.PRINCIPAL))
-
-	# ── 6. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
+	# ── 3. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
 	var etage := Section.new("Shape operations", false, Icones.icone("etage"))
 	pile.add_child(etage)
 	_sections_monde.append(etage)
@@ -844,19 +898,77 @@ func _montrer_temoin() -> void:
 
 ## ⚠ LE TRAVAIL IMPORTÉ N'EST JAMAIS RECOUVERT DU PBR : c'est l'art de l'artiste (charte §3).
 func _habiller() -> void:
-	if _travail_maillage != null and _etiquette_vue.text.begins_with("showing: your work"):
+	if _travail_maillage() != null and _etiquette_vue.text.begins_with("showing: your work"):
 		return
 	_montrer_temoin()
 
 
+## ⚠ **LE CHEMIN ET LE MAILLAGE SE LISENT DANS LA LISTE, ILS NE SONT PLUS GARDÉS À CÔTÉ.** Deux copies
+## d'un même fait divergent (charte §6) : c'est la liste qui fait autorité, et − 1 veut dire « aucun ».
+func _travail_chemin() -> String:
+	if _travail_actif < 0 or _travail_actif >= _travaux.size():
+		return ""
+	return String(_travaux[_travail_actif]["chemin"])
+
+
+func _travail_maillage() -> ArrayMesh:
+	if _travail_actif < 0 or _travail_actif >= _travaux.size():
+		return null
+	return _travaux[_travail_actif]["maillage"] as ArrayMesh
+
+
 func _travail_vu(oui: bool) -> void:
-	if oui and _travail_maillage != null:
-		_vue.montrer_maillage(_travail_maillage, null)
-		_etiquette_vue.text = "showing: your work — %s" % _travail.get_file()
+	var maillage := _travail_maillage()
+	if oui and maillage != null:
+		_vue.montrer_maillage(maillage, null)
+		_etiquette_vue.text = "showing: your work — %s" % _travail_chemin().get_file()
 	else:
 		_montrer_temoin()
 		_etiquette_vue.text = "showing: the computed witness"
 	_aller_a("witness")
+
+
+## LA GRILLE DES TRAVAUX — un bouton par import, celui qu'on tranchera est enfoncé.
+func _redire_les_travaux() -> void:
+	if _liste_travaux == null:
+		return
+	for enfant in _liste_travaux.get_children():
+		enfant.queue_free()
+		_liste_travaux.remove_child(enfant)
+	var groupe := ButtonGroup.new()
+	for i in _travaux.size():
+		var t: Dictionary = _travaux[i]
+		var b := Button.new()
+		b.text = String(t["chemin"]).get_file()
+		b.icon = Icones.icone("cube")
+		b.toggle_mode = true
+		b.button_group = groupe
+		b.button_pressed = i == _travail_actif
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.clip_text = true
+		b.add_theme_constant_override("icon_max_width", 16)
+		b.tooltip_text = "%s\nClick to show it; « Slice the selected work » slices THIS one." % t["chemin"]
+		b.pressed.connect(_choisir_travail.bind(i))
+		_liste_travaux.add_child(b)
+	_vide_travaux.visible = _travaux.is_empty()
+	_dire_la_cible()
+
+
+func _choisir_travail(i: int) -> void:
+	_travail_actif = i
+	_travail_vu(true)
+	_redire_les_travaux()
+
+
+## Ce que l'étape 3 tranchera, et où ça ira — écrit, parce que les deux se choisissent ailleurs.
+func _dire_la_cible() -> void:
+	if _etiquette_cible == null:
+		return
+	var quoi := _travail_chemin().get_file() if _travail_chemin() != "" else "no work selected"
+	var ou := "no layer"
+	if _active >= 0 and _active < _couches.size():
+		ou = String(_couches[_active].get("nom", "layer"))
+	_etiquette_cible.text = "%s  →  %s" % [quoi, ou]
 
 
 func _demander(quoi: String) -> void:
@@ -929,14 +1041,24 @@ func _importer(fichier: String) -> void:
 	var travail: ArrayMesh = BM.travail_depuis_glb(fichier, journal)
 	_fin_attente()
 	if travail == null:
-		_travail = ""
-		_travail_maillage = null
 		var motif: String = "\n  ".join(PackedStringArray(journal)) if not journal.is_empty() \
 			else "no geometry inside the block's box — was the block moved?"
 		_dire("[color=#e0603c]Nothing to show from[/color] %s\n  %s" % [fichier, motif])
 		return
-	_travail = fichier
-	_travail_maillage = travail
+	# ⚠ **RÉIMPORTER LE MÊME FICHIER LE REMPLACE, IL NE LE DOUBLE PAS.** C'est le geste le plus
+	# fréquent — on resculpte dans Blender, on réimporte — et une liste qui grossit à chaque
+	# enregistrement deviendrait illisible en dix minutes.
+	var deja := -1
+	for i in _travaux.size():
+		if String(_travaux[i]["chemin"]) == fichier:
+			deja = i
+	if deja >= 0:
+		_travaux[deja]["maillage"] = travail
+		_travail_actif = deja
+	else:
+		_travaux.append({"chemin": fichier, "maillage": travail})
+		_travail_actif = _travaux.size() - 1
+	_redire_les_travaux()
 	_travail_vu(true)
 	var ecart: int = BM.ecart_au_temoin(travail)
 	var ecart_dit: String = ("[color=#f2ca79]No vertex moved compared to the witness: slicing will give "
@@ -962,15 +1084,17 @@ func _trancher_temoin() -> void:
 func _trancher_travail() -> void:
 	if _vue.monde() == null:
 		return
-	if _travail == "":
-		_dire("No work imported.\n\n[i]« Import the work… » first: you slice what you have seen.[/i]")
+	var chemin := _travail_chemin()
+	if chemin == "":
+		_dire("No work selected.\n\n[i]Step 2: « Import the work… », then pick one in the list. "
+			+ "You slice what you have seen.[/i]")
 		return
-	var bilan: Dictionary = await _trancher_source(_travail, false)
-	var entete := "[b]Sliced from[/b] %s\n" % _travail
+	var bilan: Dictionary = await _trancher_source(chemin, false)
+	var entete := "[b]Sliced from[/b] %s\n" % chemin
 	var absents: Array = bilan.get("absents", [])
 	if not absents.is_empty():
 		entete += "[color=#f2ca79]Block MISSING from the file, computed witness kept.[/color]\n"
-	_poser_lot(bilan, "work", _travail, false, entete)
+	_poser_lot(bilan, "work", chemin, false, entete)
 
 
 ## Tranche une source et met le lot en cache. ⚠ UNE SEULE ROUTE pour le bouton et pour la réouverture
@@ -1174,11 +1298,18 @@ func _operer_selection(quoi: String) -> void:
 		_vue.vider_selection()
 		return
 	if _vue.selection.is_empty():
-		_dire("[i]Nothing selected.[/i] Pick Select (S) and paint over the matter.")
+		_dire("[i]Nothing selected.[/i] Drag a Rect (R) on the floor, a Box (B) in the air, or paint "
+			+ "over the matter with Select (S).")
 		return
 	var op: Dictionary = Outils.operer_selection(_occupees(), _vue.selection, quoi)
 	var n := _appliquer(op, quoi)
 	_vue.regler_selection(op["selection"])
+	# ⚠ **L'ÉTAGE SUIT L'EXTRUSION — DEMANDÉ PAR JORDAN (28 septembre 2026).** Extruder puis continuer
+	# à dessiner obligeait à monter l'étage à la main (PgUp) : deux gestes pour un, et un rectangle
+	# tracé au mauvais niveau sans qu'on le voie venir. Le plan de visée accompagne désormais la
+	# sélection, donc le geste se répète tout seul : Fill, Extrude, Fill, Extrude.
+	if quoi == "extruder_haut" or quoi == "extruder_bas":
+		_compteur_etage.value = _vue.etage + (1 if quoi == "extruder_haut" else -1)
 	_dire("[b]%s[/b] — %d cell(s) changed, %d selected. [i]Ctrl+Z undoes the cells.[/i]"
 		% [quoi, n, _vue.selection.size()])
 
@@ -1459,6 +1590,7 @@ func _rafraichir_couches() -> void:
 		_liste_couches.add_child(ligne)
 	if _nom_couche != null and not _couches.is_empty():
 		_nom_couche.text = _couches[_active]["nom"]
+	_dire_la_cible()
 
 
 func _dire_la_source(c: Dictionary) -> String:
@@ -1668,6 +1800,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_choisir_outil("selectionner")
 		KEY_B:
 			_choisir_outil("boite")
+		KEY_R:
+			_choisir_outil("rect")
 		KEY_BRACKETLEFT:
 			_taille.value -= 1
 		KEY_BRACKETRIGHT:

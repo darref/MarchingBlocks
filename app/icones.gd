@@ -38,6 +38,10 @@ const TRACES := {
 	"creuser": '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12h8"/>',
 	"selectionner": '<path d="M5 3.5 19 10.5l-6.2 2.2-2.3 6.3z"/>',
 	"boite": '<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="3.5 2.6"/>',
+	# Le rectangle est PLAT : un losange en perspective, comme le plan de l'étage que vise la grille.
+	"rect": '<path d="M2.5 13.5 12 8.5l9.5 5-9.5 5z" stroke-dasharray="3.5 2.6"/>',
+	# Remplir : le même losange, mais plein, et de la matière qui y tombe.
+	"remplir": '<path d="M2.5 16 12 11l9.5 5-9.5 5z"/><path d="M12 2.5V8M9 5.5 12 8.5l3-3"/>',
 	"sphere": '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12a8.5 3.2 0 0 0 17 0"/>',
 	"disque": '<ellipse cx="12" cy="12.5" rx="9" ry="4"/>',
 	"etage": '<path d="M3 10h18v4H3z"/><path d="M12 2.5v4.5M9.5 5 12 2.5 14.5 5M12 17v4.5M9.5 19 12 21.5 14.5 19"/>',
