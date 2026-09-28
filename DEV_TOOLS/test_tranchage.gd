@@ -53,9 +53,9 @@ extends SceneTree
 ##    surface horizontale d'une `mb_plaque_b4h0` tombe exactement sur le plan central de sa pièce. Le
 ##    contrôle par octants est, par nature, trop grossier pour un écart de cette taille.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 
 const CELLULE := 1.0
 

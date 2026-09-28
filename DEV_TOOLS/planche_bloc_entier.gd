@@ -25,7 +25,7 @@ extends SceneTree
 ## ⚠ Quatre angles, parce qu'un chapeau ne se voit pas de dessus. Même cadrage, même lumière, même fond
 ## pour les deux : un rendu de contrôle jugé dans un cadre différent de son témoin a déjà menti ici.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(380, 380)
 const FOND := Color("#101216")

@@ -34,7 +34,7 @@ extends SceneTree
 ## Les trois corrections : grille 20³ (un cœur profond existe), cavité confinée à 6 cases du bord,
 ## érosion confinée à la CROÛTE externe (distance ≤ 3), jamais au-delà.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const N := 20
 ## La cavité vit entre ces bornes : 6 cases de matière la séparent du bord, quoi que fasse l'érosion.

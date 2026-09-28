@@ -33,8 +33,8 @@ extends SceneTree
 ## ⚠ **AVEC SON CONTRÔLE NÉGATIF** : la même colonne pour le TÉMOIN, dont les tuiles rendent claires.
 ## Si le témoin perd les mêmes attributs au même étage, ce n'est pas ça — et l'instrument me l'aura dit.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
 
 var _fichier := ""
 

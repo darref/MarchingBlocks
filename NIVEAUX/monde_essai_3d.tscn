@@ -1,6 +1,6 @@
 [gd_scene format=4]
 
-[ext_resource type="Script" path="res://addons/marching_blocks_plugin_godot/massif_peint.gd" id="1_ekqqe"]
+[ext_resource type="Script" path="res://addons/marchingblocks_core/massif_peint.gd" id="1_ekqqe"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_pry1f"]
 vertex_color_use_as_albedo = true

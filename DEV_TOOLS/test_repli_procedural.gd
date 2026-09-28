@@ -18,9 +18,9 @@ extends SceneTree
 ## cube plein, le L, la plaque TROUÉE, le contact en DIAGONALE et la diagonale de corps — exactement les
 ## formes qui ont fait tomber le lot 2D.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
 
 ## Une face d'octant : 0,5 × 0,5.
 const AIRE_DE_FACE := 0.25

@@ -30,7 +30,7 @@ extends SceneTree
 ## ⚠ **ON NE MODIFIE PAS LE MATÉRIAU DES MAILLAGES** : il est partagé par tout le lot. On surcharge sur
 ## l'instance, ce qui laisse la tuile intacte.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(340, 340)
 const FOND := Color("#101216")

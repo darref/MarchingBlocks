@@ -31,7 +31,7 @@ extends SceneTree
 ## Aucun compteur ne dit si une pièce est à l'endroit — trois fois la couverture fut parfaite et le rendu
 ## faux, et seule une image l'a montré (charte §6).
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

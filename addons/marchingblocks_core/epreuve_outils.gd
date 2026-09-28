@@ -19,7 +19,7 @@ extends RefCounted
 ## directions obliques sont choisies génériques, et les égalités qu'on garde exprès (un rayon parallèle
 ## à un axe : deux composantes à l'infini) se départagent par la règle écrite — le plus petit axe.
 
-const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
+const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 
 const FORMAT := "marchingblocks-tools-conformance"
 const VERSION := 1

@@ -33,9 +33,9 @@ extends SceneTree
 ##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_chanfrein_sous_voxel.gd
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")
 
 const BLOC := 0
@@ -138,7 +138,7 @@ func _decrire(quoi: String, mesh: ArrayMesh) -> void:
 
 ## LA RÉCOLTE, par le vrai trancheur — jamais une seconde description du contrat de couture.
 func _recolter(quoi: String, solide: ArrayMesh, cases: Dictionary) -> void:
-	var Tranchage := load("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var fautes: Array = []
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * BM.COTE, 1.0,
 		BM.creuses(BLOC), fautes, false)

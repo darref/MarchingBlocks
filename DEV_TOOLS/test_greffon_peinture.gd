@@ -12,9 +12,9 @@ extends SceneTree
 ## ⚠ **UN CAS QUI N'EXERCE RIEN NE GARDE RIEN** (charte §6) : on vérifie aussi que les cas posent
 ## vraiment des tuiles d'air libre, des exemplaires au-delà du premier, et des marqueurs d'erreur.
 
-const FN := preload("res://addons/marching_blocks_plugin_godot/format_neutre.gd")
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
@@ -22,7 +22,7 @@ const Editeur := preload("res://addons/marchingblocks_paint/mb_editor.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
 const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
-const EO := preload("res://addons/marching_blocks_plugin_godot/epreuve_outils.gd")
+const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -374,6 +374,21 @@ func _les_outils_dans_la_vue() -> void:
 	tab.pressed = true
 	_vrai(ed.input(cam, tab), "Tab est pris en Navigate")
 	_egal(ed.aim, "grid", "et revient à Grid")
+
+	# World → Clear cells (parité avec Unity et Unreal) : tout part en UNE action, et Ctrl+Z rend tout.
+	ed.clear_world()
+	_egal(nb.call(), 0, "Clear cells vide le monde")
+	annul.undo()
+	_egal(nb.call(), 6, "et un seul Ctrl+Z rend toutes les cases")
+	# Move ±X par le menu : les cases sélectionnées se déplacent sur l'axe du monde, pas de la caméra.
+	ed.set_mode("select")
+	ed.clear_selection()
+	ed._set_selection({Vector3i(1, 0, 1): true})
+	ed.move_selection(Vector3i(1, 0, 0))
+	# (2,0,1) était déjà pleine : la case arrive sur de la matière et FUSIONNE, la source se vide.
+	_vrai(not monde.cells().has(Vector3i(1, 0, 1)) and monde.cells().has(Vector3i(2, 0, 1)),
+		"Move +X déplace la sélection d'une case sur X")
+	_egal(ed.selection, {Vector3i(2, 0, 1): true}, "et la sélection suit")
 
 	ed.world = null
 	for n in [ed, cam, monde]:

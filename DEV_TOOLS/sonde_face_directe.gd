@@ -23,9 +23,9 @@ extends SceneTree
 ## La sonde vérifie donc que les deux descriptions coïncident, par deux chemins indépendants :
 ## `MB.forme_de_face()` d'un côté, le comptage d'arêtes coupées de l'autre.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 
 ## La position d'un coin du cube de la pièce : le centre de sa case.

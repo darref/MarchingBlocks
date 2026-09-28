@@ -17,7 +17,7 @@ extends RefCounted
 ## et certains moteurs refusent des caractères comme `~` ou `.` dans un nom d'asset. La traduction vit
 ## ICI et nulle part ailleurs ; les greffons ne décodent jamais un nom, ils lisent la liste `tiles`.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const FORMAT := "marchingblocks-tileset"
 const FORMAT_EPREUVE := "marchingblocks-conformance"

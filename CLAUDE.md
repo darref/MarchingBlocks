@@ -25,10 +25,17 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
   qu'on regarde et l'aller-retour avec l'artiste, droite = la main), deux ateliers — **Witness** et
   **Test world** —, panneau d'attente nommé. Chaînes d'écran en ANGLAIS (§7).
-- **RENOMMÉ (Jordan, 27 septembre 2026)** : le dépôt vit dans `D:/MarchingBlocks` (ex-`D:/UnderMend`) et le
-  greffon dans `addons/marching_blocks_plugin_godot/` (ex-`addons/undermend/`), script `PluginMarchingBlocks.gd`.
-- ⚠ **LE CŒUR N'EST PAS RECOPIÉ** : l'appli appelle `addons/marching_blocks_plugin_godot/` comme le greffon. Ce qui vivait
-  dans l'écran du greffon et doit servir aux deux en SORT (`etages.gd`, gardé par `test_etages`).
+- **RENOMMÉ (Jordan, 27 septembre 2026)** : le dépôt vit dans `D:/MarchingBlocks` (ex-`D:/UnderMend`).
+- **LE CŒUR : `addons/marchingblocks_core/` — DÉCIDÉ (Jordan, 28 septembre 2026).** Il s'appelait
+  `addons/undermend/`, puis `addons/marching_blocks_plugin_godot/`, et portait AUSSI un écran de greffon
+  d'éditeur (`plugin.cfg`, `PluginMarchingBlocks.gd`, `ecran_edition.gd`). **Cet écran est SUPPRIMÉ** :
+  l'appli fait tout ce qu'il faisait, et il faisait apparaître un second « MarchingBlocks » dans la liste
+  des greffons, à côté du vrai greffon gratuit. Le dossier n'est plus un greffon mais une BIBLIOTHÈQUE —
+  le modèle, le témoin, le trancheur, le format — que l'appli charge ; il porte le nom de ce qu'il est.
+  ⚠ Ce qu'on distribue gratuitement, c'est `addons/marchingblocks_paint/` (§4) ; le cœur, lui, contient
+  le trancheur, c'est-à-dire ce qui se vend, et ne sort que dans l'exe chiffré.
+- ⚠ **LE CŒUR N'EST PAS RECOPIÉ** : l'appli appelle `addons/marchingblocks_core/`. Ce qui vivait dans
+  l'ancien écran de greffon et devait servir aux deux en était SORTI (`etages.gd`, gardé par `test_etages`).
 - ⚠ **LE PINCEAU EST À NOUS** : sans l'éditeur Godot, plus de pinceau natif de GridMap. Un clic est un
   rayon coupé contre le plan de l'étage courant (`vue.gd`), un coup entier s'annule d'un Ctrl+Z.
 - ⚠ **LE CHIFFREMENT DEMANDE DES MODÈLES D'EXPORT RECOMPILÉS.** L'onglet « Chiffrement » des presets
@@ -745,12 +752,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 757 vérifications, 0 échec** (28 septembre 2026, recomptées après les outils du greffon
-  Godot), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
+  Onze suites, **7 761 vérifications, 0 échec** (28 septembre 2026, recomptées après le renommage du cœur
+  et la parité du greffon Godot : Move ±X/Y/Z, World → Clear cells annulable, le compteur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
   69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6 (9 tests) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 83.
+  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 87.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
@@ -890,7 +897,7 @@ désormais le greffon.
      ⚠ **CE QUI ÉTAIT ÉCRIT ICI — « on MODULE les trois teintes, on n'en ajoute pas trois ; six teintes
      franches auraient rendu bariolé un témoin dont l'illisibilité est le défaut qu'on corrige » — A
      ÉTÉ RENVERSÉ, et la raison compte plus que le verdict** : mon objection visait une couleur qu'il
-     faut DEVINER, et la **légende écrite sous la vue** (`ecran_edition.gd`) y répond en donnant son nom
+     faut DEVINER, et la **légende écrite sous la vue** (ancien `ecran_edition.gd` ; aujourd'hui l'appli) y répond en donnant son nom
      à chacune. Six teintes nommées valent mieux que trois modulées ; six teintes muettes auraient
      effectivement été pires.
      ⚠ **ET LA MODULATION NE POUVAIT PAS SUFFIRE, c'est ce qui rend le renversement juste** : la lumière

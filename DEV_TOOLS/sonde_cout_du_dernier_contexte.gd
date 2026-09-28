@@ -14,8 +14,8 @@ extends SceneTree
 ## les totaux n'auraient pas été comparables entre les deux grilles — un écart invisible qui aurait fait
 ## dire n'importe quoi à la comparaison.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 
 

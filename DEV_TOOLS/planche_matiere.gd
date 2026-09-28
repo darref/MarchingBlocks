@@ -29,7 +29,7 @@ extends SceneTree
 ## ⚠ **ET LA MESURE NE DIRA PAS CE QUI EST BEAU** : elle dit ce qui est VISIBLE. Lequel des rendus
 ## convient reste un choix d'artiste, donc celui de Jordan.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

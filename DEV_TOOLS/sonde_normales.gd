@@ -28,7 +28,7 @@ extends SceneTree
 ##
 ## ⚠ **ELLE NE CORRIGE RIEN.** Elle compte.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 

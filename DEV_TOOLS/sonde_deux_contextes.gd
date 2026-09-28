@@ -24,7 +24,7 @@ extends SceneTree
 ##                            « sol de grotte » ≠ « sol de massif », et ce qui les sépare est le toit).
 ##      Le critère qui classe le tunnel en EXTÉRIEUR est disqualifié.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),

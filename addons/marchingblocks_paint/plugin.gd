@@ -19,6 +19,7 @@ var _shape: OptionButton
 var _hollow: CheckBox
 var _floor: SpinBox
 var _status: Label
+var _counts: Label
 var _refreshing := false
 
 
@@ -119,19 +120,47 @@ func _build_bar() -> HBoxContainer:
 	for i in ops.size():
 		popup.add_item(ops[i][0], i)
 	popup.add_separator()
+	# The same moves as the arrow keys, on fixed axes — the arrows follow the camera, these do not.
+	var moves := [["Move −X", Vector3i(-1, 0, 0)], ["Move +X", Vector3i(1, 0, 0)], ["Move −Y", Vector3i(0, -1, 0)],
+		["Move +Y", Vector3i(0, 1, 0)], ["Move −Z", Vector3i(0, 0, -1)], ["Move +Z", Vector3i(0, 0, 1)]]
+	for i in moves.size():
+		popup.add_item(moves[i][0], 110 + i)
+	popup.set_meta("moves", moves)
+	popup.add_separator()
 	popup.add_item("Copy", 100)
 	popup.add_item("Cut", 101)
 	popup.add_item("Paste", 102)
 	popup.add_item("Clear selection", 103)
-	popup.id_pressed.connect(_selection_menu.bind(ops))
+	popup.id_pressed.connect(_selection_menu.bind(ops, moves))
 	bar.add_child(menu)
+	var monde := MenuButton.new()
+	monde.text = "World"
+	monde.tooltip_text = "The whole layer: rebuild its tiles, or clear its cells (Ctrl+Z brings them back)."
+	monde.get_popup().add_item("Rebuild tiles", 0)
+	monde.get_popup().add_item("Clear cells", 1)
+	monde.get_popup().id_pressed.connect(func(id: int) -> void:
+		if _editor.world == null:
+			return
+		if id == 0:
+			_editor.world.rebuild()
+			_refresh()
+		else:
+			_editor.clear_world())
+	bar.add_child(monde)
+	bar.add_child(VSeparator.new())
+	_counts = _label("")
+	_counts.tooltip_text = "Cells painted · tiles placed · tiles the tileset lacks (red cubes)."
+	bar.add_child(_counts)
 	_status = _label("")
 	_status.add_theme_color_override("font_color", Color(0.75, 0.8, 0.6))
 	bar.add_child(_status)
 	return bar
 
 
-func _selection_menu(id: int, ops: Array) -> void:
+func _selection_menu(id: int, ops: Array, moves: Array) -> void:
+	if id >= 110 and id < 110 + moves.size():
+		_editor.move_selection(moves[id - 110][1])
+		return
 	match id:
 		100:
 			_editor.copy_selection()
@@ -177,4 +206,16 @@ func _refresh() -> void:
 		_floor.set_value_no_signal(_editor.world.floor_y)
 	var n: int = _editor.selection.size()
 	_status.text = ("%d selected · " % n if n > 0 else "") + _editor.status
+	# Cells · tiles · missing, as in the Unity inspector and the Unreal Details panel.
+	if _editor.world != null:
+		var r: Dictionary = _editor.world.last_report()
+		if str(r.get("error", "")) != "":
+			_counts.text = "⚠ " + str(r["error"])
+			_counts.add_theme_color_override("font_color", Color(0.9, 0.4, 0.3))
+		else:
+			_counts.text = "%d cells · %d tiles%s" % [_editor.world.cells().size(), int(r.get("tiles", 0)),
+				(" · %d missing (red)" % int(r["missing"])) if int(r.get("missing", 0)) > 0 else ""]
+			_counts.remove_theme_color_override("font_color")
+	else:
+		_counts.text = ""
 	_refreshing = false

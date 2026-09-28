@@ -30,7 +30,7 @@ extends SceneTree
 ## ⚠ **ELLE NE DIT PAS SI C'EST BEAU.** Un fragment répété peut très bien passer sur une matière
 ## uniforme et sauter aux yeux sur une texture dirigée. Ça, seule l'image le dira.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 

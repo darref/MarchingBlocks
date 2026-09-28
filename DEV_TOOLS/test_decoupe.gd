@@ -1,6 +1,6 @@
 extends SceneTree
 ##
-## TEST — la découpe d'un mesh par une boîte (`addons/marching_blocks_plugin_godot/decoupe.gd`).
+## TEST — la découpe d'un mesh par une boîte (`addons/marchingblocks_core/decoupe.gd`).
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_decoupe.gd
@@ -37,7 +37,7 @@ extends SceneTree
 ##   • L'AIRE SE CONSERVE : découper par deux boîtes qui se partagent l'espace rend l'aire de départ.
 ##     C'est l'invariant qui attrape à la fois un triangle perdu et un triangle compté deux fois.
 
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
 
 const EPS := 0.0005
 

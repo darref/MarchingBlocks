@@ -50,8 +50,8 @@ extends RefCounted
 ## sortie valide n'a pas à l'enregistrer (charte §6) — et un lot qui craque à la peinture coûte bien
 ## plus cher qu'un refus au tranchage.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
 
 ## En deçà de cette aire, on considère qu'un octant est vide. ⚠ Pas zéro : la découpe interpole, et un
 ## triangle rasant le plan de coupe laisse une écaille d'aire négligeable.
@@ -571,7 +571,7 @@ static func _bande_de_face(nom: String) -> AABB:
 ## D'où la règle : **le tranché remplace, le repli complète.** Chaque classe sculptée prend la place de
 ## sa version calculée, une à une, et l'invariant tient à chaque étape du travail d'art.
 static func librairie(pieces: Dictionary) -> MeshLibrary:
-	var Repli := load("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+	var Repli := load("res://addons/marchingblocks_core/repli_procedural.gd")
 	var lot := MeshLibrary.new()
 	var id := 0
 	for c in MB.classes():

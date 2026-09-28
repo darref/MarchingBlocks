@@ -1,6 +1,6 @@
 extends SceneTree
 ##
-## TEST — les outils de peinture (`addons/marching_blocks_plugin_godot/outils.gd`), et la portée des
+## TEST — les outils de peinture (`addons/marchingblocks_core/outils.gd`), et la portée des
 ## opérations d'étage (`etages.gd`) quand une sélection existe.
 ##
 ## LANCEMENT
@@ -9,8 +9,8 @@ extends SceneTree
 ## ⚠ **TOUS LES ATTENDUS SONT CALCULÉS À LA MAIN**, case par case — jamais par la fonction éprouvée
 ## (charte §6). Le rayon diagonal est déroulé pas à pas dans son commentaire.
 
-const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
-const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
+const Outils := preload("res://addons/marchingblocks_core/outils.gd")
+const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 
 var _ok := 0
 var _echecs := 0

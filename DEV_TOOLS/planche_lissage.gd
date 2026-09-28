@@ -22,7 +22,7 @@ extends SceneTree
 ## différent de son témoin a déjà menti dans ce projet : une pièce rendue sur un fond qu'elle n'aurait
 ## jamais en place. Ici la seule chose qui change d'une case à l'autre est le MAILLAGE.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(620, 620)
 const FOND := Color("#101216")

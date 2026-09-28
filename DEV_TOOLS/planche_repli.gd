@@ -32,8 +32,8 @@ extends SceneTree
 ##      Un run plat doit être d'UNE SEULE couleur ; des rayures trahiraient une orientation qui bat.
 ##      C'est la version visible du test « les tuiles de run rendent une orientation constante ».
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 const PANNEAU := Vector2i(700, 520)
 const FOND := Color("#101216")

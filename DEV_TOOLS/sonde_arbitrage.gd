@@ -44,11 +44,11 @@ extends SceneTree
 ## nombre de triangles que l'item du lot.** Si les deux diffèrent, ma duplication ne décrit pas le vrai
 ## trancheur, et je le dis au lieu de continuer.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 
 var _fichier := ""
 

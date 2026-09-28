@@ -302,6 +302,18 @@ func start_paste() -> void:
 	changed.emit()
 
 
+## Erases every cell of the world, in ONE undoable action.
+func clear_world() -> void:
+	if world == null or world.cells().is_empty():
+		status = "The world is already empty."
+		changed.emit()
+		return
+	var n: int = world.cells().size()
+	_commit("Clear cells", {}, world.cells())
+	status = "%d cell(s) cleared. Ctrl+Z brings them back." % n
+	changed.emit()
+
+
 func clear_selection() -> void:
 	_set_selection({})
 	pasting = false

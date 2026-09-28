@@ -27,8 +27,8 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle imprime.
 
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const EPS := 0.0005
 

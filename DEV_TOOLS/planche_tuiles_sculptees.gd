@@ -22,7 +22,7 @@ extends SceneTree
 ## `mb_arete_b2h0` (l'arête de falaise), `mb_coin_b1h0` (le coin saillant) — celle qu'une case peinte
 ## SEULE produit, donc exactement le cas que Jordan a essayé.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(300, 300)
 const FOND := Color("#101216")

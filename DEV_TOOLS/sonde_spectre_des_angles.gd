@@ -17,7 +17,7 @@ extends SceneTree
 ##
 ## LANCEMENT
 ##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks ##       --script res://DEV_TOOLS/sonde_spectre_des_angles.gd -- --fichier=C:/chemin/vers/le.glb
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")
 var _fichier := ""
 

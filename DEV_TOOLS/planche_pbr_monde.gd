@@ -15,8 +15,8 @@ extends SceneTree
 ##     le matériau suit réellement dans les tuiles.
 ## ⚠ Même cadrage, même lumière, même fond (charte §6 : un rendu de contrôle doit reproduire le contexte).
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const PBR := preload("res://addons/marchingblocks_core/pbr_monde.gd")
 
 const CASE := Vector2i(520, 520)
 const FOND := Color("#101216")
@@ -58,7 +58,7 @@ func _initialize() -> void:
 
 ## Un `MassifPeint` réel, câblé sur le lot, et peint avec les cases du témoin.
 func _monde_peint(lot: MeshLibrary) -> Node3D:
-	var massif: Node3D = load("res://addons/marching_blocks_plugin_godot/massif_peint.gd").new()
+	var massif: Node3D = load("res://addons/marchingblocks_core/massif_peint.gd").new()
 	massif.lot = lot
 	massif.preparer()
 	var cases: GridMap = massif.get_node("Cases")

@@ -32,7 +32,7 @@ extends SceneTree
 ##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/sonde_motifs_redondants.gd
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 ## Le décor commun : un cube de COTE, massif jusqu'à SOL (exclu), ciel au-dessus.
 const COTE := 9

@@ -21,10 +21,11 @@ config/icon="res://MARQUE/embleme.png"
 
 window/size/viewport_width=1600
 window/size/viewport_height=900
+window/size/mode=2
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/kenyoni/plugin_reloader/plugin.cfg", "res://addons/marching_blocks_plugin_godot/plugin.cfg")
+enabled=PackedStringArray("res://addons/kenyoni/plugin_reloader/plugin.cfg", "res://addons/marchingblocks_paint/plugin.cfg")
 
 [rendering]
 

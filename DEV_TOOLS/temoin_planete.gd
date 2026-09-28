@@ -34,7 +34,7 @@ extends SceneTree
 ##   Godot_v4.7-stable_win64_console.exe --headless --path D:/MarchingBlocks \
 ##       --script res://DEV_TOOLS/temoin_planete.gd
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const COTE := 10
 ## La roche monte jusqu'à SOL−1 ; au-dessus, le ciel.
@@ -372,7 +372,7 @@ func _dans_la_cible(tuiles: Dictionary) -> Dictionary:
 ## côté tandis que `BlocsMaitres.COTE` en déclare huit : `librairie_depuis_glb()` le relirait dans une
 ## boîte trop petite et en perdrait la moitié. Le dire ici vaut mieux que de le découvrir au retour.
 func _exporter(pleines: Dictionary, chemin: String) -> void:
-	var BM := load("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+	var BM := load("res://addons/marchingblocks_core/blocs_maitres.gd")
 	# ⚠ L'AMINCI, comme ce qui part réellement : `maillage_moitie` n'est rien d'autre que cet appel.
 	var brut: ArrayMesh = BM._coque_sous_voxels(pleines, 0.25)
 	if brut.get_surface_count() == 0:

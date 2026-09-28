@@ -24,7 +24,7 @@ extends SceneTree
 ## Conséquence chiffrée : 70 classes au lieu de 23, 68 pièces à sculpter au lieu de 21 — et le sol plat
 ## cesse d'être le même objet que le mur plat.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 ## ⚠ LES CHIFFRES ATTENDUS SONT ÉCRITS ICI, EN DUR ET EXPRÈS. Ils viennent d'un calcul d'orbites mené
 ## HORS du moteur (Burnside vérifié sur les trois groupes). Si le module se met à en rendre d'autres,

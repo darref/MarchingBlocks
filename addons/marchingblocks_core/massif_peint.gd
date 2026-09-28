@@ -34,8 +34,8 @@ class_name MassifPeint
 ## **C'est l'invariant du greffon, rendu vrai : peindre une case n'importe où produit toujours un
 ## résultat déterminé, complet et correct.**
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 ## Le lot de pièces. ⚠ S'il reste vide, le REPLI PROCÉDURAL prend la main : on peut donc peindre le
 ## monde entier avant d'avoir sculpté quoi que ce soit, et remplacer les classes une à une ensuite.

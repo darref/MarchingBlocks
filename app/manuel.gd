@@ -13,7 +13,7 @@ extends Control
 
 const Palette := preload("res://app/palette.gd")
 const Icones := preload("res://app/icones.gd")
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const PART := 0.84
 

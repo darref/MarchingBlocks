@@ -26,7 +26,7 @@ extends SceneTree
 ##   (B) ROCHE AU-DESSUS — binaire, donc a priori stable à l'échelle ;
 ##   (C) CIEL VU > seuil — continu, donc a priori SENSIBLE à l'épaisseur de roche disponible.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const COTE := 7
 const MARGE := 7               # l'épaisseur de roche ajoutée autour, dans le grand monde

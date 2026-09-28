@@ -22,7 +22,7 @@ extends SceneTree
 ## resserre l'écart avec le surplomb (25,6 %) jusqu'à rendre tout seuil fragile.
 ## ⚠ **Le ciel se regarde vers le HAUT.** On exige donc `dy ≥ 1`, et l'on voit si la séparation s'ouvre.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),

@@ -18,7 +18,7 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle mesure et elle imprime.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 
 func _initialize() -> void:

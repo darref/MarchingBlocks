@@ -1,6 +1,6 @@
 [gd_scene format=4 uid="uid://x1ti8dge0jn7"]
 
-[ext_resource type="Script" uid="uid://be1ppnqofrf74" path="res://addons/marching_blocks_plugin_godot/massif_peint.gd" id="1_o1js2"]
+[ext_resource type="Script" uid="uid://be1ppnqofrf74" path="res://addons/marchingblocks_core/massif_peint.gd" id="1_o1js2"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_b1rq2"]
 sky_top_color = Color(3.1766297e-06, 0.4831968, 0.6908686, 1)

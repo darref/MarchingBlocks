@@ -25,8 +25,8 @@ extends SceneTree
 ##      déduisent par remplissage depuis le bord — et les classes à double contexte peuvent livrer
 ##      DEUX variantes, au lieu d'une liste écrite à la main (5 déclarées, 10 mesurées).
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const VOISINS := [
 	Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0),

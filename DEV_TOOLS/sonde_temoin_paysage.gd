@@ -16,7 +16,7 @@ extends SceneTree
 ## à sa place » (charte §6) : la lisibilité est le SEUL but de ce premier bloc, et c'est la seule chose
 ## qu'aucun nombre ici ne peut trancher.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const COTE := 8
 

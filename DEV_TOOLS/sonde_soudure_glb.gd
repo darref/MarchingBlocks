@@ -22,7 +22,7 @@ extends SceneTree
 ## maillage dans UN objet, mais ne partage aucun sommet entre elles — une teinte par primitive coupe
 ## donc la surface à chaque changement de teinte.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const TAILLES := {5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
 

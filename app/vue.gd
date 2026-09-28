@@ -24,9 +24,9 @@ signal colle(ancre: Vector3i)
 ## semble ne rien faire.
 signal boite_trop_grande
 
-const Massif := preload("res://addons/marching_blocks_plugin_godot/massif_peint.gd")
-const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
+const Outils := preload("res://addons/marchingblocks_core/outils.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 ## Jusqu'où porte le rayon de sculpture, en cases.
 const PORTEE := 400.0

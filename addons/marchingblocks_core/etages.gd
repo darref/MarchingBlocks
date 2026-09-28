@@ -2,8 +2,8 @@
 extends RefCounted
 ## LES OPÉRATIONS D'ÉTAGE — étendre vers le haut, vers le bas, élargir, creuser.
 ##
-## ⚠ **ELLES VIVENT ICI PARCE QU'ELLES ONT DEUX LECTEURS DEPUIS LE 27 SEPTEMBRE 2026** : l'écran du
-## greffon Godot (`ecran_edition.gd`) et le logiciel MarchingBlocks (`app/`). Chacun écrivait sa copie,
+## ⚠ **ELLES VIVENT ICI PARCE QU'ELLES ONT EU DEUX LECTEURS** : l'ancien écran de greffon Godot (supprimé
+## le 28 septembre 2026, l'appli le remplace) et le logiciel MarchingBlocks (`app/`). Chacun écrivait sa copie,
 ## c'était la divergence annoncée (charte §6, « une seconde description d'un même fait diverge
 ## toujours »). La règle est pure : elle lit des cases, elle rend ce qu'il faut poser et effacer, et
 ## chaque appelant l'applique avec SON historique d'annulation.

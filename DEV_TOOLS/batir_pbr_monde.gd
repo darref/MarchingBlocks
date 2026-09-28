@@ -28,8 +28,8 @@ extends SceneTree
 ## sans convention déclarée : les prendre, c'était deviner le signe du vert — un relief inversé ne se
 ## voit qu'à l'image, et ne se signale nulle part.
 
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
-const PBR := preload("res://addons/marching_blocks_plugin_godot/pbr_monde.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const PBR := preload("res://addons/marchingblocks_core/pbr_monde.gd")
 
 const SOURCE := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
 const COTE := 1024

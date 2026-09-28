@@ -39,9 +39,9 @@ extends SceneTree
 ##                                des retraits différents (le commentaire du code avait raison)
 ##   l'AMINCI en SOUS-VOXELS      manifold ✓, 0 trou, 98 % de valence 4, récolte IDENTIQUE  → REMÈDE
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 ## ⚠ La coque en sous-voxels et le bilan vivent dans un module PARTAGÉ avec `verifier_bloc_unique.gd`.
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 

@@ -34,7 +34,7 @@ extends SceneTree
 ## ⚠ Elle lit `BlocsMaitres.sous_voxels()`, la même fonction que le mailleur — jamais une recopie de la
 ## règle du retrait.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 
 func _initialize() -> void:

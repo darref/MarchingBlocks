@@ -38,8 +38,8 @@ extends SceneTree
 ## exactement le même jeu de noms que `librairie()`. Si les deux jeux diffèrent, mon énumération ne
 ## décrit pas le balayage réel et la colonne « provenance » ne vaut rien.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 

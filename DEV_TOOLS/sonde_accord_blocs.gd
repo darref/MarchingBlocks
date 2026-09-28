@@ -39,9 +39,9 @@ extends SceneTree
 ##
 ## Elle ne modifie rien. Elle imprime.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CELLULE := 1.0
 

@@ -11,8 +11,8 @@ extends SceneTree
 ## ⚠ À RELANCER À CHAQUE CHANGEMENT DE LA RÈGLE OU DES OUTILS — et ce n'est pas laissé à la mémoire :
 ## `test_greffon_peinture` rougit si un fichier livré n'est plus celui que la référence produit.
 
-const FN := preload("res://addons/marching_blocks_plugin_godot/format_neutre.gd")
-const EO := preload("res://addons/marching_blocks_plugin_godot/epreuve_outils.gd")
+const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
 ## ⚠ UN SEUL FICHIER, LIVRÉ À CHAQUE GREFFON : tous doivent passer les MÊMES cas.
 const CIBLES := [
 	"res://addons/marchingblocks_paint/conformance.json",

@@ -30,7 +30,7 @@ extends SceneTree
 ## car pour les 46 classes structurellement intérieures, la question ne se pose même pas : il n'existe
 ## qu'une variante, et le mixte se résout tout seul.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const N := 26
 const VOISINS := [

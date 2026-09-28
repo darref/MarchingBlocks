@@ -28,7 +28,7 @@ extends SceneTree
 ## notre extraction — auquel cas les deux lots déborderaient pareil. Un contrôle qui s'inverse invalide
 ## l'instrument, pas le sujet.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 

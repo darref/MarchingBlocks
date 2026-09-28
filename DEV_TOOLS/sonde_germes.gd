@@ -33,9 +33,9 @@ extends SceneTree
 ## ⚠ Elle n'invente aucun germe : elle appelle `Tranchage.germe_canonique()`, la même fonction que le
 ## contrôle de couture. Une seconde description du repliage aurait divergé (charte §6).
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 
 ## ⚠ **QUEL BLOC — ET C'EST DEVENU LA QUESTION CENTRALE DEPUIS QU'IL Y EN A DEUX (Jordan, 25 septembre
 ## 2026).** Avec un témoin unique, « 22/22 » suffisait. Avec deux, la règle est que **chaque germe doit

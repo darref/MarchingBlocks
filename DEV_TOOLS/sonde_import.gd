@@ -22,10 +22,10 @@ extends SceneTree
 ## des sujets voisins ; ici les hypothèses plausibles sont au moins cinq — échelle en mètres, axe haut
 ## inversé, origine décalée, bloc déplacé, maillage multiple — et rien ne les départage sans mesure.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const Decoupe := preload("res://addons/marching_blocks_plugin_godot/decoupe.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Decoupe := preload("res://addons/marchingblocks_core/decoupe.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 

@@ -37,8 +37,8 @@ extends SceneTree
 ## jamais été rangé dans le module — il vivait dans des sondes. Si la légende est adoptée, il devra
 ## descendre dans `blocs_maitres.gd` pour n'exister qu'une fois.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 ## ⚠ La lecture des chutes vit LÀ-BAS, et `sonde_reste_t_il_des_marches.gd` lit la même : cette
 ## planche PEINT ce que la sonde COMPTE, et deux écritures auraient fini par ne plus s'accorder.
 const Topologie := preload("res://DEV_TOOLS/topologie.gd")

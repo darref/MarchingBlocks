@@ -31,9 +31,9 @@ extends SceneTree
 ## projet la couverture était parfaite et le rendu faux ; seule une image l'a montré. Voir
 ## `planche_lissage.gd`, à lancer AVEC fenêtre.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 
 
 ## De combien on lisse. ⚠ **LE DÉFAUT EST 1,0 ET C'ÉTAIT UN PIÈGE** : toute la table de topologie et la

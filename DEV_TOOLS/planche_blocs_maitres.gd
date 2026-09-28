@@ -27,8 +27,8 @@ extends SceneTree
 ## flancs. ⚠ Elles ne prouvent rien non plus (le code les pose d'après la normale, l'image les répète) —
 ## elles servent à LIRE la forme, pas à la valider.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(430, 430)
 const COLONNES := 3

@@ -18,7 +18,7 @@ extends SceneTree
 ## ⚠ **ELLE NE MODIFIE RIEN.** La complétion est appliquée à une COPIE ; le fichier de Jordan n'est
 ## jamais touché, et la sonde ne sait pas écrire.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 
 const SCENE := "res://NIVEAUX/OverWorld/Overworld.tscn"
 

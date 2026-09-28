@@ -36,14 +36,14 @@ extends SceneTree
 ## Les trois blocs « érosion » passeraient ce test en étant illisibles — c'est précisément pourquoi ils
 ## sont nommés « érosion » et pas « massif ».
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const Tranchage := preload("res://addons/marching_blocks_plugin_godot/tranchage.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 ## ⚠ On EMPRUNTE le bilan topologique plutôt que d'en recopier le calcul : deux descriptions d'un même
 ## fait divergent toujours, et celle-ci porte déjà deux pièges payés cher (charte §6).
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 ## Les trois teintes de base du témoin : tout le reste est une roche souterraine assombrie.
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 var _ok := 0
 var _echecs := 0

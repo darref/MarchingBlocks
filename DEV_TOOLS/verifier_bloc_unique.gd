@@ -53,13 +53,13 @@ extends SceneTree
 ## employer un autre ici validerait le bloc contre une règle que le pinceau n'appliquera pas.
 ## ⚠ On ne récolte que les sommets INTÉRIEURS — (8−1)³ = 343.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 ## ⚠ La coque en sous-voxels et le bilan topologique vivent dans un module PARTAGÉ avec
 ## `sonde_topologie_export.gd` : deux copies d'un même calcul divergent, et ce projet l'a déjà payé.
 const Topo := preload("res://DEV_TOOLS/topologie.gd")
 ## ⚠ Pour le MODE RÉSIDU seulement : lire ce que le PREMIER témoin couvre déjà, afin de ne pas le
 ## refabriquer. Le vérificateur ne dépend pas des blocs livrés en dehors de ce mode.
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const COTE := 8
 

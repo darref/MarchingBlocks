@@ -13,7 +13,7 @@ extends SceneTree
 ## puis rendu tel quel à la fin — même en cas d'échec.
 
 const Projet := preload("res://app/projet.gd")
-const Outils := preload("res://addons/marching_blocks_plugin_godot/outils.gd")
+const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 

@@ -31,7 +31,7 @@ extends SceneTree
 ## ⚠ `Engine.is_editor_hint()` est faux sous `--script`, donc le suivi automatique ne tourne pas : on
 ## appelle `preparer()` puis `reconstruire()` à la main, dans cet ordre.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const CASE := Vector2i(340, 340)
 const FOND := Color("#101216")
@@ -164,7 +164,7 @@ func _faire_vue(lot: MeshLibrary, cases: Array, bilan: Dictionary) -> SubViewpor
 	lumiere.light_energy = 1.2
 	vue.add_child(lumiere)
 
-	var massif: Node3D = load("res://addons/marching_blocks_plugin_godot/massif_peint.gd").new()
+	var massif: Node3D = load("res://addons/marchingblocks_core/massif_peint.gd").new()
 	massif.lot = lot
 	vue.add_child(massif)
 	massif.preparer()

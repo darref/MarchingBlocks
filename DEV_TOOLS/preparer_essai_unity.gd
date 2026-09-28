@@ -11,8 +11,8 @@ extends SceneTree
 ##   witness_expected.json   ce que MarchingBlocks pose dessus — l'attendu, calculé par `MB.poses()`.
 ## ⚠ L'attendu vient de la RÉFÉRENCE, pas du greffon Unity : `WitnessTests.cs` compare le greffon à lui.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const FN := preload("res://addons/marching_blocks_plugin_godot/format_neutre.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CIBLE := "D:/MarchingBlocks/engines/unity/test-project/Assets"
 

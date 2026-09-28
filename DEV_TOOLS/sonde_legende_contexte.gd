@@ -9,9 +9,9 @@ extends SceneTree
 ## compte au critère lu à la source. Écrite parce que le commentaire de `_quad` avance « 76 % du bloc
 ## est souterrain » — un chiffre qu'aucun instrument ne rendait.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 
 func _initialize() -> void:

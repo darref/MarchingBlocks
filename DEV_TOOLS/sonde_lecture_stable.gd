@@ -30,7 +30,7 @@ extends SceneTree
 ## reconstruit les normales quand le fichier n'en porte pas). ⚠ Si seul le second varie, c'est notre
 ## code ; si les deux varient, c'est en dessous de nous.
 
-const BM := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _fichier := ""
 var _fois := 5

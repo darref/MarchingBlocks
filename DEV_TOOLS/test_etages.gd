@@ -1,6 +1,6 @@
 extends SceneTree
 ##
-## TEST — les opérations d'étage (`addons/marching_blocks_plugin_godot/etages.gd`).
+## TEST — les opérations d'étage (`addons/marchingblocks_core/etages.gd`).
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_etages.gd
@@ -10,7 +10,7 @@ extends SceneTree
 ## MarchingBlocks (27 septembre 2026), elle devient une fonction pure, donc enfin gardable. Les attendus
 ## sont écrits à la main, case par case, sur une croix de cinq cases : jamais recalculés par la fonction.
 
-const Etages := preload("res://addons/marching_blocks_plugin_godot/etages.gd")
+const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 
 var _ok := 0
 var _echecs := 0

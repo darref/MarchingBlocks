@@ -29,8 +29,8 @@ extends SceneTree
 ## Godot ; hors du projet, il faut `GLTFDocument.append_from_file()`. C'est le cas réel — celui où
 ## l'artiste range son travail où il veut — et c'est donc celui qu'on éprouve.
 
-const MB := preload("res://addons/marching_blocks_plugin_godot/marching_blocks.gd")
-const BlocsMaitres := preload("res://addons/marching_blocks_plugin_godot/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const BlocsMaitres := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _dossier := ""
 

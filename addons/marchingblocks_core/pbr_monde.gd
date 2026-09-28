@@ -13,10 +13,10 @@ extends RefCounted
 ## Les textures sont bâties par `DEV_TOOLS/batir_pbr_monde.gd`. Absentes, `matiere()` rend `null` et
 ## l'écran le DIT — jamais un matériau à moitié vide qui rendrait du noir.
 
-const RP := preload("res://addons/marching_blocks_plugin_godot/repli_procedural.gd")
+const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 const DOSSIER := "res://ART/pbr_monde/"
-const SHADER := "res://addons/marching_blocks_plugin_godot/pbr_monde.gdshader"
+const SHADER := "res://addons/marchingblocks_core/pbr_monde.gdshader"
 
 
 ## Les trois tableaux sont-ils là ?
