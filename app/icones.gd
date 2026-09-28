@@ -33,6 +33,8 @@ const TRACES := {
 	# Les outils
 	"outils": '<path d="M14.7 6.3a4 4 0 0 0-5.3 5.3L3.5 17.5l3 3 5.9-5.9a4 4 0 0 0 5.3-5.3l-2.6 2.6-2.4-.6-.6-2.4z"/>',
 	"visee_grille": '<path d="M2.5 16 12 20.5l9.5-4.5L12 11.5z"/><path d="M12 3v7M9 7.5l3 3 3-3"/>',
+	# Naviguer : une boussole — on ne vise rien, on se déplace.
+	"visee_naviguer": '<circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 13.2 13.2 8.5 15.5l2.3-4.7z"/>',
 	"visee_sculpt": '<path d="M15 9.5l5.5 3.2v6.1L15 22l-5.5-3.2v-6.1z"/><path d="M9.5 12.7 15 15.9l5.5-3.2M15 15.9V22"/><path d="M3 3l6 6M9 4v5H4"/>',
 	"ajouter": '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M12 8v8M8 12h8"/>',
 	"creuser": '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12h8"/>',

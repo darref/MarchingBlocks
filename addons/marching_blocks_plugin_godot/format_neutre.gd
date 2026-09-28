@@ -225,6 +225,19 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var doc := GLTFDocument.new()
 	var etat := GLTFState.new()
 	var err: int = doc.append_from_scene(racine, etat)
+	# ⚠ **LE MAILLAGE PORTE AUSSI LE NOM DE SA TUILE, pas seulement le nœud.** Godot et Unity lisent les
+	# nœuds ; l'importeur glTF d'Unreal fait un `StaticMesh` PAR MAILLAGE et le nomme d'après lui : des
+	# maillages anonymes y arrivaient indiscernables (mesuré sur le .glb le 28 septembre 2026 : aucun
+	# `meshes[*].name`). ⚠ On le pose ICI, APRÈS `append_from_scene`, en recopiant le nom DÉFINITIF du
+	# nœud : l'export tient un seul espace de noms pour nœuds et maillages, et nommer le maillage dans la
+	# scène renommait le NŒUD en « …_22 » — 14 tuiles introuvables, vu rougir.
+	if err == OK:
+		var maillages: Array = etat.get_meshes()
+		for noeud: GLTFNode in etat.get_nodes():
+			if noeud.mesh >= 0 and noeud.mesh < maillages.size():
+				var gm := maillages[noeud.mesh] as GLTFMesh
+				gm.resource_name = noeud.resource_name
+		etat.set_meshes(maillages)
 	if err == OK:
 		err = doc.write_to_filesystem(etat, cible.path_join("tiles.glb"))
 	racine.free()

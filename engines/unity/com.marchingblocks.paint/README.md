@@ -14,8 +14,26 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 1. Drop a `.mbset` folder into `Assets/`. `tiles.glb` is imported by your glTF importer.
 2. Create an empty GameObject, add **MarchingBlocks World**, and assign **Tileset** (`tileset.json`)
    and **Tiles** (the imported `tiles.glb`).
-3. Click **Paint cells** in the inspector, then paint in the Scene view: left click paints on the
-   floor, Shift + left click erases, Page Up / Page Down change the floor. Ctrl+Z undoes.
+3. Click **Edit the world** in the inspector, then work in the Scene view. Ctrl+Z undoes every change.
+
+| Aim (Tab) | |
+|---|---|
+| Grid | aims at the floor plane — Page Up / Page Down move it |
+| Sculpt | aims at the matter itself — Add builds against the face you point at |
+| Navigate | aims at nothing: fly as usual in Unity (right drag + W A S D, Q E). No click paints |
+
+| Keys | |
+|---|---|
+| A · D · S · G · B | Add · Dig · Select · Rect (flat, on the floor) · Box (3D volume, can be Hollow) |
+| Shift | the opposite (Add ↔ Dig; adds to the selection) · Ctrl removes from it |
+| [ ] | brush size 1–7 — sphere, cube or disc in the inspector |
+| Delete · Esc | delete the selection · clear it or cancel a paste |
+| Arrows | move the selection; they follow the camera. Shift + ↑ ↓ lift and lower |
+| Ctrl + C · X · V | copy · cut · paste (then click to place) |
+
+The selection buttons — **Fill, Delete, Extrude ↑ ↓, Grow, Shrink, Connected, Move, Copy, Cut, Paste** —
+are in the inspector. Extruding moves the floor with the selection, so *Rect, Fill, Extrude, Fill…*
+raises a room.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you.
 One component is one layer: stack several GameObjects for several tilesets.
@@ -28,6 +46,7 @@ grid with exactly the same mapping. Nothing is assumed.
 
 ## The rule
 
-The placement rule is written in `tileset.json` (`rules_text`). `Tests/conformance.json` holds the
-reference cases shared by the Godot, Unity and Unreal plugins; `Tests/Editor/ConformanceTests.cs` runs
-them in the Test Runner (list `com.marchingblocks.paint` under `testables` in your project manifest).
+The placement rule is written in `tileset.json` (`rules_text`), the tools in `Tests/tools_conformance.json`
+(`rules_text`). Both hold reference cases computed by the MarchingBlocks tool itself and shared with the
+other plugins; `Tests/Editor/` runs them in the Test Runner (list `com.marchingblocks.paint` under
+`testables` in your project manifest).

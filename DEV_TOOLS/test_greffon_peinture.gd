@@ -20,6 +20,7 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
 const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
+const EO := preload("res://addons/marching_blocks_plugin_godot/epreuve_outils.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -33,6 +34,7 @@ func _initialize() -> void:
 	if not cas.is_empty():
 		_le_greffon_passe_les_cas(cas)
 	_un_format_plus_recent_est_refuse()
+	_les_cas_d_outils()
 	_de_bout_en_bout.call_deferred()
 
 
@@ -131,6 +133,58 @@ func _un_format_plus_recent_est_refuse() -> void:
 	_egal(Rule.check(regle), "", "un manifeste du format courant est refusé")
 
 
+# ── 4 bis. Les cas d'OUTILS livrés aux greffons Unity et Unreal : frais, et qui exercent quelque chose ─
+#
+# ⚠ **LA RÉFÉRENCE EST `outils.gd`**, que l'appli appelle : les cas sont calculés par elle. Les greffons
+# les passent chacun dans leur langue (banc .NET, banc g++) ; ici on garde qu'ils ne sont pas PÉRIMÉS,
+# et qu'ils éprouvent ce qu'ils nomment (charte §6 : un cas qui n'exerce rien ne garde rien).
+func _les_cas_d_outils() -> void:
+	var frais: Dictionary = EO.cas_d_epreuve()
+	_vrai(not frais.has("erreur"), "les cas d'outils sont refusés : %s" % frais.get("erreur", ""))
+	if frais.has("erreur"):
+		return
+	var texte := JSON.stringify(JSON.parse_string(JSON.stringify(frais)))
+	for cible in GENERATEUR.CIBLES_OUTILS:
+		var ici = JSON.parse_string(FileAccess.get_file_as_string(cible)) if FileAccess.file_exists(cible) else null
+		_vrai(ici != null and JSON.stringify(ici) == texte,
+			"%s est absent ou PÉRIMÉ : relancer DEV_TOOLS/generer_cas_d_epreuve.gd" % cible)
+	var sortes := {}
+	var touches := 0
+	var manques := 0
+	var egalite := false
+	var boite_vide := false
+	var creuse := false
+	var operations := {}
+	for c in frais["cases"]:
+		sortes[c["kind"]] = true
+		match c["kind"]:
+			"ray":
+				if c["expected"]["hit"]:
+					touches += 1
+				else:
+					manques += 1
+				egalite = egalite or str(c["name"]).contains("exact tie")
+			"box":
+				boite_vide = boite_vide or int(c["expected"]["count"]) == 0
+				if c["input"]["hollow"]:
+					var a: Array = c["input"]["a"]
+					var b: Array = c["input"]["b"]
+					var plein := 1
+					for i in 3:
+						plein *= absi(int(a[i]) - int(b[i])) + 1
+					creuse = creuse or (int(c["expected"]["count"]) > 0 and int(c["expected"]["count"]) < plein)
+			"selection":
+				operations[c["input"]["op"]] = true
+	_egal(sortes.size(), 9, "les cas d'outils couvrent les neuf sortes de fonctions")
+	_vrai(touches >= 3 and manques >= 2, "les rayons doivent toucher ET manquer (%d / %d)" % [touches, manques])
+	_vrai(egalite, "aucun rayon n'éprouve une égalité exacte : départager à l'envers resterait muet")
+	_vrai(boite_vide, "aucune boîte ne dépasse la borne : la borne n'est pas éprouvée")
+	_vrai(creuse, "aucune boîte creuse n'est réellement évidée")
+	_egal(operations.size(), EO.OPERATIONS_EN.size(), "chaque opération de sélection a ses cas")
+	print("  cas d'outils : %d cas, %d rayons qui touchent, %d qui manquent" % [(frais["cases"] as Array).size(),
+		touches, manques])
+
+
 # ── 5. De bout en bout : l'appli exporte, le greffon charge, pose, et redonne ce que l'appli pose ────
 func _de_bout_en_bout() -> void:
 	var bilan: Dictionary = BM.librairie()
@@ -152,6 +206,23 @@ func _de_bout_en_bout() -> void:
 		return
 	_egal((charge["library"] as MeshLibrary).get_item_list().size(), lot.get_item_list().size(),
 		"le greffon relit autant de tuiles que l'appli en a exporté")
+	# ⚠ LES MAILLAGES PORTENT LE NOM DE LEUR NŒUD — lu dans le JSON du .glb, SANS le lecteur de Godot,
+	# qui ne dirait que les nœuds. C'est ce que l'importeur d'Unreal nomme (un StaticMesh par maillage).
+	var glb := FileAccess.get_file_as_bytes(dossier.path_join("witness_rock.mbset/tiles.glb"))
+	var long_json := glb.decode_u32(12)
+	var gltf = JSON.parse_string(glb.slice(20, 20 + long_json).get_string_from_utf8())
+	var anonymes := 0
+	var mal_nommes: Array = []
+	for noeud in gltf["nodes"]:
+		if not noeud.has("mesh"):
+			continue
+		var nom_maillage = gltf["meshes"][int(noeud["mesh"])].get("name", null)
+		if nom_maillage == null:
+			anonymes += 1
+		elif nom_maillage != noeud["name"]:
+			mal_nommes.append("%s ≠ %s" % [nom_maillage, noeud["name"]])
+	_egal(anonymes, 0, "maillages anonymes dans tiles.glb (Unreal les importerait indiscernables)")
+	_vrai(mal_nommes.is_empty(), "maillages nommés autrement que leur nœud : %s" % str(mal_nommes.slice(0, 3)))
 	# Le repère témoin : présent, et lu par Godot sans conversion — ses quatre points exacts.
 	var maillages: Dictionary = Tileset._meshes_of(dossier.path_join("witness_rock.mbset/tiles.glb"))
 	var repere: Mesh = maillages.get(FN.MARQUEUR, null)

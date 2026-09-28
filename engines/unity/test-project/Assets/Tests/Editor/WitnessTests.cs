@@ -128,6 +128,43 @@ public sealed class WitnessTests
         finally { Object.DestroyImmediate(go); }
     }
 
+    // THE TOOLS AIM THROUGH THE MEASURED FRAME. glTFast mirrors X: a ray taken from the world must be
+    // brought back to format space by the inverse of that map, or it would hit the wrong side of the
+    // matter. The expected cells come from the witness cells alone, not from the package's maths.
+    [Test]
+    public void TheMatterIsAimedThroughTheMirroredFrame()
+    {
+        var go = new GameObject("witness aim");
+        try
+        {
+            var world = Build(go);
+            Assert.IsTrue(LoadSet().Mirrored, "this test is only worth something on a mirroring importer");
+            var cells = world.Cells;
+            Int3 top = default, east = default;
+            bool first = true;
+            foreach (var c in cells)
+            {
+                if (first || c.y > top.y || (c.y == top.y && MBTools.Compare(c, top) < 0)) top = c;
+                if (first || c.x > east.x || (c.x == east.x && MBTools.Compare(c, east) < 0)) east = c;
+                first = false;
+            }
+            var toWorld = world.FormatToWorld;
+            Hit Shoot(Vector3 from, Vector3 dir) =>
+                world.RayAgainstCells(new Ray(toWorld.MultiplyPoint3x4(from), toWorld.MultiplyVector(dir).normalized));
+
+            var down = Shoot(new Vector3(top.x + 0.5f, top.y + 20.5f, top.z + 0.5f), Vector3.down);
+            Assert.IsTrue(down.Touched, "a ray from above the highest cell touches nothing");
+            Assert.AreEqual(top, down.Cell, "from above: wrong cell");
+            Assert.AreEqual(new Int3(0, 1, 0), down.Normal, "from above: wrong face");
+
+            var west = Shoot(new Vector3(east.x + 20.5f, east.y + 0.5f, east.z + 0.5f), Vector3.left);
+            Assert.IsTrue(west.Touched, "a ray from +X towards the easternmost cell touches nothing");
+            Assert.AreEqual(east, west.Cell, "from +X: wrong cell — is the mirror undone?");
+            Assert.AreEqual(new Int3(1, 0, 0), west.Normal, "from +X: wrong face");
+        }
+        finally { Object.DestroyImmediate(go); }
+    }
+
     static MarchingBlocksWorld Build(GameObject go)
     {
         var world = go.AddComponent<MarchingBlocksWorld>();

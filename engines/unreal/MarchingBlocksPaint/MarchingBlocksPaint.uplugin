@@ -1,0 +1,15 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0.0",
+	"FriendlyName": "MarchingBlocks Paint",
+	"Description": "Paint worlds with MarchingBlocks tilesets: you paint cells, the non-cubic 3D tiles follow. Free and open - reads the .mbset folders made by the MarchingBlocks tool.",
+	"Category": "Editor",
+	"CreatedBy": "MarchingBlocks",
+	"CanContainContent": false,
+	"IsBetaVersion": true,
+	"Modules": [
+		{ "Name": "MarchingBlocksPaint", "Type": "Runtime", "LoadingPhase": "Default" },
+		{ "Name": "MarchingBlocksPaintEditor", "Type": "Editor", "LoadingPhase": "Default" }
+	]
+}

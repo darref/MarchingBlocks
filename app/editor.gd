@@ -52,7 +52,8 @@ const CONSEILS: Array[String] = [
 	"One witness block carries every tile. Sculpt it, bring it back, paint with it.",
 	"The witness is proven complete: not one tile missing, not one extra.",
 	"Test world: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
-	"Tab switches between Grid (paint on the floor plane) and Sculpt (paint against the matter).",
+	"Tab cycles Grid (paint on the floor plane), Sculpt (paint against the matter) and Navigate (fly around).",
+	"Navigate: Z Q S D to fly (W A S D on a QWERTY keyboard), Space up, Shift down, right drag to look.",
 	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
 	"Arrow keys move the selection, Shift + Up / Down lifts it. Ctrl+C, Ctrl+X, Ctrl+V work across layers.",
 	"Middle mouse turns the view, Shift + middle slides it, the wheel zooms.",
@@ -577,7 +578,8 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	raccourcis.columns = 2
 	raccourcis.add_theme_constant_override("h_separation", 10)
 	raccourcis.add_theme_constant_override("v_separation", 4)
-	for r in [["Tab", "Grid ↔ Sculpt"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
+	for r in [["Tab", "Grid → Sculpt → Navigate"], ["ZQSD Space Shift", "Fly (Navigate)"],
+			["Right drag", "Look (Navigate)"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
 			["PgUp PgDn", "Floor y"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
 			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
 			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
@@ -676,6 +678,9 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["sculpt", "Sculpt", "visee_sculpt", "Aims at the matter already there: Add builds on the face "
 			+ "you point at, Dig and Select act on the cell you point at.\nWhere the ray meets no "
 			+ "matter, it falls back on the floor plane."],
+		["naviguer", "Navigate", "visee_naviguer", "Aims at nothing: fly around your world.\n"
+			+ "Z Q S D move (W A S D on a QWERTY keyboard), Space goes up, Shift goes down, right drag "
+			+ "looks around. No click paints."],
 	], _choisir_visee))
 	outils.contenu.add_child(_petit_titre("TOOL"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_outil, [
@@ -1790,6 +1795,11 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	if _atelier != "monde":
 		return
+	# ⚠ **EN NAVIGATE, LES TOUCHES DE VOL NE CHOISISSENT PAS D'OUTIL.** S et D sont aussi Select et Dig :
+	# voler vers l'arrière aurait changé d'outil en silence. On les lit par leur PLACE (`vue.gd`).
+	if _vue.visee == "naviguer" and k.physical_keycode in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE]:
+		get_viewport().set_input_as_handled()
+		return
 	var fait := true
 	match k.keycode:
 		KEY_A:
@@ -1843,7 +1853,8 @@ func _input(event: InputEvent) -> void:
 	if focus is LineEdit or focus is TextEdit:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
-		_choisir_visee("sculpt" if _vue.visee == "grille" else "grille")
+		var i: int = _vue.VISEES.find(_vue.visee)
+		_choisir_visee(_vue.VISEES[(i + 1) % _vue.VISEES.size()])
 	elif k.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT] and not _vue.selection.is_empty():
 		var haut: int = 1 if k.keycode == KEY_UP else (-1 if k.keycode == KEY_DOWN else 0)
 		if k.shift_pressed:

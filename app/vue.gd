@@ -61,6 +61,13 @@ var _selection_vue: MultiMeshInstance3D
 
 ## LA BARRE D'OUTILS (charte §5, plan du 27 septembre 2026). La visée dit comment trouver le point :
 ## "grille" (le plan de l'étage) ou "sculpt" (la matière). L'outil dit ce qu'on en fait.
+## **"naviguer" — DEMANDÉ PAR JORDAN (28 septembre 2026)** : la troisième visée ne vise RIEN. On se
+## déplace dans le monde comme dans un jeu — ZQSD, Espace, Maj, clic droit pour regarder — et aucun
+## clic ne peint. ⚠ C'est une VISÉE et non un outil parce que c'est elle qui décide de ce que fait la
+## souris ; l'outil choisi reste choisi, et revient tel quel à la visée suivante.
+const VISEES := ["grille", "sculpt", "naviguer"]
+## Cases par seconde. ⚠ Proportionnelle à la distance d'orbite : de près on ajuste, de loin on traverse.
+const VITESSE_DE_VOL := 0.6
 var visee := "grille"
 var outil := "ajouter"
 var taille := 1
@@ -299,7 +306,65 @@ func _caler() -> void:
 	_camera.look_at_from_position(_cible + direction * _distance, _cible, Vector3.UP)
 
 
+## LA NAVIGATION — la caméra VOLE au lieu d'orbiter.
+##
+## ⚠ **ON GARDE LE MODÈLE D'ORBITE** (cible, azimut, élévation, distance) et on déplace la CIBLE : la
+## caméra reste à `distance` devant elle. Regarder autour de soi fait donc pivoter la cible autour de la
+## caméra, pas l'inverse — sinon l'œil tournerait autour d'un point invisible, ce qui est l'orbite et
+## non le regard. Et repasser en Grid ou Sculpt retrouve une orbite cohérente, sans saut.
+func regarder(relatif: Vector2) -> void:
+	var oeil := _camera.global_position
+	_azimut -= relatif.x * 0.005
+	_elevation = clampf(_elevation + relatif.y * 0.005, -1.4, 1.4)
+	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
+	_cible = oeil - direction * _distance
+	_caler()
+
+
+## `axes` : x à droite, y en haut, z en AVANT. ⚠ Avancer reste À PLAT : on vise le sol en marchant,
+## et Espace / Maj portent seuls la hauteur — sinon regarder vers le bas enfoncerait dans le terrain.
+func voler(axes: Vector3, dt: float) -> void:
+	if axes == Vector3.ZERO:
+		return
+	var avant := -_camera.global_transform.basis.z
+	avant.y = 0.0
+	avant = avant.normalized() if avant.length_squared() > 1e-6 else Vector3(-sin(_azimut), 0, -cos(_azimut))
+	var droite := Vector3(-avant.z, 0.0, avant.x)
+	var pas := (droite * axes.x + Vector3.UP * axes.y + avant * axes.z).normalized()
+	_cible += pas * VITESSE_DE_VOL * maxf(_distance, 4.0) * dt
+	_caler()
+
+
+## ⚠ **LES TOUCHES SE LISENT PAR LEUR PLACE, PAS PAR LEUR LETTRE** (`physical_keycode`) : ZQSD sur
+## un clavier AZERTY, WASD sur un QWERTY — le même geste de la main gauche. Lire les lettres aurait
+## donné un clavier sur deux à l'envers.
+## ⚠ Un champ de texte qui a la main garde ses touches : on tape le nom d'une couche avec des Z et des S.
+func _process(dt: float) -> void:
+	if visee != "naviguer" or mode != "monde" or not is_visible_in_tree():
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return
+	var axes := Vector3.ZERO
+	if Input.is_physical_key_pressed(KEY_W):
+		axes.z += 1.0
+	if Input.is_physical_key_pressed(KEY_S):
+		axes.z -= 1.0
+	if Input.is_physical_key_pressed(KEY_D):
+		axes.x += 1.0
+	if Input.is_physical_key_pressed(KEY_A):
+		axes.x -= 1.0
+	if Input.is_physical_key_pressed(KEY_SPACE):
+		axes.y += 1.0
+	if Input.is_physical_key_pressed(KEY_SHIFT):
+		axes.y -= 1.0
+	voler(axes, dt)
+
+
 func _gui_input(event: InputEvent) -> void:
+	if visee == "naviguer" and mode == "monde" and _naviguer(event):
+		accept_event()
+		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
 		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -347,6 +412,20 @@ func _gui_input(event: InputEvent) -> void:
 			_survoler(m.position)
 			if _coup >= 0:
 				_toucher(m.position)
+
+
+## En Navigate, la souris ne peint pas : le clic droit glissé regarde, la molette et le clic du
+## milieu gardent leur rôle (zoom, orbite). Rend vrai quand l'événement est pris.
+func _naviguer(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		return b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT
+	if event is InputEventMouseMotion:
+		var m := event as InputEventMouseMotion
+		if (m.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
+			regarder(m.relative)
+			return true
+	return false
 
 
 # ── le pinceau ───────────────────────────────────────────────────────────────────────────────────────
@@ -418,6 +497,13 @@ func _occupe_visible(c: Vector3i) -> bool:
 
 func _survoler(position: Vector2) -> void:
 	_derniere_souris = position
+	# ⚠ EN NAVIGATE, RIEN N'EST VISÉ, DONC RIEN N'EST PROMIS : un aperçu laissé à l'écran ferait croire
+	# qu'un clic peindra.
+	if visee == "naviguer":
+		_apercu.visible = false
+		_grille_locale.visible = false
+		_boite_vue.visible = false
+		return
 	var g: String = geste(_coup) if _coup >= 0 else outil
 	var point := point_vise(position, g)
 	var plan = case_sous(position)

@@ -481,10 +481,65 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   en miroir ×100, synthétique), vert.
   ⚠ Unity RÉÉCRIT le manifeste d'un projet neuf avec son gabarit (une cinquantaine de modules) : il est
   remis au minimum, et reste stable aux ouvertures suivantes.
+- **LES OUTILS D'ÉDITION DE MONDE DANS LES GREFFONS — DEMANDÉ PAR JORDAN (28 septembre 2026).** Unity et
+  Unreal reçoivent les outils de l'appli : visée Grid / Sculpt / Navigate, Add, Dig, Select, Rect, Box
+  (creuse ou non), pinceau sphère / cube / disque de 1 à 7, Fill, Delete, Extrude ↑ ↓ (l'étage suit),
+  Grow, Shrink, Connected, déplacer (les flèches suivent la caméra), copier / couper / coller.
+  ⚠ **TROIS IMPLÉMENTATIONS, UNE RÉFÉRENCE : `outils.gd`.** Même parade que pour la règle de pose :
+  `epreuve_outils.gd` CALCULE les cas avec `outils.gd` et les écrit en anglais dans
+  `tools_conformance.json` (69 cas : rayons, ancre, pinceaux, modifications, sept opérations de
+  sélection, boîtes, déplacer, copier, coller), livré avec Unity et Unreal. `test_greffon_peinture`
+  rougit s'il est PÉRIMÉ, et vérifie qu'il exerce ce qu'il nomme — rayons qui touchent ET qui manquent,
+  égalité exacte, borne dépassée, boîte réellement évidée, chaque opération. La traduction des noms
+  (`remplir` → `fill`…) vit dans `epreuve_outils.gd` ET NULLE PART AILLEURS.
+  ⚠ **LES RAYONS SONT ÉCRITS EN FLOTTANTS EXACTS** (dyadiques) : Godot vise en `Vector3`, donc en 32 bits,
+  les greffons en 64. Le générateur REFUSE un rayon dont la réponse change sous une perturbation de
+  10⁻³ de la direction — sauf l'égalité exacte VOULUE, écrite dans la règle.
+  ⚠ **UNE MUTATION EST RESTÉE MUETTE, ET C'ÉTAIT LE TEST** : départager une égalité à l'envers (`<=`)
+  ne changeait aucun cas, parce que les seules égalités exercées étaient celles d'un rayon parallèle à
+  un axe, où deux composantes sont à l'infini. Un rayon diagonal (|dx| = |dy|) départage bel et bien un
+  franchissement simultané — ajouté, il rougit.
+  - **Unity** : `MBTools.cs` (C# pur, classe `MBTools` et enum `BrushTool` — ⚠ `Tools` et `Tool` entrent
+    en collision avec `UnityEditor.Tools` et `UnityEditor.Tool`, mesuré à la compilation : le code d'un
+    acheteur qui écrit `using UnityEditor; using MarchingBlocks.Paint;` aurait buté dessus). Le
+    composant garde la liste sérialisée pour seule vérité et un INDEX à côté ; `Apply` réécrit la liste
+    en une passe (retirer case par case d'une `List` est quadratique). La Scene view : Shift fait
+    l'inverse (le clic droit y fait voler la caméra), Ctrl retire de la sélection.
+    **MESURÉ** : banc .NET 69/69 ; **Unity 6.6, 9 tests sur 9**, dont l'éditeur compilé, `Apply` repris
+    par `Undo`, et **la visée à travers le miroir de glTFast sur le vrai témoin**. Mutations rouges :
+    copie tronquée, verrou de coup ignoré, égalité inversée, creux ignoré, borne ôtée (banc .NET), et
+    visée sans défaire le miroir (dans Unity : seul ce test rougit, les 8 autres restent verts).
+  - **Unreal** : `engines/unreal/MarchingBlocksPaint/`, un greffon à deux modules. Le CŒUR est du C++
+    STANDARD (`MBCore/` : JSON, règle, outils, repère), sans Unreal, et `engines/unreal/core-runner`
+    (`./build.sh`, g++) le compile SOUS LES CONTRAINTES D'UNREAL — sans exceptions, sans RTTI, masquage
+    et rétrécissement en erreurs. **MESURÉ : 1 624 poses, 69 cas d'outils, le repère sur un importeur
+    miroir en centimètres — 0 échec**, et treize mutations toutes rouges (repli sur le nom nu, hachage
+    sans masque, quarts ignorés, les cinq des outils, la conjugaison F·R·F⁻¹ ôtée de deux façons, l'axe
+    non divisé). ⚠ **LE REPÈRE A ÉTÉ SORTI DE L'ACTEUR POUR POUVOIR ÊTRE ÉPROUVÉ** : c'est lui qui a
+    rougi dans Unity quand il était faux, et le laisser dans du code Unreal non compilable l'aurait
+    laissé sans garde. L'acteur n'en garde qu'une conversion `FVector` ↔ `FVec3`.
+    La couche Unreal : `AMarchingBlocksWorld` (cases en espace du FORMAT, copie du manifeste et repère
+    mesuré SAUVÉS avec le niveau pour qu'un jeu empaqueté reconstruise sans le fichier, une
+    `UInstancedStaticMeshComponent` par tuile, transitoires), réglages et opérations de sélection en
+    `UPROPERTY` et boutons `CallInEditor` du panneau Details — donc AUCUN Slate à écrire ; et le mode
+    `UMarchingBlocksEdMode` (un `UEdMode` : viser, glisser, aperçu, une transaction par coup).
+    ⚠ **CETTE COUCHE N'A JAMAIS ÉTÉ COMPILÉE** : ni Unreal ni Visual Studio sur le PC, ni ici. Elle est
+    écrite pour Unreal 5.3+ en évitant ce qu'on sait piéger (masquage C4456–C4459, macros `check`,
+    `verify`, `IN`, `OUT`, fonctions `static` homonymes fusionnées par les « unity builds », `FChange` et
+    `FJsonValue` qui existent aussi dans Unreal — tout est qualifié `MBPaint::`). Son README le dit.
+  ⚠ **`tiles.glb` NE NOMMAIT AUCUN MAILLAGE** — mesuré sur le fichier : seuls les NŒUDS portaient les
+  noms. Godot et Unity lisent les nœuds ; l'importeur d'Unreal fait un `StaticMesh` par MAILLAGE : les
+  tuiles y seraient arrivées indiscernables. Corrigé dans `FormatNeutre.exporter`, gardé par
+  `test_greffon_peinture` (lu dans le JSON du fichier). ⚠ **ET LA PREMIÈRE CORRECTION ÉTAIT FAUSSE** :
+  l'export glTF de Godot tient UN espace de noms pour nœuds et maillages — nommer le maillage dans la
+  scène renommait le NŒUD en « …_22 », 14 tuiles introuvables, vu rougir. Le nom est posé dans l'état
+  glTF, APRÈS `append_from_scene`, en recopiant celui du nœud (`GLTFMesh.resource_name`).
 - **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
   option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
-  un GameObject par tuile : à mesurer sur une vraie carte) ; le greffon Unreal.
+  un GameObject par tuile : à mesurer sur une vraie carte) ; **compiler le greffon Unreal** (il faut un
+  Unreal 5.3+ et Visual Studio) ; les outils d'édition dans le greffon GODOT gratuit, qui peint encore au
+  pinceau natif du GridMap.
 
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
@@ -581,6 +636,17 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
 - **LES QUATRE ÉTAPES À GAUCHE (Jordan, 28 septembre 2026)** : Export · Import · Slice · Export to
   engines, numérotées, et les imports gardés en LISTE (réimporter un même fichier le remplace). La
   liste ne survit pas à la session : OUVERT.
+- **LA TROISIÈME VISÉE : NAVIGATE — DEMANDÉ PAR JORDAN (28 septembre 2026).** Elle ne vise rien : ZQSD
+  pour se déplacer, Espace / Maj pour monter et descendre, clic droit glissé pour regarder ; aucun clic
+  ne peint. Tab fait le tour Grid → Sculpt → Navigate.
+  ⚠ **LES TOUCHES SE LISENT PAR LEUR PLACE** (`physical_keycode`) : ZQSD sur un AZERTY, WASD sur un
+  QWERTY. ⚠ **S ET D SONT AUSSI SELECT ET DIG** : en Navigate, les touches de vol ne choisissent pas
+  d'outil, sinon reculer changeait d'outil en silence. ⚠ **ON DÉPLACE LA CIBLE, PAS L'ŒIL** : regarder
+  fait pivoter la cible autour de la caméra, et repasser en Grid retrouve une orbite cohérente. Avancer
+  reste À PLAT. Gardé par `fumee_appli` (cycle de Tab, aucun clic ne peint, l'œil reste en place, vol à
+  plat, S ne choisit pas Select) — quatre mutations, toutes rouges. ⚠ Tenir une touche ne se simule pas
+  en headless : `_process` (la lecture de ZQSD) n'est éprouvé que par la main.
+  Dans Unity et Unreal, Navigate REND la souris au moteur, dont la vue vole déjà nativement.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
@@ -664,11 +730,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 710 vérifications, 0 échec** (28 septembre 2026, recomptées après la boîte de volume),
-  plus le banc C# du greffon Unity (`engines/unity/conformance-runner`, 18 cas) :
+  Onze suites, **7 731 vérifications, 0 échec** (28 septembre 2026, recomptées après les outils des greffons
+  et Navigate), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
+  69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6 (9 tests) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 428,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 57, `fumee_appli` 49, `test_greffon_peinture` 45.
+  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 57.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
@@ -691,6 +758,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   ⚠ **LE TOTAL ÉCRIT ICI A MENTI, ET C'EST UN CAS DE « TENUE DE REGISTRE ».** Il annonçait 6 686 alors
   que les suites en rendaient 6 597 : personne n'avait recompté après une suite retouchée. Un chiffre
   de charte se relève, il ne se reporte pas.
+- ⚠ **UNE MUTATION REJOUÉE PAR UN BINAIRE PÉRIMÉ MENT AVEC ASSURANCE.** Cinq mutations du banc .NET ont
+  rendu le MÊME échec : `Copy-Item` garde la date du fichier source, MSBuild a jugé le binaire à jour et
+  a rejoué la première mutation cinq fois. Un banc de mutations force la recompilation
+  (`--no-incremental`) — et cinq verdicts identiques pour cinq défauts différents sont un signal.
+- ⚠ **UN `-Werror` PEUT FAIRE PASSER UNE MUTATION POUR ROUGE** : ôter l'usage d'un paramètre ne compilait
+  plus (« unused parameter »), et l'échec de COMPILATION n'est pas un test qui rougit. La mutation se
+  réécrit pour compiler (`|| true`, `&& false`), puis on lit QUEL cas rougit.
 - **Pas de `class_name`** dans le code testé : les tests tournent en `--script`, avant que l'éditeur ait
   indexé les classes globales. On `preload`.
 - ⚠ **`--check-only --script` rend TOUJOURS le code 0**, même sur une erreur de parsing : **seul le

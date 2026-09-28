@@ -27,6 +27,9 @@ namespace MarchingBlocks.Paint
         public int floor;
 
         [SerializeField, HideInInspector] List<Vector3Int> cells = new List<Vector3Int>();
+        // An INDEX of the list above, never a second copy of the truth: rebuilt from the list whenever
+        // it may have changed behind our back (undo, a scene reload, OnValidate).
+        [System.NonSerialized] HashSet<Int3> index;
 
         const string ContainerName = "MarchingBlocks tiles (generated)";
         MBTileset loaded;
@@ -49,16 +52,50 @@ namespace MarchingBlocks.Paint
 #endif
         }
 
-        public bool HasCell(Vector3Int c) => cells.Contains(c);
+        /// <summary>The painted cells, in format space. Read-only: change them through Apply or SetCell.</summary>
+        public HashSet<Int3> Cells
+        {
+            get
+            {
+                if (index == null || index.Count != cells.Count) Reindex();
+                return index;
+            }
+        }
+
+        void Reindex()
+        {
+            index = new HashSet<Int3>();
+            foreach (var c in cells) index.Add(new Int3(c.x, c.y, c.z));
+        }
+
+        public bool HasCell(Vector3Int c) => Cells.Contains(new Int3(c.x, c.y, c.z));
 
         /// <summary>Adds or removes a cell. Call Rebuild() afterwards (once per stroke is enough).</summary>
         public void SetCell(Vector3Int c, bool full)
         {
-            if (full && !cells.Contains(c)) cells.Add(c);
-            else if (!full) cells.Remove(c);
+            var k = new Int3(c.x, c.y, c.z);
+            if (full && Cells.Add(k)) cells.Add(c);
+            else if (!full && Cells.Remove(k)) cells.Remove(c);
         }
 
-        public void ClearCells() => cells.Clear();
+        /// <summary>Applies what a tool returned (MBTools.cs): clears, then sets. Record the undo BEFORE
+        /// calling this (Undo.RecordObject); the tiles are rebuilt once. Returns the cells changed.</summary>
+        public int Apply(Change change)
+        {
+            int n = 0;
+            var set = Cells;
+            foreach (var c in change.Clear) if (set.Remove(c)) n++;
+            foreach (var c in change.Set) if (set.Add(c)) n++;
+            if (n == 0) return 0;
+            // The list is rewritten in ONE pass: removing cell by cell from a List is quadratic, and a
+            // box of a few thousand cells would freeze the editor.
+            cells.Clear();
+            foreach (var c in set) cells.Add(new Vector3Int(c.x, c.y, c.z));
+            Rebuild();
+            return n;
+        }
+
+        public void ClearCells() { cells.Clear(); index = null; }
 
         MBTileset Tileset
         {
@@ -101,12 +138,33 @@ namespace MarchingBlocks.Paint
             return true;
         }
 
+        /// <summary>The ray against the MATTER (the cells, never the rendered tiles), in format space.
+        /// Converted through the measured frame, so a mirroring importer aims right too.
+        /// <paramref name="ignore"/>: what the current Add stroke placed (see MBTools.Ray).</summary>
+        public Hit RayAgainstCells(Ray ray, ICollection<Int3> ignore = null, float reach = 1000f)
+        {
+            var toFormat = FormatToWorld.inverse;
+            Vector3 o = toFormat.MultiplyPoint3x4(ray.origin);
+            Vector3 d = toFormat.MultiplyVector(ray.direction).normalized;
+            var cellsNow = Cells;
+            return MBTools.Ray(cellsNow.Contains, o.x, o.y, o.z, d.x, d.y, d.z, reach, ignore);
+        }
+
+        /// <summary>A format-space direction seen from the world: which way a format axis points on screen.</summary>
+        public Vector3 FormatDirectionToWorld(Vector3 d) => FormatToWorld.MultiplyVector(d);
+
+        /// <summary>A world-space direction in format space.</summary>
+        public Vector3 WorldDirectionToFormat(Vector3 d) => FormatToWorld.inverse.MultiplyVector(d);
+
         /// <summary>World matrix of a unit cube filling the given cell — for gizmos and handles.</summary>
         public Matrix4x4 CellMatrix(Vector3Int c) =>
             FormatToWorld * Matrix4x4.Translate(new Vector3(c.x + 0.5f, c.y + 0.5f, c.z + 0.5f));
 
+        public Matrix4x4 CellMatrix(Int3 c) => CellMatrix(new Vector3Int(c.x, c.y, c.z));
+
         public void Rebuild()
         {
+            Reindex();
             var container = transform.Find(ContainerName);
             if (container == null)
             {
@@ -128,8 +186,7 @@ namespace MarchingBlocks.Paint
             container.localRotation = Quaternion.identity;
             container.localScale = Vector3.one * (cellSize / set.Unit);
 
-            var formatCells = new HashSet<Int3>();
-            foreach (var c in cells) formatCells.Add(new Int3(c.x, c.y, c.z));
+            var formatCells = Cells;
             var offset = set.Rule.PieceOffset;
             foreach (var p in set.Rule.Placements(formatCells))
             {

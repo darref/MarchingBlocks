@@ -1,0 +1,284 @@
+// Runs conformance.json through the Unreal plugin's FRule and tools_conformance.json through its Tools,
+// OUTSIDE Unreal: it compiles the very files the plugin ships (Source/MarchingBlocksPaint/.../MBCore).
+// Exits 1 on any divergence. Build and run: ./build.sh (see there for the flags that mimic Unreal).
+
+#include "MBCore/MBFrame.h"
+#include "MBCore/MBJson.h"
+#include "MBCore/MBRule.h"
+#include "MBCore/MBTools.h"
+
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+using namespace MBPaint;
+
+namespace
+{
+	bool Load(const std::string& Path, FJsonValue& Out)
+	{
+		std::ifstream In(Path, std::ios::binary);
+		if (!In) { std::printf("  cannot read %s\n", Path.c_str()); return false; }
+		std::stringstream Buffer;
+		Buffer << In.rdbuf();
+		std::string Error;
+		if (!ParseJson(Buffer.str(), Out, Error)) { std::printf("  %s: %s\n", Path.c_str(), Error.c_str()); return false; }
+		return true;
+	}
+
+	FCell Vec(const FJsonValue& A)
+	{
+		return FCell(static_cast<int>(A[0].AsInt()), static_cast<int>(A[1].AsInt()), static_cast<int>(A[2].AsInt()));
+	}
+
+	FCellSet Cells(const FJsonValue& A)
+	{
+		FCellSet S;
+		for (const FJsonValue& P : A.Array) S.insert(Vec(P));
+		return S;
+	}
+
+	std::string Show(const FCell& C)
+	{
+		return "(" + std::to_string(C.X) + ", " + std::to_string(C.Y) + ", " + std::to_string(C.Z) + ")";
+	}
+
+	std::string ShowList(const std::vector<FCell>& L)
+	{
+		if (L.size() > 8) return std::to_string(L.size()) + " cells";
+		std::string S;
+		for (const FCell& C : L) S += Show(C) + " ";
+		return S;
+	}
+
+	// Lists (brush, clipboard) must come out sorted AND equal; sets are compared sorted.
+	std::string Same(const char* What, const std::vector<FCell>& Got, const FJsonValue& Expected, bool bMustBeSorted)
+	{
+		std::vector<FCell> Want = Tools::Sorted(Cells(Expected));
+		std::vector<FCell> Sorted = Got;
+		std::sort(Sorted.begin(), Sorted.end());
+		if (bMustBeSorted && Sorted != Got) return std::string(What) + " is not sorted";
+		if (Sorted == Want) return "";
+		return std::string(What) + ": expected " + ShowList(Want) + ", got " + ShowList(Sorted);
+	}
+
+	std::string SameChange(const FChange& Change, const FJsonValue& E)
+	{
+		std::string Why = Same("set", Tools::Sorted(Change.Set), E["set"], false);
+		if (Why.empty()) Why = Same("clear", Tools::Sorted(Change.Clear), E["clear"], false);
+		if (Why.empty()) Why = Same("selection", Tools::Sorted(Change.Selection), E["selection"], false);
+		return Why;
+	}
+
+	bool ToolOf(const std::string& S, EBrushTool& Out)
+	{
+		if (S == "add") Out = EBrushTool::Add;
+		else if (S == "dig") Out = EBrushTool::Dig;
+		else if (S == "select") Out = EBrushTool::Select;
+		else return false;
+		return true;
+	}
+
+	bool ShapeOf(const std::string& S, EBrushShape& Out)
+	{
+		if (S == "sphere") Out = EBrushShape::Sphere;
+		else if (S == "cube") Out = EBrushShape::Cube;
+		else if (S == "disc") Out = EBrushShape::Disc;
+		else return false;
+		return true;
+	}
+
+	bool OpOf(const std::string& S, ESelectionOp& Out)
+	{
+		if (S == "delete") Out = ESelectionOp::Delete;
+		else if (S == "extrude_up") Out = ESelectionOp::ExtrudeUp;
+		else if (S == "extrude_down") Out = ESelectionOp::ExtrudeDown;
+		else if (S == "grow") Out = ESelectionOp::Grow;
+		else if (S == "shrink") Out = ESelectionOp::Shrink;
+		else if (S == "connected") Out = ESelectionOp::Connected;
+		else if (S == "fill") Out = ESelectionOp::Fill;
+		else return false;
+		return true;
+	}
+
+	std::string RunToolCase(const FJsonValue& C, const FCellSet& World)
+	{
+		const FJsonValue& I = C["input"];
+		const FJsonValue& E = C["expected"];
+		const std::string Kind = C["kind"].String;
+		const FCellSet Own = I.Find("cells") && I["cells"].Type == FJsonValue::EType::Array ? Cells(I["cells"]) : FCellSet();
+		const FCellSet& Here = I.Find("cells") && I["cells"].Type == FJsonValue::EType::Array ? Own : World;
+		const FIsFull IsFull = [&Here](const FCell& X) { return Here.count(X) > 0; };
+		if (Kind == "ray")
+		{
+			const FCellSet Ignore = Cells(I["ignore"]);
+			const FHit Hit = Tools::Ray(IsFull, I["origin"][0].AsReal(), I["origin"][1].AsReal(), I["origin"][2].AsReal(),
+				I["direction"][0].AsReal(), I["direction"][1].AsReal(), I["direction"][2].AsReal(), I["reach"].AsReal(), &Ignore);
+			const std::string Got = std::string(Hit.bTouched ? "hit " : "miss ") + Show(Hit.Cell) + " " + Show(Hit.Normal);
+			const std::string Want = std::string(E["hit"].Bool ? "hit " : "miss ") + Show(Vec(E["cell"])) + " " + Show(Vec(E["normal"]));
+			return Got == Want ? "" : "expected " + Want + ", got " + Got;
+		}
+		if (Kind == "anchor")
+		{
+			EBrushTool Tool;
+			if (!ToolOf(I["tool"].String, Tool)) return "unknown tool";
+			FHit Hit;
+			Hit.bTouched = I["hit"].Bool;
+			Hit.Cell = Vec(I["cell"]);
+			Hit.Normal = Vec(I["normal"]);
+			const FCell Got = Tools::Anchor(Tool, Hit);
+			return Got == Vec(E["anchor"]) ? "" : "expected " + Show(Vec(E["anchor"])) + ", got " + Show(Got);
+		}
+		if (Kind == "brush")
+		{
+			EBrushShape Shape;
+			if (!ShapeOf(I["shape"].String, Shape)) return "unknown shape";
+			return Same("cells", Tools::Brush(Vec(I["anchor"]), Vec(I["normal"]), static_cast<int>(I["size"].AsInt()), Shape),
+				E["cells"], true);
+		}
+		if (Kind == "change")
+		{
+			EBrushTool Tool;
+			if (!ToolOf(I["tool"].String, Tool)) return "unknown tool";
+			const FChange Change = Tools::Modify(Tool, Tools::Sorted(Cells(I["targets"])), IsFull);
+			std::string Why = Same("set", Tools::Sorted(Change.Set), E["set"], false);
+			if (Why.empty()) Why = Same("clear", Tools::Sorted(Change.Clear), E["clear"], false);
+			return Why;
+		}
+		if (Kind == "selection")
+		{
+			ESelectionOp Op;
+			if (!OpOf(I["op"].String, Op)) return "unknown op";
+			return SameChange(Tools::Operate(Here, Cells(I["selection"]), Op), E);
+		}
+		if (Kind == "box")
+		{
+			const FCellSet Box = Tools::Box(Vec(I["a"]), Vec(I["b"]), I["hollow"].Bool);
+			const long long Count = static_cast<long long>(E["count"].AsInt());
+			if (static_cast<long long>(Box.size()) != Count)
+				return "expected " + std::to_string(Count) + " cells, got " + std::to_string(Box.size());
+			return E.Find("cells") ? Same("cells", Tools::Sorted(Box), E["cells"], false) : "";
+		}
+		if (Kind == "move") return SameChange(Tools::Move(Here, Cells(I["selection"]), Vec(I["offset"])), E);
+		if (Kind == "copy") return Same("clipboard", Tools::Copy(Here, Cells(I["selection"])), E["clipboard"], true);
+		if (Kind == "paste")
+			return SameChange(Tools::Paste(Here, Tools::Sorted(Cells(I["clipboard"])), Vec(I["anchor"])), E);
+		return "unknown kind " + Kind;
+	}
+
+	int RunRule(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!Load(Path, Conf)) return 1;
+		int Cases = 0, Failed = 0;
+		size_t Placements = 0;
+		for (const FJsonValue& C : Conf["cases"].Array)
+		{
+			++Cases;
+			const FRule Rule(Conf, &Conf["tilesets"][C["tileset"].String]);
+			const std::vector<FPlacement> Got = Rule.Placements(Cells(C["cells"]));
+			const FJsonValue& Expected = C["expected"];
+			Placements += Expected.Size();
+			std::string First;
+			for (size_t I = 0; I < std::max(Got.size(), Expected.Size()) && First.empty(); ++I)
+			{
+				std::string W = "nothing", G = "nothing";
+				if (I < Expected.Size())
+				{
+					const FJsonValue& E = Expected[I];
+					W = Show(Vec(E)) + " " + (E[3].IsNull() ? std::string("null") : E[3].String) + " " + std::to_string(E[4].AsInt());
+				}
+				if (I < Got.size())
+					G = Show(Got[I].Vertex) + " " + (Got[I].Tile.empty() ? std::string("null") : Got[I].Tile) + " " + std::to_string(Got[I].QuarterTurns);
+				if (W != G) First = "at " + std::to_string(I) + ": expected " + W + ", got " + G;
+			}
+			if (!First.empty()) { ++Failed; std::printf("  FAIL %s — %s\n", C["name"].String.c_str(), First.c_str()); }
+		}
+		// A newer format must be refused.
+		FJsonValue Newer = Conf;
+		for (auto& Entry : Newer.Object)
+			if (Entry.first == "version") Entry.second.Integer = FRule::SupportedVersion + 1;
+		if (FRule::CheckManifest(Newer).empty()) { ++Failed; std::printf("  FAIL a newer format is accepted\n"); }
+		std::printf("%d cases, %zu placements, %d failure(s)\n", Cases, Placements, Failed);
+		return Failed;
+	}
+
+	int RunTools(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!Load(Path, Conf)) return 1;
+		if (Conf["format"].String != "marchingblocks-tools-conformance" || Conf["version"].AsInt() > 1)
+		{
+			std::printf("  FAIL not a tools conformance file this plugin reads\n");
+			return 1;
+		}
+		int Failed = 0, Cases = 0;
+		if (Conf["limits"]["box_volume_max"].AsInt() != Tools::BoxVolumeMax)
+		{
+			++Failed;
+			std::printf("  FAIL box_volume_max differs from the plugin's\n");
+		}
+		const FCellSet World = Cells(Conf["world"]);
+		for (const FJsonValue& C : Conf["cases"].Array)
+		{
+			++Cases;
+			const std::string Why = RunToolCase(C, World);
+			if (!Why.empty()) { ++Failed; std::printf("  FAIL tools: %s — %s\n", C["name"].String.c_str(), Why.c_str()); }
+		}
+		std::printf("%d tools cases, %d failure(s)\n", Cases, Failed);
+		return Failed;
+	}
+	// THE FRAME, on a synthetic importer that MIRRORS and works in CENTIMETRES — what a left-handed,
+	// +Z-up engine necessarily does. The expected values come from the frame we build, not from FFrame.
+	int RunFrame()
+	{
+		int Failed = 0;
+		auto Fail = [&Failed](const char* What) { ++Failed; std::printf("  FAIL frame: %s\n", What); };
+		auto Near = [](const FVec3& A, const FVec3& B) { return (A - B).Length() < 1e-9; };
+		// Format +X → Unreal +Y, +Y (up) → +Z, +Z → −X, times 100: determinant < 0.
+		const FVec3 FX(0, 100, 0), FY(0, 0, 100), FZ(-100, 0, 0);
+		auto F = [&](double X, double Y, double Z) { return FX * X + FY * Y + FZ * Z; };
+		FFrame Frame;
+		std::string Error;
+		const std::vector<FVec3> Marker = {F(0, 0, 3), F(0, 0, 0), F(1, 0, 0), F(0, 2, 0), F(1, 0, 0), F(0, 0, 0)};
+		if (!FFrame::Measure(Marker, Frame, Error)) { Fail(Error.c_str()); return Failed; }
+		if (!Near(Frame.AxisX, FX) || !Near(Frame.AxisY, FY) || !Near(Frame.AxisZ, FZ)) Fail("the axes are not read back");
+		if (std::fabs(Frame.Unit - 100.0) > 1e-9) Fail("the unit is not 100");
+		if (!Frame.IsMirrored()) Fail("a mirror is not seen as one");
+		const FVec3 P(1.5, -2.0, 3.25);
+		if (!Near(Frame.ToImported(P), F(1.5, -2.0, 3.25))) Fail("ToImported is not F");
+		if (!Near(Frame.ToFormat(Frame.ToImported(P)), P)) Fail("ToFormat does not undo ToImported");
+		for (int Q = 0; Q < 4; ++Q)
+		{
+			const std::array<FVec3, 3> M = Frame.QuarterTurn(Q);
+			auto Apply = [&M](const FVec3& V) { return M[0] * V.X + M[1] * V.Y + M[2] * V.Z; };
+			const double Det = M[0].X * (M[1].Y * M[2].Z - M[1].Z * M[2].Y) - M[0].Y * (M[1].X * M[2].Z - M[1].Z * M[2].X)
+				+ M[0].Z * (M[1].X * M[2].Y - M[1].Y * M[2].X);
+			if (std::fabs(Det - 1.0) > 1e-9) Fail("a quarter turn is not a proper rotation (determinant +1)");
+			// Written by hand: 0 → +Z stays, 1 → +Z goes to +X, 2 → −Z, 3 → −X — IN FORMAT SPACE.
+			const FVec3 Want[4] = {F(0, 0, 1), F(1, 0, 0), F(0, 0, -1), F(-1, 0, 0)};
+			if (!Near(Apply(F(0, 0, 1)), Want[Q])) Fail("a quarter turn does not send format +Z where the rule says");
+			if (!Near(Apply(F(0, 1, 0)), F(0, 1, 0))) Fail("a quarter turn moves format up");
+		}
+		FFrame Broken;
+		if (FFrame::Measure({F(0, 0, 0), F(1, 0, 0), F(0, 2, 0)}, Broken, Error)) Fail("a marker missing a point is accepted");
+		if (FFrame::Measure({F(1, 0, 0), F(0, 2, 0), F(0, 0, 3), F(0, 0, 5)}, Broken, Error)) Fail("a stray point is accepted");
+		std::printf("frame: mirrored centimetre importer, %d failure(s)\n", Failed);
+		return Failed;
+	}
+}
+
+int main(int Argc, char** Argv)
+{
+	const std::string Dir = Argc > 1 ? Argv[1] : "../MarchingBlocksPaint/Tests";
+	int Failed = RunRule(Dir + "/conformance.json");
+	Failed += RunTools(Dir + "/tools_conformance.json");
+	Failed += RunFrame();
+	std::printf(Failed == 0 ? "VERDICT: OK\n" : "VERDICT: FAILED\n");
+	return Failed == 0 ? 0 : 1;
+}

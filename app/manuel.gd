@@ -177,14 +177,20 @@ func _demarrer() -> String:
 
 func _outils() -> String:
 	var l := PackedStringArray()
-	l.append("[i]Two ways to aim, the same tools. The aim only decides WHERE you point; the tool "
+	l.append("[i]Three aims, the same tools. The aim only decides WHERE you point; the tool "
 		+ "decides what happens there.[/i]")
-	l.append(_titre("Aim — Grid or Sculpt  " + _touche("Tab")))
+	l.append(_titre("Aim — Grid, Sculpt or Navigate  " + _touche("Tab")))
 	l.append("[b]Grid[/b] aims at the floor plane, at height [b]floor y[/b] "
 		+ "(" + _touche("PgUp") + " " + _touche("PgDn") + "). Good for laying out a map.")
 	l.append("[b]Sculpt[/b] aims at the matter already there. [b]Add[/b] builds on the face you point "
 		+ "at; [b]Dig[/b] and [b]Select[/b] act on the cell you point at. Where the ray meets nothing, "
 		+ "it falls back on the floor plane — that is how the first cell of an empty world is placed.")
+	l.append("[b]Navigate[/b] aims at nothing: you fly around your world. " + _touche("Z") + " "
+		+ _touche("Q") + " " + _touche("S") + " " + _touche("D") + " move (" + _touche("W") + " "
+		+ _touche("A") + " " + _touche("S") + " " + _touche("D") + " on a QWERTY keyboard — the keys "
+		+ "are read by their place), " + _touche("Space") + " goes up, " + _touche("Shift")
+		+ " goes down, a right drag looks around. No click paints; your tool is still chosen when you "
+		+ "come back.")
 	l.append(_note("The ray aims at the cells, not at the rendered tiles: a sculpted tile may spill "
 		+ "half a cell out of its cell, the cell itself does not."))
 	l.append(_titre("Tools"))
@@ -264,7 +270,8 @@ func _aller_retour() -> String:
 
 func _raccourcis() -> String:
 	var lignes := [
-		["Tab", "Grid ↔ Sculpt"], ["A · D · S · B", "Add · Dig · Select · Box"],
+		["Tab", "Grid → Sculpt → Navigate"], ["Z Q S D · Space · Shift", "Fly (Navigate)"],
+		["Right drag", "Look around (Navigate)"], ["A · D · S · R · B", "Add · Dig · Select · Rect · Box"],
 		["[  ]", "Brush size"], ["PgUp · PgDn", "Floor y"],
 		["Arrows", "Move the selection (follows the camera)"], ["Shift + ↑ ↓", "Lift / lower the selection"],
 		["Del", "Delete the selection"], ["Esc", "Clear the selection · cancel a paste"],

@@ -180,6 +180,54 @@ func _mener() -> void:
 	vue.outil = "ajouter"
 	_vrai(not vue._boite_vue.visible, "la boîte disparaît au relâché")
 
+	# ── La troisième visée : NAVIGATE (Jordan, 28 septembre 2026) ─────────────────────────────────
+	#
+	# ⚠ ON NE PEUT PAS TENIR UNE TOUCHE EN HEADLESS : `voler()` et `regarder()` sont éprouvés en direct,
+	# et `_process` — qui lit ZQSD par leur PLACE — ne l'est pas. Ce qui se garde ici : le cycle de Tab,
+	# qu'aucun clic ne peint, que regarder laisse l'œil en place, qu'avancer reste à plat, et que S ne
+	# change pas d'outil pendant le vol.
+	var tab := InputEventKey.new()
+	tab.keycode = KEY_TAB
+	tab.pressed = true
+	var vues_visees: Array = [vue.visee]
+	for i in 3:
+		ed._input(tab)
+		vues_visees.append(vue.visee)
+	_egal(vues_visees, ["grille", "sculpt", "naviguer", "grille"], "Tab fait le tour des TROIS visées")
+	ed._choisir_visee("naviguer")
+	var avant_nav := cases0.get_used_cells().size()
+	var clic := InputEventMouseButton.new()
+	clic.button_index = MOUSE_BUTTON_LEFT
+	clic.pressed = true
+	clic.position = vue.size * 0.5
+	vue._gui_input(clic)
+	clic.pressed = false
+	vue._gui_input(clic)
+	_egal(cases0.get_used_cells().size(), avant_nav, "en Navigate, un clic ne peint rien")
+	_egal(vue._coup, -1, "et ne commence aucun coup")
+	var oeil: Vector3 = vue._camera.global_position
+	var regard: Vector3 = -vue._camera.global_transform.basis.z
+	vue.regarder(Vector2(80, 25))
+	_vrai(vue._camera.global_position.distance_to(oeil) < 1e-3, "regarder laisse l'œil EN PLACE")
+	_vrai(regard.angle_to(-vue._camera.global_transform.basis.z) > 0.2, "et tourne le regard")
+	oeil = vue._camera.global_position
+	var devant: Vector3 = -vue._camera.global_transform.basis.z
+	vue.voler(Vector3(0, 0, 1), 0.5)
+	var pas_fait: Vector3 = vue._camera.global_position - oeil
+	_vrai(absf(pas_fait.y) < 1e-4, "avancer reste À PLAT, même en regardant vers le bas")
+	_vrai(pas_fait.dot(Vector3(devant.x, 0, devant.z)) > 0.0, "et va vers où l'on regarde")
+	oeil = vue._camera.global_position
+	vue.voler(Vector3(0, 1, 0), 0.5)
+	_vrai(vue._camera.global_position.y > oeil.y + 0.1, "Espace monte")
+	var outil_avant: String = vue.outil
+	var s_touche := InputEventKey.new()
+	s_touche.keycode = KEY_S
+	s_touche.physical_keycode = KEY_S
+	s_touche.pressed = true
+	ed._unhandled_key_input(s_touche)
+	_egal(vue.outil, outil_avant, "en Navigate, S vole vers l'arrière et ne choisit pas Select")
+	ed._choisir_visee("grille")
+
 	# ── Déplacer : par le bouton, puis par les flèches, qui suivent la caméra ─────────────────────
 	# Sélection : (0,0,0) (1,0,0). La caméra regarde depuis +x +z (azimut 0,7) : « devant » est −z,
 	# « droite » est +x — calculé à la main, pas par la fonction.

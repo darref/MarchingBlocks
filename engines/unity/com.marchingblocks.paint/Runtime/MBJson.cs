@@ -132,5 +132,6 @@ namespace MarchingBlocks.Paint
 
         // Numbers may come back as long or double (a writer may print 3 as 3.0).
         public static long AsLong(object v) => v is long l ? l : Convert.ToInt64(Convert.ToDouble(v, CultureInfo.InvariantCulture));
+        public static double AsDouble(object v) => v is long l ? l : Convert.ToDouble(v, CultureInfo.InvariantCulture);
     }
 }

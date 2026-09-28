@@ -1,9 +1,10 @@
-// Runs every case of conformance.json through the Unity plugin's Rule, and exits 1 on the first
-// divergence of each case. LangVersion 9: the same language level Unity compiles the package with.
+// Runs every case of conformance.json through the Unity plugin's Rule, and every case of
+// tools_conformance.json through its Tools, and exits 1 on any divergence. LangVersion 9: the same language level Unity compiles the package with.
 using System;
 using System.Collections.Generic;
 using System.IO;
 using MarchingBlocks.Paint;
+using MarchingBlocks.Paint.Tests;
 
 static class Program
 {
@@ -41,6 +42,12 @@ static class Program
         bool refused = Rule.Check(conf) != "";
         if (!refused) { failed++; Console.WriteLine("  FAIL a newer format is accepted"); }
         Console.WriteLine($"{cases} cases, {placements} placements, {failed} failure(s)");
+
+        string toolsPath = args.Length > 1 ? args[1] : "../com.marchingblocks.paint/Tests/tools_conformance.json";
+        var toolsFailures = ToolsConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(toolsPath)), out int toolCases);
+        foreach (var f in toolsFailures) Console.WriteLine("  FAIL tools: " + f);
+        Console.WriteLine($"{toolCases} tools cases, {toolsFailures.Count} failure(s)");
+        failed += toolsFailures.Count;
         Console.WriteLine(failed == 0 ? "VERDICT: OK" : "VERDICT: FAILED");
         return failed == 0 ? 0 : 1;
     }
