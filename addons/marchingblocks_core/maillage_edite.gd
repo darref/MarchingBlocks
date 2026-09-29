@@ -174,6 +174,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 		var col := PackedColorArray()
 		var uv := PackedVector2Array()
 		var echelle: float = maxf(0.01, float(materiaux[m].get("echelle", 1.0))) if m >= 0 else 1.0
+		var mode: String = str(materiaux[m].get("projection", "boite")) if m >= 0 else "boite"
 		for f in groupes[m]:
 			var face: PackedInt32Array = faces[f]
 			var n := normale(f)
@@ -185,7 +186,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 					nor.append(n)
 					col.append(teintes[f] if f < teintes.size() else Color.WHITE)
 					if m >= 0:
-						uv.append(projeter(p, n, echelle))
+						uv.append(projeter(p, n, echelle, mode))
 		if pos.is_empty():
 			continue
 		var a := []
@@ -220,7 +221,17 @@ static func materiau_de_legende() -> StandardMaterial3D:
 ## LA PROJECTION EN BOÎTE : les UV d'un point selon l'axe dominant de la normale de sa face, divisés par
 ## l'échelle (en cases par répétition). ⚠ **LE SIGNE DE L'AXE ENTRE DANS U** : sans lui, deux faces
 ## opposées (le mur est et le mur ouest) montreraient la texture en miroir l'une de l'autre.
-static func projeter(p: Vector3, n: Vector3, echelle: float) -> Vector2:
+## LES PROJECTIONS PLANES ("dessus", "face", "cote") appliquent UNE formule à toutes les faces, quelle que
+## soit leur normale — comme la projection plane de Blender : une face perpendiculaire au plan y est
+## étirée, c'est attendu (on la choisit pour un sol, ou pour un mur vu d'un seul côté).
+static func projeter(p: Vector3, n: Vector3, echelle: float, mode := "boite") -> Vector2:
+	match mode:
+		"dessus":
+			return Vector2(p.x, p.z) / echelle
+		"face":
+			return Vector2(p.x, -p.y) / echelle
+		"cote":
+			return Vector2(-p.z, -p.y) / echelle
 	var a := n.abs()
 	var uv: Vector2
 	if a.x >= a.y and a.x >= a.z:
@@ -411,6 +422,123 @@ func lancer_rayon(origine: Vector3, direction: Vector3) -> Dictionary:
 					d_min = d
 					meilleur = {"face": f, "point": hit, "distance": d}
 	return meilleur
+
+
+# ── L'ACCÉLÉRATEUR DE RAYONS ─────────────────────────────────────────────────────────────────────────
+#
+# ⚠ **MESURÉ : UN RAYON BRUT COÛTE ~25 ms SUR LE TÉMOIN** (15 560 faces testées). Un clic, passe ; une
+# sélection par boîte qui ignore le CACHÉ tire un rayon par élément, et en demanderait des milliers.
+# Une GRILLE range chaque face dans les cases que touche sa boîte ; un rayon ne teste que les faces des
+# cases qu'il TRAVERSE (Amanatides & Woo), et s'arrête dès qu'un impact est plus proche que la sortie de la
+# case courante. `lancer_rayon` (brut) reste la RÉFÉRENCE : l'accélérateur doit rendre exactement la même
+# face, et c'est ce que le test vérifie.
+# ⚠ La grille est une PHOTO : elle ne suit pas les sommets. L'écran la rebâtit après chaque changement.
+
+var _grille := {}
+var _grille_min := Vector3.ZERO
+var _grille_pas := 1.0
+var _grille_n := Vector3i.ZERO
+
+
+func preparer_rayons(pas := 1.0) -> void:
+	_grille = {}
+	_grille_pas = pas
+	if sommets.is_empty():
+		_grille_n = Vector3i.ZERO
+		return
+	var bmin := sommets[0]
+	var bmax := sommets[0]
+	for p in sommets:
+		bmin = bmin.min(p)
+		bmax = bmax.max(p)
+	_grille_min = bmin - Vector3.ONE * 1e-3
+	_grille_n = Vector3i(((bmax - _grille_min) / pas).floor()) + Vector3i.ONE
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		var fmin: Vector3 = sommets[face[0]]
+		var fmax: Vector3 = fmin
+		for i in face:
+			fmin = fmin.min(sommets[i])
+			fmax = fmax.max(sommets[i])
+		var a := _case_de(fmin)
+		var b := _case_de(fmax)
+		for x in range(a.x, b.x + 1):
+			for y in range(a.y, b.y + 1):
+				for z in range(a.z, b.z + 1):
+					var c := Vector3i(x, y, z)
+					if not _grille.has(c):
+						_grille[c] = []
+					_grille[c].append(f)
+
+
+func _case_de(p: Vector3) -> Vector3i:
+	var c := Vector3i(((p - _grille_min) / _grille_pas).floor())
+	return c.clamp(Vector3i.ZERO, _grille_n - Vector3i.ONE)
+
+
+func lancer_rayon_rapide(origine: Vector3, direction: Vector3) -> Dictionary:
+	if _grille_n == Vector3i.ZERO:
+		preparer_rayons()
+	if _grille_n == Vector3i.ZERO:
+		return {}
+	var d := direction.normalized()
+	var boite := AABB(_grille_min, Vector3(_grille_n) * _grille_pas)
+	# Le point d'entrée dans la grille (l'origine elle-même si elle est dedans).
+	var t0 := 0.0
+	if not boite.has_point(origine):
+		var entree = boite.intersects_ray(origine, d)
+		if entree == null:
+			return {}
+		t0 = origine.distance_to(entree)
+	var p := origine + d * (t0 + 1e-6)
+	var c := _case_de(p)
+	var pas := Vector3i(int(signf(d.x)), int(signf(d.y)), int(signf(d.z)))
+	var t_max := Vector3.INF
+	var t_delta := Vector3.INF
+	for axe in 3:
+		if absf(d[axe]) > 1e-12:
+			var bord: float = _grille_min[axe] + (c[axe] + (1 if pas[axe] > 0 else 0)) * _grille_pas
+			t_max[axe] = t0 + (bord - p[axe]) / d[axe]
+			t_delta[axe] = _grille_pas / absf(d[axe])
+	var testees := {}
+	var meilleur := {}
+	var d_min := INF
+	while c.x >= 0 and c.y >= 0 and c.z >= 0 and c.x < _grille_n.x and c.y < _grille_n.y and c.z < _grille_n.z:
+		for f in _grille.get(c, []):
+			if testees.has(f):
+				continue
+			testees[f] = true
+			var face: PackedInt32Array = faces[f]
+			for t in trianguler(f):
+				var hit = Geometry3D.ray_intersects_triangle(origine, d, sommets[face[t[0]]],
+					sommets[face[t[1]]], sommets[face[t[2]]])
+				if hit != null:
+					var dist: float = origine.distance_to(hit)
+					if dist < d_min:
+						d_min = dist
+						meilleur = {"face": f, "point": hit, "distance": dist}
+		# La sortie de cette case : un impact plus proche ne peut plus être battu.
+		var sortie := minf(t_max.x, minf(t_max.y, t_max.z))
+		if d_min <= sortie:
+			break
+		if t_max.x <= t_max.y and t_max.x <= t_max.z:
+			c.x += pas.x
+			t_max.x += t_delta.x
+		elif t_max.y <= t_max.z:
+			c.y += pas.y
+			t_max.y += t_delta.y
+		else:
+			c.z += pas.z
+			t_max.z += t_delta.z
+	return meilleur
+
+
+## Le point est-il VU depuis `oeil` ? Vrai si le premier impact du rayon vers lui n'est pas plus proche
+## que lui (à `marge` près) — ce que la boîte B demande pour ignorer le caché.
+func visible_depuis(oeil: Vector3, p: Vector3, marge := 1e-3) -> bool:
+	var vers := p - oeil
+	var hit := lancer_rayon_rapide(oeil, vers)
+	return hit.is_empty() or float(hit["distance"]) >= vers.length() - marge
 
 
 # ── LES TRANSFORMATIONS (G, R, S) ───────────────────────────────────────────────────────────────────

@@ -549,6 +549,34 @@ func _le_modeleur(ed: Control) -> void:
 	ed._vue._gui_input(clic)
 	_vrai(mo.maillage.faces.size() > f0 and mo.modal == "", "le clic coupe l'anneau (%d faces, geste « %s »)" % [mo.maillage.faces.size(), mo.modal])
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# B SUR TOUTE LA VUE : sans X-ray, seulement ce qu'on VOIT — moins qu'en X-ray, et aucune face de dos.
+	ed._input(_cle(KEY_3))
+	mo.tout_choisir(false)
+	mo.rayons_x = false
+	mo.choisir_dans(Rect2(Vector2.ZERO, ed._vue.size))
+	var vues: Array = mo.sel_f.keys()
+	var dos := 0
+	for g in vues:
+		if mo.maillage.normale(g).dot(cam.global_position - mo.maillage.centre(g)) <= 0.0:
+			dos += 1
+	mo.tout_choisir(false)
+	mo.rayons_x = true
+	mo.choisir_dans(Rect2(Vector2.ZERO, ed._vue.size))
+	var toutes: int = mo.sel_f.size()
+	mo.rayons_x = false
+	mo.tout_choisir(false)
+	_vrai(vues.size() > 0 and vues.size() < toutes, "B sans X-ray : %d faces vues, contre %d en X-ray" % [vues.size(), toutes])
+	_egal(dos, 0, "B sans X-ray : aucune face qui tourne le dos à l'œil")
+	# ⚠ LA VRAIE GARDE DE L'OCCLUSION : moins que toutes les faces TOURNÉES VERS L'ŒIL dans la vue — certaines
+	# sont cachées derrière d'autres. « Moins qu'en X-ray » seul resterait vrai sans aucun rayon : les faces
+	# de dos sont déjà écartées par leur normale.
+	var tournees := 0
+	for g in mo.maillage.faces.size():
+		var cg: Vector3 = mo.maillage.centre(g)
+		if Rect2(Vector2.ZERO, ed._vue.size).has_point(cam.unproject_position(cg)) and cam.is_position_in_frustum(cg) 				and mo.maillage.normale(g).dot(cam.global_position - cg) > 0.0:
+			tournees += 1
+	_vrai(vues.size() < tournees, "B sans X-ray : %d faces vues sur %d tournées vers l'œil — les cachées sont écartées"
+		% [vues.size(), tournees])
 	# Ctrl+B : l'arête visée, biseautée de 0,1 tapé.
 	ed._input(_cle(KEY_2))
 	ed._vue._gui_input(clic)

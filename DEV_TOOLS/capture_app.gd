@@ -89,6 +89,18 @@ func _derouler() -> void:
 		mo._mettre_a_jour()
 	print("G : %.1f ms par mouvement de souris" % ((Time.get_ticks_msec() - t0) / 10.0))
 	mo.annuler()
+	for geste in ["I", "bevel"]:
+		mo.cliquer(centre_vue, false)
+		if geste == "bevel":
+			mo.choisir_mode("arete")
+		mo.commencer(geste)
+		t0 = Time.get_ticks_msec()
+		for i in 5:
+			mo.souris = centre_vue + Vector2(10 + i * 4, 0)
+			mo._mettre_a_jour()
+		print("%s : %.1f ms par mouvement de souris" % [geste, (Time.get_ticks_msec() - t0) / 5.0])
+		mo.annuler()
+		mo.choisir_mode("face")
 	mo.choisir_mode("arete")
 	await _images(5)
 	_photo("1e_modeleur_aretes")

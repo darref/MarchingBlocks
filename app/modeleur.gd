@@ -31,6 +31,9 @@ var sel_s := {}
 var sel_a := {}
 var sel_f := {}
 var proportionnel := false
+## Alt+Z — le « X-ray » de Blender : la boîte B prend aussi ce qui est caché. Éteint, elle ne prend que ce
+## qu'on VOIT (un rayon par élément, contre `lancer_rayon_rapide`).
+var rayons_x := false
 var rayon_prop := 1.0
 
 ## LE GESTE EN COURS : "" (aucun), "G", "R", "S", "I", "bevel" (Ctrl+B), "B" (boîte), "loop" (Ctrl+R),
@@ -51,6 +54,9 @@ var _base_inset: RefCounted
 var _coin_boite := Vector2.ZERO
 var _anneau_vise: Array = []
 var _aretes_biseau: Array = []
+## Pour I et Ctrl+B : les faces que l'opération touche (indices du maillage de départ), et leur nombre.
+var _faces_touchees: Array = []
+var _n_depart := 0
 ## Les points du couteau posés jusqu'ici : [{"arete", "t", "point"}].
 var _couteau: Array = []
 
@@ -150,6 +156,8 @@ func redessiner() -> void:
 	_faces_dyn_mi.mesh = null
 	_aretes_dyn_mi.mesh = null
 	_faces_mi.mesh = maillage.vers_array_mesh()
+	# La grille des rayons est une PHOTO du maillage : elle se rebâtit à chaque changement dessiné.
+	maillage.preparer_rayons()
 	_dessiner_selection()
 
 
@@ -196,6 +204,50 @@ func _preparer_le_geste() -> void:
 		else:
 			fixes.append(e)
 	_aretes_mi.mesh = _lignes(fixes, _aretes_choisies())
+
+
+## I ET Ctrl+B CHANGENT LA TOPOLOGIE À CHAQUE MOUVEMENT : l'opération est rejouée sur le maillage de départ.
+## ⚠ Mais elle ne touche que les faces qui ont un sommet dans `sommets` : le reste est dessiné UNE fois.
+## Les faces touchées gardent leur indice, et les faces neuves viennent APRÈS les `_n_depart` anciennes.
+func _preparer_le_geste_topologique(sommets: Dictionary) -> void:
+	_faces_touchees = []
+	var statiques: Array = []
+	var aretes_touchees := {}
+	for f in maillage.faces.size():
+		var touche := false
+		for i in maillage.faces[f]:
+			if sommets.has(i):
+				touche = true
+				break
+		if touche:
+			_faces_touchees.append(f)
+			var face: PackedInt32Array = maillage.faces[f]
+			for k in face.size():
+				aretes_touchees[ME.arete(face[k], face[(k + 1) % face.size()])] = true
+		else:
+			statiques.append(f)
+	_n_depart = maillage.faces.size()
+	_faces_mi.mesh = maillage.vers_array_mesh_de(statiques)
+	_aretes_mi.mesh = _lignes(_aretes().filter(func(e): return not aretes_touchees.has(e)), {})
+	_sel_mi.mesh = null
+	_sommets_mm.multimesh.instance_count = 0
+
+
+func _redessiner_le_geste_topologique() -> void:
+	var dyn: Array = _faces_touchees.filter(func(f): return f < maillage.faces.size())
+	dyn.append_array(range(_n_depart, maillage.faces.size()))
+	_faces_dyn_mi.mesh = maillage.vers_array_mesh_de(dyn)
+	var vues := {}
+	var liste: Array = []
+	for f in dyn:
+		var face: PackedInt32Array = maillage.faces[f]
+		for k in face.size():
+			var e := ME.arete(face[k], face[(k + 1) % face.size()])
+			if not vues.has(e):
+				vues[e] = true
+				liste.append(e)
+	_aretes_dyn_mi.mesh = _lignes(liste, {})
+	_dessiner_voile()
 
 
 func _redessiner_le_geste() -> void:
@@ -369,7 +421,7 @@ func tout_choisir(oui: bool) -> void:
 func cliquer(p: Vector2, ajouter: bool, boucle := false) -> void:
 	if not ajouter:
 		_vider_selection()
-	var hit: Dictionary = maillage.lancer_rayon(camera.project_ray_origin(p), camera.project_ray_normal(p))
+	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(p), camera.project_ray_normal(p))
 	if hit.is_empty():
 		_dessiner_selection()
 		return
@@ -437,18 +489,41 @@ func choisir_dans(r: Rect2) -> void:
 	match mode_sel:
 		"sommet":
 			for i in maillage.sommets.size():
-				if r.has_point(camera.unproject_position(maillage.sommets[i])):
+				var p: Vector3 = maillage.sommets[i]
+				if r.has_point(camera.unproject_position(p)) and _vu(p):
 					sel_s[i] = true
 		"arete":
-			for e in maillage.aretes():
-				if r.has_point(camera.unproject_position(maillage.sommets[e.x])) \
-						and r.has_point(camera.unproject_position(maillage.sommets[e.y])):
+			for e in _aretes():
+				var a: Vector3 = maillage.sommets[e.x]
+				var b: Vector3 = maillage.sommets[e.y]
+				if r.has_point(camera.unproject_position(a)) and r.has_point(camera.unproject_position(b)) \
+						and _vu((a + b) * 0.5):
 					sel_a[e] = true
 		"face":
 			for f in maillage.faces.size():
-				if r.has_point(camera.unproject_position(maillage.centre(f))):
+				var c: Vector3 = maillage.centre(f)
+				# ⚠ EN X-RAY, LES FACES DE DOS AUSSI (comme Blender) : l'écart de dos n'est qu'une part de « ce qu'on voit ».
+				if r.has_point(camera.unproject_position(c)) and camera.is_position_in_frustum(c) \
+						and (rayons_x or (maillage.normale(f).dot(_vers_l_oeil(c)) > 0.0 and _vu(c))):
 					sel_f[f] = true
 	_dessiner_selection()
+
+
+## La direction du point vers l'œil (en orthographique, l'œil est à l'infini derrière l'écran).
+func _vers_l_oeil(p: Vector3) -> Vector3:
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		return camera.global_transform.basis.z
+	return (camera.global_position - p).normalized()
+
+
+## Le point est-il VU ? Toujours vrai en X-ray (Alt+Z).
+func _vu(p: Vector3) -> bool:
+	if rayons_x:
+		return true
+	var oeil: Vector3 = camera.global_position
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		oeil = p + camera.global_transform.basis.z * 1000.0
+	return maillage.visible_depuis(oeil, p, 2e-3)
 
 
 # ── LES GESTES ──────────────────────────────────────────────────────────────────────────────────────
@@ -490,6 +565,11 @@ func commencer(geste: String) -> bool:
 			_base_inset = maillage.copie()
 			modal = "bevel"
 			_ids = ids
+			var bouts := {}
+			for e in _aretes_biseau:
+				bouts[e.x] = true
+				bouts[e.y] = true
+			_preparer_le_geste_topologique(bouts)
 		"I":
 			if mode_sel != "face":
 				dit.emit("[i]Inset works on faces (3).[/i]")
@@ -500,6 +580,11 @@ func commencer(geste: String) -> bool:
 			_base_inset = maillage.copie()
 			modal = "I"
 			_ids = ids
+			var dans := {}
+			for f in _faces_inset:
+				for i in maillage.faces[f]:
+					dans[i] = true
+			_preparer_le_geste_topologique(dans)
 		_:
 			_nom_geste = {"G": "Move", "R": "Rotate", "S": "Scale"}[geste]
 			modal = geste
@@ -527,7 +612,7 @@ func _mettre_a_jour() -> void:
 		var w: float = maxf(0.0, _valeur(_ecart_ecran() / _pixels_par_unite()))
 		maillage.biseauter(_aretes_biseau, w)
 		_vider_selection()
-		redessiner()
+		_redessiner_le_geste_topologique()
 		dit.emit("[b]Bevel[/b]  width %.3f   [i](type a number · Enter or click to confirm · Esc to cancel)[/i]" % w)
 		return
 	if modal == "I":
@@ -537,7 +622,7 @@ func _mettre_a_jour() -> void:
 		sel_f = {}
 		for f in _faces_inset:
 			sel_f[f] = true
-		redessiner()
+		_redessiner_le_geste_topologique()
 		dit.emit("[b]Inset[/b]  thickness %.3f   [i](type a number · Enter or click to confirm · Esc to cancel)[/i]" % t)
 		return
 	var t := Transform3D.IDENTITY
@@ -712,7 +797,7 @@ func commencer_boucle() -> void:
 
 func _viser_boucle() -> void:
 	_anneau_vise = []
-	var hit: Dictionary = maillage.lancer_rayon(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
 	var lp := PackedVector3Array()
 	if not hit.is_empty():
 		var e := _arete_proche(maillage.faces[hit["face"]], souris)
@@ -760,7 +845,7 @@ func commencer_couteau() -> void:
 
 
 func _point_vise_du_couteau() -> Dictionary:
-	var hit: Dictionary = maillage.lancer_rayon(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
 	if hit.is_empty():
 		return {}
 	var e := _arete_proche(maillage.faces[hit["face"]], souris)
@@ -957,6 +1042,13 @@ func touche(k: InputEventKey) -> bool:
 			operer("fusionner")
 		KEY_F:
 			operer("remplir")
+		KEY_Z:
+			if k.alt_pressed:
+				rayons_x = not rayons_x
+				dit.emit("[i]X-ray %s[/i] — the box %s." % ["ON" if rayons_x else "off",
+					"also takes what is hidden" if rayons_x else "only takes what you see"])
+			else:
+				return false
 		KEY_O:
 			proportionnel = not proportionnel
 			dit.emit("[i]Proportional editing %s[/i] (radius %.2f — the wheel changes it during a move)."

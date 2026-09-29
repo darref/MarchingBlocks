@@ -974,9 +974,22 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     retour de l'hexadécimal, override à l'export, `.mbmesh` non relu, une annulation par retouche — et
     « supprimer oublie les matériaux », d'abord MUETTE : le test comptait les matériaux, pas LA face qui
     le portait.
-  - **PAS ENCORE ÉCRIT** : la boîte B qui ignorerait le caché ; le biseau et l'inset redessinent encore
-    TOUT à chaque mouvement de souris ; des projections autres que la boîte (plan, cylindre) et un
-    dépliage d'UV. Rien n'a été tenu en main.
+  - **L'ACCÉLÉRATEUR DE RAYONS, LA BOÎTE QUI IGNORE LE CACHÉ, ET LES PROJECTIONS PLANES (29 septembre 2026).**
+    ⚠ Un rayon brut testait les 15 560 faces (~25 ms). Une GRILLE range chaque face dans les cases de sa
+    boîte ; le rayon ne teste que les cases qu'il traverse (Amanatides & Woo) et s'arrête quand un impact
+    est plus proche que la sortie de la case. **MESURÉ** : sur 300 rayons au hasard, la même face et la
+    même distance que le rayon brut, qui reste la référence, et au moins cinq fois plus vite. ⚠ La mutation
+    « s'arrêter au premier impact » était MUETTE sur les rayons au hasard : un PIÈGE construit à la main
+    (une grande face pentue rangée dès la première case, touchée loin ; une petite, plus proche, plus
+    loin dans la grille) la fait rougir.
+    La boîte B ne prend plus que ce qu'on VOIT (un rayon par élément) ; **Alt+Z** (X-ray) prend tout, faces
+    de dos comprises, comme Blender — l'X-ray écartait encore les faces de dos, vu en mutation. La garde
+    de l'occlusion compare aux faces TOURNÉES VERS L'ŒIL, pas au X-ray : « moins qu'en X-ray » restait vrai
+    sans un seul rayon.
+    L'inset et le biseau ne redessinent plus que les faces qu'ils touchent : **~60 ms** par mouvement de
+    souris au lieu de plus de 250.
+    Projections : Boîte, Dessus, Face, Côté — les planes appliquent une formule à toutes les faces.
+  - **PAS ENCORE ÉCRIT** : un dépliage d'UV ; une projection cylindrique. Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1192,14 +1205,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Treize suites, **8 039 vérifications, 0 échec** (29 septembre 2026, recomptées après les matériaux du
+  Treize suites, **8 053 vérifications, 0 échec** (29 septembre 2026, recomptées après l'accélérateur du
   modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 133, `test_greffon_peinture` 117, `test_faux_artiste` 35,
-  `test_maillage_edite` 122.
+  `test_outils` 57, `fumee_appli` 136, `test_greffon_peinture` 117, `test_faux_artiste` 35,
+  `test_maillage_edite` 133.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

@@ -46,6 +46,7 @@ func _initialize() -> void:
 	_la_projection()
 	_le_format_natif()
 	_le_temoin()
+	_l_accelerateur_de_rayons()
 	_le_materiau_voyage_jusqu_au_greffon()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -486,6 +487,23 @@ func _la_projection() -> void:
 		_vrai(du > 0.0, "mur de normale %s : u croît vers la droite vu de dehors" % n)
 		var dv: float = (ME.projeter(p + Vector3.UP * 0.1, n, 1.0) - ME.projeter(p, n, 1.0)).y
 		_vrai(dv < 0.0, "mur de normale %s : v décroît vers le haut (l'image n'est pas à l'envers)" % n)
+	# Les projections PLANES ignorent la normale : la même formule sur un mur et sur un sol.
+	var q := Vector3(0.3, 0.4, 0.6)
+	_vrai(ME.projeter(q, Vector3.RIGHT, 1.0, "dessus").is_equal_approx(Vector2(0.3, 0.6))
+		and ME.projeter(q, Vector3.UP, 1.0, "dessus").is_equal_approx(Vector2(0.3, 0.6)), "projection « dessus » : (x, z), quelle que soit la normale")
+	_vrai(ME.projeter(q, Vector3.UP, 0.5, "face").is_equal_approx(Vector2(0.6, -0.8)), "projection « face » : (x, −y) / échelle")
+	_vrai(ME.projeter(q, Vector3.UP, 1.0, "cote").is_equal_approx(Vector2(-0.6, -0.4)), "projection « côté » : (−z, −y)")
+	var plan := _cube()
+	plan.materiaux.append({"nom": "sol", "couleur": Color.WHITE, "echelle": 1.0, "projection": "dessus"})
+	plan.assigner(range(6), 0)
+	var mp: ArrayMesh = plan.vers_array_mesh()
+	var uvs: PackedVector2Array = mp.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var ps: PackedVector3Array = mp.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var bons := 0
+	for i in uvs.size():
+		if uvs[i].is_equal_approx(Vector2(ps[i].x, ps[i].z)):
+			bons += 1
+	_egal(bons, uvs.size(), "un matériau « dessus » : TOUS ses UV valent (x, z), murs compris")
 	# Une texture qui se répète tous les 0,5 : un point et son voisin à UNE case ont le même texel.
 	var a := ME.projeter(Vector3(0.3, 1, 0.7), Vector3.UP, 0.5)
 	var b := ME.projeter(Vector3(1.3, 1, 0.7), Vector3.UP, 0.5)
@@ -512,6 +530,64 @@ func _le_format_natif() -> void:
 	legende.teintes[0] = Color(0.37, 0.61, 0.3)
 	var relue: RefCounted = ME.depuis_dictionnaire(JSON.parse_string(JSON.stringify(legende.vers_dictionnaire())))
 	_vrai(relue.teintes[0].is_equal_approx(Color(0.37, 0.61, 0.3)), "relu : une teinte de légende revient EXACTE (pas arrondie à 1/255)")
+
+
+## L'ACCÉLÉRATEUR, JUGÉ CONTRE LE RAYON BRUT : 300 rayons tirés de partout vers le témoin (graine fixe) —
+## la même face touchée, à la même distance, à chaque fois ; et il doit être plus rapide.
+func _l_accelerateur_de_rayons() -> void:
+	var m := ME.depuis(BM.maillage_moitie(0))
+	m.preparer_rayons()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20260929
+	var ecarts := 0
+	var touches := 0
+	var premier := ""
+	var t_brut := 0
+	var t_rapide := 0
+	for i in 300:
+		var o := Vector3(rng.randf_range(-10, 22), rng.randf_range(-5, 25), rng.randf_range(-10, 22))
+		var cible := Vector3(rng.randf_range(0, 12), rng.randf_range(0, 12), rng.randf_range(0, 12))
+		var d := cible - o
+		var t := Time.get_ticks_usec()
+		var a: Dictionary = m.lancer_rayon(o, d)
+		t_brut += Time.get_ticks_usec() - t
+		t = Time.get_ticks_usec()
+		var b: Dictionary = m.lancer_rayon_rapide(o, d)
+		t_rapide += Time.get_ticks_usec() - t
+		var memes: bool = a.is_empty() == b.is_empty() and (a.is_empty() or (absf(a["distance"] - b["distance"]) < 1e-4))
+		if not a.is_empty():
+			touches += 1
+		if not memes:
+			ecarts += 1
+			if premier == "":
+				premier = "rayon %d : brut %s, rapide %s" % [i, a, b]
+	_egal(ecarts, 0, "300 rayons : l'accélérateur touche au même endroit que le rayon brut — %s" % premier)
+	_vrai(touches > 150, "les rayons exercent bien le témoin (%d touchent)" % touches)
+	_vrai(t_rapide * 5 < t_brut, "l'accélérateur est au moins cinq fois plus rapide (%.1f ms contre %.1f ms)"
+		% [t_rapide / 1000.0, t_brut / 1000.0])
+	# ⚠ LE CAS QUI JUSTIFIE « ATTENDRE LA SORTIE DE LA CASE » — les 300 rayons au hasard ne le trouvaient pas
+	# (mutation muette, vue) : une grande face PENTUE, rangée dès la première case, touchée LOIN (x = 9), et
+	# une petite face droite PLUS PROCHE (x = 3), rangée dans une case suivante. S'arrêter au premier impact
+	# trouvé rendrait la lointaine.
+	var piege: RefCounted = ME.new()
+	for p in [Vector3(0, 0, -1), Vector3(10, 1, -1), Vector3(10, 1, 2), Vector3(3, 0.8, 0.4), Vector3(3, 1.0, 0.4),
+			Vector3(3, 1.0, 0.6), Vector3(3, 0.8, 0.6)]:
+		piege.sommets.append(p)
+	piege.faces.append(PackedInt32Array([0, 1, 2]))
+	piege.faces.append(PackedInt32Array([3, 4, 5, 6]))
+	piege.teintes.append(Color.WHITE)
+	piege.teintes.append(Color.WHITE)
+	piege.preparer_rayons(1.0)
+	var o := Vector3(-1, 0.9, 0.5)
+	var brut: Dictionary = piege.lancer_rayon(o, Vector3.RIGHT)
+	var vite: Dictionary = piege.lancer_rayon_rapide(o, Vector3.RIGHT)
+	_egal(brut.get("face", -1), 1, "le piège : le rayon brut touche la petite face proche")
+	_egal(vite.get("face", -1), 1, "le piège : l'accélérateur AUSSI — il attend la sortie de la case avant de conclure")
+	# Vu / caché : le dessus d'une case pleine se voit d'en haut, pas d'en dessous à travers la roche.
+	var c := _cube()
+	c.preparer_rayons(0.5)
+	_vrai(c.visible_depuis(Vector3(0.5, 5, 0.5), Vector3(0.5, 1, 0.5)), "le dessus du cube se voit d'en haut")
+	_vrai(not c.visible_depuis(Vector3(0.5, 5, 0.5), Vector3(0.5, 0, 0.5)), "le dessous du cube ne se voit PAS d'en haut")
 
 
 ## ⚠ LE VRAI TRAJET, mesuré plutôt que supposé : un matériau posé dans le modeleur doit arriver dans les

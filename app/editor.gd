@@ -90,6 +90,7 @@ var _couleur_materiau: ColorPickerButton
 var _rugosite_materiau: HSlider
 var _metal_materiau: HSlider
 var _echelle_materiau: SpinBox
+var _projection_materiau: OptionButton
 var _texture_materiau: Label
 var _remplit_materiau := false
 ## ⚠ UNE RAFALE DE RETOUCHES = UNE ANNULATION : glisser la rugosité émet cent valeurs ; on garde le
@@ -1294,6 +1295,19 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 	_echelle_materiau.value_changed.connect(func(v: float) -> void: _retoucher("echelle", v))
 	ligne_echelle.add_child(_echelle_materiau)
 	_edition_materiau.add_child(ligne_echelle)
+	var ligne_proj := HBoxContainer.new()
+	ligne_proj.add_child(_texte("Projection", 11, Palette.GRIS))
+	_projection_materiau = OptionButton.new()
+	for e in [["Box", "boite"], ["Top", "dessus"], ["Front", "face"], ["Side", "cote"]]:
+		_projection_materiau.add_item(e[0])
+		_projection_materiau.set_item_metadata(_projection_materiau.item_count - 1, e[1])
+	_projection_materiau.tooltip_text = ("Box: each face takes the side of the box it faces — walls, floors and "
+		+ "ceilings all look right.\nTop / Front / Side: one flat projection for every face (the faces across it "
+		+ "are stretched).")
+	_projection_materiau.item_selected.connect(func(i: int) -> void:
+		_retoucher("projection", _projection_materiau.get_item_metadata(i)))
+	ligne_proj.add_child(_projection_materiau)
+	_edition_materiau.add_child(ligne_proj)
 	_texture_materiau = _texte("no image", 11, Palette.GRIS)
 	_edition_materiau.add_child(_texture_materiau)
 	_edition_materiau.add_child(_grille([
@@ -1452,6 +1466,10 @@ func _redire_les_materiaux() -> void:
 		_rugosite_materiau.value = float(d.get("rugosite", 0.8))
 		_metal_materiau.value = float(d.get("metal", 0.0))
 		_echelle_materiau.value = float(d.get("echelle", 1.0))
+		var proj: String = str(d.get("projection", "boite"))
+		for i in _projection_materiau.item_count:
+			if _projection_materiau.get_item_metadata(i) == proj:
+				_projection_materiau.select(i)
 		var tex: String = str(d.get("texture", ""))
 		_texture_materiau.text = tex.get_file() if tex != "" else "no image"
 		_remplit_materiau = false
