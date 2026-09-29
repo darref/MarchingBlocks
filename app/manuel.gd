@@ -83,8 +83,9 @@ func _batir() -> void:
 	_page("1 · Getting started", _demarrer())
 	_page("2 · Painting tools", _outils())
 	_page("3 · Layers & projects", _couches())
-	_page("4 · The artist round trip", _aller_retour())
-	_page("5 · Shortcuts", _raccourcis())
+	_page("4 · Modelling the witness", _modeleur())
+	_page("5 · The artist round trip", _aller_retour())
+	_page("6 · Shortcuts", _raccourcis())
 
 
 func _page(nom: String, corps: String) -> void:
@@ -242,6 +243,52 @@ func _couches() -> String:
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "
 		+ "again on opening; if the .glb is gone, you see the last tiles sliced from it, and the report "
 		+ "says so.")
+	l.append(_titre("Export the painted world"))
+	l.append("In [b]World[/b], [b]Painted world → Export the world…[/b] writes a [b].mbworld[/b] folder: "
+		+ "every layer, in order, with its cells, whether it is shown, and its tiles (one .mbset per tile "
+		+ "source, inside the folder). In your engine: [b]Import MarchingBlocks world[/b] — Godot "
+		+ "(Project → Tools), Unity (Tools → MarchingBlocks) or Unreal (the MarchingBlocks World Import "
+		+ "actor). A layer without tiles still travels with its cells, and the engine says it has none.")
+	return "\n".join(l)
+
+
+func _modeleur() -> String:
+	var l := PackedStringArray()
+	l.append("[i]The Witness workspace is a modeller: you can shape the witness here, with Blender's "
+		+ "gestures and shortcuts, instead of sending it away. What you model is saved next to the project "
+		+ "and joins the works of step 2 (Project), where you slice it.[/i]")
+	l.append(_titre("Editing  " + _touche("Tab")))
+	l.append(_touche("Tab") + " enters and leaves edit mode. " + _touche("1") + " " + _touche("2") + " "
+		+ _touche("3") + " select vertices, edges or faces. A click selects what you [b]see[/b]; "
+		+ _touche("Shift") + "-click adds or removes; " + _touche("Alt") + "-click selects a loop (a ring of "
+		+ "faces in face mode). " + _touche("A") + " all, " + _touche("Alt+A") + " none, " + _touche("B")
+		+ " a box — only what you see, unless X-ray is on (" + _touche("Alt+Z") + ").")
+	l.append(_titre("Transform"))
+	l.append(_touche("G") + " move, " + _touche("R") + " rotate, " + _touche("S") + " scale. Move the "
+		+ "mouse, then click or " + _touche("Enter") + " to confirm, " + _touche("Esc") + " or right click to "
+		+ "cancel. " + _touche("X") + " " + _touche("Y") + " " + _touche("Z") + " lock an axis — [b]Z is up[/b], "
+		+ "as in Blender. Type a number for an exact value (degrees for R). " + _touche("O")
+		+ " turns proportional editing on: nearby vertices follow part of the way; the wheel sets the radius.")
+	l.append(_titre("Mesh"))
+	l.append(_touche("E") + " extrude (faces follow their normal) · " + _touche("I") + " inset · "
+		+ _touche("Ctrl+B") + " bevel the selected edges · " + _touche("Ctrl+R") + " loop cut · "
+		+ _touche("K") + " knife: click points on edges, face by face, " + _touche("Enter") + " cuts · "
+		+ _touche("X") + " delete · " + _touche("M") + " merge at center · " + _touche("F")
+		+ " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
+	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you."))
+	l.append(_titre("Materials"))
+	l.append("[b]New material[/b], select faces, [b]Assign[/b]. A material has a colour, roughness, "
+		+ "metallic, an optional image, and how many cells one copy of the image covers. Images are "
+		+ "[b]projected from the position[/b] — Box (each face takes the side it faces), or flat from the "
+		+ "Top, Front or Side. Nothing to unwrap: new faces are textured too.")
+	l.append(_note("Use tileable images whose repeat divides one cell (1, 0.5, 0.25…): the texture then "
+		+ "joins from one tile to the next in the painted world. Along the cut planes, the texture must be "
+		+ "the same for every tile — an automatic texturing tool that paints the block as one object will "
+		+ "look perfect here and break at every seam of the world."))
+	l.append(_titre("View"))
+	l.append("Middle drag turns, " + _touche("Shift") + " + middle drag slides, the wheel zooms. Numpad "
+		+ _touche("1") + " front, " + _touche("3") + " right, " + _touche("7") + " top (" + _touche("Ctrl")
+		+ ": the opposite), " + _touche("5") + " orthographic, " + _touche(".") + " frames the selection.")
 	return "\n".join(l)
 
 
@@ -275,7 +322,38 @@ func _aller_retour() -> String:
 
 
 func _raccourcis() -> String:
-	var lignes := [
+	var l := PackedStringArray()
+	l.append(_titre("World"))
+	l.append(_table(_raccourcis_monde()))
+	l.append(_titre("Witness (modeller)"))
+	l.append(_table([
+		["Tab", "Edit mode on / off"], ["1 · 2 · 3", "Vertex · edge · face"], ["Click · Shift · Alt", "Select · add · loop"],
+		["A · Alt+A · B", "All · none · box"], ["Alt+Z", "X-ray (the box takes what is hidden)"],
+		["G · R · S", "Move · rotate · scale"], ["X Y Z · numbers", "Lock an axis · exact value"],
+		["E · I", "Extrude · inset"], ["Ctrl+B · Ctrl+R · K", "Bevel · loop cut · knife"],
+		["X · M · F", "Delete · merge · fill"], ["O", "Proportional editing"],
+		["Numpad 1 3 7 · 5 · .", "Views · ortho · frame"],
+	]))
+	l.append(_titre("Play test"))
+	l.append(_table([
+		["Z Q S D", "Move (W A S D on QWERTY)"], ["Space · Shift", "Jump · run"],
+		["Left drag · right drag", "Orbit the camera · turn it level"], ["Wheel", "Closer · farther"],
+		["Backspace · Esc", "Back to start · back to World"],
+	]))
+	return "\n".join(l)
+
+
+func _table(lignes: Array) -> String:
+	var l := PackedStringArray()
+	l.append("[table=2]")
+	for r in lignes:
+		l.append("[cell]%s   [/cell][cell]%s[/cell]" % [_touche(r[0]), r[1]])
+	l.append("[/table]")
+	return "\n".join(l)
+
+
+func _raccourcis_monde() -> Array:
+	return [
 		["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["A Z E Q S D", "Fly (Navigate)"],
 		["Right drag", "Look around (Navigate)"], ["A · D · S · R · B", "Add · Dig · Select · Rect · Box"],
 		["[  ]", "Brush size"], ["PgUp · PgDn", "Floor y"],
@@ -285,9 +363,3 @@ func _raccourcis() -> String:
 		["Middle drag", "Turn the view"], ["Shift + middle drag", "Slide the view"], ["Wheel", "Zoom"],
 		["F1", "This guide"],
 	]
-	var l := PackedStringArray()
-	l.append("[table=2]")
-	for r in lignes:
-		l.append("[cell]%s   [/cell][cell]%s[/cell]" % [_touche(r[0]), r[1]])
-	l.append("[/table]")
-	return "\n".join(l)

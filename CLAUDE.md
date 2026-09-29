@@ -989,6 +989,9 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     L'inset et le biseau ne redessinent plus que les faces qu'ils touchent : **~60 ms** par mouvement de
     souris au lieu de plus de 250.
     Projections : Boîte, Dessus, Face, Côté — les planes appliquent une formule à toutes les faces.
+  - **LE MANUEL (F1) LE DIT** : un onglet « Modelling the witness » (édition, transformations, maillage,
+    matériaux, vue — et l'avertissement sur les textureurs automatiques), l'export du monde dans « Layers &
+    projects », et des raccourcis rangés par atelier (World, Witness, Play test). Vu à l'image.
   - **PAS ENCORE ÉCRIT** : un dépliage d'UV ; une projection cylindrique. Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)

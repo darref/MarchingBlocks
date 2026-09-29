@@ -209,6 +209,12 @@ func _derouler() -> void:
 	_ecran._manuel.ouvrir(1)
 	await _images(10)
 	_photo("8_manuel")
+	_ecran._manuel.ouvrir(3)
+	await _images(10)
+	_photo("8b_manuel_modeleur")
+	_ecran._manuel.ouvrir(5)
+	await _images(10)
+	_photo("8c_manuel_raccourcis")
 
 	_ecran.queue_free()
 	await process_frame
