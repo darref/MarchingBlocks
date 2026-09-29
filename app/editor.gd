@@ -280,9 +280,9 @@ func _barre_titre() -> Control:
 	ligne.add_theme_constant_override("separation", 10)
 	barre.add_child(ligne)
 
-	if ResourceLoader.exists("res://MARQUE/embleme.png"):
+	if ResourceLoader.exists("res://MARQUE/icone.png"):
 		var embleme := TextureRect.new()
-		embleme.texture = load("res://MARQUE/embleme.png")
+		embleme.texture = load("res://MARQUE/icone.png")
 		embleme.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		embleme.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		embleme.custom_minimum_size = Vector2(24, 24)
