@@ -22,13 +22,12 @@ extends Control
 ##     le GridMap de l'éditeur Godot ; ici il faut notre propre pinceau (`vue.gd`).
 ##
 ## ⚠ **LE CŒUR N'EST PAS RECOPIÉ.** Tout passe par `addons/marchingblocks_core/` — le modèle, le témoin, le
-## trancheur, le PBR, les opérations d'étage — exactement comme le greffon. Deux écrans, une seule
+## trancheur, les opérations d'étage — exactement comme le greffon. Deux écrans, une seule
 ## vérité : c'est ce qui garantit que le logiciel fait CE QUE FAIT le greffon, et pas une imitation.
 
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
-const PBR := preload("res://addons/marchingblocks_core/pbr_monde.gd")
 const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd")
@@ -61,7 +60,6 @@ const CONSEILS: Array[String] = [
 	"Keep your relief inside its cell: the slicer cuts straight through the cell centres.",
 	"Import your work to SEE what the slicer will read, before slicing anything.",
 	"The six colours of the witness are six tile families: open air or underground, floor, wall, ceiling.",
-	"World-space PBR follows the tiles: no seam where the slicer cut.",
 	"Each layer has its own tiles and its own cells. Slicing a new work into a layer keeps its painting.",
 	"Your project saves itself after every change, and reopens when you come back.",
 ]
@@ -81,9 +79,7 @@ var _boutons_atelier := {}
 var _atelier := "witness"
 var _sections_monde: Array[Control] = []
 
-var _pbr: CheckButton
 var _plans: CheckButton
-var _matiere_pbr: ShaderMaterial
 var _etiquette_vue: Label
 var _etiquette_etage: Label
 var _rapport: RichTextLabel
@@ -103,7 +99,7 @@ var _liste_travaux: VBoxContainer
 var _vide_travaux: Label
 var _etiquette_cible: Label
 
-## LES COUCHES (`projet.gd`), dans l'ordre des massifs de la vue : {nom, source, pbr, visible}.
+## LES COUCHES (`projet.gd`), dans l'ordre des massifs de la vue : {nom, source, visible}.
 ## ⚠ LEURS CASES N'Y SONT PAS : elles vivent dans la grille `Cases` de chaque massif, seule autorité ;
 ## on ne les recopie qu'au moment d'écrire le fichier.
 var _couches: Array = []
@@ -470,19 +466,6 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 	pile.add_child(temoin)
 	_etiquette_vue = _texte("showing: the computed witness", 11, Palette.GRIS)
 	temoin.contenu.add_child(_etiquette_vue)
-	_pbr = CheckButton.new()
-	_pbr.text = "World-space PBR"
-	_pbr.icon = Icones.icone("texture")
-	_pbr.add_theme_constant_override("icon_max_width", 16)
-	if PBR.disponible():
-		_pbr.tooltip_text = ("One full PBR set per colour — albedo, normal, AO, roughness, height (POM) — "
-			+ "projected in WORLD space, so the tiles meet without seams.\nApplies to the witness and "
-			+ "to the tiles sliced from it. Your imported work keeps its own materials.")
-	else:
-		_pbr.disabled = true
-		_pbr.tooltip_text = "The PBR textures are not installed."
-	_pbr.toggled.connect(func(_v: bool) -> void: _habiller())
-	temoin.contenu.add_child(_pbr)
 	# Jordan (27 septembre 2026) : voir OÙ le trancheur coupe, sur le témoin comme sur le travail importé.
 	_plans = CheckButton.new()
 	_plans.text = "Show the cells"
@@ -885,27 +868,8 @@ func _aller_a(atelier: String) -> void:
 
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
 
-func _matiere_voulue() -> Material:
-	return _matiere(_pbr != null and _pbr.button_pressed)
-
-
-func _matiere(pbr: bool) -> Material:
-	if not pbr:
-		return null
-	if _matiere_pbr == null:
-		_matiere_pbr = PBR.matiere()
-	return _matiere_pbr
-
-
 func _montrer_temoin() -> void:
-	_vue.montrer_maillage(BM.maillage_moitie(0), _matiere_voulue())
-
-
-## ⚠ LE TRAVAIL IMPORTÉ N'EST JAMAIS RECOUVERT DU PBR : c'est l'art de l'artiste (charte §3).
-func _habiller() -> void:
-	if _travail_maillage() != null and _etiquette_vue.text.begins_with("showing: your work"):
-		return
-	_montrer_temoin()
+	_vue.montrer_maillage(BM.maillage_moitie(0), null)
 
 
 ## ⚠ **LE CHEMIN ET LE MAILLAGE SE LISENT DANS LA LISTE, ILS NE SONT PLUS GARDÉS À CÔTÉ.** Deux copies
@@ -1081,9 +1045,8 @@ func _importer(fichier: String) -> void:
 func _trancher_temoin() -> void:
 	if _vue.monde() == null:
 		return
-	var pbr: bool = _pbr != null and _pbr.button_pressed
-	var bilan: Dictionary = await _trancher_source(Projet.TEMOIN, pbr)
-	_poser_lot(bilan, "witness", Projet.TEMOIN, pbr)
+	var bilan: Dictionary = await _trancher_source(Projet.TEMOIN)
+	_poser_lot(bilan, "witness", Projet.TEMOIN)
 
 
 func _trancher_travail() -> void:
@@ -1094,33 +1057,33 @@ func _trancher_travail() -> void:
 		_dire("No work selected.\n\n[i]Step 2: « Import the work… », then pick one in the list. "
 			+ "You slice what you have seen.[/i]")
 		return
-	var bilan: Dictionary = await _trancher_source(chemin, false)
+	var bilan: Dictionary = await _trancher_source(chemin)
 	var entete := "[b]Sliced from[/b] %s\n" % chemin
 	var absents: Array = bilan.get("absents", [])
 	if not absents.is_empty():
 		entete += "[color=#f2ca79]Block MISSING from the file, computed witness kept.[/color]\n"
-	_poser_lot(bilan, "work", chemin, false, entete)
+	_poser_lot(bilan, "work", chemin, entete)
 
 
 ## Tranche une source et met le lot en cache. ⚠ UNE SEULE ROUTE pour le bouton et pour la réouverture
 ## d'un projet dont la source a changé : deux routes finiraient par trancher différemment.
-func _trancher_source(source: String, pbr: bool) -> Dictionary:
+func _trancher_source(source: String) -> Dictionary:
 	var bilan: Dictionary
 	if source == Projet.TEMOIN:
 		await _attendre("Slicing the witness", "52 tiles, every sculpted copy kept")
-		bilan = BM.librairie(_matiere(pbr))
+		bilan = BM.librairie()
 	else:
 		await _attendre("Slicing your work", source.get_file())
 		bilan = BM.librairie_depuis_glb(source)
 	_fin_attente()
 	var lot: MeshLibrary = bilan.get("lot", null)
 	if lot != null and BM.anomalies().is_empty():
-		bilan["cache"] = Projet.mettre_en_cache(lot, source, pbr)
+		bilan["cache"] = Projet.mettre_en_cache(lot, source)
 	return bilan
 
 
 ## Habille la couche active du lot, et DIT tout ce que le bilan contient.
-func _poser_lot(bilan: Dictionary, quoi: String, source: String, pbr: bool, entete := "") -> void:
+func _poser_lot(bilan: Dictionary, quoi: String, source: String, entete := "") -> void:
 	var fautes: Array = BM.anomalies()
 	if not fautes.is_empty():
 		_dire("[color=#e0603c]REFUSED — %d problem(s) in the witness:[/color]\n  %s"
@@ -1129,7 +1092,6 @@ func _poser_lot(bilan: Dictionary, quoi: String, source: String, pbr: bool, ente
 	var lot: MeshLibrary = bilan["lot"]
 	_vue.monde().lot = lot
 	_couches[_active]["source"] = source
-	_couches[_active]["pbr"] = pbr
 	_rafraichir_couches()
 	_enregistrer()
 	_aller_a("monde")
@@ -1489,7 +1451,7 @@ func _dire_l_etage() -> void:
 func _ajouter_couche(etat: Dictionary) -> int:
 	var massif: Node = _vue.ajouter_couche()
 	massif.visible = etat["visible"]
-	_couches.append({"nom": etat["nom"], "source": etat["source"], "pbr": etat["pbr"],
+	_couches.append({"nom": etat["nom"], "source": etat["source"],
 		"visible": etat["visible"]})
 	return _couches.size() - 1
 
@@ -1603,7 +1565,7 @@ func _dire_la_source(c: Dictionary) -> String:
 		"":
 			return "no tiles yet"
 		Projet.TEMOIN:
-			return "computed witness" + (" · PBR" if c["pbr"] else "")
+			return "computed witness"
 	return str(c["source"]).get_file()
 
 
@@ -1690,13 +1652,13 @@ func _habiller_couche(i: int) -> String:
 	var massif: Node = _vue.couche(i)
 	if c["source"] == "":
 		return ""
-	var cache: Dictionary = Projet.lire_cache(c["source"], c["pbr"])
+	var cache: Dictionary = Projet.lire_cache(c["source"])
 	if cache["a_jour"]:
 		massif.lot = cache["lot"]
 		return ""
 	var presente: bool = c["source"] == Projet.TEMOIN or FileAccess.file_exists(c["source"])
 	if presente:
-		var bilan: Dictionary = await _trancher_source(c["source"], c["pbr"])
+		var bilan: Dictionary = await _trancher_source(c["source"])
 		if bilan.get("lot", null) != null:
 			massif.lot = bilan["lot"]
 			return "« %s » sliced again: its source changed since last time." % c["nom"]

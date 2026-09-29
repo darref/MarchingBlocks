@@ -59,7 +59,6 @@ func _initialize() -> void:
 	_la_couverture_est_complete()
 	_la_partition_des_contextes_est_derivee()
 	_le_temoin_livre_exactement_le_monde()
-	_le_materiau_suit_dans_les_tuiles()
 	_le_temoin_revient_avec_ses_six_teintes()
 	_le_temoin_part_soude()
 	_les_uv_sont_canoniques()
@@ -212,38 +211,6 @@ func _la_partition_des_contextes_est_derivee() -> void:
 ## ⚠ **ET LE TÉMOIN N'A AUCUN CONTACT DIAGONAL SUR SES SOMMETS INTÉRIEURS.** C'est la promesse du monde
 ## qu'il montre : un témoin qui en porterait livrerait une tuile que le monde ne pose jamais, et
 ## rouvrirait l'ambiguïté non-manifold que ce monde a fermée.
-## ⚠ **LE MATÉRIAU SUIT DANS LES TUILES — c'est la promesse du PBR espace monde** (Jordan, 27 septembre
-## 2026) : posé sur le solide avant le tranchage, il doit se retrouver sur CHAQUE tuile, avec les
-## couleurs de sommet par lesquelles le shader choisit son set. Un matériau témoin, pas le PBR : ses
-## textures ne sont pas dans le dépôt, et ce test doit tourner partout.
-func _le_materiau_suit_dans_les_tuiles() -> void:
-	var marqueur := StandardMaterial3D.new()
-	marqueur.resource_name = "marqueur"
-	var lot: MeshLibrary = BlocsMaitres.librairie(marqueur)["lot"]
-	var sans_marqueur := 0
-	var sans_couleurs := 0
-	for id in lot.get_item_list():
-		var mesh: Mesh = lot.get_item_mesh(id)
-		if mesh.surface_get_material(0) != marqueur:
-			sans_marqueur += 1
-		if mesh.surface_get_arrays(0)[Mesh.ARRAY_COLOR] == null:
-			sans_couleurs += 1
-	_dire(lot.get_item_list().size() > 0, "librairie(marqueur) ne rend aucune tuile")
-	_dire(sans_marqueur == 0, "%d tuile(s) sur %d n'ont pas hérité du matériau posé sur le solide"
-		% [sans_marqueur, lot.get_item_list().size()])
-	_dire(sans_couleurs == 0, "%d tuile(s) ont perdu leurs couleurs de sommet — le PBR ne saurait plus "
-		% sans_couleurs + "quel set poser")
-	# Et sans matériau donné, rien ne change : le marqueur ne doit pas fuir d'un appel à l'autre.
-	var nu: MeshLibrary = BlocsMaitres.librairie()["lot"]
-	var fuite := 0
-	for id in nu.get_item_list():
-		if nu.get_item_mesh(id).surface_get_material(0) == marqueur:
-			fuite += 1
-	_dire(fuite == 0, "%d tuile(s) portent encore le marqueur sans qu'on l'ait demandé" % fuite)
-	print("  matériau : il suit dans les %d tuiles, couleurs de sommet comprises"
-		% lot.get_item_list().size())
-
-
 ## ⚠ **LE TÉMOIN EXPORTÉ DOIT REVENIR AVEC SES SIX TEINTES.** Il part en six surfaces nommées
 ## (`par_teinte`) et sans normales ; relu, il passait par `normales_plates()`, qui fondait tout en UNE
 ## surface sous « Floor - open air » — un réimport direct revenait entièrement vert. Aucune suite ne

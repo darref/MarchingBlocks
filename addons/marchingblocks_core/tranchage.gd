@@ -134,9 +134,15 @@ static func boite_d_octant(t: int) -> AABB:
 ## déplacé la matière.
 ## `exemplaires` — panier de SORTIE, {clé: [{mesh, sommet}, …]} dans l'ordre du balayage. Il porte TOUS
 ## les morceaux récoltés ; `pieces` n'en garde que le premier de chaque clé et en est DÉRIVÉ.
+## `origine` — où siège la case (0, 0, 0) dans le repère du maillage, quand elle est CONNUE. Sinon (null),
+## elle est déduite de la boîte du maillage. ⚠ **LE BLOC MAÎTRE EST À L'ORIGINE PAR CONTRAT (§4), ET LA
+## DÉDUIRE ÉTAIT UN DÉFAUT RÉEL (29 septembre 2026)** : un relief qui déborde légalement (règle (A)) d'un
+## côté du bloc et pas de l'autre grossit la boîte d'un seul côté, et la déduction DÉCALAIT TOUS LES PLANS
+## DE COUPE. Mesuré sur le faux travail d'artiste : un liseré d'herbe qui surplombe les falaises du bord
+## rendait « le bloc mesure 1,000 de trop » et 579 remarques de couture.
 static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
 		erreurs: Array, peau := true, remarques: Array = [],
-		exemplaires: Dictionary = {}) -> Dictionary:
+		exemplaires: Dictionary = {}, origine: Variant = null) -> Dictionary:
 	var pieces := {}
 	if mesh == null:
 		erreurs.append("aucun bloc fourni")
@@ -173,8 +179,9 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	var centre_attendu: Vector3 = (mini + maxi) * 0.5 * cellule
 
 	var boite: AABB = mesh.get_aabb()
-	var origine: Vector3 = boite.get_center() - centre_attendu
-	var normalise: ArrayMesh = Decoupe.poser(mesh, Transform3D(Basis(), -origine))
+	var connue: bool = origine != null
+	var decalage: Vector3 = (origine as Vector3) if connue else boite.get_center() - centre_attendu
+	var normalise: ArrayMesh = Decoupe.poser(mesh, Transform3D(Basis(), -decalage))
 
 	# On ne REFUSE pas un débord — c'est du relief, c'est voulu — mais on le DIT quand il devient trop
 	# gros pour en être. ⚠ En valeur absolue : un bloc plus PETIT que son étendue occupée est aussi faux
@@ -187,8 +194,10 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	# plateau » et « encoche en L », dont l'étendue occupée vaut 3,0 pour un maillage de 2,5.
 	# ⚠ Trois quarts attrape toujours l'erreur d'une case entière (1,0), tout en laissant passer
 	# l'amincissement et le relief, qui sont légaux (règle (A) : le relief peut déborder d'une cellule).
+	# ⚠ Ce contrôle attrape une déclaration fausse ; une origine CONNUE n'a rien à déclarer, et son relief
+	# déborde légalement. Il ne juge donc que le cas déduit.
 	var debord: Vector3 = boite.size - attendue
-	for axe in 3:
+	for axe in (range(0) if connue else range(3)):
 		if absf(debord[axe]) > cellule * 0.75:
 			erreurs.append("le bloc mesure %.3f de trop (ou de moins) sur l'axe %d pour une étendue "
 				% [debord[axe], axe]
@@ -285,7 +294,100 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	# d'une clé s'accordent entre elles, l'accord des clés voisines suffit.
 	verifier_octants(a_plat, bits_a_plat, erreurs)
 	verifier_couture(a_plat, bits_a_plat, remarques)
+	verifier_couture_texture(a_plat, remarques)
 	return pieces
+
+
+## De combien deux couleurs de coupe peuvent différer (par canal, sur [0 ; 1]) avant qu'on le DISE.
+const ECART_DE_TEXTURE := 0.08
+
+## CONTRÔLE 3 — LA TEXTURE LE LONG DES COUPES : une REMARQUE, jamais une erreur (charte §3).
+##
+## ⚠ **LA RÈGLE QUE L'ARTISTE A REÇUE** (Jordan, 28 septembre 2026) : *le long de chaque plan de coupe, la
+## texture doit être la MÊME pour toutes les tuiles — sur les quatre bords, dans les deux sens.* Dans le
+## monde, une tuile rencontre à sa coupe une voisine que le témoin ne lui a jamais montrée (une autre
+## clé, un autre exemplaire, un autre quart de tour) : seule une texture qui ne dépend que de la PLACE
+## sur le plan raccorde partout.
+## On échantillonne donc la texture de chaque tuile sur ses arêtes posées SUR un plan de coupe, et l'on
+## compare toutes les tuiles au même point du plan. ⚠ Le point est REPLIÉ par les symétries que la pose
+## peut appliquer — quarts de tour autour de +Y, et les deux côtés d'un plan — : sur un plan horizontal,
+## (x, z) ne compte qu'à permutation et signe près ; sur un plan vertical, seul le haut garde son signe.
+## ⚠ Une tuile sans texture lisible (pas d'`albedo_texture`, pas d'UV) n'est pas jugée : le témoin
+## calculé n'en porte pas, et le contrôle ne doit rien dire de lui.
+static func verifier_couture_texture(pieces: Dictionary, remarques: Array) -> void:
+	var releves := {}   # point replié → [couleur, nom de la première tuile]
+	var ecarts := 0
+	var pire := 0.0
+	var pire_de := ""
+	for nom in pieces:
+		var mesh: Mesh = pieces[nom]
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s) as StandardMaterial3D
+			if m == null or m.albedo_texture == null:
+				continue
+			var image: Image = m.albedo_texture.get_image()
+			if image == null or image.is_empty():
+				continue
+			if image.is_compressed():
+				image = image.duplicate()
+				image.decompress()
+			var arrays: Array = mesh.surface_get_arrays(s)
+			if arrays[Mesh.ARRAY_TEX_UV] == null:
+				continue
+			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+			var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+			var idx = arrays[Mesh.ARRAY_INDEX]
+			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+				else PackedInt32Array(range(v.size()))
+			for t in range(0, ordre.size() - 2, 3):
+				for k in 3:
+					var ia: int = ordre[t + k]
+					var ib: int = ordre[t + (k + 1) % 3]
+					var axe: int = _plan_commun(v[ia], v[ib])
+					if axe < 0:
+						continue
+					for f in [0.25, 0.5, 0.75]:
+						var p: Vector3 = v[ia].lerp(v[ib], f)
+						var u: Vector2 = uv[ia].lerp(uv[ib], f)
+						var couleur: Color = image.get_pixel(
+							clampi(int(u.x * image.get_width()), 0, image.get_width() - 1),
+							clampi(int(u.y * image.get_height()), 0, image.get_height() - 1))
+						var cle: String = _point_replie(p, axe)
+						if not releves.has(cle):
+							releves[cle] = [couleur, nom]
+							continue
+						var autre: Color = releves[cle][0]
+						var e: float = maxf(maxf(absf(autre.r - couleur.r), absf(autre.g - couleur.g)),
+							absf(autre.b - couleur.b))
+						if e > ECART_DE_TEXTURE:
+							ecarts += 1
+							if e > pire:
+								pire = e
+								pire_de = "%s / %s" % [releves[cle][1], nom]
+	if ecarts > 0:
+		remarques.append("texture : %d point(s) de coupe où deux tuiles n'ont pas la même couleur "
+			% ecarts + "(pire écart %.2f, entre %s) — le long d'une coupe, la texture doit être la même "
+			% [pire, pire_de] + "pour toutes les tuiles")
+
+
+## L'axe du plan de coupe (face de la boîte unité) qui porte l'arête [a, b], ou −1.
+static func _plan_commun(a: Vector3, b: Vector3) -> int:
+	for axe in 3:
+		if absf(absf(a[axe]) - 0.5) < 0.0005 and absf(absf(b[axe]) - 0.5) < 0.0005 \
+				and signf(a[axe]) == signf(b[axe]):
+			return axe
+	return -1
+
+
+## Un point d'un plan de coupe, replié par les symétries de la pose, au 1/64 de case.
+static func _point_replie(p: Vector3, axe: int) -> String:
+	var q := func(x: float) -> int: return roundi(x * 64.0)
+	if axe == 1:
+		var a: float = absf(p.x)
+		var b: float = absf(p.z)
+		return "h|%d|%d" % [q.call(maxf(a, b)), q.call(minf(a, b))]
+	var h: float = absf(p.z) if axe == 0 else absf(p.x)
+	return "v|%d|%d" % [q.call(h), q.call(p.y)]
 
 
 ## LA CLÉ D'UN SOMMET, et la rotation qui ramène sa pièce à la référence. `{}` s'il ne porte aucune surface.

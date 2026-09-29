@@ -25,7 +25,6 @@ func _initialize() -> void:
 	# ── 1. L'aller-retour d'un projet à deux couches ──────────────────────────────────────────────
 	var roche := Projet.couche("Roche")
 	roche["source"] = Projet.TEMOIN
-	roche["pbr"] = true
 	roche["cases"] = {Vector3i(0, 0, 0): true, Vector3i(-3, 2, 41): true, Vector3i(100, -7, -64): true}
 	var glace := Projet.couche("Glace")
 	glace["source"] = "D:/quelque/part/glace.glb"
@@ -40,7 +39,6 @@ func _initialize() -> void:
 	if couches.size() == 2:
 		_egal(couches[0]["nom"], "Roche", "le nom revient")
 		_egal(couches[0]["source"], "witness", "la source témoin revient")
-		_egal(couches[0]["pbr"], true, "le PBR revient")
 		_egal(couches[1]["visible"], false, "une couche cachée reste cachée")
 		_egal(couches[1]["source"], "D:/quelque/part/glace.glb", "le chemin du travail revient")
 		var cases: Dictionary = couches[0]["cases"]
@@ -74,27 +72,23 @@ func _initialize() -> void:
 	var lot := MeshLibrary.new()
 	lot.create_item(0)
 	lot.set_item_name(0, "mb_essai")
-	_egal(Projet.mettre_en_cache(lot, source, false), "", "le lot s'écrit en cache")
-	var lu: Dictionary = Projet.lire_cache(source, false)
+	_egal(Projet.mettre_en_cache(lot, source), "", "le lot s'écrit en cache")
+	var lu: Dictionary = Projet.lire_cache(source)
 	_vrai(lu["lot"] != null and lu["a_jour"], "relu aussitôt, le cache est à jour")
 	if lu["lot"] != null:
 		_egal((lu["lot"] as MeshLibrary).get_item_name(0), "mb_essai", "le cache rend le même lot")
-	_vrai(not Projet.lire_cache(source, true)["a_jour"] and Projet.lire_cache(source, true)["lot"] == null,
-		"la même source AVEC le PBR est un autre cache")
 
 	# Réenregistrer le fichier change sa taille : l'empreinte doit bouger.
 	_ecrire(source, "seconde version, plus longue")
-	lu = Projet.lire_cache(source, false)
+	lu = Projet.lire_cache(source)
 	_vrai(not lu["a_jour"], "le travail réenregistré rend le cache PÉRIMÉ")
 	_vrai(lu["lot"] != null, "un cache périmé est quand même rendu — c'est tout ce qui reste si la source part")
 
 	DirAccess.remove_absolute(source)
-	_egal(Projet.empreinte(source, false), "", "une source disparue n'a pas d'empreinte")
-	_vrai(not Projet.lire_cache(source, false)["a_jour"], "une source disparue n'est jamais « à jour »")
-	_egal(Projet.empreinte("", false), "", "une couche sans source n'a pas d'empreinte")
-	_vrai(Projet.empreinte(Projet.TEMOIN, true) != Projet.empreinte(Projet.TEMOIN, false),
-		"le témoin avec et sans PBR n'ont pas la même empreinte")
-	DirAccess.remove_absolute(Projet.chemin_cache(source, false))
+	_egal(Projet.empreinte(source), "", "une source disparue n'a pas d'empreinte")
+	_vrai(not Projet.lire_cache(source)["a_jour"], "une source disparue n'est jamais « à jour »")
+	_egal(Projet.empreinte(""), "", "une couche sans source n'a pas d'empreinte")
+	DirAccess.remove_absolute(Projet.chemin_cache(source))
 
 	# ── 4. La grille locale : où s'arrête la grille centrale ─────────────────────────────────────
 	# DEMI_GRILLE = 24 : lignes de −24 à +24, donc cases de −24 à 23.

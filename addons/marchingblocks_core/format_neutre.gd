@@ -180,8 +180,8 @@ static func familles_du_lot(lot: MeshLibrary) -> Dictionary:
 
 ## EXPORTE UN LOT dans `<dossier>/<nom>.mbset/`. Rend {"dossier": chemin, "tuiles": n, "manquantes": [...]}
 ## ou {"erreur": raison}.
-## ⚠ **LE PBR ESPACE MONDE NE VOYAGE PAS** : c'est un shader de Godot. Une tuile qui porte un
-## `ShaderMaterial` part avec un matériau standard lisant ses couleurs de sommet — la légende du témoin.
+## ⚠ **UN SHADER DE GODOT NE VOYAGE PAS.** Une tuile qui porte un `ShaderMaterial` (ou aucun matériau)
+## part avec un matériau standard lisant ses couleurs de sommet — la légende du témoin.
 ## Le travail de l'artiste, lui, part avec SES matériaux.
 static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur: String) -> Dictionary:
 	if lot == null or lot.get_item_list().is_empty():

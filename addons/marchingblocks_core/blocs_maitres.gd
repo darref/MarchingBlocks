@@ -1067,10 +1067,7 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 ## ⚠ **ET CE BLOC EST FAIT DE CUBES : aucun réglage ne lui donnera des formes.** C'est un TÉMOIN, qui
 ## montre où sont les tuiles ; ce qui donnera des formes, c'est le relief sculpté par l'artiste, d'où
 ## l'aller-retour `.glb` (`exporter_le_bloc` / `librairie_depuis_glb`).
-##
-## `matiere` — s'il est donné, il est posé sur le solide AVANT le tranchage, et la découpe le recopie
-## dans chaque tuile : c'est ainsi que le PBR espace monde « suit dans les tuiles » (`pbr_monde.gd`).
-static func librairie(matiere: Material = null) -> Dictionary:
+static func librairie() -> Dictionary:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var pieces := {}
 	var provenance := {}
@@ -1088,13 +1085,11 @@ static func librairie(matiere: Material = null) -> Dictionary:
 		# export, catalogue, repli — lisent donc le même appel, et changer de géométrie veut dire les
 		# changer tous les trois. Voir `maillage_lisse` pour le chanfrein, suspendu.
 		var solide: ArrayMesh = maillage_moitie(i)
-		if matiere != null:
-			solide.surface_set_material(0, matiere)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
 		var du_bloc := {}
 		var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
-			creuses(i), fautes, false, remarques, du_bloc)
+			creuses(i), fautes, false, remarques, du_bloc, Vector3.ZERO)
 		for f in fautes:
 			erreurs.append("« %s » : %s" % [BLOCS[i]["nom"], f])
 		for nom in recolte:
@@ -1305,7 +1300,7 @@ static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
 ## l'autre (matériau, UV, couleur) coupe le maillage. L'OBJ, lui, fait référencer par ses faces une
 ## liste de sommets COMMUNE, matériau par face : 15 546 sommets, 0 couture, six matériaux nommés.
 ## Le témoin n'est qu'une ébauche — de la géométrie et six teintes — donc l'OBJ ne lui coûte rien.
-## Le TRAVAIL revient en .glb, avec tout ce que le glTF porte (textures, UV, normales, PBR).
+## Le TRAVAIL revient en .glb, avec tout ce que le glTF porte (textures, UV, normales, matériaux).
 ## ⚠ `.glb` reste accepté ici pour les outils de `DEV_TOOLS/` qui relisent leur propre export : même
 ## maillage, même appel — seule l'écriture change.
 static func exporter_le_bloc(chemin: String) -> String:
@@ -1372,6 +1367,15 @@ static func cles_de_l_atlas(i: int) -> Array:
 	return ordre
 
 
+## LA DISPOSITION DE L'ATLAS du bloc `i` : {"cles": [...], "n": côté de la grille, en tuiles}.
+## ⚠ UNE SEULE description : `_uv_du_temoin` la lit, et quiconque veut peindre l'atlas aussi.
+static func atlas_du_temoin(i: int) -> Dictionary:
+	var cles: Array = cles_de_l_atlas(i)
+	var n: int = ceili(sqrt(float((cles.size() + 1) * 6)))
+	n += (6 - n % 6) % 6   # les six sens d'une clé sur une même ligne
+	return {"cles": cles, "n": n}
+
+
 ## La fonction qui donne ses trois UV à un triangle du témoin `i` (sommets dans l'ordre HORAIRE de Godot).
 ## ⚠ **LE BLOC EST À L'ORIGINE** (§4) : la case `p` occupe [p ; p+1], et le sommet `v` a pour boîte le
 ## cube d'une case centré en `v + (1,1,1)` — les mêmes conventions que `Tranchage.boite_du_sommet`.
@@ -1379,13 +1383,13 @@ static func _uv_du_temoin(i: int) -> Callable:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var pleines: Dictionary = cases(i)
 	var plafond: int = MB.plafond_de(pleines)
-	var cles: Array = cles_de_l_atlas(i)
+	var atlas: Dictionary = atlas_du_temoin(i)
+	var cles: Array = atlas["cles"]
 	var rang := {}
 	for k in cles.size():
 		rang[cles[k]] = k
 	var reservee: int = cles.size()
-	var n: int = ceili(sqrt(float((cles.size() + 1) * 6)))
-	n += (6 - n % 6) % 6   # les six sens d'une clé sur une même ligne
+	var n: int = atlas["n"]
 	var grille := GridMap.new()
 	var bases := {}
 	for o in 24:
@@ -1476,7 +1480,10 @@ static func _ecrire_obj(mesh: ArrayMesh, chemin: String, uv_de := Callable()) ->
 			var uv: PackedVector2Array = uv_de.call(v[ordre[t]], v[ordre[t + 1]], v[ordre[t + 2]])
 			var m_uv := PackedInt32Array()
 			for k in 3:
-				var cle_uv := "%.6f %.6f" % [uv[k].x, uv[k].y]
+				# ⚠ **L'OBJ COMPTE `v` DEPUIS LE BAS, Godot et le glTF depuis le HAUT.** Écrire l'UV telle
+				# quelle retournait la texture : peinte dans Blender sur l'OBJ, elle revenait à l'envers
+				# par le .glb. On écrit donc 1 − v, et `_lire_obj` le défait.
+				var cle_uv := "%.6f %.6f" % [uv[k].x, 1.0 - uv[k].y]
 				if not index_uv.has(cle_uv):
 					index_uv[cle_uv] = index_uv.size() + 1
 					coords.append("vt " + cle_uv)
@@ -1528,7 +1535,7 @@ static func _lire_obj(chemin: String, journal: Array = []) -> ArrayMesh:
 		elif l.begins_with("vt "):
 			var c := l.substr(3).split(" ", false)
 			if c.size() >= 2:
-				coords.append(Vector2(float(c[0]), float(c[1])))
+				coords.append(Vector2(float(c[0]), 1.0 - float(c[1])))   # `v` depuis le bas, voir l'écriture
 		elif l.begins_with("usemtl "):
 			courante = l.substr(7).strip_edges()
 		elif l.begins_with("f "):
@@ -1629,10 +1636,18 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	var fautes: Array = []
 	var remarques: Array = []
 	var exemplaires := {}
+	# ⚠ LE BLOC EST À L'ORIGINE (§4) : on le dit au trancheur, au lieu de le lui faire déduire d'une boîte
+	# que le relief de l'artiste a le droit de déformer.
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
-		creuses(0), fautes, false, remarques, exemplaires)
+		creuses(0), fautes, false, remarques, exemplaires, Vector3.ZERO)
 	for f in fautes:
 		erreurs.append("« %s » : %s" % [BLOCS[0]["nom"], f])
+	# ⚠ ON LE DIT : plusieurs objets sont tous du terrain tant que les props entiers (§9 bis) n'existent
+	# pas — un rocher rangé à part sera tranché, et c'est une demi-coque qui reviendra.
+	var objets: int = solide.get_meta("objets", 1)
+	if objets > 1:
+		remarques.append("objets : le fichier en porte %d, tous tranchés comme du terrain — " % objets
+			+ "un prop entier (rocher, décor) n'est pas encore pris en charge")
 	for nom in recolte:
 		pieces[nom] = recolte[nom]
 		provenance[nom] = BLOCS[0]["nom"]
@@ -1687,6 +1702,7 @@ static func travail_depuis_glb(chemin: String, journal: Array = []) -> ArrayMesh
 	var extrait: ArrayMesh = Decoupe.trancher(relu, boite_du_bloc())
 	if extrait.get_surface_count() == 0:
 		return null
+	extrait.set_meta("objets", relu.get_meta("objets", 1))
 	return extrait
 
 
@@ -1831,7 +1847,7 @@ static func _lire_glb(chemin: String, journal: Array = []) -> ArrayMesh:
 		journal.append("generate_scene rend null (la scène n'a pas pu être construite — "
 			+ "matériaux ou textures ?)")
 		return null
-	var trouve: ArrayMesh = _premier_maillage(scene)
+	var trouve: ArrayMesh = _tous_les_maillages(scene)
 	# ⚠ ON COMPTE CE QUI PORTE UN MAILLAGE, pas ce qui est d'une classe donnée — c'est la distinction qui
 	# manquait, et qui a fait dire « 0 » alors que la scène était pleine d'`ImporterMeshInstance3D`.
 	var porteurs := 0
@@ -1852,7 +1868,9 @@ static func _lire_glb(chemin: String, journal: Array = []) -> ArrayMesh:
 	if trouve.get_surface_count() > 0 \
 			and trouve.surface_get_arrays(0)[Mesh.ARRAY_NORMAL] == null:
 		print("   (lecture : le fichier ne porte pas de normales — reconstruction en ombrage PLAT)")
+		var objets: int = trouve.get_meta("objets", 1)
 		trouve = normales_plates(trouve)
+		trouve.set_meta("objets", objets)
 	return trouve
 
 
@@ -1887,19 +1905,31 @@ static func _tous_les_noeuds(racine: Node) -> Array:
 ## rotation sur le nœud. Relu sans elle, le travail revenait couché : 41 erreurs de tranchage, 2 393
 ## sommets déplacés (mesuré, aller-retour OBJ → Blender → .glb). Le même piège attendait tout artiste
 ## qui tourne ou déplace son objet sans « Apply ». On lit désormais ce qu'il VOIT dans sa vue.
-static func _premier_maillage(noeud: Node, racine: Node = null) -> ArrayMesh:
-	if racine == null:
-		racine = noeud
-	var brut: Variant = noeud.get("mesh")
-	if brut != null:
+## ⚠ **TOUS LES MAILLAGES, PLUS LE PREMIER — CORRIGÉ LE 29 SEPTEMBRE 2026.** Cette fonction s'appelait
+## `_premier_maillage` et s'arrêtait au premier nœud porteur. Un artiste qui range son herbe dans un
+## second objet perdait l'un des deux SANS UN MOT — et si l'herbe venait d'abord, c'était le TERRAIN :
+## mesuré sur le faux travail d'artiste, 2 676 triangles relus sur 33 428 écrits. Chaque objet garde sa
+## pose et ses surfaces (donc ses matériaux) ; le nombre d'objets lus est noté en méta (`objets`).
+## ⚠ Ils sont tous tranchés comme du TERRAIN : un prop entier (charte §9 bis) n'est pas encore écrit.
+static func _tous_les_maillages(racine: Node) -> ArrayMesh:
+	var sortie := ArrayMesh.new()
+	var objets := 0
+	for noeud in _tous_les_noeuds(racine):
+		var brut: Variant = noeud.get("mesh")
+		if brut == null:
+			continue
 		var converti: ArrayMesh = _en_array_mesh(brut)
-		if converti != null and converti.get_surface_count() > 0:
-			return _transformer(converti, _pose_dans_la_scene(noeud, racine))
-	for enfant in noeud.get_children():
-		var trouve: ArrayMesh = _premier_maillage(enfant, racine)
-		if trouve != null:
-			return trouve
-	return null
+		if converti == null or converti.get_surface_count() == 0:
+			continue
+		var pose: ArrayMesh = _transformer(converti, _pose_dans_la_scene(noeud, racine))
+		for s in pose.get_surface_count():
+			sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, pose.surface_get_arrays(s))
+			sortie.surface_set_material(sortie.get_surface_count() - 1, pose.surface_get_material(s))
+		objets += 1
+	if objets == 0:
+		return null
+	sortie.set_meta("objets", objets)
+	return sortie
 
 
 ## La pose d'un nœud dans sa scène, de proche en proche jusqu'à la racine INCLUSE. ⚠ Pas de

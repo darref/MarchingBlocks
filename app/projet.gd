@@ -25,7 +25,7 @@ const TEMOIN := "witness"
 
 ## Une couche neuve : aucune source, aucune case.
 static func couche(nom: String) -> Dictionary:
-	return {"nom": nom, "source": "", "pbr": false, "visible": true, "cases": {}}
+	return {"nom": nom, "source": "", "visible": true, "cases": {}}
 
 
 static func vers_texte(couches: Array, active: int) -> String:
@@ -35,7 +35,7 @@ static func vers_texte(couches: Array, active: int) -> String:
 		for p in c["cases"]:
 			var v: Vector3i = p
 			plat.append_array([v.x, v.y, v.z])
-		sorties.append({"nom": c["nom"], "source": c["source"], "pbr": c["pbr"],
+		sorties.append({"nom": c["nom"], "source": c["source"],
 			"visible": c["visible"], "cases": plat})
 	return JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties},
 		"\t")
@@ -76,19 +76,19 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 		for k in range(0, (plat as Array).size(), 3):
 			cases[Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = true
 		couches.append({"nom": str(c.get("nom", "Layer %d" % (i + 1))), "source": str(c.get("source", "")),
-			"pbr": bool(c.get("pbr", false)), "visible": bool(c.get("visible", true)), "cases": cases})
+			"visible": bool(c.get("visible", true)), "cases": cases})
 	var active: int = clampi(int(brut.get("active", 0)), 0, couches.size() - 1)
 	return {"couches": couches, "active": active}
 
 
 ## CE QUI DIT QUE LA SOURCE A CHANGÉ. Vide si elle n'existe pas (ou pas encore).
-## ⚠ Le témoin ne change qu'avec le logiciel : sa version en fait partie. Le PBR aussi, puisque le
-## matériau est posé AVANT le tranchage et part dans chaque tuile.
-static func empreinte(source: String, pbr: bool) -> String:
+## ⚠ Le témoin ne change qu'avec le logiciel : sa version en fait partie.
+## ⚠ Un projet d'avant le 29 septembre 2026 porte encore un champ « pbr » par couche : il est ignoré.
+static func empreinte(source: String) -> String:
 	if source == "":
 		return ""
 	if source == TEMOIN:
-		return "witness|%s|%s" % [pbr, ProjectSettings.get_setting("application/config/version", "")]
+		return "witness|%s" % ProjectSettings.get_setting("application/config/version", "")
 	if not FileAccess.file_exists(source):
 		return ""
 	# ⚠ LE CONTENU, PAS LA DATE : la date n'est précise qu'à la seconde, et deux enregistrements de même
@@ -96,15 +96,15 @@ static func empreinte(source: String, pbr: bool) -> String:
 	return FileAccess.get_md5(source)
 
 
-static func chemin_cache(source: String, pbr: bool) -> String:
-	return "%s/%s.res" % [DOSSIER_CACHE, ("%s|%s" % [source, pbr]).md5_text()]
+static func chemin_cache(source: String) -> String:
+	return "%s/%s.res" % [DOSSIER_CACHE, source.md5_text()]
 
 
 ## Met un lot tranché en cache, marqué de l'empreinte de sa source. Rend "" ou la raison d'un échec.
-static func mettre_en_cache(lot: MeshLibrary, source: String, pbr: bool) -> String:
+static func mettre_en_cache(lot: MeshLibrary, source: String) -> String:
 	DirAccess.make_dir_recursive_absolute(DOSSIER_CACHE)
-	lot.set_meta("empreinte", empreinte(source, pbr))
-	var e: int = ResourceSaver.save(lot, chemin_cache(source, pbr), ResourceSaver.FLAG_COMPRESS)
+	lot.set_meta("empreinte", empreinte(source))
+	var e: int = ResourceSaver.save(lot, chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
 	return "" if e == OK else "cache not written (error %d)" % e
 
 
@@ -112,12 +112,12 @@ static func mettre_en_cache(lot: MeshLibrary, source: String, pbr: bool) -> Stri
 ## ⚠ UN CACHE PÉRIMÉ EST QUAND MÊME RENDU, marqué `a_jour = false` : si le `.glb` a disparu, c'est
 ## tout ce qui reste de la couche, et l'appelant décide — retrancher si la source est là, sinon
 ## montrer le vieux lot en le DISANT.
-static func lire_cache(source: String, pbr: bool) -> Dictionary:
-	var chemin := chemin_cache(source, pbr)
+static func lire_cache(source: String) -> Dictionary:
+	var chemin := chemin_cache(source)
 	if not FileAccess.file_exists(chemin):
 		return {"lot": null, "a_jour": false}
 	var lot := ResourceLoader.load(chemin, "", ResourceLoader.CACHE_MODE_IGNORE) as MeshLibrary
 	if lot == null:
 		return {"lot": null, "a_jour": false}
-	var e: String = empreinte(source, pbr)
+	var e: String = empreinte(source)
 	return {"lot": lot, "a_jour": e != "" and str(lot.get_meta("empreinte", "")) == e}
