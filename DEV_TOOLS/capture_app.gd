@@ -69,6 +69,30 @@ func _derouler() -> void:
 	await _images(20)
 	_photo("2_monde")
 
+	# LE PLAY TEST : le personnage posé sur le plateau, puis en marche, puis de près.
+	_ecran._vue._cible = Vector3(1.5, 1.0, 4.5)
+	_ecran._aller_a("jeu")
+	await _images(60)
+	_photo("2b_play_test")
+	_touche(KEY_W, true)
+	await _images(14)
+	_photo("2c_play_test_marche")
+	_touche(KEY_W, false)
+	_touche(KEY_SPACE, true)
+	await _images(10)
+	_touche(KEY_SPACE, false)
+	_photo("2d_play_test_saut")
+	await _images(60)
+	_ecran._vue._distance = 1.6
+	await _images(20)
+	_photo("2e_play_test_pres")
+	# DE FACE : les yeux violets ne se voient que de là — la caméra passe devant lui.
+	_ecran._vue._azimut += PI
+	await _images(20)
+	_photo("2f_play_test_face")
+	_ecran._aller_a("monde")
+	await _images(5)
+
 	# La barre d'outils : visée Sculpt, une sélection, et l'aperçu d'un pinceau sous une souris posée.
 	_ecran._choisir_visee("sculpt")
 	_ecran._vue.regler_selection({Vector3i(2, 1, 1): true, Vector3i(3, 1, 1): true, Vector3i(4, 1, 1): true})
@@ -128,6 +152,14 @@ func _derouler() -> void:
 		g.close()
 	DirAccess.remove_absolute(JETABLE)
 	quit(0)
+
+
+func _touche(touche: Key, appuyee: bool) -> void:
+	var e := InputEventKey.new()
+	e.physical_keycode = touche
+	e.keycode = touche
+	e.pressed = appuyee
+	Input.parse_input_event(e)
 
 
 func _images(n: int) -> void:

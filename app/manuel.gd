@@ -156,7 +156,7 @@ func _demarrer() -> String:
 	l.append(("It carries [b]%d tiles[/b]: %d classes, and %d of them again for the open air. That is "
 		+ "a count, not a promise: the tests prove not one is missing.") % [dedans + dehors, dedans, dehors])
 	l.append(_titre("2. Paint a test world"))
-	l.append("Open [b]Test world[/b], and in [b]Slice into the active layer[/b] press "
+	l.append("Open [b]World[/b], and in [b]Slice into the active layer[/b] press "
 		+ "[b]Slice the witness[/b]. The first time takes a few seconds; after that it is cached.")
 	l.append("Then paint: [b]left click[/b] applies the tool, [b]right click[/b] does the opposite. "
 		+ "Every stroke is undone by one " + _touche("Ctrl+Z") + ".")
@@ -164,6 +164,10 @@ func _demarrer() -> String:
 	l.append("[b]Export the witness…[/b] writes one .obj for Blender. Sculpt it, export it as .glb, then "
 		+ "[b]Import the work…[/b] to see it as the slicer will read it, and [b]Slice the work[/b] to "
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
+	l.append("Then open [b]Play test[/b] and walk it: " + _touche("Z Q S D") + " to move, "
+		+ _touche("Space") + " to jump, " + _touche("Shift") + " to run, right drag to turn the camera, "
+		+ "the wheel to come closer. You walk on the tiles you see — a step too high or a tunnel too "
+		+ "low shows here first. " + _touche("Esc") + " brings you back.")
 	l.append(_note("A red cube is a tile your library does not have. Nothing is ever filled in for you: "
 		+ "a hole must be seen where it happens."))
 	l.append(_titre("4. Take it to your engine"))

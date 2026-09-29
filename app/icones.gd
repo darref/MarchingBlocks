@@ -14,6 +14,7 @@ const TAILLE_RENDU := 40.0
 ## Le contenu d'un SVG 24 × 24, au trait. `#FFF` est remplacé par la couleur demandée.
 const TRACES := {
 	# Les ateliers
+	"jouer": '<path d="M7 4.5v15l12-7.5z"/>',
 	"cube": '<path d="M12 2.5 3.5 7.2v9.6L12 21.5l8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
 	"grille": '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17" stroke-opacity="0.7"/>',
 	"monde": '<path d="M2.5 15.5 12 20.5l9.5-5L12 10.5z"/><path d="M7 13l9.5 5M17 13l-9.5 5M12 10.5v-6M9.5 7 12 4.5 14.5 7"/>',

@@ -23,8 +23,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
-  qu'on regarde et l'aller-retour avec l'artiste, droite = la main), deux ateliers — **Witness** et
-  **Test world** —, panneau d'attente nommé. Chaînes d'écran en ANGLAIS (§7).
+  qu'on regarde et l'aller-retour avec l'artiste, droite = la main), trois ateliers — **Witness**,
+  **World** (ex-« Test world », renommé par Jordan le 29 septembre 2026) et **Play test** (§5) —, panneau
+  d'attente nommé. Chaînes d'écran en ANGLAIS (§7).
 - **RENOMMÉ (Jordan, 27 septembre 2026)** : le dépôt vit dans `D:/MarchingBlocks` (ex-`D:/UnderMend`).
 - **LE CŒUR : `addons/marchingblocks_core/` — DÉCIDÉ (Jordan, 28 septembre 2026).** Il s'appelait
   `addons/undermend/`, puis `addons/marching_blocks_plugin_godot/`, et portait AUSSI un écran de greffon
@@ -830,9 +831,41 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
   d'outil, sinon reculer changeait d'outil en silence. ⚠ **ON DÉPLACE LA CIBLE, PAS L'ŒIL** : regarder
   fait pivoter la cible autour de la caméra, et repasser en Grid retrouve une orbite cohérente. Avancer
   reste À PLAT. Gardé par `fumee_appli` (cycle de Tab, aucun clic ne peint, l'œil reste en place, vol à
-  plat, S ne choisit pas Select) — quatre mutations, toutes rouges. ⚠ Tenir une touche ne se simule pas
-  en headless : `_process` (la lecture de ZQSD) n'est éprouvé que par la main.
+  plat, S ne choisit pas Select) — quatre mutations, toutes rouges. ⚠ **« TENIR UNE TOUCHE NE SE SIMULE
+  PAS EN HEADLESS » ÉTAIT ÉCRIT ICI, ET C'EST FAUX** : `Input.parse_input_event` d'un `InputEventKey`
+  appuyé met la touche à l'état tenu pour `Input.is_physical_key_pressed`, jusqu'à son relâché — mesuré
+  le 29 septembre 2026, le Play test de la fumée avance et saute ainsi. La lecture de ZQSD en Navigate
+  (`_process`) reste pourtant sans garde : personne ne l'a encore écrite.
   Dans Unity et Unreal, Navigate REND la souris au moteur, dont la vue vole déjà nativement.
+- **LE PLAY TEST — DEMANDÉ PAR JORDAN (29 septembre 2026).** Un troisième atelier : on MARCHE dans le
+  monde peint, ZQSD (par leur place), Espace saute, Maj court ; caméra à la troisième personne qui tourne
+  autour du personnage en LACET au clic droit glissé, molette pour rapprocher ou éloigner ; Échap rend
+  World, Retour arrière ramène au départ. Aucune case n'y change. Le personnage (`app/personnage.gd`) :
+  un stickman Funko Pop tout noir, yeux violets émissifs, contour violet de la même couleur (coque
+  inversée : `next_pass`, `CULL_FRONT`, `grow`), animé en PROCÉDURAL — repos, marche, course, saut,
+  écrasement à l'atterrissage. Bâti en primitives : aucun modèle emprunté, rien à importer.
+  - ⚠ **IL FOULE CE QU'ON VOIT, PAS LES CASES.** Les grilles `Rendu` portent une boîte par octant plein
+    (`RP.collision`) : la case entière, alors que la matière de l'aminci est un quart de case en retrait.
+    Un décor à part (couche de collision 2) est bâti à l'entrée avec les TRIANGLES des tuiles posées,
+    rotations comprises. **MESURÉ** : sur le témoin tranché, il se pose à y = 10,75 sur un sol d'étage
+    10 ; sur les boîtes des cases, à 11,00.
+  - ⚠ **LA MUTATION « IL FOULE LES CASES » ÉTAIT MUETTE SUR LE REPLI PROCÉDURAL**, où surface rendue et
+    boîtes coïncident (11,00 des deux côtés) : le test était trop étroit, pas le code inutile (§6). La
+    fumée tranche désormais le témoin dans la couche avant de jouer, et la mutation rougit.
+  - ⚠ **LA VUE A LE CLAVIER EN PLAY TEST**, sinon Espace re-cliquait le bouton « Play test ». Elle ne
+    doit donc avaler que la SOURIS : avaler ses touches privait l'écran d'Échap — vu rougir, parce que la
+    fumée envoie Échap par `Input.parse_input_event` et non par un appel direct, qui ne l'aurait jamais vu.
+  - ⚠ **`_trancher_temoin` PEND EN HEADLESS** : son panneau d'attente guette `frame_post_draw`, qui ne
+    vient jamais sans rendu. La fumée pendait sans un mot ; elle pose le lot directement.
+  - **Gardé par `fumee_appli`** (14 vérifications : refus d'un monde vide, apparition, pose sur la
+    surface rendue, avance, saut de plus d'une case, rotation, molette, Échap, aucune case changée).
+    Mutations rouges : décor vide, vue qui avale les touches, saut trop faible, collision sur les cases.
+    ⚠ **Une mutation reste MUETTE, et c'est un trou** : sans `backface_collision`, rien ne rougit — on
+    ne l'a éprouvé que sur un sol vu d'en haut. Les faces vues de dos (coupes ouvertes, dessous d'un
+    surplomb) n'ont aucune garde.
+  - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
+    en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
+    de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
@@ -916,13 +949,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 797 vérifications, 0 échec** (29 septembre 2026, recomptées après le faux travail
-  d'artiste et le retrait du PBR), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Douze suites, **7 811 vérifications, 0 échec** (29 septembre 2026, recomptées après le Play test), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 87, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 72, `test_greffon_peinture` 87, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

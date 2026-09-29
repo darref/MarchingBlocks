@@ -14,6 +14,7 @@ extends SceneTree
 
 const Projet := preload("res://app/projet.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 
@@ -43,6 +44,11 @@ func _mener() -> void:
 		await process_frame
 	_egal(ed._projet, JETABLE, "l'appli rouvre le dernier projet")
 	_egal(ed._couches.size(), 1, "une couche relue")
+	# ── Play test : un monde vide est REFUSÉ, et on reste dans World ───────────────────────────────
+	ed._aller_a("jeu")
+	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._rapport.text.contains("empty"),
+		"Play test sur un monde vide : refusé, on reste dans World, et l'écran le dit")
+	_egal((ed._boutons_atelier["monde"] as Button).text, "World", "l'atelier s'appelle World")
 	ed._aller_a("monde")
 	var cases: GridMap = ed._vue.cases()
 
@@ -268,12 +274,94 @@ func _mener() -> void:
 		ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")),
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
+	await _play_test(ed)
+
 	ed.queue_free()
 	await process_frame
 	_rendre_les_reglages()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
+
+
+## LE PLAY TEST, mené par de VRAIES touches (`Input.parse_input_event`) : le personnage tombe sur un
+## sol peint, s'y pose, avance, saute, et la sortie rend tout. ⚠ Le headless ne dit pas s'il est beau.
+func _play_test(ed: Control) -> void:
+	var sol := {}
+	for x in range(20, 29):
+		for z in range(20, 29):
+			sol[Vector3i(x, 10, z)] = true
+	ed._coup_commence()
+	ed._touche({"poser": sol, "effacer": {}}, "Add")
+	ed._coup_fini()
+	# ⚠ LE TÉMOIN, PAS LE REPLI : sur le repli procédural, la surface rendue COÏNCIDE avec les boîtes
+	# de collision des cases (mesuré : 11,00 dans les deux cas), donc marcher sur les cases au lieu des
+	# tuiles restait MUET. L'aminci rentre d'un quart de case : là, les deux se séparent.
+	# ⚠ Le lot se pose SANS `_trancher_temoin` : son panneau d'attente guette `frame_post_draw`, qui
+	# ne vient jamais en headless — la fumée pendait sans un mot.
+	ed._vue.monde().lot = BM.librairie()["lot"]
+	var avant: int = ed._vue.cases().get_used_cells().size()
+	ed._vue._cible = Vector3(24.5, 11, 24.5)
+	ed._aller_a("jeu")
+	var p: CharacterBody3D = ed._vue.personnage
+	_vrai(ed._atelier == "jeu" and p != null, "Play test sur un monde peint : le personnage apparaît")
+	if p == null:
+		return
+	_vrai(not ed._droite.visible and ed._section_jeu.visible, "la barre des outils se retire, les commandes du jeu apparaissent")
+	_vrai(p.global_position.y > 11.0, "il apparaît AU-DESSUS du sol peint")
+	for i in 90:
+		await physics_frame
+	_vrai(p.is_on_floor(), "il tombe et se POSE sur les tuiles (pas à travers)")
+	_vrai(p.global_position.y > 10.5 and p.global_position.y < 10.9,
+		"il se pose sur la surface RENDUE, un quart de case sous la case pleine (y = %.2f)" % p.global_position.y)
+	var depart: Vector3 = p.global_position
+	_touche_physique(KEY_W, true)
+	for i in 40:
+		await physics_frame
+	_touche_physique(KEY_W, false)
+	var pas := Vector2(p.global_position.x - depart.x, p.global_position.z - depart.z).length()
+	_vrai(pas > 0.8, "W (Z en AZERTY) le fait avancer (%.2f case)" % pas)
+	for i in 20:
+		await physics_frame
+	var y0: float = p.global_position.y
+	_touche_physique(KEY_SPACE, true)
+	var sommet := y0
+	for i in 20:
+		await physics_frame
+		sommet = maxf(sommet, p.global_position.y)
+	_touche_physique(KEY_SPACE, false)
+	_vrai(sommet - y0 > 1.0, "Espace le fait sauter de plus d'une case (%.2f)" % (sommet - y0))
+	var az: float = ed._vue._azimut
+	var glisse := InputEventMouseMotion.new()
+	glisse.button_mask = MOUSE_BUTTON_MASK_RIGHT
+	glisse.relative = Vector2(80, 0)
+	ed._vue._gui_input(glisse)
+	_vrai(not is_equal_approx(ed._vue._azimut, az), "clic droit glissé : la caméra tourne autour de lui")
+	var d: float = ed._vue._distance
+	var molette := InputEventMouseButton.new()
+	molette.button_index = MOUSE_BUTTON_WHEEL_UP
+	molette.pressed = true
+	ed._vue._gui_input(molette)
+	_vrai(ed._vue._distance < d, "la molette rapproche la caméra")
+	# ⚠ PAR LE VRAI CHEMIN DES TOUCHES, vue AU CLAVIER : c'est elle qui a la main en Play test, et une
+	# vue qui avalerait les touches priverait l'écran d'Échap. Appeler `_unhandled_key_input` en direct
+	# ne l'aurait jamais vu.
+	_vrai(ed._vue.has_focus(), "en Play test, la vue a le clavier (Espace ne re-clique aucun bouton)")
+	_touche_physique(KEY_ESCAPE, true)
+	_touche_physique(KEY_ESCAPE, false)
+	await process_frame
+	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._vue._decor == null,
+		"Échap rend World, sans personnage ni décor")
+	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
+
+
+func _touche_physique(touche: Key, appuyee: bool) -> void:
+	var e := InputEventKey.new()
+	e.physical_keycode = touche
+	e.keycode = touche
+	e.pressed = appuyee
+	Input.parse_input_event(e)
+	Input.flush_buffered_events()
 
 
 func _rendre_les_reglages() -> void:

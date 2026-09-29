@@ -3,7 +3,10 @@ extends SubViewportContainer
 ##
 ## Deux choses à montrer, jamais en même temps :
 ##   • le TÉMOIN (ou le travail importé) — ce que l'artiste sculpte, qu'on fait tourner ;
-##   • le MONDE DE TEST — un `MassifPeint` réel, qu'on peint case par case avec le lot tranché.
+##   • le MONDE (« World », ex-« Test world ») — un `MassifPeint` réel, qu'on peint case par case avec
+##     le lot tranché ;
+##   • et, par-dessus le monde, le PLAY TEST (`mode == "jeu"`) : le même monde, sans pinceau, où l'on
+##     marche avec un personnage (`personnage.gd`).
 ##
 ## ⚠ **LE PINCEAU EST ICI PARCE QUE L'ÉDITEUR GODOT N'EST PLUS LÀ.** Le greffon s'appuyait sur le
 ## pinceau natif du GridMap ; un logiciel autonome doit écrire le sien. C'est la « sélection maison »
@@ -27,6 +30,7 @@ signal boite_trop_grande
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const Personnage := preload("res://app/personnage.gd")
 
 ## Jusqu'où porte le rayon de sculpture, en cases.
 const PORTEE := 400.0
@@ -82,7 +86,7 @@ var selection := {}
 ## jusqu'au clic. Vide hors d'un collage.
 var collage: Array = []
 
-## "temoin" ou "monde".
+## "temoin", "monde" ou "jeu".
 var mode := "temoin"
 var etage := 0
 
@@ -97,16 +101,29 @@ var _coin_fin: Variant = null
 var _maj_du_coup := false
 var _boite_vue: MeshInstance3D
 
+## ── LE PLAY TEST ──
+var _env: Environment
+var personnage: CharacterBody3D
+## Le décor qu'il foule : la SURFACE RENDUE des tuiles, pas les boîtes par case des grilles.
+var _decor: StaticBody3D
+var _depart := Vector3.ZERO
+var _plus_bas := 0.0
+## L'orbite d'avant le Play test, rendue à la sortie : on retrouve le monde tel qu'on l'avait laissé.
+var _orbite_d_avant: Array = []
+
 
 func _ready() -> void:
 	stretch = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	# Un clic dans la vue lui donne le clavier : Espace ne doit plus « cliquer » le dernier bouton.
+	focus_mode = Control.FOCUS_CLICK
 	_vue = SubViewport.new()
 	_vue.own_world_3d = true
 	_vue.msaa_3d = Viewport.MSAA_4X
 	add_child(_vue)
 
 	var env := Environment.new()
+	_env = env
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("#101216")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
@@ -170,7 +187,7 @@ func montrer(quoi: String) -> void:
 	mode = quoi
 	_temoin.visible = quoi == "temoin"
 	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
-	_couches.visible = quoi == "monde"
+	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
 	_grille_locale.visible = false
@@ -340,6 +357,9 @@ func voler(axes: Vector3, dt: float) -> void:
 ## donné un clavier sur deux à l'envers.
 ## ⚠ Un champ de texte qui a la main garde ses touches : on tape le nom d'une couche avec des Z et des S.
 func _process(dt: float) -> void:
+	if mode == "jeu":
+		_mener_le_jeu()
+		return
 	if visee != "naviguer" or mode != "monde" or not is_visible_in_tree():
 		return
 	var focus := get_viewport().gui_get_focus_owner()
@@ -362,6 +382,12 @@ func _process(dt: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	# ⚠ LA SOURIS SEULEMENT : la vue a le clavier en Play test, et avaler ses touches ici priverait
+	# l'écran d'Échap et de Retour arrière.
+	if mode == "jeu" and event is InputEventMouse:
+		_souris_du_jeu(event)
+		accept_event()
+		return
 	if visee == "naviguer" and mode == "monde" and _naviguer(event):
 		accept_event()
 		return
@@ -817,3 +843,191 @@ func _maillage_grille_locale() -> ImmediateMesh:
 func _placer_grille() -> void:
 	if _grille != null:
 		_grille.position = Vector3(0, etage + 0.002, 0)
+
+
+# ── LE PLAY TEST ─────────────────────────────────────────────────────────────────────────────────────
+#
+# DEMANDÉ PAR JORDAN (29 septembre 2026) : marcher et sauter dans le monde peint avec un personnage,
+# caméra à la troisième personne qui tourne autour de lui en LACET au clic droit glissé, molette pour
+# rapprocher ou éloigner.
+#
+# ⚠ **IL FOULE CE QU'ON VOIT, PAS LES CASES.** Les grilles `Rendu` portent une boîte de collision par
+# octant plein (`RP.collision`) : la case entière, alors que la matière rendue de l'aminci est un quart
+# de case en retrait. Marcher sur les boîtes ferait flotter le personnage au-dessus du sol visible, et
+# buter contre des murs invisibles. On bâtit donc un décor à part (couche de collision 2) à partir des
+# TRIANGLES des tuiles posées, rotations comprises — et c'est ce qu'il faut éprouver : l'art de l'artiste.
+# ⚠ Il est bâti UNE fois à l'entrée : le Play test ne change aucune case.
+
+const CAMERA_DISTANCE := 4.0
+const CAMERA_ELEVATION := 0.38
+const CAMERA_HAUTEUR := 0.6
+## Sous le point le plus bas du monde, de tant de cases : on est tombé, on repart du départ.
+const CHUTE := 25.0
+
+
+## Entre en Play test. Rend "" si l'on joue, sinon la raison — en anglais, l'écran l'affiche.
+func commencer_partie() -> String:
+	finir_partie()
+	var triangles := PackedVector3Array()
+	var colonnes := {}
+	_plus_bas = INF
+	for m in _couches.get_children():
+		if not (m as Node3D).visible:
+			continue
+		for nom in ["Rendu", "Fautes"]:
+			var g := m.get_node_or_null(nom) as GridMap
+			if g != null:
+				triangles.append_array(_triangles_poses(g))
+		for c in (m.get_node("Cases") as GridMap).get_used_cells():
+			_plus_bas = minf(_plus_bas, c.y)
+			var cle := Vector2i(c.x, c.z)
+			colonnes[cle] = maxi(colonnes.get(cle, c.y), c.y)
+	if triangles.is_empty() or colonnes.is_empty():
+		return "The world is empty — paint some ground in World first."
+
+	_decor = StaticBody3D.new()
+	_decor.name = "DecorDuJeu"
+	_decor.collision_layer = 2
+	_decor.collision_mask = 0
+	var forme := CollisionShape3D.new()
+	var concave := ConcavePolygonShape3D.new()
+	# ⚠ LES DEUX FACES : la découpe laisse les pièces OUVERTES sur leurs plans de coupe (charte §4), et
+	# un triangle vu de dos ne retiendrait rien.
+	concave.backface_collision = true
+	concave.set_faces(triangles)
+	forme.shape = concave
+	_decor.add_child(forme)
+	_vue.add_child(_decor)
+
+	# LE DÉPART : la colonne peinte la plus proche de ce qu'on regardait, au-dessus de sa plus haute case.
+	var vise := Vector2(_cible.x, _cible.z)
+	var meilleure := Vector2i.ZERO
+	var d_min := INF
+	for cle in colonnes:
+		var d := vise.distance_squared_to(Vector2(cle) + Vector2(0.5, 0.5))
+		if d < d_min:
+			d_min = d
+			meilleure = cle
+	_depart = Vector3(meilleure.x + 0.5, colonnes[meilleure] + 1.6, meilleure.y + 0.5)
+
+	personnage = Personnage.new()
+	_vue.add_child(personnage)
+	personnage.global_position = _depart
+	_orbite_d_avant = [_cible, _azimut, _elevation, _distance]
+	_elevation = CAMERA_ELEVATION
+	_distance = CAMERA_DISTANCE
+	personnage.cap_camera = _azimut
+	# Le halo des yeux violets : allumé pour le jeu seulement, il changerait le jugement des teintes.
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.9
+	_env.glow_bloom = 0.05
+	_env.glow_hdr_threshold = 1.0
+	_suivre(0.0)
+	return ""
+
+
+func finir_partie() -> void:
+	if personnage != null:
+		personnage.queue_free()
+		personnage = null
+	if _decor != null:
+		_decor.queue_free()
+		_decor = null
+	if _env != null:
+		_env.glow_enabled = false
+	if not _orbite_d_avant.is_empty():
+		_cible = _orbite_d_avant[0]
+		_azimut = _orbite_d_avant[1]
+		_elevation = _orbite_d_avant[2]
+		_distance = _orbite_d_avant[3]
+		_orbite_d_avant = []
+		_caler()
+
+
+func reapparaitre() -> void:
+	if personnage == null:
+		return
+	personnage.global_position = _depart
+	personnage.velocity = Vector3.ZERO
+
+
+## Les triangles de toutes les tuiles d'une grille, en coordonnées du monde. Le maillage d'un item est
+## lu une fois ; la pose (case, quart de tour, décalage d'une demi-case de `Rendu`) s'applique d'un bloc.
+static func _triangles_poses(g: GridMap) -> PackedVector3Array:
+	var sortie := PackedVector3Array()
+	var lot := g.mesh_library
+	if lot == null:
+		return sortie
+	var par_item := {}
+	var base := g.global_transform
+	for c in g.get_used_cells():
+		var id := g.get_cell_item(c)
+		if not par_item.has(id):
+			var mesh := lot.get_item_mesh(id)
+			par_item[id] = lot.get_item_mesh_transform(id) * mesh.get_faces() if mesh != null \
+				else PackedVector3Array()
+		var pose := Transform3D(g.get_basis_with_orthogonal_index(g.get_cell_item_orientation(c)),
+			g.map_to_local(c))
+		sortie.append_array((base * pose) * (par_item[id] as PackedVector3Array))
+	return sortie
+
+
+## Le clavier se lit par la PLACE des touches (ZQSD / WASD, comme Navigate). ⚠ Un champ de texte qui a
+## la main garde ses touches.
+func _mener_le_jeu() -> void:
+	if personnage == null:
+		return
+	var focus := get_viewport().gui_get_focus_owner()
+	var libre := not (focus is LineEdit or focus is TextEdit) and is_visible_in_tree()
+	var e := Vector2.ZERO
+	if libre:
+		if Input.is_physical_key_pressed(KEY_W):
+			e.y += 1.0
+		if Input.is_physical_key_pressed(KEY_S):
+			e.y -= 1.0
+		if Input.is_physical_key_pressed(KEY_D):
+			e.x += 1.0
+		if Input.is_physical_key_pressed(KEY_A):
+			e.x -= 1.0
+	personnage.entree = e
+	personnage.saut = libre and Input.is_physical_key_pressed(KEY_SPACE)
+	personnage.course = libre and Input.is_physical_key_pressed(KEY_SHIFT)
+	personnage.cap_camera = _azimut
+	if personnage.global_position.y < _plus_bas - CHUTE:
+		reapparaitre()
+	_suivre(get_process_delta_time())
+
+
+## LA CAMÉRA À LA TROISIÈME PERSONNE : elle suit le personnage, à hauteur fixe. ⚠ Elle se RAPPROCHE
+## quand une paroi s'interpose (un rayon du personnage vers l'œil, contre le décor) : sans ça, dans un
+## tunnel, on ne verrait que de la roche.
+func _suivre(dt: float) -> void:
+	var vers := personnage.global_position + Vector3.UP * CAMERA_HAUTEUR
+	_cible = vers if dt <= 0.0 else _cible.lerp(vers, minf(1.0, 18.0 * dt))
+	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
+	var distance := _distance
+	var espace := _vue.world_3d.direct_space_state if _vue.world_3d != null else null
+	if espace != null:
+		var q := PhysicsRayQueryParameters3D.create(_cible, _cible + direction * _distance, 2)
+		var r := espace.intersect_ray(q)
+		if not r.is_empty():
+			distance = maxf(0.4, _cible.distance_to(r["position"]) - 0.2)
+	_camera.look_at_from_position(_cible + direction * distance, _cible, Vector3.UP)
+
+
+## Clic droit glissé : la caméra tourne autour du personnage, en LACET seulement (Jordan). Molette :
+## plus près, plus loin. Aucun clic ne peint.
+func _souris_du_jeu(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_distance = maxf(1.5, _distance / 1.12)
+		elif b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_distance = minf(16.0, _distance * 1.12)
+		elif b.pressed:
+			# ⚠ Le clic rend la main clavier à la vue : sinon Espace « clique » le dernier bouton touché.
+			grab_focus()
+	elif event is InputEventMouseMotion:
+		var m := event as InputEventMouseMotion
+		if (m.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
+			_azimut -= m.relative.x * 0.008

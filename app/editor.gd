@@ -15,11 +15,14 @@ extends Control
 ##     échange avec l'artiste, à DROITE ce que fait la main ;
 ##   • un panneau d'ATTENTE nommé pour toute opération longue — un tranchage prend quelques secondes.
 ##
-## ── LES DEUX ATELIERS (« rooms » de SoluTiles) ───────────────────────────────────────────────────────
+## ── LES TROIS ATELIERS (« rooms » de SoluTiles) ──────────────────────────────────────────────────────
 ##
 ##   • WITNESS — le témoin, ou le travail importé, qu'on fait tourner. L'aller-retour avec l'artiste.
-##   • TEST WORLD — un monde qu'on peint case par case avec les tuiles tranchées. C'est ce que faisait
-##     le GridMap de l'éditeur Godot ; ici il faut notre propre pinceau (`vue.gd`).
+##   • WORLD — un monde qu'on peint case par case avec les tuiles tranchées. C'est ce que faisait
+##     le GridMap de l'éditeur Godot ; ici il faut notre propre pinceau (`vue.gd`). Il s'appelait
+##     « Test world » jusqu'au 29 septembre 2026 (Jordan).
+##   • PLAY TEST — le même monde, sans pinceau : on y marche et on y saute avec un personnage
+##     (`personnage.gd`), pour juger à hauteur de joueur. Aucune case n'y change.
 ##
 ## ⚠ **LE CŒUR N'EST PAS RECOPIÉ.** Tout passe par `addons/marchingblocks_core/` — le modèle, le témoin, le
 ## trancheur, les opérations d'étage — exactement comme le greffon. Deux écrans, une seule
@@ -50,7 +53,8 @@ const SECONDES_CONSEIL := 7.0
 const CONSEILS: Array[String] = [
 	"One witness block carries every tile. Sculpt it, bring it back, paint with it.",
 	"The witness is proven complete: not one tile missing, not one extra.",
-	"Test world: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
+	"World: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
+	"Play test: walk your world. Z Q S D to move, Space to jump, Shift to run, right drag to turn the camera.",
 	"Tab cycles Grid (paint on the floor plane), Sculpt (paint against the matter) and Navigate (fly around).",
 	"Navigate: Z Q S D to fly (W A S D on a QWERTY keyboard), Space up, Shift down, right drag to look.",
 	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
@@ -78,6 +82,7 @@ var _ecoule := 0.0
 var _boutons_atelier := {}
 var _atelier := "witness"
 var _sections_monde: Array[Control] = []
+var _section_jeu: Control
 
 var _plans: CheckButton
 var _etiquette_vue: Label
@@ -151,7 +156,7 @@ func _ready() -> void:
 	_batir()
 	_montrer_temoin()
 	_aller_a("witness")
-	_dire("[i]Look at the witness, export it for your artist, or open the Test world and paint.[/i]")
+	_dire("[i]Look at the witness, export it for your artist, or open the World and paint.[/i]")
 	_histoire.version_changed.connect(_enregistrer)
 	await get_tree().process_frame
 	_regler_fenetre()
@@ -428,7 +433,8 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 	var ateliers: Array = []
 	for a in [
 		["witness", "Witness", "cube", "The block your artist sculpts: look at it, export it, bring it back."],
-		["monde", "Test world", "monde", "Paint worlds with the sliced tiles."],
+		["monde", "World", "monde", "Paint worlds with the sliced tiles."],
+		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -442,7 +448,28 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 		b.pressed.connect(_aller_a.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
-	pile.add_child(_rangee(ateliers))
+	pile.add_child(_rangee(ateliers, 4))
+
+	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
+	_section_jeu = Section.new("Play test", true, Icones.icone("jouer"))
+	pile.add_child(_section_jeu)
+	_section_jeu.contenu.add_child(_texte("You walk on the tiles you SEE — your art, not the cells. "
+		+ "Nothing you do here changes the world.", 11, Palette.GRIS))
+	var commandes := GridContainer.new()
+	commandes.columns = 2
+	commandes.add_theme_constant_override("h_separation", 10)
+	commandes.add_theme_constant_override("v_separation", 4)
+	for r in [["ZQSD", "Move (WASD on QWERTY)"], ["Space", "Jump"], ["Shift", "Run"],
+			["Right drag", "Turn the camera"], ["Wheel", "Closer · farther"], ["Backspace", "Back to start"],
+			["Esc", "Back to World"]]:
+		commandes.add_child(_touche_clavier(r[0]))
+		commandes.add_child(_texte(r[1], 11, Palette.GRIS))
+	_section_jeu.contenu.add_child(commandes)
+	_section_jeu.contenu.add_child(_rangee([
+		_bouton("Back to start", "Puts the character back where it started (Backspace).",
+			func() -> void: _vue.reapparaitre(), "haut"),
+		_bouton("Leave", "Back to World (Esc).", _aller_a.bind("monde"), "croix"),
+	], 4))
 
 	var projet := Section.new("Project", true, Icones.icone("enregistrer"))
 	pile.add_child(projet)
@@ -857,11 +884,28 @@ func _fin_attente() -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
+	if atelier == "jeu" and _atelier != "jeu":
+		var refus: String = _vue.commencer_partie()
+		if refus != "":
+			_dire("[color=#e0603c]%s[/color]" % refus)
+			atelier = "monde"
+	elif atelier != "jeu" and _atelier == "jeu":
+		_vue.finir_partie()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	for s in _sections_monde:
 		s.visible = atelier == "monde"
-	_vue.montrer("monde" if atelier == "monde" else "temoin")
+	_section_jeu.visible = atelier == "jeu"
+	# ⚠ LA BARRE DE DROITE N'A RIEN À OFFRIR EN PLAY TEST : ses outils peignent. On la retire pour
+	# rendre la vue au jeu, plutôt que de laisser un cadre vide.
+	_droite.visible = atelier != "jeu"
+	_vue.montrer({"monde": "monde", "jeu": "jeu"}.get(atelier, "temoin"))
+	if atelier == "jeu":
+		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
+		get_viewport().gui_release_focus()
+		_vue.grab_focus()
+		_dire("[b]Play test[/b] — Z Q S D to move, Space to jump, Shift to run, right drag to turn. "
+			+ "Esc to go back.")
 	_selection_changee()
 	_dire_l_etage()
 
@@ -1754,6 +1798,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				KEY_V:
 					_coller()
 			get_viewport().set_input_as_handled()
+		return
+	if _atelier == "jeu":
+		match k.keycode:
+			KEY_ESCAPE:
+				_aller_a("monde")
+			KEY_BACKSPACE:
+				_vue.reapparaitre()
+			_:
+				return
+		get_viewport().set_input_as_handled()
 		return
 	if _atelier != "monde":
 		return

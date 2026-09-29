@@ -1,6 +1,6 @@
 [gd_resource type="MeshLibrary" format=4 uid="uid://dv2mwu0ccv8r5"]
 
-[ext_resource type="Shader" uid="uid://brgjbki58c57m" path="res://addons/undermend/pbr_monde.gdshader" id="1_bf1rv"]
+[ext_resource type="Shader" uid="uid://brgjbki58c57m" path="res://addons/marchingblocks_core/pbr_monde.gdshader" id="1_bf1rv"]
 [ext_resource type="Texture2DArray" path="res://ART/pbr_monde/albedo.res" id="2_ir647"]
 [ext_resource type="Texture2DArray" path="res://ART/pbr_monde/normale.res" id="3_jt7nr"]
 [ext_resource type="Texture2DArray" path="res://ART/pbr_monde/orh.res" id="4_2uthf"]
