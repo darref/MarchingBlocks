@@ -53,8 +53,26 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   chez l'acheteur — un addon Godot part en source, une DLL Unity se décompile. Des greffons gratuits vont
   là où l'on cherche (Asset Library Godot, Asset Store Unity, Fab) : c'est la DÉCOUVERTE du §10. Le
   format est décrit au §4.
-- **OUVERT** : la licence ; l'icône et le splash ; les
-  textures PBR de test (retirées avec le PBR le 29 septembre 2026) venaient de HEART_WORLD.
+- **L'ÉDITEUR EST SPANNERGAMES INC. — DÉCIDÉ (Jordan, 29 septembre 2026).** Dans les propriétés de
+  l'exe (société, copyright) et tout à droite de la barre de titre, logo DÉTOURÉ
+  (`MARQUE/spannergames_detoure.png` : le fond violet opaque de `spannergames.png` ferait un carré).
+- **LE SPLASH — DÉCIDÉ (Jordan, 29 septembre 2026) : un fond par logiciel, UNE signature pour tous.**
+  - **Le fond de MarchingBlocks** raconte le slogan : le témoin de 12³ flotte dans ses plans de coupe
+    dorés, et le monde devient, vers la droite, organique et stylisé. La moitié gauche est RENDUE avec le
+    vrai produit (`DEV_TOOLS/rendre_splash.gd` → `MARQUE/splash_fond.png`) ; la droite a été reprise dans
+    Tripo par Jordan (`MARQUE/splash_fond_tripo.png`, gardée telle quelle). ⚠ C'est une image de
+    présentation : l'interdit de Tripo (§3) porte sur le TÉMOIN qu'on texture, pas sur elle.
+  - **La signature** (logo détouré et « SpannerGames Inc. », en bas à droite, sur un voile flou) est
+    collée par `MARQUE/composer_splash.py`, tailles proportionnelles à la hauteur. ⚠ **CE SCRIPT SE
+    COPIE TEL QUEL dans chaque logiciel de Jordan**, avec le logo détouré : le retoucher dans un seul
+    projet, c'est une signature qui diverge (§6). On ne colle jamais la signature à la main, et on
+    n'envoie jamais à un générateur d'images un fond déjà signé : il la déformerait.
+  - ⚠ **« COVER », PAS « KEEP »** (`boot_splash/stretch_mode=4`) : une fenêtre maximisée est plus large
+    que 16:9 (la barre des tâches lui prend de la hauteur), et « Keep » laissait des bandes sur les côtés
+    — vu par Jordan. « Cover » rogne en haut et en bas, d'où la marge de sûreté de la signature (0,065 de
+    la hauteur).
+- **OUVERT** : la licence ; l'icône (remplacée en `362ae23`, pas encore validée ici) ; les textures PBR de test (retirées avec le PBR le 29 septembre 2026)
+  venaient de HEART_WORLD.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
