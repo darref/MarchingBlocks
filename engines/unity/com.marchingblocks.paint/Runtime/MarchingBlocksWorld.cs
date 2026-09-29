@@ -97,6 +97,16 @@ namespace MarchingBlocks.Paint
 
         public void ClearCells() { cells.Clear(); index = null; }
 
+        /// <summary>Replaces ALL the cells (format space), in one pass — a duplicate is kept once. Record the
+        /// undo before calling this; call Rebuild() afterwards.</summary>
+        public void SetCells(IEnumerable<Vector3Int> newCells)
+        {
+            cells.Clear();
+            index = new HashSet<Int3>();
+            foreach (var c in newCells)
+                if (index.Add(new Int3(c.x, c.y, c.z))) cells.Add(c);
+        }
+
         MBTileset Tileset
         {
             get

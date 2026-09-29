@@ -1,0 +1,374 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "layers": [
+          {
+            "cells": [
+              [
+                -7,
+                -2,
+                5
+              ],
+              [
+                -1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                -3
+              ]
+            ],
+            "name": "Rock",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [
+              [
+                2,
+                0,
+                2
+              ]
+            ],
+            "name": "Ice",
+            "tileset": null,
+            "visible": false
+          },
+          {
+            "cells": [],
+            "name": "Empty",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          }
+        ]
+      },
+      "name": "two layers, negative cells, a hidden layer without tiles, an empty layer",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              -7,
+              -2,
+              5,
+              -1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              -3
+            ],
+            "name": "Rock",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [
+              2,
+              0,
+              2
+            ],
+            "name": "Ice",
+            "tileset": null,
+            "visible": false
+          },
+          {
+            "cells": [],
+            "name": "Empty",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "newer version",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              -7,
+              -2,
+              5,
+              -1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              -3
+            ],
+            "name": "Rock",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [
+              2,
+              0,
+              2
+            ],
+            "name": "Ice",
+            "tileset": null,
+            "visible": false
+          },
+          {
+            "cells": [],
+            "name": "Empty",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 2
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "wrong format",
+      "world": {
+        "format": "marchingblocks-tileset",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              -7,
+              -2,
+              5,
+              -1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              -3
+            ],
+            "name": "Rock",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [
+              2,
+              0,
+              2
+            ],
+            "name": "Ice",
+            "tileset": null,
+            "visible": false
+          },
+          {
+            "cells": [],
+            "name": "Empty",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "no version",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              -7,
+              -2,
+              5,
+              -1,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              1,
+              -3
+            ],
+            "name": "Rock",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [
+              2,
+              0,
+              2
+            ],
+            "name": "Ice",
+            "tileset": null,
+            "visible": false
+          },
+          {
+            "cells": [],
+            "name": "Empty",
+            "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": null
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "cells not in triples",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              0,
+              0
+            ],
+            "name": "A",
+            "tileset": null,
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "a cell twice",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              1,
+              2,
+              3,
+              1,
+              2,
+              3
+            ],
+            "name": "A",
+            "tileset": null,
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "a fractional cell",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [
+              0,
+              0.5,
+              0
+            ],
+            "name": "A",
+            "tileset": null,
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "tileset neither path nor null",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": 3,
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "layer without visibility",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    }
+  ],
+  "format": "marchingblocks-world-conformance",
+  "rule": [
+    "MARCHINGBLOCKS WORLD v1 — world.json",
+    "",
+    "format   must be \"marchingblocks-world\". version: refuse anything newer than 1.",
+    "layers   an array, in order. Each layer:",
+    "  name      a string",
+    "  visible   true or false",
+    "  tileset   the path of a tileset.json RELATIVE to world.json, or null (a layer without tiles:",
+    "            its cells still travel; show that it has no tiles, never invent some)",
+    "  cells     a flat array of integers, x y z per cell, in FORMAT space: cell c covers [c, c+1],",
+    "            +Y is up. Its length is a multiple of 3. The same cell never appears twice.",
+    "Refuse the whole file, and say why, if any of these does not hold."
+  ],
+  "version": 1
+}

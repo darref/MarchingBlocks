@@ -282,12 +282,14 @@ func _mener() -> void:
 	_vrai(not ed._section_projet.visible and not ed._etapes_artiste.any(func(e): return e.visible)
 		and not ed._etapes_monde.any(func(e): return e.visible),
 		"Witness : ni Save · open ni aller-retour — ils vivent dans Project seul")
+	_vrai(not ed._section_monde_peint.visible, "Witness : pas de Painted world")
 	_vrai(not ed._bouton_revoir_temoin.visible, "« Show the witness » absent quand on regarde déjà le témoin")
 	ed._aller_a("monde")
 	_vrai(ed._droite.visible and not ed._section_temoin.visible and ed._section_raccourcis.visible
 		and ed._section_couches.visible, "World : outils, couches, raccourcis — et plus de section Witness")
 	_vrai(not ed._section_projet.visible and not ed._etapes_monde.any(func(e): return e.visible),
 		"World : ni Save · open ni aller-retour")
+	_vrai(ed._section_monde_peint.visible, "World : la section Painted world (exporter le monde entier)")
 	ed._choisir_outil("rect")
 	_vrai(not ed._ligne_taille.visible and not ed._ligne_forme.visible and not ed._creux.visible,
 		"Rect : ni pinceau ni Hollow")

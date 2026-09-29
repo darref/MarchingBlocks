@@ -114,6 +114,13 @@ public:
 	/** Moves the selected matter by Offset (format space), as one undo step. */
 	void MoveSelection(const MBPaint::FCell& Offset);
 
+	/** Sets the whole layer at once — its tile source and its cells (format space) — then rebuilds. Used by
+	 *  the world import. An empty TilesetFile is a layer WITHOUT tiles: its cells are kept, nothing is drawn,
+	 *  and the Status says so. Call Modify() first to undo. */
+	void SetLayer(const FString& TilesetFile, const FString& InTilesFolder, const std::vector<MBPaint::FCell>& InCells);
+	/** True once the frame marker 'mb_frame' was found in the Tiles Folder, i.e. tiles.glb is imported there. */
+	bool HasTileMeshes() const;
+
 	/** The ray against the MATTER (the cells, never the rendered tiles), converted into format space. */
 	MBPaint::FHit RayAgainstCells(const FVector& WorldOrigin, const FVector& WorldDirection,
 		const MBPaint::FCellSet* Ignore = nullptr);

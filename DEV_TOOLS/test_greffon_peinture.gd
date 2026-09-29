@@ -23,6 +23,8 @@ const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
 const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
+const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
+const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -38,6 +40,7 @@ func _initialize() -> void:
 	_un_format_plus_recent_est_refuse()
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
+	_les_cas_de_monde()
 	_de_bout_en_bout.call_deferred()
 
 
@@ -489,7 +492,113 @@ func _de_bout_en_bout() -> void:
 	print("  de bout en bout : %d tuiles exportées, %d posées par le greffon, %d écart(s)"
 		% [sortie["tuiles"], tuiles.get_used_cells().size(), ecarts])
 	monde.queue_free()
+	_le_monde_de_bout_en_bout(lot, pleines, attendu)
 	_fin()
+
+
+# ── LE MONDE PEINT (29 septembre 2026) ──────────────────────────────────────────────────────────────
+#
+# Trois greffons liront `world.json` : les cas sont calculés par la lecture de RÉFÉRENCE du cœur
+# (`FormatMonde.lire`) et livrés à chacun ; le greffon Godot les passe ici avec SA lecture, écrite à part
+# (sa source part chez l'acheteur, elle ne charge rien du cœur).
+func _les_cas_de_monde() -> void:
+	var frais = JSON.parse_string(JSON.stringify(FM.cas_d_epreuve()))
+	for cible in GENERATEUR.CIBLES_MONDE:
+		var ici = JSON.parse_string(FileAccess.get_file_as_string(cible)) if FileAccess.file_exists(cible) else null
+		_vrai(ici != null and JSON.stringify(ici) == JSON.stringify(frais),
+			"%s est absent ou PÉRIMÉ : relancer DEV_TOOLS/generer_cas_d_epreuve.gd" % cible)
+	var cas: Array = frais["cases"]
+	var refus := 0
+	for c in cas:
+		var lu := WorldFile.read(c["world"])
+		if c["expected"].has("error"):
+			refus += 1
+			_vrai(lu.has("error"), "monde « %s » : le greffon devait REFUSER, il a lu %s" % [c["name"], lu])
+		else:
+			# Les deux côtés repassent par JSON, clés triées : l'ordre des clés et 2 contre 2.0 ne sont pas la question.
+			_vrai(not lu.has("error") and _json_norme(lu) == _json_norme(c["expected"]),
+				"monde « %s » : le greffon lit %s, attendu %s" % [c["name"], lu, c["expected"]])
+	# ⚠ LES CAS EXERCENT CE QU'ILS NOMMENT : un cas bon, des refus, et dans le bon une cellule négative, une
+	# couche cachée, une couche sans tuiles, une couche vide.
+	_vrai(refus >= 6 and refus == cas.size() - 1, "les cas de monde : un bon, et au moins six refus")
+	var bon: Array = cas[0]["expected"]["layers"]
+	var negatif := false
+	for l in bon:
+		for p in l["cells"]:
+			negatif = negatif or p[0] < 0 or p[1] < 0 or p[2] < 0
+	_vrai(negatif and bon.any(func(l): return not l["visible"]) and bon.any(func(l): return l["tileset"] == null)
+		and bon.any(func(l): return (l["cells"] as Array).is_empty()),
+		"le cas bon porte une case négative, une couche cachée, une couche sans tuiles, une couche vide")
+
+
+func _vider(d: String) -> void:
+	if not DirAccess.dir_exists_absolute(d):
+		return
+	for f in DirAccess.get_files_at(d):
+		DirAccess.remove_absolute(d.path_join(f))
+	for sd in DirAccess.get_directories_at(d):
+		_vider(d.path_join(sd))
+	DirAccess.remove_absolute(d)
+
+
+func _json_norme(v: Variant) -> String:
+	return JSON.stringify(JSON.parse_string(JSON.stringify(v)), "", true)
+
+
+## L'appli exporte un monde de trois couches, le greffon le rebâtit : mêmes cases, même visibilité, mêmes
+## poses que l'appli, et la couche sans tuiles arrive sans tuiles, et le DIT.
+func _le_monde_de_bout_en_bout(lot: MeshLibrary, pleines: Dictionary, attendu: Array) -> void:
+	var glace: Array = [Vector3i(40, 0, 40), Vector3i(41, 0, 40), Vector3i(-3, -1, 2)]
+	var brouillon: Array = [Vector3i(0, 5, 0)]
+	var couches: Array = [
+		{"nom": "Rock", "visible": true, "source": "temoin", "lot": lot, "cases": pleines.keys()},
+		{"nom": "Ice", "visible": false, "source": "temoin", "lot": lot, "cases": glace},
+		{"nom": "Draft", "visible": true, "source": "", "lot": null, "cases": brouillon},
+	]
+	var dossier := ProjectSettings.globalize_path("user://test_monde")
+	# Un dossier propre : les restes d'un passage précédent fausseraient le compte des jeux écrits.
+	_vider(dossier.path_join("my_world.mbworld"))
+	var r: Dictionary = FM.exporter(couches, dossier, "My World", "MarchingBlocks test")
+	_vrai(not r.has("erreur"), "l'export du monde échoue : %s" % r.get("erreur", ""))
+	if r.has("erreur"):
+		return
+	# ⚠ COMPTÉ SUR LE DISQUE, pas dans le bilan : le bilan compte par source et restait à 1 même quand
+	# chaque couche réécrivait son propre dossier (mutation muette, vue).
+	var jeux_ecrits := Array(DirAccess.get_directories_at(str(r["dossier"]))).filter(
+		func(d: String) -> bool: return d.ends_with(".mbset"))
+	_egal(jeux_ecrits.size(), 1, "deux couches de même source partagent UN dossier de tuiles (%s)" % str(jeux_ecrits))
+	_egal(r["sans_tuiles"], ["Draft"], "la couche sans tuiles est nommée")
+	var chemin: String = str(r["dossier"]).path_join("world.json")
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var b := WorldFile.build(chemin, tenant)
+	_vrai(not b.has("error"), "le greffon ne rebâtit pas le monde : %s" % b.get("error", ""))
+	if b.has("error"):
+		tenant.queue_free()
+		return
+	var noeuds: Array = b["nodes"]
+	_egal(noeuds.size(), 3, "une couche, un nœud, dans l'ordre")
+	_egal(b["without_tiles"], ["Draft"], "le greffon DIT quelle couche arrive sans tuiles")
+	for i in noeuds.size():
+		var n: Node3D = noeuds[i]
+		var voulu := {}
+		for c in couches[i]["cases"]:
+			voulu[c] = true
+		_egal(n.cells(), voulu, "couche %s : les cases reviennent à l'identique" % couches[i]["nom"])
+		_egal(n.visible, couches[i]["visible"], "couche %s : la visibilité revient" % couches[i]["nom"])
+	_egal(noeuds[2].last_report()["error"], "no tileset chosen", "la couche sans tuiles n'en invente aucune")
+	# Les poses de la couche Rock : exactement celles du peintre de l'appli (la même référence qu'au-dessus).
+	var tuiles := (noeuds[0] as Node3D).get_node("Tiles") as GridMap
+	var lib: MeshLibrary = tuiles.mesh_library
+	var ecarts := 0
+	for e in attendu:
+		var id: int = tuiles.get_cell_item(Vector3i(e[0], e[1], e[2]))
+		if id < 0 or lib.get_item_name(id) != e[3]:
+			ecarts += 1
+	_egal(ecarts, 0, "couche Rock rebâtie : sommets où le greffon ne pose pas ce que l'appli pose")
+	_egal(tuiles.get_used_cells().size(), attendu.size(), "couche Rock rebâtie : rien de plus")
+	_egal((noeuds[1] as Node3D).last_report()["error"], "", "la couche Ice (cachée) charge le jeu partagé")
+	tenant.queue_free()
 
 
 func _fin() -> void:

@@ -1,6 +1,6 @@
 {
   "name": "MarchingBlocks.Paint.Integration",
-  "references": ["MarchingBlocks.Paint", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "references": ["MarchingBlocks.Paint", "MarchingBlocks.Paint.Editor", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
   "includePlatforms": ["Editor"],
   "overrideReferences": true,
   "precompiledReferences": ["nunit.framework.dll"],

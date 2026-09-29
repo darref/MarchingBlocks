@@ -13,11 +13,18 @@ extends SceneTree
 
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
+const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 ## ⚠ UN SEUL FICHIER, LIVRÉ À CHAQUE GREFFON : tous doivent passer les MÊMES cas.
 const CIBLES := [
 	"res://addons/marchingblocks_paint/conformance.json",
 	"res://engines/unity/com.marchingblocks.paint/Tests/conformance.json",
 	"res://engines/unreal/MarchingBlocksPaint/Tests/conformance.json",
+]
+## ⚠ LA LECTURE DU MONDE PEINT (`world.json`, 29 septembre 2026) : mêmes trois greffons, même parade.
+const CIBLES_MONDE := [
+	"res://addons/marchingblocks_paint/world_conformance.json",
+	"res://engines/unity/com.marchingblocks.paint/Tests/world_conformance.json",
+	"res://engines/unreal/MarchingBlocksPaint/Tests/world_conformance.json",
 ]
 const CIBLES_OUTILS := [
 	"res://addons/marchingblocks_paint/tools_conformance.json",
@@ -34,6 +41,7 @@ func _initialize() -> void:
 		return
 	_ecrire(FN.cas_d_epreuve(), CIBLES)
 	_ecrire(outils, CIBLES_OUTILS)
+	_ecrire(FM.cas_d_epreuve(), CIBLES_MONDE)
 	quit(0)
 
 

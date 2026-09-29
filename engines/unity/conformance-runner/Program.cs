@@ -1,5 +1,6 @@
 // Runs every case of conformance.json through the Unity plugin's Rule, and every case of
-// tools_conformance.json through its Tools, and exits 1 on any divergence. LangVersion 9: the same language level Unity compiles the package with.
+// tools_conformance.json through its Tools, and every case of world_conformance.json through its world
+// reader (MBWorldFile), and exits 1 on any divergence. LangVersion 9: the same language level Unity compiles the package with.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -48,6 +49,12 @@ static class Program
         foreach (var f in toolsFailures) Console.WriteLine("  FAIL tools: " + f);
         Console.WriteLine($"{toolCases} tools cases, {toolsFailures.Count} failure(s)");
         failed += toolsFailures.Count;
+
+        string worldPath = args.Length > 2 ? args[2] : "../com.marchingblocks.paint/Tests/world_conformance.json";
+        var worldFailures = WorldConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(worldPath)), out int worldCases);
+        foreach (var f in worldFailures) Console.WriteLine("  FAIL world: " + f);
+        Console.WriteLine($"{worldCases} world cases, {worldFailures.Count} failure(s)");
+        failed += worldFailures.Count;
         Console.WriteLine(failed == 0 ? "VERDICT: OK" : "VERDICT: FAILED");
         return failed == 0 ? 0 : 1;
     }

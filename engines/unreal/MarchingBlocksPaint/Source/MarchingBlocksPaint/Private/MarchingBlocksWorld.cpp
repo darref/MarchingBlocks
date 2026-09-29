@@ -106,6 +106,30 @@ void AMarchingBlocksWorld::MoveSelection(const MBPaint::FCell& Offset)
 	});
 }
 
+void AMarchingBlocksWorld::SetLayer(const FString& TilesetFile, const FString& InTilesFolder, const std::vector<MBPaint::FCell>& InCells)
+{
+	Tileset.FilePath = TilesetFile;
+	TilesFolder.Path = InTilesFolder;
+	// Nothing of a previous source survives: a stale manifest or mesh map would draw another tileset.
+	ManifestText.Reset();
+	TileMeshes.Reset();
+	Rule.Reset();
+	Status.Reset();
+	Cells.Reset(static_cast<int32>(InCells.size()));
+	for (const MBPaint::FCell& C : InCells) Cells.Add(FIntVector(C.X, C.Y, C.Z));
+	bIndexValid = false;
+	Selection.clear();
+	Rebuild();
+	if (TilesetFile.IsEmpty())
+		Status = FString::Printf(TEXT("This layer has no tiles (it was exported without a tileset): its %d cell(s) are kept, nothing is drawn."),
+			Cells.Num());
+}
+
+bool AMarchingBlocksWorld::HasTileMeshes() const
+{
+	return TileMeshes.Contains(TEXT("mb_frame"));
+}
+
 void AMarchingBlocksWorld::Fill() { Operate(MBPaint::ESelectionOp::Fill, TEXT("Fill")); }
 void AMarchingBlocksWorld::DeleteSelected() { Operate(MBPaint::ESelectionOp::Delete, TEXT("Delete")); }
 void AMarchingBlocksWorld::ExtrudeUp() { Operate(MBPaint::ESelectionOp::ExtrudeUp, TEXT("Extrude up")); }

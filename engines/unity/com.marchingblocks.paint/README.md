@@ -40,6 +40,20 @@ raises a room.
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you.
 One component is one layer: stack several GameObjects for several tilesets.
 
+## Import a painted world
+
+MarchingBlocks exports a whole painted world as a `<name>.mbworld/` folder: `world.json` (the layers, in
+order, with their visibility and cells) and one `.mbset` tileset folder per tile source, inside it.
+
+1. Copy the whole `.mbworld` folder into `Assets/`. Every `tiles.glb` inside is imported by your glTF
+   importer.
+2. **Tools > MarchingBlocks > Import World...** and pick its `world.json`.
+
+You get one GameObject named after the world, with one child per layer, in order, each with a
+**MarchingBlocks World** component already set up. A hidden layer arrives inactive. A layer without
+tiles arrives with its cells and no tiles, and the Console names it. The whole import is one Ctrl+Z.
+A world made by a newer MarchingBlocks is refused: update the package.
+
 ## Why it works with any importer
 
 Unity is left-handed, glTF is right-handed, and every importer converts in its own way. `tiles.glb`
@@ -49,6 +63,6 @@ grid with exactly the same mapping. Nothing is assumed.
 ## The rule
 
 The placement rule is written in `tileset.json` (`rules_text`), the tools in `Tests/tools_conformance.json`
-(`rules_text`). Both hold reference cases computed by the MarchingBlocks tool itself and shared with the
+(`rules_text`), the world file in `Tests/world_conformance.json` (`rule`). All three hold reference cases computed by the MarchingBlocks tool itself and shared with the
 other plugins; `Tests/Editor/` runs them in the Test Runner (list `com.marchingblocks.paint` under
 `testables` in your project manifest).

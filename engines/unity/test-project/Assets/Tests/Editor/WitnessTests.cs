@@ -230,11 +230,12 @@ public sealed class WitnessTests
         return world;
     }
 
-    static string Key(string tile, Vector3 formatPosition, int turns) =>
+    // Shared with WorldImportTests.cs.
+    internal static string Key(string tile, Vector3 formatPosition, int turns) =>
         $"{tile}@{Mathf.RoundToInt(formatPosition.x * 100)},{Mathf.RoundToInt(formatPosition.y * 100)},{Mathf.RoundToInt(formatPosition.z * 100)}/{((turns % 4) + 4) % 4}";
 
     // Which quarter turn does this rotation make, once brought back to format space?
-    static int TurnsOf(MBTileset set, Transform t)
+    internal static int TurnsOf(MBTileset set, Transform t)
     {
         var r = Matrix4x4.Rotate(t.localRotation);
         var z = set.FrameInverse.MultiplyVector(r.MultiplyVector(set.Frame.MultiplyVector(Vector3.forward)));

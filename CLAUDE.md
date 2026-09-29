@@ -689,8 +689,56 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   l'export glTF de Godot tient UN espace de noms pour nœuds et maillages — nommer le maillage dans la
   scène renommait le NŒUD en « …_22 », 14 tuiles introuvables, vu rougir. Le nom est posé dans l'état
   glTF, APRÈS `append_from_scene`, en recopiant celui du nœud (`GLTFMesh.resource_name`).
-- **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
-  option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
+- **LE FORMAT DU MONDE PEINT v1 — DÉCIDÉ (Jordan, 29 septembre 2026)** : « dans WORLD, une section
+  pour gérer le monde peint, déjà l'exporter vers les trois addons ». `addons/marchingblocks_core/
+  format_monde.gd` écrit un dossier `<projet>.mbworld/` : `world.json` (les couches DANS L'ORDRE : nom,
+  visibilité, jeu de tuiles, cases) et un `.mbset` par SOURCE distincte, DANS le dossier.
+  - ⚠ **LE MONDE SE SUFFIT À LUI-MÊME** : `world.json` désigne ses jeux par un chemin RELATIF. Un monde
+    qui pointerait vers un `.mbset` ailleurs sur le disque arriverait chez l'acheteur sans ses tuiles.
+  - ⚠ **UNE SOURCE, UN DOSSIER** : deux couches tranchées du même travail partagent le même `.mbset`.
+    ⚠ La garde qui le vérifiait comptait les jeux PAR SOURCE dans le bilan, qui restait à 1 même quand
+    chaque couche réécrivait son dossier — mutation muette. On compte désormais les dossiers SUR LE DISQUE.
+  - ⚠ **UNE COUCHE SANS TUILES VOYAGE QUAND MÊME** (`"tileset": null`) : ses cases sont du travail. Le
+    greffon la rebâtit sans tuiles et le DIT (§3 : l'absence se voit).
+  - Les cases sont en espace du FORMAT, à plat par triplets, TRIÉES : un même monde s'écrit toujours
+    pareil. Un format plus récent est refusé ; toute entrée malformée refuse le fichier ENTIER, avec sa
+    raison.
+  - **LA RÈGLE DE LECTURE VIT À UN ENDROIT** (`FormatMonde.lire`), et ses réponses partent en
+    `world_conformance.json` avec les trois greffons (9 cas : un monde à case négative, couche cachée,
+    couche sans tuiles, couche vide ; huit refus). Le greffon Godot la réimplémente dans
+    `mb_world_file.gd` (sans rien charger du cœur) et bâtit un nœud MarchingBlocksWorld par couche
+    (Project → Tools → Import MarchingBlocks world…, une seule annulation).
+  - **MESURÉ (`test_greffon_peinture`, 117 vérifications)** : les 9 cas ; puis l'appli exporte un monde de
+    trois couches (Rock = témoin, Ice cachée de même source, Draft sans tuiles), le greffon le rebâtit :
+    cases identiques, visibilité rendue, UN dossier de tuiles, **1 048 poses de Rock identiques à celles
+    de l'appli**, Draft sans tuiles et nommée. Mutations rouges : version plus récente acceptée, case en
+    double acceptée, visibilité ignorée, chemin du jeu non relatif, un dossier par couche.
+  - ⚠ **L'EXPORT DE L'APPLI N'EST PAS MENÉ PAR LA FUMÉE** : il passe par le panneau d'attente, qui pend en
+    headless (`frame_post_draw`). Le bouton est gardé par le contexte ; l'écriture, par le test du greffon.
+  - **UNITY — MESURÉ** : `MBWorldFile.cs` (C# pur, sur `MBJson`) et `Tools/MarchingBlocks/Import World...`
+    (`MBWorldImporter.cs` : une racine, un enfant `MarchingBlocksWorld` par couche, rempli INACTIF puis
+    activé selon `visible`, UN groupe d'annulation ; `MarchingBlocksWorld.SetCells` réécrit la liste en
+    une passe). Banc .NET : **9 cas de monde sur 9** (avec les 18 de pose et les 69 d'outils). Unity 6.6
+    en batch : **15 tests sur 15** — la couche Rock pose **1 048 poses sur 1 048** comme MarchingBlocks,
+    Ice (cachée) 20 sur 20. Treize mutations, toutes rouges (dont : l'activer AVANT de lui donner ses
+    cases la bâtit à vide). Le monde d'essai est écrit par `preparer_essai_unity.gd`. ⚠ Non tenu en
+    main : le menu lui-même, et `ToAssetPath`, sans test.
+  - **UNREAL — MESURÉ** : `MBCore/MBWorldFile` (C++ standard) et l'acteur éditeur **MarchingBlocks World
+    Import** (bouton `CallInEditor` « Import World » : un `AMarchingBlocksWorld` par couche, dans l'ordre,
+    une transaction, relancer REMPLACE ses couches). `core-runner` : **9 cas de monde, 0 échec**, et les
+    mutations rouges — dont une que le RUNNER rendait muette (retirer le `clear()` d'un refus : il passait
+    un vecteur vide ; il le pré-remplit désormais). **Compilé par `RunUAT BuildPlugin` sur Unreal 5.8.3,
+    sans avertissement** — après un C4458 : un local `Layers` masquait `AActor::Layers`, le piège annoncé.
+    Mené dans l'éditeur (`UnrealEditor-Cmd -ExecutePythonScript -nullrhi`, projet jetable) sur le vrai
+    monde exporté : **Rock 1 048 tuiles**, Ice 20 et masquée, Draft « no tiles », un Ctrl+Z par import.
+    ⚠ Seul le NOMBRE de tuiles y est comparé, pas les poses ; aucune mutation dans la couche Unreal ; le
+    bouton n'a jamais été cliqué. ⚠ **IL N'Y A PAS DE g++ SUR CE PC** : le banc a tourné avec le clang 22
+    livré avec Unity (cible MSVC), mêmes drapeaux (`-fno-exceptions -fno-rtti -Wshadow -Wconversion
+    -Werror`).
+  - ⚠ **L'EMPREINTE DE GÉOMÉTRIE DU §4 EST PÉRIMÉE** : le témoin rend aujourd'hui **31 120 triangles,
+    `819204827d6121ec7e13d41aefdd4dcc`** (mesuré dans Godot ET Unity, qui s'accordent), et non 90 651 /
+    `c3876f4f…`. Probablement la découpe sans triangles plats (`cb59fab`) — NON vérifié.
+- **OUVERT** : la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
   un GameObject par tuile : à mesurer sur une vraie carte) ; **éprouver le greffon Unreal dans l'éditeur** (il compile
   sur 5.8, voir plus haut).
@@ -836,6 +884,27 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
   l'UI est dans le même cas.
 
 ---
+
+### LE MODELEUR DU TÉMOIN — DÉCIDÉ (Jordan, 29 septembre 2026), PAS ÉCRIT
+
+Jordan : « une barre de droite pleine d'outils de modélisation du témoin dans le mode Witness — imiter
+toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matériaux et texturing ».
+
+- **IL REMPLACE BLENDER.** L'artiste ne quitte plus l'appli : le maillage du témoin devient une DONNÉE
+  qu'on édite, enregistrée dans le projet, et le trancheur la lit directement. L'export `.obj` et
+  l'import `.glb` restent pour qui préfère Blender. C'est aussi l'occasion de faire respecter le contrat
+  PENDANT qu'on modélise — plans de coupe visibles, props séparés (§3), raccords de texture vérifiés.
+- **PALIER 1 : L'ÉDITION DE MAILLAGE** — modes sommet / arête / face (1 2 3), sélection (clic, Maj, B, A,
+  Alt+clic en boucle), G R S avec contrainte d'axe X Y Z et saisie numérique, E extrude, I inset, Ctrl+B
+  bevel, Ctrl+R loop cut, K knife, M merge, X delete, F fill, subdivide, O proportionnel, vues du pavé
+  numérique, Tab objet / édition.
+- **LE TEXTURING = MATÉRIAUX + PROJECTIONS** : des matières tuilables assignées et projetées (UV, box),
+  réglées pour tenir la discipline des coupes (§3). La peinture sur maillage n'est PAS demandée.
+- ⚠ **LE CODE DE BLENDER NE SE RECOPIE PAS, ET CE N'EST PAS UNE PRÉFÉRENCE : Blender est sous GPL.** Le
+  reprendre ou le traduire dans un exe vendu et chiffré obligerait à publier tout MarchingBlocks sous
+  GPL. On reproduit le COMPORTEMENT (gestes, raccourcis, résultats) — libre —, avec des algorithmes
+  écrits ici, et chaque geste gardé par un test.
+- **ORDRE (Jordan)** : l'export du monde d'abord, le modeleur ensuite.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1039,13 +1108,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 847 vérifications, 0 échec** (29 septembre 2026, recomptées après la navigation
-  sortie des visées, la passe de contexte de l'écran et l'atelier Project), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Douze suites, **7 879 vérifications, 0 échec** (29 septembre 2026, recomptées après l'export du monde
+  peint vers les trois greffons), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 93, `test_greffon_peinture` 87, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 95, `test_greffon_peinture` 117, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

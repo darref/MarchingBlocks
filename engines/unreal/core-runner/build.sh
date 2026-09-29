@@ -8,5 +8,6 @@ ${CXX:-g++} -std=c++17 -O2 -fno-exceptions -fno-rtti \
   -Wall -Wextra -Wshadow -Wconversion -Wsign-conversion -Werror \
   -I"$SRC/Public" \
   runner.cpp "$SRC/Private/MBCore/MBJson.cpp" "$SRC/Private/MBCore/MBRule.cpp" "$SRC/Private/MBCore/MBTools.cpp" "$SRC/Private/MBCore/MBFrame.cpp" \
+  "$SRC/Private/MBCore/MBWorldFile.cpp" \
   -o runner
 ./runner "${1:-../MarchingBlocksPaint/Tests}"

@@ -9,6 +9,12 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
    Every change is one Ctrl+Z. (Selecting its **Cells** child gives Godot's own GridMap editor instead —
    both paint the same cells.)
 
+**A whole painted world** (every layer, its cells and its tiles) comes as a `.mbworld` folder: copy it into
+your project, then **Project → Tools → Import MarchingBlocks world...** and pick its `world.json`. One
+MarchingBlocksWorld node per layer is built, in order, under a new node — one Ctrl+Z. A layer exported
+without tiles arrives with its cells and no tiles, and the Output panel says so. `world_conformance.json`
+holds the reading rule's reference cases.
+
 | Aim (Tab) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |

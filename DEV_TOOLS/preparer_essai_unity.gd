@@ -10,11 +10,17 @@ extends SceneTree
 ##   witness_cells.json      ses cases, en espace du FORMAT ;
 ##   witness_expected.json   ce que MarchingBlocks pose dessus — l'attendu, calculé par `MB.poses()` ;
 ##   faux.mbset/             le FAUX TRAVAIL D'ARTISTE (`faux_artiste.gd`) tranché : la texture et les UV
-##                           de l'artiste doivent arriver sur chaque tuile, lues par glTFast.
+##                           de l'artiste doivent arriver sur chaque tuile, lues par glTFast ;
+##   witness_world.mbworld/  un MONDE PEINT de trois couches, écrit par `FormatMonde.exporter` : Rock (la
+##                           forme du témoin), Ice (CACHÉE, même source, donc même dossier de tuiles),
+##                           Draft (sans tuiles) — le même monde que `test_greffon_peinture` ;
+##   witness_world_expected.json  par couche : nom, visibilité, cases, et les poses que l'appli y fait
+##                           (`FN.attendu`, null pour la couche sans tuiles).
 ## ⚠ L'attendu vient de la RÉFÉRENCE, pas du greffon Unity : `WitnessTests.cs` compare le greffon à lui.
 
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const Faux := preload("res://DEV_TOOLS/faux_artiste.gd")
 const CIBLE := "D:/MarchingBlocks/engines/unity/test-project/Assets"
@@ -45,6 +51,9 @@ func _preparer() -> void:
 	_ecrire(CIBLE.path_join("witness_expected.json"), FN.attendu(pleines, comptes))
 	_ecrire(CIBLE.path_join("witness_geometry.json"), _coutures(pleines))
 	print("%s — %d tuiles, %d cases" % [r["dossier"], r["tuiles"], cellules.size()])
+	if not _monde(lot, pleines, comptes):
+		quit(1)
+		return
 	var faux := ProjectSettings.globalize_path("user://faux_unity.glb")
 	var m: Dictionary = Faux.fabriquer(faux)
 	var bilan: Dictionary = BM.librairie_depuis_glb(faux) if m["erreur"] == "" else {}
@@ -59,6 +68,46 @@ func _preparer() -> void:
 		return
 	print("%s — %d tuiles texturées" % [rf["dossier"], rf["tuiles"]])
 	quit(0)
+
+
+## LE MONDE PEINT : exporté par la référence, et son attendu calculé par la référence, couche par couche.
+## ⚠ Le dossier est VIDÉ d'abord : un reste d'un passage précédent (un second .mbset) fausserait l'essai.
+func _monde(lot: MeshLibrary, pleines: Dictionary, comptes: Dictionary) -> bool:
+	var couches: Array = [
+		{"nom": "Rock", "visible": true, "source": "temoin", "lot": lot, "cases": pleines.keys()},
+		{"nom": "Ice", "visible": false, "source": "temoin", "lot": lot,
+			"cases": [Vector3i(40, 0, 40), Vector3i(41, 0, 40), Vector3i(-3, -1, 2)]},
+		{"nom": "Draft", "visible": true, "source": "", "lot": null, "cases": [Vector3i(0, 5, 0)]},
+	]
+	_vider(CIBLE.path_join("witness_world.mbworld"))
+	var r: Dictionary = FM.exporter(couches, CIBLE, "witness world", "MarchingBlocks (test)")
+	if r.has("erreur"):
+		print("✗ monde : " + r["erreur"])
+		return false
+	var attendu: Array = []
+	for c in couches:
+		var cases := {}
+		for v in c["cases"]:
+			cases[v] = true
+		var plat: Array = []
+		for v in c["cases"]:
+			plat.append([v.x, v.y, v.z])
+		attendu.append({"name": c["nom"], "visible": c["visible"], "cells": plat,
+			"expected": FN.attendu(cases, comptes) if c["lot"] != null else null})
+	_ecrire(CIBLE.path_join("witness_world_expected.json"), attendu)
+	print("%s — %d couches, %d jeu(x) de tuiles, sans tuiles : %s" % [r["dossier"], r["couches"], r["jeux"],
+		str(r["sans_tuiles"])])
+	return true
+
+
+func _vider(d: String) -> void:
+	if not DirAccess.dir_exists_absolute(d):
+		return
+	for f in DirAccess.get_files_at(d):
+		DirAccess.remove_absolute(d.path_join(f))
+	for sd in DirAccess.get_directories_at(d):
+		_vider(d.path_join(sd))
+	DirAccess.remove_absolute(d)
 
 
 func _ecrire(chemin: String, donnees) -> void:

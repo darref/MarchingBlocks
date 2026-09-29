@@ -9,6 +9,8 @@ extends EditorPlugin
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const Editor := preload("res://addons/marchingblocks_paint/mb_editor.gd")
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
+const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
+const IMPORT_WORLD := "Import MarchingBlocks world..."
 
 var _editor: Node
 var _bar: HBoxContainer
@@ -21,6 +23,7 @@ var _floor: SpinBox
 var _status: Label
 var _counts: Label
 var _refreshing := false
+var _world_dialog: EditorFileDialog
 
 
 func _enter_tree() -> void:
@@ -32,10 +35,23 @@ func _enter_tree() -> void:
 	_bar = _build_bar()
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, _bar)
 	_bar.visible = false
+	# Project > Tools > Import MarchingBlocks world: a .mbworld folder exported by MarchingBlocks.
+	_world_dialog = EditorFileDialog.new()
+	_world_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+	# Inside the project: the scene keeps res:// paths, so it opens on any machine.
+	_world_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	_world_dialog.add_filter("world.json", "MarchingBlocks world")
+	_world_dialog.title = "Import a MarchingBlocks world (copy the .mbworld folder into your project first)"
+	_world_dialog.file_selected.connect(_import_world)
+	EditorInterface.get_base_control().add_child(_world_dialog)
+	add_tool_menu_item(IMPORT_WORLD, func() -> void: _world_dialog.popup_file_dialog())
 
 
 func _exit_tree() -> void:
 	remove_custom_type("MarchingBlocksWorld")
+	remove_tool_menu_item(IMPORT_WORLD)
+	if _world_dialog != null:
+		_world_dialog.queue_free()
 	if _bar != null:
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, _bar)
 		_bar.queue_free()
@@ -57,6 +73,40 @@ func _make_visible(visible: bool) -> void:
 	_bar.visible = visible
 	if not visible:
 		_editor.world = null
+
+
+## Builds the world under a new "MarchingBlocks world" node of the edited scene — ONE undo action.
+func _import_world(path: String) -> void:
+	var root := EditorInterface.get_edited_scene_root()
+	if root == null:
+		push_warning("MarchingBlocks: open or create a 3D scene first, then import the world.")
+		return
+	var holder := Node3D.new()
+	holder.name = path.get_base_dir().get_file().get_basename().validate_node_name()
+	var r := WorldFile.build(path, holder)
+	if r.has("error"):
+		holder.free()
+		push_error("MarchingBlocks: cannot import %s — %s" % [path, r["error"]])
+		return
+	var ur := get_undo_redo()
+	ur.create_action("Import MarchingBlocks world")
+	ur.add_do_method(root, "add_child", holder, true)
+	ur.add_do_method(self, "_own", holder, root)
+	ur.add_do_reference(holder)
+	ur.add_undo_method(root, "remove_child", holder)
+	ur.commit_action()
+	if not (r["without_tiles"] as Array).is_empty():
+		push_warning("MarchingBlocks: %d layer(s) have no tiles in this world — their cells are there, no "
+			% (r["without_tiles"] as Array).size() + "tiles: %s" % str(r["without_tiles"]))
+
+
+## Every node of the import belongs to the scene, so it is saved with it.
+func _own(node: Node, root: Node) -> void:
+	for child in node.get_children():
+		child.owner = root
+		_own(child, root)
+	if node != root:
+		node.owner = root
 
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:

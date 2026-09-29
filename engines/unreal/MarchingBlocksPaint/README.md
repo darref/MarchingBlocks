@@ -43,6 +43,23 @@ Fill…* raises a room. Every change is one Ctrl+Z.
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you. One actor is one
 layer: place several for several tilesets.
 
+## Import a painted world
+
+MarchingBlocks exports a painted world as a `<name>.mbworld/` folder: `world.json` (the layers, in order,
+with their cells) and one `.mbset` tileset folder per tile source, inside it.
+
+1. Place a **MarchingBlocks World Import** actor. Set **World File** (`world.json`) and press
+   **Import World** in its Details panel.
+2. It makes one **MarchingBlocks World** actor per layer, in order, named after the layer, in the Outliner
+   folder `MarchingBlocks/<world>`. A layer hidden in MarchingBlocks is hidden here too. The whole import
+   is one Ctrl+Z; pressing Import World again replaces the layers it made.
+3. Its Status (and the Output Log) names every `tiles.glb` still to import and where:
+   `<Tiles Root>/<world>/<tileset>`. Import them there, then press **Import World** again.
+
+A file that breaks the rule (see its `README.txt`) is refused whole, with the reason, and nothing is made.
+A layer exported **without tiles** keeps its cells and draws nothing: the import says so, and never gives
+it tiles it did not have. The import actor is editor-only and is not cooked.
+
 ## Why it works with any importer
 
 Unreal is left-handed, +Z up and in centimetres; glTF is right-handed, +Y up and in metres. `tiles.glb`
@@ -52,5 +69,5 @@ cell grid with exactly the same map. Nothing is assumed.
 ## The rule and the tools
 
 The placement rule is written in `tileset.json` (`rules_text`), the tools in `Tests/tools_conformance.json`
-(`rules_text`). Both files hold reference cases computed by the MarchingBlocks tool itself and shared by
-the Godot, Unity and Unreal plugins.
+(`rules_text`), the world file in `Tests/world_conformance.json` (`rule`). The three files hold reference
+cases computed by the MarchingBlocks tool itself and shared by the Godot, Unity and Unreal plugins.

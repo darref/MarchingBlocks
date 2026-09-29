@@ -1,11 +1,12 @@
-// Runs conformance.json through the Unreal plugin's FRule and tools_conformance.json through its Tools,
-// OUTSIDE Unreal: it compiles the very files the plugin ships (Source/MarchingBlocksPaint/.../MBCore).
+// Runs conformance.json through the Unreal plugin's FRule, tools_conformance.json through its Tools and
+// world_conformance.json through its FWorldFile, OUTSIDE Unreal: it compiles the very files the plugin ships (Source/MarchingBlocksPaint/.../MBCore).
 // Exits 1 on any divergence. Build and run: ./build.sh (see there for the flags that mimic Unreal).
 
 #include "MBCore/MBFrame.h"
 #include "MBCore/MBJson.h"
 #include "MBCore/MBRule.h"
 #include "MBCore/MBTools.h"
+#include "MBCore/MBWorldFile.h"
 
 #include <algorithm>
 #include <array>
@@ -233,6 +234,63 @@ namespace
 		std::printf("%d tools cases, %d failure(s)\n", Cases, Failed);
 		return Failed;
 	}
+	// THE WORLD FILE: every case is a world.json and what the reference reader made of it — a refusal
+	// ({"error": true}; the REASON is not imposed) or the layers, cells in the order of the file.
+	int RunWorld(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!Load(Path, Conf)) return 1;
+		if (Conf["format"].String != "marchingblocks-world-conformance" || Conf["version"].AsInt() > FWorldFile::SupportedVersion)
+		{
+			std::printf("  FAIL not a world conformance file this plugin reads\n");
+			return 1;
+		}
+		int Failed = 0, Cases = 0, Refused = 0, Layers = 0;
+		size_t CellCount = 0;
+		for (const FJsonValue& C : Conf["cases"].Array)
+		{
+			++Cases;
+			// Pre-filled on purpose: a refused file must give NOTHING, not what the caller's vector held.
+			std::vector<FWorldLayer> Got(1);
+			Got[0].Name = "left over";
+			const std::string Error = FWorldFile::Read(C["world"], Got);
+			const FJsonValue& E = C["expected"];
+			std::string Why;
+			if (E.Find("error"))
+			{
+				++Refused;
+				if (Error.empty()) Why = "expected a refusal, the file was accepted";
+				else if (!Got.empty()) Why = "refused, but layers were returned anyway";
+			}
+			else if (!Error.empty()) Why = "expected the file to be read, refused: " + Error;
+			else if (Got.size() != E["layers"].Size())
+				Why = "expected " + std::to_string(E["layers"].Size()) + " layers, got " + std::to_string(Got.size());
+			else
+			{
+				for (size_t L = 0; L < Got.size() && Why.empty(); ++L)
+				{
+					const FJsonValue& W = E["layers"][L];
+					const FWorldLayer& G = Got[L];
+					++Layers;
+					if (G.Name != W["name"].String) Why = "layer " + std::to_string(L) + ": name '" + G.Name + "'";
+					else if (G.bVisible != W["visible"].Bool) Why = "layer '" + G.Name + "': visibility";
+					else if (G.bHasTileset != !W["tileset"].IsNull() || G.Tileset != W["tileset"].String)
+						Why = "layer '" + G.Name + "': tileset '" + G.Tileset + "'";
+					else
+					{
+						std::vector<FCell> Want;
+						for (const FJsonValue& P : W["cells"].Array) Want.push_back(Vec(P));
+						CellCount += Want.size();
+						if (G.Cells != Want) Why = "layer '" + G.Name + "': cells: expected " + ShowList(Want) + ", got " + ShowList(G.Cells);
+					}
+				}
+			}
+			if (!Why.empty()) { ++Failed; std::printf("  FAIL world: %s — %s\n", C["name"].String.c_str(), Why.c_str()); }
+		}
+		std::printf("%d world cases (%d refusals, %d layers read, %zu cells), %d failure(s)\n", Cases, Refused, Layers, CellCount, Failed);
+		return Failed;
+	}
+
 	// THE FRAME, on a synthetic importer that MIRRORS and works in CENTIMETRES — what a left-handed,
 	// +Z-up engine necessarily does. The expected values come from the frame we build, not from FFrame.
 	int RunFrame()
@@ -278,6 +336,7 @@ int main(int Argc, char** Argv)
 	const std::string Dir = Argc > 1 ? Argv[1] : "../MarchingBlocksPaint/Tests";
 	int Failed = RunRule(Dir + "/conformance.json");
 	Failed += RunTools(Dir + "/tools_conformance.json");
+	Failed += RunWorld(Dir + "/world_conformance.json");
 	Failed += RunFrame();
 	std::printf(Failed == 0 ? "VERDICT: OK\n" : "VERDICT: FAILED\n");
 	return Failed == 0 ? 0 : 1;

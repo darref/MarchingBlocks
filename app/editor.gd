@@ -34,6 +34,7 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Panneau := preload("res://app/panneau.gd")
@@ -87,6 +88,7 @@ var _section_jeu: Control
 var _titre_projet: Control
 var _section_projet: Control
 var _section_couches: Control
+var _section_monde_peint: Control
 var _titre_aller_retour: Control
 var _etapes_artiste: Array[Control] = []
 var _etapes_monde: Array[Control] = []
@@ -648,6 +650,20 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	_bouton_supprimer_couche = (couches.contenu.get_child(couches.contenu.get_child_count() - 1)
 		.get_child(1) as Button)
 
+	# ── LE MONDE PEINT — DEMANDÉ PAR JORDAN (29 septembre 2026) : « dans WORLD, une section pour gérer le
+	# monde peint, déjà l'exporter vers les trois addons ». Toutes les couches partent ENSEMBLE, avec
+	# leurs tuiles, dans un seul dossier (`format_monde.gd`).
+	var monde_peint := Section.new("Painted world", true, Icones.icone("monde"))
+	pile.add_child(monde_peint)
+	_section_monde_peint = monde_peint
+	monde_peint.contenu.add_child(_texte("Sends the WHOLE world — every layer, its cells and its tiles — "
+		+ "to Godot, Unity or Unreal, through the free MarchingBlocks Paint plugins.", 11, Palette.GRIS))
+	monde_peint.contenu.add_child(_bouton("Export the world…",
+		"Writes <project>.mbworld/ : world.json (the layers and their cells, in order) and one .mbset "
+		+ "folder per tile source.\nIn your engine: Import MarchingBlocks world. A layer without tiles "
+		+ "still travels, and shows it has none.", func() -> void: _demander("monde"), "exporter",
+		Palette.PRINCIPAL))
+
 	# ── LES QUATRE ÉTAPES — DEMANDÉ PAR JORDAN (28 septembre 2026).
 	#
 	# ⚠ **L'ORDRE EST LE MODE D'EMPLOI.** Les mêmes boutons étaient là, mais répartis entre « Artist
@@ -1055,6 +1071,7 @@ func _aller_a(atelier: String) -> void:
 ##   Save · open           ✓
 ##   Round trip 1 → 4      ✓                          (3 et 4 visent la couche ACTIVE, choisie dans World)
 ##   Layers                                  ✓
+##   Painted world                           ✓         (exporter le monde entier vers les greffons)
 ##   Play test                                         ✓
 ##   Witness (réf.)        ✓        ✓                  (sa légende nomme les teintes du TÉMOIN)
 ##   Shortcuts (réf.)                        ✓         (ce ne sont que des gestes de peinture)
@@ -1071,6 +1088,7 @@ func _contexte() -> void:
 	_titre_projet.visible = projet
 	_section_projet.visible = projet
 	_section_couches.visible = monde
+	_section_monde_peint.visible = monde
 	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
 		e.visible = projet
@@ -1182,9 +1200,9 @@ func _demander(quoi: String) -> void:
 	var ecrire: bool = quoi in ["exporter", "enregistrer"]
 	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if ecrire else FileDialog.FILE_MODE_OPEN_FILE
 	_dialogue.clear_filters()
-	if quoi == "tileset":
+	if quoi == "tileset" or quoi == "monde":
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_DIR
-		_dialogue.title = "Export the tileset into…"
+		_dialogue.title = "Export the tileset into…" if quoi == "tileset" else "Export the world into…"
 		_dialogue.current_file = ""
 	elif quoi in ["ouvrir", "enregistrer"]:
 		_dialogue.add_filter("*." + Projet.EXTENSION, "MarchingBlocks project")
@@ -1213,6 +1231,8 @@ func _fichier_choisi(fichier: String) -> void:
 			_enregistrer_sous(fichier)
 		"tileset":
 			_exporter_le_jeu(fichier)
+		"monde":
+			_exporter_le_monde(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
@@ -1564,6 +1584,31 @@ func _exporter_le_jeu(dossier: String) -> void:
 		texte += ("\n\n[color=#f2ca79]%d tile(s) of the world are missing[/color] — the engine will show red "
 			+ "cubes there: %s") % [(r["manquantes"] as Array).size(),
 			", ".join(PackedStringArray((r["manquantes"] as Array).slice(0, 8)))]
+	_dire(texte)
+
+
+## LE MONDE ENTIER, toutes couches, vers les greffons (`format_monde.gd`).
+func _exporter_le_monde(dossier: String) -> void:
+	var couches: Array = []
+	for i in _couches.size():
+		var massif: Node = _vue.couche(i)
+		couches.append({"nom": _couches[i]["nom"], "visible": _couches[i]["visible"],
+			"source": _couches[i]["source"], "lot": massif.lot,
+			"cases": (massif.get_node("Cases") as GridMap).get_used_cells()})
+	await _attendre("Exporting the world", "%d layer(s)" % couches.size())
+	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
+	var nom: String = _projet.get_file().get_basename() if _projet != "" else "world"
+	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version)
+	_fin_attente()
+	if r.has("erreur"):
+		_dire("[color=#e0603c]Export failed:[/color] %s" % r["erreur"])
+		return
+	var texte := ("[color=#b4bd85][b]World written[/b][/color] → %s\n%d layer(s), %d tileset(s). In your "
+		+ "engine: [b]Import MarchingBlocks world[/b].") % [r["dossier"], r["couches"], r["jeux"]]
+	if not (r["sans_tuiles"] as Array).is_empty():
+		texte += ("\n\n[color=#f2ca79]%d layer(s) have no tiles yet[/color] — their cells travel, the engine "
+			+ "shows them without tiles: %s") % [(r["sans_tuiles"] as Array).size(),
+			", ".join(PackedStringArray(r["sans_tuiles"]))]
 	_dire(texte)
 
 
