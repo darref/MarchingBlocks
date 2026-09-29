@@ -682,6 +682,274 @@ func boucle(depart: Vector2i) -> Array:
 	return sortie
 
 
+# ── LE BISEAU ET LE COUTEAU ─────────────────────────────────────────────────────────────────────────
+
+## Ctrl+B — LE BISEAU D'ARÊTES, un segment de largeur `largeur`.
+##
+## Chaque COIN de face touché par une arête biseautée recule :
+##   - une seule de ses deux arêtes est biseautée → le coin glisse de `largeur` sur l'AUTRE arête (le point
+##     est partagé avec la face voisine de cette arête, qui le reçoit dans son contour : pas de fente en T) ;
+##   - ses deux arêtes le sont → le coin rentre DANS la face, à `largeur` des deux (l'onglet).
+## Chaque arête biseautée devient un quad entre les coins reculés de ses deux faces. Aux BOUTS d'une chaîne,
+## il reste un petit trou : il est rebouché par une face qui suit le trou À L'ENVERS — l'orientation vient
+## des voisines, jamais d'une supposition.
+## ⚠ **LE TROU DU BOUT GARDE LE SOMMET D'ORIGINE** : au coin d'un cube, un petit triangle coplanaire à la
+## face voisine reste là où Blender couperait le coin. La forme est la même, la topologie a une face de plus.
+## ⚠ Une largeur est plafonnée à 49 % de l'arête sur laquelle elle glisse : deux biseaux ne se croisent pas.
+## Rend les faces neuves (les quads du biseau).
+func biseauter(choix: Array, largeur: float) -> Array:
+	var fpa := faces_par_arete()
+	var sel := {}
+	for e in choix:
+		if (fpa.get(e, []) as Array).size() == 2:
+			sel[e] = true
+	if sel.is_empty() or largeur <= 0.0:
+		return []
+	var avant_bords := _bords_orientes()
+	var sur_arete := {}   # Vector2i(v, x) orienté → le point à `largeur` de v vers x
+	var remplace := {}    # Vector2i(face, indice) → le sommet qui remplace ce coin
+	var depart := sommets.duplicate()
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		var n := face.size()
+		for i in n:
+			var v := face[i]
+			var p := face[(i - 1 + n) % n]
+			var s := face[(i + 1) % n]
+			var s_in := sel.has(arete(p, v))
+			var s_out := sel.has(arete(v, s))
+			if s_in and s_out:
+				var u1: Vector3 = (depart[p] - depart[v]).normalized()
+				var u2: Vector3 = (depart[s] - depart[v]).normalized()
+				var bis := (u1 + u2)
+				var demi := u1.angle_to(u2) * 0.5
+				var k := sommets.size()
+				sommets.append(depart[v] + bis.normalized() * (largeur / maxf(sin(demi), 0.2)) \
+					if bis.length_squared() > 1e-12 else depart[v])
+				remplace[Vector2i(f, i)] = k
+			elif s_out:
+				remplace[Vector2i(f, i)] = _point_sur(sur_arete, depart, v, p, largeur)
+			elif s_in:
+				remplace[Vector2i(f, i)] = _point_sur(sur_arete, depart, v, s, largeur)
+	# Les faces refaites : leurs coins remplacés, et sur chaque arête NON biseautée, les points que les
+	# voisines y ont posés (dans l'ordre, du premier bout vers le second).
+	var neuves_faces: Array = []
+	var neuves_teintes := PackedColorArray()
+	var coins := {}       # Vector2i(face, indice) → sommet final (pour les quads du biseau)
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		var n := face.size()
+		var sortie := PackedInt32Array()
+		for i in n:
+			var v := face[i]
+			var s := face[(i + 1) % n]
+			var c: int = remplace.get(Vector2i(f, i), v)
+			coins[Vector2i(f, i)] = c
+			sortie.append(c)
+			if not sel.has(arete(v, s)):
+				for cle in [Vector2i(v, s), Vector2i(s, v)]:
+					if sur_arete.has(cle):
+						sortie.append(sur_arete[cle])
+		neuves_faces.append(_sans_doublons(sortie))
+		neuves_teintes.append(teintes[f])
+	# Les quads du biseau.
+	var quads: Array = []
+	for e in sel:
+		var f1 := -1
+		var f2 := -1
+		var i1a := -1
+		var i1b := -1
+		var i2a := -1
+		var i2b := -1
+		for f in fpa[e]:
+			var face: PackedInt32Array = faces[f]
+			var ia := face.find(e.x)
+			var ib := face.find(e.y)
+			if face[(ia + 1) % face.size()] == e.y:
+				f1 = f
+				i1a = ia
+				i1b = ib
+			else:
+				f2 = f
+				i2a = ia
+				i2b = ib
+		if f1 < 0 or f2 < 0:
+			continue
+		var q := _sans_doublons(PackedInt32Array([coins[Vector2i(f1, i1b)], coins[Vector2i(f1, i1a)],
+			coins[Vector2i(f2, i2a)], coins[Vector2i(f2, i2b)]]))
+		if q.size() >= 3:
+			quads.append(neuves_faces.size())
+			neuves_faces.append(q)
+			neuves_teintes.append(teintes[f1])
+	faces = neuves_faces
+	teintes = neuves_teintes
+	# Les trous des bouts : toute arête orientée restée seule, qui n'était pas un bord AVANT.
+	_reboucher(avant_bords)
+	nettoyer()
+	var sortie_faces: Array = []
+	for f in quads:
+		if f < faces.size():
+			sortie_faces.append(f)
+	return sortie_faces
+
+
+func _point_sur(sur_arete: Dictionary, depart: PackedVector3Array, v: int, x: int, largeur: float) -> int:
+	var cle := Vector2i(v, x)
+	if not sur_arete.has(cle):
+		var d: Vector3 = depart[x] - depart[v]
+		sur_arete[cle] = sommets.size()
+		sommets.append(depart[v] + d.normalized() * minf(largeur, d.length() * 0.49))
+	return sur_arete[cle]
+
+
+static func _sans_doublons(f: PackedInt32Array) -> PackedInt32Array:
+	var sortie := PackedInt32Array()
+	for i in f.size():
+		if f[i] != f[(i + 1) % f.size()]:
+			sortie.append(f[i])
+	return sortie
+
+
+## Les arêtes orientées qui n'ont pas de jumelle (un bord), en positions — pour ne reboucher que les trous
+## qu'une opération vient d'ouvrir, jamais un bord que l'artiste a voulu.
+func _bords_orientes() -> Dictionary:
+	var orientees := {}
+	for f in faces:
+		for k in (f as PackedInt32Array).size():
+			orientees[Vector2i(f[k], f[(k + 1) % f.size()])] = true
+	var bords := {}
+	for e in orientees:
+		if not orientees.has(Vector2i(e.y, e.x)):
+			bords[_cle_pos(sommets[e.x], sommets[e.y])] = true
+	return bords
+
+
+static func _cle_pos(a: Vector3, b: Vector3) -> String:
+	return "%s|%s" % [a.snapped(Vector3.ONE * 1e-5), b.snapped(Vector3.ONE * 1e-5)]
+
+
+func _reboucher(avant: Dictionary) -> void:
+	var orientees := {}
+	for f in faces:
+		for k in (f as PackedInt32Array).size():
+			orientees[Vector2i(f[k], f[(k + 1) % f.size()])] = true
+	var suivant := {}
+	for e in orientees:
+		if orientees.has(Vector2i(e.y, e.x)):
+			continue
+		if avant.has(_cle_pos(sommets[e.x], sommets[e.y])):
+			continue
+		suivant[e.x] = e.y
+	var vus := {}
+	for depart in suivant.keys():
+		if vus.has(depart):
+			continue
+		var boucle := PackedInt32Array()
+		var v: int = depart
+		while suivant.has(v) and not vus.has(v):
+			vus[v] = true
+			boucle.append(v)
+			v = suivant[v]
+		if v != depart or boucle.size() < 3:
+			continue
+		# Le trou est parcouru dans le sens de ses bords : la face qui le bouche le parcourt à l'envers.
+		boucle.reverse()
+		faces.append(boucle)
+		teintes.append(teintes[0] if not teintes.is_empty() else Color.WHITE)
+
+
+## K — LE COUTEAU : une coupe qui suit des points posés SUR DES ARÊTES, `[{"arete": Vector2i, "t": float}…]`
+## (t de x vers y). Deux points consécutifs doivent border une MÊME face : elle est fendue entre eux. Chaque
+## point neuf entre aussi dans l'autre face de son arête (pas de fente en T). Rend les sommets neufs, ou []
+## si un pas ne tombe dans aucune face commune — et alors rien n'est coupé.
+func couper(points: Array) -> Array:
+	if points.size() < 2:
+		return []
+	var sauve := copie()
+	var neufs: Array = []
+	var ids: Array = []
+	for pt in points:
+		var e: Vector2i = pt["arete"]
+		var t: float = clampf(float(pt["t"]), 0.0, 1.0)
+		var i: int
+		if t < 1e-4:
+			i = e.x
+		elif t > 1.0 - 1e-4:
+			i = e.y
+		else:
+			i = _inserer_sur_arete(e, sommets[e.x].lerp(sommets[e.y], t))
+			if i < 0:
+				_restaurer(sauve)
+				return []
+			neufs.append(i)
+		ids.append(i)
+	for k in range(ids.size() - 1):
+		if not _fendre(ids[k], ids[k + 1]):
+			_restaurer(sauve)
+			return []
+	return neufs
+
+
+func _restaurer(m: RefCounted) -> void:
+	sommets = m.sommets
+	faces = m.faces
+	teintes = m.teintes
+
+
+## Un point neuf sur l'arête e, inséré dans TOUTES les faces qui la bordent. Rend son indice, ou −1.
+func _inserer_sur_arete(e: Vector2i, p: Vector3) -> int:
+	var i := sommets.size()
+	var touche := false
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		for k in face.size():
+			var a := face[k]
+			var b := face[(k + 1) % face.size()]
+			if arete(a, b) == e:
+				face.insert(k + 1, i)
+				faces[f] = face
+				touche = true
+				break
+	if not touche:
+		return -1
+	sommets.append(p)
+	return i
+
+
+## Fend en deux la face qui contient a ET b (non voisins dans son contour). Rend faux s'il n'y en a pas.
+func _fendre(a: int, b: int) -> bool:
+	if a == b:
+		return false
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		var ia := face.find(a)
+		var ib := face.find(b)
+		if ia < 0 or ib < 0:
+			continue
+		var n := face.size()
+		if (ib - ia + n) % n == 1 or (ia - ib + n) % n == 1:
+			return true   # déjà une arête : rien à couper
+		var une := PackedInt32Array()
+		var k := ia
+		while true:
+			une.append(face[k])
+			if k == ib:
+				break
+			k = (k + 1) % n
+		var autre := PackedInt32Array()
+		k = ib
+		while true:
+			autre.append(face[k])
+			if k == ia:
+				break
+			k = (k + 1) % n
+		faces[f] = une
+		faces.append(autre)
+		teintes.append(teintes[f])
+		return true
+	return false
+
+
 # ── LE MÉNAGE ───────────────────────────────────────────────────────────────────────────────────────
 
 ## Retire les sommets répétés d'affilée dans une face, les faces de moins de trois sommets, et les

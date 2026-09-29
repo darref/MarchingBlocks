@@ -548,6 +548,36 @@ func _le_modeleur(ed: Control) -> void:
 	ed._vue._gui_input(clic)
 	_vrai(mo.maillage.faces.size() > f0 and mo.modal == "", "le clic coupe l'anneau (%d faces, geste « %s »)" % [mo.maillage.faces.size(), mo.modal])
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Ctrl+B : l'arête visée, biseautée de 0,1 tapé.
+	ed._input(_cle(KEY_2))
+	ed._vue._gui_input(clic)
+	_egal(mo.sel_a.size(), 1, "2 puis un clic : une arête choisie")
+	ed._input(_cle(KEY_B, true))
+	_egal(mo.modal, "bevel", "Ctrl+B biseaute")
+	for k in [KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(mo.modal == "" and mo.maillage.faces.size() > f0, "Ctrl+B 0.1 Entrée : le biseau est posé (%d faces)"
+		% mo.maillage.faces.size())
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.faces.size(), f0, "Ctrl+Z défait le biseau")
+	# K : deux points sur deux arêtes de la face visée, Entrée.
+	ed._input(_cle(KEY_3))
+	var face: PackedInt32Array = mo.maillage.faces[f]
+	var m1: Vector3 = (mo.maillage.sommets[face[0]] + mo.maillage.sommets[face[1]]) * 0.5
+	var m2: Vector3 = (mo.maillage.sommets[face[2]] + mo.maillage.sommets[face[3]]) * 0.5
+	ed._input(_cle(KEY_K))
+	_egal(mo.modal, "knife", "K prend le couteau")
+	for m in [m1, m2]:
+		var pc := InputEventMouseButton.new()
+		pc.button_index = MOUSE_BUTTON_LEFT
+		pc.pressed = true
+		# Un cheveu vers le centre de la face : on vise la face, pas son arête pile.
+		pc.position = cam.unproject_position(m.lerp(mo.maillage.centre(f), 0.05))
+		ed._vue._gui_input(pc)
+	ed._input(_cle(KEY_ENTER))
+	_egal(mo.maillage.faces.size(), f0 + 1, "K, deux clics, Entrée : la face visée est fendue en deux")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.faces.size(), f0, "Ctrl+Z défait la coupe")
 	# L'enregistrement : le fichier, relu, redonne le même maillage ; et il rejoint les travaux.
 	var raison: String = ed._enregistrer_le_temoin_modele()
 	var chemin: String = ed._chemin_temoin_modele()

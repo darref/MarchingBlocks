@@ -33,7 +33,8 @@ var sel_f := {}
 var proportionnel := false
 var rayon_prop := 1.0
 
-## LE GESTE EN COURS : "" (aucun), "G", "R", "S", "I", "B" (boîte), "loop" (Ctrl+R).
+## LE GESTE EN COURS : "" (aucun), "G", "R", "S", "I", "bevel" (Ctrl+B), "B" (boîte), "loop" (Ctrl+R),
+## "knife" (K).
 var modal := ""
 var _axe := ""
 var _saisie := ""
@@ -49,6 +50,9 @@ var _faces_inset: Array = []
 var _base_inset: RefCounted
 var _coin_boite := Vector2.ZERO
 var _anneau_vise: Array = []
+var _aretes_biseau: Array = []
+## Les points du couteau posés jusqu'ici : [{"arete", "t", "point"}].
+var _couteau: Array = []
 
 ## LE DESSIN EN DEUX MORCEAUX PENDANT UN GESTE : ce qui ne bouge pas (dessiné une fois au début), ce qui
 ## bouge (redessiné à chaque mouvement). ⚠ MESURÉ sur le témoin : un redessin complet coûtait ~250 ms,
@@ -458,7 +462,7 @@ func commencer(geste: String) -> bool:
 	if maillage == null or modal != "":
 		return false
 	var ids := sommets_choisis()
-	if ids.is_empty() and geste in ["G", "R", "S", "E", "I"]:
+	if ids.is_empty() and geste in ["G", "R", "S", "E", "I", "bevel"]:
 		dit.emit("[i]Nothing selected.[/i] Click a face (3), an edge (2) or a vertex (1) first.")
 		return false
 	_avant = maillage.copie()
@@ -480,6 +484,16 @@ func commencer(geste: String) -> bool:
 				_avant = null
 				return false
 			modal = "G"
+		"bevel":
+			_aretes_biseau = _aretes_choisies().keys()
+			if _aretes_biseau.is_empty():
+				dit.emit("[i]Bevel works on selected edges (2), or on the edges of selected faces.[/i]")
+				_avant = null
+				return false
+			_nom_geste = "Bevel"
+			_base_inset = maillage.copie()
+			modal = "bevel"
+			_ids = ids
 		"I":
 			if mode_sel != "face":
 				dit.emit("[i]Inset works on faces (3).[/i]")
@@ -512,6 +526,14 @@ func commencer(geste: String) -> bool:
 
 
 func _mettre_a_jour() -> void:
+	if modal == "bevel":
+		maillage = _base_inset.copie()
+		var w: float = maxf(0.0, _valeur(_ecart_ecran() / _pixels_par_unite()))
+		maillage.biseauter(_aretes_biseau, w)
+		_vider_selection()
+		redessiner()
+		dit.emit("[b]Bevel[/b]  width %.3f   [i](type a number · Enter or click to confirm · Esc to cancel)[/i]" % w)
+		return
 	if modal == "I":
 		maillage = _base_inset.copie()
 		var t: float = maxf(0.0, _valeur(_ecart_ecran() / _pixels_par_unite()))
@@ -727,6 +749,80 @@ func _couper_la_boucle() -> void:
 	dit.emit("[b]Loop cut[/b] — %d new vertices, selected: G to slide them. [i]Ctrl+Z undoes it.[/i]" % neufs.size())
 
 
+## K — LE COUTEAU : chaque clic pose un point sur l'arête visée la plus proche (sur la face qu'on VOIT) ;
+## la coupe se dessine en jaune ; Entrée coupe, Retour arrière ôte le dernier point, Échap abandonne.
+## ⚠ **DEUX POINTS CONSÉCUTIFS DOIVENT BORDER UNE MÊME FACE** (`MaillageEdite.couper`) : sinon rien n'est
+## coupé, et on le DIT — une coupe à moitié faite serait pire que pas de coupe.
+func commencer_couteau() -> void:
+	if maillage == null or modal != "":
+		return
+	modal = "knife"
+	_couteau = []
+	_dessiner_couteau()
+	dit.emit("[b]Knife[/b] — click points on edges; each step must stay on one face. Enter cuts, "
+		+ "Backspace removes the last point, Esc cancels.")
+
+
+func _point_vise_du_couteau() -> Dictionary:
+	var hit: Dictionary = maillage.lancer_rayon(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	if hit.is_empty():
+		return {}
+	var e := _arete_proche(maillage.faces[hit["face"]], souris)
+	var a: Vector3 = maillage.sommets[e.x]
+	var b: Vector3 = maillage.sommets[e.y]
+	var ab := b - a
+	var t := clampf((hit["point"] - a).dot(ab) / maxf(ab.length_squared(), 1e-12), 0.0, 1.0)
+	# ⚠ Près d'un bout, on colle AU SOMMET : une coupe qui passe à 1 % d'un coin laisserait une arête minuscule.
+	if t < 0.08:
+		t = 0.0
+	elif t > 0.92:
+		t = 1.0
+	return {"arete": e, "t": t, "point": a.lerp(b, t)}
+
+
+func _poser_point_de_couteau() -> void:
+	var p := _point_vise_du_couteau()
+	if not p.is_empty():
+		_couteau.append(p)
+	_dessiner_couteau()
+
+
+func _dessiner_couteau() -> void:
+	var lignes := PackedVector3Array()
+	var pts: Array = _couteau.map(func(p): return p["point"])
+	var vise := _point_vise_du_couteau()
+	if not vise.is_empty():
+		pts.append(vise["point"])
+	for i in range(pts.size() - 1):
+		lignes.append(pts[i])
+		lignes.append(pts[i + 1])
+	# Une petite croix sur chaque point.
+	for p in pts:
+		for d in [Vector3(0.05, 0, 0), Vector3(0, 0.05, 0), Vector3(0, 0, 0.05)]:
+			lignes.append(p - d)
+			lignes.append(p + d)
+	_apercu_mi.mesh = _mesh_de(lignes, Mesh.PRIMITIVE_LINES)
+
+
+func _finir_le_couteau() -> void:
+	modal = ""
+	_apercu_mi.mesh = null
+	if _couteau.size() < 2:
+		dit.emit("[i]The knife needs two points or more.[/i]")
+		_couteau = []
+		return
+	var avant: RefCounted = maillage.copie()
+	var neufs: Array = maillage.couper(_couteau)
+	_couteau = []
+	if neufs.is_empty() and maillage.faces.size() == avant.faces.size():
+		dit.emit("[color=#e0603c]Nothing cut[/color] — each step of the knife must stay on ONE face. "
+			+ "[i]Place the points again, face by face.[/i]")
+		return
+	change.emit(avant, maillage.copie(), "Knife")
+	redessiner()
+	dit.emit("[b]Knife[/b] done. [i]Ctrl+Z undoes it.[/i]")
+
+
 # ── L'ENTRÉE ────────────────────────────────────────────────────────────────────────────────────────
 
 ## La souris dans la vue. Rend vrai quand l'événement est pris. Le clic du milieu et la molette restent à
@@ -736,8 +832,11 @@ func souris_entree(event: InputEvent) -> bool:
 		return false
 	if event is InputEventMouseMotion:
 		souris = (event as InputEventMouseMotion).position
-		if modal in ["G", "R", "S", "I"]:
+		if modal in ["G", "R", "S", "I", "bevel"]:
 			_mettre_a_jour()
+			return true
+		if modal == "knife":
+			_dessiner_couteau()
 			return true
 		if modal == "loop":
 			_viser_boucle()
@@ -758,8 +857,10 @@ func souris_entree(event: InputEvent) -> bool:
 		return b.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]
 	match b.button_index:
 		MOUSE_BUTTON_LEFT:
-			if modal in ["G", "R", "S", "I"]:
+			if modal in ["G", "R", "S", "I", "bevel"]:
 				confirmer()
+			elif modal == "knife":
+				_poser_point_de_couteau()
 			elif modal == "loop":
 				_couper_la_boucle()
 			elif modal == "B":
@@ -785,7 +886,21 @@ func touche(k: InputEventKey) -> bool:
 	if maillage == null or not k.pressed:
 		return false
 	# PENDANT UN GESTE : contraintes, saisie, confirmer, annuler.
-	if modal in ["G", "R", "S", "I"]:
+	if modal == "knife":
+		match k.keycode:
+			KEY_ENTER, KEY_KP_ENTER:
+				_finir_le_couteau()
+			KEY_ESCAPE:
+				_couteau = []
+				modal = ""
+				_apercu_mi.mesh = null
+				dit.emit("[i]Knife cancelled.[/i]")
+			KEY_BACKSPACE:
+				if not _couteau.is_empty():
+					_couteau.pop_back()
+					_dessiner_couteau()
+		return true
+	if modal in ["G", "R", "S", "I", "bevel"]:
 		match k.keycode:
 			KEY_X, KEY_Y, KEY_Z:
 				var a := OS.get_keycode_string(k.keycode).to_lower()
@@ -820,6 +935,9 @@ func touche(k: InputEventKey) -> bool:
 		if k.keycode == KEY_R:
 			commencer_boucle()
 			return true
+		if k.keycode == KEY_B:
+			commencer("bevel")
+			return true
 		return false
 	# 1 2 3 de la RANGÉE DU HAUT, par leur place (sur un AZERTY, « 1 » est sous « & ») ; ceux du pavé
 	# numérique sont les VUES, et restent à l'écran.
@@ -832,6 +950,8 @@ func touche(k: InputEventKey) -> bool:
 			tout_choisir(not k.alt_pressed)
 		KEY_G, KEY_R, KEY_S, KEY_E, KEY_I:
 			commencer(OS.get_keycode_string(k.keycode))
+		KEY_K:
+			commencer_couteau()
 		KEY_B:
 			modal = "B"
 			dit.emit("[b]Box select[/b] — drag a rectangle (it also takes what is hidden). Esc cancels.")

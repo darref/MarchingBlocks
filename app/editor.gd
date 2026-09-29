@@ -1214,6 +1214,10 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			func() -> void: _geste_modeleur("fusionner"), "retrecir"),
 		_bouton("Fill  ·  F", "F — make a face on the selected vertices (a hole's rim).",
 			func() -> void: _geste_modeleur("remplir"), "remplir"),
+		_bouton("Bevel  ·  Ctrl+B", "Ctrl+B — chamfer the selected edges (or the edges of the selected "
+			+ "faces); the width follows the mouse or is typed.", func() -> void: _geste_modeleur("bevel"), "evider"),
+		_bouton("Knife  ·  K", "K — click points on edges, face by face; Enter cuts.",
+			func() -> void: _geste_modeleur("knife"), "couper"),
 		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: F closes it.",
 			func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
 	], 2))
@@ -1271,8 +1275,10 @@ func _geste_modeleur(nom: String) -> void:
 			_dire("[b]Box select[/b] — drag a rectangle. Esc cancels.")
 		"loop":
 			_modeleur.commencer_boucle()
-		"G", "R", "S", "E", "I":
+		"G", "R", "S", "E", "I", "bevel":
 			_modeleur.commencer(nom)
+		"knife":
+			_modeleur.commencer_couteau()
 		_:
 			_modeleur.operer(nom)
 

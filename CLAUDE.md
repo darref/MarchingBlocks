@@ -941,8 +941,18 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     désormais d'un état propre.
   - ⚠ **LA FUMÉE CONCLUAIT « OK » SUR UN ÉCRAN QUI NE COMPILAIT PAS** (98 vérifications, 0 échec). Elle
     exige d'abord que `editor.gd` se charge, et s'arrête net sinon — vu rougir.
-  - **PAS ENCORE ÉCRIT** : bevel (Ctrl+B), knife (K), matériaux et projections, et la boîte B qui
-    ignorerait le caché. Rien n'a été tenu en main.
+  - **LE BISEAU (Ctrl+B) ET LE COUTEAU (K) — ÉCRITS LE 29 SEPTEMBRE 2026.** Biseau : chaque coin touché
+    recule de la largeur sur l'AUTRE arête (point partagé avec la voisine), ou à l'ONGLET quand ses deux
+    arêtes sont biseautées ; chaque arête devient un quad ; les trous des bouts sont rebouchés à l'envers
+    de leurs bords. ⚠ Au bout d'une chaîne, un petit triangle COPLANAIRE garde le sommet d'origine, là où
+    Blender couperait le coin : même forme, une face de plus. Couteau : des points SUR les arêtes, deux
+    points consécutifs sur une même face ; sinon RIEN n'est coupé (retour arrière complet), et on le dit.
+    **MESURÉ par des volumes écrits à la main** : une arête biseautée de 0,25 → 0,96875 ; les quatre du
+    dessus → 0,75 + 0,25/3 (1 + 0,25 + 0,5). `test_maillage_edite` 94, cinq mutations rouges (onglet sans
+    sinus, bouts non rebouchés, quad retourné, point du couteau dans une seule face, pas de retour
+    arrière) ; la fumée mène Ctrl+B 0.1 et K sur le vrai témoin (125), deux mutations rouges.
+  - **PAS ENCORE ÉCRIT** : matériaux et projections ; la boîte B qui ignorerait le caché ; le biseau et
+    l'inset redessinent encore TOUT à chaque mouvement de souris. Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1158,14 +1168,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Treize suites, **7 979 vérifications, 0 échec** (29 septembre 2026, recomptées après le palier 1 du
-  modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Treize suites, **8 003 vérifications, 0 échec** (29 septembre 2026, recomptées après le biseau et le
+  couteau du modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 118, `test_greffon_peinture` 117, `test_faux_artiste` 35,
-  `test_maillage_edite` 77.
+  `test_outils` 57, `fumee_appli` 125, `test_greffon_peinture` 117, `test_faux_artiste` 35,
+  `test_maillage_edite` 94.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

@@ -38,6 +38,8 @@ func _initialize() -> void:
 	_la_boucle_d_aretes()
 	_transformer_et_proportionnel()
 	_le_rayon()
+	_le_biseau()
+	_le_couteau()
 	_le_temoin()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -381,6 +383,52 @@ func _le_rayon() -> void:
 	_vrai(not r.is_empty() and r["face"] == _face_du_haut(c), "un rayon tombé d'en haut touche le DESSUS")
 	_vrai(not r.is_empty() and is_equal_approx(r["distance"], 4.0), "à 4 cases")
 	_vrai(c.lancer_rayon(Vector3(5, 5, 5), Vector3.UP).is_empty(), "un rayon qui s'éloigne ne touche rien")
+
+
+# ── 12 bis — le biseau, jugé par des VOLUMES calculés à la main ─────────────────────────────────────
+func _le_biseau() -> void:
+	var c := _cube()
+	var q: Array = c.biseauter([Vector2i(6, 7)], 0.25)
+	_egal(q.size(), 1, "biseau d'une arête : un quad")
+	_egal(_etanche(c), "", "biseau d'une arête : étanche et orienté (les bouts rebouchés)")
+	_egal(_euler(c), 2, "biseau d'une arête : Euler")
+	# Un prisme triangulaire de côté 0,25 et de longueur 1 part : 1 − 0,25² / 2.
+	_vrai(is_equal_approx(_volume(c), 1.0 - 0.03125), "biseau d'une arête de 0,25 : volume 0,96875 (%.5f)" % _volume(c))
+	var t := _cube()
+	t.biseauter([Vector2i(2, 6), Vector2i(6, 7), Vector2i(3, 7), Vector2i(2, 3)], 0.25)
+	_egal(_etanche(t), "", "biseau des quatre arêtes du dessus : étanche et orienté")
+	_egal(_euler(t), 2, "biseau du dessus : Euler")
+	# Un bloc de 0,75 et, dessus, un tronc de pyramide de 1×1 à 0,5×0,5 sur 0,25 : h/3 (A1 + A2 + √(A1 A2)).
+	var attendu := 0.75 + 0.25 / 3.0 * (1.0 + 0.25 + 0.5)
+	_vrai(absf(_volume(t) - attendu) < 1e-5, "biseau du dessus : volume %.5f (attendu %.5f) — les ONGLETS aux coins"
+		% [_volume(t), attendu])
+	var dessus := 0
+	for p in t.sommets:
+		if is_equal_approx(p.y, 1.0):
+			dessus += 1
+	_egal(dessus, 4, "biseau du dessus : il reste un carré de quatre sommets en haut")
+	var r := _cube()
+	_egal(r.biseauter([Vector2i(6, 7)], 0.0), [], "biseau de largeur nulle : rien")
+
+
+# ── 12 ter — le couteau ─────────────────────────────────────────────────────────────────────────────
+func _le_couteau() -> void:
+	var c := _cube()
+	var neufs: Array = c.couper([{"arete": Vector2i(2, 3), "t": 0.5}, {"arete": Vector2i(6, 7), "t": 0.5}])
+	_egal(neufs.size(), 2, "couteau à travers le dessus : deux sommets neufs")
+	_egal(c.faces.size(), 7, "le dessus est fendu en deux")
+	_egal(_etanche(c), "", "couteau : étanche — les faces voisines ont reçu les points")
+	_vrai(is_equal_approx(_volume(c), 1.0), "couteau : volume inchangé")
+	var d := _cube()
+	d.couper([{"arete": Vector2i(2, 3), "t": 0.5}, {"arete": Vector2i(6, 7), "t": 0.5}, {"arete": Vector2i(4, 5), "t": 0.5}])
+	_egal(d.faces.size(), 8, "couteau sur deux faces (le dessus, puis l'avant) : 8 faces")
+	_egal(_etanche(d), "", "couteau sur deux faces : étanche")
+	var e := _cube()
+	var avant: int = e.faces.size()
+	var s0: int = e.sommets.size()
+	_egal(e.couper([{"arete": Vector2i(0, 1), "t": 0.5}, {"arete": Vector2i(6, 7), "t": 0.5}]), [],
+		"deux points sans face commune : refusé")
+	_vrai(e.faces.size() == avant and e.sommets.size() == s0, "et rien n'a été coupé à moitié")
 
 
 # ── 13 ──────────────────────────────────────────────────────────────────────────────────────────────
