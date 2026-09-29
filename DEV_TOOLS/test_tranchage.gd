@@ -75,6 +75,7 @@ func _initialize() -> void:
 	_un_bloc_absent_est_refuse()
 	_la_couture_range_par_germe_oriente()
 	_la_couture_utilise_vraiment_la_cle()
+	_les_sections_se_raccordent()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -687,6 +688,136 @@ func _quad_plat(axe: int, plan: float, bas: float, haut: float) -> ArrayMesh:
 	res.resize(Mesh.ARRAY_MAX)
 	res[Mesh.ARRAY_VERTEX] = v
 	res[Mesh.ARRAY_NORMAL] = n
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
+	return m
+
+
+# ── 10. LES SECTIONS SE RACCORDENT (`verifier_sections`) ─────────────────────────────────────────────
+
+## ⚠ **CE TEST EXISTE POUR DES FENTES VUES À L'ÉCRAN** (29 septembre 2026) : le témoin passé dans Tripo,
+## tranché puis peint, montrait un trait fin à chaque joint — 39 097 arêtes ouvertes, larges de 0,0026 case
+## en médiane —, et `verifier_couture` n'en disait qu'une. Le sujet est construit à la main, jamais tiré
+## du trancheur : un MUR (les quatre cases z = 0 pleines), dont la section sur les plans x± et y± est un
+## segment en z = 0. Posé dans le monde, un mur rencontre sa propre copie par y+ contre y− : ses deux
+## sections doivent donc tomber au même endroit.
+## ⚠ **LE MAILLAGE EST DANS LE REPÈRE DE RÉFÉRENCE DE SA CLASSE**, comme ce que rend le trancheur : la
+## configuration de référence est la plus petite de l'orbite (cases z = 0, bits 15), PAS les cases x = 0
+## (bits 85). Le premier jet de ce test l'a supposé, et le contrôle l'a refusé à juste titre.
+func _les_sections_se_raccordent() -> void:
+	print("\n10. les sections se raccordent")
+	var bits := 1 + 2 + 4 + 8   # coins 0, 1, 2, 3 : les quatre cases z = 0
+	_dire(MB.classer(bits)["surface"], "le sujet doit porter une surface")
+	_dire(MB.classer(bits)["orientation"] == 0, "le sujet n'est pas la configuration de RÉFÉRENCE de sa "
+		+ "classe : les maillages ci-dessous ne seraient pas dans son repère")
+
+	# ── CONTRÔLE NÉGATIF : un mur droit. Toutes ses sections sont le même segment → SILENCE.
+	var droit := _quad_plat(2, 0.0, -0.5, 0.5)
+	var muet: Array = []
+	Tranchage.verifier_sections({"droit": droit}, {"droit": bits}, muet)
+	_dire(muet.is_empty(), "un mur droit reçoit une remarque de section : %s" % str(muet))
+
+	# ── LE CAS TRIPO : le haut du mur décalé de 0,003 case. Même aire dans toutes les bandes — et
+	# `verifier_couture` le laisse passer, c'est ce qui a rendu ce contrôle nécessaire.
+	var penche := _quad_libre([Vector3(-0.5, -0.5, 0), Vector3(-0.5, 0.5, 0.003),
+		Vector3(0.5, 0.5, 0.003), Vector3(0.5, -0.5, 0)])
+	var aveugle: Array = []
+	Tranchage.verifier_couture({"penche": penche}, {"penche": bits}, aveugle)
+	_dire(aveugle.is_empty(), "l'ancienne couture voit désormais un décalage de 0,003 : ce test ne dit "
+		+ "plus pourquoi `verifier_sections` existe (%s)" % str(aveugle))
+	var crie: Array = []
+	Tranchage.verifier_sections({"penche": penche}, {"penche": bits}, crie)
+	_dire(crie.size() == 1 and str(crie[0]).begins_with("couture"),
+		"un mur dont le haut et le bas ne tombent pas au même endroit DOIT être signalé : %s" % str(crie))
+
+	# ── ET ENTRE DEUX TUILES : le droit et un exemplaire décalé ENTIER de 0,003 se rencontrent aussi.
+	var decale := _quad_libre([Vector3(-0.5, -0.5, 0.003), Vector3(-0.5, 0.5, 0.003),
+		Vector3(0.5, 0.5, 0.003), Vector3(0.5, -0.5, 0.003)])
+	var seul: Array = []
+	Tranchage.verifier_sections({"decale": decale}, {"decale": bits}, seul)
+	_dire(seul.is_empty(), "un mur décalé mais d'accord avec lui-même est signalé seul : %s" % str(seul))
+	var deux: Array = []
+	Tranchage.verifier_sections({"droit": droit, "decale~1": decale}, {"droit": bits, "decale~1": bits}, deux)
+	_dire(deux.size() == 1, "deux exemplaires dont les sections diffèrent de 0,003 DOIVENT être signalés")
+
+	# ── UNE FACE DONT LES QUATRE CASES SONT VIDES : rien ne doit s'y poser. Une nageoire qui touche z+.
+	var nageoire := _quad_plat(0, 0.1, -0.1, 0.5)   # x = 0,1 ; y et z de −0,1 à 0,5 : bord posé sur z = 0,5
+	var orpheline: Array = []
+	Tranchage.verifier_sections({"n": Decoupe.fusionner([droit, nageoire])}, {"n": bits}, orpheline)
+	_dire(orpheline.any(func(r: String) -> bool: return r.contains("toutes vides ou toutes pleines")),
+		"de la matière posée sur une face vide DOIT être signalée : %s" % str(orpheline))
+
+	# ── UNE SECTION QUI EN CONTIENT UNE AUTRE : le mur, plus un aileron qui ne sort que par y+. De y− vers
+	# y+ tout tombe juste ; c'est de y+ vers y− que l'aileron se voit. ⚠ Comparer dans UN seul sens
+	# laissait ce test vert (mutation muette, 29 septembre 2026).
+	var aileron := Decoupe.fusionner([droit, _quad_libre([Vector3(0.3, 0.0, 0.0), Vector3(0.3, 0.5, 0.0),
+		Vector3(0.3, 0.5, 0.2), Vector3(0.3, 0.0, 0.2)])])
+	var inclus: Array = []
+	Tranchage.verifier_sections({"aileron": aileron}, {"aileron": bits}, inclus)
+	_dire(inclus.size() == 1, "une section qui en contient une autre plus un morceau DOIT être signalée : %s"
+		% str(inclus))
+	print("   → droit : %d, penché : %d, deux exemplaires : %d, nageoire : %d, aileron : %d remarque(s)"
+		% [muet.size(), crie.size(), deux.size(), orpheline.size(), inclus.size()])
+	_entre_deux_classes_il_faut_toutes_les_poses()
+
+
+## ⚠ **LES POSES TOURNÉES NE SERVENT QU'ENTRE DEUX CLASSES** : un quart de tour tourne toutes les tuiles
+## d'une classe ensemble, donc la seule pose de référence suffit à comparer une classe à elle-même. Ne
+## garder qu'elle laissait tout ce test vert (mutation muette, 29 septembre 2026). Il faut deux classes qui
+## ne se rencontrent que sous un quart de tour :
+##   • un SOL (les quatre cases y = 0) bombé en x² : ses bords x± sont plats à 0,003, ses bords z± courbes ;
+##   • une ARÊTE (cases y = 0, z = 0) dont le sol porte la MÊME courbe, et qui s'accorde donc au sol par z−.
+## Tournée d'un quart de tour, l'arête présente cette courbe sur un plan x, face au bord PLAT du sol :
+## écart 0,003 au milieu. Rien d'autre ne les confronte.
+func _entre_deux_classes_il_faut_toutes_les_poses() -> void:
+	var b_sol := 1 + 2 + 16 + 32     # coins 0, 1, 4, 5 : les quatre cases y = 0
+	var b_arete := 1 + 2             # coins 0, 1 : cases y = 0, z = 0
+	_dire(MB.classer(b_sol)["orientation"] == 0 and MB.classer(b_arete)["orientation"] == 0,
+		"le sol ou l'arête n'est pas la configuration de référence de sa classe")
+	var h := func(x: float) -> float: return 0.012 * x * x
+	var sol := _nappe(h, -0.5, 0.5)
+	var arete := Decoupe.fusionner([_nappe(h, -0.5, 0.0), _paroi(h)])
+	for cas in [["sol", {"sol": sol}, {"sol": b_sol}], ["arête", {"arete": arete}, {"arete": b_arete}]]:
+		var seul: Array = []
+		Tranchage.verifier_sections(cas[1], cas[2], seul)
+		_dire(seul.is_empty(), "le %s seul doit s'accorder avec lui-même : %s" % [cas[0], str(seul)])
+	var ensemble: Array = []
+	Tranchage.verifier_sections({"sol": sol, "arete": arete}, {"sol": b_sol, "arete": b_arete}, ensemble)
+	_dire(ensemble.size() == 1, "une arête tournée face au bord plat du sol DOIT être signalée : %s"
+		% str(ensemble))
+	print("   → sol et arête : %d remarque(s) ensemble, aucune séparément" % ensemble.size())
+
+
+## Une nappe y = h(x) sur x ∈ [−0,5 ; 0,5] et z ∈ [z0 ; z1], en huit bandes le long de x.
+func _nappe(h: Callable, z0: float, z1: float) -> ArrayMesh:
+	var morceaux: Array = []
+	for i in 8:
+		var xa: float = -0.5 + i / 8.0
+		var xb: float = xa + 1.0 / 8.0
+		morceaux.append(_quad_libre([Vector3(xa, h.call(xa), z0), Vector3(xb, h.call(xb), z0),
+			Vector3(xb, h.call(xb), z1), Vector3(xa, h.call(xa), z1)]))
+	return Decoupe.fusionner(morceaux)
+
+
+## La paroi z = 0 de l'arête, de y = −0,5 jusqu'à la nappe.
+func _paroi(h: Callable) -> ArrayMesh:
+	var morceaux: Array = []
+	for i in 8:
+		var xa: float = -0.5 + i / 8.0
+		var xb: float = xa + 1.0 / 8.0
+		morceaux.append(_quad_libre([Vector3(xa, -0.5, 0.0), Vector3(xb, -0.5, 0.0),
+			Vector3(xb, h.call(xb), 0.0), Vector3(xa, h.call(xa), 0.0)]))
+	return Decoupe.fusionner(morceaux)
+
+
+## Un quad de quatre points donnés, en deux triangles.
+func _quad_libre(coins: Array) -> ArrayMesh:
+	var v := PackedVector3Array()
+	for k in [0, 1, 2, 0, 2, 3]:
+		v.append(coins[k])
+	var res: Array = []
+	res.resize(Mesh.ARRAY_MAX)
+	res[Mesh.ARRAY_VERTEX] = v
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
 	return m

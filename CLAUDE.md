@@ -227,9 +227,9 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
 - ⚠ **LE RISQUE EST LA FISSURE, ET IL EXISTAIT DÉJÀ.** Deux exemplaires d'une même clé dont les plans
   de coupe ne s'accordent pas font une fissure là où ils se rencontrent. Ce n'est pas nouveau — les 52
   tuiles venaient déjà de 52 endroits différents — mais les exemplaires multiplient les occasions de
-  la rencontrer. **C'est `verifier_couture` qui la voit**, parce que deux exemplaires d'une clé tombent
-  dans le MÊME seau de germe. Si toutes les variantes d'une clé s'accordent entre elles, l'accord des
-  clés voisines suffit : pas besoin de comparer N×M paires.
+  la rencontrer. ~~C'est `verifier_couture` qui la voit~~ — **FAUX, MESURÉ LE 29 SEPTEMBRE 2026** : sur
+  un travail qui en était plein, elle n'a rien dit pour 39 097 arêtes ouvertes. C'est
+  **`verifier_sections`** qui la voit (§4, « les fentes entre tuiles »).
 - ⚠ **ET `verifier_couture` N'AVAIT JAMAIS ÉTÉ LUE DE SA VIE.** Les deux appelants de `trancher()` ne
   passaient pas le paramètre `remarques` : elle écrivait dans le tableau par DÉFAUT, neuf à chaque
   appel et relu par personne. **Le seul contrôle qui juge l'accord des coutures tournait pour rien**,
@@ -324,6 +324,10 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
   outil peint le bloc comme UN objet : la texture est continue à travers les coupes, donc parfaite dans
   le témoin et cassée à chaque couture du monde peint. Le témoin MENT alors sur le rendu. Ça s'écrit
   dans la documentation de l'artiste et sur la page de vente, AVANT l'achat (§10).
+  ⚠ **ET LA FORME AUSSI — MESURÉ (29 septembre 2026)** : Tripo REMAILLE le bloc (arêtes arrondies,
+  relief), donc le bord de la matière sur un plan de coupe change d'un endroit du témoin à l'autre. Le
+  monde peint avec `test_textured_by_tripo.glb` montrait une fente fine à CHAQUE joint (§4, « les fentes
+  entre tuiles »). Ce n'est pas seulement la peinture qui casse : c'est l'étanchéité.
 - **ÉCRIT ET MESURÉ (29 septembre 2026) — LA REMARQUE DE COUTURE DE TEXTURE** (`Tranchage.
   verifier_couture_texture`, appelée par `trancher()`). Elle échantillonne l'image de chaque tuile sur
   ses arêtes posées SUR un plan de coupe et compare toutes les tuiles au même point du plan, REPLIÉ par
@@ -728,6 +732,61 @@ canoniques. `test_faux_artiste` le tranche par le vrai pipeline, chaque garde av
   ⚠ Et un faux rouge juste après : un `tiles.glb` au contenu identique n'est pas réimporté, donc il
   gardait l'échec d'avant — le « sujet a-t-il changé » du §6, une fois de plus.
 
+### LES FENTES ENTRE TUILES — MESURÉ (29 septembre 2026)
+
+Jordan a vu, dans le monde peint, des fentes **fines, rectilignes et régulières** à chaque joint de tuile.
+La question était « est-ce le trancheur ? ». **Non** — et la réponse a été tranchée par
+`DEV_TOOLS/sonde_fentes.gd`, qui assemble le monde peint en espace monde par le VRAI peintre, compte ses
+arêtes ouvertes, et le REND deux fois sur fond magenta : en GridMap, puis fusionné en un seul maillage.
+
+- **LE TÉMOIN CALCULÉ EST ÉTANCHE AU BIT PRÈS** : 1 048 tuiles, 0 arête ouverte, et GridMap = fusionné à
+  l'image — en OpenGL, en Vulkan logiciel, et sur la RTX 2060 du PC (par `ssh pcjordan`).
+- **LE TRAVAIL DE JORDAN ÉTAIT `test_textured_by_tripo.glb`** (lu dans le projet ouvert, `test.mbproj`) :
+  **39 097 arêtes ouvertes, 99 % sur un plan de coupe, larges de 0,0026 case en médiane** (90 % sous
+  0,008). Et le rendu fusionné montre EXACTEMENT les mêmes fentes que le GridMap (104 pixels contre 104) :
+  ⚠ **ce n'est pas le GPU, c'est de la géométrie**, et ce n'est pas la découpe — c'est l'art (§3, Tripo).
+- ⚠ **L'INSTRUMENT QUI POUVAIT MENTIR A ÉTÉ CONTRE-VÉRIFIÉ** : le premier rendu montrait un quadrillage
+  clair entre TOUTES les tuiles — c'était la grille `Cases` (cubes translucides de 0,98), que l'appli
+  masque (`vue.gd`). Et une hypothèse « la grille d'étage se dessine sur les sols » a été démentie à
+  l'image, à trois étages.
+
+**CE QUE ÇA A RÉVÉLÉ CHEZ NOUS, ET QUI EST CORRIGÉ :**
+
+- ⚠ **`verifier_couture` ÉTAIT AVEUGLE AUX FENTES** : AUCUNE remarque pour 39 097 arêtes ouvertes (la
+  seule remarque du bilan était celle de texture — je l'ai d'abord comptée comme de couture). Une aire
+  dans une bande de 0,08 case ne voit pas un bord décalé de trois millièmes ; et ses seaux (le germe
+  orienté) ne réunissent même pas les faces qui SE RENCONTRENT — la face x+ d'une tuile et la face x− de
+  sa voisine lisent les mêmes quatre cases, mais sont deux germes dès que le motif n'est pas symétrique.
+- **ÉCRIT : `Tranchage.verifier_sections`** (appelée par `trancher()`, une REMARQUE préfixée
+  « couture »). La SECTION d'une tuile sur un plan, ce sont les arêtes que la découpe y a laissées. Le
+  seau est ce que le monde met FACE À FACE : l'axe du plan et le motif de ses quatre cases vu du plan,
+  le côté oublié ; chaque tuile y entre sous chacune des orientations que le peintre lui donne vraiment
+  (`MB.classer` sur l'orbite). Toutes les sections d'un seau doivent coïncider à `ECART_DE_SECTION` près
+  (0,001 case, **PROPOSÉ**), dans les deux sens. Et une face aux quatre cases toutes vides ou toutes
+  pleines doit avoir une section VIDE : en face, le sommet est souvent muet, rien ne bouchera.
+  - **MESURÉ** : témoin 0 remarque ; faux travail discipliné 0 ; faux maladroit 7 945 faces ; coût
+    1,3 s sur les 541 tuiles. **Et `test_textured_by_tripo.glb`, sur le PC : 7 070 faces, pire écart
+    0,0166 case** — là où `verifier_couture` se taisait.
+  - **Gardé par `test_tranchage` §10**, sujets bâtis à la main dans le repère de RÉFÉRENCE de leur classe
+    (⚠ le premier jet ne l'était pas — un mur aux cases x = 0, alors que la référence est la plus petite
+    configuration de l'orbite, z = 0 — et le contrôle l'a refusé à juste titre). Six mutations rouges :
+    le côté dans le seau, les faces vides ignorées, la tolérance ×10, un seul sens, une seule pose, et les
+    triangles plats gardés (`test_decoupe` §7). ⚠ **« UN SEUL SENS » ET « UNE SEULE POSE » ÉTAIENT
+    MUETTES** — le test était trop étroit (§6) : il fallait une section qui en CONTIENT une autre
+    (l'aileron), et deux CLASSES qui ne se rencontrent que sous un quart de tour (un sol bombé en x² et
+    une arête) — un quart de tour tourne toutes les tuiles d'une classe ensemble, donc les poses tournées
+    ne servent qu'entre classes.
+- ⚠ **LA DÉCOUPE FABRIQUAIT DES TRIANGLES PLATS PAR MILLIERS** : un sommet posé SUR un plan de coupe est
+  gardé des deux côtés, et le triangle voisin qui touche la boîte par une arête laissait un polygone
+  réduit à un segment, que l'éventail triangulait. **32 190 triangles d'aire nulle sur 49 802** dans les
+  tuiles du témoin, tous sur les joints. `Decoupe._plat` les écarte : **17 612 triangles, 0 plat**, et le
+  tranchage passe de 17,7 s à 16,8 s. ⚠ **Ils faussaient aussi la sonde** : sur le faux travail d'artiste,
+  leurs arêtes sans partenaire faisaient 109 « fentes » de plus de 0,05 case ; sans eux, il reste des
+  jonctions en T sous 0,001 case (90 % sous 0,00004) — deux triangulations qui se croisent, invisibles.
+- **OUVERT** : afficher QUELLES faces ne raccordent pas (aujourd'hui : un compte, le pire écart et une
+  paire) ; les jonctions en T entre deux triangulations peuvent encore scintiller d'un pixel sur un GPU,
+  sans avoir été vues.
+
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
 **MESURÉ (`DEV_TOOLS/sonde_api_editeur.gd`)**, et c'est la réponse à la question de Jordan :
@@ -949,11 +1008,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 811 vérifications, 0 échec** (29 septembre 2026, recomptées après le Play test), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Douze suites, **7 826 vérifications, 0 échec** (29 septembre 2026, recomptées après les fentes entre
+  tuiles, sur l'état fusionné avec le Play test), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
-  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 31,
+  `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
   `test_outils` 57, `fumee_appli` 72, `test_greffon_peinture` 87, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
@@ -1164,7 +1224,8 @@ désormais le greffon.
      doit remplacer. Reste à mesurer qu'un rocher à cheval sur une coupe s'isole par la connexité.
 10. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
     ⚠ **ET LA TEXTURE : LE TÉMOIN NE S'ENVOIE PAS À TRIPO** ni à aucun textureur automatique (§3) —
-    à écrire sur la page avant la vente.
+    à écrire sur la page avant la vente. ⚠ Et pas seulement pour la texture : sa géométrie remaillée ouvre
+    une fente à chaque joint du monde peint (§4, MESURÉ).
     ⚠ **ET UNE LIMITE À ÉCRIRE AVANT LA VENTE, PAS APRÈS** : un atlas ne porte pas d'unicité
     (§3). Une clé vue 81 fois porte 81 exemplaires, pas 81 emplacements — un détail sculpté à UN
     endroit réapparaît ailleurs. L'acheteur doit le lire avant d'acheter, jamais le découvrir.

@@ -85,6 +85,8 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 			# Un polygone convexe se retriangule en éventail : il l'est toujours, puisqu'on coupe un
 			# triangle (convexe) par des demi-espaces (convexes).
 			for k in range(1, polygone.size() - 1):
+				if _plat(polygone[0]["p"], polygone[k]["p"], polygone[k + 1]["p"]):
+					continue
 				for sommet in [polygone[0], polygone[k], polygone[k + 1]]:
 					v_out.append(sommet["p"])
 					n_out.append(sommet["n"])
@@ -109,6 +111,21 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 		if matiere != null:
 			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
 	return sortie
+
+
+## Ce triangle est-il PLAT — ses trois sommets alignés, à 10⁻⁶ près de sa taille ?
+##
+## ⚠ **LA DÉCOUPE EN FABRIQUAIT PAR MILLIERS — MESURÉ (29 septembre 2026).** Un sommet posé SUR un plan de
+## coupe est gardé des deux côtés (`>= -EPS`) : le triangle d'une case voisine qui touche la boîte par une
+## arête ou un sommet laisse donc un polygone réduit à un segment, que l'éventail triangulait quand même.
+## Sur le témoin : 0 triangle plat en entrée, **32 190 sur 49 802 en sortie** (65 %), tous couchés sur les
+## plans de coupe — donc exactement sur les joints. Ils ne portent aucune aire, mais leurs arêtes laissaient
+## des bords sans partenaire, et c'est ce qu'un compteur d'arêtes ouvertes lisait comme des fentes.
+## ⚠ Le seuil est RELATIF : un fil de largeur 10⁻⁶ × sa longueur ne se voit à aucune échelle.
+static func _plat(a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var plus_long: float = maxf((b - a).length_squared(), maxf((c - b).length_squared(),
+		(a - c).length_squared()))
+	return (b - a).cross(c - a).length() <= 1e-6 * plus_long
 
 
 ## Ce triangle peut-il toucher la boîte ? Réponse CONSERVATRICE : « non » est certain, « oui » ne

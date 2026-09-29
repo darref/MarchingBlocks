@@ -54,6 +54,7 @@ func _initialize() -> void:
 	_poser_conserve_les_couleurs()
 	_fusionner_conserve_les_couleurs()
 	_l_aire_se_conserve()
+	_aucun_triangle_plat()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -226,3 +227,26 @@ func _l_aire_se_conserve() -> void:
 		"le plan de coupe devait traverser le carré : les deux moitiés doivent être non vides")
 	print("   → %.5f + %.5f = %.5f (attendu %.5f)"
 		% [Decoupe.aire(gauche), Decoupe.aire(droite), somme, totale])
+
+
+
+## ⚠ **UN SOMMET POSÉ SUR UN PLAN DE COUPE EST GARDÉ DES DEUX CÔTÉS** : le triangle d'une case voisine qui
+## touche la boîte par une arête laissait un polygone réduit à un segment, et l'éventail le triangulait.
+## Mesuré sur le témoin : 32 190 triangles d'aire nulle sur 49 802, tous sur les joints.
+func _aucun_triangle_plat() -> void:
+	print("7. aucun triangle plat à la découpe")
+	# Un triangle de la case x > 0,5 qui touche la boîte [−0,5 ; 0,5] par son arête x = 0,5.
+	var v := PackedVector3Array([Vector3(0.5, -0.4, 0), Vector3(0.5, 0.4, 0), Vector3(0.9, 0, 0)])
+	var res: Array = []
+	res.resize(Mesh.ARRAY_MAX)
+	res[Mesh.ARRAY_VERTEX] = v
+	var voisin := ArrayMesh.new()
+	voisin.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
+	var boite := AABB(Vector3(-0.5, -0.5, -0.5), Vector3.ONE)
+	var reste: ArrayMesh = Decoupe.trancher(voisin, boite)
+	_dire(_sommets_de(reste) == 0, "un triangle qui ne fait que TOUCHER la boîte y laisse %d sommet(s)"
+		% _sommets_de(reste))
+	# ⚠ Et le contrôle négatif : ce qui entre VRAIMENT dans la boîte reste.
+	var dedans: ArrayMesh = Decoupe.trancher(voisin, AABB(Vector3(-0.5, -0.5, -0.5), Vector3(1.2, 1, 1)))
+	_dire(Decoupe.aire(dedans) > 0.01, "la partie du triangle réellement dans la boîte a disparu")
+	print("   → touché : %d sommet(s) ; entré : aire %.3f" % [_sommets_de(reste), Decoupe.aire(dedans)])

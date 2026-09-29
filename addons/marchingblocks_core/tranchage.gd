@@ -294,6 +294,7 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	# d'une clé s'accordent entre elles, l'accord des clés voisines suffit.
 	verifier_octants(a_plat, bits_a_plat, erreurs)
 	verifier_couture(a_plat, bits_a_plat, remarques)
+	verifier_sections(a_plat, bits_a_plat, remarques)
 	verifier_couture_texture(a_plat, remarques)
 	return pieces
 
@@ -674,6 +675,201 @@ static func _bande_de_face(nom: String) -> AABB:
 		"y+": return AABB(Vector3(-0.5, 0.5 - e, -0.5), Vector3(1.0, e, 1.0))
 		"z-": return AABB(Vector3(-0.5, -0.5, -0.5), Vector3(1.0, 1.0, e))
 		_: return AABB(Vector3(-0.5, -0.5, 0.5 - e), Vector3(1.0, 1.0, e))
+
+
+## De combien, en fraction de case, deux sections qui doivent se raccorder peuvent s'écarter avant qu'on
+## le DISE. **PROPOSÉ** : au-dessus du bruit des coupes (10⁻⁶), sous les fentes mesurées sur le travail
+## texturé par Tripo (médiane 0,0026 case, 90 % sous 0,008 — des fentes VUES à l'écran).
+const ECART_DE_SECTION := 0.001
+
+## Au-delà, l'écart n'est plus mesuré : la section d'en face n'a rien à moins d'un cran de grille.
+const _CRAN_DE_SECTION := 0.0625
+
+## Les poses que le peintre emploie réellement, par classe : [{bits (du monde), base}].
+static var _poses_par_classe: Dictionary = {}
+
+
+## CONTRÔLE 4 — LES SECTIONS SE RACCORDENT : une REMARQUE, jamais une erreur (charte §3).
+##
+## La SECTION d'une tuile sur un plan de coupe, c'est le bord de sa matière posé sur ce plan : les arêtes
+## que la découpe y a laissées. Deux tuiles voisines dans le monde se touchent par cette section ; si la
+## leur ne tombe pas au même endroit, il reste une FENTE — le fond se voit à travers le monde peint.
+## C'est le « cran suivant » que `verifier_couture` annonçait : comparer les SECTIONS, pas les aires.
+##
+## ⚠ **POURQUOI UN AUTRE CONTRÔLE ET PAS `verifier_couture` REFAIT — MESURÉ (29 septembre 2026).** Sur le
+## travail d'un textureur automatique (le témoin passé dans Tripo), le monde peint montrait des fentes
+## fines et régulières à chaque joint : 39 097 arêtes ouvertes, larges de 0,0026 case en médiane
+## (`DEV_TOOLS/sonde_fentes.gd`). `verifier_couture` n'en a dit qu'UNE : une aire dans une bande de 0,08
+## case ne voit pas un bord décalé de trois millièmes. Et ses seaux ne réunissent même pas les faces qui
+## se RENCONTRENT : la face x+ d'une tuile et la face x− de sa voisine lisent les mêmes quatre cases, mais
+## pour le groupe orienté ce sont deux germes distincts dès que le motif n'est pas symétrique.
+##
+## ⚠ **LE SEAU EST CE QUE LE MONDE MET FACE À FACE** : l'axe du plan et le motif de ses quatre cases VU DU
+## PLAN, le côté oublié. Et chaque tuile y entre sous CHACUNE des orientations que le peintre lui donne
+## réellement (`MB.classer` sur toute l'orbite de sa classe) : c'est la pose, pas une supposition de
+## symétrie. Toutes les tuiles d'un seau peuvent se rencontrer — n'importe quelle clé, n'importe quel
+## exemplaire —, donc toutes leurs sections doivent être la même. On compare chacune à la première, dans
+## les deux sens : si toutes égalent la première, toutes s'égalent entre elles.
+## ⚠ Un triangle d'aire nulle n'a pas de section : il ne compte pas.
+static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, remarques: Array) -> void:
+	var seaux := {}   # "axe|motif" → [{nom, segments: PackedVector2Array (paires)}]
+	var orphelines := 0
+	var orpheline_de := ""
+	for nom in pieces:
+		var bits: int = bits_par_nom.get(MB.nom_nu(nom), bits_par_nom.get(nom, -1))
+		if bits < 0:
+			continue
+		var segments: PackedVector3Array = _segments_sur_les_plans(pieces[nom])
+		for pose in _poses_de(MB.classer(bits)["classe"]):
+			var base: Basis = pose["base"]
+			var tournes := PackedVector3Array()
+			for p in segments:
+				tournes.append(base * p)
+			for axe in 3:
+				for cote in [0, 1]:
+					var motif: int = _motif_de_face(pose["bits"], axe, cote)
+					var section: PackedVector2Array = _section(tournes, axe, 0.5 if cote == 1 else -0.5)
+					# ⚠ **UNE FACE VIDE OU PLEINE DOIT AVOIR UNE SECTION VIDE.** En face, le sommet est
+					# souvent MUET — le vide, le ventre plein — : aucune tuile n'y bouchera ce qui sort.
+					if motif == 0 or motif == 15:
+						if not section.is_empty():
+							orphelines += 1
+							if orphelines == 1:
+								orpheline_de = "%s, plan %s" % [nom, "xyz"[axe]]
+						continue
+					var cle := "%d|%d" % [axe, motif]
+					if not seaux.has(cle):
+						seaux[cle] = []
+					seaux[cle].append({"nom": nom, "segments": section})
+
+	var fautes := 0
+	var pire := 0.0
+	var pire_de := ""
+	for cle in seaux:
+		var entrees: Array = seaux[cle]
+		var reference: Dictionary = entrees[0]
+		var grille_ref: Dictionary = _grille_de_segments(reference["segments"])
+		for i in range(1, entrees.size()):
+			var autre: Dictionary = entrees[i]
+			var ecart: float = maxf(_ecart_vers(autre["segments"], reference["segments"], grille_ref),
+				_ecart_vers(reference["segments"], autre["segments"],
+					_grille_de_segments(autre["segments"])))
+			if ecart > ECART_DE_SECTION:
+				fautes += 1
+				if ecart > pire:
+					pire = ecart
+					pire_de = "%s / %s, plan %s" % [reference["nom"], autre["nom"], "xyz"[int(cle.split("|")[0])]]
+	if fautes > 0:
+		remarques.append(("couture : %d face(s) de tuile dont la section ne tombe pas sur celle d'une voisine "
+			+ "possible (écart jusqu'à %s case, entre %s) — le monde peint aura des fentes à ces joints ; "
+			+ "ce qui franchit une coupe ne doit dépendre que des quatre cases de cette face")
+			% [fautes, ("≥ %.4f" % _CRAN_DE_SECTION) if pire >= _CRAN_DE_SECTION else "%.4f" % pire, pire_de])
+	if orphelines > 0:
+		remarques.append(("couture : %d face(s) de tuile laissent de la matière sur un plan dont les quatre "
+			+ "cases sont toutes vides ou toutes pleines (la première : %s) — en face il n'y a souvent AUCUNE "
+			+ "tuile, et ce bord restera ouvert dans le monde peint") % [orphelines, orpheline_de])
+
+
+## Les poses d'une classe : chaque configuration de son orbite et la base que le peintre lui applique.
+static func _poses_de(classe: int) -> Array:
+	if _poses_par_classe.is_empty():
+		var grille := GridMap.new()   # ⚠ seulement pour lire les bases d'orientation, comme `trancher()`
+		for b in 256:
+			var r: Dictionary = MB.classer(b)
+			if not r["surface"]:
+				continue
+			if not _poses_par_classe.has(r["classe"]):
+				_poses_par_classe[r["classe"]] = []
+			_poses_par_classe[r["classe"]].append({"bits": b,
+				"base": grille.get_basis_with_orthogonal_index(r["orientation"])})
+		grille.free()
+	return _poses_par_classe.get(classe, [])
+
+
+## Le motif (4 bits) des cases d'une face, VU DU PLAN : le côté (`cote`, 0 ou 1 sur `axe`) est oublié,
+## c'est ce qui réunit la face x+ d'une tuile et la face x− de sa voisine. Bit u + 2v, (u, v) sur les deux
+## autres axes dans l'ordre croissant.
+static func _motif_de_face(bits: int, axe: int, cote: int) -> int:
+	var u_axe: int = 1 if axe == 0 else 0
+	var v_axe: int = 1 if axe == 2 else 2
+	var motif := 0
+	for t in 8:
+		var c: Vector3i = MB.COINS[t]
+		if c[axe] == cote and (bits & (1 << t)) != 0:
+			motif |= 1 << (c[u_axe] + 2 * c[v_axe])
+	return motif
+
+
+## Les arêtes d'un maillage (repère de pièce) posées sur une face de la boîte unité, par paires de points.
+## ⚠ Une arête de la boîte est sur DEUX faces : elle est gardée une fois, et `_section` la lira sur chacune.
+static func _segments_sur_les_plans(mesh: Mesh) -> PackedVector3Array:
+	var sortie := PackedVector3Array()
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+			else PackedInt32Array(range(v.size()))
+		for t in range(0, ordre.size() - 2, 3):
+			var a: Vector3 = v[ordre[t]]
+			var b: Vector3 = v[ordre[t + 1]]
+			var c: Vector3 = v[ordre[t + 2]]
+			if (b - a).cross(c - a).length_squared() < 1e-18:
+				continue   # d'aire nulle : pas de section
+			for pa in [[a, b], [b, c], [c, a]]:
+				for axe in 3:
+					if absf(absf(pa[0][axe]) - 0.5) < 0.0005 and absf(pa[1][axe] - pa[0][axe]) < 0.0005:
+						sortie.append(pa[0])
+						sortie.append(pa[1])
+						break
+	return sortie
+
+
+## Les segments posés sur le plan `axe = valeur`, projetés sur les deux autres axes.
+static func _section(segments: PackedVector3Array, axe: int, valeur: float) -> PackedVector2Array:
+	var u_axe: int = 1 if axe == 0 else 0
+	var v_axe: int = 1 if axe == 2 else 2
+	var sortie := PackedVector2Array()
+	for i in range(0, segments.size(), 2):
+		var a: Vector3 = segments[i]
+		var b: Vector3 = segments[i + 1]
+		if absf(a[axe] - valeur) < 0.0005 and absf(b[axe] - valeur) < 0.0005:
+			sortie.append(Vector2(a[u_axe], a[v_axe]))
+			sortie.append(Vector2(b[u_axe], b[v_axe]))
+	return sortie
+
+
+## Les segments rangés par cran de grille, pour qu'une recherche de voisin ne balaie pas tout.
+static func _grille_de_segments(segments: PackedVector2Array) -> Dictionary:
+	var grille := {}
+	for i in range(0, segments.size(), 2):
+		var lo := Vector2i(((segments[i].min(segments[i + 1])) / _CRAN_DE_SECTION).floor())
+		var hi := Vector2i(((segments[i].max(segments[i + 1])) / _CRAN_DE_SECTION).floor())
+		for x in range(lo.x, hi.x + 1):
+			for y in range(lo.y, hi.y + 1):
+				var k := Vector2i(x, y)
+				if not grille.has(k):
+					grille[k] = []
+				grille[k].append(i)
+	return grille
+
+
+## Le plus grand écart d'un point de `de` (extrémités et milieux) à la section `vers`, plafonné au cran.
+static func _ecart_vers(de: PackedVector2Array, vers: PackedVector2Array, grille: Dictionary) -> float:
+	var pire := 0.0
+	for i in range(0, de.size(), 2):
+		for q in [de[i], de[i + 1], (de[i] + de[i + 1]) * 0.5]:
+			var meilleur := _CRAN_DE_SECTION
+			var c := Vector2i((q / _CRAN_DE_SECTION).floor())
+			for dx in range(-1, 2):
+				for dy in range(-1, 2):
+					for j in grille.get(c + Vector2i(dx, dy), []):
+						var p: Vector2 = Geometry2D.get_closest_point_to_segment(q, vers[j], vers[j + 1])
+						meilleur = minf(meilleur, q.distance_to(p))
+			pire = maxf(pire, meilleur)
+			if pire >= _CRAN_DE_SECTION:
+				return pire
+	return pire
 
 
 ## LA `MeshLibrary` D'UN BLOC TRANCHÉ, COMPLÉTÉE PAR LE REPLI.
