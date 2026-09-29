@@ -300,7 +300,7 @@ func _barre_titre() -> Control:
 	version.add_theme_font_size_override("font_size", 12)
 	ligne.add_child(version)
 	var devise := Label.new()
-	devise.text = "Sculpt one block. Get every tile."
+	devise.text = "Sculpt one block. Paint a world."
 	devise.add_theme_color_override("font_color", Palette.GRIS)
 	devise.add_theme_font_size_override("font_size", 12)
 	ligne.add_child(devise)
