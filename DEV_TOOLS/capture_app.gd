@@ -45,6 +45,9 @@ func _initialize() -> void:
 func _derouler() -> void:
 	await _images(20)
 	# ⚠ Rouvrir le projet mène au monde de test : on revient au témoin pour le photographier.
+	_ecran._aller_a("projet")
+	await _images(10)
+	_photo("0_projet")
 	_ecran._aller_a("witness")
 	await _images(10)
 	_photo("1_temoin")

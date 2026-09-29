@@ -173,7 +173,8 @@ func _ready() -> void:
 	_batir()
 	_montrer_temoin()
 	_aller_a("witness")
-	_dire("[i]Look at the witness, export it for your artist, or open the World and paint.[/i]")
+	_dire("[i]Look at the witness, open Project to exchange it with your artist, or open the World "
+		+ "and paint.[/i]")
 	_histoire.version_changed.connect(_enregistrer)
 	await get_tree().process_frame
 	_regler_fenetre()
@@ -521,6 +522,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	var groupe := ButtonGroup.new()
 	var ateliers: Array = []
 	for a in [
+		["projet", "Project", "enregistrer", "Save, open, and the round trip with your artist: export, "
+			+ "import, slice, export to engines."],
 		["witness", "Witness", "cube", "The block your artist sculpts: look at it, export it, bring it back."],
 		["monde", "World", "monde", "Paint worlds with the sliced tiles."],
 		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
@@ -537,7 +540,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		b.pressed.connect(_aller_a.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
-	tete.add_child(_rangee(ateliers, 4))
+	# Quatre ateliers : en grille de deux, une rangée de quatre ne tient pas dans 300 px.
+	tete.add_child(_grille(ateliers, 2))
 
 	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
 	_section_jeu = Section.new("Play test", true, Icones.icone("jouer"))
@@ -1014,6 +1018,7 @@ func _aller_a(atelier: String) -> void:
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
+	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde).
 	_vue.montrer({"monde": "monde", "jeu": "jeu"}.get(atelier, "temoin"))
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
@@ -1028,34 +1033,37 @@ func _aller_a(atelier: String) -> void:
 ## CE QUE L'ÉCRAN MONTRE, SELON L'ATELIER — la passe de Jordan (29 septembre 2026) : « certaines sections
 ## s'affichent alors qu'elles ne le devraient pas vu le contexte ».
 ##
-##                      Witness   World   Play test
-##   Project               ✓        ✓
-##   Layers                         ✓
-##   Round trip 1 · 2      ✓        ✓         (exporter le témoin, importer un travail)
-##   Round trip 3 · 4               ✓         (ils agissent sur la couche ACTIVE)
-##   Play test                                 ✓
-##   Witness (réf.)        ✓                   (sa légende nomme les teintes du TÉMOIN)
-##   Shortcuts (réf.)               ✓         (ce ne sont que des gestes de peinture)
-##   barre de droite                ✓         (elle ne porte que des outils de peinture)
+## **L'ATELIER PROJECT — DÉCIDÉ PAR JORDAN (29 septembre 2026)** : il est le SEUL à montrer
+## l'enregistrement et l'aller-retour. Ailleurs, on travaille ; ici, on range et on échange.
+##
+##                      Project  Witness   World   Play test
+##   Save · open           ✓
+##   Round trip 1 → 4      ✓                          (3 et 4 visent la couche ACTIVE, choisie dans World)
+##   Layers                                  ✓
+##   Play test                                         ✓
+##   Witness (réf.)        ✓        ✓                  (sa légende nomme les teintes du TÉMOIN)
+##   Shortcuts (réf.)                        ✓         (ce ne sont que des gestes de peinture)
+##   barre de droite                         ✓         (elle ne porte que des outils de peinture)
 ##
 ## ⚠ LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN : ses sections se cachaient, le panneau
 ## restait, et mangeait un quart de la vue sur le bloc qu'on veut justement regarder.
 func _contexte() -> void:
+	var projet := _atelier == "projet"
 	var temoin := _atelier == "witness"
 	var monde := _atelier == "monde"
 	var jeu := _atelier == "jeu"
 	_section_jeu.visible = jeu
-	_titre_projet.visible = not jeu
-	_section_projet.visible = not jeu
+	_titre_projet.visible = projet
+	_section_projet.visible = projet
 	_section_couches.visible = monde
-	_titre_aller_retour.visible = not jeu
+	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
-		e.visible = not jeu
+		e.visible = projet
 	for e in _etapes_monde:
-		e.visible = monde
-	_section_temoin.visible = temoin
+		e.visible = projet
+	_section_temoin.visible = temoin or projet
 	_section_raccourcis.visible = monde
-	_zone_reference.visible = temoin or monde
+	_zone_reference.visible = temoin or monde or projet
 	_droite.visible = monde
 	_contexte_des_outils()
 
@@ -1102,7 +1110,8 @@ func _travail_vu(oui: bool) -> void:
 		_montrer_temoin()
 		_etiquette_vue.text = "showing: the computed witness"
 		_bouton_revoir_temoin.visible = false
-	_aller_a("witness")
+	# ⚠ ON RESTE DANS PROJECT : c'est là qu'on importe, et la liste des travaux n'existe que là.
+	_aller_a(_atelier if _atelier in ["projet", "witness"] else "projet")
 
 
 ## LA GRILLE DES TRAVAUX — un bouton par import, celui qu'on tranchera est enfoncé.

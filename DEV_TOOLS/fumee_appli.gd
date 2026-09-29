@@ -271,18 +271,23 @@ func _mener() -> void:
 	ed._choisir_visee("grille")
 
 	# ── LE CONTEXTE : ce qui ne sert pas ici ne s'affiche pas (Jordan, 29 septembre 2026) ─────────
+	ed._aller_a("projet")
+	_vrai(ed._section_projet.visible and ed._etapes_artiste.all(func(e): return e.visible)
+		and ed._etapes_monde.all(func(e): return e.visible), "Project : Save · open et les quatre étapes")
+	_vrai(ed._bouton_trancher_travail.disabled, "rien d'importé : « Slice the selected work » est grisé")
 	ed._aller_a("witness")
-	_vrai(not ed._droite.visible, "Witness : pas de barre d'outils (elle ne peint rien ici)")
+	_vrai(not ed._droite.visible, "Witness : pas de barre d'outils de peinture")
 	_vrai(ed._section_temoin.visible and not ed._section_raccourcis.visible and not ed._section_couches.visible,
 		"Witness : la section Witness, sans raccourcis de peinture ni couches")
-	_vrai(ed._etapes_artiste.all(func(e): return e.visible) and not ed._etapes_monde.any(func(e): return e.visible),
-		"Witness : étapes 1 et 2 seulement")
+	_vrai(not ed._section_projet.visible and not ed._etapes_artiste.any(func(e): return e.visible)
+		and not ed._etapes_monde.any(func(e): return e.visible),
+		"Witness : ni Save · open ni aller-retour — ils vivent dans Project seul")
 	_vrai(not ed._bouton_revoir_temoin.visible, "« Show the witness » absent quand on regarde déjà le témoin")
 	ed._aller_a("monde")
 	_vrai(ed._droite.visible and not ed._section_temoin.visible and ed._section_raccourcis.visible
 		and ed._section_couches.visible, "World : outils, couches, raccourcis — et plus de section Witness")
-	_vrai(ed._etapes_monde.all(func(e): return e.visible), "World : les quatre étapes")
-	_vrai(ed._bouton_trancher_travail.disabled, "rien d'importé : « Slice the selected work » est grisé")
+	_vrai(not ed._section_projet.visible and not ed._etapes_monde.any(func(e): return e.visible),
+		"World : ni Save · open ni aller-retour")
 	ed._choisir_outil("rect")
 	_vrai(not ed._ligne_taille.visible and not ed._ligne_forme.visible and not ed._creux.visible,
 		"Rect : ni pinceau ni Hollow")

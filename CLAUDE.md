@@ -940,17 +940,20 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
     de la fenêtre. **De gros séparateurs** (titre gras sur filet épais) marquent les groupes : WORKSPACE,
     PROJECT, THE ROUND TRIP, REFERENCE.
   - **TOUTE LA BARRE DE DROITE S'OUVRE DÉPLIÉE** (« Shape operations » était repliée).
+  - **L'ATELIER PROJECT — DÉCIDÉ PAR JORDAN (29 septembre 2026)** : quatre ateliers (Project, Witness,
+    World, Play test, en grille de deux), et **Project est le SEUL à montrer Save · open et l'aller-retour**
+    (les quatre étapes ; 3 et 4 visent la couche active, choisie dans World). Choisir un travail importé
+    reste dans Project.
   - **CE QUI NE SERT PAS ICI NE S'AFFICHE PAS** — une seule fonction, `_contexte()`, avec son tableau :
-    Witness montre le projet, les étapes 1-2 et la section Witness ; World montre le projet, les couches,
-    les quatre étapes, les raccourcis et la barre de droite ; Play test ne montre que ses commandes et le
-    rapport. ⚠ **LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN** : ses sections se cachaient, le
+    Project montre Save · open, les quatre étapes et la section Witness ; Witness, la section Witness ;
+    World, les couches, les raccourcis et la barre de droite ; Play test, ses commandes et le rapport. ⚠ **LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN** : ses sections se cachaient, le
     panneau restait et mangeait un quart de la vue. Dans les outils, le pinceau (taille, forme) disparaît
     pour Rect et Box, « Hollow » n'apparaît qu'avec Box. « Show the witness » n'apparaît que quand on
     regarde un travail ; « Slice the selected work » est grisé tant que rien n'est importé, « Delete » tant
     qu'il ne reste qu'une couche.
-  - **Gardé par `fumee_appli`** (92 vérifications) — mutations rouges : Tab sur trois visées, E qui ne
+  - **Gardé par `fumee_appli`** (93 vérifications) — mutations rouges : Tab sur trois visées, E qui ne
     monte plus, Witness partout, Hollow partout, A qui choisit Add en vol, barre de droite partout,
-    ateliers dans le défilement. **Vu à l'image** (`capture_app.gd`, Witness et World) : c'est là qu'on a
+    ateliers dans le défilement, Save · open dans Witness, étapes 3-4 dans World. **Vu à l'image** (`capture_app.gd`, Witness et World) : c'est là qu'on a
     vu le titre PROJECT doublé par la bande « Project » (devenue « Save · open ») et le rapport qui gardait
     les touches du jeu après en être sorti.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
@@ -1036,13 +1039,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 846 vérifications, 0 échec** (29 septembre 2026, recomptées après la navigation
-  sortie des visées et la passe de contexte de l'écran), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Douze suites, **7 847 vérifications, 0 échec** (29 septembre 2026, recomptées après la navigation
+  sortie des visées, la passe de contexte de l'écran et l'atelier Project), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 92, `test_greffon_peinture` 87, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 93, `test_greffon_peinture` 87, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
