@@ -478,9 +478,10 @@ func _le_modeleur(ed: Control) -> void:
 	# ⚠ UN TÉMOIN MODÉLISÉ LAISSÉ PAR UN PASSAGE PRÉCÉDENT fausserait tous les comptes : la minuterie
 	# d'enregistrement (une seconde après chaque geste) l'avait RÉÉCRIT après sa suppression — vu le 29
 	# septembre 2026, le passage suivant partait d'un témoin déjà coupé.
-	var reste: String = ProjectSettings.globalize_path(ed._chemin_temoin_modele())
-	if FileAccess.file_exists(reste):
-		DirAccess.remove_absolute(reste)
+	for reste in [ed._chemin_temoin_modele(), ed._chemin_modele_natif()]:
+		var r: String = ProjectSettings.globalize_path(reste)
+		if FileAccess.file_exists(r):
+			DirAccess.remove_absolute(r)
 	_vrai(ed._droite_temoin.visible and not ed._droite.visible, "Witness : la barre du MODELEUR, pas celle de la peinture")
 	ed._input(_cle(KEY_TAB))
 	var mo: Node3D = ed._modeleur
@@ -578,6 +579,27 @@ func _le_modeleur(ed: Control) -> void:
 	_egal(mo.maillage.faces.size(), f0 + 1, "K, deux clics, Entrée : la face visée est fendue en deux")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_egal(mo.maillage.faces.size(), f0, "Ctrl+Z défait la coupe")
+	# LES MATÉRIAUX : un neuf, assigné à la face visée ; Ctrl+Z / Ctrl+Y ; une rafale de retouches = UNE annulation.
+	ed._vue._gui_input(clic)
+	ed._nouveau_materiau()
+	_egal(mo.maillage.materiaux.size(), 1, "New material : un matériau")
+	ed._assigner_materiau()
+	_egal(mo.maillage.mat(f), 0, "Assign : la face visée prend le matériau")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.mat(f), -1, "Ctrl+Z : elle le rend")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_egal(mo.maillage.mat(f), 0, "Ctrl+Y : elle le reprend")
+	mo.materiau_courant = 0
+	ed._redire_les_materiaux()
+	var couleur0: Color = mo.maillage.materiaux[0]["couleur"]
+	for c in [Color(0.5, 0.2, 0.2), Color(0.7, 0.15, 0.1), Color(0.9, 0.1, 0.1)]:
+		ed._retoucher("couleur", c)
+	ed._inscrire_les_retouches()
+	_vrai((mo.maillage.materiaux[0]["couleur"] as Color).is_equal_approx(Color(0.9, 0.1, 0.1)), "la couleur retouchée")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai((mo.maillage.materiaux[0]["couleur"] as Color).is_equal_approx(couleur0),
+		"trois retouches de couleur : UN Ctrl+Z les défait toutes")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
 	# L'enregistrement : le fichier, relu, redonne le même maillage ; et il rejoint les travaux.
 	var raison: String = ed._enregistrer_le_temoin_modele()
 	var chemin: String = ed._chemin_temoin_modele()
@@ -586,8 +608,23 @@ func _le_modeleur(ed: Control) -> void:
 	_vrai(relu != null and ME.depuis(relu).faces.size() == mo.maillage.faces.size(),
 		"relu depuis son .glb, le témoin modélisé a le même nombre de faces")
 	_vrai(ed._travaux.any(func(t): return String(t["chemin"]) == chemin), "il rejoint les travaux de l'étape 2")
+	var rouge := false
+	if relu != null:
+		for i in relu.get_surface_count():
+			var sm := relu.surface_get_material(i) as BaseMaterial3D
+			rouge = rouge or (sm != null and sm.albedo_color.is_equal_approx(Color(0.9, 0.1, 0.1)))
+	_vrai(rouge, "le .glb porte le matériau rouge (aucun override ne l'efface)")
+	# Rouvert : le .mbmesh fait foi — la face garde SON matériau.
+	var faces_avant: int = mo.maillage.faces.size()
+	mo.maillage = null
+	ed._regler_edition(false)
+	ed._regler_edition(true)
+	_vrai(mo.maillage != null and mo.maillage.faces.size() == faces_avant and mo.maillage.mat(f) == 0,
+		"rouvert depuis son .mbmesh : la face visée garde son matériau")
 	ed._minuterie_temoin.stop()
+	ed._minuterie_materiau.stop()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(chemin))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(ed._chemin_modele_natif()))
 	ed._input(_cle(KEY_TAB))
 	_vrai(not ed._vue.edition and not mo.visible, "Tab sort de l'édition")
 	ed._aller_a("monde")

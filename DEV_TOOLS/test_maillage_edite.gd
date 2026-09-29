@@ -18,6 +18,8 @@ extends SceneTree
 
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -40,7 +42,11 @@ func _initialize() -> void:
 	_le_rayon()
 	_le_biseau()
 	_le_couteau()
+	_les_materiaux()
+	_la_projection()
+	_le_format_natif()
 	_le_temoin()
+	_le_materiau_voyage_jusqu_au_greffon()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -429,6 +435,138 @@ func _le_couteau() -> void:
 	_egal(e.couper([{"arete": Vector2i(0, 1), "t": 0.5}, {"arete": Vector2i(6, 7), "t": 0.5}]), [],
 		"deux points sans face commune : refusé")
 	_vrai(e.faces.size() == avant and e.sommets.size() == s0, "et rien n'a été coupé à moitié")
+
+
+# ── 14 — les matériaux suivent les faces ──────────────────────────────────────────────────────────
+func _les_materiaux() -> void:
+	var c := _cube()
+	c.materiaux.append({"nom": "rock", "couleur": Color(1, 0, 0), "echelle": 0.5})
+	var haut := _face_du_haut(c)
+	c.assigner([haut], 0)
+	c.extruder_faces([haut])
+	var avec := 0
+	for f in c.faces.size():
+		if c.mat(f) == 0:
+			avec += 1
+	_egal(avec, 5, "extruder une face de matériau : ses quatre côtés neufs le PRENNENT (5 faces)")
+	# Toutes les opérations gardent les deux tableaux alignés.
+	c.biseauter([Vector2i(0, 1)], 0.1)
+	c.subdiviser([0])
+	c.couper_en_boucle(c.aretes()[0])
+	c.supprimer_faces([1])
+	_egal(c.mats.size(), c.faces.size(), "après extruder, biseauter, subdiviser, loop cut, supprimer : un matériau par face")
+	# ⚠ LA BONNE FACE, PAS SEULEMENT LE BON COMPTE : après une suppression, `nettoyer` réaligne la TAILLE
+	# des tableaux ; une suppression qui oubliait les matériaux passait donc le compte (mutation muette, vue).
+	var d := _cube()
+	d.materiaux.append({"nom": "x", "couleur": Color.RED, "echelle": 1.0})
+	d.assigner([5], 0)
+	var derniere: PackedInt32Array = d.faces[5]
+	d.supprimer_faces([0])
+	var ou: int = d.faces.find(derniere)
+	_vrai(ou >= 0 and d.mat(ou) == 0 and Array(d.mats).count(0) == 1,
+		"supprimer une face : le matériau reste sur LA face qui le portait (%s)" % str(Array(d.mats)))
+	var mesh: ArrayMesh = c.vers_array_mesh()
+	_egal(mesh.get_surface_count(), 2, "deux surfaces : la légende, et le matériau")
+	var avec_mat := -1
+	for i in mesh.get_surface_count():
+		if mesh.surface_get_material(i) != null:
+			avec_mat = i
+	_vrai(avec_mat >= 0 and (mesh.surface_get_material(avec_mat) as StandardMaterial3D).albedo_color == Color(1, 0, 0),
+		"la surface du matériau porte SA couleur")
+	_vrai(avec_mat >= 0 and mesh.surface_get_arrays(avec_mat)[Mesh.ARRAY_TEX_UV] != null, "et des UV projetés")
+
+
+## LA PROJECTION EN BOÎTE, jugée à l'écran : vue de DEHORS, u croît vers la DROITE sur chaque mur — sinon
+## deux murs opposés montreraient la texture en miroir.
+func _la_projection() -> void:
+	for n in [Vector3.RIGHT, Vector3.LEFT, Vector3.FORWARD, Vector3.BACK]:
+		var droite: Vector3 = (-n).cross(Vector3.UP)
+		var p := Vector3(0.3, 0.4, 0.6)
+		var du: float = (ME.projeter(p + droite * 0.1, n, 1.0) - ME.projeter(p, n, 1.0)).x
+		_vrai(du > 0.0, "mur de normale %s : u croît vers la droite vu de dehors" % n)
+		var dv: float = (ME.projeter(p + Vector3.UP * 0.1, n, 1.0) - ME.projeter(p, n, 1.0)).y
+		_vrai(dv < 0.0, "mur de normale %s : v décroît vers le haut (l'image n'est pas à l'envers)" % n)
+	# Une texture qui se répète tous les 0,5 : un point et son voisin à UNE case ont le même texel.
+	var a := ME.projeter(Vector3(0.3, 1, 0.7), Vector3.UP, 0.5)
+	var b := ME.projeter(Vector3(1.3, 1, 0.7), Vector3.UP, 0.5)
+	var reste := fposmod(b.x - a.x, 1.0)
+	_vrai(minf(reste, 1.0 - reste) < 1e-5, "échelle 0,5 : une case plus loin, le même texel (raccord de tuile)")
+
+
+func _le_format_natif() -> void:
+	var c := _cube()
+	c.materiaux.append({"nom": "moss", "couleur": Color(0.2, 0.6, 0.3), "rugosite": 0.7, "metal": 0.0,
+		"texture": "", "echelle": 0.25})
+	c.assigner([2, 3], 0)
+	var texte := JSON.stringify(c.vers_dictionnaire())
+	var r: RefCounted = ME.depuis_dictionnaire(JSON.parse_string(texte))
+	_vrai(r != null, "le .mbmesh se relit")
+	if r == null:
+		return
+	_egal(r.faces.size(), 6, "relu : six faces")
+	_egal(Array(r.mats), [-1, -1, 0, 0, -1, -1], "relu : CHAQUE face garde son matériau")
+	_vrai((r.materiaux[0]["couleur"] as Color).is_equal_approx(Color(0.2, 0.6, 0.3)), "relu : la couleur du matériau")
+	_egal(r.materiaux[0]["echelle"], 0.25, "relu : son échelle")
+	_vrai(is_equal_approx(_volume(r), 1.0), "relu : la géométrie")
+	var legende := _cube()
+	legende.teintes[0] = Color(0.37, 0.61, 0.3)
+	var relue: RefCounted = ME.depuis_dictionnaire(JSON.parse_string(JSON.stringify(legende.vers_dictionnaire())))
+	_vrai(relue.teintes[0].is_equal_approx(Color(0.37, 0.61, 0.3)), "relu : une teinte de légende revient EXACTE (pas arrondie à 1/255)")
+
+
+## ⚠ LE VRAI TRAJET, mesuré plutôt que supposé : un matériau posé dans le modeleur doit arriver dans les
+## tuiles que le GREFFON charge — témoin → .glb → trancheur → tiles.glb → mb_tileset.gd.
+func _le_materiau_voyage_jusqu_au_greffon() -> void:
+	var m := ME.depuis(BM.maillage_moitie(0))
+	m.materiaux.append({"nom": "red_rock", "couleur": Color(0.9, 0.1, 0.1), "echelle": 0.5})
+	var dessus: Array = []
+	for f in m.faces.size():
+		if m.normale(f).y > 0.9:
+			dessus.append(f)
+	m.assigner(dessus, 0)
+	var dossier := ProjectSettings.globalize_path("user://test_maillage")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var glb := dossier.path_join("modele.glb")
+	var racine := Node3D.new()
+	var mi := MeshInstance3D.new()
+	mi.name = "witness"
+	mi.mesh = m.vers_array_mesh(false)
+	racine.add_child(mi)
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	var err := doc.append_from_scene(racine, etat)
+	if err == OK:
+		err = doc.write_to_filesystem(etat, glb)
+	racine.free()
+	_egal(err, OK, "le modèle s'écrit en .glb")
+	var bilan: Dictionary = BM.librairie_depuis_glb(glb)
+	var lot: MeshLibrary = bilan.get("lot")
+	_vrai(lot != null, "le trancheur tranche le modèle")
+	if lot == null:
+		return
+	_vrai(_lot_porte_la_couleur(lot, Color(0.9, 0.1, 0.1)), "les tuiles TRANCHÉES portent le matériau rouge")
+	var r: Dictionary = FN.exporter(lot, dossier, "materiaux", "test")
+	_vrai(not r.has("erreur"), "l'export vers les moteurs : %s" % r.get("erreur", ""))
+	if r.has("erreur"):
+		return
+	var charge: Dictionary = Tileset.load_tileset(str(r["dossier"]).path_join("tileset.json"))
+	_vrai(not charge.has("error"), "le greffon charge le jeu : %s" % charge.get("error", ""))
+	if charge.has("error"):
+		return
+	_vrai(_lot_porte_la_couleur(charge["library"], Color(0.9, 0.1, 0.1)),
+		"les tuiles que le GREFFON charge portent encore le matériau rouge")
+
+
+func _lot_porte_la_couleur(lot: MeshLibrary, c: Color) -> bool:
+	for id in lot.get_item_list():
+		var mesh: Mesh = lot.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var sm := mesh.surface_get_material(s) as BaseMaterial3D
+			if sm != null and sm.albedo_color.is_equal_approx(c):
+				return true
+	return false
 
 
 # ── 13 ──────────────────────────────────────────────────────────────────────────────────────────────

@@ -74,14 +74,10 @@ var _apercu_mi: MeshInstance3D
 
 func _init() -> void:
 	name = "Modeleur"
+	# ⚠ PAS DE `material_override` : chaque surface porte son matériau (`MaillageEdite.vers_array_mesh_de`).
 	_faces_mi = MeshInstance3D.new()
-	var mf := StandardMaterial3D.new()
-	mf.vertex_color_use_as_albedo = true
-	mf.roughness = 0.9
-	_faces_mi.material_override = mf
 	add_child(_faces_mi)
 	_faces_dyn_mi = MeshInstance3D.new()
-	_faces_dyn_mi.material_override = mf
 	add_child(_faces_dyn_mi)
 	_sel_mi = _instance_translucide(Color(ORANGE, 0.35))
 	_aretes_mi = MeshInstance3D.new()
@@ -980,6 +976,46 @@ static func _chiffre(k: InputEventKey) -> String:
 	return ""
 
 
+# ── LES MATÉRIAUX ───────────────────────────────────────────────────────────────────────────────────
+
+## Le matériau qu'on assigne : un indice de `maillage.materiaux`, ou −1 (la teinte de la légende).
+var materiau_courant := -1
+
+
+func nouveau_materiau() -> int:
+	var avant: RefCounted = maillage.copie()
+	var n: int = maillage.materiaux.size()
+	# Une couleur par matériau neuf, tournant sur le cercle chromatique : on les distingue d'un coup d'œil.
+	maillage.materiaux.append({"nom": "Material %d" % (n + 1), "couleur": Color.from_hsv(fmod(0.08 + n * 0.17, 1.0), 0.45, 0.75),
+		"rugosite": 0.8, "metal": 0.0, "texture": "", "echelle": 1.0})
+	materiau_courant = n
+	change.emit(avant, maillage.copie(), "New material")
+	redessiner()
+	return n
+
+
+## Assigne le matériau courant aux faces choisies.
+func assigner_courant() -> void:
+	var fs := _faces_choisies()
+	if fs.is_empty():
+		dit.emit("[i]Select faces first (3), then Assign.[/i]")
+		return
+	var avant: RefCounted = maillage.copie()
+	maillage.assigner(fs, materiau_courant)
+	change.emit(avant, maillage.copie(), "Assign material")
+	redessiner()
+	dit.emit("[b]Material[/b] %s → %d face(s). [i]Ctrl+Z undoes it.[/i]" % [
+		"legend colour" if materiau_courant < 0 else str(maillage.materiaux[materiau_courant]["nom"]), fs.size()])
+
+
+## Change une propriété d'un matériau, À VIF (l'écran regroupe une rafale de retouches en UNE annulation).
+func regler_materiau(k: int, cle: String, valeur: Variant) -> void:
+	if k < 0 or k >= maillage.materiaux.size():
+		return
+	maillage.materiaux[k][cle] = valeur
+	redessiner()
+
+
 ## Le pivot de la sélection (sa moyenne) — pour cadrer la vue (touche « . » du pavé).
 func centre_de_la_selection() -> Variant:
 	var ids := sommets_choisis()
@@ -997,10 +1033,8 @@ func vers_glb(chemin: String) -> String:
 	racine.name = "Witness"
 	var mi := MeshInstance3D.new()
 	mi.name = "witness"
+	# ⚠ PAS DE `material_override` : il effaçait les matériaux de l'export.
 	mi.mesh = maillage.vers_array_mesh(false)
-	var m := StandardMaterial3D.new()
-	m.vertex_color_use_as_albedo = true
-	mi.material_override = m
 	racine.add_child(mi)
 	var doc := GLTFDocument.new()
 	var etat := GLTFState.new()

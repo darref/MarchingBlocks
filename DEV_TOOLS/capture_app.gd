@@ -33,6 +33,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute("user://capture")
 	# Un témoin modélisé laissé par une capture précédente serait rechargé : on part du témoin calculé.
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://capture/capture_witness.glb"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://capture/capture_witness.mbmesh"))
 	var f := FileAccess.open(JETABLE, FileAccess.WRITE)
 	f.store_string(Projet.vers_texte([Projet.couche("Rock")], 0))
 	f.close()
@@ -91,6 +92,21 @@ func _derouler() -> void:
 	mo.choisir_mode("arete")
 	await _images(5)
 	_photo("1e_modeleur_aretes")
+	# UN MATÉRIAU TEXTURÉ, projeté sur toutes les faces du dessus.
+	var image := ProjectSettings.globalize_path("res://HEART_WORLD/3D_TILESETS_FULL/SIMPLE_GROUND/TILES_3D_FACTORY/WALL_CORNER_SAMPLE/TILES3D_stone+well+3d+model_basecolor.jpg")
+	var k: int = mo.nouveau_materiau()
+	mo.regler_materiau(k, "texture", image)
+	mo.regler_materiau(k, "couleur", Color.WHITE)
+	mo.regler_materiau(k, "echelle", 0.5)
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	for f in mo.maillage.faces.size():
+		if mo.maillage.normale(f).y > 0.9:
+			mo.sel_f[f] = true
+	mo.assigner_courant()
+	mo.tout_choisir(false)
+	await _images(10)
+	_photo("1f_modeleur_materiau")
 	_ecran._regler_edition(false)
 
 	await _ecran._trancher_temoin()

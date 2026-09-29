@@ -25,6 +25,17 @@ var sommets := PackedVector3Array()
 ## Array de PackedInt32Array.
 var faces: Array = []
 var teintes := PackedColorArray()
+## LE MATÉRIAU DE CHAQUE FACE — un indice dans `materiaux`, ou −1 : la teinte de la légende (§9.5).
+## ⚠ **IL SUIT LA TEINTE PARTOUT** : chaque opération qui fabrique, recopie ou retire une face fait la même
+## chose aux deux tableaux. Une face née d'une opération prend le matériau de celle dont elle sort.
+var mats := PackedInt32Array()
+## LES MATÉRIAUX — DÉCIDÉ (Jordan, 29 septembre 2026) : « matériaux + projections ». Chacun :
+## {"nom", "couleur": Color, "rugosite", "metal", "texture": chemin d'image ou "", "echelle": cases par
+## répétition}. ⚠ **LES UV NE SONT PAS STOCKÉS : ILS SE PROJETTENT DEPUIS LA POSITION** (en boîte, sur
+## l'axe dominant de la normale), au dessin comme à l'export. Une face née d'une extrusion ou d'un biseau
+## est donc texturée sans rien déplier ; et une texture tuilable dont la période divise la case se raccorde
+## d'une tuile à l'autre — la discipline de l'artiste (§3), servie par construction là où c'est possible.
+var materiaux: Array = []
 
 
 func copie() -> RefCounted:
@@ -33,7 +44,26 @@ func copie() -> RefCounted:
 	for f in faces:
 		m.faces.append((f as PackedInt32Array).duplicate())
 	m.teintes = teintes.duplicate()
+	m.mats = mats.duplicate()
+	m.materiaux = materiaux.duplicate(true)
 	return m
+
+
+func mat(f: int) -> int:
+	return mats[f] if f < mats.size() else -1
+
+
+## Ajoute une face avec sa teinte et son matériau — les deux tableaux restent alignés.
+## ⚠ **ON COMPLÈTE D'ABORD** : un maillage bâti à la main (des faces sans matériau) garderait sinon un
+## tableau `mats` plus court, et le matériau d'une face neuve atterrirait sur une face ancienne.
+func _ajouter(face: PackedInt32Array, teinte: Color, m: int) -> void:
+	while mats.size() < faces.size():
+		mats.append(-1)
+	while teintes.size() < faces.size():
+		teintes.append(Color.WHITE)
+	faces.append(face)
+	teintes.append(teinte)
+	mats.append(m)
 
 
 # ── L'ENTRÉE ET LA SORTIE ───────────────────────────────────────────────────────────────────────────
@@ -77,12 +107,10 @@ static func depuis(mesh: Mesh, epsilon := 0.00001) -> RefCounted:
 		if i + 1 < tris.size():
 			var q := _recoller(m.sommets, tris[i], tris[i + 1])
 			if not q.is_empty() and couleurs_tri[i] == couleurs_tri[i + 1]:
-				m.faces.append(q)
-				m.teintes.append(couleurs_tri[i])
+				m._ajouter(q, couleurs_tri[i], -1)
 				i += 2
 				continue
-		m.faces.append(tris[i])
-		m.teintes.append(couleurs_tri[i])
+		m._ajouter(tris[i], couleurs_tri[i], -1)
 		i += 1
 	return m
 
@@ -127,28 +155,168 @@ func vers_array_mesh(avec_normales := true) -> ArrayMesh:
 ## La même chose pour une PARTIE des faces — ce qui bouge pendant un geste, redessiné seul (le reste est
 ## dessiné une fois au début du geste : un G qui suit la souris ne peut pas rebâtir 15 000 faces par image).
 func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
-	var pos := PackedVector3Array()
-	var nor := PackedVector3Array()
-	var col := PackedColorArray()
+	# Une SURFACE PAR MATÉRIAU, dans l'ordre : la légende (−1) d'abord. Le trancheur garde une surface par
+	# matériau (`Decoupe.trancher`), et l'export glTF en fait une primitive chacune.
+	var groupes := {}
 	for f in choix:
-		var face: PackedInt32Array = faces[f]
-		var n := normale(f)
-		for t in trianguler(f):
-			# Horaire pour Godot : le triangle trigonométrique [a,b,c] s'écrit [a,c,b].
-			for k in [0, 2, 1]:
-				pos.append(sommets[face[t[k]]])
-				nor.append(n)
-				col.append(teintes[f] if f < teintes.size() else Color.WHITE)
-	var a := []
-	a.resize(Mesh.ARRAY_MAX)
-	a[Mesh.ARRAY_VERTEX] = pos
-	if avec_normales:
-		a[Mesh.ARRAY_NORMAL] = nor
-	a[Mesh.ARRAY_COLOR] = col
+		var m := mat(f)
+		if m >= materiaux.size():
+			m = -1
+		if not groupes.has(m):
+			groupes[m] = []
+		groupes[m].append(f)
+	var cles: Array = groupes.keys()
+	cles.sort()
 	var mesh := ArrayMesh.new()
-	if not pos.is_empty():
+	for m in cles:
+		var pos := PackedVector3Array()
+		var nor := PackedVector3Array()
+		var col := PackedColorArray()
+		var uv := PackedVector2Array()
+		var echelle: float = maxf(0.01, float(materiaux[m].get("echelle", 1.0))) if m >= 0 else 1.0
+		for f in groupes[m]:
+			var face: PackedInt32Array = faces[f]
+			var n := normale(f)
+			for t in trianguler(f):
+				# Horaire pour Godot : le triangle trigonométrique [a,b,c] s'écrit [a,c,b].
+				for k in [0, 2, 1]:
+					var p: Vector3 = sommets[face[t[k]]]
+					pos.append(p)
+					nor.append(n)
+					col.append(teintes[f] if f < teintes.size() else Color.WHITE)
+					if m >= 0:
+						uv.append(projeter(p, n, echelle))
+		if pos.is_empty():
+			continue
+		var a := []
+		a.resize(Mesh.ARRAY_MAX)
+		a[Mesh.ARRAY_VERTEX] = pos
+		if avec_normales:
+			a[Mesh.ARRAY_NORMAL] = nor
+		a[Mesh.ARRAY_COLOR] = col
+		if m >= 0:
+			a[Mesh.ARRAY_TEX_UV] = uv
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+		# ⚠ **CHAQUE SURFACE PORTE SON MATÉRIAU, LA LÉGENDE COMPRISE.** Un `material_override` unique (la
+		# couleur de sommet) remplaçait ceux de TOUTES les surfaces — à l'écran comme dans le .glb : les
+		# matériaux se seraient effacés sans un mot.
+		mesh.surface_set_material(mesh.get_surface_count() - 1, materiau_godot(m) if m >= 0 else materiau_de_legende())
 	return mesh
+
+
+static var _legende: StandardMaterial3D
+
+
+## La teinte de légende, lue dans la couleur de sommet.
+static func materiau_de_legende() -> StandardMaterial3D:
+	if _legende == null:
+		_legende = StandardMaterial3D.new()
+		_legende.resource_name = "legend"
+		_legende.vertex_color_use_as_albedo = true
+		_legende.roughness = 0.9
+	return _legende
+
+
+## LA PROJECTION EN BOÎTE : les UV d'un point selon l'axe dominant de la normale de sa face, divisés par
+## l'échelle (en cases par répétition). ⚠ **LE SIGNE DE L'AXE ENTRE DANS U** : sans lui, deux faces
+## opposées (le mur est et le mur ouest) montreraient la texture en miroir l'une de l'autre.
+static func projeter(p: Vector3, n: Vector3, echelle: float) -> Vector2:
+	var a := n.abs()
+	var uv: Vector2
+	if a.x >= a.y and a.x >= a.z:
+		uv = Vector2(-p.z * signf(n.x), -p.y)
+	elif a.y >= a.z:
+		uv = Vector2(p.x, p.z * signf(n.y))
+	else:
+		uv = Vector2(p.x * signf(n.z), -p.y)
+	return uv / echelle
+
+
+var _cache_godot := {}
+
+
+## Le StandardMaterial3D d'un matériau (gardé tant que sa définition ne change pas).
+func materiau_godot(m: int) -> StandardMaterial3D:
+	var d: Dictionary = materiaux[m]
+	var cle := JSON.stringify(d)
+	if _cache_godot.has(cle):
+		return _cache_godot[cle]
+	var sm := StandardMaterial3D.new()
+	sm.resource_name = str(d.get("nom", "material"))
+	sm.albedo_color = d.get("couleur", Color.WHITE)
+	sm.roughness = float(d.get("rugosite", 0.8))
+	sm.metallic = float(d.get("metal", 0.0))
+	var chemin: String = str(d.get("texture", ""))
+	if chemin != "":
+		var img := Image.load_from_file(chemin) if FileAccess.file_exists(chemin) else null
+		if img != null:
+			sm.albedo_texture = ImageTexture.create_from_image(img)
+	_cache_godot[cle] = sm
+	return sm
+
+
+## Assigne un matériau (ou −1, la légende) à des faces.
+func assigner(choix: Array, m: int) -> void:
+	while mats.size() < faces.size():
+		mats.append(-1)
+	for f in choix:
+		mats[f] = m
+
+
+static func _couleur(v: Variant) -> Color:
+	if v is Array and (v as Array).size() >= 3:
+		return Color(float(v[0]), float(v[1]), float(v[2]), float(v[3]) if (v as Array).size() > 3 else 1.0)
+	return Color.WHITE
+
+
+# ── LE FORMAT NATIF (.mbmesh) ──────────────────────────────────────────────────────────────────────
+#
+# ⚠ **LE MODÈLE S'ENREGISTRE DANS SON PROPRE FORMAT, ET LE .glb N'EN EST QU'UNE SORTIE.** Relire le .glb
+# regroupe les faces par surface et ne sait plus QUELLE face portait QUEL matériau : l'assignation se
+# perdrait à chaque réouverture. Le `.mbmesh` (JSON) garde tout : sommets, faces, teintes, matériaux.
+
+func vers_dictionnaire() -> Dictionary:
+	var s: Array = []
+	for p in sommets:
+		s.append_array([p.x, p.y, p.z])
+	var f: Array = []
+	for face in faces:
+		f.append(Array(face))
+	# ⚠ LES COULEURS EN NOMBRES, PAS EN HEXADÉCIMAL : `to_html` arrondit à 1/255 — un vert à 0,3 revenait à
+	# 0,302, et les teintes de la légende auraient dérivé à chaque enregistrement (vu rougir).
+	var t: Array = []
+	for c in teintes:
+		t.append([c.r, c.g, c.b, c.a])
+	var mt: Array = []
+	for d in materiaux:
+		var e: Dictionary = d.duplicate()
+		var c: Color = d.get("couleur", Color.WHITE)
+		e["couleur"] = [c.r, c.g, c.b, c.a]
+		mt.append(e)
+	return {"format": "marchingblocks-mesh", "version": 1, "sommets": s, "faces": f, "teintes": t,
+		"mats": Array(mats), "materiaux": mt}
+
+
+static func depuis_dictionnaire(d: Dictionary) -> RefCounted:
+	var m: RefCounted = load("res://addons/marchingblocks_core/maillage_edite.gd").new()
+	if str(d.get("format", "")) != "marchingblocks-mesh":
+		return null
+	var s: Array = d.get("sommets", [])
+	for i in range(0, s.size() - 2, 3):
+		m.sommets.append(Vector3(float(s[i]), float(s[i + 1]), float(s[i + 2])))
+	var fs: Array = d.get("faces", [])
+	var ts: Array = d.get("teintes", [])
+	var ms: Array = d.get("mats", [])
+	for k in fs.size():
+		var face := PackedInt32Array()
+		for i in fs[k]:
+			face.append(int(i))
+		m._ajouter(face, _couleur(ts[k]) if k < ts.size() else Color.WHITE, int(ms[k]) if k < ms.size() else -1)
+	for e in d.get("materiaux", []):
+		var x: Dictionary = (e as Dictionary).duplicate()
+		x["couleur"] = _couleur(e.get("couleur", [1, 1, 1, 1]))
+		m.materiaux.append(x)
+	return m
 
 
 ## Les triangles d'une face, en positions LOCALES de la face ([[0,1,2], [0,2,3]…]), trigonométriques.
@@ -309,15 +477,14 @@ func extruder_faces(choix: Array) -> Dictionary:
 			var a: int = face[i]
 			var b: int = face[(i + 1) % face.size()]
 			if usage[arete(a, b)] == 1:
-				cotes.append([PackedInt32Array([a, b, double[b], double[a]]), teintes[f]])
+				cotes.append([PackedInt32Array([a, b, double[b], double[a]]), teintes[f], mat(f)])
 				bord.append([double[a], double[b], f])
 		var neuve := PackedInt32Array()
 		for i in face:
 			neuve.append(double[i])
 		faces[f] = neuve
 	for c in cotes:
-		faces.append(c[0])
-		teintes.append(c[1])
+		_ajouter(c[0], c[1], c[2])
 	var nouveaux: Array = double.values()
 	var carte := nettoyer()
 	return {"sommets": _renumeroter(nouveaux, carte), "normale": nrm.normalized(),
@@ -348,10 +515,9 @@ func extruder_aretes(choix: Array) -> Array:
 			if not double.has(i):
 				double[i] = sommets.size()
 				sommets.append(sommets[i])
-		nouvelles.append([PackedInt32Array([b, a, double[a], double[b]]), teintes[f]])
+		nouvelles.append([PackedInt32Array([b, a, double[a], double[b]]), teintes[f], mat(f)])
 	for n in nouvelles:
-		faces.append(n[0])
-		teintes.append(n[1])
+		_ajouter(n[0], n[1], n[2])
 	return double.values()
 
 
@@ -392,12 +558,15 @@ func supprimer_faces(choix: Array) -> void:
 		ote[f] = true
 	var gardees: Array = []
 	var gt := PackedColorArray()
+	var gm := PackedInt32Array()
 	for f in faces.size():
 		if not ote.has(f):
 			gardees.append(faces[f])
 			gt.append(teintes[f])
+			gm.append(mat(f))
 	faces = gardees
 	teintes = gt
+	mats = gm
 	nettoyer()
 
 
@@ -462,11 +631,13 @@ func remplir(choix: Array) -> int:
 		voisins[i] = true
 	var nrm := Vector3.ZERO
 	var teinte := Color.WHITE
+	var m := -1
 	for f in faces.size():
 		for i in faces[f]:
 			if voisins.has(i):
 				nrm += normale(f)
 				teinte = teintes[f]
+				m = mat(f)
 				break
 	if nrm.length_squared() < 1e-10:
 		nrm = (sommets[choix[1]] - sommets[choix[0]]).cross(sommets[choix[2]] - sommets[choix[0]])
@@ -495,8 +666,7 @@ func remplir(choix: Array) -> int:
 			pour += 1
 	if contre > pour:
 		face.reverse()
-	faces.append(face)
-	teintes.append(teinte)
+	_ajouter(face, teinte, m)
 	return faces.size() - 1
 
 
@@ -518,6 +688,7 @@ func subdiviser(choix: Array) -> Array:
 				sommets.append((sommets[e.x] + sommets[e.y]) * 0.5)
 	var gardees: Array = []
 	var gt := PackedColorArray()
+	var gm := PackedInt32Array()
 	var neuves: Array = []
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
@@ -531,11 +702,14 @@ func subdiviser(choix: Array) -> Array:
 				neuves.append(gardees.size())
 				gardees.append(PackedInt32Array([face[i], milieux[apres], ci, milieux[avant]]))
 				gt.append(teintes[f])
+				gm.append(mat(f))
 		else:
 			gardees.append(_avec_milieux(face, milieux))
 			gt.append(teintes[f])
+			gm.append(mat(f))
 	faces = gardees
 	teintes = gt
+	mats = gm
 	return neuves
 
 
@@ -620,6 +794,7 @@ func couper_en_boucle(depart: Vector2i, t := 0.5) -> Array:
 		sommets.append(sommets[a].lerp(sommets[b], t))
 	var gardees: Array = []
 	var gt := PackedColorArray()
+	var gm := PackedInt32Array()
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
 		var coupees: Array = []
@@ -635,11 +810,15 @@ func couper_en_boucle(depart: Vector2i, t := 0.5) -> Array:
 			gardees.append(PackedInt32Array([m1, p[1], p[2], m2]))
 			gt.append(teintes[f])
 			gt.append(teintes[f])
+			gm.append(mat(f))
+			gm.append(mat(f))
 		else:
 			gardees.append(_avec_milieux(face, milieux))
 			gt.append(teintes[f])
+			gm.append(mat(f))
 	faces = gardees
 	teintes = gt
+	mats = gm
 	return neufs
 
 
@@ -735,6 +914,7 @@ func biseauter(choix: Array, largeur: float) -> Array:
 	# voisines y ont posés (dans l'ordre, du premier bout vers le second).
 	var neuves_faces: Array = []
 	var neuves_teintes := PackedColorArray()
+	var neuves_mats := PackedInt32Array()
 	var coins := {}       # Vector2i(face, indice) → sommet final (pour les quads du biseau)
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
@@ -752,6 +932,7 @@ func biseauter(choix: Array, largeur: float) -> Array:
 						sortie.append(sur_arete[cle])
 		neuves_faces.append(_sans_doublons(sortie))
 		neuves_teintes.append(teintes[f])
+		neuves_mats.append(mat(f))
 	# Les quads du biseau.
 	var quads: Array = []
 	for e in sel:
@@ -781,8 +962,10 @@ func biseauter(choix: Array, largeur: float) -> Array:
 			quads.append(neuves_faces.size())
 			neuves_faces.append(q)
 			neuves_teintes.append(teintes[f1])
+			neuves_mats.append(mat(f1))
 	faces = neuves_faces
 	teintes = neuves_teintes
+	mats = neuves_mats
 	# Les trous des bouts : toute arête orientée restée seule, qui n'était pas un bord AVANT.
 	_reboucher(avant_bords)
 	nettoyer()
@@ -854,8 +1037,7 @@ func _reboucher(avant: Dictionary) -> void:
 			continue
 		# Le trou est parcouru dans le sens de ses bords : la face qui le bouche le parcourt à l'envers.
 		boucle.reverse()
-		faces.append(boucle)
-		teintes.append(teintes[0] if not teintes.is_empty() else Color.WHITE)
+		_ajouter(boucle, teintes[0] if not teintes.is_empty() else Color.WHITE, mat(0) if not faces.is_empty() else -1)
 
 
 ## K — LE COUTEAU : une coupe qui suit des points posés SUR DES ARÊTES, `[{"arete": Vector2i, "t": float}…]`
@@ -894,6 +1076,7 @@ func _restaurer(m: RefCounted) -> void:
 	sommets = m.sommets
 	faces = m.faces
 	teintes = m.teintes
+	mats = m.mats
 
 
 ## Un point neuf sur l'arête e, inséré dans TOUTES les faces qui la bordent. Rend son indice, ou −1.
@@ -944,8 +1127,7 @@ func _fendre(a: int, b: int) -> bool:
 				break
 			k = (k + 1) % n
 		faces[f] = une
-		faces.append(autre)
-		teintes.append(teintes[f])
+		_ajouter(autre, teintes[f], mat(f))
 		return true
 	return false
 
@@ -957,6 +1139,7 @@ func _fendre(a: int, b: int) -> bool:
 func nettoyer() -> Dictionary:
 	var gardees: Array = []
 	var gt := PackedColorArray()
+	var gm := PackedInt32Array()
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
 		var propre := PackedInt32Array()
@@ -969,8 +1152,10 @@ func nettoyer() -> Dictionary:
 		if distincts.size() >= 3:
 			gardees.append(propre)
 			gt.append(teintes[f] if f < teintes.size() else Color.WHITE)
+			gm.append(mat(f))
 	faces = gardees
 	teintes = gt
+	mats = gm
 	var emploi := {}
 	for face in faces:
 		for i in face:

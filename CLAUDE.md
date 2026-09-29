@@ -951,8 +951,32 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     dessus → 0,75 + 0,25/3 (1 + 0,25 + 0,5). `test_maillage_edite` 94, cinq mutations rouges (onglet sans
     sinus, bouts non rebouchés, quad retourné, point du couteau dans une seule face, pas de retour
     arrière) ; la fumée mène Ctrl+B 0.1 et K sur le vrai témoin (125), deux mutations rouges.
-  - **PAS ENCORE ÉCRIT** : matériaux et projections ; la boîte B qui ignorerait le caché ; le biseau et
-    l'inset redessinent encore TOUT à chaque mouvement de souris. Rien n'a été tenu en main.
+  - **LES MATÉRIAUX ET LES PROJECTIONS — ÉCRITS LE 29 SEPTEMBRE 2026.** Chaque face porte un indice de
+    matériau (`mats`, −1 = la teinte de la légende), qui suit la teinte dans CHAQUE opération (une face née
+    d'une autre prend son matériau). Un matériau : couleur, rugosité, métal, image facultative, échelle.
+    ⚠ **LES UV NE SONT PAS STOCKÉS, ILS SE PROJETTENT DEPUIS LA POSITION** (boîte, axe dominant de la
+    normale, le signe de l'axe dans u pour que deux murs opposés ne soient pas en miroir) : une face née
+    d'une extrusion est texturée sans rien déplier, et une image tuilable dont la répétition divise la case
+    se raccorde d'une tuile à l'autre. Une SURFACE par matériau ; la barre du modeleur a sa section
+    Materials (New, Assign, nom, couleur, rugosité, métal, répétition, image), et une rafale de retouches
+    fait UNE annulation.
+    **MESURÉ, LE TRAJET ENTIER** (`test_maillage_edite`) : un matériau posé dans le modeleur arrive dans
+    les tuiles TRANCHÉES, puis dans celles que le GREFFON Godot charge depuis `tiles.glb`. Vu à l'image : une
+    texture projetée sur les 2 965 faces du dessus, continue sur tout le bloc.
+    ⚠ **LE MODÈLE S'ENREGISTRE EN `.mbmesh` (JSON), ET LE .glb N'EN EST QU'UNE SORTIE** : relire le .glb
+    regroupe les faces par surface, et l'assignation se serait perdue à chaque réouverture.
+    ⚠ **TROIS DÉFAUTS VUS AVANT D'ÊTRE LIVRÉS** : un `material_override` unique (la couleur de sommet)
+    effaçait tous les matériaux, à l'écran ET dans le .glb — chaque surface porte désormais le sien, la
+    légende comprise ; les couleurs passaient par l'hexadécimal, arrondi à 1/255, et les teintes de la
+    légende auraient dérivé à chaque enregistrement ; et `_ajouter` complète `mats` avant d'ajouter, sinon
+    un maillage bâti à la main décalait les matériaux sur les mauvaises faces.
+    Mutations rouges : projection sans le signe, côtés extrudés sans matériau, surface sans son matériau,
+    retour de l'hexadécimal, override à l'export, `.mbmesh` non relu, une annulation par retouche — et
+    « supprimer oublie les matériaux », d'abord MUETTE : le test comptait les matériaux, pas LA face qui
+    le portait.
+  - **PAS ENCORE ÉCRIT** : la boîte B qui ignorerait le caché ; le biseau et l'inset redessinent encore
+    TOUT à chaque mouvement de souris ; des projections autres que la boîte (plan, cylindre) et un
+    dépliage d'UV. Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1168,14 +1192,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Treize suites, **8 003 vérifications, 0 échec** (29 septembre 2026, recomptées après le biseau et le
-  couteau du modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Treize suites, **8 039 vérifications, 0 échec** (29 septembre 2026, recomptées après les matériaux du
+  modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 125, `test_greffon_peinture` 117, `test_faux_artiste` 35,
-  `test_maillage_edite` 94.
+  `test_outils` 57, `fumee_appli` 133, `test_greffon_peinture` 117, `test_faux_artiste` 35,
+  `test_maillage_edite` 122.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

@@ -82,6 +82,20 @@ var _boutons_selmode := {}
 var _bouton_prop: Button
 ## L'enregistrement du témoin modélisé attend une seconde de calme : un geste = un fichier réécrit, pas dix.
 var _minuterie_temoin: Timer
+## LES MATÉRIAUX DU MODELEUR : la liste, et l'éditeur du matériau courant.
+var _liste_materiaux: VBoxContainer
+var _edition_materiau: VBoxContainer
+var _nom_materiau: LineEdit
+var _couleur_materiau: ColorPickerButton
+var _rugosite_materiau: HSlider
+var _metal_materiau: HSlider
+var _echelle_materiau: SpinBox
+var _texture_materiau: Label
+var _remplit_materiau := false
+## ⚠ UNE RAFALE DE RETOUCHES = UNE ANNULATION : glisser la rugosité émet cent valeurs ; on garde le
+## maillage d'avant la première, et on inscrit le geste quand les retouches se calment.
+var _materiau_avant: RefCounted
+var _minuterie_materiau: Timer
 var _attente: PanelContainer
 var _attente_titre: Label
 var _attente_note: Label
@@ -277,6 +291,11 @@ func _batir() -> void:
 	_minuterie_temoin.wait_time = 1.0
 	_minuterie_temoin.timeout.connect(_enregistrer_le_temoin_modele)
 	add_child(_minuterie_temoin)
+	_minuterie_materiau = Timer.new()
+	_minuterie_materiau.one_shot = true
+	_minuterie_materiau.wait_time = 0.8
+	_minuterie_materiau.timeout.connect(_inscrire_les_retouches)
+	add_child(_minuterie_materiau)
 	_batir_attente(corps)
 
 	_manuel = Manuel.new()
@@ -1234,6 +1253,56 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			func() -> void: _dire("[i]%s view.[/i]" % ("Orthographic" if _vue.basculer_ortho() else "Perspective"))),
 	], 2))
 
+	# ── LES MATÉRIAUX — DÉCIDÉ (Jordan, 29 septembre 2026) : matériaux + projections.
+	var mats := Section.new("Materials", true, Icones.icone("texture"))
+	pile.add_child(mats)
+	mats.contenu.add_child(_texte("Pick a material, select faces, Assign. Textures are PROJECTED from the "
+		+ "position (box mapping): new faces are textured too. Tileable images whose repeat divides one "
+		+ "cell join from tile to tile.", 11, Palette.GRIS))
+	_liste_materiaux = VBoxContainer.new()
+	_liste_materiaux.add_theme_constant_override("separation", 4)
+	mats.contenu.add_child(_liste_materiaux)
+	mats.contenu.add_child(_grille([
+		_bouton("New material", "Adds a material and makes it the one you assign.", _nouveau_materiau, "plus"),
+		_bouton("Assign", "Gives the chosen material to the selected faces.", _assigner_materiau, "remplir",
+			Palette.PRINCIPAL),
+	], 2))
+	_edition_materiau = VBoxContainer.new()
+	_edition_materiau.add_theme_constant_override("separation", 6)
+	mats.contenu.add_child(_edition_materiau)
+	_nom_materiau = LineEdit.new()
+	_nom_materiau.placeholder_text = "material name"
+	_nom_materiau.text_submitted.connect(func(t: String) -> void: _retoucher("nom", t))
+	_nom_materiau.focus_exited.connect(func() -> void: _retoucher("nom", _nom_materiau.text))
+	_edition_materiau.add_child(_nom_materiau)
+	_couleur_materiau = ColorPickerButton.new()
+	_couleur_materiau.text = "Colour"
+	_couleur_materiau.custom_minimum_size = Vector2(0, 30)
+	_couleur_materiau.color_changed.connect(func(c: Color) -> void: _retoucher("couleur", c))
+	_edition_materiau.add_child(_couleur_materiau)
+	_rugosite_materiau = _curseur(_edition_materiau, "Roughness", 0.0, 1.0, 0.01, "rugosite")
+	_metal_materiau = _curseur(_edition_materiau, "Metallic", 0.0, 1.0, 0.01, "metal")
+	var ligne_echelle := HBoxContainer.new()
+	ligne_echelle.add_child(_texte("Repeat every", 11, Palette.GRIS))
+	_echelle_materiau = SpinBox.new()
+	_echelle_materiau.min_value = 0.05
+	_echelle_materiau.max_value = 16.0
+	_echelle_materiau.step = 0.05
+	_echelle_materiau.suffix = "cell"
+	_echelle_materiau.tooltip_text = ("How many cells one copy of the image covers. 1, 0.5, 0.25… divide a cell: "
+		+ "the texture then joins from one tile to the next.")
+	_echelle_materiau.value_changed.connect(func(v: float) -> void: _retoucher("echelle", v))
+	ligne_echelle.add_child(_echelle_materiau)
+	_edition_materiau.add_child(ligne_echelle)
+	_texture_materiau = _texte("no image", 11, Palette.GRIS)
+	_edition_materiau.add_child(_texture_materiau)
+	_edition_materiau.add_child(_grille([
+		_bouton("Image…", "A tileable image (.png, .jpg) projected on the faces.",
+			func() -> void: _demander("texture"), "texture"),
+		_bouton("No image", "Colour only.", func() -> void: _retoucher("texture", ""), "croix"),
+	], 2))
+	_redire_les_materiaux()
+
 	var tem := Section.new("The modelled witness", true, Icones.icone("enregistrer"))
 	pile.add_child(tem)
 	tem.contenu.add_child(_texte("It saves itself next to the project, and joins the works of step 2 "
@@ -1247,15 +1316,23 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 ## s'il existe, sinon le témoin calculé.
 func _regler_edition(oui: bool) -> void:
 	if oui and _modeleur.maillage == null:
-		var chemin := _chemin_temoin_modele()
+		# ⚠ LE .mbmesh FAIT FOI (il garde quelle face porte quel matériau) ; le .glb n'en est qu'une sortie,
+		# relue seulement s'il est seul (un modèle d'avant les matériaux).
 		var m: RefCounted = null
-		if FileAccess.file_exists(chemin):
+		var natif := _chemin_modele_natif()
+		if FileAccess.file_exists(natif):
+			var d = JSON.parse_string(FileAccess.get_file_as_string(natif))
+			if d is Dictionary:
+				m = ME.depuis_dictionnaire(d)
+		var chemin := _chemin_temoin_modele()
+		if m == null and FileAccess.file_exists(chemin):
 			var lu: ArrayMesh = BM.travail_depuis_glb(chemin)
 			if lu != null:
 				m = ME.depuis(lu)
 		if m == null:
 			m = ME.depuis(BM.maillage_moitie(0))
 		_modeleur.charger(m)
+		_redire_les_materiaux()
 	_vue.regler_edition(oui)
 	_bouton_edition.set_pressed_no_signal(oui)
 	if oui:
@@ -1304,12 +1381,121 @@ func _geste_du_modeleur(avant: RefCounted, apres: RefCounted, nom: String) -> vo
 
 func _temoin_modifie() -> void:
 	_minuterie_temoin.start()
+	_redire_les_materiaux()
+
+
+# ── LES MATÉRIAUX DU MODELEUR ──
+
+func _curseur(parent: Control, nom: String, mini: float, maxi: float, pas: float, cle: String) -> HSlider:
+	var ligne := HBoxContainer.new()
+	var l := _texte(nom, 11, Palette.GRIS)
+	l.custom_minimum_size = Vector2(80, 0)
+	l.size_flags_horizontal = Control.SIZE_FILL
+	ligne.add_child(l)
+	var c := HSlider.new()
+	c.min_value = mini
+	c.max_value = maxi
+	c.step = pas
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	c.value_changed.connect(func(v: float) -> void: _retoucher(cle, v))
+	ligne.add_child(c)
+	parent.add_child(ligne)
+	return c
+
+
+## La liste : la légende, puis chaque matériau ; le courant est enfoncé. Et l'éditeur du courant.
+func _redire_les_materiaux() -> void:
+	if _liste_materiaux == null:
+		return
+	for enfant in _liste_materiaux.get_children():
+		_liste_materiaux.remove_child(enfant)
+		enfant.queue_free()
+	var groupe := ButtonGroup.new()
+	var liste: Array = [[-1, "Legend colour (no material)", Palette.GRIS]]
+	if _modeleur.maillage != null:
+		for k in _modeleur.maillage.materiaux.size():
+			var d: Dictionary = _modeleur.maillage.materiaux[k]
+			liste.append([k, str(d.get("nom", "Material")), d.get("couleur", Color.WHITE)])
+	if _modeleur.materiau_courant >= liste.size() - 1:
+		_modeleur.materiau_courant = -1
+	for e in liste:
+		var b := Button.new()
+		b.text = e[1]
+		b.toggle_mode = true
+		b.button_group = groupe
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.clip_text = true
+		b.button_pressed = e[0] == _modeleur.materiau_courant
+		var pastille := Panel.new()
+		pastille.add_theme_stylebox_override("panel", Palette.fond(e[2], 3, 0))
+		pastille.custom_minimum_size = Vector2(12, 12)
+		pastille.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		b.add_child(pastille)
+		pastille.position = Vector2(-18, 9)
+		var marge := MarginContainer.new()
+		marge.add_theme_constant_override("margin_left", 20)
+		marge.add_child(b)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(func() -> void:
+			_modeleur.materiau_courant = e[0]
+			_redire_les_materiaux())
+		_liste_materiaux.add_child(marge)
+	var k: int = _modeleur.materiau_courant
+	_edition_materiau.visible = k >= 0
+	if k >= 0:
+		var d: Dictionary = _modeleur.maillage.materiaux[k]
+		_remplit_materiau = true
+		_nom_materiau.text = str(d.get("nom", ""))
+		_couleur_materiau.color = d.get("couleur", Color.WHITE)
+		_rugosite_materiau.value = float(d.get("rugosite", 0.8))
+		_metal_materiau.value = float(d.get("metal", 0.0))
+		_echelle_materiau.value = float(d.get("echelle", 1.0))
+		var tex: String = str(d.get("texture", ""))
+		_texture_materiau.text = tex.get_file() if tex != "" else "no image"
+		_remplit_materiau = false
+
+
+func _nouveau_materiau() -> void:
+	_regler_edition(true)
+	_modeleur.nouveau_materiau()
+	_redire_les_materiaux()
+
+
+func _assigner_materiau() -> void:
+	_regler_edition(true)
+	_modeleur.assigner_courant()
+
+
+## Une retouche du matériau courant, À VIF ; l'annulation est inscrite quand les retouches se calment.
+func _retoucher(cle: String, valeur: Variant) -> void:
+	if _remplit_materiau or _modeleur.maillage == null or _modeleur.materiau_courant < 0:
+		return
+	if _materiau_avant == null:
+		_materiau_avant = _modeleur.maillage.copie()
+	_modeleur.regler_materiau(_modeleur.materiau_courant, cle, valeur)
+	if cle in ["nom", "texture"]:
+		_redire_les_materiaux()
+	_minuterie_materiau.start()
+
+
+func _inscrire_les_retouches() -> void:
+	if _materiau_avant == null:
+		return
+	var avant := _materiau_avant
+	_materiau_avant = null
+	_geste_du_modeleur(avant, _modeleur.maillage.copie(), "Material")
 
 
 func _remettre_le_temoin() -> void:
 	_regler_edition(true)
 	_geste_du_modeleur(_modeleur.maillage.copie(), ME.depuis(BM.maillage_moitie(0)), "Reset")
 	_modeleur.remplacer(ME.depuis(BM.maillage_moitie(0)))
+
+
+func _chemin_modele_natif() -> String:
+	return _chemin_temoin_modele().get_basename() + ".mbmesh"
 
 
 func _chemin_temoin_modele() -> String:
@@ -1323,6 +1509,10 @@ func _enregistrer_le_temoin_modele() -> String:
 	if _modeleur.maillage == null:
 		return ""
 	var chemin := _chemin_temoin_modele()
+	var f := FileAccess.open(_chemin_modele_natif(), FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify(_modeleur.maillage.vers_dictionnaire()))
+		f.close()
 	var raison: String = _modeleur.vers_glb(chemin)
 	if raison != "":
 		_dire("[color=#e0603c]The modelled witness could not be saved:[/color] %s" % raison)
@@ -1433,6 +1623,11 @@ func _demander(quoi: String) -> void:
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 		_dialogue.title = "Export the tileset into…" if quoi == "tileset" else "Export the world into…"
 		_dialogue.current_file = ""
+	elif quoi == "texture":
+		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_dialogue.add_filter("*.png, *.jpg, *.jpeg, *.webp", "Image")
+		_dialogue.title = "A tileable image for the material"
+		_dialogue.current_file = ""
 	elif quoi in ["ouvrir", "enregistrer"]:
 		_dialogue.add_filter("*." + Projet.EXTENSION, "MarchingBlocks project")
 		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
@@ -1462,6 +1657,9 @@ func _fichier_choisi(fichier: String) -> void:
 			_exporter_le_jeu(fichier)
 		"monde":
 			_exporter_le_monde(fichier)
+		"texture":
+			_retoucher("texture", fichier)
+			_inscrire_les_retouches()
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
