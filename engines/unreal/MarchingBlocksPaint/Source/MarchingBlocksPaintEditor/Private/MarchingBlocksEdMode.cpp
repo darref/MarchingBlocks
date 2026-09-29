@@ -336,13 +336,12 @@ MBPaint::FCell UMarchingBlocksEdMode::ArrowOffset(AMarchingBlocksWorld* World, F
 	return MBPaint::FCell(-R.X, 0, -R.Z);
 }
 
-void UMarchingBlocksEdMode::Render(const FSceneView* View, FViewport* Viewport, FPrimitiveDrawInterface* PDI)
+void UMarchingBlocksEdMode::Draw(const FSceneView* View, FPrimitiveDrawInterface* PDI)
 {
 	using namespace MarchingBlocksEdModeDetail;
-	Super::Render(View, Viewport, PDI);
 	AMarchingBlocksWorld* World = Target();
 	if (!World) return;
-	auto Draw = [&](const MBPaint::FCell& C, const FLinearColor& Colour, double Inset)
+	auto DrawCell = [&](const MBPaint::FCell& C, const FLinearColor& Colour, double Inset)
 	{
 		const double H = 0.5 - Inset;
 		DrawWireBox(PDI, World->CellMatrix(C), FBox(FVector(-H), FVector(H)), Colour, SDPG_Foreground);
@@ -351,13 +350,13 @@ void UMarchingBlocksEdMode::Render(const FSceneView* View, FViewport* Viewport, 
 	for (const MBPaint::FCell& C : World->Selection)
 	{
 		if (++N > MaxDrawn) break;
-		Draw(C, SelectionColour, 0.04);
+		DrawCell(C, SelectionColour, 0.04);
 	}
 	N = 0;
 	for (const MBPaint::FCell& C : Preview)
 	{
 		if (++N > MaxDrawn) break;
-		Draw(C, PreviewColour, 0.02);
+		DrawCell(C, PreviewColour, 0.02);
 	}
 }
 

@@ -18,13 +18,18 @@
 
 #include "CoreMinimal.h"
 #include "Tools/UEdMode.h"
+#include "Tools/LegacyEdModeInterfaces.h"
 #include "MBCore/MBTools.h"
 #include "MarchingBlocksEdMode.generated.h"
 
 class AMarchingBlocksWorld;
 
+// ⚠ THE VIEWPORT AND DRAW INTERFACES ARE INHERITED EXPLICITLY. Measured on Unreal 5.8: UEdMode itself no
+// longer declares InputKey, MouseMove or Render — the mode manager casts every mode to
+// ILegacyEdModeViewportInterface (mouse, keys) and ILegacyEdModeDrawHelperInterface (Draw) instead.
 UCLASS()
-class UMarchingBlocksEdMode : public UEdMode
+class UMarchingBlocksEdMode : public UEdMode, public ILegacyEdModeViewportInterface,
+	public ILegacyEdModeDrawHelperInterface
 {
 	GENERATED_BODY()
 
@@ -38,7 +43,7 @@ public:
 	virtual bool InputKey(FEditorViewportClient* ViewportClient, FViewport* Viewport, FKey Key, EInputEvent Event) override;
 	virtual bool MouseMove(FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 X, int32 Y) override;
 	virtual bool CapturedMouseMove(FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 X, int32 Y) override;
-	virtual void Render(const FSceneView* View, FViewport* Viewport, FPrimitiveDrawInterface* PDI) override;
+	virtual void Draw(const FSceneView* View, FPrimitiveDrawInterface* PDI) override;
 	virtual bool IsSelectionAllowed(AActor* InActor, bool bInSelection) const override { return true; }
 
 private:

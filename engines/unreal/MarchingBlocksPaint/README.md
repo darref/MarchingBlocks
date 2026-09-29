@@ -3,15 +3,15 @@
 Free, open plugin that paints worlds with **MarchingBlocks tilesets** (the `.mbset` folders made by the
 MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 
-> **Status: beta, not yet compiled inside Unreal.** The placement rule, the editing tools and the frame
-> maths (`Source/MarchingBlocksPaint/.../MBCore`) are standard C++, and are proven outside Unreal against
-> the same reference cases as the Godot and Unity plugins (`../core-runner`). The Unreal-facing layer —
-> the actor and the editor mode — has not been built in Unreal yet.
+> **Status: beta.** Built with Unreal 5.8.3 (Win64, editor and game modules). Older versions are not
+> verified. The placement rule, the editing tools and the frame maths (`Source/MarchingBlocksPaint/.../MBCore`)
+> are standard C++, proven outside Unreal against the same reference cases as the Godot and Unity plugins
+> (`../core-runner`). The editor mode compiles but has not yet been driven by hand in the level viewport.
 
 ## Install
 
 1. Copy this `MarchingBlocksPaint` folder into your project's `Plugins/` and restart the editor
-   (it compiles on first launch). Unreal 5.3 or newer.
+   (it compiles on first launch). Built with Unreal 5.8; older versions are not verified.
 2. Import `tiles.glb` from your `.mbset` folder into a content folder, **one Static Mesh per mesh**
    (Combine Meshes OFF). Keep `tileset.json` next to it on disk.
 

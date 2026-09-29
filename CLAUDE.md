@@ -660,10 +660,20 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
     `UInstancedStaticMeshComponent` par tuile, transitoires), réglages et opérations de sélection en
     `UPROPERTY` et boutons `CallInEditor` du panneau Details — donc AUCUN Slate à écrire ; et le mode
     `UMarchingBlocksEdMode` (un `UEdMode` : viser, glisser, aperçu, une transaction par coup).
-    ⚠ **CETTE COUCHE N'A JAMAIS ÉTÉ COMPILÉE.** Le 29 septembre 2026, le PC porte Unreal 5.8.3
-    (`D:/UE_5.8`) et les Build Tools de Visual Studio 2022 : `RunUAT BuildPlugin` s'arrête AVANT le
-    greffon, « Could not find NetFxSDK install dir » — il manque le .NET Framework SDK (4.6 ou plus), un
-    composant des Build Tools. Pas installé sans l'accord de Jordan. Elle est
+    **MESURÉ — ELLE COMPILE, SUR UNREAL 5.8.3 (29 septembre 2026)** : `RunUAT BuildPlugin -TargetPlatforms=Win64`
+    sur le PC (`D:/UE_5.8`, Build Tools de Visual Studio 2022), **BUILD SUCCESSFUL, aucun avertissement**,
+    les deux modules. Il a fallu, dans l'ordre où ils sont apparus :
+    - le **.NET Framework 4.8 SDK** dans les Build Tools (installé avec l'accord de Jordan) — sans lui,
+      Unreal Build Tool s'arrête AVANT le greffon (« Could not find NetFxSDK install dir ») ;
+    - ⚠ **`UEdMode` NE DÉCLARE PLUS `InputKey`, `MouseMove`, `Render` EN 5.8** : le gestionnaire de modes
+      caste chaque mode vers `ILegacyEdModeViewportInterface` (souris, touches) et
+      `ILegacyEdModeDrawHelperInterface` (`Draw`) — lu dans `EditorModeManager.cpp`. Le mode en hérite ;
+    - ⚠ **LES OUTILS DU CŒUR N'ÉTAIENT PAS EXPORTÉS** : le module éditeur ne se liait pas (six
+      `LNK2019`). `MARCHINGBLOCKSPAINT_API` devant `MBPaint::Tools`, défini à vide hors d'Unreal —
+      `core-runner` compile et passe toujours.
+    ⚠ **CE QUI N'EST PAS ÉPROUVÉ** : le mode dans l'éditeur (viser, peindre, Ctrl+Z), l'import de
+    `tiles.glb`, un jeu empaqueté ; et les versions antérieures à 5.8 — l'héritage explicite pourrait y
+    doubler une base. Le README dit « 5.8, antérieures non vérifiées ». Elle a été
     écrite pour Unreal 5.3+ en évitant ce qu'on sait piéger (masquage C4456–C4459, macros `check`,
     `verify`, `IN`, `OUT`, fonctions `static` homonymes fusionnées par les « unity builds », `FChange` et
     `FJsonValue` qui existent aussi dans Unreal — tout est qualifié `MBPaint::`). Son README le dit.
@@ -677,8 +687,8 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
 - **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
   option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
-  un GameObject par tuile : à mesurer sur une vraie carte) ; **compiler le greffon Unreal** (il manque le
-  .NET Framework SDK aux Build Tools du PC, voir plus haut).
+  un GameObject par tuile : à mesurer sur une vraie carte) ; **éprouver le greffon Unreal dans l'éditeur** (il compile
+  sur 5.8, voir plus haut).
 
 ### LE FAUX TRAVAIL D'ARTISTE — MESURÉ (29 septembre 2026)
 
