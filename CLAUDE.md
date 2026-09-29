@@ -998,6 +998,18 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     ⚠ **Une mutation reste MUETTE, et c'est un trou** : sans `backface_collision`, rien ne rougit — on
     ne l'a éprouvé que sur un sol vu d'en haut. Les faces vues de dos (coupes ouvertes, dessous d'un
     surplomb) n'ont aucune garde.
+  - **LE BRAS-RESSORT ET LE CLIC GAUCHE — DEMANDÉS PAR JORDAN (29 septembre 2026).** Clic gauche glissé :
+    la caméra tourne en lacet ET en hauteur (le clic droit reste en lacet seul). La caméra est tenue par
+    un bras-ressort : une SPHÈRE (rayon du plan proche) lancée du personnage vers l'œil contre le décor —
+    un rayon ne voyait que l'axe, et le plan proche, qui a une largeur, traversait la paroi. Elle rentre
+    sans délai et ressort en douceur.
+    ⚠ **LE RAYON DE CAMÉRA D'AVANT N'AVAIT JAMAIS TOURNÉ** : `SubViewport.world_3d` est NUL quand la vue a
+    son propre monde (`own_world_3d`) ; c'est `find_world_3d()` qui le rend. Et la fumée n'en disait rien.
+    ⚠ **UNE ERREUR D'EXÉCUTION ABANDONNE LA FONCTION EN SILENCE** : la fumée a conclu « OK » avec cinq
+    vérifications de moins. Une SENTINELLE exige désormais que le Play test aille jusqu'au bout.
+    ⚠ **« L'ŒIL RESTE AU-DESSUS DU SOL » ÉTAIT UN MAUVAIS CRITÈRE** : près du bord, l'œil passe légitimement
+    sous le plateau en le contournant. La garde vérifie qu'il n'y a RIEN entre le personnage et l'œil, ni
+    autour de l'œil. Mutations rouges : bras ôté, retour de `world_3d`, clic gauche ignoré.
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
@@ -1108,13 +1120,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 879 vérifications, 0 échec** (29 septembre 2026, recomptées après l'export du monde
+  Douze suites, **7 882 vérifications, 0 échec** (29 septembre 2026, recomptées après le bras-ressort — seule `fumee_appli` a changé —, puis l'export du monde
   peint vers les trois greffons), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 95, `test_greffon_peinture` 117, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 98, `test_greffon_peinture` 117, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

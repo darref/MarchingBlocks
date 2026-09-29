@@ -21,6 +21,9 @@ const JETABLE := "user://fumee/fumee.mbproj"
 var _ok := 0
 var _echecs := 0
 var _reglages_avant := ""
+## ⚠ LA SENTINELLE : une erreur d'exécution ABANDONNE la fonction en cours sans rien dire, et la fumée
+## concluait « OK » avec cinq vérifications de moins (vu le 29 septembre 2026, `world_3d` nul).
+var _play_test_fini := false
 
 
 func _initialize() -> void:
@@ -339,6 +342,7 @@ func _mener() -> void:
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
 	await _play_test(ed)
+	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
 
 	ed.queue_free()
 	await process_frame
@@ -403,6 +407,33 @@ func _play_test(ed: Control) -> void:
 	glisse.relative = Vector2(80, 0)
 	ed._vue._gui_input(glisse)
 	_vrai(not is_equal_approx(ed._vue._azimut, az), "clic droit glissé : la caméra tourne autour de lui")
+	# Clic GAUCHE glissé : lacet ET hauteur.
+	var el: float = ed._vue._elevation
+	var gauche := InputEventMouseMotion.new()
+	gauche.button_mask = MOUSE_BUTTON_MASK_LEFT
+	gauche.relative = Vector2(40, 30)
+	ed._vue._gui_input(gauche)
+	_vrai(ed._vue._elevation > el, "clic gauche glissé : la caméra monte autour de lui")
+	# LE BRAS-RESSORT : une vue voulue À TRAVERS le sol. ⚠ « l'œil reste au-dessus du sol » était un mauvais
+	# critère — près du bord du plateau, l'œil passe légitimement SOUS lui en le contournant (vu : 10,17).
+	# La propriété, c'est : RIEN du décor entre le personnage et l'œil, ni autour de l'œil.
+	ed._vue._elevation = -1.2
+	ed._vue._distance = 8.0
+	for i in 5:
+		await process_frame
+	var oeil: Vector3 = ed._vue._camera.global_position
+	var espace: PhysicsDirectSpaceState3D = ed._vue._vue.find_world_3d().direct_space_state
+	var traverse := espace.intersect_ray(PhysicsRayQueryParameters3D.create(ed._vue._cible, oeil, 2))
+	var boule := PhysicsShapeQueryParameters3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.15
+	boule.shape = sphere
+	boule.transform = Transform3D(Basis(), oeil)
+	boule.collision_mask = 2
+	_vrai(traverse.is_empty() and espace.intersect_shape(boule, 1).is_empty(),
+		"bras-ressort : rien du décor entre lui et l'œil, ni autour de l'œil (œil en %s)" % oeil)
+	ed._vue._elevation = 0.38
+	ed._vue._distance = 4.0
 	var d: float = ed._vue._distance
 	var molette := InputEventMouseButton.new()
 	molette.button_index = MOUSE_BUTTON_WHEEL_UP
@@ -419,6 +450,7 @@ func _play_test(ed: Control) -> void:
 	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._vue._decor == null,
 		"Échap rend World, sans personnage ni décor")
 	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
+	_play_test_fini = true
 
 
 func _tenir(touche: Key, appuyee: bool) -> void:

@@ -165,7 +165,7 @@ func _demarrer() -> String:
 		+ "[b]Import the work…[/b] to see it as the slicer will read it, and [b]Slice the work[/b] to "
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
 	l.append("Then open [b]Play test[/b] and walk it: " + _touche("Z Q S D") + " to move, "
-		+ _touche("Space") + " to jump, " + _touche("Shift") + " to run, right drag to turn the camera, "
+		+ _touche("Space") + " to jump, " + _touche("Shift") + " to run, left drag to orbit the camera (right drag turns it level), "
 		+ "the wheel to come closer. You walk on the tiles you see — a step too high or a tunnel too "
 		+ "low shows here first. " + _touche("Esc") + " brings you back.")
 	l.append(_note("A red cube is a tile your library does not have. Nothing is ever filled in for you: "

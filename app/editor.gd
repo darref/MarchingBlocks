@@ -55,7 +55,7 @@ const CONSEILS: Array[String] = [
 	"One witness block carries every tile. Sculpt it, bring it back, paint with it.",
 	"The witness is proven complete: not one tile missing, not one extra.",
 	"World: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
-	"Play test: walk your world. Z Q S D to move, Space to jump, Shift to run, right drag to turn the camera.",
+	"Play test: walk your world. Z Q S D to move, Space to jump, Shift to run, left drag to orbit the camera.",
 	"Tab switches Grid (paint on the floor plane) and Sculpt (paint against the matter).",
 	"Space turns Navigate on and off: A Z E Q S D to fly (Q W E A S D on QWERTY), right drag to look.",
 	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
@@ -570,7 +570,7 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	commandes.add_theme_constant_override("h_separation", 10)
 	commandes.add_theme_constant_override("v_separation", 4)
 	for r in [["ZQSD", "Move (WASD on QWERTY)"], ["Space", "Jump"], ["Shift", "Run"],
-			["Right drag", "Turn the camera"], ["Wheel", "Closer · farther"], ["Backspace", "Back to start"],
+			["Left drag", "Orbit the camera"], ["Right drag", "Turn (level)"], ["Wheel", "Closer · farther"], ["Backspace", "Back to start"],
 			["Esc", "Back to World"]]:
 		commandes.add_child(_touche_clavier(r[0]))
 		commandes.add_child(_texte(r[1], 11, Palette.GRIS))

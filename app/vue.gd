@@ -112,6 +112,8 @@ var _depart := Vector3.ZERO
 var _plus_bas := 0.0
 ## L'orbite d'avant le Play test, rendue à la sortie : on retrouve le monde tel qu'on l'avait laissé.
 var _orbite_d_avant: Array = []
+## La longueur actuelle du bras-ressort (≤ `_distance`).
+var _bras := 0.0
 
 
 func _ready() -> void:
@@ -863,6 +865,11 @@ func _placer_grille() -> void:
 
 const CAMERA_DISTANCE := 4.0
 const CAMERA_ELEVATION := 0.38
+## La sphère du bras-ressort : un peu plus que le demi-plan proche de la caméra (0,05 à 45°).
+const RAYON_DU_BRAS := 0.2
+## Au clic gauche glissé, la hauteur de vue reste entre ces bornes : sous le sol, on ne voit rien.
+const ELEVATION_MINI := -0.35
+const ELEVATION_MAXI := 1.35
 const CAMERA_HAUTEUR := 0.6
 ## Sous le point le plus bas du monde, de tant de cases : on est tombé, on repart du départ.
 const CHUTE := 25.0
@@ -1001,25 +1008,46 @@ func _mener_le_jeu() -> void:
 	_suivre(get_process_delta_time())
 
 
-## LA CAMÉRA À LA TROISIÈME PERSONNE : elle suit le personnage, à hauteur fixe. ⚠ Elle se RAPPROCHE
-## quand une paroi s'interpose (un rayon du personnage vers l'œil, contre le décor) : sans ça, dans un
-## tunnel, on ne verrait que de la roche.
+## LA CAMÉRA À LA TROISIÈME PERSONNE, TENUE PAR UN BRAS-RESSORT — DEMANDÉ PAR JORDAN (29 septembre 2026) :
+## « une collision avec un spring arm pour que ça ne passe jamais à travers le décor ».
+##
+## ⚠ **UNE SPHÈRE, PAS UN RAYON.** Le rayon d'avant ne voyait que l'axe : l'œil s'arrêtait juste devant
+## la paroi, mais le plan proche de la caméra, lui, a une largeur — il la traversait, et l'on voyait
+## l'intérieur de la roche. On lance une SPHÈRE du rayon du plan proche (`RAYON_DU_BRAS`), du personnage
+## vers l'œil, contre le décor ; la caméra se pose là où la sphère a dû s'arrêter.
+## ⚠ **RENTRER TOUT DE SUITE, RESSORTIR EN DOUCEUR** : le ressort. Rentrer en retard, c'est passer une
+## image à travers la paroi ; ressortir d'un coup, c'est un saut de caméra à chaque pilier franchi.
 func _suivre(dt: float) -> void:
 	var vers := personnage.global_position + Vector3.UP * CAMERA_HAUTEUR
 	_cible = vers if dt <= 0.0 else _cible.lerp(vers, minf(1.0, 18.0 * dt))
 	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
-	var distance := _distance
-	var espace := _vue.world_3d.direct_space_state if _vue.world_3d != null else null
+	var libre := _distance
+	# ⚠ `find_world_3d()`, PAS `world_3d` : sur un SubViewport qui a son propre monde, `world_3d` est NUL.
+	# Le rayon de caméra d'avant ne tournait donc JAMAIS — et rien ne le disait.
+	var monde_3d := _vue.find_world_3d()
+	var espace := monde_3d.direct_space_state if monde_3d != null else null
 	if espace != null:
-		var q := PhysicsRayQueryParameters3D.create(_cible, _cible + direction * _distance, 2)
-		var r := espace.intersect_ray(q)
+		var q := PhysicsShapeQueryParameters3D.new()
+		var sphere := SphereShape3D.new()
+		sphere.radius = RAYON_DU_BRAS
+		q.shape = sphere
+		q.transform = Transform3D(Basis(), _cible)
+		q.motion = direction * _distance
+		q.collision_mask = 2
+		var r := espace.cast_motion(q)
 		if not r.is_empty():
-			distance = maxf(0.4, _cible.distance_to(r["position"]) - 0.2)
-	_camera.look_at_from_position(_cible + direction * distance, _cible, Vector3.UP)
+			libre = _distance * r[0]
+	# Le ressort : rentrer sans délai, ressortir en douceur.
+	if dt <= 0.0 or libre < _bras:
+		_bras = libre
+	else:
+		_bras = minf(libre, lerpf(_bras, libre, minf(1.0, 6.0 * dt)))
+	_camera.look_at_from_position(_cible + direction * _bras, _cible, Vector3.UP)
 
 
-## Clic droit glissé : la caméra tourne autour du personnage, en LACET seulement (Jordan). Molette :
-## plus près, plus loin. Aucun clic ne peint.
+## Clic droit glissé : la caméra tourne autour du personnage, en LACET seulement (Jordan). Clic GAUCHE
+## glissé (Jordan, 29 septembre 2026) : en lacet ET en hauteur. Molette : plus près, plus loin. Aucun clic
+## ne peint.
 func _souris_du_jeu(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
@@ -1032,5 +1060,8 @@ func _souris_du_jeu(event: InputEvent) -> void:
 			grab_focus()
 	elif event is InputEventMouseMotion:
 		var m := event as InputEventMouseMotion
-		if (m.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
+		if (m.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_azimut -= m.relative.x * 0.008
+			_elevation = clampf(_elevation + m.relative.y * 0.006, ELEVATION_MINI, ELEVATION_MAXI)
+		elif (m.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
 			_azimut -= m.relative.x * 0.008
