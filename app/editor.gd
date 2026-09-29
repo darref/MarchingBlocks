@@ -42,6 +42,8 @@ const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
 const Icones := preload("res://app/icones.gd")
 const Manuel := preload("res://app/manuel.gd")
+const Modeleur := preload("res://app/modeleur.gd")
+const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
@@ -72,6 +74,14 @@ const CONSEILS: Array[String] = [
 var _vue: Vue
 var _gauche: Panneau
 var _droite: Panneau
+## LA BARRE DU MODELEUR — la barre de droite de l'atelier Witness (Jordan, 29 septembre 2026).
+var _droite_temoin: Panneau
+var _modeleur: Node3D
+var _bouton_edition: Button
+var _boutons_selmode := {}
+var _bouton_prop: Button
+## L'enregistrement du témoin modélisé attend une seconde de calme : un geste = un fichier réécrit, pas dix.
+var _minuterie_temoin: Timer
 var _attente: PanelContainer
 var _attente_titre: Label
 var _attente_note: Label
@@ -256,6 +266,17 @@ func _batir() -> void:
 	_batir_rapport(_gauche.get_meta("pied"))
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
+	_modeleur = Modeleur.new()
+	_vue.brancher_modeleur(_modeleur)
+	_modeleur.change.connect(_geste_du_modeleur)
+	_modeleur.dit.connect(_dire)
+	_droite_temoin = _panneau(corps, false, LARGEUR_DROITE)
+	_batir_droite_temoin(_droite_temoin.get_meta("pile"))
+	_minuterie_temoin = Timer.new()
+	_minuterie_temoin.one_shot = true
+	_minuterie_temoin.wait_time = 1.0
+	_minuterie_temoin.timeout.connect(_enregistrer_le_temoin_modele)
+	add_child(_minuterie_temoin)
 	_batir_attente(corps)
 
 	_manuel = Manuel.new()
@@ -1076,6 +1097,7 @@ func _aller_a(atelier: String) -> void:
 ##   Witness (réf.)        ✓        ✓                  (sa légende nomme les teintes du TÉMOIN)
 ##   Shortcuts (réf.)                        ✓         (ce ne sont que des gestes de peinture)
 ##   barre de droite                         ✓         (elle ne porte que des outils de peinture)
+##   barre du modeleur            ✓                    (les outils de modélisation du témoin)
 ##
 ## ⚠ LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN : ses sections se cachaient, le panneau
 ## restait, et mangeait un quart de la vue sur le bloc qu'on veut justement regarder.
@@ -1098,6 +1120,7 @@ func _contexte() -> void:
 	_section_raccourcis.visible = monde
 	_zone_reference.visible = temoin or monde or projet
 	_droite.visible = monde
+	_droite_temoin.visible = temoin
 	_contexte_des_outils()
 
 
@@ -1111,6 +1134,206 @@ func _contexte_des_outils() -> void:
 	_ligne_taille.visible = pinceau
 	_ligne_forme.visible = pinceau
 	_creux.visible = _vue.outil == "boite"
+
+
+# ── LE MODELEUR DU TÉMOIN ────────────────────────────────────────────────────────────────────────────
+#
+# **DÉCIDÉ (Jordan, 29 septembre 2026)** : le modeleur remplace Blender. Palier 1, l'édition de maillage :
+# les gestes et les raccourcis de Blender (`modeleur.gd`), sur un maillage de polygones
+# (`maillage_edite.gd`). Tab entre et sort de l'édition, comme dans Blender.
+#
+# ⚠ **LE TÉMOIN MODÉLISÉ PREND LA ROUTE DES TRAVAUX, ET AUCUNE AUTRE** : il s'enregistre en `.glb` à côté du
+# projet et entre dans la liste de l'étape 2, où l'on le tranche comme un travail importé. Une seconde
+# route de tranchage finirait par trancher autrement (charte §6).
+
+func _batir_droite_temoin(pile: VBoxContainer) -> void:
+	var mode := Section.new("Edit mode", true, Icones.icone("cube"))
+	pile.add_child(mode)
+	_bouton_edition = Button.new()
+	_bouton_edition.text = "Edit the witness  ·  Tab"
+	_bouton_edition.icon = Icones.icone("outils")
+	_bouton_edition.toggle_mode = true
+	_bouton_edition.focus_mode = Control.FOCUS_NONE
+	_bouton_edition.custom_minimum_size = Vector2(0, 34)
+	_bouton_edition.tooltip_text = ("Tab — edit the witness mesh, the way you would in Blender.\nTab again "
+		+ "looks at it without editing.")
+	_bouton_edition.toggled.connect(func(v: bool) -> void: _regler_edition(v))
+	mode.contenu.add_child(_bouton_edition)
+	mode.contenu.add_child(_petit_titre("SELECT  ·  1 2 3"))
+	mode.contenu.add_child(_rangee_de_choix(_boutons_selmode, [
+		["sommet", "Vertex", "ajouter", "1 — select vertices."],
+		["arete", "Edge", "rect", "2 — select edges."],
+		["face", "Face", "boite", "3 — select faces."],
+	], func(m: String) -> void:
+		_regler_edition(true)
+		_modeleur.choisir_mode(m), Palette.OUTIL))
+	(_boutons_selmode["face"] as Button).button_pressed = true
+
+	var sel := Section.new("Select", true, Icones.icone("selectionner"))
+	pile.add_child(sel)
+	sel.contenu.add_child(_texte("Click selects what you SEE · Shift+click adds or removes · Alt+click "
+		+ "selects a loop (a ring of faces in Face mode).", 11, Palette.GRIS))
+	sel.contenu.add_child(_grille([
+		_bouton("All  ·  A", "A — select everything.", func() -> void: _geste_modeleur("tout"), "grandir"),
+		_bouton("None  ·  Alt+A", "Alt+A — select nothing.", func() -> void: _geste_modeleur("rien"), "croix"),
+		_bouton("Box  ·  B", "B, then drag a rectangle. It also takes what is hidden behind.",
+			func() -> void: _geste_modeleur("B"), "boite"),
+	], 2))
+
+	var tr := Section.new("Transform", true, Icones.icone("deplacer"))
+	pile.add_child(tr)
+	tr.contenu.add_child(_texte("Move the mouse, then click or Enter to confirm, Esc or right click to cancel. "
+		+ "X Y Z lock an axis (Z is UP, as in Blender). Type a number for an exact value.", 11, Palette.GRIS))
+	tr.contenu.add_child(_grille([
+		_bouton("Move  ·  G", "G — move the selection.", func() -> void: _geste_modeleur("G"), "deplacer"),
+		_bouton("Rotate  ·  R", "R — rotate it around its center. Typed values are degrees.",
+			func() -> void: _geste_modeleur("R"), "connexe"),
+		_bouton("Scale  ·  S", "S — scale it from its center.", func() -> void: _geste_modeleur("S"), "grandir"),
+	], 2))
+	_bouton_prop = Button.new()
+	_bouton_prop.text = "Proportional editing  ·  O"
+	_bouton_prop.toggle_mode = true
+	_bouton_prop.focus_mode = Control.FOCUS_NONE
+	_bouton_prop.tooltip_text = ("O — nearby vertices follow part of the way, softly. The wheel changes the "
+		+ "radius during a move.")
+	_bouton_prop.toggled.connect(func(v: bool) -> void: _modeleur.proportionnel = v)
+	tr.contenu.add_child(_bouton_prop)
+
+	var mesh := Section.new("Mesh", true, Icones.icone("couteau"))
+	pile.add_child(mesh)
+	mesh.contenu.add_child(_grille([
+		_bouton("Extrude  ·  E", "E — pull the selected faces (or edges) out; they follow the mouse.",
+			func() -> void: _geste_modeleur("E"), "extruder_haut"),
+		_bouton("Inset  ·  I", "I — a smaller copy of the selected faces inside them.",
+			func() -> void: _geste_modeleur("I"), "evider"),
+		_bouton("Loop cut  ·  Ctrl+R", "Ctrl+R — point an edge: its ring lights up; click to cut it in the middle.",
+			func() -> void: _geste_modeleur("loop"), "couteau"),
+		_bouton("Subdivide", "Splits each selected face into quads. Neighbours get the new points too: no gap.",
+			func() -> void: _geste_modeleur("subdiviser"), "grandir"),
+		_bouton("Merge  ·  M", "M — merge the selected vertices at their center.",
+			func() -> void: _geste_modeleur("fusionner"), "retrecir"),
+		_bouton("Fill  ·  F", "F — make a face on the selected vertices (a hole's rim).",
+			func() -> void: _geste_modeleur("remplir"), "remplir"),
+		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: F closes it.",
+			func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
+	], 2))
+
+	var vue := Section.new("View", true, Icones.icone("oeil"))
+	pile.add_child(vue)
+	vue.contenu.add_child(_texte("Middle drag turns, Shift + middle slides, the wheel zooms.", 11, Palette.GRIS))
+	vue.contenu.add_child(_grille([
+		_bouton("Front  ·  1", "Numpad 1 (Ctrl: back).", func() -> void: _vue.vue_de("face")),
+		_bouton("Right  ·  3", "Numpad 3 (Ctrl: left).", func() -> void: _vue.vue_de("droite")),
+		_bouton("Top  ·  7", "Numpad 7 (Ctrl: bottom).", func() -> void: _vue.vue_de("dessus")),
+		_bouton("Frame  ·  .", "Numpad . — center the view on the selection.", _cadrer_la_selection),
+		_bouton("Ortho  ·  5", "Numpad 5 — perspective or orthographic.",
+			func() -> void: _dire("[i]%s view.[/i]" % ("Orthographic" if _vue.basculer_ortho() else "Perspective"))),
+	], 2))
+
+	var tem := Section.new("The modelled witness", true, Icones.icone("enregistrer"))
+	pile.add_child(tem)
+	tem.contenu.add_child(_texte("It saves itself next to the project, and joins the works of step 2 "
+		+ "(Project): slice it there, like an imported work.", 11, Palette.GRIS))
+	tem.contenu.add_child(_bouton("Reset to the computed witness",
+		"Starts again from the computed witness (Ctrl+Z brings your model back).", _remettre_le_temoin,
+		"gomme", Palette.DANGER))
+
+
+## Entre ou sort de l'édition. La première fois, le maillage se charge : le témoin modélisé enregistré
+## s'il existe, sinon le témoin calculé.
+func _regler_edition(oui: bool) -> void:
+	if oui and _modeleur.maillage == null:
+		var chemin := _chemin_temoin_modele()
+		var m: RefCounted = null
+		if FileAccess.file_exists(chemin):
+			var lu: ArrayMesh = BM.travail_depuis_glb(chemin)
+			if lu != null:
+				m = ME.depuis(lu)
+		if m == null:
+			m = ME.depuis(BM.maillage_moitie(0))
+		_modeleur.charger(m)
+	_vue.regler_edition(oui)
+	_bouton_edition.set_pressed_no_signal(oui)
+	if oui:
+		_dire("[b]Edit mode[/b] — %d faces. 1 2 3 pick vertices, edges or faces; G R S E I, Ctrl+R, X M F "
+			% _modeleur.maillage.faces.size() + "work as in Blender. [i]Tab to stop editing.[/i]")
+
+
+func _geste_modeleur(nom: String) -> void:
+	_regler_edition(true)
+	match nom:
+		"tout":
+			_modeleur.tout_choisir(true)
+		"rien":
+			_modeleur.tout_choisir(false)
+		"B":
+			_modeleur.modal = "B"
+			_dire("[b]Box select[/b] — drag a rectangle. Esc cancels.")
+		"loop":
+			_modeleur.commencer_boucle()
+		"G", "R", "S", "E", "I":
+			_modeleur.commencer(nom)
+		_:
+			_modeleur.operer(nom)
+
+
+func _cadrer_la_selection() -> void:
+	var c = _modeleur.centre_de_la_selection() if _modeleur.maillage != null else null
+	if c == null:
+		_dire("[i]Nothing selected to frame.[/i]")
+		return
+	_vue.cadrer(c)
+
+
+## Chaque geste fini du modeleur : UNE action d'annulation, et le fichier réécrit une seconde plus tard.
+func _geste_du_modeleur(avant: RefCounted, apres: RefCounted, nom: String) -> void:
+	_histoire.create_action("Witness: " + nom)
+	_histoire.add_do_method(_modeleur.remplacer.bind(apres))
+	_histoire.add_do_method(_temoin_modifie)
+	_histoire.add_undo_method(_modeleur.remplacer.bind(avant))
+	_histoire.add_undo_method(_temoin_modifie)
+	_histoire.commit_action(false)
+	_temoin_modifie()
+
+
+func _temoin_modifie() -> void:
+	_minuterie_temoin.start()
+
+
+func _remettre_le_temoin() -> void:
+	_regler_edition(true)
+	_geste_du_modeleur(_modeleur.maillage.copie(), ME.depuis(BM.maillage_moitie(0)), "Reset")
+	_modeleur.remplacer(ME.depuis(BM.maillage_moitie(0)))
+
+
+func _chemin_temoin_modele() -> String:
+	if _projet != "":
+		return _projet.get_basename() + "_witness.glb"
+	return "user://witness_model.glb"
+
+
+## Écrit le témoin modélisé, et le range dans la liste des travaux (étape 2) — remplacé, jamais doublé.
+func _enregistrer_le_temoin_modele() -> String:
+	if _modeleur.maillage == null:
+		return ""
+	var chemin := _chemin_temoin_modele()
+	var raison: String = _modeleur.vers_glb(chemin)
+	if raison != "":
+		_dire("[color=#e0603c]The modelled witness could not be saved:[/color] %s" % raison)
+		return raison
+	var maillage: ArrayMesh = _modeleur.maillage.vers_array_mesh(false)
+	var deja := -1
+	for i in _travaux.size():
+		if String(_travaux[i]["chemin"]) == chemin:
+			deja = i
+	if deja >= 0:
+		_travaux[deja]["maillage"] = maillage
+	else:
+		_travaux.append({"chemin": chemin, "maillage": maillage})
+		if _travail_actif < 0:
+			_travail_actif = _travaux.size() - 1
+	_redire_les_travaux()
+	return ""
 
 
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
@@ -2116,6 +2339,9 @@ func _input(event: InputEvent) -> void:
 		return
 	if _manuel != null and _manuel.visible:
 		return
+	if k != null and k.pressed and _atelier == "witness" and _touche_du_temoin(k):
+		get_viewport().set_input_as_handled()
+		return
 	if k == null or not k.pressed or _atelier != "monde" or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
@@ -2138,6 +2364,46 @@ func _input(event: InputEvent) -> void:
 	else:
 		return
 	get_viewport().set_input_as_handled()
+
+
+## LES TOUCHES DE L'ATELIER WITNESS — lues dans `_input`, AVANT l'interface : Tab, Entrée, Espace et les
+## chiffres y sont des gestes, pas du déplacement de focus. ⚠ Ctrl+Z / Ctrl+Y n'y sont PAS pris : ils
+## descendent à `_unhandled_key_input`, qui tient l'historique de toute l'appli.
+func _touche_du_temoin(k: InputEventKey) -> bool:
+	var focus := get_viewport().gui_get_focus_owner()
+	if focus is LineEdit or focus is TextEdit:
+		return false
+	if k.keycode == KEY_TAB and not k.echo and _modeleur.modal == "":
+		_regler_edition(not _vue.edition)
+		return true
+	# Les vues du pavé numérique, en édition comme hors édition (sauf pendant un geste : on tape un nombre).
+	if _modeleur.modal == "":
+		match k.keycode:
+			KEY_KP_1:
+				_vue.vue_de("face", k.ctrl_pressed)
+				return true
+			KEY_KP_3:
+				_vue.vue_de("droite", k.ctrl_pressed)
+				return true
+			KEY_KP_7:
+				_vue.vue_de("dessus", k.ctrl_pressed)
+				return true
+			KEY_KP_5:
+				_vue.basculer_ortho()
+				return true
+			KEY_KP_PERIOD:
+				_cadrer_la_selection()
+				return true
+	if not _vue.edition:
+		return false
+	if k.ctrl_pressed and k.keycode in [KEY_Z, KEY_Y]:
+		return false
+	var pris: bool = _modeleur.touche(k)
+	if pris:
+		_bouton_prop.set_pressed_no_signal(_modeleur.proportionnel)
+		for m in _boutons_selmode:
+			(_boutons_selmode[m] as Button).set_pressed_no_signal(m == _modeleur.mode_sel)
+	return pris
 
 
 func _dire(texte: String) -> void:

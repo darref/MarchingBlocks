@@ -41,6 +41,17 @@ func _initialize() -> void:
 
 
 func _mener() -> void:
+	# ⚠ L'ÉCRAN DOIT SE CHARGER, SINON RIEN NE COMPTE : un `editor.gd` qui ne compilait plus a laissé la fumée
+	# conclure « 98 vérifications, OK » (29 septembre 2026). On l'exige d'abord, et on s'arrête net sinon.
+	var script_ecran := load("res://app/editor.gd") as GDScript
+	if script_ecran == null or not script_ecran.can_instantiate():
+		_vrai(false, "app/editor.gd ne se CHARGE pas : rien d'autre n'est éprouvé")
+		_rendre_les_reglages()
+		print("
+%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
+		print("VERDICT : ÉCHEC")
+		quit(1)
+		return
 	var ed: Control = (load("res://app/editor.tscn") as PackedScene).instantiate()
 	root.add_child(ed)
 	for i in 10:
@@ -341,6 +352,7 @@ func _mener() -> void:
 		ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")),
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
+	await _le_modeleur(ed)
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
 
@@ -455,6 +467,109 @@ func _play_test(ed: Control) -> void:
 
 func _tenir(touche: Key, appuyee: bool) -> void:
 	_touche_physique(touche, appuyee)
+
+
+## LE MODELEUR DU TÉMOIN, mené au clavier et à la souris comme Blender : Tab, 3, un clic, E 1 Entrée,
+## Ctrl+Z / Ctrl+Y, G Z 2, X, Ctrl+R, et l'enregistrement qui le range parmi les travaux. Jugé sur des
+## positions et des comptes calculés ICI, à partir de ce que le clic a touché.
+func _le_modeleur(ed: Control) -> void:
+	const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+	ed._aller_a("witness")
+	# ⚠ UN TÉMOIN MODÉLISÉ LAISSÉ PAR UN PASSAGE PRÉCÉDENT fausserait tous les comptes : la minuterie
+	# d'enregistrement (une seconde après chaque geste) l'avait RÉÉCRIT après sa suppression — vu le 29
+	# septembre 2026, le passage suivant partait d'un témoin déjà coupé.
+	var reste: String = ProjectSettings.globalize_path(ed._chemin_temoin_modele())
+	if FileAccess.file_exists(reste):
+		DirAccess.remove_absolute(reste)
+	_vrai(ed._droite_temoin.visible and not ed._droite.visible, "Witness : la barre du MODELEUR, pas celle de la peinture")
+	ed._input(_cle(KEY_TAB))
+	var mo: Node3D = ed._modeleur
+	_vrai(ed._vue.edition and mo.maillage != null and mo.visible, "Tab entre en édition, le témoin est chargé")
+	if mo.maillage == null:
+		return
+	var f0: int = mo.maillage.faces.size()
+	ed._input(_cle(KEY_3))
+	_egal(mo.mode_sel, "face", "3 : mode face")
+	# ⚠ ON RECADRE : les essais de vol de Navigate ont emmené la caméra ailleurs. Vue de face, sur le bloc.
+	ed._vue._distance = 26.0
+	ed._vue.vue_de("face")
+	ed._vue.cadrer(Vector3(6, 6, 6))
+	# Le clic : au centre de la vue. On calcule ICI quelle face le rayon touche.
+	for i in 3:
+		await process_frame
+	var cam: Camera3D = ed._vue._camera
+	var centre_vue: Vector2 = ed._vue.size * 0.5
+	var hit: Dictionary = mo.maillage.lancer_rayon(cam.project_ray_origin(centre_vue), cam.project_ray_normal(centre_vue))
+	_vrai(not hit.is_empty(), "le centre de la vue tombe sur le témoin")
+	if hit.is_empty():
+		return
+	var f: int = hit["face"]
+	var clic := InputEventMouseButton.new()
+	clic.button_index = MOUSE_BUTTON_LEFT
+	clic.pressed = true
+	clic.position = centre_vue
+	ed._vue._gui_input(clic)
+	_egal(mo.sel_f, {f: true}, "un clic choisit la face VISIBLE sous la souris")
+	var c0: Vector3 = mo.maillage.centre(f)
+	var n0: Vector3 = mo.maillage.normale(f)
+	# E 1 Entrée : extruder d'une case le long de la normale.
+	for k in [KEY_E, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(mo.maillage.faces.size() > f0, "E : des faces de côté en plus (%d → %d)" % [f0, mo.maillage.faces.size()])
+	_vrai(mo.maillage.centre(f).is_equal_approx(c0 + n0), "E 1 Entrée : la face avance d'UNE case le long de sa normale")
+	var apres_e: int = mo.maillage.faces.size()
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.faces.size(), f0, "Ctrl+Z défait l'extrusion d'un coup")
+	_vrai(mo.maillage.centre(f).is_equal_approx(c0), "Ctrl+Z rend la face à sa place")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_egal(mo.maillage.faces.size(), apres_e, "Ctrl+Y la refait")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# G Z 2 Entrée : Z est le HAUT, comme dans Blender.
+	ed._vue._gui_input(clic)
+	for k in [KEY_G, KEY_Z, KEY_2, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(mo.maillage.centre(f).is_equal_approx(c0 + Vector3(0, 2, 0)), "G Z 2 : la face MONTE de deux cases (Z = haut)")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Échap annule un geste : rien ne change, rien ne s'inscrit.
+	ed._vue._gui_input(clic)
+	for k in [KEY_G, KEY_X, KEY_3]:
+		ed._input(_cle(k))
+	ed._input(_cle(KEY_ESCAPE))
+	_vrai(mo.maillage.centre(f).is_equal_approx(c0) and mo.modal == "", "Échap annule G : la face n'a pas bougé")
+	# X : supprimer la face ouvre un trou.
+	ed._input(_cle(KEY_X))
+	_egal(mo.maillage.faces.size(), f0 - 1, "X supprime la face choisie")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.faces.size(), f0, "et Ctrl+Z la rend")
+	# Ctrl+R : l'anneau sous la souris, coupé au clic.
+	mo.souris = centre_vue
+	ed._input(_cle(KEY_R, true))
+	_egal(mo.modal, "loop", "Ctrl+R vise un anneau")
+	ed._vue._gui_input(clic)
+	_vrai(mo.maillage.faces.size() > f0 and mo.modal == "", "le clic coupe l'anneau (%d faces, geste « %s »)" % [mo.maillage.faces.size(), mo.modal])
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# L'enregistrement : le fichier, relu, redonne le même maillage ; et il rejoint les travaux.
+	var raison: String = ed._enregistrer_le_temoin_modele()
+	var chemin: String = ed._chemin_temoin_modele()
+	_egal(raison, "", "le témoin modélisé s'enregistre")
+	var relu: ArrayMesh = BM.travail_depuis_glb(chemin)
+	_vrai(relu != null and ME.depuis(relu).faces.size() == mo.maillage.faces.size(),
+		"relu depuis son .glb, le témoin modélisé a le même nombre de faces")
+	_vrai(ed._travaux.any(func(t): return String(t["chemin"]) == chemin), "il rejoint les travaux de l'étape 2")
+	ed._minuterie_temoin.stop()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(chemin))
+	ed._input(_cle(KEY_TAB))
+	_vrai(not ed._vue.edition and not mo.visible, "Tab sort de l'édition")
+	ed._aller_a("monde")
+
+
+func _cle(k: Key, ctrl := false) -> InputEventKey:
+	var e := InputEventKey.new()
+	e.keycode = k
+	e.physical_keycode = k
+	e.pressed = true
+	e.ctrl_pressed = ctrl
+	return e
 
 
 func _touche_physique(touche: Key, appuyee: bool) -> void:

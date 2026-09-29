@@ -31,6 +31,8 @@ func _initialize() -> void:
 	if FileAccess.file_exists(REGLAGES):
 		_reglages_avant = FileAccess.get_file_as_string(REGLAGES)
 	DirAccess.make_dir_recursive_absolute("user://capture")
+	# Un témoin modélisé laissé par une capture précédente serait rechargé : on part du témoin calculé.
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://capture/capture_witness.glb"))
 	var f := FileAccess.open(JETABLE, FileAccess.WRITE)
 	f.store_string(Projet.vers_texte([Projet.couche("Rock")], 0))
 	f.close()
@@ -55,6 +57,41 @@ func _derouler() -> void:
 	await _images(10)
 	_photo("1b_plans_de_coupe")
 	_ecran._plans.button_pressed = false
+
+	# LE MODELEUR : édition, une face choisie au centre, extrudée d'une case.
+	var t0 := Time.get_ticks_msec()
+	_ecran._regler_edition(true)
+	print("entrée en édition : %d ms" % (Time.get_ticks_msec() - t0))
+	_ecran._vue._distance = 14.0
+	_ecran._vue.cadrer(Vector3(6, 8, 6))
+	await _images(5)
+	var mo = _ecran._modeleur
+	var centre_vue: Vector2 = _ecran._vue.size * 0.5
+	mo.cliquer(centre_vue, false)
+	await _images(5)
+	_photo("1c_modeleur_selection")
+	t0 = Time.get_ticks_msec()
+	mo.souris = centre_vue
+	mo.commencer("E")
+	mo._saisie = "1"
+	mo._mettre_a_jour()
+	mo.confirmer()
+	print("extruder et redessiner : %d ms" % (Time.get_ticks_msec() - t0))
+	await _images(5)
+	_photo("1d_modeleur_extrude")
+	# LE COÛT D'UN MOUVEMENT DE SOURIS PENDANT G : dix mises à jour.
+	mo.cliquer(centre_vue, false)
+	mo.commencer("G")
+	t0 = Time.get_ticks_msec()
+	for i in 10:
+		mo.souris = centre_vue + Vector2(i * 3, 0)
+		mo._mettre_a_jour()
+	print("G : %.1f ms par mouvement de souris" % ((Time.get_ticks_msec() - t0) / 10.0))
+	mo.annuler()
+	mo.choisir_mode("arete")
+	await _images(5)
+	_photo("1e_modeleur_aretes")
+	_ecran._regler_edition(false)
 
 	await _ecran._trancher_temoin()
 	_ecran._aller_a("monde")

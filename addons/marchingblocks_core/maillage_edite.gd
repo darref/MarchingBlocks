@@ -121,10 +121,16 @@ static func _recoller(s: PackedVector3Array, t1: PackedInt32Array, t2: PackedInt
 ## sa teinte. ⚠ Un quad se coupe en éventail ; au-delà, `Geometry2D.triangulate_polygon` sur la face
 ## projetée — un éventail sur une face concave déborderait de la face.
 func vers_array_mesh(avec_normales := true) -> ArrayMesh:
+	return vers_array_mesh_de(range(faces.size()), avec_normales)
+
+
+## La même chose pour une PARTIE des faces — ce qui bouge pendant un geste, redessiné seul (le reste est
+## dessiné une fois au début du geste : un G qui suit la souris ne peut pas rebâtir 15 000 faces par image).
+func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 	var pos := PackedVector3Array()
 	var nor := PackedVector3Array()
 	var col := PackedColorArray()
-	for f in faces.size():
+	for f in choix:
 		var face: PackedInt32Array = faces[f]
 		var n := normale(f)
 		for t in trianguler(f):
@@ -246,14 +252,16 @@ func lancer_rayon(origine: Vector3, direction: Vector3) -> Dictionary:
 ## ⚠ **L'ÉDITION PROPORTIONNELLE (O)** : avec `rayon > 0`, les sommets NON choisis à moins de `rayon` du
 ## plus proche sommet choisi suivent en partie, selon une retombée douce (3t² − 2t³, la « Smooth » de
 ## Blender). Les positions de départ sont celles d'AVANT le geste : l'écran rejoue depuis elles.
-func transformer(ids: Array, t: Transform3D, depart: PackedVector3Array, rayon := 0.0) -> void:
+## `candidats` (facultatif) : les seuls sommets qui PEUVENT suivre — l'écran les calcule une fois par geste,
+## pour ne pas mesurer chaque sommet du maillage contre chaque sommet choisi à chaque mouvement de souris.
+func transformer(ids: Array, t: Transform3D, depart: PackedVector3Array, rayon := 0.0, candidats: Array = []) -> void:
 	var choisis := {}
 	for i in ids:
 		choisis[i] = true
 		sommets[i] = t * depart[i]
 	if rayon <= 0.0:
 		return
-	for i in sommets.size():
+	for i in (candidats if not candidats.is_empty() else range(sommets.size())):
 		if choisis.has(i):
 			continue
 		var d := INF

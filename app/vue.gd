@@ -90,6 +90,10 @@ var collage: Array = []
 
 ## "temoin", "monde" ou "jeu".
 var mode := "temoin"
+## LE MODELEUR (`modeleur.gd`) : branché par l'écran. En mode témoin, `edition` le montre à la place du
+## témoin figé, et lui donne la souris (Tab, comme dans Blender).
+var modeleur: Node3D
+var edition := false
 var etage := 0
 
 var _coup := -1          # le bouton qui peint, -1 hors d'un coup
@@ -187,9 +191,23 @@ func _ready() -> void:
 
 # ── ce qu'on montre ──────────────────────────────────────────────────────────────────────────────────
 
+func brancher_modeleur(m: Node3D) -> void:
+	modeleur = m
+	_vue.add_child(m)
+	m.camera = _camera
+	m.visible = false
+
+
+func regler_edition(oui: bool) -> void:
+	edition = oui
+	montrer(mode)
+
+
 func montrer(quoi: String) -> void:
 	mode = quoi
-	_temoin.visible = quoi == "temoin"
+	_temoin.visible = quoi == "temoin" and not edition
+	if modeleur != null:
+		modeleur.visible = quoi == "temoin" and edition
 	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
 	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_grille.visible = quoi == "monde"
@@ -321,7 +339,42 @@ func regler_etage(y: int) -> void:
 
 # ── la caméra ────────────────────────────────────────────────────────────────────────────────────────
 
+## LES VUES DU PAVÉ NUMÉRIQUE, celles de Blender : 1 face, 3 droite, 7 dessus ; avec Ctrl, l'opposée.
+## ⚠ En axes de Blender : « face » regarde vers +Y de Blender, donc l'œil est du côté −Y de Blender, qui
+## est +Z de Godot.
+func vue_de(nom: String, opposee := false) -> void:
+	match nom:
+		"face":
+			_azimut = PI if opposee else 0.0
+			_elevation = 0.0
+		"droite":
+			_azimut = -PI / 2.0 if opposee else PI / 2.0
+			_elevation = 0.0
+		"dessus":
+			_azimut = 0.0
+			_elevation = -1.5 if opposee else 1.5
+	_caler()
+
+
+## 5 — perspective ou orthographique.
+func basculer_ortho() -> bool:
+	if _camera.projection == Camera3D.PROJECTION_PERSPECTIVE:
+		_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		_camera.size = _distance * 0.8
+	else:
+		_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+	return _camera.projection == Camera3D.PROJECTION_ORTHOGONAL
+
+
+## « . » du pavé — cadrer un point.
+func cadrer(centre: Vector3) -> void:
+	_cible = centre
+	_caler()
+
+
 func _caler() -> void:
+	if _camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		_camera.size = _distance * 0.8
 	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation),
 		cos(_elevation) * cos(_azimut))
 	_camera.look_at_from_position(_cible + direction * _distance, _cible, Vector3.UP)
@@ -393,13 +446,17 @@ func _gui_input(event: InputEvent) -> void:
 		_souris_du_jeu(event)
 		accept_event()
 		return
+	if mode == "temoin" and edition and modeleur != null and modeleur.souris_entree(event):
+		accept_event()
+		return
 	if naviguer and mode == "monde" and _naviguer(event):
 		accept_event()
 		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
 		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_distance = maxf(4.0, _distance / 1.12)
+			# Dans le témoin on modélise de PRÈS : une case entière doit pouvoir remplir l'écran.
+			_distance = maxf(1.0 if mode == "temoin" else 4.0, _distance / 1.12)
 			_caler()
 			accept_event()
 			return
@@ -425,7 +482,7 @@ func _gui_input(event: InputEvent) -> void:
 		# ⚠ Clic du milieu = tourner, Maj + milieu = glisser — les réflexes de Blender, puisque c'est
 		# de là que vient l'artiste. Dans le témoin, le clic gauche tourne aussi : il n'y a rien à peindre.
 		var tourne: bool = (m.button_mask & MOUSE_BUTTON_MASK_MIDDLE) != 0 \
-			or (mode == "temoin" and (m.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0)
+			or (mode == "temoin" and not edition and (m.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0)
 		if tourne and m.shift_pressed:
 			var droite: Vector3 = _camera.global_transform.basis.x
 			var haut: Vector3 = _camera.global_transform.basis.y

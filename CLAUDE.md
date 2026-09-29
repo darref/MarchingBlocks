@@ -905,6 +905,44 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   GPL. On reproduit le COMPORTEMENT (gestes, raccourcis, résultats) — libre —, avec des algorithmes
   écrits ici, et chaque geste gardé par un test.
 - **ORDRE (Jordan)** : l'export du monde d'abord, le modeleur ensuite.
+- **PALIER 1 — ÉCRIT (29 septembre 2026)** :
+  - **Le cœur, `addons/marchingblocks_core/maillage_edite.gd`** : des sommets, des faces à N côtés
+    trigonométriques vues de dehors (l'INVERSE de Godot : la conversion vit dans `depuis()` et
+    `vers_array_mesh()` seulement), une teinte par face, PAS d'arête libre. La lecture RECOLLE les quads
+    (toute paire de triangles coplanaires, convexe, qui partage une arête en sens opposés) : le témoin
+    revient en **15 560 quads, étanche et orienté**. Opérations : G R S (avec proportionnel), extrusion de
+    RÉGION et d'arêtes, inset à bissectrice, supprimer, fusionner, remplir orienté par ses voisines,
+    subdiviser sans fente en T, anneau et loop cut, boucle d'arêtes, rayon.
+    **`test_maillage_edite`, 77 vérifications**, jugées par des invariants qui ne passent pas par le
+    code (étanche, orienté, Euler, volume par la divergence, positions à la main). Huit mutations
+    rouges ; DEUX ONT D'ABORD ÉTÉ MUETTES, par un test trop étroit : F n'était essayé que dans un ordre
+    qui tombait juste, et l'anneau que sur un cube, où il se referme avant d'exercer son second sens.
+    ⚠ **TROIS DÉFAUTS ONT ÉTÉ TROUVÉS PAR CES TESTS** : le recollage ne reconnaissait qu'un motif (un cube
+    relu revenait en triangles), l'anneau prenait la mauvaise arête opposée (la coupe zigzaguait), et un
+    attendu de boucle était faux — la boucle d'une rangée intérieure traverse la rangée, comme Blender.
+  - **L'écran, `app/modeleur.gd`**, et une barre de droite propre à l'atelier Witness. Tab entre en
+    édition ; 1 2 3 (par leur PLACE) ; clic sur ce qu'on VOIT (le rayon trouve la face, puis le sommet ou
+    l'arête de cette face), Maj+clic, Alt+clic (boucle), A, Alt+A, B ; G R S avec X Y Z et saisie
+    numérique, Entrée ou clic pour valider, Échap ou clic droit pour annuler ; E, I, Ctrl+R, X, M, F,
+    subdiviser, O ; vues du pavé (1 3 7, Ctrl, 5, « . »). **Z MONTE, comme dans Blender** (`AXES`).
+    Chaque geste est UNE annulation de l'historique de l'appli.
+  - **LE TÉMOIN MODÉLISÉ PREND LA ROUTE DES TRAVAUX** : il s'enregistre (une seconde après le dernier
+    geste) en `<projet>_witness.glb` et entre dans la liste de l'étape 2, où on le tranche. Une seconde
+    route de tranchage trancherait autrement (§6).
+  - ⚠ **MESURÉ : UN REDESSIN COMPLET DU TÉMOIN COÛTE ~250 ms** — un G qui suit la souris aurait tourné à
+    quatre images par seconde. Pendant un geste, ce qui ne bouge pas est dessiné UNE fois, et seul ce qui
+    bouge est redessiné : **2,6 ms par mouvement de souris**. ⚠ L'inset (I) change la topologie à chaque
+    mouvement et redessine encore TOUT : plus lent, à mesurer à la main.
+  - **Gardé par `fumee_appli`** (20 vérifications, avec de vraies touches et un vrai clic sur le témoin :
+    E 1, Ctrl+Z / Ctrl+Y, G Z 2, Échap, X, Ctrl+R, l'enregistrement relu). Mutations rouges : Z = Z de
+    Godot, Échap qui ne rend rien, geste sans annulation, clic sur la mauvaise face.
+  - ⚠ **LA MINUTERIE D'ENREGISTREMENT A FAUSSÉ LA FUMÉE** : elle réécrivait le témoin modélisé APRÈS sa
+    suppression, et le passage suivant partait d'un témoin déjà coupé. La fumée et la capture partent
+    désormais d'un état propre.
+  - ⚠ **LA FUMÉE CONCLUAIT « OK » SUR UN ÉCRAN QUI NE COMPILAIT PAS** (98 vérifications, 0 échec). Elle
+    exige d'abord que `editor.gd` se charge, et s'arrête net sinon — vu rougir.
+  - **PAS ENCORE ÉCRIT** : bevel (Ctrl+B), knife (K), matériaux et projections, et la boîte B qui
+    ignorerait le caché. Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1120,13 +1158,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 882 vérifications, 0 échec** (29 septembre 2026, recomptées après le bras-ressort — seule `fumee_appli` a changé —, puis l'export du monde
-  peint vers les trois greffons), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Treize suites, **7 979 vérifications, 0 échec** (29 septembre 2026, recomptées après le palier 1 du
+  modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 98, `test_greffon_peinture` 117, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 118, `test_greffon_peinture` 117, `test_faux_artiste` 35,
+  `test_maillage_edite` 77.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
