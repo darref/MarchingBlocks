@@ -15,11 +15,11 @@ MarchingBlocksWorld node per layer is built, in order, under a new node — one 
 without tiles arrives with its cells and no tiles, and the Output panel says so. `world_conformance.json`
 holds the reading rule's reference cases.
 
-| Aim (Tab) | |
+| Aim (Tab switches) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |
 | Sculpt | aims at the matter itself — Add builds against the face you point at |
-| Navigate | aims at nothing: fly as usual (right drag + W A S D, Q E). No click paints |
+| **Navigate (Space)** | a switch, not an aim: fly as usual (right drag + W A S D, Q E), no click paints. Space again — or an aim — brings you back, the aim unchanged |
 
 | Keys | |
 |---|---|

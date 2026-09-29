@@ -374,6 +374,28 @@ void AMarchingBlocksWorld::OnConstruction(const FTransform& Transform)
 	Rebuild();
 }
 
+MBPaint::FAimState AMarchingBlocksWorld::GetAimState() const
+{
+	MBPaint::FAimState State;
+	State.Aim = Aim == EMarchingBlocksAim::Sculpt ? MBPaint::EAim::Sculpt : MBPaint::EAim::Grid;
+	State.bNavigating = bNavigate || Aim == EMarchingBlocksAim::Navigate;
+	return State;
+}
+
+void AMarchingBlocksWorld::SetAimState(const MBPaint::FAimState& State)
+{
+	Aim = State.Aim == MBPaint::EAim::Sculpt ? EMarchingBlocksAim::Sculpt : EMarchingBlocksAim::Grid;
+	bNavigate = State.bNavigating;
+}
+
+// ⚠ A LEVEL SAVED WHEN NAVIGATE WAS STILL AN AIM (before 29 September 2026) comes back as it was left: Grid,
+// navigating. The enum value stays (hidden) so the saved name still resolves.
+void AMarchingBlocksWorld::PostLoad()
+{
+	Super::PostLoad();
+	if (Aim == EMarchingBlocksAim::Navigate) SetAimState(GetAimState());
+}
+
 #if WITH_EDITOR
 void AMarchingBlocksWorld::PostEditChangeProperty(FPropertyChangedEvent& Event)
 {
@@ -384,6 +406,13 @@ void AMarchingBlocksWorld::PostEditChangeProperty(FPropertyChangedEvent& Event)
 		Rule.Reset();
 		Status.Reset();
 		Rebuild();
+	}
+	// Choosing an aim in the Details panel leaves navigation, as Tab does. (The hidden legacy value, if code
+	// sets it, still means "navigating".)
+	if (Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWorld, Aim))
+	{
+		const MBPaint::FAimState State = GetAimState();
+		SetAimState(Aim == EMarchingBlocksAim::Navigate ? State : MBPaint::Tools::ChooseAim(State, State.Aim));
 	}
 }
 

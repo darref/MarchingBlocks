@@ -1,5 +1,5 @@
 // Runs conformance.json through the Unreal plugin's FRule, tools_conformance.json through its Tools and
-// world_conformance.json through its FWorldFile, OUTSIDE Unreal: it compiles the very files the plugin ships (Source/MarchingBlocksPaint/.../MBCore).
+// world_conformance.json through its FWorldFile, and checks the aim / navigation switches, OUTSIDE Unreal: it compiles the very files the plugin ships (Source/MarchingBlocksPaint/.../MBCore).
 // Exits 1 on any divergence. Build and run: ./build.sh (see there for the flags that mimic Unreal).
 
 #include "MBCore/MBFrame.h"
@@ -329,6 +329,52 @@ namespace
 		std::printf("frame: mirrored centimetre importer, %d failure(s)\n", Failed);
 		return Failed;
 	}
+
+	// THE AIM AND NAVIGATION (decided 29 September 2026): Tab alternates Grid ↔ Sculpt only, Space switches
+	// navigation without touching the aim, choosing an aim leaves navigation. Every expected state is
+	// written by hand, never computed by the functions under test.
+	int RunAim()
+	{
+		int Failed = 0, Checks = 0;
+		auto State = [](EAim Aim, bool bNavigating) { FAimState S; S.Aim = Aim; S.bNavigating = bNavigating; return S; };
+		auto Expect = [&](const FAimState& Got, const FAimState& Want, const char* What)
+		{
+			++Checks;
+			if (!(Got == Want)) { ++Failed; std::printf("  FAIL aim: %s\n", What); }
+		};
+		const FAimState Grid = State(EAim::Grid, false), Sculpt = State(EAim::Sculpt, false);
+		const FAimState GridFlying = State(EAim::Grid, true), SculptFlying = State(EAim::Sculpt, true);
+
+		// Tab: two aims, never navigation — however many times it is pressed.
+		Expect(Tools::Tab(Grid), Sculpt, "Tab from Grid is not Sculpt");
+		Expect(Tools::Tab(Sculpt), Grid, "Tab from Sculpt is not Grid (Tab must never enter navigation)");
+		FAimState S = Grid;
+		for (int I = 0; I < 6; ++I)
+		{
+			S = Tools::Tab(S);
+			Expect(S, I % 2 == 0 ? Sculpt : Grid, "Tab pressed again and again leaves the Grid ↔ Sculpt cycle");
+		}
+		// Tab while navigating is choosing an aim: it leaves navigation, and alternates.
+		Expect(Tools::Tab(GridFlying), Sculpt, "Tab while navigating from Grid is not Sculpt, painting");
+		Expect(Tools::Tab(SculptFlying), Grid, "Tab while navigating from Sculpt is not Grid, painting");
+
+		// Space: on, then off, and the aim comes back unchanged.
+		Expect(Tools::ToggleNavigate(Grid), GridFlying, "Space does not switch navigation on (Grid)");
+		Expect(Tools::ToggleNavigate(Sculpt), SculptFlying, "Space does not switch navigation on (Sculpt)");
+		Expect(Tools::ToggleNavigate(GridFlying), Grid, "Space does not switch navigation off (Grid)");
+		Expect(Tools::ToggleNavigate(SculptFlying), Sculpt, "the aim is lost after switching navigation off (Sculpt)");
+		Expect(Tools::ToggleNavigate(Tools::ToggleNavigate(Sculpt)), Sculpt, "Space twice does not give Sculpt back");
+
+		// Choosing an aim leaves navigation — the current aim included.
+		Expect(Tools::ChooseAim(GridFlying, EAim::Sculpt), Sculpt, "choosing Sculpt while navigating does not leave navigation");
+		Expect(Tools::ChooseAim(SculptFlying, EAim::Sculpt), Sculpt, "choosing the current aim while navigating does not leave navigation");
+		Expect(Tools::ChooseAim(SculptFlying, EAim::Grid), Grid, "choosing Grid while navigating does not leave navigation");
+		Expect(Tools::ChooseAim(Grid, EAim::Sculpt), Sculpt, "choosing Sculpt does not set Sculpt");
+		Expect(Tools::ChooseAim(Sculpt, EAim::Grid), Grid, "choosing Grid does not set Grid");
+
+		std::printf("aim: %d checks, %d failure(s)\n", Checks, Failed);
+		return Failed;
+	}
 }
 
 int main(int Argc, char** Argv)
@@ -338,6 +384,7 @@ int main(int Argc, char** Argv)
 	Failed += RunTools(Dir + "/tools_conformance.json");
 	Failed += RunWorld(Dir + "/world_conformance.json");
 	Failed += RunFrame();
+	Failed += RunAim();
 	std::printf(Failed == 0 ? "VERDICT: OK\n" : "VERDICT: FAILED\n");
 	return Failed == 0 ? 0 : 1;
 }

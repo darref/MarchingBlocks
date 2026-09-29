@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- Runs the Unity plugin's placement rule against conformance.json, outside Unity.
        It compiles the SAME files the Unity package ships: Runtime/MBRule.cs, MBJson.cs, MBTools.cs,
-       MBWorldFile.cs, and the tools and world checks of Tests/Editor. -->
+       MBWorldFile.cs, and the tools, world and aim checks of Tests/Editor. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
@@ -16,5 +16,6 @@
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/ToolsConformanceCheck.cs" Link="ToolsConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Runtime/MBWorldFile.cs" Link="MBWorldFile.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WorldConformanceCheck.cs" Link="WorldConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/AimCheck.cs" Link="AimCheck.cs" />
   </ItemGroup>
 </Project>

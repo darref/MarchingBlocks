@@ -240,5 +240,26 @@ namespace MBPaint
 			}
 			return Change;
 		}
+
+		FAimState Tab(const FAimState& State)
+		{
+			return ChooseAim(State, State.Aim == EAim::Grid ? EAim::Sculpt : EAim::Grid);
+		}
+
+		FAimState ToggleNavigate(const FAimState& State)
+		{
+			FAimState Next = State;
+			Next.bNavigating = !State.bNavigating;
+			return Next;
+		}
+
+		FAimState ChooseAim(const FAimState& State, EAim Aim)
+		{
+			(void)State;
+			FAimState Next;
+			Next.Aim = Aim;
+			Next.bNavigating = false;
+			return Next;
+		}
 	}
 }

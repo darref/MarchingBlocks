@@ -18,11 +18,15 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
    and **Tiles** (the imported `tiles.glb`).
 3. Click **Edit the world** in the inspector, then work in the Scene view. Ctrl+Z undoes every change.
 
-| Aim (Tab) | |
+| Aim (Tab alternates) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |
 | Sculpt | aims at the matter itself — Add builds against the face you point at |
-| Navigate | aims at nothing: fly as usual in Unity (right drag + W A S D, Q E). No click paints |
+
+**Navigate · Space** is a switch, not an aim: Space (or its button, next to the aims) hands the mouse and
+keys back to Unity — fly as usual (right drag + W A S D, Q E) — and no click paints. Space again comes
+back to the aim you had; choosing an aim, by its button or by Tab, stops navigating too. Space and Tab are
+only taken while **Edit the world** is on; Shift + Space stays Unity's.
 
 | Keys | |
 |---|---|

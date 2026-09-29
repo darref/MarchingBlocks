@@ -628,6 +628,20 @@ func _le_modeleur(ed: Control) -> void:
 	_vrai((mo.maillage.materiaux[0]["couleur"] as Color).is_equal_approx(couleur0),
 		"trois retouches de couleur : UN Ctrl+Z les défait toutes")
 	ed._unhandled_key_input(_cle(KEY_Y, true))
+	# U : la face visée dépliée ; le matériau en projection « UV » ; le patron écrit.
+	ed._vue._gui_input(clic)
+	ed._input(_cle(KEY_U))
+	_vrai(mo.maillage.uv(f).size() == (mo.maillage.faces[f] as PackedInt32Array).size(), "U déplie la face visée")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(mo.maillage.uv(f).is_empty(), "Ctrl+Z défait le dépliage")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	ed._retoucher("projection", "uv")
+	ed._inscrire_les_retouches()
+	var patron: String = ProjectSettings.globalize_path("user://fumee/patron.png")
+	_egal(ed._exporter_le_patron(patron), "", "Export UV layout écrit le patron")
+	var img := Image.load_from_file(patron)
+	_vrai(img != null and img.get_width() == 2048, "le patron fait 2048 × 2048")
+	DirAccess.remove_absolute(patron)
 	# L'enregistrement : le fichier, relu, redonne le même maillage ; et il rejoint les travaux.
 	var raison: String = ed._enregistrer_le_temoin_modele()
 	var chemin: String = ed._chemin_temoin_modele()

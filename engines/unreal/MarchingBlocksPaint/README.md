@@ -21,11 +21,15 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
    **Tiles Folder** (where `tiles.glb` was imported).
 2. Select the actor, open the **Modes** menu and pick **MarchingBlocks**. Then paint in the viewport.
 
-| Aim (Tab) | |
+| Aim (Tab alternates) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |
 | Sculpt | aims at the matter itself — Add builds against the face you point at |
-| Navigate | aims at nothing: fly as usual (right drag + W A S D, Q E). No click paints |
+
+**Navigate (Space)** is a switch, not an aim: Space turns it on and off (or tick *Navigate (Space)* in
+the Details panel). While it is on, no click paints and the viewport flies as usual (right drag +
+W A S D, Q E). Your aim is kept and comes back when you switch it off; choosing an aim — Tab, or in the
+Details panel — leaves navigation. In this mode Space no longer cycles the transform gizmo.
 
 | Keys | |
 |---|---|

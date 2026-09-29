@@ -20,6 +20,41 @@ namespace MarchingBlocks.Paint
     public enum BrushShape { Sphere, Cube, Disc }
     public enum SelectionOp { Delete, ExtrudeUp, ExtrudeDown, Grow, Shrink, Connected, Fill }
 
+    /// <summary>What a click aims at: the floor plane (Grid) or the matter itself (Sculpt).</summary>
+    public enum BrushAim { Grid, Sculpt }
+
+    /// <summary>
+    /// The aim, and whether you are navigating. Navigating is NOT a third aim: it is a switch (Space) that
+    /// hands the mouse and keys back to the engine's own camera, and the aim you had comes back unchanged
+    /// when you switch it off. Tab alternates Grid and Sculpt, and choosing an aim — by Tab or by its
+    /// button — stops navigating: you pick an aim to aim, not to fly. The same rules as the MarchingBlocks
+    /// tool.
+    /// </summary>
+    public readonly struct AimState
+    {
+        public readonly BrushAim Aim;
+        public readonly bool Navigating;
+
+        public AimState(BrushAim aim, bool navigating) { Aim = aim; Navigating = navigating; }
+
+        /// <summary>Grid, not navigating.</summary>
+        public static AimState Start => new AimState(BrushAim.Grid, false);
+
+        /// <summary>Tab: the other aim, and navigation off.</summary>
+        public AimState Tab() => new AimState(Aim == BrushAim.Grid ? BrushAim.Sculpt : BrushAim.Grid, false);
+
+        /// <summary>Space: navigation on or off, the aim kept.</summary>
+        public AimState Space() => new AimState(Aim, !Navigating);
+
+        /// <summary>An aim's button: that aim, and navigation off.</summary>
+        public AimState Choose(BrushAim aim) => new AimState(aim, false);
+
+        /// <summary>A click paints only when not navigating.</summary>
+        public bool Paints => !Navigating;
+
+        public override string ToString() => Aim + (Navigating ? " + navigating" : "");
+    }
+
     /// <summary>What a tool changes: cells to set, cells to clear, and the selection AFTER.</summary>
     public sealed class Change
     {

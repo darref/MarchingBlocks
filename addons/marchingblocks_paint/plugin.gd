@@ -15,6 +15,7 @@ const IMPORT_WORLD := "Import MarchingBlocks world..."
 var _editor: Node
 var _bar: HBoxContainer
 var _aim_buttons := {}
+var _navigate: Button
 var _mode_buttons := {}
 var _size: SpinBox
 var _shape: OptionButton
@@ -121,10 +122,12 @@ func _build_bar() -> HBoxContainer:
 	var bar := HBoxContainer.new()
 	bar.add_child(VSeparator.new())
 	bar.add_child(_label("MarchingBlocks"))
-	for a in [["grid", "Grid", "Aims at the floor plane (Page Up / Page Down move it). Tab cycles the aims."],
-			["sculpt", "Sculpt", "Aims at the matter itself: Add builds against the face you point at."],
-			["navigate", "Navigate", "Aims at nothing: fly as usual (right drag + W A S D, Q E). No click paints."]]:
+	for a in [["grid", "Grid", "Aims at the floor plane (Page Up / Page Down move it). Tab switches Grid and Sculpt."],
+			["sculpt", "Sculpt", "Aims at the matter itself: Add builds against the face you point at."]]:
 		_aim_buttons[a[0]] = _toggle(bar, a[1], a[2], func() -> void: _editor.set_aim(a[0]))
+	_navigate = _toggle(bar, "Navigate (Space)", "Space — fly as usual (right drag + W A S D, Q E); no click "
+		+ "paints. Space again, or an aim, brings you back.", func() -> void:
+			_editor.set_navigating(not _editor.navigating))
 	bar.add_child(VSeparator.new())
 	for m in [["add", "Add", "A — adds matter. Shift digs."], ["dig", "Dig", "D — removes matter. Shift adds."],
 			["select", "Select", "S — paints the selection over the matter. Shift adds to it, Ctrl removes."],
@@ -247,6 +250,7 @@ func _refresh() -> void:
 	_refreshing = true
 	for a in _aim_buttons:
 		(_aim_buttons[a] as Button).set_pressed_no_signal(a == _editor.aim)
+	_navigate.set_pressed_no_signal(_editor.navigating)
 	for m in _mode_buttons:
 		(_mode_buttons[m] as Button).set_pressed_no_signal(m == _editor.mode)
 	_hollow.set_pressed_no_signal(_editor.hollow)

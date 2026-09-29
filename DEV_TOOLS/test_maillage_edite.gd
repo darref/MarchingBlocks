@@ -45,6 +45,7 @@ func _initialize() -> void:
 	_les_materiaux()
 	_la_projection()
 	_le_format_natif()
+	_le_depliage()
 	_le_temoin()
 	_l_accelerateur_de_rayons()
 	_le_materiau_voyage_jusqu_au_greffon()
@@ -530,6 +531,126 @@ func _le_format_natif() -> void:
 	legende.teintes[0] = Color(0.37, 0.61, 0.3)
 	var relue: RefCounted = ME.depuis_dictionnaire(JSON.parse_string(JSON.stringify(legende.vers_dictionnaire())))
 	_vrai(relue.teintes[0].is_equal_approx(Color(0.37, 0.61, 0.3)), "relu : une teinte de légende revient EXACTE (pas arrondie à 1/255)")
+
+
+## LE DÉPLIAGE (U), jugé par des propriétés qui ne passent pas par lui : tout dans [0,1], des îlots qui ne
+## se chevauchent pas (comptés en PIXELS : deux îlots qui se couvrent peindraient le même texel), une échelle
+## UNIQUE (chaque arête garde le même rapport longueur UV / longueur 3D), et des carrés qui restent carrés.
+func _le_depliage() -> void:
+	var c := _cube()
+	var r: Dictionary = c.deplier()
+	_egal(r["ilots"], 6, "cube : six îlots (ses faces sont à 90°, au-delà de 66°)")
+	var dedans := true
+	var rapports: Array = []
+	var angles_droits := true
+	for f in c.faces.size():
+		var u: PackedVector2Array = c.uv(f)
+		_vrai(u.size() == 4, "face %d : quatre UV" % f)
+		for k in u.size():
+			dedans = dedans and u[k].x >= -1e-6 and u[k].y >= -1e-6 and u[k].x <= 1.0 + 1e-6 and u[k].y <= 1.0 + 1e-6
+			var a: Vector3 = c.sommets[c.faces[f][k]]
+			var b: Vector3 = c.sommets[c.faces[f][(k + 1) % 4]]
+			rapports.append(u[k].distance_to(u[(k + 1) % 4]) / a.distance_to(b))
+			var d1: Vector2 = u[(k + 1) % 4] - u[k]
+			var d0: Vector2 = u[(k + 3) % 4] - u[k]
+			angles_droits = angles_droits and absf(d1.normalized().dot(d0.normalized())) < 1e-4
+	_vrai(dedans, "tous les UV sont dans [0,1]")
+	var r0: float = rapports[0]
+	_vrai(rapports.all(func(x): return absf(x - r0) < 1e-4), "UNE échelle : chaque arête garde le même rapport UV / 3D")
+	_vrai(angles_droits, "les carrés restent carrés (aucun cisaillement)")
+	# ⚠ UN PAVÉ 2×1×1, AUX ÎLOTS DE TAILLES DIFFÉRENTES : sur le cube, tous égaux, « une échelle par îlot »
+	# rendait la même chose qu'une échelle commune (mutation muette, vue).
+	var pave := _cube()
+	for i in pave.sommets.size():
+		pave.sommets[i] = pave.sommets[i] * Vector3(2, 1, 1)
+	pave.deplier()
+	var rp: Array = []
+	for f in pave.faces.size():
+		var u: PackedVector2Array = pave.uv(f)
+		for k in u.size():
+			rp.append(u[k].distance_to(u[(k + 1) % 4]) / pave.sommets[pave.faces[f][k]].distance_to(pave.sommets[pave.faces[f][(k + 1) % 4]]))
+	var rp0: float = rp[0]
+	_vrai(rp.all(func(x): return absf(x - rp0) < 1e-4), "pavé 2×1×1 : UNE échelle pour des îlots de tailles différentes")
+	# PAS DE MIROIR : chaque face dépliée tourne dans le MÊME sens que sous la projection en boîte (qui
+	# regarde chaque face de dehors) — sinon une image peinte y paraîtrait à l'envers.
+	var memes_sens := true
+	for f in c.faces.size():
+		var u: PackedVector2Array = c.uv(f)
+		var b := PackedVector2Array()
+		for i in c.faces[f]:
+			b.append(ME.projeter(c.sommets[i], c.normale(f), 1.0))
+		memes_sens = memes_sens and signf(_aire_signee(u)) == signf(_aire_signee(b))
+	_vrai(memes_sens, "aucun îlot n'est retourné en miroir")
+	# Pas de chevauchement : on peint chaque îlot dans une grille de 256² ; aucun texel ne doit l'être deux fois.
+	var grille := {}
+	var double := 0
+	for f in c.faces.size():
+		var u: PackedVector2Array = c.uv(f)
+		var bmin := u[0]
+		var bmax := u[0]
+		for p in u:
+			bmin = bmin.min(p)
+			bmax = bmax.max(p)
+		for x in range(int(ceil(bmin.x * 256)), int(floor(bmax.x * 256))):
+			for y in range(int(ceil(bmin.y * 256)), int(floor(bmax.y * 256))):
+				var k := Vector2i(x, y)
+				if grille.has(k):
+					double += 1
+				grille[k] = true
+	_egal(double, 0, "aucun texel n'appartient à deux îlots")
+	# Une grille plane 3×3 : UN îlot.
+	var g: RefCounted = ME.new()
+	for z in 4:
+		for x in 4:
+			g.sommets.append(Vector3(x, 0, z))
+	for z in 3:
+		for x in 3:
+			var a := z * 4 + x
+			g.faces.append(PackedInt32Array([a, a + 4, a + 5, a + 1]))
+			g.teintes.append(Color.WHITE)
+	_egal(g.deplier()["ilots"], 1, "une grille plane : UN îlot")
+	# Ce qui déforme efface ; ce qui déplace garde.
+	var e := _cube()
+	e.materiaux.append({"nom": "peint", "couleur": Color.WHITE, "echelle": 1.0, "projection": "uv"})
+	e.assigner(range(6), 0)
+	e.deplier()
+	var haut := _face_du_haut(e)
+	var avant_uv: PackedVector2Array = e.uv(haut)
+	e.extruder_faces([haut])
+	_vrai(e.uv(haut) == avant_uv, "extruder une face la DÉPLACE : ses UV restent")
+	_egal(e.faces_a_deplier(), 4, "ses quatre côtés neufs n'ont pas d'UV : quatre faces à redéplier")
+	e.subdiviser([haut])
+	_vrai(e.faces_a_deplier() > 4, "subdiviser efface les UV des faces qu'il déforme")
+	# Le dessin lit les UV dépliés d'un matériau « uv ».
+	var d := _cube()
+	d.materiaux.append({"nom": "peint", "couleur": Color.WHITE, "echelle": 1.0, "projection": "uv"})
+	d.assigner(range(6), 0)
+	d.deplier()
+	var mesh: ArrayMesh = d.vers_array_mesh()
+	var lus: PackedVector2Array = mesh.surface_get_arrays(0)[Mesh.ARRAY_TEX_UV]
+	var attendus := {}
+	for f in d.faces.size():
+		for p in d.uv(f):
+			attendus[p.snapped(Vector2.ONE * 1e-5)] = true
+	_vrai(lus.size() == 36 and Array(lus).all(func(p): return attendus.has(p.snapped(Vector2.ONE * 1e-5))),
+		"un matériau « uv » est dessiné avec les UV DÉPLIÉS")
+	# Le .mbmesh les garde ; le patron se dessine.
+	var relu: RefCounted = ME.depuis_dictionnaire(JSON.parse_string(JSON.stringify(d.vers_dictionnaire())))
+	_vrai(relu.uv(3).size() == 4 and relu.uv(3)[2].is_equal_approx(d.uv(3)[2]), "le .mbmesh garde les UV dépliés")
+	var img: Image = d.dessiner_patron(128)
+	var traits := 0
+	for y in 128:
+		for x in 128:
+			if img.get_pixel(x, y).r > 0.5:
+				traits += 1
+	_vrai(traits > 100, "le patron se dessine (%d pixels de trait)" % traits)
+
+
+static func _aire_signee(u: PackedVector2Array) -> float:
+	var a := 0.0
+	for k in u.size():
+		a += u[k].x * u[(k + 1) % u.size()].y - u[(k + 1) % u.size()].x * u[k].y
+	return a
 
 
 ## L'ACCÉLÉRATEUR, JUGÉ CONTRE LE RAYON BRUT : 300 rayons tirés de partout vers le témoin (graine fixe) —

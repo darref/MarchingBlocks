@@ -1049,6 +1049,8 @@ func touche(k: InputEventKey) -> bool:
 					"also takes what is hidden" if rayons_x else "only takes what you see"])
 			else:
 				return false
+		KEY_U:
+			deplier_selection()
 		KEY_O:
 			proportionnel = not proportionnel
 			dit.emit("[i]Proportional editing %s[/i] (radius %.2f — the wheel changes it during a move)."
@@ -1106,6 +1108,20 @@ func regler_materiau(k: int, cle: String, valeur: Variant) -> void:
 		return
 	maillage.materiaux[k][cle] = valeur
 	redessiner()
+
+
+## U — DÉPLIER : les faces choisies (tout le témoin si rien n'est choisi).
+func deplier_selection() -> void:
+	if maillage == null:
+		return
+	var fs := _faces_choisies()
+	var avant: RefCounted = maillage.copie()
+	var r: Dictionary = maillage.deplier(fs)
+	change.emit(avant, maillage.copie(), "Unwrap")
+	redessiner()
+	dit.emit(("[b]Unwrapped[/b] — %d face(s) in %d island(s), laid out in the 0–1 square at one scale. "
+		+ "[i]Export UV layout… to paint on it; give the material the « UV » projection.[/i]")
+		% [r["faces"], r["ilots"]])
 
 
 ## Le pivot de la sélection (sa moyenne) — pour cadrer la vue (touche « . » du pavé).

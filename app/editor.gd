@@ -91,6 +91,7 @@ var _rugosite_materiau: HSlider
 var _metal_materiau: HSlider
 var _echelle_materiau: SpinBox
 var _projection_materiau: OptionButton
+var _etat_uv: Label
 var _texture_materiau: Label
 var _remplit_materiau := false
 ## ⚠ UNE RAFALE DE RETOUCHES = UNE ANNULATION : glisser la rugosité émet cent valeurs ; on garde le
@@ -1298,17 +1299,29 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 	var ligne_proj := HBoxContainer.new()
 	ligne_proj.add_child(_texte("Projection", 11, Palette.GRIS))
 	_projection_materiau = OptionButton.new()
-	for e in [["Box", "boite"], ["Top", "dessus"], ["Front", "face"], ["Side", "cote"]]:
+	for e in [["Box", "boite"], ["Top", "dessus"], ["Front", "face"], ["Side", "cote"], ["UV (unwrapped)", "uv"]]:
 		_projection_materiau.add_item(e[0])
 		_projection_materiau.set_item_metadata(_projection_materiau.item_count - 1, e[1])
 	_projection_materiau.tooltip_text = ("Box: each face takes the side of the box it faces — walls, floors and "
 		+ "ceilings all look right.\nTop / Front / Side: one flat projection for every face (the faces across it "
-		+ "are stretched).")
+		+ "are stretched).\nUV: the unwrapped layout (U) — for images painted on the exported UV layout; faces "
+		+ "without UVs fall back to Box.")
 	_projection_materiau.item_selected.connect(func(i: int) -> void:
 		_retoucher("projection", _projection_materiau.get_item_metadata(i)))
 	ligne_proj.add_child(_projection_materiau)
 	_edition_materiau.add_child(ligne_proj)
 	_texture_materiau = _texte("no image", 11, Palette.GRIS)
+	_edition_materiau.add_child(_grille([
+		_bouton("Unwrap  ·  U", "U — unwrap the selected faces (all of them if none is selected): islands of "
+			+ "faces that face the same way, laid flat in the 0–1 square at one scale.",
+			func() -> void:
+				_regler_edition(true)
+				_modeleur.deplier_selection(), "grille"),
+		_bouton("Export UV layout…", "Writes a PNG of the unwrapped edges, to paint on in your image editor.",
+			func() -> void: _demander("patron"), "exporter"),
+	], 2))
+	_etat_uv = _texte("", 11, Palette.AMBRE)
+	_edition_materiau.add_child(_etat_uv)
 	_edition_materiau.add_child(_texture_materiau)
 	_edition_materiau.add_child(_grille([
 		_bouton("Image…", "A tileable image (.png, .jpg) projected on the faces.",
@@ -1470,9 +1483,26 @@ func _redire_les_materiaux() -> void:
 		for i in _projection_materiau.item_count:
 			if _projection_materiau.get_item_metadata(i) == proj:
 				_projection_materiau.select(i)
+		var a_deplier: int = _modeleur.maillage.faces_a_deplier()
+		_etat_uv.text = ("%d face(s) with the UV projection have no UVs (new or reshaped): press U again."
+			% a_deplier) if a_deplier > 0 else ""
+		_etat_uv.visible = a_deplier > 0
 		var tex: String = str(d.get("texture", ""))
 		_texture_materiau.text = tex.get_file() if tex != "" else "no image"
 		_remplit_materiau = false
+
+
+## LE PATRON DES UV — à peindre dans un logiciel de dessin, puis à rendre comme image d'un matériau « UV ».
+func _exporter_le_patron(fichier: String) -> String:
+	if _modeleur.maillage == null:
+		return "nothing to export"
+	var err: int = _modeleur.maillage.dessiner_patron(2048).save_png(fichier)
+	if err != OK:
+		_dire("[color=#e0603c]The UV layout could not be written[/color] (error %d)." % err)
+		return "error %d" % err
+	_dire("[b]UV layout written[/b] → %s\n[i]Paint on it (2048 × 2048), then give the image to a material with the "
+		% fichier + "« UV » projection.[/i]")
+	return ""
 
 
 func _nouveau_materiau() -> void:
@@ -1641,6 +1671,11 @@ func _demander(quoi: String) -> void:
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_DIR
 		_dialogue.title = "Export the tileset into…" if quoi == "tileset" else "Export the world into…"
 		_dialogue.current_file = ""
+	elif quoi == "patron":
+		_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+		_dialogue.add_filter("*.png", "PNG image")
+		_dialogue.title = "Export the UV layout"
+		_dialogue.current_file = "uv_layout.png"
 	elif quoi == "texture":
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 		_dialogue.add_filter("*.png, *.jpg, *.jpeg, *.webp", "Image")
@@ -1678,6 +1713,8 @@ func _fichier_choisi(fichier: String) -> void:
 		"texture":
 			_retoucher("texture", fichier)
 			_inscrire_les_retouches()
+		"patron":
+			_exporter_le_patron(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un

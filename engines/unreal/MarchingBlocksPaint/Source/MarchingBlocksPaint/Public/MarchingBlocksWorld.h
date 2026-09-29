@@ -29,8 +29,9 @@ enum class EMarchingBlocksAim : uint8
 	Grid,
 	/** Aims at the matter itself; falls back on the floor when the ray meets nothing. */
 	Sculpt,
-	/** Aims at nothing: the viewport flies as usual (right drag + W A S D, Q E). No click paints. */
-	Navigate,
+	/** DEPRECATED — Navigate is no longer an aim but a switch (bNavigate, Space). Kept, hidden, only so a
+	 *  level saved with it still loads: it is read back as Grid + navigating (PostLoad). Never set it. */
+	Navigate UMETA(Hidden),
 };
 
 UENUM(BlueprintType)
@@ -71,8 +72,14 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	int32 Floor = 0;
 
+	/** Tab alternates Grid and Sculpt. Choosing an aim leaves navigation. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	EMarchingBlocksAim Aim = EMarchingBlocksAim::Grid;
+
+	/** Space: no click paints, the mouse and keys fly the viewport as usual (right drag + W A S D, Q E).
+	 *  The aim is kept, and comes back unchanged when you switch it off. Not saved with the level. */
+	UPROPERTY(EditAnywhere, Transient, Category = "MarchingBlocks|Tools", meta = (DisplayName = "Navigate (Space)"))
+	bool bNavigate = false;
 
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	EMarchingBlocksTool Tool = EMarchingBlocksTool::Add;
@@ -105,6 +112,10 @@ public:
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks") void ClearCells();
 
 	// ── For the editor mode and for code ──
+
+	/** The aim and the navigation switch as MBCore sees them (a legacy Navigate aim reads as Grid + navigating). */
+	MBPaint::FAimState GetAimState() const;
+	void SetAimState(const MBPaint::FAimState& State);
 
 	const MBPaint::FCellSet& GetCells();
 	/** Applies what a tool returned: clears, then sets, then rebuilds once. Call Modify() first to undo. */
@@ -139,6 +150,7 @@ public:
 	FString Status;
 
 	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void PostLoad() override;
 #if WITH_EDITOR
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& Event) override;
 	virtual void PostEditUndo() override;

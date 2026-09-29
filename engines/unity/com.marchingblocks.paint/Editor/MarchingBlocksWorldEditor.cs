@@ -6,8 +6,10 @@
 //
 //   AIM      Grid — on the floor plane (Page Up / Page Down move it)
 //            Sculpt — on the matter itself; falls back to the floor when the ray meets nothing
-//            Navigate — aims at nothing: the mouse is Unity's again (right drag + W A S D Q E flies)
-//            Tab cycles the three
+//            Tab alternates the two
+//   NAVIGATE a switch, not an aim (Space, or its button): the mouse and keys are Unity's again (right
+//            drag + W A S D Q E flies) and no click paints. Space again comes back to the SAME aim;
+//            choosing an aim (its button or Tab) stops navigating too. Rules: AimState in MBTools.cs.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)      Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
 //   SELECT   Fill, Delete, Extrude ↑ ↓ (the floor follows), Grow, Shrink, Connected,
@@ -25,11 +27,12 @@ namespace MarchingBlocks.Paint.EditorTools
     [CustomEditor(typeof(MarchingBlocksWorld))]
     public sealed class MarchingBlocksWorldEditor : Editor
     {
-        enum Aim { Grid, Sculpt, Navigate }
         enum Mode { Add, Dig, Select, Rect, Box }
 
         static bool editing;
-        static Aim aim = Aim.Grid;
+        static AimState aim = AimState.Start;
+        // Unity repeats KeyDown while a key is held: without this, holding Space would flicker navigation.
+        static bool spaceHeld;
         static Mode mode = Mode.Add;
         static int brushSize = 1;
         static BrushShape shape = BrushShape.Sphere;
@@ -85,13 +88,28 @@ namespace MarchingBlocks.Paint.EditorTools
 
             using (new EditorGUI.DisabledScope(!editing))
             {
-                aim = (Aim)GUILayout.Toolbar((int)aim, new[] { "Grid", "Sculpt", "Navigate" });
-                EditorGUILayout.HelpBox(aim == Aim.Grid
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    // While navigating no aim button is down, so clicking either one — even the kept aim —
+                    // is a choice, and a choice stops navigating.
+                    int shown = aim.Navigating ? -1 : (int)aim.Aim;
+                    int picked = GUILayout.Toolbar(shown, new[]
+                    {
+                        new GUIContent("Grid", "Aim at the floor plane (Tab alternates Grid and Sculpt)."),
+                        new GUIContent("Sculpt", "Aim at the matter itself (Tab alternates Grid and Sculpt)."),
+                    });
+                    if (picked != shown && picked >= 0) aim = aim.Choose((BrushAim)picked);
+                    bool navigate = GUILayout.Toggle(aim.Navigating, new GUIContent("Navigate · Space",
+                        "Space: fly around your world as usual in Unity, no click paints. Space again comes " +
+                        "back to the same aim."), GUI.skin.button, GUILayout.Width(130));
+                    if (navigate != aim.Navigating) { aim = aim.Space(); StopGesture(); }
+                }
+                EditorGUILayout.HelpBox(aim.Navigating
+                    ? $"Navigating: fly with the right mouse button and W A S D (Q E up and down), as usual in " +
+                      $"Unity; no click paints. Space comes back to {aim.Aim}."
+                    : aim.Aim == BrushAim.Grid
                     ? "Grid: aims at the floor plane. Page Up / Page Down move it."
-                    : aim == Aim.Sculpt
-                    ? "Sculpt: aims at the matter itself — Add builds against the face you point at."
-                    : "Navigate: aims at nothing. Fly with the right mouse button and W A S D (Q E up and down), " +
-                      "as usual in Unity; no click paints. Tab comes back to Grid.",
+                    : "Sculpt: aims at the matter itself — Add builds against the face you point at.",
                     MessageType.None);
                 var newMode = (Mode)GUILayout.Toolbar((int)mode, new[] { "Add  A", "Dig  D", "Select  S", "Rect  G", "Box  B" });
                 if (newMode != mode) { mode = newMode; CancelAll(); }
@@ -171,22 +189,23 @@ namespace MarchingBlocks.Paint.EditorTools
 
         // ── The Scene view ─────────────────────────────────────────────────────────────────────────
 
-        void OnSceneGUI()
+        void OnSceneGUI() => SceneGUI(Event.current);
+
+        // The event is a parameter so that the tests can hand it real events: Event.current cannot be set
+        // outside a GUI pass.
+        void SceneGUI(Event e)
         {
             DrawSelection();
             if (!editing) return;
-            var e = Event.current;
-            // Navigate takes NO control: the mouse and keys are Unity's own, only Tab is ours.
-            if (aim == Aim.Navigate)
+            if (HandleAimKeys(e))
             {
-                if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Tab && !e.alt && !e.control)
-                {
-                    aim = Aim.Grid;
-                    e.Use();
-                    Repaint();
-                }
+                StopGesture();
+                Repaint();
+                SceneView.RepaintAll();
                 return;
             }
+            // Navigating takes NO control: the mouse and keys are Unity's own, only Tab and Space are ours.
+            if (!aim.Paints) return;
             int id = GUIUtility.GetControlID(FocusType.Passive);
             if (e.type == EventType.Layout) HandleUtility.AddDefaultControl(id);
 
@@ -203,7 +222,7 @@ namespace MarchingBlocks.Paint.EditorTools
         bool Aimed(Ray ray, bool add, out Hit hit)
         {
             hit = default;
-            if (aim == Aim.Sculpt)
+            if (aim.Aim == BrushAim.Sculpt)
             {
                 hit = World.RayAgainstCells(ray, add ? placedThisStroke : null);
                 if (hit.Touched) return true;
@@ -375,6 +394,25 @@ namespace MarchingBlocks.Paint.EditorTools
             return true;
         }
 
+        // Tab and Space, the keys that work whether navigating or not. Returns true when the event was
+        // ours, and then USES it: Space must not reach Unity's other handlers when it toggles. Only called
+        // while editing the selected world, so outside the tools Space and Tab are left alone.
+        // Shift + Space stays Unity's (maximise the view).
+        static bool HandleAimKeys(Event e)
+        {
+            if (e.type == EventType.KeyUp && e.keyCode == KeyCode.Space) { spaceHeld = false; return false; }
+            if (e.type != EventType.KeyDown || e.alt || e.control || e.command) return false;
+            if (e.keyCode == KeyCode.Tab) aim = aim.Tab();
+            else if (e.keyCode == KeyCode.Space && !e.shift)
+            {
+                if (!spaceHeld) aim = aim.Space();   // a held key's repeats are swallowed, not toggled
+                spaceHeld = true;
+            }
+            else return false;
+            e.Use();
+            return true;
+        }
+
         bool HandleKeys(Event e)
         {
             if (e.type != EventType.KeyDown || e.alt || e.control || e.command) return false;
@@ -385,7 +423,6 @@ namespace MarchingBlocks.Paint.EditorTools
                 case KeyCode.S: SetMode(Mode.Select); break;
                 case KeyCode.G: SetMode(Mode.Rect); break;
                 case KeyCode.B: SetMode(Mode.Box); break;
-                case KeyCode.Tab: aim = (Aim)(((int)aim + 1) % 3); break;
                 case KeyCode.LeftBracket: brushSize = Mathf.Max(1, brushSize - 1); break;
                 case KeyCode.RightBracket: brushSize = Mathf.Min(7, brushSize + 1); break;
                 case KeyCode.PageUp: ChangeFloor(1); break;
@@ -492,6 +529,15 @@ namespace MarchingBlocks.Paint.EditorTools
             selection.Clear();
             SceneView.RepaintAll();
             Repaint();
+        }
+
+        // A stroke or a box begun before navigating does not survive it: its mouse-up goes to Unity. A
+        // paste does, like it survives Tab.
+        void StopGesture()
+        {
+            if (!aim.Navigating) return;
+            stroking = false;
+            boxStart = null;
         }
 
         void CancelAll()

@@ -8,8 +8,9 @@ extends Node
 ## tests (both have create_action / add_do_method / add_undo_method / commit_action).
 ##
 ##   AIM      grid — the floor plane (Page Up / Page Down move it) · sculpt — the matter itself
-##            navigate — aims at nothing: the viewport flies as usual (right drag + W A S D, Q E)
-##            Tab cycles the three
+##            Tab switches the two
+##   NAVIGATE a switch, not an aim — Space turns it on and off: the viewport flies as usual (right drag +
+##            W A S D, Q E) and no click paints. The aim is kept, and comes back as it was.
 ##   TOOLS    add (A) · dig (D) · select (S) · rect (G) · box (B)      Shift does the opposite
 ##   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
 ##   KEYS     Delete · Escape · arrows move the selection (they follow the camera; Shift + up / down
@@ -21,7 +22,7 @@ signal changed
 
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
 
-const AIMS := ["grid", "sculpt", "navigate"]
+const AIMS := ["grid", "sculpt"]
 const MODES := ["add", "dig", "select", "rect", "box"]
 const REACH := 2000.0
 const MAX_DRAWN := 4000
@@ -40,6 +41,8 @@ var world: Node3D:
 		_cancel()
 var undo: Object
 var aim := "grid"
+## Space — flying through the world; nothing is aimed, nothing paints. Choosing an aim turns it off.
+var navigating := false
 var mode := "add"
 var brush_size := 1
 var shape := "sphere"
@@ -69,11 +72,15 @@ func input(camera: Camera3D, event: InputEvent) -> bool:
 	if world == null or not is_instance_valid(world):
 		return false
 	var key := event as InputEventKey
-	if aim == "navigate":
-		# Navigate takes nothing but Tab: the mouse and keys fly the viewport, as usual.
-		if key != null and key.pressed and not key.echo and key.keycode == KEY_TAB \
+	if navigating:
+		# Navigating takes nothing but Space (to stop) and Tab (to pick an aim): the mouse and the other keys
+		# fly the viewport, as usual. Not while the right button flies — Space is not ours then.
+		if key != null and key.pressed and not key.echo and key.keycode in [KEY_SPACE, KEY_TAB] \
 				and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-			set_aim("grid")
+			if key.keycode == KEY_TAB:
+				set_aim(AIMS[(AIMS.find(aim) + 1) % AIMS.size()])
+			else:
+				set_navigating(false)
 			return true
 		_show_preview([], ADD_COLOUR)
 		return false
@@ -90,9 +97,19 @@ func input(camera: Camera3D, event: InputEvent) -> bool:
 	return false
 
 
+## Choosing an aim also stops navigating: you pick an aim to aim.
 func set_aim(value: String) -> void:
 	aim = value
+	navigating = false
 	_cancel()
+	changed.emit()
+
+
+func set_navigating(on: bool) -> void:
+	navigating = on
+	_cancel()
+	if on:
+		_show_preview([], ADD_COLOUR)
 	changed.emit()
 
 
@@ -400,6 +417,8 @@ func _key(camera: Camera3D, k: InputEventKey) -> bool:
 			set_mode("box")
 		KEY_TAB:
 			set_aim(AIMS[(AIMS.find(aim) + 1) % AIMS.size()])
+		KEY_SPACE:
+			set_navigating(true)
 		KEY_BRACKETLEFT:
 			brush_size = maxi(1, brush_size - 1)
 			changed.emit()

@@ -1010,7 +1010,21 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   - **LE MANUEL (F1) LE DIT** : un onglet « Modelling the witness » (édition, transformations, maillage,
     matériaux, vue — et l'avertissement sur les textureurs automatiques), l'export du monde dans « Layers &
     projects », et des raccourcis rangés par atelier (World, Witness, Play test). Vu à l'image.
-  - **PAS ENCORE ÉCRIT** : un dépliage d'UV ; une projection cylindrique. Rien n'a été tenu en main.
+  - **LE DÉPLIAGE (U) — DEMANDÉ PAR JORDAN (29 septembre 2026)**, pour peindre des textures qui ne se
+    répètent pas. ⚠ **CE N'EST PAS LE « UNWRAP » EXACT DE BLENDER (LSCM)** mais l'équivalent de son « Smart
+    UV Project » : des ÎLOTS de faces voisines dont la normale reste à moins de 66° de celle qui a lancé
+    l'îlot ; chacun mis À PLAT sur son plan moyen ; rangés par étagères dans [0,1] à UNE échelle.
+    Les UV sont stockés par coin de face, gardés quand une face est seulement DÉPLACÉE, effacés quand elle
+    est déformée (on ne devine pas l'UV d'un point neuf) : la face retombe sur la boîte et l'écran dit
+    combien sont à redéplier. Le matériau prend une projection « UV » ; **Export UV layout…** écrit le
+    patron en PNG (2048²), à peindre ailleurs. **MESURÉ** : tout dans [0,1], aucun texel dans deux îlots
+    (compté en pixels), une échelle unique, les carrés restent carrés, aucun îlot en MIROIR ; le témoin
+    entier en 366 îlots, 248 ms ; vu à l'image. Mutations rouges : étagère qui ne descend pas, îlot en
+    miroir, ménage qui efface tout, U ignoré — et « une échelle par îlot », d'abord MUETTE sur le cube
+    (îlots tous égaux) : un pavé 2×1×1 la fait rougir.
+    ⚠ `trait` est devenu un MOT RÉSERVÉ de GDScript 4.7 : `var trait :=` ne compilait plus.
+  - **PAS ENCORE ÉCRIT** : une projection cylindrique ; un vrai LSCM ; un rangement plus serré (la marge
+    visée laisse ~20 % de patron vide). Rien n'a été tenu en main.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1075,9 +1089,17 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   appuyé met la touche à l'état tenu pour `Input.is_physical_key_pressed`, jusqu'à son relâché — mesuré
   le 29 septembre 2026. ⚠ **LA GARDE « A NE CHOISIT PAS ADD » ÉTAIT MUETTE** : l'outil était déjà Add.
   Elle part désormais de Dig.
-  ⚠ **LES GREFFONS (Godot, Unity, Unreal) GARDENT NAVIGATE COMME TROISIÈME VISÉE** : le changement du 29
-  n'a porté que sur l'appli. **OUVERT** — les aligner ? Dans Unity et Unreal, Navigate REND la souris au
-  moteur, dont la vue vole déjà nativement.
+  **LES TROIS GREFFONS SONT ALIGNÉS — DEMANDÉ PAR JORDAN (29 septembre 2026).** Tab n'alterne plus que Grid
+  et Sculpt, Espace bascule Navigate (qui garde la visée et rend la souris au moteur), choisir une visée
+  sort du vol. **MESURÉ** — Godot (`test_greffon_peinture` 120 : Espace pris, visée gardée, cycle à deux,
+  Tab en vol) ; Unity (la transition en C# pur, `AimState`, 24 vérifications au banc .NET, et 20 tests sur
+  20 dans Unity 6.6 dont 4 qui envoient de VRAIS événements à l'éditeur de scène ; Espace tenu ne bascule
+  qu'une fois) ; Unreal (la transition dans MBCore, 20 vérifications au core-runner, BuildPlugin 5.8.3 sans
+  avertissement). Mutations rouges partout (2 Godot, 11 Unity, 4 Unreal).
+  ⚠ Unreal : un niveau enregistré avec l'ancienne visée Navigate se relit en Grid + vol (la valeur d'enum
+  reste, masquée) ; et dans le mode MarchingBlocks, Espace ne fait plus tourner le gizmo d'Unreal.
+  ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN** dans les trois éditeurs — en particulier, qu'Espace arrive bien
+  jusqu'au greffon dans la Scene view d'Unity et la vue d'Unreal.
 - **LE PLAY TEST — DEMANDÉ PAR JORDAN (29 septembre 2026).** Un troisième atelier : on MARCHE dans le
   monde peint, ZQSD (par leur place), Espace saute, Maj court ; caméra à la troisième personne qui tourne
   autour du personnage en LACET au clic droit glissé, molette pour rapprocher ou éloigner ; Échap rend
@@ -1226,14 +1248,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Treize suites, **8 053 vérifications, 0 échec** (29 septembre 2026, recomptées après l'accélérateur du
+  Treize suites, **8 080 vérifications, 0 échec** (29 septembre 2026, recomptées après le dépliage du
   modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 136, `test_greffon_peinture` 117, `test_faux_artiste` 35,
-  `test_maillage_edite` 133.
+  `test_outils` 57, `fumee_appli` 140, `test_greffon_peinture` 120, `test_faux_artiste` 35,
+  `test_maillage_edite` 153.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

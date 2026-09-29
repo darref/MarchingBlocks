@@ -29,6 +29,12 @@ var teintes := PackedColorArray()
 ## ⚠ **IL SUIT LA TEINTE PARTOUT** : chaque opération qui fabrique, recopie ou retire une face fait la même
 ## chose aux deux tableaux. Une face née d'une opération prend le matériau de celle dont elle sort.
 var mats := PackedInt32Array()
+## LES UV DÉPLIÉS (U) — un PackedVector2Array par face, un UV par coin ; vide = pas déplié.
+## ⚠ **UNE OPÉRATION QUI DÉFORME UNE FACE EFFACE SES UV** (une face neuve, un sommet inséré, une face
+## fendue) : on ne devine pas l'UV d'un point neuf. La face retombe sur la projection en boîte, et l'écran
+## dit combien de faces sont à redéplier. Une face seulement DÉPLACÉE (G, R, S, l'extrusion de sa région)
+## garde les siens.
+var uvs: Array = []
 ## LES MATÉRIAUX — DÉCIDÉ (Jordan, 29 septembre 2026) : « matériaux + projections ». Chacun :
 ## {"nom", "couleur": Color, "rugosite", "metal", "texture": chemin d'image ou "", "echelle": cases par
 ## répétition}. ⚠ **LES UV NE SONT PAS STOCKÉS : ILS SE PROJETTENT DEPUIS LA POSITION** (en boîte, sur
@@ -45,6 +51,8 @@ func copie() -> RefCounted:
 		m.faces.append((f as PackedInt32Array).duplicate())
 	m.teintes = teintes.duplicate()
 	m.mats = mats.duplicate()
+	for u in uvs:
+		m.uvs.append((u as PackedVector2Array).duplicate())
 	m.materiaux = materiaux.duplicate(true)
 	return m
 
@@ -53,17 +61,32 @@ func mat(f: int) -> int:
 	return mats[f] if f < mats.size() else -1
 
 
+## Les UV de la face, s'ils sont valides (un par coin), sinon vide.
+func uv(f: int) -> PackedVector2Array:
+	if f < uvs.size() and (uvs[f] as PackedVector2Array).size() == (faces[f] as PackedInt32Array).size():
+		return uvs[f]
+	return PackedVector2Array()
+
+
+func _effacer_uv(f: int) -> void:
+	if f < uvs.size():
+		uvs[f] = PackedVector2Array()
+
+
 ## Ajoute une face avec sa teinte et son matériau — les deux tableaux restent alignés.
 ## ⚠ **ON COMPLÈTE D'ABORD** : un maillage bâti à la main (des faces sans matériau) garderait sinon un
 ## tableau `mats` plus court, et le matériau d'une face neuve atterrirait sur une face ancienne.
-func _ajouter(face: PackedInt32Array, teinte: Color, m: int) -> void:
+func _ajouter(face: PackedInt32Array, teinte: Color, m: int, u := PackedVector2Array()) -> void:
 	while mats.size() < faces.size():
 		mats.append(-1)
 	while teintes.size() < faces.size():
 		teintes.append(Color.WHITE)
+	while uvs.size() < faces.size():
+		uvs.append(PackedVector2Array())
 	faces.append(face)
 	teintes.append(teinte)
 	mats.append(m)
+	uvs.append(u)
 
 
 # ── L'ENTRÉE ET LA SORTIE ───────────────────────────────────────────────────────────────────────────
@@ -172,7 +195,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 		var pos := PackedVector3Array()
 		var nor := PackedVector3Array()
 		var col := PackedColorArray()
-		var uv := PackedVector2Array()
+		var uv_sortie := PackedVector2Array()
 		var echelle: float = maxf(0.01, float(materiaux[m].get("echelle", 1.0))) if m >= 0 else 1.0
 		var mode: String = str(materiaux[m].get("projection", "boite")) if m >= 0 else "boite"
 		for f in groupes[m]:
@@ -186,7 +209,8 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 					nor.append(n)
 					col.append(teintes[f] if f < teintes.size() else Color.WHITE)
 					if m >= 0:
-						uv.append(projeter(p, n, echelle, mode))
+						var depl := uv(f) if mode == "uv" else PackedVector2Array()
+						uv_sortie.append(depl[t[k]] if not depl.is_empty() else projeter(p, n, echelle, "boite" if mode == "uv" else mode))
 		if pos.is_empty():
 			continue
 		var a := []
@@ -196,7 +220,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 			a[Mesh.ARRAY_NORMAL] = nor
 		a[Mesh.ARRAY_COLOR] = col
 		if m >= 0:
-			a[Mesh.ARRAY_TEX_UV] = uv
+			a[Mesh.ARRAY_TEX_UV] = uv_sortie
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 		# ⚠ **CHAQUE SURFACE PORTE SON MATÉRIAU, LA LÉGENDE COMPRISE.** Un `material_override` unique (la
 		# couleur de sommet) remplaçait ceux de TOUTES les surfaces — à l'écran comme dans le .glb : les
@@ -280,6 +304,141 @@ static func _couleur(v: Variant) -> Color:
 	return Color.WHITE
 
 
+# ── LE DÉPLIAGE (U) ─────────────────────────────────────────────────────────────────────────────────
+#
+# **DÉCIDÉ (Jordan, 29 septembre 2026)** : un dépliage d'UV, pour peindre des textures qui ne se répètent
+# pas. ⚠ **CE N'EST PAS LE « UNWRAP » EXACT DE BLENDER (LSCM, un solveur de moindres carrés)** : c'est
+# l'équivalent de son « Smart UV Project », qui convient aux formes du témoin, faites de faces planes :
+#   1. les ÎLOTS : des faces voisines dont la normale reste à moins de `angle` de celle qui a lancé l'îlot ;
+#   2. chaque îlot est MIS À PLAT sur son plan moyen — sans aucune déformation quand l'îlot est plan ;
+#   3. les îlots sont RANGÉS par étagères dans le carré [0,1], sans se chevaucher, avec une marge, à UNE
+#      échelle commune (une case fait la même taille dans tout le patron : la texture a une densité égale).
+
+## Déplie les faces `choix` (toutes si vide). Rend {"ilots": nombre, "faces": nombre}.
+func deplier(choix: Array = [], angle := 66.0, marge := 0.01) -> Dictionary:
+	var dans := {}
+	for f in (choix if not choix.is_empty() else range(faces.size())):
+		dans[f] = true
+	while uvs.size() < faces.size():
+		uvs.append(PackedVector2Array())
+	var fpa := faces_par_arete()
+	var seuil := cos(deg_to_rad(angle))
+	var ilot_de := {}
+	var ilots: Array = []
+	for depart in dans:
+		if ilot_de.has(depart):
+			continue
+		var n0 := normale(depart)
+		var ilot: Array = [depart]
+		ilot_de[depart] = ilots.size()
+		var file: Array = [depart]
+		while not file.is_empty():
+			var f: int = file.pop_back()
+			var face: PackedInt32Array = faces[f]
+			for k in face.size():
+				for g in fpa.get(arete(face[k], face[(k + 1) % face.size()]), []):
+					if dans.has(g) and not ilot_de.has(g) and normale(g).dot(n0) >= seuil:
+						ilot_de[g] = ilots.size()
+						ilot.append(g)
+						file.append(g)
+		ilots.append(ilot)
+	# 2. À plat : chaque îlot sur son plan moyen (normales pondérées par l'aire).
+	var plats: Array = []   # [{faces, uv: {f: PackedVector2Array}, min, max}]
+	for ilot in ilots:
+		var nrm := Vector3.ZERO
+		for f in ilot:
+			nrm += normale(f) * _aire(f)
+		nrm = nrm.normalized() if nrm.length_squared() > 1e-12 else normale(ilot[0])
+		var haut_ref := Vector3.UP if absf(nrm.y) < 0.9 else Vector3.BACK
+		# Vu de DEHORS (l'œil regarde vers −N) : u vers la droite, v vers le bas de l'image (comme `projeter`).
+		var droite := haut_ref.cross(nrm).normalized()
+		var haut := nrm.cross(droite).normalized()
+		var par_face := {}
+		var bmin := Vector2(INF, INF)
+		var bmax := Vector2(-INF, -INF)
+		for f in ilot:
+			var u := PackedVector2Array()
+			for i in faces[f]:
+				var q: Vector3 = sommets[i]
+				var t := Vector2(q.dot(droite), -q.dot(haut))
+				u.append(t)
+				bmin = bmin.min(t)
+				bmax = bmax.max(t)
+			par_face[f] = u
+		plats.append({"uv": par_face, "min": bmin, "taille": bmax - bmin})
+	# 3. Le rangement, par étagères : les plus hauts d'abord, sur une largeur qui vise un carré.
+	var aire := 0.0
+	for pl in plats:
+		aire += (pl["taille"] as Vector2).x * (pl["taille"] as Vector2).y
+	var largeur := maxf(sqrt(aire) * 1.15, 1e-6)
+	for pl in plats:
+		largeur = maxf(largeur, (pl["taille"] as Vector2).x)
+	var jeu := largeur * marge
+	var ordre: Array = range(plats.size())
+	ordre.sort_custom(func(a: int, b: int) -> bool: return plats[a]["taille"].y > plats[b]["taille"].y)
+	var x := jeu
+	var y := jeu
+	var etagere := 0.0
+	var etendue := Vector2.ZERO
+	for i in ordre:
+		var t: Vector2 = plats[i]["taille"]
+		if x + t.x + jeu > largeur + 2.0 * jeu and x > jeu:
+			x = jeu
+			y += etagere + jeu
+			etagere = 0.0
+		plats[i]["place"] = Vector2(x, y)
+		x += t.x + jeu
+		etagere = maxf(etagere, t.y)
+		etendue = etendue.max(Vector2(x, y + t.y + jeu))
+	var echelle := 1.0 / maxf(etendue.x, etendue.y)
+	for pl in plats:
+		for f in pl["uv"]:
+			var u: PackedVector2Array = pl["uv"][f]
+			for k in u.size():
+				u[k] = (u[k] - pl["min"] + pl["place"]) * echelle
+			uvs[f] = u
+	return {"ilots": ilots.size(), "faces": dans.size()}
+
+
+func _aire(f: int) -> float:
+	var face: PackedInt32Array = faces[f]
+	var a := Vector3.ZERO
+	for i in range(1, face.size() - 1):
+		a += (sommets[face[i]] - sommets[face[0]]).cross(sommets[face[i + 1]] - sommets[face[0]])
+	return a.length() * 0.5
+
+
+## Combien de faces portent un matériau en projection « uv » SANS UV valides — à redéplier.
+func faces_a_deplier() -> int:
+	var n := 0
+	for f in faces.size():
+		var m := mat(f)
+		if m >= 0 and m < materiaux.size() and str(materiaux[m].get("projection", "")) == "uv" and uv(f).is_empty():
+			n += 1
+	return n
+
+
+## LE PATRON — une image des arêtes dépliées, à peindre dans un logiciel de dessin (« Export UV layout »).
+func dessiner_patron(taille := 1024) -> Image:
+	var img := Image.create(taille, taille, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.1, 0.1, 0.12, 1.0))
+	var encre := Color(0.95, 0.85, 0.4, 1.0)
+	for f in faces.size():
+		var u := uv(f)
+		for k in u.size():
+			_ligne(img, u[k] * taille, u[(k + 1) % u.size()] * taille, encre)
+	return img
+
+
+static func _ligne(img: Image, a: Vector2, b: Vector2, c: Color) -> void:
+	var n := int(maxf(absf(b.x - a.x), absf(b.y - a.y))) + 1
+	for i in n + 1:
+		var p := a.lerp(b, float(i) / float(n))
+		var x := clampi(int(p.x), 0, img.get_width() - 1)
+		var y := clampi(int(p.y), 0, img.get_height() - 1)
+		img.set_pixel(x, y, c)
+
+
 # ── LE FORMAT NATIF (.mbmesh) ──────────────────────────────────────────────────────────────────────
 #
 # ⚠ **LE MODÈLE S'ENREGISTRE DANS SON PROPRE FORMAT, ET LE .glb N'EN EST QU'UNE SORTIE.** Relire le .glb
@@ -305,7 +464,17 @@ func vers_dictionnaire() -> Dictionary:
 		e["couleur"] = [c.r, c.g, c.b, c.a]
 		mt.append(e)
 	return {"format": "marchingblocks-mesh", "version": 1, "sommets": s, "faces": f, "teintes": t,
-		"mats": Array(mats), "materiaux": mt}
+		"mats": Array(mats), "uvs": _uvs_en_listes(), "materiaux": mt}
+
+
+func _uvs_en_listes() -> Array:
+	var sortie: Array = []
+	for f in faces.size():
+		var l: Array = []
+		for p in uv(f):
+			l.append_array([p.x, p.y])
+		sortie.append(l)
+	return sortie
 
 
 static func depuis_dictionnaire(d: Dictionary) -> RefCounted:
@@ -318,11 +487,16 @@ static func depuis_dictionnaire(d: Dictionary) -> RefCounted:
 	var fs: Array = d.get("faces", [])
 	var ts: Array = d.get("teintes", [])
 	var ms: Array = d.get("mats", [])
+	var us: Array = d.get("uvs", [])
 	for k in fs.size():
 		var face := PackedInt32Array()
 		for i in fs[k]:
 			face.append(int(i))
-		m._ajouter(face, _couleur(ts[k]) if k < ts.size() else Color.WHITE, int(ms[k]) if k < ms.size() else -1)
+		var u := PackedVector2Array()
+		if k < us.size():
+			for i in range(0, (us[k] as Array).size() - 1, 2):
+				u.append(Vector2(float(us[k][i]), float(us[k][i + 1])))
+		m._ajouter(face, _couleur(ts[k]) if k < ts.size() else Color.WHITE, int(ms[k]) if k < ms.size() else -1, u)
 	for e in d.get("materiaux", []):
 		var x: Dictionary = (e as Dictionary).duplicate()
 		x["couleur"] = _couleur(e.get("couleur", [1, 1, 1, 1]))
@@ -687,14 +861,17 @@ func supprimer_faces(choix: Array) -> void:
 	var gardees: Array = []
 	var gt := PackedColorArray()
 	var gm := PackedInt32Array()
+	var gu: Array = []
 	for f in faces.size():
 		if not ote.has(f):
 			gardees.append(faces[f])
 			gt.append(teintes[f])
 			gm.append(mat(f))
+			gu.append(uv(f))
 	faces = gardees
 	teintes = gt
 	mats = gm
+	uvs = gu
 	nettoyer()
 
 
@@ -817,6 +994,7 @@ func subdiviser(choix: Array) -> Array:
 	var gardees: Array = []
 	var gt := PackedColorArray()
 	var gm := PackedInt32Array()
+	var gu: Array = []
 	var neuves: Array = []
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
@@ -831,13 +1009,17 @@ func subdiviser(choix: Array) -> Array:
 				gardees.append(PackedInt32Array([face[i], milieux[apres], ci, milieux[avant]]))
 				gt.append(teintes[f])
 				gm.append(mat(f))
+				gu.append(PackedVector2Array())
 		else:
-			gardees.append(_avec_milieux(face, milieux))
+			var avec := _avec_milieux(face, milieux)
+			gardees.append(avec)
 			gt.append(teintes[f])
 			gm.append(mat(f))
+			gu.append(uv(f) if avec.size() == face.size() else PackedVector2Array())
 	faces = gardees
 	teintes = gt
 	mats = gm
+	uvs = gu
 	return neuves
 
 
@@ -923,6 +1105,7 @@ func couper_en_boucle(depart: Vector2i, t := 0.5) -> Array:
 	var gardees: Array = []
 	var gt := PackedColorArray()
 	var gm := PackedInt32Array()
+	var gu: Array = []
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
 		var coupees: Array = []
@@ -940,13 +1123,18 @@ func couper_en_boucle(depart: Vector2i, t := 0.5) -> Array:
 			gt.append(teintes[f])
 			gm.append(mat(f))
 			gm.append(mat(f))
+			gu.append(PackedVector2Array())
+			gu.append(PackedVector2Array())
 		else:
-			gardees.append(_avec_milieux(face, milieux))
+			var avec := _avec_milieux(face, milieux)
+			gardees.append(avec)
 			gt.append(teintes[f])
 			gm.append(mat(f))
+			gu.append(uv(f) if avec.size() == face.size() else PackedVector2Array())
 	faces = gardees
 	teintes = gt
 	mats = gm
+	uvs = gu
 	return neufs
 
 
@@ -1043,6 +1231,7 @@ func biseauter(choix: Array, largeur: float) -> Array:
 	var neuves_faces: Array = []
 	var neuves_teintes := PackedColorArray()
 	var neuves_mats := PackedInt32Array()
+	var neuves_uvs: Array = []
 	var coins := {}       # Vector2i(face, indice) → sommet final (pour les quads du biseau)
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
@@ -1058,9 +1247,11 @@ func biseauter(choix: Array, largeur: float) -> Array:
 				for cle in [Vector2i(v, s), Vector2i(s, v)]:
 					if sur_arete.has(cle):
 						sortie.append(sur_arete[cle])
-		neuves_faces.append(_sans_doublons(sortie))
+		var refaite := _sans_doublons(sortie)
+		neuves_faces.append(refaite)
 		neuves_teintes.append(teintes[f])
 		neuves_mats.append(mat(f))
+		neuves_uvs.append(uv(f) if refaite == face else PackedVector2Array())
 	# Les quads du biseau.
 	var quads: Array = []
 	for e in sel:
@@ -1091,9 +1282,11 @@ func biseauter(choix: Array, largeur: float) -> Array:
 			neuves_faces.append(q)
 			neuves_teintes.append(teintes[f1])
 			neuves_mats.append(mat(f1))
+			neuves_uvs.append(PackedVector2Array())
 	faces = neuves_faces
 	teintes = neuves_teintes
 	mats = neuves_mats
+	uvs = neuves_uvs
 	# Les trous des bouts : toute arête orientée restée seule, qui n'était pas un bord AVANT.
 	_reboucher(avant_bords)
 	nettoyer()
@@ -1205,6 +1398,7 @@ func _restaurer(m: RefCounted) -> void:
 	faces = m.faces
 	teintes = m.teintes
 	mats = m.mats
+	uvs = m.uvs
 
 
 ## Un point neuf sur l'arête e, inséré dans TOUTES les faces qui la bordent. Rend son indice, ou −1.
@@ -1219,6 +1413,7 @@ func _inserer_sur_arete(e: Vector2i, p: Vector3) -> int:
 			if arete(a, b) == e:
 				face.insert(k + 1, i)
 				faces[f] = face
+				_effacer_uv(f)
 				touche = true
 				break
 	if not touche:
@@ -1255,6 +1450,7 @@ func _fendre(a: int, b: int) -> bool:
 				break
 			k = (k + 1) % n
 		faces[f] = une
+		_effacer_uv(f)
 		_ajouter(autre, teintes[f], mat(f))
 		return true
 	return false
@@ -1268,6 +1464,7 @@ func nettoyer() -> Dictionary:
 	var gardees: Array = []
 	var gt := PackedColorArray()
 	var gm := PackedInt32Array()
+	var gu: Array = []
 	for f in faces.size():
 		var face: PackedInt32Array = faces[f]
 		var propre := PackedInt32Array()
@@ -1281,9 +1478,11 @@ func nettoyer() -> Dictionary:
 			gardees.append(propre)
 			gt.append(teintes[f] if f < teintes.size() else Color.WHITE)
 			gm.append(mat(f))
+			gu.append(uv(f) if propre.size() == face.size() else PackedVector2Array())
 	faces = gardees
 	teintes = gt
 	mats = gm
+	uvs = gu
 	var emploi := {}
 	for face in faces:
 		for i in face:

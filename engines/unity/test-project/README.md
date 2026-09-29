@@ -6,4 +6,5 @@ Proves the Unity package on the REAL witness, through the REAL glTF importer (gl
    exports the witness tileset into `Assets/`, with its cells and what MarchingBlocks places on them, and a
    three-layer painted world (`witness_world.mbworld`) with what MarchingBlocks places on each layer.
 2. `Unity.exe -batchmode -nographics -projectPath . -runTests -testPlatform EditMode -testResults results.xml`
-   runs the package's conformance tests, `Assets/Tests/Editor/WitnessTests.cs` and `WorldImportTests.cs`.
+   runs the package's conformance and aim tests, `Assets/Tests/Editor/WitnessTests.cs`, `WorldImportTests.cs`
+   and `AimKeysTests.cs` (Tab and Space through the Scene-view editor itself).

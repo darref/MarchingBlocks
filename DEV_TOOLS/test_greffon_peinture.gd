@@ -366,17 +366,29 @@ func _les_outils_dans_la_vue() -> void:
 	_egal(monde.floor_y, 0, "Ctrl+Z rend l'étage avec les cases")
 	_egal(nb.call(), 6, "et reprend l'extrusion")
 
-	# Navigate : aucun clic ne peint, Tab revient à Grid.
-	ed.set_aim("navigate")
+	# NAVIGATE EST UN INTERRUPTEUR (Espace), plus une visée (Jordan, 29 septembre 2026) — aligné sur l'appli.
+	ed.set_aim("sculpt")
 	ed.set_mode("add")
+	var espace := InputEventKey.new()
+	espace.keycode = KEY_SPACE
+	espace.pressed = true
+	_vrai(ed.input(cam, espace), "Espace est pris")
+	_vrai(ed.navigating and ed.aim == "sculpt", "Espace allume Navigate SANS toucher à la visée")
 	_vrai(not clic.call(ecran.call(Vector3i(0, 0, 0)), true), "en Navigate, le clic est LAISSÉ à l'éditeur")
 	clic.call(ecran.call(Vector3i(0, 0, 0)), false)
 	_egal(nb.call(), 6, "en Navigate, un clic ne peint rien")
+	_vrai(ed.input(cam, espace) and not ed.navigating and ed.aim == "sculpt", "Espace éteint Navigate : la visée revient telle quelle")
 	var tab := InputEventKey.new()
 	tab.keycode = KEY_TAB
 	tab.pressed = true
-	_vrai(ed.input(cam, tab), "Tab est pris en Navigate")
-	_egal(ed.aim, "grid", "et revient à Grid")
+	var visees: Array = [ed.aim]
+	for i in 2:
+		ed.input(cam, tab)
+		visees.append(ed.aim)
+	_egal(visees, ["sculpt", "grid", "sculpt"], "Tab alterne Grid et Sculpt, et SEULEMENT eux")
+	ed.input(cam, espace)
+	_vrai(ed.input(cam, tab) and not ed.navigating and ed.aim == "grid", "Tab en vol choisit la visée suivante et sort du vol")
+	ed.set_aim("grid")
 
 	# World → Clear cells (parité avec Unity et Unreal) : tout part en UNE action, et Ctrl+Z rend tout.
 	ed.clear_world()

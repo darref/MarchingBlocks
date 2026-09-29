@@ -48,6 +48,19 @@ namespace MBPaint
 
 	using FIsFull = std::function<bool(const FCell&)>;
 
+	/// The two aims. Navigate is NOT an aim: it is a switch on top of them (below).
+	enum class EAim { Grid, Sculpt };
+
+	/// What the viewport does with the mouse: aim (Grid or Sculpt) and paint, or navigate — the mouse and
+	/// keys go back to the engine's own viewport navigation and no click paints. The aim is KEPT while
+	/// navigating: switching navigation off gives back the aim you had.
+	struct FAimState
+	{
+		EAim Aim = EAim::Grid;
+		bool bNavigating = false;
+		bool operator==(const FAimState& O) const { return Aim == O.Aim && bNavigating == O.bNavigating; }
+	};
+
 	namespace Tools
 	{
 		/// A box of more cells returns empty: two corners far apart by accident (a ray lost on the
@@ -89,5 +102,16 @@ namespace MBPaint
 
 		/// Only empty cells are set; the selection becomes the pasted cells.
 		MARCHINGBLOCKSPAINT_API FChange Paste(const FCellSet& Cells, const std::vector<FCell>& Clipboard, const FCell& AnchorCell);
+
+		// ── THE AIM AND NAVIGATION — the same transitions as the MarchingBlocks tool. ──
+
+		/// Tab: alternates Grid ↔ Sculpt, and nothing else — it never enters navigation. Tab is choosing
+		/// an aim, so it LEAVES navigation.
+		MARCHINGBLOCKSPAINT_API FAimState Tab(const FAimState& State);
+		/// Space: navigation on / off. The aim is untouched either way.
+		MARCHINGBLOCKSPAINT_API FAimState ToggleNavigate(const FAimState& State);
+		/// Choosing an aim (Grid or Sculpt, even the current one) leaves navigation: you pick an aim to
+		/// paint, not to fly.
+		MARCHINGBLOCKSPAINT_API FAimState ChooseAim(const FAimState& State, EAim Aim);
 	}
 }

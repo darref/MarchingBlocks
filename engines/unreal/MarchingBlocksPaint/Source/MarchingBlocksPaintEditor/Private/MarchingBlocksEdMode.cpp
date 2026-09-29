@@ -129,7 +129,8 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 	using namespace MarchingBlocksEdModeDetail;
 	Preview.clear();
 	AMarchingBlocksWorld* World = Target();
-	if (!World || World->Aim == EMarchingBlocksAim::Navigate) return;
+	// Navigating aims at nothing, so it promises nothing: no preview.
+	if (!World || World->GetAimState().bNavigating) return;
 	FVector Origin, Direction;
 	if (!MouseRay(ViewportClient, Viewport, Origin, Direction)) return;
 
@@ -191,12 +192,14 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 	const bool bControl = Viewport->KeyState(EKeys::LeftControl) || Viewport->KeyState(EKeys::RightControl);
 	const bool bFlying = Viewport->KeyState(EKeys::RightMouseButton);
 
-	// Navigate takes nothing but Tab: the mouse and keys fly the viewport, as usual.
-	if (World->Aim == EMarchingBlocksAim::Navigate)
+	// Navigating takes nothing but Space (back to painting) and Tab (an aim, which also leaves navigation):
+	// the mouse and every other key fly the viewport, as usual. No click paints.
+	if (World->GetAimState().bNavigating)
 	{
-		if (Key == EKeys::Tab && Event == IE_Pressed && !bFlying)
+		if (Event == IE_Pressed && !bFlying && (Key == EKeys::SpaceBar || Key == EKeys::Tab))
 		{
-			World->Aim = EMarchingBlocksAim::Grid;
+			SetAimState(World, Key == EKeys::Tab ? MBPaint::Tools::Tab(World->GetAimState())
+				: MBPaint::Tools::ToggleNavigate(World->GetAimState()));
 			return true;
 		}
 		return false;
@@ -288,6 +291,24 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 	return HandleShortcut(World, Viewport, Key);
 }
 
+// The transitions are MBCore's (Tools::Tab, ToggleNavigate, ChooseAim — proven by the core-runner); this
+// only applies them. ⚠ Entering navigation ENDS the current stroke: its release would come while navigating,
+// where no click is taken, and the undo transaction would stay open.
+void UMarchingBlocksEdMode::SetAimState(AMarchingBlocksWorld* World, const MBPaint::FAimState& State)
+{
+	World->SetAimState(State);
+	if (State.bNavigating)
+	{
+		if (bStroking)
+		{
+			bStroking = false;
+			GEditor->EndTransaction();
+		}
+		bBoxing = false;
+	}
+	Preview.clear();
+}
+
 bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key)
 {
 	if (Key == EKeys::A) World->Tool = EMarchingBlocksTool::Add;
@@ -295,8 +316,8 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else if (Key == EKeys::S) World->Tool = EMarchingBlocksTool::Select;
 	else if (Key == EKeys::G) World->Tool = EMarchingBlocksTool::Rect;
 	else if (Key == EKeys::B) World->Tool = EMarchingBlocksTool::Box;
-	else if (Key == EKeys::Tab)
-		World->Aim = World->Aim == EMarchingBlocksAim::Grid ? EMarchingBlocksAim::Sculpt : EMarchingBlocksAim::Navigate;
+	else if (Key == EKeys::Tab) SetAimState(World, MBPaint::Tools::Tab(World->GetAimState()));
+	else if (Key == EKeys::SpaceBar) SetAimState(World, MBPaint::Tools::ToggleNavigate(World->GetAimState()));
 	else if (Key == EKeys::LeftBracket) World->BrushSize = FMath::Max(1, World->BrushSize - 1);
 	else if (Key == EKeys::RightBracket) World->BrushSize = FMath::Min(7, World->BrushSize + 1);
 	else if (Key == EKeys::PageUp || Key == EKeys::PageDown)

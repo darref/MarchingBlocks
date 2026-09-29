@@ -5,8 +5,9 @@
 // applies inside an undo transaction. Its settings and the selection operations are on the actor, in the
 // Details panel.
 //
-//   AIM      Grid — the floor plane (Page Up / Page Down) · Sculpt — the matter itself
-//            Navigate — aims at nothing: the viewport flies as usual. Tab cycles the three.
+//   AIM      Grid — the floor plane (Page Up / Page Down) · Sculpt — the matter itself. Tab alternates them.
+//   NAVIGATE Space, on and off: aims at nothing, no click paints, the viewport flies as usual. The aim is
+//            kept and comes back; choosing an aim (Tab, or in the Details panel) leaves navigation.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)     Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]); shape and Hollow on the actor
 //   KEYS     Delete · Esc · arrows move the selection (they follow the camera; Shift + up / down lift)
@@ -57,6 +58,7 @@ private:
 	bool HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key);
 	MBPaint::FCell ArrowOffset(AMarchingBlocksWorld* World, FEditorViewportClient* ViewportClient, FKey Key, bool bShift) const;
 	MBPaint::EBrushTool Gesture(const AMarchingBlocksWorld* World, bool bInverse) const;
+	void SetAimState(AMarchingBlocksWorld* World, const MBPaint::FAimState& State);
 
 	// The current stroke.
 	bool bStroking = false;
