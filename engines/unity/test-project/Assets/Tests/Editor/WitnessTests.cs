@@ -165,6 +165,59 @@ public sealed class WitnessTests
         finally { Object.DestroyImmediate(go); }
     }
 
+    // The fake artist's work (DEV_TOOLS/faux_artiste.gd), sliced by MarchingBlocks: its texture and UVs
+    // must reach every tile through glTFast. MarchingBlocks proves the same on its side; this is the far end.
+    [Test]
+    public void TheArtistsTextureArrivesOnEveryTile()
+    {
+        var manifest = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/faux.mbset/tileset.json");
+        var tiles = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/faux.mbset/tiles.glb");
+        Assert.IsNotNull(manifest, "faux.mbset/tileset.json is missing — run preparer_essai_unity.gd");
+        Assert.IsNotNull(tiles, "faux.mbset/tiles.glb is not imported as a GameObject");
+        var set = MBTileset.Load(manifest, tiles, out var error);
+        Assert.IsNull(error, error);
+        int without = 0;
+        string first = null;
+        foreach (var kv in set.Tiles)
+        {
+            var mesh = kv.Value.Mesh;
+            bool uv = mesh != null && mesh.vertexCount > 0 && mesh.uv.Length == mesh.vertexCount;
+            bool texture = false;
+            foreach (var m in kv.Value.Materials)
+                if (m != null)
+                    foreach (var p in m.GetTexturePropertyNames())
+                        if (m.GetTexture(p) != null) texture = true;
+            if (!uv || !texture) { without++; first = first ?? kv.Key; }
+        }
+        Debug.Log($"fake artist: {set.Tiles.Count} tiles, {without} without texture or UVs");
+        Assert.Greater(set.Tiles.Count, 500, "the fake artist's set is incomplete");
+        Assert.AreEqual(0, without, $"tiles without the artist's texture or UVs, e.g. {first}. "
+            + $"glTFast says: {ImporterReport("Assets/faux.mbset/tiles.glb")}");
+    }
+
+    // What glTFast's importer reported ("see inspector for details"), read by reflection so that this test
+    // does not depend on glTFast's API: the console only says that the import failed, never why.
+    static string ImporterReport(string path)
+    {
+        var importer = AssetImporter.GetAtPath(path);
+        if (importer == null) return "no importer";
+        var field = importer.GetType().GetField("reportItems",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        if (!(field?.GetValue(importer) is System.Array items)) return "no report";
+        var lines = new List<string>();
+        foreach (var item in items)
+        {
+            var t = item.GetType();
+            var type = t.GetField("Type")?.GetValue(item) ?? t.GetProperty("Type")?.GetValue(item);
+            var code = t.GetField("Code")?.GetValue(item) ?? t.GetProperty("Code")?.GetValue(item);
+            var messages = t.GetField("Messages")?.GetValue(item) ?? t.GetProperty("Messages")?.GetValue(item);
+            var text = messages is string[] m ? string.Join(" ", m) : "";
+            var full = t.GetMethod("ToString", System.Type.EmptyTypes)?.Invoke(item, null);
+            lines.Add($"{type} {code} {text} {full}");
+        }
+        return lines.Count == 0 ? "nothing" : string.Join(" | ", lines);
+    }
+
     static MarchingBlocksWorld Build(GameObject go)
     {
         var world = go.AddComponent<MarchingBlocksWorld>();

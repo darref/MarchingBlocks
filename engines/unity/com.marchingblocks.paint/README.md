@@ -6,6 +6,8 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 ## Install
 
 1. A glTF importer: **glTFast** (`com.unity.cloud.gltfast`, Package Manager → Unity Registry) or UnityGLTF.
+   Textured tiles also need Unity's built-in *Image Conversion* and *Unity Web Request Texture*
+   modules: this package declares them, so they are enabled when you install it.
 2. This package: Package Manager → **+** → *Add package from disk…* → `package.json`
    (or copy the folder into your project's `Packages/`).
 

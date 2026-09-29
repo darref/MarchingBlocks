@@ -8,12 +8,15 @@ extends SceneTree
 ## Écrit dans `engines/unity/test-project/Assets/` :
 ##   witness.mbset/          le jeu de tuiles du témoin, tel que « Export to engines » l'écrit ;
 ##   witness_cells.json      ses cases, en espace du FORMAT ;
-##   witness_expected.json   ce que MarchingBlocks pose dessus — l'attendu, calculé par `MB.poses()`.
+##   witness_expected.json   ce que MarchingBlocks pose dessus — l'attendu, calculé par `MB.poses()` ;
+##   faux.mbset/             le FAUX TRAVAIL D'ARTISTE (`faux_artiste.gd`) tranché : la texture et les UV
+##                           de l'artiste doivent arriver sur chaque tuile, lues par glTFast.
 ## ⚠ L'attendu vient de la RÉFÉRENCE, pas du greffon Unity : `WitnessTests.cs` compare le greffon à lui.
 
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
+const Faux := preload("res://DEV_TOOLS/faux_artiste.gd")
 const CIBLE := "D:/MarchingBlocks/engines/unity/test-project/Assets"
 
 
@@ -42,6 +45,19 @@ func _preparer() -> void:
 	_ecrire(CIBLE.path_join("witness_expected.json"), FN.attendu(pleines, comptes))
 	_ecrire(CIBLE.path_join("witness_geometry.json"), _coutures(pleines))
 	print("%s — %d tuiles, %d cases" % [r["dossier"], r["tuiles"], cellules.size()])
+	var faux := ProjectSettings.globalize_path("user://faux_unity.glb")
+	var m: Dictionary = Faux.fabriquer(faux)
+	var bilan: Dictionary = BM.librairie_depuis_glb(faux) if m["erreur"] == "" else {}
+	if bilan.is_empty() or not (bilan["erreurs"] as Array).is_empty():
+		print("✗ le faux travail ne se tranche pas : %s" % str(m["erreur"] if bilan.is_empty() else bilan["erreurs"]))
+		quit(1)
+		return
+	var rf: Dictionary = FN.exporter(bilan["lot"], CIBLE, "faux", "MarchingBlocks (test)")
+	if rf.has("erreur"):
+		print("✗ " + rf["erreur"])
+		quit(1)
+		return
+	print("%s — %d tuiles texturées" % [rf["dossier"], rf["tuiles"]])
 	quit(0)
 
 

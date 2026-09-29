@@ -4,6 +4,10 @@
   "displayName": "MarchingBlocks Paint",
   "description": "Paint worlds with MarchingBlocks tilesets: you paint cells, the non-cubic 3D tiles follow. Free and open - reads the .mbset folders made by the MarchingBlocks tool. Needs a glTF importer (glTFast or UnityGLTF) for tiles.glb.",
   "unity": "2021.3",
+  "dependencies": {
+    "com.unity.modules.imageconversion": "1.0.0",
+    "com.unity.modules.unitywebrequesttexture": "1.0.0"
+  },
   "author": { "name": "MarchingBlocks" },
   "keywords": ["tiles", "level design", "marching cubes", "terrain", "voxel", "gltf"]
 }

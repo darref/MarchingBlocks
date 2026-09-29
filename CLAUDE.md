@@ -53,7 +53,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   là où l'on cherche (Asset Library Godot, Asset Store Unity, Fab) : c'est la DÉCOUVERTE du §10. Le
   format est décrit au §4.
 - **OUVERT** : la licence ; l'icône et le splash ; les
-  textures PBR de test viennent de HEART_WORLD — leur droit de revente n'est PAS établi.
+  textures PBR de test (retirées avec le PBR le 29 septembre 2026) venaient de HEART_WORLD.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
@@ -65,8 +65,10 @@ des angles rentrants, des tunnels — en assemblant automatiquement, selon le vo
 découpées dans l'art de l'artiste.
 
 ⚠ **LA GÉOMÉTRIE PLUTÔT QUE LE PBR (Jordan, 24 septembre 2026).** Le relief est réel et libre, il n'est
-pas suggéré par une carte de normales. Le PBR reste prévu pour un **mode simplifié** du greffon, dans le
-greffon — pas comme substitut.
+pas suggéré par une carte de normales. ⚠ **LE PBR EST RETIRÉ, MODE SIMPLIFIÉ COMPRIS — DÉCIDÉ (Jordan,
+29 septembre 2026) : « on n'en a plus besoin ».** Le PBR espace monde, son POM, sa case à cocher, son
+shader et ses outils sont partis (§9.8) ; `git show 72d1764 -- addons/marchingblocks_core/pbr_monde.gd`
+les rend.
 
 ---
 
@@ -256,8 +258,17 @@ deux voisinages qui ne se sont jamais rencontrés dans le témoin, personne n'a 
 
 **DÉCIDÉ — deux sortes de matière dans le travail :**
 
-- **LE TERRAIN est MONOLITHIQUE** : une seule coque connexe, qui respecte le contrat de couture sur les
-  plans de coupe. Il est tranché comme aujourd'hui ; **la règle de pose des tuiles ne change pas**.
+- **LE TERRAIN est MONOLITHIQUE** : D'UN SEUL TENANT, et rien de plus. Il est tranché comme aujourd'hui ;
+  **la règle de pose des tuiles ne change pas**.
+  ⚠ **MONOLITHIQUE NE VEUT DIRE NI LISSE, NI FERMÉ, NI « SANS DÉPASSEMENT » — PRÉCISÉ PAR JORDAN (29
+  septembre 2026)** : *« tout dépassement de faces rattaché au volume et fusionné, qui rend le volume non
+  lisse »* — un liseré d'herbe qui sort du volume, une lame, une écaille, une arête vive — est du TERRAIN.
+  Il a le droit de sortir de sa case (règle (A)) ; seule la couture fait foi.
+  ⚠ **ET LA COUTURE DIT CE QUE ÇA VEUT DIRE, MESURÉ SUR LE FAUX TRAVAIL D'ARTISTE** (§4) : **ce qui
+  FRANCHIT un plan de coupe ne doit dépendre que du germe de cette face.** Un liseré posé « là où le ciel
+  est ouvert » (une condition hors des huit cases), ou assez large pour entrer dans une région dont le
+  germe est VIDE — une tuile qui n'existe pas —, a rendu 579 remarques de couture, toutes justes : sa
+  pointe se serait perdue, ou aurait flotté à côté d'une voisine qui ne la porte pas.
 - **TOUT LE RESTE EST UN PROP** : rochers, souches, décor. Jamais tranché, il part ENTIER, peut
   traverser les coupes et déborder sur les voisines.
 - ⚠ **LE MONOLITHE REND LES PROPS DÉDUCTIBLES — c'est ce qui le justifie.** Toute composante connexe
@@ -312,9 +323,13 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
   outil peint le bloc comme UN objet : la texture est continue à travers les coupes, donc parfaite dans
   le témoin et cassée à chaque couture du monde peint. Le témoin MENT alors sur le rendu. Ça s'écrit
   dans la documentation de l'artiste et sur la page de vente, AVANT l'achat (§10).
-- **PROPOSÉ** : une remarque de couture de TEXTURE — échantillonner l'image de chaque tuile le long de
-  ses bords de coupe et comparer entre voisines possibles, comme `verifier_couture` le fait pour la
-  géométrie. Une remarque, jamais une erreur : le trancheur ne juge pas l'art (§3).
+- **ÉCRIT ET MESURÉ (29 septembre 2026) — LA REMARQUE DE COUTURE DE TEXTURE** (`Tranchage.
+  verifier_couture_texture`, appelée par `trancher()`). Elle échantillonne l'image de chaque tuile sur
+  ses arêtes posées SUR un plan de coupe et compare toutes les tuiles au même point du plan, REPLIÉ par
+  ce que la pose peut faire (quarts de tour autour de +Y, les deux côtés d'un plan). Une remarque, jamais
+  une erreur (§3). Une tuile sans texture n'est pas jugée : le témoin calculé n'en porte pas.
+  Mesuré : 0 remarque sur le faux travail discipliné, 218 122 points sur le même peint sans discipline ;
+  le repli est gardé par un cas construit (deux tuiles en miroir, rouge contre bleu), vu rougir.
 - **PROPOSÉ, non tranché** : le MODE CANONIQUE — griser au témoin tous les exemplaires sauf un par clé
   (52 à peindre au lieu de 541), le choix canonique vivant à UN endroit du cœur (« quart de tour 0
   d'abord » à mesurer). Il réduit le nombre de raccords à tenir ; il ne les supprime pas.
@@ -522,8 +537,9 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   `mb_arete_creuse_b2h2_dehors` → `edge_inner_b2h2_outdoor`, exemplaires `_2`, `_3`… La traduction vit
   dans `format_neutre.gd` ET NULLE PART AILLEURS ; les greffons ne décodent jamais un nom, ils lisent
   `tiles`. Gardé : aucun id en double, aucun hors de l'alphabet.
-- ⚠ **LE PBR ESPACE MONDE NE VOYAGE PAS** — c'est un shader de Godot. Une tuile à `ShaderMaterial` part
-  avec un matériau standard lisant ses couleurs de sommet ; le travail de l'artiste part avec SES matériaux.
+- ⚠ **UN SHADER DE GODOT NE VOYAGE PAS** : une tuile à `ShaderMaterial` part avec un matériau standard
+  lisant ses couleurs de sommet ; le travail de l'artiste part avec SES matériaux — **et sa texture arrive,
+  MESURÉ jusque dans Unity** (voir le faux travail d'artiste, plus bas).
 - **Un format plus récent est REFUSÉ** par les greffons : sa règle peut vouloir dire autre chose.
 - **LES CAS D'ÉPREUVE** (`FormatNeutre.cas_d_epreuve()`, écrits par `DEV_TOOLS/generer_cas_d_epreuve.gd`
   dans `conformance.json`, LIVRÉ AVEC CHAQUE GREFFON) : 9 mondes (case seule, sol, falaise de 3,
@@ -644,7 +660,10 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
     `UInstancedStaticMeshComponent` par tuile, transitoires), réglages et opérations de sélection en
     `UPROPERTY` et boutons `CallInEditor` du panneau Details — donc AUCUN Slate à écrire ; et le mode
     `UMarchingBlocksEdMode` (un `UEdMode` : viser, glisser, aperçu, une transaction par coup).
-    ⚠ **CETTE COUCHE N'A JAMAIS ÉTÉ COMPILÉE** : ni Unreal ni Visual Studio sur le PC, ni ici. Elle est
+    ⚠ **CETTE COUCHE N'A JAMAIS ÉTÉ COMPILÉE.** Le 29 septembre 2026, le PC porte Unreal 5.8.3
+    (`D:/UE_5.8`) et les Build Tools de Visual Studio 2022 : `RunUAT BuildPlugin` s'arrête AVANT le
+    greffon, « Could not find NetFxSDK install dir » — il manque le .NET Framework SDK (4.6 ou plus), un
+    composant des Build Tools. Pas installé sans l'accord de Jordan. Elle est
     écrite pour Unreal 5.3+ en évitant ce qu'on sait piéger (masquage C4456–C4459, macros `check`,
     `verify`, `IN`, `OUT`, fonctions `static` homonymes fusionnées par les « unity builds », `FChange` et
     `FJsonValue` qui existent aussi dans Unreal — tout est qualifié `MBPaint::`). Son README le dit.
@@ -658,8 +677,45 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
 - **OUVERT** : l'export des MONDES peints (`world.json` : couches, jeu de tuiles, cases), proposé en
   option ; la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
-  un GameObject par tuile : à mesurer sur une vraie carte) ; **compiler le greffon Unreal** (il faut un
-  Unreal 5.3+ et Visual Studio).
+  un GameObject par tuile : à mesurer sur une vraie carte) ; **compiler le greffon Unreal** (il manque le
+  .NET Framework SDK aux Build Tools du PC, voir plus haut).
+
+### LE FAUX TRAVAIL D'ARTISTE — MESURÉ (29 septembre 2026)
+
+Toutes les mesures du retour venaient du témoin lui-même, dont aucun triangle ne chevauche une coupe et
+qui ne porte ni texture ni second objet. `DEV_TOOLS/faux_artiste.gd` fabrique ce qu'un artiste renverrait :
+un relief (le gradient d'un champ périodique et invariant par les quarts de tour — un artiste
+« discipliné »), un liseré d'herbe SOUDÉ au volume qui sort de sa case, une texture peinte sur les UV
+canoniques. `test_faux_artiste` le tranche par le vrai pipeline, chaque garde avec son contrôle négatif
+(un relief quelconque, une texture sans discipline, un liseré trop large).
+
+- ⚠ **IL A TROUVÉ TROIS DÉFAUTS RÉELS, que le témoin ne pouvait pas montrer :**
+  - **L'ORIGINE DU TRANCHEUR ÉTAIT DÉDUITE DE LA BOÎTE DU MAILLAGE** : un relief qui déborde légalement
+    d'un côté du bloc la décalait, et **tous les plans de coupe avec elle** (« le bloc mesure 1,000 de
+    trop », 579 remarques). Le bloc est à l'origine PAR CONTRAT : `trancher(…, origine)` la reçoit.
+  - **LE LECTEUR NE PRENAIT QUE LE PREMIER MAILLAGE DU FICHIER** : une herbe rangée dans un second objet
+    placé d'abord faisait perdre le TERRAIN sans un mot — 2 676 triangles relus sur 33 428. Il lit tout
+    (`_tous_les_maillages`), et le bilan le DIT : tous les objets sont tranchés comme du terrain tant que
+    les props entiers (§9 bis) n'existent pas.
+  - **L'OBJ ÉCRIVAIT `v` SANS LE RETOURNER** : l'OBJ compte depuis le bas, Godot et le glTF depuis le
+    haut. Nos propres relectures ne le voyaient pas — elles se trompaient dans les deux sens. Blender, oui.
+- **MESURÉ** : relief jusqu'à 0,084 case, 202 triangles à cheval sur une coupe, 1 336 triangles de liseré
+  hors de leur case — **541 items, 0 erreur, 0 remarque**, texture et UV sur chaque tuile, tranché en
+  ~22 s. Le relief maladroit : 23 remarques ; le liseré trop large : 322.
+- ⚠ **L'AIRE DANS UNE BANDE A DES FAUX POSITIFS, MESURÉS** : un liseré qui retombe PRÈS d'un plan de
+  coupe sans le franchir entre dans la bande de 0,08 case et fait parler `verifier_couture`, alors qu'il
+  ne casse rien. C'est la réserve n°1 de ce contrôle (« une condition nécessaire ») vue sur pièce.
+- **MESURÉ DANS BLENDER 5.1** (`DEV_TOOLS/essai_blender.gd` + `.py`, sur le PC) : le témoin OBJ importé
+  et réexporté en .glb revient avec **0 UV fausse sur 31 120 triangles** ; le faux travail relu et
+  réécrit par Blender se tranche en **541 items, 0 erreur, 0 remarque**. Sans le retournement de `v` :
+  31 120 UV fausses, vu rougir.
+- **MESURÉ DANS UNITY 6.6** : `TheArtistsTextureArrivesOnEveryTile` — la texture et les UV de l'artiste
+  sur les 541 tuiles, par glTFast. ⚠ **IL A D'ABORD ROUGI SUR UN VRAI DÉFAUT** : glTFast ne lit un PNG
+  qu'avec les modules intégrés *Image Conversion* et *Unity Web Request Texture* — absents d'un projet
+  au manifeste minimal, et la console ne disait que « Failed to import (see inspector) ». Le paquet les
+  DÉCLARE désormais, et le test lit le rapport de l'importeur par réflexion pour dire POURQUOI.
+  ⚠ Et un faux rouge juste après : un `tiles.glb` au contenu identique n'est pas réimporté, donc il
+  gardait l'échec d'avant — le « sujet a-t-il changé » du §6, une fois de plus.
 
 ## 5. L'éditeur — ce que GridMap donne, et ce qu'il faut écrire
 
@@ -850,12 +906,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Onze suites, **7 769 vérifications, 0 échec** (28 septembre 2026, recomptées après les UV canoniques
-  du témoin), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` : 18 cas de pose,
-  69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6 (9 tests) :
-  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 436,
-  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 34,
-  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 87.
+  Douze suites, **7 797 vérifications, 0 échec** (29 septembre 2026, recomptées après le faux travail
+  d'artiste et le retrait du PBR), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
+  (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
+  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
+  `test_massif_peint` 86, `test_tranchage` 40, `test_decoupe` 15, `test_etages` 7, `test_projet` 31,
+  `test_outils` 57, `fumee_appli` 58, `test_greffon_peinture` 87, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
@@ -1050,38 +1107,19 @@ désormais le greffon.
 
 7. **La sélection maison** (§5) : `_forward_3d_gui_input`, un rayon, un étage ou la géométrie, un
    surlignage. C'est ce qui débloque tous les outils au-delà de la case à case.
-8. **LE PBR ESPACE MONDE — EN COURS (Jordan, 27 septembre 2026).** Une case « Texturer en PBR espace
-   monde » sous le titre habille chaque teinte du témoin d'un set complet — albédo, normale, AO,
-   rugosité, hauteur en POM — projeté en TRIPLANAIRE dans l'espace monde (`pbr_monde.gdshader`).
-   - ⚠ **LA COULEUR DE SOMMET CHOISIT LE SET, ET C'EST CE QUI LE FAIT SUIVRE DANS LES TUILES** : le
-     tranchage fond tout en une surface, un matériau par surface s'y perdrait. Le matériau est posé
-     sur le solide AVANT le tranchage (`librairie(matiere)`) ; `test_blocs_maitres` exige qu'il se
-     retrouve sur les 52 tuiles avec leurs couleurs, **vu rougir** en ne le posant plus.
-   - ⚠ **LA NORMALE DE PROJECTION VIENT DES DÉRIVÉES DE LA POSITION**, pas du maillage : un maillage
-     soudé porte une normale moyenne, qui arrondirait les arêtes franches.
-   - Les textures : cinq sets de `D:/Spirit3D/HEART_WORLD/biomes/maps/`, `normal_gl` seulement, bâtis
-     par `DEV_TOOLS/batir_pbr_monde.gd` dans `ART/pbr_monde/` — **hors git**, régénérables.
-     ⚠ **EN HEADLESS, IL ÉCRIVAIT TROIS FICHIERS DE 324 OCTETS ET AFFICHAIT « ✓ »** : le serveur de rendu
-     factice ne garde pas les pixels qu'un `Texture2DArray` relit pour s'enregistrer. Il exige
-     désormais une taille plancher, et se lance AVEC fenêtre.
-   - Le travail IMPORTÉ n'est jamais recouvert : c'est l'art de l'artiste (§3).
-   - La planche (`planche_pbr_monde.gd`) a montré des falaises RAYÉES dans le monde peint : c'était la
-     LÉGENDE, corrigée à la face (point 5). Revue après correction (`ART/pbr_monde_face.png`) : le monde
-     peint redonne le témoin, falaises d'une seule teinte.
-   - ⚠ **LE POM N'A PAS BESOIN DE SOMMETS, ET C'EST MESURÉ** (Jordan pensait qu'il lui fallait « plus
-     de finesse dans les vertices ») : c'est un effet PAR PIXEL. Même gros plan, profondeur 0 contre
-     0,06 : **45 % des pixels changent** ; contre 0,25 : 64 %, et le relief bave déjà aux angles
-     rasants (`ART/pom_profondeurs.png`). Il était FAIBLE, pas absent. ⚠ **CE QU'AUCUN POM NE FERA :
-     changer une SILHOUETTE** — les arêtes restent droites. Pour cela il faut déplacer des sommets, donc
-     subdiviser : c'est le relief réel, que la charte §1 confie à l'ARTISTE. **OUVERT** : la profondeur
-     par défaut (0,06).
-   - ⚠ Une planche réécrite par-dessus un PNG verrouillé par l'éditeur ÉCHOUE (erreur 12) et laisse
-     l'ANCIENNE image en place : je l'ai lue une fois comme si c'était la nouvelle. Écrire ailleurs,
-     et vérifier la date du fichier avant de le regarder (§6, « le sujet a-t-il changé »).
-9. **Le mode PBR simplifié** (§1), pour les machines et les projets qui ne veulent pas de la géométrie.
+8. ~~**LE PBR ESPACE MONDE**~~ — **RETIRÉ (Jordan, 29 septembre 2026), et le mode PBR simplifié (ancien
+   point 9) avec lui** (§1). Ce qu'il a appris reste vrai et reste ici en une ligne : le POM est un effet
+   par PIXEL, il ne change jamais une silhouette — le relief réel est à l'artiste. Il a aussi révélé la
+   légende par case (point 5), corrigée. `git show 72d1764` rend son code et ses mesures.
 9 bis. **LE TERRAIN MONOLITHIQUE ET LES PROPS RATTACHÉS** (§3) — DÉCIDÉ, pas écrit. D'abord les deux
-   mesures (le témoin est-il d'un seul tenant ; un `.glb` d'essai avec un rocher sur une coupe), puis
-   l'import et la récolte, puis le format et les trois greffons.
+   mesures, puis l'import et la récolte, puis le format et les trois greffons.
+   - **MESURÉ (29 septembre 2026) — le témoin EST d'un seul tenant** : l'aminci soudé forme UNE
+     composante connexe, ses 31 120 triangles. « Tout le reste est un prop » ne prendra donc aucun
+     morceau du témoin pour un rocher.
+   - **À MOITIÉ MESURÉ — le second objet** : le lecteur ne prenait que le premier maillage (§4, le faux
+     travail d'artiste) ; il lit désormais TOUS les objets et les tranche comme du terrain, en le disant.
+     Un rocher rangé à part revient donc aujourd'hui en demi-coques : c'est exactement ce que ce point
+     doit remplacer. Reste à mesurer qu'un rocher à cheval sur une coupe s'isole par la connexité.
 10. **Ce qu'il faut pour vendre** : une démo, une page, une licence. OUVERT.
     ⚠ **ET LA TEXTURE : LE TÉMOIN NE S'ENVOIE PAS À TRIPO** ni à aucun textureur automatique (§3) —
     à écrire sur la page avant la vente.
