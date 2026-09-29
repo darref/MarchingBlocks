@@ -336,6 +336,21 @@ func _barre_titre() -> Control:
 	manuel.focus_mode = Control.FOCUS_NONE
 	manuel.pressed.connect(func() -> void: _manuel.ouvrir())
 	ligne.add_child(manuel)
+
+	# L'éditeur, tout à droite. ⚠ LE LOGO DÉTOURÉ, pas `spannergames.png` : son fond violet opaque
+	# ferait un carré sur la barre.
+	if ResourceLoader.exists("res://MARQUE/spannergames_detoure.png"):
+		var logo := TextureRect.new()
+		logo.texture = load("res://MARQUE/spannergames_detoure.png")
+		logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		logo.custom_minimum_size = Vector2(20, 20)
+		ligne.add_child(logo)
+	var editeur := Label.new()
+	editeur.text = "SpannerGames Inc."
+	editeur.add_theme_color_override("font_color", Palette.GRIS)
+	editeur.add_theme_font_size_override("font_size", 12)
+	ligne.add_child(editeur)
 	return barre
 
 
