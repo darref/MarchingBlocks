@@ -882,20 +882,27 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
 - **LES QUATRE ÉTAPES À GAUCHE (Jordan, 28 septembre 2026)** : Export · Import · Slice · Export to
   engines, numérotées, et les imports gardés en LISTE (réimporter un même fichier le remplace). La
   liste ne survit pas à la session : OUVERT.
-- **LA TROISIÈME VISÉE : NAVIGATE — DEMANDÉ PAR JORDAN (28 septembre 2026).** Elle ne vise rien : ZQSD
-  pour se déplacer, Espace / Maj pour monter et descendre, clic droit glissé pour regarder ; aucun clic
-  ne peint. Tab fait le tour Grid → Sculpt → Navigate.
+- **NAVIGATE — DEMANDÉ PAR JORDAN (28 septembre 2026), SORTI DES VISÉES LE 29.** Elle ne vise rien :
+  clic droit glissé pour regarder, aucun clic ne peint. Elle était la troisième visée du cycle de Tab ;
+  **DÉCIDÉ (Jordan, 29 septembre 2026)** : Tab n'alterne plus que Grid et Sculpt, qui restent ensemble, et
+  Navigate est un INTERRUPTEUR basculé par **Espace** (et un bouton sous les visées). On vole en
+  **AZEQSD** : Z S avancent et reculent, Q D vont de côté, A descend, E monte (QWEASD sur un QWERTY). La
+  visée d'avant revient telle quelle ; choisir Grid ou Sculpt, au clic ou par Tab, sort du vol.
   ⚠ **LES TOUCHES SE LISENT PAR LEUR PLACE** (`physical_keycode`) : ZQSD sur un AZERTY, WASD sur un
-  QWERTY. ⚠ **S ET D SONT AUSSI SELECT ET DIG** : en Navigate, les touches de vol ne choisissent pas
-  d'outil, sinon reculer changeait d'outil en silence. ⚠ **ON DÉPLACE LA CIBLE, PAS L'ŒIL** : regarder
+  QWERTY. ⚠ **S, D ET A SONT AUSSI SELECT, DIG ET ADD** : en Navigate, les touches de vol ne choisissent
+  pas d'outil, sinon reculer ou descendre changeait d'outil en silence. ⚠ Espace passe par `_input`,
+  comme Tab : un bouton qui a le clavier l'aurait pris pour un clic. ⚠ **ON DÉPLACE LA CIBLE, PAS L'ŒIL** : regarder
   fait pivoter la cible autour de la caméra, et repasser en Grid retrouve une orbite cohérente. Avancer
-  reste À PLAT. Gardé par `fumee_appli` (cycle de Tab, aucun clic ne peint, l'œil reste en place, vol à
-  plat, S ne choisit pas Select) — quatre mutations, toutes rouges. ⚠ **« TENIR UNE TOUCHE NE SE SIMULE
+  reste À PLAT. Gardé par `fumee_appli` (Tab sur deux visées seulement, Espace allume et éteint sans
+  toucher à la visée, aucun clic ne peint, l'œil reste en place, vol à plat, E / A / Z TENUES pour de vrai
+  montent, descendent, avancent, S et A ne choisissent pas d'outil). ⚠ **« TENIR UNE TOUCHE NE SE SIMULE
   PAS EN HEADLESS » ÉTAIT ÉCRIT ICI, ET C'EST FAUX** : `Input.parse_input_event` d'un `InputEventKey`
   appuyé met la touche à l'état tenu pour `Input.is_physical_key_pressed`, jusqu'à son relâché — mesuré
-  le 29 septembre 2026, le Play test de la fumée avance et saute ainsi. La lecture de ZQSD en Navigate
-  (`_process`) reste pourtant sans garde : personne ne l'a encore écrite.
-  Dans Unity et Unreal, Navigate REND la souris au moteur, dont la vue vole déjà nativement.
+  le 29 septembre 2026. ⚠ **LA GARDE « A NE CHOISIT PAS ADD » ÉTAIT MUETTE** : l'outil était déjà Add.
+  Elle part désormais de Dig.
+  ⚠ **LES GREFFONS (Godot, Unity, Unreal) GARDENT NAVIGATE COMME TROISIÈME VISÉE** : le changement du 29
+  n'a porté que sur l'appli. **OUVERT** — les aligner ? Dans Unity et Unreal, Navigate REND la souris au
+  moteur, dont la vue vole déjà nativement.
 - **LE PLAY TEST — DEMANDÉ PAR JORDAN (29 septembre 2026).** Un troisième atelier : on MARCHE dans le
   monde peint, ZQSD (par leur place), Espace saute, Maj court ; caméra à la troisième personne qui tourne
   autour du personnage en LACET au clic droit glissé, molette pour rapprocher ou éloigner ; Échap rend
@@ -925,6 +932,27 @@ qu'il faut écrire, c'est la couche au-dessus — tout ce qui porte sur plus d'u
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
+- **LA BARRE DE GAUCHE ET LE CONTEXTE — DEMANDÉ PAR JORDAN (29 septembre 2026).**
+  - **L'ATELIER EST ÉPINGLÉ EN HAUT** : il ne défile jamais.
+  - **DEUX ZONES, CHACUNE SON DÉFILEMENT** : en haut ce qui compte (le projet, les couches, les quatre
+    étapes, le Play test, et le rapport épinglé dessous), en bas la RÉFÉRENCE (le témoin et sa légende,
+    les raccourcis), dans un rapport d'étirement de 3 contre 1 — les 75 % demandés, qui suivent la taille
+    de la fenêtre. **De gros séparateurs** (titre gras sur filet épais) marquent les groupes : WORKSPACE,
+    PROJECT, THE ROUND TRIP, REFERENCE.
+  - **TOUTE LA BARRE DE DROITE S'OUVRE DÉPLIÉE** (« Shape operations » était repliée).
+  - **CE QUI NE SERT PAS ICI NE S'AFFICHE PAS** — une seule fonction, `_contexte()`, avec son tableau :
+    Witness montre le projet, les étapes 1-2 et la section Witness ; World montre le projet, les couches,
+    les quatre étapes, les raccourcis et la barre de droite ; Play test ne montre que ses commandes et le
+    rapport. ⚠ **LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN** : ses sections se cachaient, le
+    panneau restait et mangeait un quart de la vue. Dans les outils, le pinceau (taille, forme) disparaît
+    pour Rect et Box, « Hollow » n'apparaît qu'avec Box. « Show the witness » n'apparaît que quand on
+    regarde un travail ; « Slice the selected work » est grisé tant que rien n'est importé, « Delete » tant
+    qu'il ne reste qu'une couche.
+  - **Gardé par `fumee_appli`** (92 vérifications) — mutations rouges : Tab sur trois visées, E qui ne
+    monte plus, Witness partout, Hollow partout, A qui choisit Add en vol, barre de droite partout,
+    ateliers dans le défilement. **Vu à l'image** (`capture_app.gd`, Witness et World) : c'est là qu'on a
+    vu le titre PROJECT doublé par la bande « Project » (devenue « Save · open ») et le rapport qui gardait
+    les touches du jeu après en être sorti.
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
@@ -1008,13 +1036,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Douze suites, **7 826 vérifications, 0 échec** (29 septembre 2026, recomptées après les fentes entre
-  tuiles, sur l'état fusionné avec le Play test), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Douze suites, **7 846 vérifications, 0 échec** (29 septembre 2026, recomptées après la navigation
+  sortie des visées et la passe de contexte de l'écran), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
   `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 72, `test_greffon_peinture` 87, `test_faux_artiste` 35.
+  `test_outils` 57, `fumee_appli` 92, `test_greffon_peinture` 87, `test_faux_artiste` 35.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

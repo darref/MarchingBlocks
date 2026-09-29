@@ -44,6 +44,12 @@ func _mener() -> void:
 		await process_frame
 	_egal(ed._projet, JETABLE, "l'appli rouvre le dernier projet")
 	_egal(ed._couches.size(), 1, "une couche relue")
+	_vrai(ed._bouton_supprimer_couche.disabled, "une seule couche : « Delete » est grisé")
+	var atelier_btn: Control = ed._boutons_atelier["witness"]
+	var ancetre := atelier_btn.get_parent()
+	while ancetre != null and not (ancetre is ScrollContainer) and ancetre != ed._gauche:
+		ancetre = ancetre.get_parent()
+	_vrai(ancetre == ed._gauche, "les ateliers sont ÉPINGLÉS : aucun défilement au-dessus d'eux")
 	# ── Play test : un monde vide est REFUSÉ, et on reste dans World ───────────────────────────────
 	ed._aller_a("jeu")
 	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._rapport.text.contains("empty"),
@@ -186,21 +192,30 @@ func _mener() -> void:
 	vue.outil = "ajouter"
 	_vrai(not vue._boite_vue.visible, "la boîte disparaît au relâché")
 
-	# ── La troisième visée : NAVIGATE (Jordan, 28 septembre 2026) ─────────────────────────────────
+	# ── NAVIGATE : un interrupteur, plus une visée (Jordan, 29 septembre 2026) ────────────────────
 	#
-	# ⚠ ON NE PEUT PAS TENIR UNE TOUCHE EN HEADLESS : `voler()` et `regarder()` sont éprouvés en direct,
-	# et `_process` — qui lit ZQSD par leur PLACE — ne l'est pas. Ce qui se garde ici : le cycle de Tab,
-	# qu'aucun clic ne peint, que regarder laisse l'œil en place, qu'avancer reste à plat, et que S ne
-	# change pas d'outil pendant le vol.
+	# Tab n'alterne plus que Grid et Sculpt ; Espace bascule la navigation, et la visée d'avant revient
+	# telle quelle. Les touches sont MAINTENUES pour de vrai (`Input.parse_input_event`), lues par leur
+	# PLACE : AZEQSD en AZERTY = QWEASD en QWERTY.
 	var tab := InputEventKey.new()
 	tab.keycode = KEY_TAB
 	tab.pressed = true
 	var vues_visees: Array = [vue.visee]
-	for i in 3:
+	for i in 2:
 		ed._input(tab)
 		vues_visees.append(vue.visee)
-	_egal(vues_visees, ["grille", "sculpt", "naviguer", "grille"], "Tab fait le tour des TROIS visées")
-	ed._choisir_visee("naviguer")
+	_egal(vues_visees, ["grille", "sculpt", "grille"], "Tab alterne Grid et Sculpt, et SEULEMENT eux")
+	ed._choisir_visee("sculpt")
+	var espace := InputEventKey.new()
+	espace.keycode = KEY_SPACE
+	espace.pressed = true
+	ed._input(espace)
+	_vrai(vue.naviguer and vue.visee == "sculpt" and ed._bouton_naviguer.button_pressed,
+		"Espace allume Navigate, sans toucher à la visée, et le bouton le montre")
+	ed._input(tab)
+	_vrai(not vue.naviguer and vue.visee == "grille", "Tab en vol reprend la visée suivante et quitte le vol")
+	ed._input(espace)
+	_vrai(vue.naviguer, "Espace rallume Navigate")
 	var avant_nav := cases0.get_used_cells().size()
 	var clic := InputEventMouseButton.new()
 	clic.button_index = MOUSE_BUTTON_LEFT
@@ -222,9 +237,18 @@ func _mener() -> void:
 	var pas_fait: Vector3 = vue._camera.global_position - oeil
 	_vrai(absf(pas_fait.y) < 1e-4, "avancer reste À PLAT, même en regardant vers le bas")
 	_vrai(pas_fait.dot(Vector3(devant.x, 0, devant.z)) > 0.0, "et va vers où l'on regarde")
-	oeil = vue._camera.global_position
-	vue.voler(Vector3(0, 1, 0), 0.5)
-	_vrai(vue._camera.global_position.y > oeil.y + 0.1, "Espace monte")
+	# LES VRAIES TOUCHES, tenues quelques images : E monte, A (Q en QWERTY) descend, Z (W) avance.
+	for cas in [[KEY_E, "E monte"], [KEY_Q, "A (Q en QWERTY) descend"], [KEY_W, "Z (W en QWERTY) avance"]]:
+		oeil = vue._camera.global_position
+		devant = -vue._camera.global_transform.basis.z
+		_tenir(cas[0], true)
+		for i in 6:
+			await process_frame
+		_tenir(cas[0], false)
+		var bouge: Vector3 = vue._camera.global_position - oeil
+		var ok: bool = bouge.y > 0.05 if cas[0] == KEY_E else (bouge.y < -0.05 if cas[0] == KEY_Q
+			else bouge.dot(Vector3(devant.x, 0, devant.z)) > 0.05 and absf(bouge.y) < 1e-4)
+		_vrai(ok, "touche tenue : " + cas[1])
 	var outil_avant: String = vue.outil
 	var s_touche := InputEventKey.new()
 	s_touche.keycode = KEY_S
@@ -232,7 +256,40 @@ func _mener() -> void:
 	s_touche.pressed = true
 	ed._unhandled_key_input(s_touche)
 	_egal(vue.outil, outil_avant, "en Navigate, S vole vers l'arrière et ne choisit pas Select")
+	var a_touche := InputEventKey.new()
+	a_touche.keycode = KEY_A
+	a_touche.physical_keycode = KEY_Q
+	a_touche.pressed = true
+	# ⚠ DEPUIS DIG : l'outil était déjà Add, donc « A choisit Add » ne changeait rien — la garde était
+	# muette (vu en mutation).
+	ed._choisir_outil("creuser")
+	ed._unhandled_key_input(a_touche)
+	_egal(vue.outil, "creuser", "en Navigate, A (AZERTY) descend et ne choisit pas Add")
+	ed._choisir_outil(outil_avant)
+	ed._input(espace)
+	_vrai(not vue.naviguer and vue.visee == "grille", "Espace éteint Navigate et rend la visée")
 	ed._choisir_visee("grille")
+
+	# ── LE CONTEXTE : ce qui ne sert pas ici ne s'affiche pas (Jordan, 29 septembre 2026) ─────────
+	ed._aller_a("witness")
+	_vrai(not ed._droite.visible, "Witness : pas de barre d'outils (elle ne peint rien ici)")
+	_vrai(ed._section_temoin.visible and not ed._section_raccourcis.visible and not ed._section_couches.visible,
+		"Witness : la section Witness, sans raccourcis de peinture ni couches")
+	_vrai(ed._etapes_artiste.all(func(e): return e.visible) and not ed._etapes_monde.any(func(e): return e.visible),
+		"Witness : étapes 1 et 2 seulement")
+	_vrai(not ed._bouton_revoir_temoin.visible, "« Show the witness » absent quand on regarde déjà le témoin")
+	ed._aller_a("monde")
+	_vrai(ed._droite.visible and not ed._section_temoin.visible and ed._section_raccourcis.visible
+		and ed._section_couches.visible, "World : outils, couches, raccourcis — et plus de section Witness")
+	_vrai(ed._etapes_monde.all(func(e): return e.visible), "World : les quatre étapes")
+	_vrai(ed._bouton_trancher_travail.disabled, "rien d'importé : « Slice the selected work » est grisé")
+	ed._choisir_outil("rect")
+	_vrai(not ed._ligne_taille.visible and not ed._ligne_forme.visible and not ed._creux.visible,
+		"Rect : ni pinceau ni Hollow")
+	ed._choisir_outil("boite")
+	_vrai(ed._creux.visible and not ed._ligne_taille.visible, "Box : Hollow, sans pinceau")
+	ed._choisir_outil("ajouter")
+	_vrai(ed._ligne_taille.visible and not ed._creux.visible, "Add : le pinceau revient, Hollow s'en va")
 
 	# ── Déplacer : par le bouton, puis par les flèches, qui suivent la caméra ─────────────────────
 	# Sélection : (0,0,0) (1,0,0). La caméra regarde depuis +x +z (azimut 0,7) : « devant » est −z,
@@ -308,6 +365,8 @@ func _play_test(ed: Control) -> void:
 	if p == null:
 		return
 	_vrai(not ed._droite.visible and ed._section_jeu.visible, "la barre des outils se retire, les commandes du jeu apparaissent")
+	_vrai(not ed._zone_reference.visible and not ed._section_projet.visible and not ed._section_couches.visible,
+		"Play test : ni référence, ni projet, ni couches — le jeu seul")
 	_vrai(p.global_position.y > 11.0, "il apparaît AU-DESSUS du sol peint")
 	for i in 90:
 		await physics_frame
@@ -353,6 +412,10 @@ func _play_test(ed: Control) -> void:
 	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._vue._decor == null,
 		"Échap rend World, sans personnage ni décor")
 	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
+
+
+func _tenir(touche: Key, appuyee: bool) -> void:
+	_touche_physique(touche, appuyee)
 
 
 func _touche_physique(touche: Key, appuyee: bool) -> void:

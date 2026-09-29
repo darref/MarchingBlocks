@@ -55,8 +55,8 @@ const CONSEILS: Array[String] = [
 	"The witness is proven complete: not one tile missing, not one extra.",
 	"World: left click applies the tool, right click does the opposite. Ctrl+Z undoes a whole stroke.",
 	"Play test: walk your world. Z Q S D to move, Space to jump, Shift to run, right drag to turn the camera.",
-	"Tab cycles Grid (paint on the floor plane), Sculpt (paint against the matter) and Navigate (fly around).",
-	"Navigate: Z Q S D to fly (W A S D on a QWERTY keyboard), Space up, Shift down, right drag to look.",
+	"Tab switches Grid (paint on the floor plane) and Sculpt (paint against the matter).",
+	"Space turns Navigate on and off: A Z E Q S D to fly (Q W E A S D on QWERTY), right drag to look.",
 	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
 	"Arrow keys move the selection, Shift + Up / Down lifts it. Ctrl+C, Ctrl+X, Ctrl+V work across layers.",
 	"Middle mouse turns the view, Shift + middle slides it, the wheel zooms.",
@@ -81,8 +81,25 @@ var _ecoule := 0.0
 
 var _boutons_atelier := {}
 var _atelier := "witness"
-var _sections_monde: Array[Control] = []
+## LES MORCEAUX DE L'ÉCRAN QUI DÉPENDENT DU CONTEXTE — tous montrés ou cachés par `_contexte()`, et
+## nulle part ailleurs (charte §6 : une règle vit à UN endroit).
 var _section_jeu: Control
+var _titre_projet: Control
+var _section_projet: Control
+var _section_couches: Control
+var _titre_aller_retour: Control
+var _etapes_artiste: Array[Control] = []
+var _etapes_monde: Array[Control] = []
+var _section_temoin: Control
+var _section_raccourcis: Control
+var _zone_reference: Control
+var _bouton_revoir_temoin: Button
+var _bouton_trancher_travail: Button
+var _bouton_supprimer_couche: Button
+var _bouton_naviguer: Button
+var _titre_pinceau: Control
+var _ligne_taille: Control
+var _ligne_forme: Control
 
 var _plans: CheckButton
 var _etiquette_vue: Label
@@ -232,7 +249,7 @@ func _batir() -> void:
 	corps.add_child(_vue)
 
 	_gauche = _panneau(corps, true, LARGEUR_GAUCHE)
-	_batir_gauche(_gauche.get_meta("pile"))
+	_batir_gauche(_gauche.get_meta("tete"), _gauche.get_meta("pile"), _gauche.get_meta("reference"))
 	_batir_rapport(_gauche.get_meta("pied"))
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
@@ -362,7 +379,79 @@ func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
 	colonne.add_child(pied)
 	p.set_meta("pile", pile)
 	p.set_meta("pied", pied)
+	if a_gauche:
+		p.set_meta("reference", _zone_de_reference(p, colonne, defile, pied))
 	return p
+
+
+## LA ZONE DE RÉFÉRENCE — DEMANDÉE PAR JORDAN (29 septembre 2026) : la barre de gauche se coupe en
+## deux, ce qui COMPTE en haut (75 % de la hauteur, avec le rapport épinglé dessous) et ce qu'on
+## consulte en bas (25 % : le témoin, les raccourcis), chacune dans SON défilement. Déplier les
+## raccourcis ne pousse donc plus les étapes hors de l'écran.
+## ⚠ **LE 75 % EST UN RAPPORT D'ÉTIREMENT (3 contre 1), PAS UNE HAUTEUR** : la fenêtre change de taille,
+## le rapport reste. Et quand le bas n'a rien à montrer (Play test), `_contexte()` le cache : le haut
+## prend tout.
+## ⚠ **L'ATELIER EST ÉPINGLÉ EN HAUT (Jordan, 29 septembre 2026)** : `tete` ne défile pas. C'est la
+## décision la plus haute de l'écran ; la voir partir avec le défilement obligeait à remonter pour changer
+## d'atelier.
+func _zone_de_reference(p: Control, colonne: VBoxContainer, defile: ScrollContainer,
+		pied: VBoxContainer) -> VBoxContainer:
+	var haut := VBoxContainer.new()
+	haut.add_theme_constant_override("separation", 10)
+	haut.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	haut.size_flags_stretch_ratio = 3.0
+	colonne.remove_child(defile)
+	colonne.remove_child(pied)
+	var tete := VBoxContainer.new()
+	tete.add_theme_constant_override("separation", 8)
+	var marge_tete := MarginContainer.new()
+	marge_tete.add_theme_constant_override("margin_right", 8)
+	marge_tete.add_child(tete)
+	haut.add_child(marge_tete)
+	p.set_meta("tete", tete)
+	haut.add_child(defile)
+	haut.add_child(pied)
+	colonne.add_child(haut)
+	var bas := VBoxContainer.new()
+	bas.add_theme_constant_override("separation", 6)
+	bas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bas.size_flags_stretch_ratio = 1.0
+	bas.add_child(_grand_titre("REFERENCE"))
+	var defile_bas := ScrollContainer.new()
+	defile_bas.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	defile_bas.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bas.add_child(defile_bas)
+	var marge := MarginContainer.new()
+	marge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	marge.add_theme_constant_override("margin_right", 8)
+	defile_bas.add_child(marge)
+	var pile := VBoxContainer.new()
+	pile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pile.add_theme_constant_override("separation", 14)
+	marge.add_child(pile)
+	colonne.add_child(bas)
+	_zone_reference = bas
+	return pile
+
+
+## UN GROS SÉPARATEUR — DEMANDÉ PAR JORDAN (29 septembre 2026). Entre les GROUPES de sections (l'atelier,
+## le projet, l'aller-retour, la référence), pas entre les sections : un titre net sur un filet épais,
+## qui se voit d'un coup d'œil là où le petit titre gris se lisait.
+func _grand_titre(texte: String) -> Control:
+	var bloc := VBoxContainer.new()
+	bloc.add_theme_constant_override("separation", 4)
+	var l := Label.new()
+	l.text = texte
+	l.add_theme_font_override("font", Palette.gras())
+	l.add_theme_font_size_override("font_size", 13)
+	l.add_theme_color_override("font_color", Palette.OLIVE)
+	bloc.add_child(l)
+	var filet := ColorRect.new()
+	filet.color = Palette.OLIVE
+	filet.custom_minimum_size = Vector2(0, 3)
+	filet.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bloc.add_child(filet)
+	return bloc
 
 
 func _petit_titre(texte: String) -> Label:
@@ -426,9 +515,9 @@ func _grille(boutons: Array, colonnes := 2) -> GridContainer:
 	return g
 
 
-func _batir_gauche(pile: VBoxContainer) -> void:
-	# L'ATELIER : la décision la plus haute de l'écran, donc tout en haut, en grand.
-	pile.add_child(_petit_titre("WORKSPACE"))
+func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxContainer) -> void:
+	# L'ATELIER : la décision la plus haute de l'écran, donc tout en haut, en grand — et ÉPINGLÉ.
+	tete.add_child(_grand_titre("WORKSPACE"))
 	var groupe := ButtonGroup.new()
 	var ateliers: Array = []
 	for a in [
@@ -448,7 +537,7 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 		b.pressed.connect(_aller_a.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
-	pile.add_child(_rangee(ateliers, 4))
+	tete.add_child(_rangee(ateliers, 4))
 
 	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
 	_section_jeu = Section.new("Play test", true, Icones.icone("jouer"))
@@ -471,7 +560,12 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 		_bouton("Leave", "Back to World (Esc).", _aller_a.bind("monde"), "croix"),
 	], 4))
 
-	var projet := Section.new("Project", true, Icones.icone("enregistrer"))
+	_titre_projet = _grand_titre("PROJECT")
+	pile.add_child(_titre_projet)
+	# ⚠ « SAVE · OPEN » ET NON « PROJECT » : sous le gros titre PROJECT, le même mot en bande se lisait
+	# deux fois de suite (vu à l'image).
+	var projet := Section.new("Save · open", true, Icones.icone("enregistrer"))
+	_section_projet = projet
 	pile.add_child(projet)
 	_etiquette_projet = Label.new()
 	_etiquette_projet.add_theme_font_override("font", Palette.gras())
@@ -489,8 +583,10 @@ func _batir_gauche(pile: VBoxContainer) -> void:
 			func() -> void: _demander("enregistrer"), "enregistrer"),
 	], 4))
 
+	# ── LE TÉMOIN — en RÉFÉRENCE (Jordan) : on le consulte, on n'y travaille pas.
 	var temoin := Section.new("Witness", true, Icones.icone("cube"))
-	pile.add_child(temoin)
+	_section_temoin = temoin
+	reference.add_child(temoin)
 	_etiquette_vue = _texte("showing: the computed witness", 11, Palette.GRIS)
 	temoin.contenu.add_child(_etiquette_vue)
 	# Jordan (27 septembre 2026) : voir OÙ le trancheur coupe, sur le témoin comme sur le travail importé.
@@ -504,13 +600,16 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	_plans.toggled.connect(func(v: bool) -> void: _vue.montrer_plans_de_coupe(v))
 	temoin.contenu.add_child(_plans)
 	temoin.contenu.add_child(_legende())
-	temoin.contenu.add_child(_bouton("Show the witness", "Back to the computed witness.",
-		func() -> void: _travail_vu(false), "cube"))
+	# ⚠ SEULEMENT QUAND ON REGARDE UN TRAVAIL : sur le témoin, « montrer le témoin » ne fait rien.
+	_bouton_revoir_temoin = _bouton("Show the witness", "Back to the computed witness.",
+		func() -> void: _travail_vu(false), "cube")
+	_bouton_revoir_temoin.visible = false
+	temoin.contenu.add_child(_bouton_revoir_temoin)
 
 	# ── LES COUCHES — où tout atterrit, donc AVANT les étapes qui y déposent.
 	var couches := Section.new("Layers", true, Icones.icone("couches"))
 	pile.add_child(couches)
-	_sections_monde.append(couches)
+	_section_couches = couches
 	couches.contenu.add_child(_texte("A layer holds its own cells AND its own tiles. Slicing dresses "
 		+ "the ACTIVE one.", 11, Palette.GRIS))
 	_liste_couches = VBoxContainer.new()
@@ -527,6 +626,8 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 		_bouton("Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche,
 			"poubelle", Palette.DANGER),
 	]))
+	_bouton_supprimer_couche = (couches.contenu.get_child(couches.contenu.get_child_count() - 1)
+		.get_child(1) as Button)
 
 	# ── LES QUATRE ÉTAPES — DEMANDÉ PAR JORDAN (28 septembre 2026).
 	#
@@ -534,10 +635,12 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	# round trip » à gauche et « Slice » / « Export to engines » à droite, au milieu des outils : rien
 	# ne disait qu'ils formaient UNE chaîne, ni dans quel sens la parcourir. Numérotés et mis bout à
 	# bout, ils se lisent sans manuel — et la barre de droite ne garde que ce qui édite.
-	pile.add_child(_petit_titre("THE ROUND TRIP"))
+	_titre_aller_retour = _grand_titre("THE ROUND TRIP")
+	pile.add_child(_titre_aller_retour)
 
 	var etape1 := Section.new("1 · Export the witness", true, Icones.icone("exporter"))
 	pile.add_child(etape1)
+	_etapes_artiste.append(etape1)
 	etape1.contenu.add_child(_texte("Send the block to Blender as one welded .obj.", 11, Palette.GRIS))
 	etape1.contenu.add_child(_bouton("Export the witness…",
 		"Writes the witness as ONE .obj (+ its .mtl) for Blender — fully welded, six named materials.\n"
@@ -547,6 +650,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 
 	var etape2 := Section.new("2 · Import your work", true, Icones.icone("importer"))
 	pile.add_child(etape2)
+	_etapes_artiste.append(etape2)
 	etape2.contenu.add_child(_texte("Bring the sculpted .glb back. Each import is kept here — pick "
 		+ "the one you want to slice.", 11, Palette.GRIS))
 	etape2.contenu.add_child(_bouton("Import the work…",
@@ -560,21 +664,23 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 
 	var etape3 := Section.new("3 · Slice into the active layer", true, Icones.icone("couteau"))
 	pile.add_child(etape3)
-	_sections_monde.append(etape3)
+	_etapes_monde.append(etape3)
 	_etiquette_cible = _texte("", 11, Palette.OLIVE)
 	etape3.contenu.add_child(_etiquette_cible)
 	etape3.contenu.add_child(_texte("Gives the ACTIVE layer its tiles. Its painted cells never move.",
 		11, Palette.GRIS))
-	etape3.contenu.add_child(_bouton("Slice the selected work",
+	_bouton_trancher_travail = _bouton("Slice the selected work",
 		"Re-reads the work you picked above, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
-		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL))
+		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL)
+	_bouton_trancher_travail.disabled = true
+	etape3.contenu.add_child(_bouton_trancher_travail)
 	etape3.contenu.add_child(_bouton("Slice the witness",
 		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
 		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
 
 	var etape4 := Section.new("4 · Export to engines", true, Icones.icone("exporter"))
 	pile.add_child(etape4)
-	_sections_monde.append(etape4)
+	_etapes_monde.append(etape4)
 	etape4.contenu.add_child(_texte("Writes the ACTIVE layer's tiles as a .mbset folder — read by the "
 		+ "free MarchingBlocks Paint plugins for Godot, Unity and Unreal.", 11, Palette.GRIS))
 	etape4.contenu.add_child(_bouton("Export the tileset…",
@@ -582,13 +688,14 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 		+ "tile, with its materials) and README.txt.\nOpen format: the tiles you make are yours.",
 		func() -> void: _demander("tileset"), "exporter", Palette.PRINCIPAL))
 
-	var aide := Section.new("Shortcuts", false, Icones.icone("clavier"))
-	pile.add_child(aide)
+	var aide := Section.new("Shortcuts", true, Icones.icone("clavier"))
+	_section_raccourcis = aide
+	reference.add_child(aide)
 	var raccourcis := GridContainer.new()
 	raccourcis.columns = 2
 	raccourcis.add_theme_constant_override("h_separation", 10)
 	raccourcis.add_theme_constant_override("v_separation", 4)
-	for r in [["Tab", "Grid → Sculpt → Navigate"], ["ZQSD Space Shift", "Fly (Navigate)"],
+	for r in [["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["AZEQSD", "Fly (Navigate)"],
 			["Right drag", "Look (Navigate)"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
 			["PgUp PgDn", "Floor y"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
 			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
@@ -680,7 +787,6 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	# ── 1. LES OUTILS — ce qu'on touche à chaque geste.
 	var outils := Section.new("Tools", true, Icones.icone("outils"))
 	pile.add_child(outils)
-	_sections_monde.append(outils)
 	outils.contenu.add_child(_petit_titre("AIM  ·  Tab"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_visee, [
 		["grille", "Grid", "visee_grille", "Aims at the floor plane y — the grid. Good for laying out "
@@ -688,10 +794,19 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["sculpt", "Sculpt", "visee_sculpt", "Aims at the matter already there: Add builds on the face "
 			+ "you point at, Dig and Select act on the cell you point at.\nWhere the ray meets no "
 			+ "matter, it falls back on the floor plane."],
-		["naviguer", "Navigate", "visee_naviguer", "Aims at nothing: fly around your world.\n"
-			+ "Z Q S D move (W A S D on a QWERTY keyboard), Space goes up, Shift goes down, right drag "
-			+ "looks around. No click paints."],
 	], _choisir_visee))
+	# LA NAVIGATION : un interrupteur à part, plus une visée (Jordan, 29 septembre 2026).
+	_bouton_naviguer = Button.new()
+	_bouton_naviguer.text = "Navigate  ·  Space"
+	_bouton_naviguer.icon = Icones.icone("visee_naviguer")
+	_bouton_naviguer.toggle_mode = true
+	_bouton_naviguer.focus_mode = Control.FOCUS_NONE
+	_bouton_naviguer.custom_minimum_size = Vector2(0, 32)
+	_bouton_naviguer.tooltip_text = ("Space — fly around your world, then Space again to come back to "
+		+ "your aim.\nA Z E Q S D (Q W E A S D on a QWERTY keyboard): Z S forward and back, Q D sideways, "
+		+ "A down, E up.\nRight drag looks around. No click paints.")
+	_bouton_naviguer.toggled.connect(_basculer_navigation)
+	outils.contenu.add_child(_bouton_naviguer)
 	outils.contenu.add_child(_petit_titre("TOOL"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_outil, [
 		["ajouter", "Add", "ajouter", "A — adds matter. Right click digs."],
@@ -717,8 +832,10 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		_vue.rafraichir())
 	outils.contenu.add_child(_creux)
 
-	outils.contenu.add_child(_petit_titre("BRUSH  ·  [ ]"))
+	_titre_pinceau = _petit_titre("BRUSH  ·  [ ]")
+	outils.contenu.add_child(_titre_pinceau)
 	var taille := HBoxContainer.new()
+	_ligne_taille = taille
 	taille.add_theme_constant_override("separation", 10)
 	_taille = HSlider.new()
 	_taille.min_value = 1
@@ -741,12 +858,13 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	taille.add_child(_taille)
 	taille.add_child(_valeur_taille)
 	outils.contenu.add_child(taille)
-	outils.contenu.add_child(_rangee_de_choix(_boutons_forme, [
+	_ligne_forme = _rangee_de_choix(_boutons_forme, [
 		["sphere", "Sphere", "sphere", "A ball of cells."],
 		["cube", "Cube", "cube", "A cube of cells."],
 		["disque", "Disc", "disque", "Flat, across the face you point at — fills or digs a wall without "
 			+ "thickening it."],
-	], _choisir_forme))
+	], _choisir_forme)
+	outils.contenu.add_child(_ligne_forme)
 
 	outils.contenu.add_child(_petit_titre("FLOOR  ·  PgUp PgDn"))
 	var ligne := HBoxContainer.new()
@@ -815,9 +933,9 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	], 4))
 
 	# ── 3. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
-	var etage := Section.new("Shape operations", false, Icones.icone("etage"))
+	# ⚠ OUVERTE AU DÉPART, comme toute la barre de droite (Jordan, 29 septembre 2026).
+	var etage := Section.new("Shape operations", true, Icones.icone("etage"))
 	pile.add_child(etage)
-	_sections_monde.append(etage)
 	_etiquette_portee = _texte("", 11, Palette.GRIS)
 	etage.contenu.add_child(_etiquette_portee)
 	var ops: Array = []
@@ -891,14 +1009,11 @@ func _aller_a(atelier: String) -> void:
 			atelier = "monde"
 	elif atelier != "jeu" and _atelier == "jeu":
 		_vue.finir_partie()
+		# Le rapport disait encore les touches du jeu : on dit où l'on revient.
+		_dire("[i]Back from the Play test.[/i]")
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
-	for s in _sections_monde:
-		s.visible = atelier == "monde"
-	_section_jeu.visible = atelier == "jeu"
-	# ⚠ LA BARRE DE DROITE N'A RIEN À OFFRIR EN PLAY TEST : ses outils peignent. On la retire pour
-	# rendre la vue au jeu, plutôt que de laisser un cadre vide.
-	_droite.visible = atelier != "jeu"
+	_contexte()
 	_vue.montrer({"monde": "monde", "jeu": "jeu"}.get(atelier, "temoin"))
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
@@ -908,6 +1023,53 @@ func _aller_a(atelier: String) -> void:
 			+ "Esc to go back.")
 	_selection_changee()
 	_dire_l_etage()
+
+
+## CE QUE L'ÉCRAN MONTRE, SELON L'ATELIER — la passe de Jordan (29 septembre 2026) : « certaines sections
+## s'affichent alors qu'elles ne le devraient pas vu le contexte ».
+##
+##                      Witness   World   Play test
+##   Project               ✓        ✓
+##   Layers                         ✓
+##   Round trip 1 · 2      ✓        ✓         (exporter le témoin, importer un travail)
+##   Round trip 3 · 4               ✓         (ils agissent sur la couche ACTIVE)
+##   Play test                                 ✓
+##   Witness (réf.)        ✓                   (sa légende nomme les teintes du TÉMOIN)
+##   Shortcuts (réf.)               ✓         (ce ne sont que des gestes de peinture)
+##   barre de droite                ✓         (elle ne porte que des outils de peinture)
+##
+## ⚠ LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN : ses sections se cachaient, le panneau
+## restait, et mangeait un quart de la vue sur le bloc qu'on veut justement regarder.
+func _contexte() -> void:
+	var temoin := _atelier == "witness"
+	var monde := _atelier == "monde"
+	var jeu := _atelier == "jeu"
+	_section_jeu.visible = jeu
+	_titre_projet.visible = not jeu
+	_section_projet.visible = not jeu
+	_section_couches.visible = monde
+	_titre_aller_retour.visible = not jeu
+	for e in _etapes_artiste:
+		e.visible = not jeu
+	for e in _etapes_monde:
+		e.visible = monde
+	_section_temoin.visible = temoin
+	_section_raccourcis.visible = monde
+	_zone_reference.visible = temoin or monde
+	_droite.visible = monde
+	_contexte_des_outils()
+
+
+## DANS LA BARRE D'OUTILS : ce qui ne s'applique pas à l'outil choisi disparaît. Le pinceau (taille,
+## forme) ne sert ni au Rect ni à la Box, qui se tracent coin à coin ; « Hollow » ne sert qu'à la Box.
+func _contexte_des_outils() -> void:
+	if _creux == null:
+		return
+	var pinceau: bool = _vue.outil in ["ajouter", "creuser", "selectionner"]
+	_titre_pinceau.visible = pinceau
+	_ligne_taille.visible = pinceau
+	_ligne_forme.visible = pinceau
+	_creux.visible = _vue.outil == "boite"
 
 
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
@@ -935,9 +1097,11 @@ func _travail_vu(oui: bool) -> void:
 	if oui and maillage != null:
 		_vue.montrer_maillage(maillage, null)
 		_etiquette_vue.text = "showing: your work — %s" % _travail_chemin().get_file()
+		_bouton_revoir_temoin.visible = true
 	else:
 		_montrer_temoin()
 		_etiquette_vue.text = "showing: the computed witness"
+		_bouton_revoir_temoin.visible = false
 	_aller_a("witness")
 
 
@@ -964,6 +1128,11 @@ func _redire_les_travaux() -> void:
 		b.pressed.connect(_choisir_travail.bind(i))
 		_liste_travaux.add_child(b)
 	_vide_travaux.visible = _travaux.is_empty()
+	# ⚠ Rien à trancher tant que rien n'est importé : le bouton le DIT plutôt que de répondre après coup.
+	_bouton_trancher_travail.disabled = _travaux.is_empty()
+	_bouton_trancher_travail.tooltip_text = ("Import a work first (step 2)." if _travaux.is_empty() else
+		"Re-reads the work you picked above, slices it, and dresses the ACTIVE layer with YOUR tiles.\n"
+		+ "Its painted cells stay as they are.")
 	_dire_la_cible()
 
 
@@ -1448,16 +1617,29 @@ func _choisir_forme(f: String) -> void:
 	_vue.rafraichir()
 
 
+## ⚠ CHOISIR UNE VISÉE SORT DE LA NAVIGATION : on clique Grid ou Sculpt pour viser, pas pour voler.
 func _choisir_visee(v: String) -> void:
 	_vue.visee = v
 	(_boutons_visee[v] as Button).button_pressed = true
+	_basculer_navigation(false)
 	_vue.rafraichir()
 
 
 func _choisir_outil(o: String) -> void:
 	_vue.outil = o
 	(_boutons_outil[o] as Button).button_pressed = true
+	_contexte_des_outils()
 	_vue.rafraichir()
+
+
+func _basculer_navigation(oui: bool) -> void:
+	if _vue.naviguer == oui:
+		return
+	_vue.naviguer = oui
+	_bouton_naviguer.set_pressed_no_signal(oui)
+	_vue.rafraichir()
+	_dire("[b]Navigate[/b] — A Z E Q S D to fly, right drag to look. [i]Space to paint again.[/i]" if oui
+		else "[i]Back to painting (%s).[/i]" % ("Grid" if _vue.visee == "grille" else "Sculpt"))
 
 
 func _selection_changee() -> void:
@@ -1565,6 +1747,8 @@ func _montrer_couche(i: int, oui: bool) -> void:
 func _rafraichir_couches() -> void:
 	if _liste_couches == null:
 		return
+	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
+	_bouton_supprimer_couche.disabled = _couches.size() <= 1
 	for enfant in _liste_couches.get_children():
 		_liste_couches.remove_child(enfant)
 		enfant.queue_free()
@@ -1813,7 +1997,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		return
 	# ⚠ **EN NAVIGATE, LES TOUCHES DE VOL NE CHOISISSENT PAS D'OUTIL.** S et D sont aussi Select et Dig :
 	# voler vers l'arrière aurait changé d'outil en silence. On les lit par leur PLACE (`vue.gd`).
-	if _vue.visee == "naviguer" and k.physical_keycode in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE]:
+	if _vue.naviguer and k.physical_keycode in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E]:
 		get_viewport().set_input_as_handled()
 		return
 	var fait := true
@@ -1871,6 +2055,9 @@ func _input(event: InputEvent) -> void:
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)
 		_choisir_visee(_vue.VISEES[(i + 1) % _vue.VISEES.size()])
+	# ⚠ ESPACE PASSE AUSSI PAR `_input` : un bouton qui a le clavier le prendrait pour un clic.
+	elif k.keycode == KEY_SPACE and not k.echo:
+		_basculer_navigation(not _vue.naviguer)
 	elif k.keycode in [KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT] and not _vue.selection.is_empty():
 		var haut: int = 1 if k.keycode == KEY_UP else (-1 if k.keycode == KEY_DOWN else 0)
 		if k.shift_pressed:

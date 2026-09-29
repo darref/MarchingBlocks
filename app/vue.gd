@@ -65,11 +65,13 @@ var _selection_vue: MultiMeshInstance3D
 
 ## LA BARRE D'OUTILS (charte §5, plan du 27 septembre 2026). La visée dit comment trouver le point :
 ## "grille" (le plan de l'étage) ou "sculpt" (la matière). L'outil dit ce qu'on en fait.
-## **"naviguer" — DEMANDÉ PAR JORDAN (28 septembre 2026)** : la troisième visée ne vise RIEN. On se
-## déplace dans le monde comme dans un jeu — ZQSD, Espace, Maj, clic droit pour regarder — et aucun
-## clic ne peint. ⚠ C'est une VISÉE et non un outil parce que c'est elle qui décide de ce que fait la
-## souris ; l'outil choisi reste choisi, et revient tel quel à la visée suivante.
-const VISEES := ["grille", "sculpt", "naviguer"]
+## **LA NAVIGATION N'EST PLUS UNE VISÉE — DÉCIDÉ PAR JORDAN (29 septembre 2026).** Elle était la
+## troisième visée du cycle de Tab (28 septembre) ; elle en sort. Tab alterne Grid et Sculpt, qui
+## restent ensemble, et la navigation est un INTERRUPTEUR à part, basculé par Espace : on vole, on
+## revient, et la visée d'avant est toujours là. Elle ne vise RIEN : aucun clic ne peint.
+const VISEES := ["grille", "sculpt"]
+## Vrai pendant qu'on vole (AZEQSD, clic droit pour regarder).
+var naviguer := false
 ## Cases par seconde. ⚠ Proportionnelle à la distance d'orbite : de près on ajuste, de loin on traverse.
 const VITESSE_DE_VOL := 0.6
 var visee := "grille"
@@ -339,7 +341,7 @@ func regarder(relatif: Vector2) -> void:
 
 
 ## `axes` : x à droite, y en haut, z en AVANT. ⚠ Avancer reste À PLAT : on vise le sol en marchant,
-## et Espace / Maj portent seuls la hauteur — sinon regarder vers le bas enfoncerait dans le terrain.
+## et A / E (AZERTY ; Q / E en QWERTY) portent seuls la hauteur — sinon regarder vers le bas enfoncerait dans le terrain.
 func voler(axes: Vector3, dt: float) -> void:
 	if axes == Vector3.ZERO:
 		return
@@ -354,13 +356,14 @@ func voler(axes: Vector3, dt: float) -> void:
 
 ## ⚠ **LES TOUCHES SE LISENT PAR LEUR PLACE, PAS PAR LEUR LETTRE** (`physical_keycode`) : ZQSD sur
 ## un clavier AZERTY, WASD sur un QWERTY — le même geste de la main gauche. Lire les lettres aurait
-## donné un clavier sur deux à l'envers.
+## donné un clavier sur deux à l'envers. AZEQSD en AZERTY = QWEASD en QWERTY : Z S avancent et
+## reculent, Q D vont de côté, A descend, E monte — et Espace, qui montait, sert désormais à basculer.
 ## ⚠ Un champ de texte qui a la main garde ses touches : on tape le nom d'une couche avec des Z et des S.
 func _process(dt: float) -> void:
 	if mode == "jeu":
 		_mener_le_jeu()
 		return
-	if visee != "naviguer" or mode != "monde" or not is_visible_in_tree():
+	if not naviguer or mode != "monde" or not is_visible_in_tree():
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
@@ -374,9 +377,9 @@ func _process(dt: float) -> void:
 		axes.x += 1.0
 	if Input.is_physical_key_pressed(KEY_A):
 		axes.x -= 1.0
-	if Input.is_physical_key_pressed(KEY_SPACE):
+	if Input.is_physical_key_pressed(KEY_E):
 		axes.y += 1.0
-	if Input.is_physical_key_pressed(KEY_SHIFT):
+	if Input.is_physical_key_pressed(KEY_Q):
 		axes.y -= 1.0
 	voler(axes, dt)
 
@@ -388,7 +391,7 @@ func _gui_input(event: InputEvent) -> void:
 		_souris_du_jeu(event)
 		accept_event()
 		return
-	if visee == "naviguer" and mode == "monde" and _naviguer(event):
+	if naviguer and mode == "monde" and _naviguer(event):
 		accept_event()
 		return
 	if event is InputEventMouseButton:
@@ -525,7 +528,7 @@ func _survoler(position: Vector2) -> void:
 	_derniere_souris = position
 	# ⚠ EN NAVIGATE, RIEN N'EST VISÉ, DONC RIEN N'EST PROMIS : un aperçu laissé à l'écran ferait croire
 	# qu'un clic peindra.
-	if visee == "naviguer":
+	if naviguer:
 		_apercu.visible = false
 		_grille_locale.visible = false
 		_boite_vue.visible = false
