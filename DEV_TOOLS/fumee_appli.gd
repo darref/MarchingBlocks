@@ -730,9 +730,156 @@ func _les_sections_dans_le_modeleur(ed: Control) -> void:
 	_vrai(coupees_k >= 2 and _sans_partenaire(t) == 0,
 		"K parti d'un bord : la coupe est reportée dans %d autres tuiles, tout joint a son partenaire" % coupees_k)
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# LA BRIDE (DÉCIDÉ, Jordan, 30 septembre 2026) : les faces ±Z de la paroi glissées d'une DEMI-case de côté (X
+	# de la tuile) — là où la capture voyait des faces repliées dans d'AUTRES tuiles. Le long de leur normale, la
+	# dalle ne fait que se translater : rien ne replie. Le geste doit s'arrêter
+	# avant le premier repli. ⚠ L'attendu est hors du code éprouvé : les triangles en éventail et les normales de
+	# départ sont recalculés ici (`_repliees`, `_le_plus_ecrase`).
+	var faces_z: Array = []
+	for g in mo.maillage.faces.size():
+		if absf(mo.maillage.normale(g).z) > 0.9:
+			faces_z.append(g)
+	var dir_monde: Vector3 = (mo.pose.basis * Vector3(1, 0, 0)).abs()
+	var lettre: Key = KEY_NONE
+	for k in lettres:
+		if (lettres[k] as Vector3).dot(dir_monde) > 0.5:
+			lettre = k
+	var depart_bride := {}
+	for c in t.tuiles:
+		depart_bride[c] = (t.tuiles[c].sommets as PackedVector3Array).duplicate()
+	var bougent := {}
+	for g in faces_z:
+		for i in mo.maillage.faces[g]:
+			bougent[i] = true
+	for valeur in [[KEY_0, KEY_PERIOD, KEY_1], [KEY_MINUS, KEY_0, KEY_PERIOD, KEY_5]]:
+		mo.choisir_mode("face")
+		mo.tout_choisir(false)
+		for g in faces_z:
+			mo.sel_f[g] = true
+		for k in [KEY_G, lettre] + valeur + [KEY_ENTER]:
+			ed._input(_cle(k))
+		var pas := 0.0
+		for i in bougent:
+			pas = maxf(pas, (mo.maillage.sommets[i] - (depart_bride[paroi] as PackedVector3Array)[i]).length())
+		var demande := 0.1 if valeur.size() == 3 else 0.5
+		_egal(_repliees(t, depart_bride), 0, "G %s %s%.1f sur les faces ±Z de la paroi : aucune face repliée, dans aucune tuile"
+			% [OS.get_keycode_string(lettre), "" if demande < 0.2 else "-", demande])
+		if demande < 0.2:
+			_vrai(absf(pas - 0.1) < 1e-4 and is_equal_approx(mo.bride, 1.0),
+				"dans la marge, le geste n'est pas bridé (%.4f)" % pas)
+		else:
+			var ecrase: Array = _le_plus_ecrase(t, depart_bride)
+			print("  bride : %.4f case au lieu de 0,5 (%.3f du geste), arrêtée par « %s » (triangle à %.5f de son aire)"
+				% [pas, mo.bride, ecrase[1], float(ecrase[0])])
+			_vrai(pas > 0.05 and pas < 0.5 - 1e-3 and mo.bride < 1.0,
+				"au-delà, le geste est BRIDÉ : %.4f case au lieu de 0,5 (bride %.3f)" % [pas, mo.bride])
+			_vrai(float(ecrase[0]) < 0.02, "et il s'arrête AU repli : un triangle de « %s » est écrasé à %.4f de son aire"
+				% [ecrase[1], float(ecrase[0])])
+			_vrai(ecrase[1] != paroi, "la face qui arrête le geste est dans une AUTRE tuile (%s)" % ecrase[1])
+		_egal(_joints_ouverts(t, paires), 0, "G %.1f : les joints du témoin restent fermés" % demande)
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		var rendues_bride := 0
+		for c in t.tuiles:
+			if t.tuiles[c].sommets == depart_bride[c]:
+				rendues_bride += 1
+		_egal(rendues_bride, t.tuiles.size(), "G %.1f : UN Ctrl+Z rend toutes les tuiles" % demande)
+	# ⚠ CE CAS NE PROUVE PAS QUE LES AUTRES TUILES SONT GARDÉES : la dalle de la paroi s'écrase en même temps que
+	# ses voisines (même marge partout), donc garder la seule tuile en édition l'arrêtait aussi — mutation MUETTE.
+	# Il faut un geste où une AUTRE tuile replie AVANT celle qu'on édite. `sonde_bride_ailleurs.gd` en trouve 46 ;
+	# on rejoue le plus net — le sommet 3 de `mb_vrille_d_b3h1_dehors`, glissé vers −X de la tuile : elle ne replie
+	# jamais, `mb_coin_b1h0` replie à 0,25 — et on REVÉRIFIE ici sa condition, qui rougirait si le témoin changeait.
+	var vrille := "mb_vrille_d_b3h1_dehors"
+	mo.activer(int(t.occurrences_de(vrille)[0]))
+	var vers: Vector3 = mo.pose.basis * Vector3(-1, 0, 0)
+	var nom_axe := ""
+	var signe := ""
+	for k in mo.AXES:
+		var d: float = (mo.AXES[k] as Vector3).dot(vers)
+		if absf(d) > 0.5:
+			nom_axe = k
+			signe = "" if d > 0.0 else "-"
+	mo.choisir_mode("sommet")
+	mo.tout_choisir(false)
+	mo.sel_s = {3: true}
+	var avant_v: Vector3 = mo.maillage.sommets[3]
+	mo.commencer("G")
+	mo._axe = nom_axe
+	mo._saisie = signe + "0.4"
+	mo._mettre_a_jour()
+	mo.confirmer()
+	var marge: float = _min_de_tuile(t, depart_bride, vrille)
+	var parcours: float = (mo.maillage.sommets[3] - avant_v).length()
+	print("  bride par une autre tuile : %.4f case au lieu de 0,4 (bride %.3f), « %s » garde %.3f de son aire, « %s » %.5f"
+		% [parcours, mo.bride, vrille, marge, _le_plus_ecrase(t, depart_bride)[1], float(_le_plus_ecrase(t, depart_bride)[0])])
+	_vrai(mo.bride < 1.0 and marge > 0.1,
+		"un geste que seule une AUTRE tuile arrête : bridé (%.3f), la tuile en édition garde %.3f de son aire" % [mo.bride, marge])
+	_egal(_repliees(t, depart_bride), 0, "et aucune face n'est repliée, dans aucune tuile")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
 	ed._minuterie_temoin.stop()
 	ed._regler_edition(false)
 	_sections_finies = true
+
+
+## Le plus petit rapport d'aire des triangles en éventail d'UNE tuile (INF si aucune face gardable).
+func _min_de_tuile(t: RefCounted, depart: Dictionary, c: String) -> float:
+	var pire := INF
+	var m: RefCounted = t.tuiles[c]
+	for face in m.faces:
+		for a in _aires_en_eventail(face, depart[c], m.sommets):
+			pire = minf(pire, float(a))
+	return pire
+
+
+## Les faces saines au départ (normale de Newell non nulle, triangles en éventail d'aire positive) qu'un triangle
+## en éventail a aplaties ou retournées depuis. Faces de 3 et 4 côtés : l'éventail est alors le dessin exact.
+func _repliees(t: RefCounted, depart: Dictionary) -> int:
+	var n := 0
+	for c in t.tuiles:
+		var m: RefCounted = t.tuiles[c]
+		var s0: PackedVector3Array = depart[c]
+		if s0.size() != m.sommets.size():
+			continue
+		for face in m.faces:
+			for a in _aires_en_eventail(face, s0, m.sommets):
+				if a < 1e-6:
+					n += 1
+					break
+	return n
+
+
+## [le rapport d'aire le plus petit, sa tuile], sur tous les triangles en éventail des faces saines au départ.
+func _le_plus_ecrase(t: RefCounted, depart: Dictionary) -> Array:
+	var pire := [INF, ""]
+	for c in t.tuiles:
+		var m: RefCounted = t.tuiles[c]
+		var s0: PackedVector3Array = depart[c]
+		if s0.size() != m.sommets.size():
+			continue
+		for face in m.faces:
+			for a in _aires_en_eventail(face, s0, m.sommets):
+				if a < float(pire[0]):
+					pire = [a, c]
+	return pire
+
+
+## Pour une face de 3 ou 4 côtés saine au départ : l'aire orientée de chaque triangle en éventail (orientée par
+## la normale de DÉPART), rapportée à son aire de départ. Une face qui n'était pas saine rend [].
+func _aires_en_eventail(face: PackedInt32Array, s0: PackedVector3Array, s1: PackedVector3Array) -> Array:
+	if face.size() > 4:
+		return []
+	var nd := Vector3.ZERO
+	for k in face.size():
+		nd += s0[face[k]].cross(s0[face[(k + 1) % face.size()]])
+	if nd.length() < 1e-9:
+		return []
+	nd = nd.normalized()
+	var sortie: Array = []
+	for k in range(1, face.size() - 1):
+		var a0: float = (s0[face[k]] - s0[face[0]]).cross(s0[face[k + 1]] - s0[face[0]]).dot(nd)
+		if a0 <= 1e-9:
+			return []
+		sortie.append((s1[face[k]] - s1[face[0]]).cross(s1[face[k + 1]] - s1[face[0]]).dot(nd) / a0)
+	return sortie
 
 
 func _unitaire(axe: int) -> Vector3:
@@ -999,11 +1146,12 @@ func _le_modeleur(ed: Control) -> void:
 	ed._unhandled_key_input(_cle(KEY_Y, true))
 	_egal(mo.maillage.faces.size(), apres_e, "Ctrl+Y la refait")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
-	# G Z 2 Entrée : Z est le HAUT, comme dans Blender.
+	# G Z 0.1 Entrée : Z est le HAUT, comme dans Blender. ⚠ Un dixième, pas deux cases : depuis la bride (Jordan,
+	# 30 septembre 2026), deux cases replient les faces voisines et le geste s'arrête avant (mesuré à part).
 	ed._vue._gui_input(clic)
-	for k in [KEY_G, KEY_Z, KEY_2, KEY_ENTER]:
+	for k in [KEY_G, KEY_Z, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
 		ed._input(_cle(k))
-	_vrai(mo.maillage.centre(f).is_equal_approx(c0 + Vector3(0, 2, 0)), "G Z 2 : la face MONTE de deux cases (Z = haut)")
+	_vrai(mo.maillage.centre(f).is_equal_approx(c0 + Vector3(0, 0.1, 0)), "G Z 0.1 : la face MONTE d'un dixième de case (Z = haut)")
 	# ⚠ LES AUTRES COPIES SUIVENT : le maillage partagé par les occurrences de la tuile porte la face montée.
 	var partage: Mesh = (mo._mm_de[cle_a] as MultiMeshInstance3D).multimesh.mesh
 	var dans_le_partage := {}
@@ -1014,7 +1162,7 @@ func _le_modeleur(ed: Control) -> void:
 	for i in (mo.maillage.faces[f] as PackedInt32Array):
 		suivent = suivent and dans_le_partage.has(Vector3i((mo.maillage.sommets[i] * 1000.0).round()))
 	_vrai(suivent and mo.temoin.tuiles[cle_a] == mo.maillage and mo.temoin.occurrences_de(cle_a).size() > 1,
-		"G Z 2 : les %d autres copies de la tuile montrent la face montée" % (mo.temoin.occurrences_de(cle_a).size() - 1))
+		"G Z 0.1 : les %d autres copies de la tuile montrent la face montée" % (mo.temoin.occurrences_de(cle_a).size() - 1))
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	# Échap annule un geste : rien ne change, rien ne s'inscrit.
 	ed._vue._gui_input(clic)
@@ -1190,8 +1338,9 @@ func _le_modeleur(ed: Control) -> void:
 		_egal(mo.temoin.tuiles[cle_b].faces.size(), fb0, "Ctrl+Z défait l'extrusion de la tuile qu'on n'édite plus")
 		_egal(mo.cle, cle_a, "et l'édition reste sur la tuile en cours")
 		ed._vue._gui_input(clic)
-	# UNE COPIE TOURNÉE : « G X 1 » déplace d'une case vers +X DU MONDE, quelle que soit la rotation de la copie
-	# (Z ne le prouverait pas : un quart de tour autour de +Y garde le haut).
+	# UNE COPIE TOURNÉE : « G X 0.1 » déplace d'un dixième vers +X DU MONDE, quelle que soit la rotation de la copie
+	# (Z ne le prouverait pas : un quart de tour autour de +Y garde le haut). ⚠ Une case entière replie une face de
+	# la tuile (mesuré : un triangle de `mb_coin_b0h1` écrasé à 4e-6 de son aire) : la bride l'arrête à 0,25.
 	var tournee := -1
 	for i in mo.temoin.occurrences.size():
 		var b: Basis = (mo.temoin.occurrences[i]["pose"] as Transform3D).basis
@@ -1204,11 +1353,11 @@ func _le_modeleur(ed: Control) -> void:
 		mo.tout_choisir(false)
 		mo.sel_f = {0: true}
 		var avant_monde: Vector3 = mo.pose * mo.maillage.centre(0)
-		for k in [KEY_G, KEY_X, KEY_1, KEY_ENTER]:
+		for k in [KEY_G, KEY_X, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
 			ed._input(_cle(k))
 		var apres_monde: Vector3 = mo.pose * mo.maillage.centre(0)
-		_vrai((apres_monde - avant_monde).is_equal_approx(Vector3(1, 0, 0)),
-			"G X 1 sur une copie tournée : +1 en X du MONDE (%s)" % (apres_monde - avant_monde))
+		_vrai((apres_monde - avant_monde).is_equal_approx(Vector3(0.1, 0, 0)),
+			"G X 0.1 sur une copie tournée : +0,1 en X du MONDE (%s)" % (apres_monde - avant_monde))
 		ed._unhandled_key_input(_cle(KEY_Z, true))
 		ed._vue._gui_input(clic)
 	# L'enregistrement : le .glb LIÉ se relit tuile par tuile, avec le matériau ; et il rejoint les travaux.

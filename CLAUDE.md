@@ -415,7 +415,7 @@ témoin montre ce que le monde montrera.
     format d'avant — des LISTES par clé : les greffons le refusent désormais. À réexporter depuis l'appli.
   - La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections — OUVERT.
 
-### LES SECTIONS PARTAGÉES — DEMANDÉ PAR JORDAN (30 septembre 2026), MESURÉ, PAS ÉCRIT
+### LES SECTIONS PARTAGÉES — DEMANDÉ PAR JORDAN (30 septembre 2026), ÉCRIT EN TROIS POINTS ET LA BRIDE
 
 Jordan : les sommets du bord d'une paroi doivent être partagés avec ceux du bord correspondant d'un coin,
 d'une lèvre de plateau… — « la seule manière d'avoir un witness monolithique sans trous ». Les copies liées
@@ -511,10 +511,44 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
     propagé est juste — c'est le même vecteur dans la section partagée —, mais une tuile voisine n'a pas la
     place : dans `mb_equerre_b2h1_a`, le point reporté au milieu d'une arête de 0,25, poussé de 0,25, dépasse
     son bout. Avec des tirages dans la marge (0,1), zéro tache.
-  - **OUVERT — À TRANCHER PAR JORDAN** : quand un geste replie une face dans une tuile qu'on n'édite pas, faut-il
-    (a) BRIDER le geste à la plus grande amplitude sans repli dans aucune copie, (b) le laisser faire et le
-    DIRE (« N faces repliées dans K tuiles »), ou (c) rien, comme Blender qui laisse replier sa propre tuile ?
-    Aujourd'hui : (c).
+  - **DÉCIDÉ (Jordan, 30 septembre 2026) — (a), LA BRIDE : un geste s'arrête à la plus grande amplitude qui ne
+    replie AUCUNE face, dans AUCUNE tuile** (les autres réponses étaient : le laisser faire et le dire, ou rien,
+    comme Blender). ÉCRIT LE MÊME JOUR :
+    - **le critère vit dans le cœur** (`MaillageEdite.gardes_de_repli` / `replie`) : au début du geste, pour
+      chaque face qui PEUT bouger — dans la tuile en édition et dans chaque tuile que la propagation-sonde
+      atteint —, ses triangles de départ (ceux que `trianguler` dessine) et sa normale ; la face est repliée dès
+      qu'un triangle s'ÉCRASE ou se retourne (aire orientée ≤ 10⁻⁷). ⚠ Une face déjà écrasée au départ n'est pas
+      gardée : on ne bride pas un geste pour ce qu'il n'a pas fait ;
+    - **le modeleur parcourt le geste** : G, R et S sont des FAMILLES de transformations paramétrées par leur
+      amplitude s (déplacement, angle, écart d'échelle) ; si s = 1 replie, on avance par pas de 1/8 jusqu'au
+      premier qui replie, puis huit dichotomies ; le geste s'arrête au dernier point sain (`bride`, et le
+      rapport dit « stopped at N% »). C'est le PREMIER repli le long du geste ; un repli qui naîtrait et
+      disparaîtrait dans un même huitième peut échapper ;
+    - ⚠ **LA TUILE QU'ON ÉDITE EST BRIDÉE AUSSI** (« dans aucune tuile ») : un S négatif (miroir) ou une face
+      poussée à travers sa voisine s'arrêtent. Deux vérifications de la fumée tiraient d'une et deux cases — elles
+      REPLIAIENT (mesuré hors du code éprouvé : un triangle de `mb_coin_b0h1` écrasé à 4·10⁻⁶ de son aire) ; elles
+      éprouvent le SENS des axes et passent à 0,1 ;
+    - ⚠ rappelé en plein geste (la molette du proportionnel), la préparation repart des positions de départ,
+      tuiles entraînées comprises : sinon ses gardes seraient prises sur un état déplacé, et une tuile sortie du
+      lot resterait déplacée (défaut du point 2, vu en écrivant ceci, pas gardé par un test).
+  - **MESURÉ** : `test_maillage_edite` (160, +7 : le cube, attendus écrits à la main — à 0,5 sain, à 0,001 sain,
+    à 0 écrasé, à −0,5 retourné, deux faces écrasées au départ non gardées) ; `fumee_appli` (223, +12 : les faces
+    ±Z de la paroi glissées de côté au clavier ; à 0,1 rien n'est bridé ; à 0,5 le geste s'arrête à **0,2498**
+    case ; aucune face repliée dans aucune tuile ; joints fermés ; un Ctrl+Z rend tout. Attendu hors du code
+    éprouvé : éventail et normales de départ recalculés dans la fumée).
+  - ⚠ **« LA BRIDE NE GARDE QUE LA TUILE EN ÉDITION » ÉTAIT MUETTE, ET C'ÉTAIT LE TEST** : la dalle de la paroi
+    s'écrase EN MÊME TEMPS que ses voisines (même marge d'un quart de case partout), donc garder la seule tuile en
+    édition l'arrêtait aussi. Il fallait un geste qu'une AUTRE tuile arrête seule : `sonde_bride_ailleurs.gd` en
+    trouve **46** (un sommet de bord, un axe de son plan) ; la fumée rejoue le plus net — le sommet 3 de
+    `mb_vrille_d_b3h1_dehors` vers −X de la tuile, qui ne replie jamais, quand `mb_coin_b1h0` replie à 0,25 — et
+    REVÉRIFIE sa condition (bridé à 0,625 du geste, la tuile en édition garde toute son aire). **Vu à l'image** (`capture_modeleur_lie.gd`, avec fenêtre) :
+    0 pixel vu à travers une face de dos, sur les quatre photos, dont celle du geste bridé.
+  - **COÛT MESURÉ** (avec fenêtre) : un mouvement non bridé ~11 ms (9,1 avant) ; un mouvement que la bride doit
+    chercher **~50 ms** (une quinzaine d'essais à ~3 ms) — à juger souris en main.
+  - **Mutations rouges** : un triangle écrasé qui ne compte pas comme repli, les faces écrasées au départ gardées,
+    pas de bride, la bride qui ne garde que la tuile en édition (après la sonde), la bride qui rend le premier
+    point qui replie. ⚠ Le rappel en plein geste (molette) et le pas régulier avant la dichotomie n'ont pas de garde.
+  - ⚠ **PAS TENU EN MAIN.**
   - ⚠ **PAS TENU EN MAIN.**
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
@@ -1581,14 +1615,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 376 vérifications, 0 échec** (30 septembre 2026, relevées après les coupes des sections partagées),
+  Seize suites, **8 395 vérifications, 0 échec** (30 septembre 2026, relevées après la bride des sections partagées),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
-  `test_outils` 57, `fumee_appli` 211, `test_greffon_peinture` 179, `test_faux_artiste` 36,
-  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 30.
+  `test_outils` 57, `fumee_appli` 223, `test_greffon_peinture` 179, `test_faux_artiste` 36,
+  `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 30.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**

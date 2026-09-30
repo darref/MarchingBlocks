@@ -544,6 +544,44 @@ func normale(f: int) -> Vector3:
 	return _normale_de(sommets, faces[f])
 
 
+## LES GARDES DE REPLI — DÉCIDÉ (Jordan, 30 septembre 2026) : un geste ne replie aucune face, dans aucune
+## tuile. Pour chaque face de `choix`, ses triangles de DÉPART (ceux que `trianguler` dessine) et sa normale de
+## départ ; la face est repliée dès qu'un de ces triangles s'aplatit ou se retourne par rapport à elle.
+## ⚠ Une face déjà repliée au départ n'est pas gardée : on ne bride pas un geste pour ce qu'il n'a pas fait.
+const SEUIL_DE_REPLI := 1e-7
+
+func gardes_de_repli(choix: Array) -> Array:
+	var gardes: Array = []
+	for f in choix:
+		var n := normale(f)
+		if n == Vector3.ZERO:
+			continue
+		var tris := trianguler(f)
+		var saine := true
+		for t in tris:
+			if _aire_orientee(faces[f], t, n) <= SEUIL_DE_REPLI:
+				saine = false
+				break
+		if saine:
+			gardes.append([f, tris, n])
+	return gardes
+
+
+## Vrai si une face gardée s'est repliée depuis `gardes_de_repli`.
+func replie(gardes: Array) -> bool:
+	for g in gardes:
+		var face: PackedInt32Array = faces[int(g[0])]
+		for t in g[1]:
+			if _aire_orientee(face, t, g[2]) <= SEUIL_DE_REPLI:
+				return true
+	return false
+
+
+func _aire_orientee(face: PackedInt32Array, t: Array, n: Vector3) -> float:
+	var a: Vector3 = sommets[face[t[0]]]
+	return (sommets[face[t[1]]] - a).cross(sommets[face[t[2]]] - a).dot(n)
+
+
 static func _normale_de(s: PackedVector3Array, face: PackedInt32Array) -> Vector3:
 	var n := Vector3.ZERO
 	for i in face.size():

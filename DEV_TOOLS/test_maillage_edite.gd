@@ -49,6 +49,7 @@ func _initialize() -> void:
 	_le_temoin()
 	_l_accelerateur_de_rayons()
 	_le_materiau_voyage_jusqu_au_greffon()
+	_les_gardes_de_repli()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -815,3 +816,26 @@ func _egal(a, b, quoi: String) -> void:
 	else:
 		_echecs += 1
 		print("  ✗ %s — rendu %s, attendu %s" % [quoi, a, b])
+
+
+# ── LES GARDES DE REPLI (la bride, Jordan, 30 septembre 2026) ─────────────────────────────────────────
+#
+# Le sommet 7 (1,1,1) du cube glisse en x, dans le plan du dessus. Les attendus sont écrits À LA MAIN :
+# à x = 0,5 le dessus reste un quad convexe et les faces x+ et z+ gardent leurs triangles d'aire positive ;
+# à x = 0 le triangle [2,6,7] du dessus s'écrase sur le sommet 6 ; à x = −0,5 il est retourné.
+func _les_gardes_de_repli() -> void:
+	var c := _cube()
+	var toutes: Array = range(c.faces.size())
+	var gardes: Array = c.gardes_de_repli(toutes)
+	_egal(gardes.size(), 6, "gardes : les six faces du cube, toutes saines au départ")
+	_vrai(not c.replie(gardes), "gardes : le cube au départ n'est pas replié")
+	for cas in [[0.5, false, "7 glisse jusqu'à x = 0,5 : rien ne replie"],
+			[0.001, false, "7 à x = 0,001 : encore sain"],
+			[0.0, true, "7 à x = 0 : le triangle [2,6,7] du dessus s'écrase — c'est un repli"],
+			[-0.5, true, "7 à x = −0,5 : le dessus est retourné"]]:
+		c.sommets[7] = Vector3(cas[0], 1, 1)
+		_egal(c.replie(gardes), cas[1], "gardes : " + cas[2])
+	# Une face déjà écrasée au départ n'est pas gardée : 7 posé sur 6 écrase le dessus et la face z+.
+	var d := _cube()
+	d.sommets[7] = Vector3(0, 1, 1)
+	_egal(d.gardes_de_repli(range(d.faces.size())).size(), 4, "gardes : les deux faces écrasées au départ ne sont pas gardées")

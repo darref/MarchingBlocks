@@ -109,6 +109,14 @@ var _photo := {}             # clé → positions au début du geste (pour rejou
 var _touchees := {}          # clé → true : les AUTRES tuiles que le geste peut toucher
 var _propages_ici: Array = []   # les sommets de la tuile en édition qui bougent par propagation
 var _sections_du_geste := false
+## LA BRIDE — DÉCIDÉ (Jordan, 30 septembre 2026) : un geste s'arrête à la plus grande amplitude qui ne replie
+## AUCUNE face, dans AUCUNE tuile (celle qu'on édite comprise). `bride` est la fraction du geste demandé qui a
+## été appliquée (1 = rien n'a été bridé).
+var _atteints := {}          # clé → {sommet: true} : ce que la propagation peut atteindre dans les AUTRES tuiles
+var _gardes := {}            # clé → gardes de repli (`MaillageEdite.gardes_de_repli`)
+var bride := 1.0
+const PAS_DE_BRIDE := 8      # pas réguliers le long du geste, puis dichotomie dans le premier qui replie
+const AFFINAGES_DE_BRIDE := 8
 var _rang_dans_mm := {}   # occurrence → rang dans la MultiMesh de sa tuile
 
 
@@ -357,6 +365,13 @@ func _aretes() -> Array:
 ## Au début d'un geste : ce qui peut bouger (les sommets choisis, et avec l'édition proportionnelle ceux
 ## qui sont à portée), les faces et les arêtes qui les touchent ; tout le reste est dessiné UNE fois.
 func _preparer_le_geste() -> void:
+	# Rappelé en plein geste (la molette change le rayon proportionnel) : tout repart des positions de départ,
+	# sinon les gardes seraient prises sur un état déjà déplacé, et une tuile qui sort du lot resterait déplacée.
+	maillage.sommets = _depart.duplicate()
+	if _sections_du_geste:
+		for c in _touchees:
+			temoin.tuiles[c].sommets = (_photo[c] as PackedVector3Array).duplicate()
+			_rafraichir_tuile(c)
 	var mobiles := {}
 	for i in _ids:
 		mobiles[i] = true
@@ -385,6 +400,7 @@ func _preparer_le_geste() -> void:
 		else:
 			statiques.append(f)
 	_faces_mi.mesh = maillage.vers_array_mesh_de(statiques)
+	_preparer_les_gardes()
 	_aretes_mobiles = []
 	var fixes: Array = []
 	for e in _aretes():
@@ -837,8 +853,11 @@ func _mettre_a_jour() -> void:
 		_redessiner_le_geste_topologique()
 		dit.emit("[b]Inset[/b]  thickness %.3f   [i](type a number · Enter or click to confirm · Esc to cancel)[/i]" % t)
 		return
-	var t := Transform3D.IDENTITY
 	var axe := _direction_d_axe()
+	# Le geste est une FAMILLE de transformations, paramétrée par son amplitude s (1 = ce qu'on demande) :
+	# la bride la parcourt sans rien recalculer d'autre.
+	var faire: Callable
+	var dire: Callable
 	match modal:
 		"G":
 			var delta := _glissement()
@@ -846,8 +865,9 @@ func _mettre_a_jour() -> void:
 				delta = (axe if axe != Vector3.ZERO else _vers_la_tuile(AXES["x"])) * _valeur(0.0)
 			elif axe != Vector3.ZERO:
 				delta = axe * delta.dot(axe)
-			t = Transform3D(Basis(), delta)
-			dit.emit("[b]%s[/b]  %s   %s" % [_nom_geste, _dire_vecteur(pose.basis * delta), _aide_axe()])
+			faire = func(s: float) -> Transform3D: return Transform3D(Basis(), delta * s)
+			dire = func(s: float) -> String:
+				return "[b]%s[/b]  %s" % [_nom_geste, _dire_vecteur(pose.basis * delta * s)]
 		"R":
 			# ⚠ L'ANGLE À L'ÉCRAN, AUTOUR DE L'AXE QUI POINTE VERS L'ŒIL : l'écran a son y vers le bas, donc un
 			# angle qui croît y tourne dans le sens HORAIRE, soit −angle autour de l'axe vers l'œil. Un axe
@@ -861,8 +881,9 @@ func _mettre_a_jour() -> void:
 				angle = -angle
 			if _saisie != "":
 				angle = deg_to_rad(_valeur(0.0))
-			t = Transform3D(Basis(), _pivot) * Transform3D(Basis(autour.normalized(), angle), Vector3.ZERO) 				* Transform3D(Basis(), -_pivot)
-			dit.emit("[b]Rotate[/b]  %.1f°   %s" % [rad_to_deg(angle), _aide_axe()])
+			faire = func(s: float) -> Transform3D:
+				return Transform3D(Basis(), _pivot) * Transform3D(Basis(autour.normalized(), angle * s), Vector3.ZERO) 					* Transform3D(Basis(), -_pivot)
+			dire = func(s: float) -> String: return "[b]Rotate[/b]  %.1f°" % rad_to_deg(angle * s)
 		"S":
 			var ps := _ecran(_pivot)
 			var f := souris.distance_to(ps) / maxf(1.0, _souris0.distance_to(ps))
@@ -872,12 +893,80 @@ func _mettre_a_jour() -> void:
 			if axe != Vector3.ZERO:
 				var a := axe.abs()
 				echelle = Vector3.ONE + a * (f - 1.0)
-			t = Transform3D(Basis(), _pivot) * Transform3D(Basis.from_scale(echelle), Vector3.ZERO) \
-				* Transform3D(Basis(), -_pivot)
-			dit.emit("[b]Scale[/b]  %.3f   %s" % [f, _aide_axe()])
-	maillage.transformer(_ids, t, _depart, rayon_prop if proportionnel else 0.0, _candidats)
-	_contraindre_et_propager()
+			faire = func(s: float) -> Transform3D:
+				return Transform3D(Basis(), _pivot) * Transform3D(Basis.from_scale(Vector3.ONE + (echelle - Vector3.ONE) * s),
+					Vector3.ZERO) * Transform3D(Basis(), -_pivot)
+			dire = func(s: float) -> String: return "[b]Scale[/b]  %.3f" % (1.0 + (f - 1.0) * s)
+	bride = _brider(faire)
+	var texte: String = dire.call(bride)
+	if bride < 1.0:
+		texte += "   [color=#e0a03c]stopped at %d%% — further would fold a face[/color]" % int(floor(bride * 100.0))
+	dit.emit("%s   %s" % [texte, _aide_axe()])
+	for c in _touchees:
+		_rafraichir_tuile(c)
 	_redessiner_le_geste()
+
+
+## Applique le geste à l'amplitude `s` : la tuile en édition, puis les sections partagées (sans redessiner).
+func _appliquer_le_geste(faire: Callable, s: float) -> void:
+	maillage.transformer(_ids, faire.call(s), _depart, rayon_prop if proportionnel else 0.0, _candidats)
+	_contraindre_et_propager()
+
+
+## LA BRIDE : si le geste entier replie une face gardée, on le parcourt depuis 0 par pas réguliers jusqu'au
+## premier pas qui replie, puis on affine par dichotomie ; le geste s'arrête au dernier point sain. C'est le
+## PREMIER repli rencontré le long du geste — un repli qui naîtrait et disparaîtrait à l'intérieur d'un pas
+## (1/8 du geste) peut échapper. Coût mesuré : ~3 ms par essai, donc un mouvement bridé en coûte ~16.
+## ⚠ s = 0 est sain par construction : les gardes ne portent que des faces saines au départ.
+func _brider(faire: Callable) -> float:
+	_appliquer_le_geste(faire, 1.0)
+	if _gardes.is_empty() or not _replie():
+		return 1.0
+	var sain := 0.0
+	var mauvais := 1.0
+	for k in range(1, PAS_DE_BRIDE + 1):
+		var s := float(k) / PAS_DE_BRIDE
+		_appliquer_le_geste(faire, s)
+		if _replie():
+			mauvais = s
+			break
+		sain = s
+	for k in AFFINAGES_DE_BRIDE:
+		var m := (sain + mauvais) * 0.5
+		_appliquer_le_geste(faire, m)
+		if _replie():
+			mauvais = m
+		else:
+			sain = m
+	_appliquer_le_geste(faire, sain)
+	return sain
+
+
+func _replie() -> bool:
+	for c in _gardes:
+		var m: RefCounted = maillage if c == cle else temoin.tuiles[c]
+		if m.replie(_gardes[c]):
+			return true
+	return false
+
+
+## Les gardes du geste : les faces qui PEUVENT bouger, dans la tuile en édition et dans chaque tuile que la
+## propagation peut atteindre. Sans sections partagées (témoin d'un seul tenant), pas de bride.
+func _preparer_les_gardes() -> void:
+	_gardes = {}
+	bride = 1.0
+	if not _sections_du_geste:
+		return
+	_gardes[cle] = maillage.gardes_de_repli(_faces_mobiles)
+	for c in _atteints:
+		var m: RefCounted = temoin.tuiles[c]
+		var choix: Array = []
+		for f in m.faces.size():
+			for i in m.faces[f]:
+				if (_atteints[c] as Dictionary).has(i):
+					choix.append(f)
+					break
+		_gardes[c] = m.gardes_de_repli(choix)
 
 
 func _aide_axe() -> String:
@@ -931,6 +1020,7 @@ func _valeur(defaut: float) -> float:
 func _preparer_les_sections(mobiles: Dictionary) -> void:
 	_touchees = {}
 	_propages_ici = []
+	_atteints = {}
 	if not _sections_du_geste:
 		return
 	var sonde := {}
@@ -938,6 +1028,7 @@ func _preparer_les_sections(mobiles: Dictionary) -> void:
 		if sections.est_de_bord(cle, i):
 			sonde[i] = Vector3.ONE
 	var atteints: Dictionary = sections.propager(cle, sonde)
+	_atteints = {}
 	for c in atteints:
 		if c == cle:
 			for i in atteints[c]:
@@ -945,6 +1036,7 @@ func _preparer_les_sections(mobiles: Dictionary) -> void:
 					_propages_ici.append(i)
 		else:
 			_touchees[c] = true
+			_atteints[c] = atteints[c]
 
 
 ## À chaque mouvement : chaque sommet de bord qui a bougé est ramené DANS son plan, et ses correspondants
@@ -967,8 +1059,6 @@ func _contraindre_et_propager() -> void:
 		maillage.sommets[i] = _depart[i] + (r[cle][i] as Vector3)
 	r.erase(cle)
 	sections.deplacer(r, _photo)
-	for c in r:
-		_rafraichir_tuile(c)
 
 
 ## LA COMPLÉTION APRÈS UNE COUPE (point 3) : un sommet neuf posé sur un bord est reporté sur chaque face de sa

@@ -82,6 +82,37 @@ func _derouler() -> void:
 	_photo("modeleur_lie_2_paroi_tiree")
 	_taches(_ecran._modeleur, v, "2")
 
+	# LA BRIDE (Jordan, 30 septembre 2026) : les mêmes faces glissées d'une DEMI-case de côté (X de la tuile) —
+	# sans bride, des faces d'autres tuiles se repliaient. Le geste doit s'arrêter avant, et le coût d'un
+	# mouvement de souris quand la bride cherche se mesure ici.
+	var lx: Vector3 = (mo.pose.basis * Vector3(1, 0, 0)).abs()
+	var lettre := ""
+	for k in ["x", "y", "z"]:
+		if (mo.AXES[k] as Vector3).abs().dot(lx) > 0.5:
+			lettre = k
+	mo.tout_choisir(false)
+	for g in mo.maillage.faces.size():
+		if absf(mo.maillage.normale(g).z) > 0.9:
+			mo.sel_f[g] = true
+	mo._dessiner_selection()
+	mo.souris = v.size * 0.5
+	mo.commencer("G")
+	mo._axe = lettre
+	mo._saisie = "-0.5"
+	var pire_b := 0
+	var total_b := 0
+	for k in 10:
+		var t2 := Time.get_ticks_usec()
+		mo._mettre_a_jour()
+		var dt2 := Time.get_ticks_usec() - t2
+		total_b += dt2
+		pire_b = maxi(pire_b, dt2)
+	print("bride : %.3f du geste ; %.1f ms par mouvement bridé en moyenne, %.1f au pire" % [mo.bride, total_b / 10000.0, pire_b / 1000.0])
+	mo.confirmer()
+	await _images(10)
+	_photo("modeleur_lie_2b_bride")
+	_taches(mo, v, "2b")
+
 	# LES COUPES SUR LES BORDS (point 3) : un loop cut à travers un bord de la paroi, puis ses sommets neufs tirés
 	# d'un quart de case — reportés et entraînés dans les autres tuiles, aucune fente ne doit s'ouvrir.
 	var anneau_bord := Vector2i(-1, -1)
