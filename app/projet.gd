@@ -21,7 +21,9 @@ const DOSSIER_CACHE := "user://cache"
 ## LE FORMAT DU CACHE. ⚠ 2 depuis le 29 septembre 2026 : le lot porte la PROVENANCE de chaque tuile (le
 ## sommet du témoin d'où elle vient, lu par l'atelier World). Un lot d'avant ne la porte pas : il passe
 ## pour périmé et se retranche, sinon « d'où vient cette tuile ? » resterait muet sans dire pourquoi.
-const FORMAT_DU_CACHE := 2
+## ⚠ 3 depuis le 30 septembre 2026 : UNE tuile par clé (charte §3). Un lot d'avant porte des exemplaires
+## « ~k » que le peintre ne pose plus : il passe pour périmé et se retranche.
+const FORMAT_DU_CACHE := 3
 
 ## La source « témoin calculé ». Toute autre source non vide est un chemin de `.glb`.
 const TEMOIN := "witness"

@@ -10,7 +10,7 @@ extends SceneTree
 ## du format (`mb_rule.gd`). Les cas d'épreuve les confrontent ; c'est ce qui rendra visible la moindre
 ## divergence, et ce que les greffons Unity et Unreal devront passer à leur tour.
 ## ⚠ **UN CAS QUI N'EXERCE RIEN NE GARDE RIEN** (charte §6) : on vérifie aussi que les cas posent
-## vraiment des tuiles d'air libre, des exemplaires au-delà du premier, et des marqueurs d'erreur.
+## vraiment des tuiles d'air libre et des marqueurs d'erreur.
 
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
@@ -64,8 +64,15 @@ func _les_noms() -> void:
 			vus[id] = cle
 	_vrai(mauvais.is_empty(), "des ids sortent hors de [a-z0-9_] ou en double : %s" % str(mauvais.slice(0, 5)))
 	_egal(FN.id_de_cle("mb_arete_creuse_b2h2_dehors"), "edge_inner_b2h2_outdoor", "la traduction, écrite à la main")
-	_egal(FN.nom_de_tuile("mb_coin_b1h0", 0), "corner_b1h0", "l'exemplaire 0 porte le nom nu")
-	_egal(FN.nom_de_tuile("mb_coin_b1h0", 2), "corner_b1h0_3", "l'exemplaire 2 porte « _3 »")
+	_egal(FN.nom_de_tuile("mb_coin_b1h0"), "corner_b1h0", "une tuile par clé : son nom est l'id de la clé")
+	# ⚠ UNE TUILE PAR CLÉ (charte §3, 30 septembre 2026) : ni champ `copies`, ni étape « Copy » dans la règle.
+	var regle: Dictionary = FN.regle_du_format()
+	_vrai(not regle.has("copies"), "le format ne porte plus de champ « copies »")
+	var copie := false
+	for ligne in FN.regle():
+		if ligne.contains("Copy") or ligne.contains("73856093"):
+			copie = true
+	_vrai(not copie, "la règle écrite ne tire plus de copie par hachage")
 
 
 # ── 2. Les quarts de tour — mesurés contre la base, pas recopiés ─────────────────────────────────────
@@ -203,8 +210,8 @@ func _la_barre_ne_montre_que_l_utile() -> void:
 # ── 4. Le greffon reproduit chaque cas, à 100 % ─────────────────────────────────────────────────────
 func _le_greffon_passe_les_cas(cas: Dictionary) -> void:
 	var dehors := 0
-	var exemplaires := 0
 	var marqueurs := 0
+	var hors_du_jeu := 0
 	var total := 0
 	for c in cas["cases"]:
 		var cells := {}
@@ -223,17 +230,22 @@ func _le_greffon_passe_les_cas(cas: Dictionary) -> void:
 				premier = "au rang %d : attendu %s, le greffon rend %s" % [i, str(a), str(o)]
 				break
 		_vrai(premier == "", "« %s » — %s" % [c["name"], premier])
+		# Chaque tuile attendue est LA tuile d'une clé du jeu (une par clé) : aucun autre nom ne peut sortir.
+		var noms := {}
+		for k in cas["tilesets"][c["tileset"]]:
+			noms[cas["tilesets"][c["tileset"]][k]] = true
 		for e in attendu:
 			if e[3] == null:
 				marqueurs += 1
-			elif str(e[3]).contains("_outdoor"):
-				dehors += 1
-			elif RegEx.create_from_string("_[0-9]+$").search(str(e[3])) != null:
-				exemplaires += 1
-	print("  cas d'épreuve : %d cas, %d poses — %d d'air libre, %d exemplaires au-delà du premier, %d marqueurs"
-		% [(cas["cases"] as Array).size(), total, dehors, exemplaires, marqueurs])
+			else:
+				if not noms.has(e[3]):
+					hors_du_jeu += 1
+				if str(e[3]).contains("_outdoor"):
+					dehors += 1
+	print("  cas d'épreuve : %d cas, %d poses — %d d'air libre, %d marqueurs"
+		% [(cas["cases"] as Array).size(), total, dehors, marqueurs])
 	_vrai(dehors > 0, "aucun cas ne pose de tuile d'air libre : le contexte n'est pas éprouvé")
-	_vrai(exemplaires > 0, "aucun cas ne tire d'exemplaire au-delà du premier : le hachage n'est pas éprouvé")
+	_egal(hors_du_jeu, 0, "tuiles attendues qui ne sont LA tuile d'aucune clé du jeu")
 	_vrai(marqueurs > 0, "aucun cas ne demande de tuile absente : le marqueur n'est pas éprouvé")
 
 
@@ -243,6 +255,12 @@ func _un_format_plus_recent_est_refuse() -> void:
 	_vrai(Rule.check(regle) != "", "un manifeste d'un format PLUS RÉCENT est accepté")
 	regle["version"] = FN.VERSION
 	_egal(Rule.check(regle), "", "un manifeste du format courant est refusé")
+	# ⚠ UNE TUILE PAR CLÉ (charte §3) : un manifeste qui porte encore une LISTE de copies par clé (le brouillon
+	# du 27 au 30 septembre 2026) est refusé en le disant, jamais lu de travers.
+	regle["tiles"] = {"corner_b1h0": ["corner_b1h0", "corner_b1h0_2"]}
+	_vrai(Rule.check(regle).contains("one tile per key"), "un manifeste à listes de copies est accepté")
+	regle["tiles"] = {"corner_b1h0": "corner_b1h0"}
+	_egal(Rule.check(regle), "", "un manifeste à une tuile par clé est refusé")
 
 
 # ── 4 bis. Les cas d'OUTILS livrés aux greffons Unity et Unreal : frais, et qui exercent quelque chose ─
@@ -579,10 +597,7 @@ func _de_bout_en_bout() -> void:
 	_egal(rapport["error"], "", "le monde se bâtit sans erreur")
 	_egal(rapport["missing"], 0, "aucun cube rouge sur le témoin")
 	# L'attendu : ce que le PEINTRE DE L'APPLI pose, via la référence.
-	var comptes := {}
-	var familles: Dictionary = FN.familles_du_lot(lot)
-	for cle in familles:
-		comptes[cle] = (familles[cle] as Array).size()
+	var comptes: Dictionary = FN.tuiles_du_lot(lot)
 	var attendu: Array = FN.attendu(pleines, comptes)
 	var tuiles := monde.get_node("Tiles") as GridMap
 	var lib: MeshLibrary = tuiles.mesh_library

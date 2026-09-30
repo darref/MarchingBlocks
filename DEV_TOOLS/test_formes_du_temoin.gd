@@ -108,7 +108,7 @@ func _initialize() -> void:
 	_egal(orphelins, [], "chacun appartient à au moins une carte")
 
 	# ── 5. La provenance, portée par le lot ────────────────────────────────────────────────────────────
-	# PAR LE NOM : un exemplaire vide (k = 1) est sauté, et « ~2 » doit rester le sommet C, pas glisser en B.
+	# PAR LE NOM. ⚠ Une tuile par clé (charte §3, 30 septembre 2026) : un nom, un sommet.
 	var MB := FT.MB
 	var cle := ""
 	for c in MB.classes():
@@ -121,14 +121,10 @@ func _initialize() -> void:
 	tri[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP])
 	plein.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tri)
 	var a := Vector3i(1, 1, 1)
-	var b := Vector3i(2, 2, 2)
-	var c3 := Vector3i(3, 3, 3)
-	var monte: Dictionary = BM._assembler({cle: plein}, {cle: [{"mesh": plein, "sommet": a},
-		{"mesh": ArrayMesh.new(), "sommet": b}, {"mesh": plein, "sommet": c3}]})
+	var monte: Dictionary = BM._assembler({cle: plein}, {cle: {"mesh": plein, "sommet": a}})
 	var faux_lot: MeshLibrary = monte["lot"]
-	_egal(FT.sommet_source(faux_lot, cle), a, "le nom nu vient du premier sommet")
-	_egal(FT.sommet_source(faux_lot, MB.nom_d_exemplaire(cle, 2)), c3,
-		"l'exemplaire 2 vient du TROISIÈME sommet, même quand le deuxième, vide, a été sauté")
+	_egal(FT.sommet_source(faux_lot, cle), a, "la tuile porte le sommet d'où elle vient")
+	_egal(faux_lot.get_item_list().size(), 1, "une clé, un item")
 	_egal(FT.sommet_source(load("res://addons/marchingblocks_core/repli_procedural.gd").librairie(), cle), null,
 		"le repli procédural ne vient d'aucun témoin")
 	# Sur le VRAI lot : chaque tuile vient d'un sommet qui, dans le témoin, porte SA clé. L'attendu vient du
@@ -145,11 +141,11 @@ func _initialize() -> void:
 		if s == null:
 			continue
 		vus[s] = true
-		if Tranchage.cle_du_sommet(pleines, s, plafond).get("cle", "") == MB.cle_sans_exemplaire(nom):
+		if Tranchage.cle_du_sommet(pleines, s, plafond).get("cle", "") == nom:
 			justes += 1
-	_egal(items.size(), 549, "le lot du témoin : 549 tuiles")
-	_egal(justes, 549, "les 549 viennent chacune d'un sommet qui porte leur clé")
-	_egal(vus.size(), 549, "et de 549 sommets DIFFÉRENTS : aucun exemplaire n'en désigne un autre")
+	_egal(items.size(), 52, "le lot du témoin : 52 tuiles, une par clé")
+	_egal(justes, 52, "les 52 viennent chacune d'un sommet qui porte leur clé")
+	_egal(vus.size(), 52, "et de 52 sommets DIFFÉRENTS")
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))

@@ -1,7 +1,7 @@
 // MarchingBlocks Paint for Unreal — THE PLACEMENT RULE, implemented from the tileset format itself.
 //
-// This file reads nothing but a tileset manifest (tileset.json): its table, corners, classes, context
-// and copies. It is standard C++ with no Unreal dependency: Tests/conformance.json (the reference cases,
+// This file reads nothing but a tileset manifest (tileset.json): its table, corners, classes and
+// context. It is standard C++ with no Unreal dependency: Tests/conformance.json (the reference cases,
 // shipped with every MarchingBlocks plugin) proves it places exactly what the MarchingBlocks tool places.
 //
 // Everything here is in FORMAT space: right-handed, +Y up, 1 unit = 1 cell (glTF). Converting to
@@ -14,9 +14,7 @@
 //   3. table[bits] gives [class, quarter_turns]; class -1 places nothing;
 //   4. an outdoor-capable class is OUTDOOR when no empty cell among the 8 has a full cell above it,
 //      from v.y + band up to the highest full cell of the layer; outdoor tries "<id>_outdoor" first;
-//   5. the copy is picked by a spatial hash of v in 64-bit arithmetic, so a world always looks the same.
-//      It is computed UNSIGNED here: in C++ a signed overflow is undefined, an unsigned one wraps, and
-//      the low bits the mask keeps are the same either way;
+//   5. each key has exactly one tile, tiles[key];
 //   6. a missing key gives an empty tile name — show an error marker, never fill in.
 
 #pragma once
@@ -80,7 +78,10 @@ namespace MBPaint
 		/// mean something else, and placing anyway would be a silent lie.
 		static std::string CheckManifest(const FJsonValue& Manifest);
 
-		/// Tiles: {key: [tile names]} — pass nullptr to use the manifest's own "tiles".
+		/// "" when every key of Tiles names exactly one tile (one tile per key), otherwise the reason.
+		static std::string CheckTiles(const FJsonValue& Tiles);
+
+		/// Tiles: {key: tile name} — pass nullptr to use the manifest's own "tiles".
 		/// Call CheckManifest first: a manifest it refuses gives an empty rule.
 		explicit FRule(const FJsonValue& Manifest, const FJsonValue* Tiles = nullptr);
 
@@ -89,7 +90,7 @@ namespace MBPaint
 
 		std::array<FCell, 8> Corners;
 		FCell PieceOffset = FCell(1, 1, 1);
-		std::unordered_map<std::string, std::vector<std::string>> Tiles;
+		std::unordered_map<std::string, std::string> Tiles;
 
 	private:
 		bool HasTile(const std::string& Key) const;
@@ -101,7 +102,5 @@ namespace MBPaint
 		std::vector<bool> OutdoorPossible;
 		int Band = 2;
 		std::string OutdoorSuffix = "_outdoor";
-		std::array<int64_t, 3> Primes{};
-		int64_t Mask = 0;
 	};
 }

@@ -104,8 +104,12 @@ func _le_faux_revient_entier() -> MeshLibrary:
 		"le faux se tranche avec %d erreur(s) : %s" % [(bilan["erreurs"] as Array).size(),
 		str((bilan["erreurs"] as Array).slice(0, 3))])
 	_dire((bilan["manquantes"] as Array).is_empty(), "le faux ne livre pas : %s" % str(bilan["manquantes"]))
-	_dire(lot.get_item_list().size() == 549,
-		"le faux livre %d items, le témoin en livre 549" % lot.get_item_list().size())
+	_dire(lot.get_item_list().size() == 52,
+		"le faux livre %d items, une tuile par clé du monde en fait 52" % lot.get_item_list().size())
+	# ⚠ UNE TUILE PAR CLÉ (charte §3) : le faux est d'un seul tenant, donc NON LIÉ — chaque tuile y apparaît à
+	# plusieurs endroits, et seule la copie la plus lisible est lue. Ce qui est perdu doit se DIRE.
+	_dire(not _remarques_de(bilan, "non lié").is_empty(),
+		"un travail d'un seul tenant ne dit pas qu'une seule copie de chaque tuile est lue : %s" % str(bilan["remarques"]))
 	var couture: Array = _remarques_de(bilan, "")
 	couture = couture.filter(func(r: String) -> bool: return r.begins_with("couture"))
 	_dire(couture.is_empty(), "un artiste DISCIPLINÉ reçoit %d remarque(s) de couture : %s"

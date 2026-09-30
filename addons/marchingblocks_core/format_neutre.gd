@@ -10,7 +10,7 @@ extends RefCounted
 ##
 ## ⚠ **LE FICHIER PORTE LA RÈGLE, PAS SEULEMENT LES TUILES.** Trois greffons qui réécriraient chacun la
 ## classification, c'est la seconde description qui diverge (charte §6). Tout ce qui se PRÉ-CALCULE
-## (la table) est écrit ; ce qui doit se recalculer en jeu (contexte, exemplaire) est décrit, et gardé
+## (la table) est écrit ; ce qui doit se recalculer en jeu (le contexte) est décrit, et gardé
 ## par des CAS D'ÉPREUVE (`cas_d_epreuve()`) que chaque greffon doit reproduire à 100 %.
 ## ⚠ **LA RÉFÉRENCE EST `MB.poses()`**, celle-là même que le peintre de l'appli appelle.
 ## ⚠ **LES NOMS SORTENT EN ANGLAIS, EN `[a-z0-9_]`** — un acheteur les lit dans son moteur (charte §7),
@@ -58,11 +58,10 @@ static func id_de_cle(cle: String) -> String:
 	return id_de_classe(cle)
 
 
-## Le nom du k-ième exemplaire d'une clé, en sortie : le nom nu pour k = 0, puis « _2 », « _3 »…
-## ⚠ Le NOM NU EST L'EXEMPLAIRE 0, comme dans le lot (charte §3).
-static func nom_de_tuile(cle: String, k: int) -> String:
-	var id := id_de_cle(cle)
-	return id if k <= 0 else "%s_%d" % [id, k + 1]
+## Le nom de la tuile d'une clé, en sortie. ⚠ UNE tuile par clé (charte §3, 30 septembre 2026) : son nom
+## EST l'id de la clé — les « _2 », « _3 » des exemplaires ont vécu du 27 au 30 septembre.
+static func nom_de_tuile(cle: String) -> String:
+	return id_de_cle(cle)
 
 
 ## LES QUARTS DE TOUR d'un index d'orientation de GridMap : k tel que la base est une rotation de
@@ -125,11 +124,9 @@ static func regle() -> PackedStringArray:
 		"   the layer. v is OUTDOOR when, for EVERY EMPTY cell e among its 8, no cell (e.x, y, e.z) is full",
 		"   for y from v.y + 2 to top inclusive. Outdoor: use key '<class id>_outdoor' if the tileset has it,",
 		"   otherwise fall back on the bare key '<class id>'. Indoor: the bare key.",
-		"5. Copy. n = number of copies of the key (tiles[key].length). With 64-bit signed integers,",
-		"   h = (v.x * 73856093) XOR (v.y * 19349663) XOR (v.z * 83492791); k = (h AND 0x7FFFFFFF) mod n.",
-		"   Place tiles[key][k].",
-		"6. Missing. If the key is absent (or n = 0), place a clearly visible error marker. Never fill in.",
-		"7. Pose. The tile mesh is centred on the origin. Place it at (v + piece_offset) * cell_size,",
+		"5. Tile. Each key has exactly one tile, tiles[key]. If the key is absent, place a clearly visible",
+		"   error marker instead. Never fill in.",
+		"6. Pose. The tile mesh is centred on the origin. Place it at (v + piece_offset) * cell_size,",
 		"   rotated by quarter_turns * 90 degrees about +Y, right-hand rule (+Z turns towards +X).",
 		"Rebuilding after cell (x, y, z) changes: only the vertices of columns x-1..x, z-1..z at heights",
 		"   up to y can change (their bits, or their context).",
@@ -154,28 +151,17 @@ static func regle_du_format() -> Dictionary:
 		"table": table(),
 		"classes": classes_du_format(),
 		"context": {"rule": "open-sky-above-empty-cells", "band": 2, "outdoor_suffix": SUFFIXE_DEHORS},
-		"copies": {"hash": [73856093, 19349663, 83492791], "mask": 2147483647},
 		"rules_text": Array(regle()),
 		"frame_marker": {"node": MARQUEUR, "points": POINTS_DU_MARQUEUR},
 	}
 
 
-## {nom interne de clé: [ids d'item du lot, dans l'ordre des exemplaires]}.
-static func familles_du_lot(lot: MeshLibrary) -> Dictionary:
-	var familles := {}
+## {nom interne de clé: id d'item du lot}. ⚠ Une tuile par clé, de nom nu (charte §3).
+static func tuiles_du_lot(lot: MeshLibrary) -> Dictionary:
+	var tuiles := {}
 	for id in lot.get_item_list():
-		var nom: String = lot.get_item_name(id)
-		var cle: String = MB.cle_sans_exemplaire(nom)
-		var k: int = MB.indice_d_exemplaire(nom)
-		if not familles.has(cle):
-			familles[cle] = []
-		var liste: Array = familles[cle]
-		while liste.size() <= k:
-			liste.append(-1)
-		liste[k] = id
-	for cle in familles:
-		familles[cle] = (familles[cle] as Array).filter(func(i: int) -> bool: return i >= 0)
-	return familles
+		tuiles[lot.get_item_name(id)] = id
+	return tuiles
 
 
 ## EXPORTE UN LOT dans `<dossier>/<nom>.mbset/`. Rend {"dossier": chemin, "tuiles": n, "manquantes": [...]}
@@ -195,27 +181,22 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var cible := dossier.path_join(n + ".mbset")
 	DirAccess.make_dir_recursive_absolute(cible)
 
-	var familles := familles_du_lot(lot)
+	var du_lot := tuiles_du_lot(lot)
 	var tuiles := {}
 	var racine := Node3D.new()
 	racine.name = "Tiles"
 	var vus := {}
-	for cle in familles:
-		var noms: Array = []
-		var liste: Array = familles[cle]
-		for k in liste.size():
-			var tuile := nom_de_tuile(cle, k)
-			if vus.has(tuile):
-				racine.free()
-				return {"erreur": "two tiles would share the name « %s »" % tuile}
-			vus[tuile] = true
-			noms.append(tuile)
-			var inst := MeshInstance3D.new()
-			inst.name = tuile
-			inst.mesh = _maillage_exportable(lot.get_item_mesh(liste[k]),
-				lot.get_item_mesh_transform(liste[k]))
-			racine.add_child(inst)
-		tuiles[id_de_cle(cle)] = noms
+	for cle in du_lot:
+		var tuile := nom_de_tuile(cle)
+		if vus.has(tuile):
+			racine.free()
+			return {"erreur": "two tiles would share the name « %s »" % tuile}
+		vus[tuile] = true
+		var inst := MeshInstance3D.new()
+		inst.name = tuile
+		inst.mesh = _maillage_exportable(lot.get_item_mesh(du_lot[cle]), lot.get_item_mesh_transform(du_lot[cle]))
+		racine.add_child(inst)
+		tuiles[id_de_cle(cle)] = tuile
 
 	var marqueur := MeshInstance3D.new()
 	marqueur.name = MARQUEUR
@@ -246,11 +227,11 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 
 	var manquantes: Array = []
 	for c in MB.pieces_a_sculpter():
-		if not familles.has(c):
+		if not du_lot.has(c):
 			manquantes.append(id_de_cle(c))
 	for c in MB.exterieures_a_sculpter():
 		var cle: String = MB.nom_en_contexte(c, true)
-		if not familles.has(cle):
+		if not du_lot.has(cle):
 			manquantes.append(id_de_cle(cle))
 
 	var manifeste := regle_du_format()
@@ -313,22 +294,22 @@ static func _maillage_exportable(mesh: Mesh, pose: Transform3D) -> ArrayMesh:
 # ── LES CAS D'ÉPREUVE ──────────────────────────────────────────────────────────────────────────────
 #
 # ⚠ **CE QUE CHAQUE GREFFON DOIT REPRODUIRE À 100 %.** Des mondes construits pour exercer chaque ligne de
-# la règle — contexte, repli, exemplaires, coordonnées négatives, diagonales —, et pour chacun la liste
+# la règle — contexte, repli, coordonnées négatives, diagonales —, et pour chacun la liste
 # ATTENDUE [x, y, z, tuile ou null, quarts de tour], triée. L'attendu vient de `MB.poses()`, la règle
 # que le peintre de l'appli applique réellement ; les greffons l'implémentent, eux, depuis le TEXTE du
 # format. Deux implémentations, un attendu : c'est ce qui rend la divergence visible.
 
-## Deux jeux de tuiles fictifs — les cas n'ont besoin que des NOMS et des COMPTES, pas des maillages.
-##   riche : toutes les clés du monde, variante d'air libre comprise, TROIS exemplaires chacune ;
-##   nu    : les classes du monde, nom nu seul, un exemplaire — le repli doit poser partout le nom nu.
+## Deux jeux de tuiles fictifs — les cas n'ont besoin que des NOMS, pas des maillages.
+##   riche : toutes les clés du monde, variante d'air libre comprise ;
+##   nu    : les classes du monde, nom nu seul — le repli doit poser partout le nom nu.
 static func jeux_d_epreuve() -> Dictionary:
 	var riche := {}
 	var nu := {}
 	for c in MB.pieces_a_sculpter():
-		riche[c] = 3
-		nu[c] = 1
+		riche[c] = true
+		nu[c] = true
 	for c in MB.exterieures_a_sculpter():
-		riche[MB.nom_en_contexte(c, true)] = 3
+		riche[MB.nom_en_contexte(c, true)] = true
 	return {"rich": riche, "bare": nu}
 
 
@@ -393,10 +374,7 @@ static func cas_d_epreuve() -> Dictionary:
 	for nom_jeu in jeux:
 		var t := {}
 		for cle in jeux[nom_jeu]:
-			var noms: Array = []
-			for k in int(jeux[nom_jeu][cle]):
-				noms.append(nom_de_tuile(cle, k))
-			t[id_de_cle(cle)] = noms
+			t[id_de_cle(cle)] = nom_de_tuile(cle)
 		tiles_json[nom_jeu] = t
 	var cas: Array = []
 	for monde in mondes_d_epreuve():
@@ -414,15 +392,15 @@ static func cas_d_epreuve() -> Dictionary:
 
 
 ## La liste attendue pour un monde et un jeu : [x, y, z, tuile ou null, quarts], triée par sommet.
-static func attendu(pleines: Dictionary, comptes: Dictionary) -> Array:
+static func attendu(pleines: Dictionary, cles: Dictionary) -> Array:
 	var quarts := {}
 	var sortie: Array = []
-	for d in MB.poses(pleines, comptes):
+	for d in MB.poses(pleines, cles):
 		var s: Vector3i = d["sommet"]
 		var o: int = d["orientation"]
 		if not quarts.has(o):
 			quarts[o] = quarts_de_tour(o)
-		sortie.append([s.x, s.y, s.z, nom_de_tuile(d["cle"], d["k"]) if d["cle"] != "" else null, quarts[o]])
+		sortie.append([s.x, s.y, s.z, nom_de_tuile(d["cle"]) if d["cle"] != "" else null, quarts[o]])
 	sortie.sort_custom(func(a: Array, b: Array) -> bool:
 		if a[0] != b[0]:
 			return a[0] < b[0]

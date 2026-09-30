@@ -94,7 +94,7 @@ func _verifier_le_faux(chemin: String) -> void:
 	var lot: MeshLibrary = bilan["lot"]
 	_dire((bilan["erreurs"] as Array).is_empty(), "%d erreur(s) : %s"
 		% [(bilan["erreurs"] as Array).size(), str((bilan["erreurs"] as Array).slice(0, 3))])
-	_dire(lot.get_item_list().size() == 549, "%d items au lieu de 549" % lot.get_item_list().size())
+	_dire(lot.get_item_list().size() == 52, "%d items au lieu de 52 (une tuile par clé)" % lot.get_item_list().size())
 	var gardees: Array = (bilan["remarques"] as Array).filter(
 		func(r: String) -> bool: return r.begins_with("couture") or r.begins_with("texture"))
 	_dire(gardees.is_empty(), "%d remarque(s) : %s" % [gardees.size(), str(gardees.slice(0, 2))])

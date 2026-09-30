@@ -30,14 +30,14 @@ static func load_tileset(manifest_path: String) -> Dictionary:
 	var missing: Array = []
 	var next_id := 0
 	for key in manifest.get("tiles", {}):
-		for tile in manifest["tiles"][key]:
-			if not meshes.has(tile):
-				missing.append(tile)
-				continue
-			library.create_item(next_id)
-			library.set_item_name(next_id, tile)
-			library.set_item_mesh(next_id, meshes[tile])
-			next_id += 1
+		var tile: String = manifest["tiles"][key]
+		if not meshes.has(tile):
+			missing.append(tile)
+			continue
+		library.create_item(next_id)
+		library.set_item_name(next_id, tile)
+		library.set_item_mesh(next_id, meshes[tile])
+		next_id += 1
 	if not missing.is_empty():
 		return {"error": "%d tile(s) listed in tileset.json are not in %s: %s"
 			% [missing.size(), glb.get_file(), str(missing.slice(0, 5))]}

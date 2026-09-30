@@ -240,13 +240,10 @@ func reconstruire() -> Dictionary:
 		if id_faute < 0 and fautes.mesh_library.get_item_list().size() > 0:
 			id_faute = fautes.mesh_library.get_item_list()[0]
 
-	# ⚠ **L'INDEX DES FAMILLES SE BÂTIT UNE FOIS PAR RECONSTRUCTION, PAS PAR CASE.**
-	# `find_item_by_name()` est un balayage linéaire du lot ; le chercher par case et par exemplaire
-	# coûterait items × cases à chaque touche de pinceau. Un passage sur le lot, puis un accès direct.
-	var familles: Dictionary = _familles(rendu.mesh_library)
-	var comptes := {}
-	for cle in familles:
-		comptes[cle] = (familles[cle] as Array).size()
+	# ⚠ **L'INDEX DU LOT SE BÂTIT UNE FOIS PAR RECONSTRUCTION, PAS PAR CASE.**
+	# `find_item_by_name()` est un balayage linéaire du lot ; le chercher par case coûterait items × cases
+	# à chaque touche de pinceau. Un passage sur le lot, puis un accès direct.
+	var index: Dictionary = _index_du_lot(rendu.mesh_library)
 
 	# ⚠ **LA RÈGLE N'EST PLUS ÉCRITE ICI** : elle vit dans `MB.poses()`, qui est aussi la référence des
 	# cas d'épreuve du format neutre. Le peintre ne fait plus que POSER ce qu'elle décide — une seconde
@@ -254,8 +251,7 @@ func reconstruire() -> Dictionary:
 	var poses := 0
 	var manquantes := 0
 	var dehors_poses := 0
-	var exemplaires_poses := 0
-	var decisions: Array = MB.poses(pleines, comptes)
+	var decisions: Array = MB.poses(pleines, index)
 	for d in decisions:
 		var sommet: Vector3i = d["sommet"]
 		if d["cle"] == "":
@@ -265,11 +261,9 @@ func reconstruire() -> Dictionary:
 			if id_faute >= 0:
 				fautes.set_cell_item(sommet, id_faute)
 			continue
-		var id: int = (familles[d["cle"]] as Array)[d["k"]]
+		var id: int = index[d["cle"]]
 		if d["dehors"]:
 			dehors_poses += 1
-		if d["k"] > 0:
-			exemplaires_poses += 1
 		rendu.set_cell_item(sommet, id, d["orientation"])
 		poses += 1
 	var muets: int = _sommets_touches(pleines) - decisions.size()
@@ -278,10 +272,7 @@ func reconstruire() -> Dictionary:
 	# ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
 	# variantes il vaut 0 alors que le monde est plein de ciel — et c'est exactement ce qu'il doit dire :
 	# « ce lot n'a rien de spécifique au dehors ». Compter les sommets ferait croire l'inverse.
-	# ⚠ `exemplaires` COMPTE LES CASES QUI ONT REÇU AUTRE CHOSE QUE L'EXEMPLAIRE DE NOM NU. Sur un lot
-	# sans exemplaires il vaut 0, comme `dehors` sur un lot sans variantes — et c'est ce qu'il doit dire.
-	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses,
-		"exemplaires": exemplaires_poses}
+	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses}
 	return _dernier_bilan
 
 
@@ -302,43 +293,16 @@ func dernier_bilan() -> Dictionary:
 	return _dernier_bilan
 
 
-## L'INDEX DES FAMILLES D'UN LOT — {clé: [id de l'exemplaire 0, du 1, …]}.
-##
-## ⚠ **UN LOT SANS EXEMPLAIRES REND DES FAMILLES D'UN SEUL ÉLÉMENT**, et le tirage y rend toujours
-## l'indice 0 : le repli procédural et les lots d'avant cette version passent par ce chemin mot pour
-## mot, sans branche séparée qui pourrait diverger (charte §9.4).
-static func _familles(lot: MeshLibrary) -> Dictionary:
-	var familles := {}
+## L'INDEX D'UN LOT — {nom de tuile: id}. Une clé, une tuile, de nom nu (charte §3, 30 septembre 2026).
+## ⚠ Un item nommé « …~k » (un lot d'avant, qui portait des exemplaires) n'est pas une clé : il n'est jamais
+## posé. Le cache se retranche de toute façon (`Projet.FORMAT_DU_CACHE`).
+static func _index_du_lot(lot: MeshLibrary) -> Dictionary:
+	var index := {}
 	if lot == null:
-		return familles
+		return index
 	for id in lot.get_item_list():
-		var nom: String = lot.get_item_name(id)
-		var cle: String = MB.cle_sans_exemplaire(nom)
-		var k: int = MB.indice_d_exemplaire(nom)
-		if not familles.has(cle):
-			familles[cle] = []
-		var liste: Array = familles[cle]
-		while liste.size() <= k:
-			liste.append(-1)
-		liste[k] = id
-	# ⚠ **ON TASSE LES TROUS.** Un lot bâti à la main peut porter « ...~3 » sans « ...~2 » ; laisser
-	# un −1 dans la liste ferait poser un cube rouge pour un lot qui a pourtant la tuile.
-	for cle in familles:
-		var propre: Array = []
-		for id in familles[cle]:
-			if id >= 0:
-				propre.append(id)
-		familles[cle] = propre
-	return familles
-
-
-## L'exemplaire à poser à ce sommet pour cette clé. Rend [id, indice] — [−1, 0] si la clé manque.
-static func _tirer(familles: Dictionary, cle: String, sommet: Vector3i) -> Array:
-	var liste: Array = familles.get(cle, [])
-	if liste.is_empty():
-		return [-1, 0]
-	var k: int = MB.exemplaire_du_sommet(sommet, liste.size())
-	return [int(liste[k]), k]
+		index[lot.get_item_name(id)] = id
+	return index
 
 
 ## ⚠ UNE EMPREINTE, PAS UNE COPIE. Comparer deux listes de milliers de cases à chaque image coûterait

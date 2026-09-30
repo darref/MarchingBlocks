@@ -132,8 +132,8 @@ static func boite_d_octant(t: int) -> AABB:
 ## l'artiste pour satisfaire un contrôle qui n'avait pas lieu d'être. `verifier_octants`, lui, reste dans
 ## `erreurs` : un octant plein qui borde le vide et ne porte aucune surface, c'est bien la COUPE qui a
 ## déplacé la matière.
-## `exemplaires` — panier de SORTIE, {clé: [{mesh, sommet}, …]} dans l'ordre du balayage. Il porte TOUS
-## les morceaux récoltés ; `pieces` n'en garde que le premier de chaque clé et en est DÉRIVÉ.
+## `sources` — panier de SORTIE, {clé: {mesh, sommet, copies}} : la tuile de chaque clé (UNE, le sommet le
+## plus pur), le sommet d'où elle vient, et combien de sommets du bloc portaient cette clé.
 ## `origine` — où siège la case (0, 0, 0) dans le repère du maillage, quand elle est CONNUE. Sinon (null),
 ## elle est déduite de la boîte du maillage. ⚠ **LE BLOC MAÎTRE EST À L'ORIGINE PAR CONTRAT (§4), ET LA
 ## DÉDUIRE ÉTAIT UN DÉFAUT RÉEL (29 septembre 2026)** : un relief qui déborde légalement (règle (A)) d'un
@@ -142,10 +142,9 @@ static func boite_d_octant(t: int) -> AABB:
 ## rendait « le bloc mesure 1,000 de trop » et 579 remarques de couture.
 static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
 		erreurs: Array, peau := true, remarques: Array = [],
-		exemplaires: Dictionary = {}, origine: Variant = null, seuls: Dictionary = {}) -> Dictionary:
-	# `seuls` — {sommet: true} : ne récolter QUE ces sommets (vide = tous). C'est ce qui permet au témoin lié
-	# de ne découper que ses 52 tuiles (`BlocsMaitres.tuiles_du_temoin`) par CETTE route, sans en écrire une
-	# seconde qui découperait autrement (charte §6).
+		sources: Dictionary = {}, origine: Variant = null) -> Dictionary:
+	# `sources` (sortie) — {clé: {"mesh", "sommet", "copies"}} : d'où vient la tuile de chaque clé, et combien
+	# de sommets du bloc portaient cette clé (un travail NON LIÉ peut en avoir sculpté autant de versions).
 	var pieces := {}
 	if mesh == null:
 		erreurs.append("aucun bloc fourni")
@@ -229,78 +228,67 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 	# n cases n'en a que (n−1)³ — d'où neuf blocs maîtres et non cinq.
 	# ⚠ `peau = true` reste le défaut pour ne rien changer aux appelants existants et à leurs tests ; il
 	# a un sens pour un rocher isolé dont toute la peau est sculptée.
+	# ⚠ **UNE TUILE PAR CLÉ — DÉCIDÉ (Jordan, 30 septembre 2026, charte §3).** Du 27 au 30 septembre, le
+	# trancheur gardait TOUS les sommets d'une clé comme autant d'« exemplaires » tirés par position : une
+	# falaise droite devenait une mosaïque de 30 morceaux découpés à 30 endroits (mesuré). Il ne garde plus
+	# qu'UN sommet par clé : le plus PUR (`MB.purete` — celui dont les voisins ont laissé le moins de traces),
+	# à égalité le premier du balayage (x, puis y, puis z). ⚠ Le choix se fait sur les CASES, AVANT de
+	# découper : on ne découpe que les sommets retenus (52 découpes, pas 549).
+	# ⚠ Un travail LIÉ ne passe pas par ici (`BlocsMaitres.tuiles_liees`). Un travail NON LIÉ ne livre donc
+	# que la copie la plus lisible de chaque tuile — `sources[clé]["copies"]` permet à l'appelant de le DIRE.
 	var premier := -1 if peau else 0
+	var choisi := {}
+	var purete_de := {}
+	var copies := {}
+	var cle_de := {}
 	for vx in range(premier, cases.x if peau else cases.x - 1):
 		for vy in range(premier, cases.y if peau else cases.y - 1):
 			for vz in range(premier, cases.z if peau else cases.z - 1):
 				var v := Vector3i(vx, vy, vz)
-				if not seuls.is_empty() and not seuls.has(v):
-					continue
 				var r: Dictionary = cle_du_sommet(pleines, v, plafond)
 				if r.is_empty():
 					continue
 				var cle: String = r["cle"]
+				copies[cle] = int(copies.get(cle, 0)) + 1
+				var p: int = MB.purete(pleines, v)
+				if not choisi.has(cle) or p < int(purete_de[cle]):
+					choisi[cle] = v
+					purete_de[cle] = p
+					cle_de[cle] = r
 
-				# ⚠ **ON NE S'ARRÊTE PLUS AU PREMIER SOMMET D'UNE CLÉ, ET C'ÉTAIT UN DÉFAUT MUET.** Un
-				# `if pieces.has(cle): continue` vivait ici. Mesuré sur la planète paysage : 541 sommets
-				# récoltables pour 52 clés, donc **489 morceaux sculptés jetés sans un mot** — et le survivant
-				# n'était pas le meilleur, seulement le plus petit `vx` de la boucle. Tout ce que l'artiste
-				# sculptait au fond du bloc était perdu, sans erreur ni remarque.
-				# ⚠ Le coût est réel : on découpe désormais 541 fois au lieu de 52.
+	for cle in choisi:
+		var v: Vector3i = choisi[cle]
+		var r: Dictionary = cle_de[cle]
+		var morceau: ArrayMesh = Decoupe.trancher(normalise, boite_du_sommet(v, cellule))
+		if morceau.get_surface_count() == 0:
+			continue
 
-				var morceau: ArrayMesh = Decoupe.trancher(normalise, boite_du_sommet(v, cellule))
-				if morceau.get_surface_count() == 0:
-					continue
+		# Recentré sur l'origine, puis ramené à l'ÉCHELLE UNITÉ.
+		var centre := (Vector3(v) + Vector3.ONE) * cellule
+		var recentre: ArrayMesh = Decoupe.poser(morceau,
+			Transform3D(Basis().scaled(Vector3.ONE / cellule), Vector3.ZERO)
+				* Transform3D(Basis(), -centre))
 
-				# Recentré sur l'origine, puis ramené à l'ÉCHELLE UNITÉ.
-				var centre := (Vector3(v) + Vector3.ONE) * cellule
-				var recentre: ArrayMesh = Decoupe.poser(morceau,
-					Transform3D(Basis().scaled(Vector3.ONE / cellule), Vector3.ZERO)
-						* Transform3D(Basis(), -centre))
-
-				# ⚠ ET RAMENÉ À SA RÉFÉRENCE. La pièce trouvée est la classe posée avec l'orientation
-				# `r["orientation"]` ; pour obtenir le mesh de RÉFÉRENCE il faut lui appliquer la
-				# rotation INVERSE. Une rotation étant orthogonale, son inverse est sa transposée.
-				# L'ancien trancheur se trompait de sens ici, et le test ne le voyait pas.
-				var base: Basis = grille.get_basis_with_orthogonal_index(r["orientation"])
-				var reference: ArrayMesh = Decoupe.poser(recentre,
-					Transform3D(base.transposed(), Vector3.ZERO))
-
-				if not exemplaires.has(cle):
-					exemplaires[cle] = []
-				exemplaires[cle].append({"mesh": reference, "sommet": v})
-				vues[cle] = MB.classes()[r["classe"]]["bits"]
+		# ⚠ ET RAMENÉ À SA RÉFÉRENCE. La pièce trouvée est la classe posée avec l'orientation
+		# `r["orientation"]` ; pour obtenir le mesh de RÉFÉRENCE il faut lui appliquer la
+		# rotation INVERSE. Une rotation étant orthogonale, son inverse est sa transposée.
+		# L'ancien trancheur se trompait de sens ici, et le test ne le voyait pas.
+		var base: Basis = grille.get_basis_with_orthogonal_index(r["orientation"])
+		var reference: ArrayMesh = Decoupe.poser(recentre,
+			Transform3D(base.transposed(), Vector3.ZERO))
+		pieces[cle] = reference
+		sources[cle] = {"mesh": reference, "sommet": v, "copies": int(copies[cle])}
+		vues[cle] = MB.classes()[r["classe"]]["bits"]
 
 	grille.free()
 
-	# ⚠ **`pieces` EST DÉRIVÉ DE `exemplaires`, JAMAIS REMPLI EN PARALLÈLE** (charte §6 : une seconde
-	# description d'un même fait diverge toujours). La règle « le premier du balayage représente la
-	# clé » vit donc à UN seul endroit, et un appelant qui ignore les exemplaires reçoit exactement ce
-	# qu'il recevait avant.
-	for cle in exemplaires:
-		pieces[cle] = exemplaires[cle][0]["mesh"]
-
-	# ⚠ **LES CONTRÔLES PORTENT SUR TOUTES LES VARIANTES, PAS SUR LES SEULES REPRÉSENTANTES.** Une
-	# rotation fausse ou une couture cassée dans la variante n°7 part chez le peintre comme les autres :
-	# ne vérifier que la première rendrait le contrôle aveugle sur 90 % de ce qui est livré.
-	var a_plat := {}
-	var bits_a_plat := {}
-	for cle in exemplaires:
-		for k in exemplaires[cle].size():
-			var nom: String = MB.nom_d_exemplaire(cle, k)
-			a_plat[nom] = exemplaires[cle][k]["mesh"]
-			bits_a_plat[nom] = vues[cle]
-
 	# ⚠ L'UN REFUSE, L'AUTRE SIGNALE. Les octants vérifient la COUPE ; la couture juge l'ART, et l'art
-	# appartient à l'artiste.
-	# ⚠ **ET C'EST LA COUTURE QUI GARDE LES VARIANTES.** Deux exemplaires d'une même clé tombent dans le
-	# MÊME seau de germe : si l'artiste les a sculptées différemment à leurs plans de coupe, l'écart
-	# d'aire le dit. C'est ce qui évite de comparer N×M paires de voisins — si toutes les exemplaires
-	# d'une clé s'accordent entre elles, l'accord des clés voisines suffit.
-	verifier_octants(a_plat, bits_a_plat, erreurs)
-	verifier_couture(a_plat, bits_a_plat, remarques)
-	verifier_sections(a_plat, bits_a_plat, remarques)
-	verifier_couture_texture(a_plat, remarques)
+	# appartient à l'artiste. Les contrôles portent sur les tuiles LIVRÉES, une par clé : ce sont elles que
+	# le monde met face à face.
+	verifier_octants(pieces, vues, erreurs)
+	verifier_couture(pieces, vues, remarques)
+	verifier_sections(pieces, vues, remarques)
+	verifier_couture_texture(pieces, remarques)
 	return pieces
 
 
@@ -312,7 +300,7 @@ const ECART_DE_TEXTURE := 0.08
 ## ⚠ **LA RÈGLE QUE L'ARTISTE A REÇUE** (Jordan, 28 septembre 2026) : *le long de chaque plan de coupe, la
 ## texture doit être la MÊME pour toutes les tuiles — sur les quatre bords, dans les deux sens.* Dans le
 ## monde, une tuile rencontre à sa coupe une voisine que le témoin ne lui a jamais montrée (une autre
-## clé, un autre exemplaire, un autre quart de tour) : seule une texture qui ne dépend que de la PLACE
+## clé, un autre quart de tour) : seule une texture qui ne dépend que de la PLACE
 ## sur le plan raccorde partout.
 ## On échantillonne donc la texture de chaque tuile sur ses arêtes posées SUR un plan de coupe, et l'on
 ## compare toutes les tuiles au même point du plan. ⚠ Le point est REPLIÉ par les symétries que la pose
@@ -712,8 +700,8 @@ static var _poses_par_classe: Dictionary = {}
 ## ⚠ **LE SEAU EST CE QUE LE MONDE MET FACE À FACE** : l'axe du plan et le motif de ses quatre cases VU DU
 ## PLAN, le côté oublié. Et chaque tuile y entre sous CHACUNE des orientations que le peintre lui donne
 ## réellement (`MB.classer` sur toute l'orbite de sa classe) : c'est la pose, pas une supposition de
-## symétrie. Toutes les tuiles d'un seau peuvent se rencontrer — n'importe quelle clé, n'importe quel
-## exemplaire —, donc toutes leurs sections doivent être la même. On compare chacune à la première, dans
+## symétrie. Toutes les tuiles d'un seau peuvent se rencontrer — n'importe quelle clé, sous
+## n'importe quelle pose —, donc toutes leurs sections doivent être la même. On compare chacune à la première, dans
 ## les deux sens : si toutes égalent la première, toutes s'égalent entre elles.
 ## ⚠ Un triangle d'aire nulle n'a pas de section : il ne compte pas.
 static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, remarques: Array) -> void:

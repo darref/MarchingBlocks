@@ -23,7 +23,10 @@ const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const Faux := preload("res://DEV_TOOLS/faux_artiste.gd")
-const CIBLE := "D:/MarchingBlocks/engines/unity/test-project/Assets"
+## ⚠ DÉRIVÉ DU PROJET OUVERT, PAS ÉCRIT EN DUR : un chemin « D:/MarchingBlocks/… » écrivait dans le dépôt
+## principal même lancé depuis un autre checkout (un worktree, la machine Linux) — et l'essai Unity aurait
+## alors éprouvé l'ANCIEN paquet (vu le 30 septembre 2026).
+var CIBLE: String = ProjectSettings.globalize_path("res://engines/unity/test-project/Assets")
 
 
 ## ⚠ DIFFÉRÉ : pendant `_initialize`, le `_ready()` du monde n'a pas encore tourné — sa grille `Cells`
@@ -43,10 +46,8 @@ func _preparer() -> void:
 	var cellules: Array = []
 	for c in pleines:
 		cellules.append([c.x, c.y, c.z])
-	var comptes := {}
-	var familles: Dictionary = FN.familles_du_lot(lot)
-	for cle in familles:
-		comptes[cle] = (familles[cle] as Array).size()
+	# Une tuile par clé (charte §3) : l'attendu ne lit que la PRÉSENCE des clés.
+	var comptes: Dictionary = FN.tuiles_du_lot(lot)
 	_ecrire(CIBLE.path_join("witness_cells.json"), cellules)
 	_ecrire(CIBLE.path_join("witness_expected.json"), FN.attendu(pleines, comptes))
 	_ecrire(CIBLE.path_join("witness_geometry.json"), _coutures(pleines))

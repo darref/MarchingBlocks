@@ -64,7 +64,7 @@ func _initialize() -> void:
 	_les_symetries_imposees()
 	_le_lieu_et_la_matiere_sont_deux_questions()
 	_le_flanc_d_une_falaise_est_a_l_air_libre()
-	_les_exemplaires_se_nomment_et_se_tirent()
+	_une_tuile_par_cle_purete_et_pose()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -703,104 +703,62 @@ func _le_flanc_d_une_falaise_est_a_l_air_libre() -> void:
 	print("   → la falaise voit le ciel par son vide, et le surplomb le lui retire")
 
 
-# ── 16. les exemplaires : nommage et tirage ──────────────────────────────────────────
+# ── 16. une tuile par clé : la pureté, et une pose sans tirage ───────────────────────────────────
 #
-# ⚠ **CE QUI EST GARDÉ ICI, ET POURQUOI CHAQUE POINT A COÛTÉ QUELQUE CHOSE.**
-#
-#   • **k = 0 rend le nom NU.** C'est la compatibilité du §9.4 : un lot sans exemplaires — le repli
-#     procédural, un lot d'avant cette version — doit rester lisible mot pour mot. Nommer la première
-#     « ...~0 » ferait poser des cubes rouges sur des lots parfaitement valides.
-#   • **`nom_nu` retire les DEUX suffixes, et l'exemplaire d'abord.** Un nom s'écrit
-#     `<classe>[_dehors][~k]` ; ne retirer que `_dehors` laissait `verifier_octants` et
-#     `verifier_couture` chercher les bits sous « mb_x_dehors~3 », qu'aucune table ne porte — donc
-#     `bits = 0`, donc un contrôle qui ne vérifie plus rien, EN SILENCE.
-#   • **le tirage ne doit pas faire de bandes.** Un hachage qui ne mêlerait pas ses axes
-#     (`x + y*n + z*n*n`) rendrait des exemplaires en couches régulières — c'est-à-dire exactement le
-#     motif visible qu'on cherche à casser. On exige donc que faire varier CHAQUE axe seul change le
-#     tirage, et que les trois exemplaires soient tous atteints.
-#   ⚠ **ET LE TIRAGE DOIT SE RÉPÉTER À L'IDENTIQUE.** Le massif se reconstruit à chaque case peinte et
-#     à chaque Ctrl+Z : un `randi()` redessinerait un autre monde à chaque fois.
+# ⚠ **DÉCIDÉ (Jordan, 30 septembre 2026, charte §3)** : une clé porte UNE tuile. Les « exemplaires » (N
+# morceaux par clé, tirés par un hachage de la position) ont vécu du 27 au 30 septembre ; une falaise
+# droite en devenait une mosaïque. Ce qui est gardé ici :
+#   • **la PURETÉ** (`MB.purete`), qui choisit le sommet dont vient la tuile d'une clé : ses attendus sont
+#     comptés À LA MAIN sur trois scènes construites, pas recalculés par la fonction ;
+#   • **la pose ne tire plus rien** : `MB.poses` ne rend plus d'indice, et lit la seule PRÉSENCE d'une clé.
 
-func _les_exemplaires_se_nomment_et_se_tirent() -> void:
-	print("\n16. les exemplaires se nomment, se relisent, et se tirent par la position")
+func _une_tuile_par_cle_purete_et_pose() -> void:
+	print("\n16. une tuile par clé — la pureté, et une pose sans tirage")
+	# Un sol ÉPAIS (trois couches, y = −2..0) : au sommet (0, 0, 0), le voisinage prolonge exactement la
+	# configuration « sol » — le dessous est plein, le dessus vide, rien ne dépasse. Pureté 0.
+	var epais := {}
+	for x in range(-4, 6):
+		for z in range(-4, 6):
+			for y in range(-2, 1):
+				epais[Vector3i(x, y, z)] = true
+	_dire(MB.purete(epais, Vector3i.ZERO) == 0, "sol épais : pureté 0 (rend %d)" % MB.purete(epais, Vector3i.ZERO))
+	# Une dalle FINE (y = 0 seule) : la couche y = −1 est vide, alors que le prolongement la voudrait
+	# pleine — ses 16 cases (4 × 4) s'écartent. Pureté 16.
+	var fine := {}
+	for x in range(-4, 6):
+		for z in range(-4, 6):
+			fine[Vector3i(x, 0, z)] = true
+	_dire(MB.purete(fine, Vector3i.ZERO) == 16, "dalle fine : pureté 16 (rend %d)" % MB.purete(fine, Vector3i.ZERO))
+	# Le sol épais avec UNE marche posée dans le voisinage (2, 1, 0) : une case pleine là où le prolongement
+	# (1, 1, 0) est vide. Pureté 1. Posée juste HORS du voisinage (3, 1, 0), elle ne compte pas.
+	var marche := epais.duplicate()
+	marche[Vector3i(2, 1, 0)] = true
+	_dire(MB.purete(marche, Vector3i.ZERO) == 1, "une marche dans le voisinage : pureté 1 (rend %d)"
+		% MB.purete(marche, Vector3i.ZERO))
+	var loin := epais.duplicate()
+	loin[Vector3i(3, 1, 0)] = true
+	_dire(MB.purete(loin, Vector3i.ZERO) == 0, "une marche hors du voisinage ne compte pas (rend %d)"
+		% MB.purete(loin, Vector3i.ZERO))
 
-	# — le nom nu est l'exemplaire 0, et l'aller-retour se referme
-	_dire(MB.nom_d_exemplaire("mb_plaque_b2h2", 0) == "mb_plaque_b2h2",
-		"l'exemplaire 0 doit porter le nom NU, il porte « %s »"
-		% MB.nom_d_exemplaire("mb_plaque_b2h2", 0))
-	_dire(MB.nom_d_exemplaire("mb_plaque_b2h2", -3) == "mb_plaque_b2h2",
-		"un indice négatif doit rendre le nom nu, pas un suffixe absurde")
-	for cle in ["mb_plaque_b2h2", "mb_arete_creuse_b4h2_dehors"]:
-		for k in [0, 1, 2, 9, 47, 512]:
-			var nom: String = MB.nom_d_exemplaire(cle, k)
-			_dire(MB.cle_sans_exemplaire(nom) == cle,
-				"« %s » doit se relire en clé « %s », il rend « %s »"
-				% [nom, cle, MB.cle_sans_exemplaire(nom)])
-			_dire(MB.indice_d_exemplaire(nom) == k,
-				"« %s » doit se relire en indice %d, il rend %d"
-				% [nom, k, MB.indice_d_exemplaire(nom)])
-
-	# — `nom_nu` retire les DEUX suffixes. L'attendu est ÉCRIT À LA MAIN, jamais recomposé par les
-	#   fonctions qu'on éprouve : un attendu bâti par `nom_d_exemplaire` bougerait avec la mutation
-	#   (charte §6 — un test ne calcule jamais son attendu avec la fonction qu'il éprouve).
-	var attendus := {
-		"mb_plaque_b2h2": "mb_plaque_b2h2",
-		"mb_plaque_b2h2_dehors": "mb_plaque_b2h2",
-		"mb_plaque_b2h2~3": "mb_plaque_b2h2",
-		"mb_plaque_b2h2_dehors~17": "mb_plaque_b2h2",
-	}
-	for nom in attendus:
-		_dire(MB.nom_nu(nom) == attendus[nom],
-			"nom_nu(« %s ») doit rendre « %s », il rend « %s »"
-			% [nom, attendus[nom], MB.nom_nu(nom)])
-
-	# — on n'ampute QUE sur un entier strictement positif
-	for intact in ["mb_x~", "mb_x~0", "mb_x~ab", "mb_x~-2", "mb_x~1a"]:
-		_dire(MB.cle_sans_exemplaire(intact) == intact,
-			"« %s » ne porte pas d'indice valide : il doit rester entier, il devient « %s »"
-			% [intact, MB.cle_sans_exemplaire(intact)])
-		_dire(MB.indice_d_exemplaire(intact) == 0,
-			"« %s » doit rendre l'indice 0" % intact)
-
-	# — une famille d'un seul élément tire toujours 0 : c'est par là que passent les lots sans
-	#   exemplaires, sans branche séparée qui pourrait diverger
-	var tous_nuls := true
-	for x in range(-6, 7):
-		for y in range(-6, 7):
-			for z in range(-6, 7):
-				for combien in [0, 1]:
-					if MB.exemplaire_du_sommet(Vector3i(x, y, z), combien) != 0:
-						tous_nuls = false
-	_dire(tous_nuls, "une famille de 0 ou 1 exemplaire doit toujours tirer l'indice 0")
-
-	# — le tirage reste dans les bornes, et se répète à l'identique
-	var hors := 0
-	var instables := 0
-	var vus := {}
-	for x in range(-8, 9):
-		for y in range(-8, 9):
-			for z in range(-8, 9):
-				var v := Vector3i(x, y, z)
-				var k: int = MB.exemplaire_du_sommet(v, 5)
-				if k < 0 or k >= 5:
-					hors += 1
-				if MB.exemplaire_du_sommet(v, 5) != k:
-					instables += 1
-				vus[k] = true
-	_dire(hors == 0, "%d tirage(s) hors de [0,5[" % hors)
-	_dire(instables == 0, "%d tirage(s) ne se répètent pas à l'identique" % instables)
-	_dire(vus.size() == 5, "les 5 exemplaires doivent tous être atteints, %d le sont" % vus.size())
-
-	# ⚠ — PAS DE BANDES : faire varier UN SEUL axe doit changer le tirage. C'est ce point qui distingue
-	#   un vrai hachage d'un `x + y*n + z*n*n`, lequel rendrait des couches entières identiques.
-	for axe in 3:
-		var valeurs := {}
-		for t in range(0, 40):
-			var v := Vector3i(3, 5, 7)
-			v[axe] = t
-			valeurs[MB.exemplaire_du_sommet(v, 4)] = true
-		_dire(valeurs.size() >= 3,
-			"en ne faisant varier que l'axe %d, le tirage ne prend que %d valeur(s) sur 4 — des BANDES"
-			% [axe, valeurs.size()])
-
-	print("   → nom nu pour k=0, deux suffixes relus, tirage borné, stable, et sans bandes")
+	# LA POSE : aucune entrée ne porte d'indice ; un lot qui n'a que le nom nu le pose partout, même à l'air
+	# libre ; un lot qui a la variante d'air libre la pose au ciel.
+	var nu := {"mb_plaque_b4h0": true}
+	var avec_dehors := {"mb_plaque_b4h0": true, "mb_plaque_b4h0_dehors": true}
+	var p_nu: Array = MB.poses(epais, nu)
+	var p_dehors: Array = MB.poses(epais, avec_dehors)
+	var avec_k := 0
+	var sol_nu := 0
+	var sol_dehors := 0
+	for d in p_nu:
+		if (d as Dictionary).has("k"):
+			avec_k += 1
+		if d["nom"] == "mb_plaque_b4h0" and d["cle"] == "mb_plaque_b4h0":
+			sol_nu += 1
+	for d in p_dehors:
+		if d["nom"] == "mb_plaque_b4h0" and d["cle"] == "mb_plaque_b4h0_dehors":
+			sol_dehors += 1
+	_dire(avec_k == 0, "la pose ne rend plus d'indice d'exemplaire (%d entrées en portent)" % avec_k)
+	# Le dessus d'un sol de 10 × 10 : les sommets (x, 0, z) pour x, z de −4 à 4, soit 81 sommets de sol plat.
+	_dire(sol_nu == 81 and sol_dehors == 81,
+		"le dessus du sol : 81 tuiles de sol, nues (%d) puis d'air libre (%d)" % [sol_nu, sol_dehors])
+	print("   → pureté 0 / 16 / 1 / 0, et 81 sols posés sans tirage")

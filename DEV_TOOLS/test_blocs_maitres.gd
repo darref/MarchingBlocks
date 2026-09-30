@@ -67,7 +67,7 @@ func _initialize() -> void:
 	_les_maillages_existent_et_tiennent_dans_le_bloc()
 	_la_geometrie_livree_est_saine()
 	_la_legende_du_temoin_dit_le_contexte()
-	_aucun_morceau_sculpte_n_est_jete()
+	_une_tuile_par_cle()
 	_le_temoin_prouve_tous_les_raccords()
 	_le_temoin_lie_fait_l_aller_retour()
 
@@ -294,7 +294,7 @@ func _le_temoin_part_soude() -> void:
 ## les sommets, et le .glb qu'il réécrit garde cette rotation : lue sans elle, l'œuvre revenait couchée
 ## (41 erreurs de tranchage). Scénario CONSTRUIT : un cube unité posé par un nœud tourné de −90° en X et
 ## translaté de (5, 0, 0) — l'attendu est calculé à la main : x ∈ [5, 6], y ∈ [0, 1], z ∈ [−1, 0].
-## §15 — LES UV CANONIQUES : tous les exemplaires d'une clé portent les mêmes UV, et deux clés jamais.
+## §15 — LES UV CANONIQUES : toutes les copies d'une clé portent les mêmes UV, et deux clés jamais.
 ##
 ## ⚠ **L'AUTORITÉ EST LE TRANCHEUR, PAS LA FONCTION D'UV.** On exporte l'OBJ, on le RELIT et on le
 ## TRANCHE comme un travail revenu de Blender ; ce qui fait foi, ce sont les tuiles du lot. Aucune
@@ -320,41 +320,103 @@ func _les_uv_sont_canoniques() -> void:
 	_dire(n_vt > 0 and faces_sans_uv == 0,
 		"l'OBJ du témoin porte %d vt, et %d face(s) sans UV" % [n_vt, faces_sans_uv])
 
+	# ⚠ **UNE TUILE PAR CLÉ (charte §3, 30 septembre 2026) : le lot ne porte plus qu'UNE copie de chaque clé.**
+	# La cohérence entre copies se juge donc sur l'OBJ lui-même, qui les porte TOUTES (549 sommets) : chaque
+	# triangle est rendu à son sommet et à sa clé, ramené au repère de RÉFÉRENCE par la base du peintre — un
+	# calcul de repère écrit ICI, sans la formule d'atlas —, et « même clé, même point, même sens, même UV ».
+	var relu: ArrayMesh = BlocsMaitres._lire_obj(chemin)
+	var pleines: Dictionary = BlocsMaitres.cases(0)
+	var plafond: int = MB.plafond_de(pleines)
+	var grille := GridMap.new()
+	var par_cle := {}           # clé → {point de référence|sens : UV}
+	var proprietaire := {}      # centre d'UV d'un triangle → clé
+	var dans_l_occurrence := {} # sommet → {centre d'UV : centre de position}
+	var incoherents := 0
+	var partages := 0
+	var recouvrements := 0
+	var occurrences := {}
+	for s_ in relu.get_surface_count():
+		var arrays: Array = relu.surface_get_arrays(s_)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV] if arrays[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null else PackedInt32Array(range(v.size()))
+		for t in range(0, ordre.size() - 2, 3):
+			var a3: Vector3 = v[ordre[t]]
+			var b3: Vector3 = v[ordre[t + 1]]
+			var c3: Vector3 = v[ordre[t + 2]]
+			var centre: Vector3 = (a3 + b3 + c3) / 3.0
+			var sommet := Vector3i(floori(centre.x - 0.5), floori(centre.y - 0.5), floori(centre.z - 0.5))
+			var interieur: bool = sommet.x >= 0 and sommet.y >= 0 and sommet.z >= 0 \
+				and sommet.x < BlocsMaitres.COTE - 1 and sommet.y < BlocsMaitres.COTE - 1 and sommet.z < BlocsMaitres.COTE - 1
+			var r: Dictionary = Tranchage.cle_du_sommet(pleines, sommet, plafond) if interieur else {}
+			if r.is_empty() or uv.is_empty():
+				continue
+			var cle: String = r["cle"]
+			occurrences[sommet] = true
+			var inverse: Basis = grille.get_basis_with_orthogonal_index(r["orientation"]).transposed()
+			var geo: Vector3 = inverse * -(b3 - a3).cross(c3 - a3)
+			if geo.length_squared() < 1e-10:
+				continue
+			var axe := 0
+			for j in 3:
+				if absf(geo[j]) > absf(geo[axe]):
+					axe = j
+			var sens: int = axe * 2 + (0 if geo[axe] > 0.0 else 1)
+			if not par_cle.has(cle):
+				par_cle[cle] = {}
+			for k in 3:
+				var q: Vector3 = inverse * (v[ordre[t + k]] - (Vector3(sommet) + Vector3.ONE))
+				var point := "%d,%d,%d|%d" % [roundi(q.x * 1000.0), roundi(q.y * 1000.0), roundi(q.z * 1000.0), sens]
+				var u: Vector2 = uv[ordre[t + k]]
+				if par_cle[cle].has(point):
+					if not (par_cle[cle][point] as Vector2).is_equal_approx(u):
+						incoherents += 1
+				else:
+					par_cle[cle][point] = u
+			var cu: Vector2 = (uv[ordre[t]] + uv[ordre[t + 1]] + uv[ordre[t + 2]]) / 3.0
+			var cle_uv := Vector2i(roundi(cu.x * 100000.0), roundi(cu.y * 100000.0))
+			if proprietaire.has(cle_uv) and proprietaire[cle_uv] != cle:
+				partages += 1
+			proprietaire[cle_uv] = cle
+			if not dans_l_occurrence.has(sommet):
+				dans_l_occurrence[sommet] = {}
+			var cle_p := Vector3i(roundi(centre.x * 1000.0), roundi(centre.y * 1000.0), roundi(centre.z * 1000.0))
+			if dans_l_occurrence[sommet].has(cle_uv) and dans_l_occurrence[sommet][cle_uv] != cle_p:
+				recouvrements += 1
+			dans_l_occurrence[sommet][cle_uv] = cle_p
+	grille.free()
+	_dire(occurrences.size() > par_cle.size() * 5,
+		"l'OBJ ne montre que %d occurrences pour %d clés : la cohérence entre copies n'est pas éprouvée"
+		% [occurrences.size(), par_cle.size()])
+	_dire(incoherents == 0, "%d coin(s) où deux copies d'une clé n'ont pas la même UV" % incoherents)
+	_dire(partages == 0, "%d triangle(s) dont l'UV tombe dans la région d'une AUTRE clé" % partages)
+	_dire(recouvrements == 0, "%d triangle(s) qui se recouvrent en UV dans une même copie" % recouvrements)
+
+	# ET LA TUILE DU LOT (tranchée depuis l'OBJ relu) PORTE CES UV-LÀ : l'aller-retour `vt` → découpe → lot.
 	var resultat: Dictionary = BlocsMaitres.librairie_depuis_glb(chemin)
 	DirAccess.remove_absolute(chemin)
 	DirAccess.remove_absolute(chemin.get_basename() + ".mtl")
 	_dire((resultat["erreurs"] as Array).is_empty(),
 		"l'OBJ à UV se tranche avec %d erreur(s)" % (resultat["erreurs"] as Array).size())
 	var lot: MeshLibrary = resultat["lot"]
-	var par_cle := {}           # clé → {point de référence : UV}
-	var proprietaire := {}      # centre d'UV d'un triangle → clé
-	var incoherents := 0
-	var partages := 0
-	var recouvrements := 0
 	var items_sans_uv := 0
-	var cles := {}
+	var ecarts := 0
+	var lus := 0
 	for id in lot.get_item_list():
-		var cle: String = MB.cle_sans_exemplaire(lot.get_item_name(id))
-		cles[cle] = true
-		if not par_cle.has(cle):
-			par_cle[cle] = {}
-		var dans_l_item := {}   # centre d'UV → centre de position, dans cet exemplaire
+		var cle: String = lot.get_item_name(id)
 		var mesh: Mesh = lot.get_item_mesh(id)
-		for s in mesh.get_surface_count():
-			var arrays: Array = mesh.surface_get_arrays(s)
+		for s_ in mesh.get_surface_count():
+			var arrays: Array = mesh.surface_get_arrays(s_)
 			if arrays[Mesh.ARRAY_TEX_UV] == null:
 				items_sans_uv += 1
 				continue
 			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 			var uv: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 			var idx = arrays[Mesh.ARRAY_INDEX]
-			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
-				else PackedInt32Array(range(v.size()))
+			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null else PackedInt32Array(range(v.size()))
 			for t in range(0, ordre.size() - 2, 3):
-				var a: Vector3 = v[ordre[t]]
-				var b: Vector3 = v[ordre[t + 1]]
-				var c: Vector3 = v[ordre[t + 2]]
-				var geo: Vector3 = -(b - a).cross(c - a)
+				var geo: Vector3 = -(v[ordre[t + 1]] - v[ordre[t]]).cross(v[ordre[t + 2]] - v[ordre[t]])
 				if geo.length_squared() < 1e-10:
 					continue
 				var axe := 0
@@ -363,35 +425,17 @@ func _les_uv_sont_canoniques() -> void:
 						axe = j
 				var sens: int = axe * 2 + (0 if geo[axe] > 0.0 else 1)
 				for k in 3:
-					var p: Vector3 = v[ordre[t + k]]
-					var point := "%d,%d,%d|%d" % [roundi(p.x * 1000.0), roundi(p.y * 1000.0),
-						roundi(p.z * 1000.0), sens]
-					var u: Vector2 = uv[ordre[t + k]]
-					if par_cle[cle].has(point):
-						if not (par_cle[cle][point] as Vector2).is_equal_approx(u):
-							incoherents += 1
-					else:
-						par_cle[cle][point] = u
-				var cu: Vector2 = (uv[ordre[t]] + uv[ordre[t + 1]] + uv[ordre[t + 2]]) / 3.0
-				var cle_uv := Vector2i(roundi(cu.x * 100000.0), roundi(cu.y * 100000.0))
-				if proprietaire.has(cle_uv) and proprietaire[cle_uv] != cle:
-					partages += 1
-				proprietaire[cle_uv] = cle
-				var cp: Vector3 = (a + b + c) / 3.0
-				var cle_p := Vector3i(roundi(cp.x * 1000.0), roundi(cp.y * 1000.0), roundi(cp.z * 1000.0))
-				if dans_l_item.has(cle_uv) and dans_l_item[cle_uv] != cle_p:
-					recouvrements += 1
-				dans_l_item[cle_uv] = cle_p
-	_dire(lot.get_item_list().size() > cles.size(),
-		"le lot à UV ne porte que %d items pour %d clés : les exemplaires ne sont pas éprouvés"
-		% [lot.get_item_list().size(), cles.size()])
+					var q: Vector3 = v[ordre[t + k]]
+					var point := "%d,%d,%d|%d" % [roundi(q.x * 1000.0), roundi(q.y * 1000.0), roundi(q.z * 1000.0), sens]
+					if (par_cle.get(cle, {}) as Dictionary).has(point):
+						lus += 1
+						if not (par_cle[cle][point] as Vector2).is_equal_approx(uv[ordre[t + k]]):
+							ecarts += 1
 	_dire(items_sans_uv == 0, "%d surface(s) du lot sont revenues SANS UV" % items_sans_uv)
-	_dire(incoherents == 0, "%d coin(s) où deux exemplaires d'une clé n'ont pas la même UV" % incoherents)
-	_dire(partages == 0, "%d triangle(s) dont l'UV tombe dans la région d'une AUTRE clé" % partages)
-	_dire(recouvrements == 0, "%d triangle(s) qui se recouvrent en UV dans un même exemplaire"
-		% recouvrements)
-	print("  uv : %d vt, %d items, %d clés, %d incohérent(s), %d partagé(s), %d recouvrement(s)"
-		% [n_vt, lot.get_item_list().size(), cles.size(), incoherents, partages, recouvrements])
+	_dire(lus > 1000 and ecarts == 0,
+		"la tuile de chaque clé porte les UV de l'OBJ : %d coins comparés, %d écarts" % [lus, ecarts])
+	print("  uv : %d vt, %d occurrences, %d clés, %d incohérent(s), %d partagé(s), %d recouvrement(s)"
+		% [n_vt, occurrences.size(), par_cle.size(), incoherents, partages, recouvrements])
 
 
 func _la_pose_du_noeud_est_lue() -> void:
@@ -458,17 +502,15 @@ func _le_temoin_livre_exactement_le_monde() -> void:
 	_dire((resultat["manquantes"] as Array).is_empty(), "librairie() se déclare incomplète : %s"
 		% str(resultat["manquantes"]))
 	var lot: MeshLibrary = resultat["lot"]
-	# ⚠ **ON COMPARE LES CLÉS, PAS LES NOMS D'ITEM — et ce n'est pas un desserrage.** Depuis les
-	# exemplaires, le lot porte plusieurs items par clé (« mb_coin_b1h0 », « mb_coin_b1h0~1 »…). La
-	# propriété gardée reste la même : le lot livre EXACTEMENT les 52 clés du monde, aucune en trop.
-	# Un exemplaire d'une clé hors du monde ferait donc toujours rougir, puisque sa clé rougirait.
+	# ⚠ **UNE TUILE PAR CLÉ, DE NOM NU** (charte §3, 30 septembre 2026) : chaque item porte le nom d'une clé,
+	# et aucune clé n'en porte deux. Du 27 au 30 septembre le lot portait des exemplaires « ~k ».
 	var livre := {}
-	var items_par_cle := {}
+	var doublons: Array = []
 	for id in lot.get_item_list():
 		var nom: String = lot.get_item_name(id)
-		var cle: String = MB.cle_sans_exemplaire(nom)
-		livre[cle] = true
-		items_par_cle[cle] = int(items_par_cle.get(cle, 0)) + 1
+		if livre.has(nom):
+			doublons.append(nom)
+		livre[nom] = true
 	var manque: Array = []
 	for nom in attendu:
 		if not livre.has(nom):
@@ -479,26 +521,10 @@ func _le_temoin_livre_exactement_le_monde() -> void:
 			en_trop.append(nom)
 	_dire(manque.is_empty(), "%d tuile(s) du monde que librairie() ne livre pas : %s"
 		% [manque.size(), str(manque.slice(0, 6))])
-	# — LA TUILE DE NOM NU EXISTE POUR CHAQUE CLÉ LIVRÉE (charte §9.4 : un peintre qui ignore les
-	#   exemplaires doit trouver sa tuile). Recompté sur les noms d'item, pas sur les clés.
-	var noms_bruts := {}
-	for id in lot.get_item_list():
-		noms_bruts[lot.get_item_name(id)] = true
-	var sans_nom_nu: Array = []
-	for cle in livre:
-		if not noms_bruts.has(cle):
-			sans_nom_nu.append(cle)
-	_dire(sans_nom_nu.is_empty(),
-		"%d clé(s) n'ont AUCUNE tuile de nom nu — un lot sans exemplaires poserait des cubes rouges : %s"
-		% [sans_nom_nu.size(), str(sans_nom_nu.slice(0, 6))])
-
-	# — LE COMPTE D'EXEMPLAIRES ANNONCÉ CORRESPOND AUX ITEMS RÉELLEMENT POSÉS.
-	var en_plus_reel := lot.get_item_list().size() - livre.size()
-	_dire(int(resultat["exemplaires_en_plus"]) == en_plus_reel,
-		"librairie() annonce %d exemplaire(s) en plus, le lot en porte %d"
-		% [int(resultat["exemplaires_en_plus"]), en_plus_reel])
-	print("   %d clé(s), %d item(s) au total — %d exemplaire(s) en plus"
-		% [livre.size(), lot.get_item_list().size(), en_plus_reel])
+	_dire(doublons.is_empty() and lot.get_item_list().size() == attendu.size(),
+		"une tuile par clé : %d item(s) pour %d clés, doublons %s" % [lot.get_item_list().size(), attendu.size(),
+		str(doublons.slice(0, 4))])
+	print("   %d clé(s), %d item(s)" % [livre.size(), lot.get_item_list().size()])
 
 	_dire(en_trop.is_empty(), "%d tuile(s) livrées HORS du monde : %s"
 		% [en_trop.size(), str(en_trop.slice(0, 6))])
@@ -823,75 +849,84 @@ func _verdicts_par_face(mesh: ArrayMesh, unique: bool) -> Dictionary:
 	return par_face
 
 
-# ── 14. aucun morceau sculpté n'est jeté ───────────────────────────────────────────
+# ── 14. une tuile par clé : celle du sommet le plus PUR ──────────────────────────────────────────
 #
-# ⚠ **LE DÉFAUT QUE CETTE SECTION GARDE A VÉCU DANS `tranchage.gd` JUSQU'AU 27 SEPTEMBRE 2026.** La
-# récolte tenait un `if pieces.has(cle): continue` : elle s'arrêtait au PREMIER sommet de chaque clé.
-# Mesuré sur la planète paysage : **541 sommets récoltables pour 52 clés, donc 489 morceaux sculptés
-# jetés sans une erreur ni une remarque** — et le survivant n'était pas le meilleur, seulement le plus
-# petit `vx` de la boucle. Tout ce que l'artiste sculptait au fond du bloc était perdu en silence.
-#
-# ⚠ **L'ATTENDU EST RECOMPTÉ ICI, SOMMET PAR SOMMET, SANS APPELER LE TRANCHEUR** (charte §6 : un test
-# ne calcule jamais son attendu avec la fonction qu'il éprouve). Comparer « exemplaires en plus » au
-# nombre d'items du lot serait une TAUTOLOGIE : remettre le `continue` rendrait 0 = 0, et la mutation
-# resterait muette. L'autorité est le MODÈLE — chaque sommet intérieur qui porte une surface doit
-# livrer son morceau, un et un seul.
+# ⚠ **DÉCIDÉ (Jordan, 30 septembre 2026, charte §3)** : une clé livre UNE tuile. Du 27 au 30 septembre le
+# trancheur gardait tous les sommets d'une clé comme « exemplaires », et le peintre en tirait un par
+# position — une falaise droite devenait une mosaïque de 30 morceaux. Il ne garde plus que le sommet le
+# plus PUR (celui dont les 64 cases voisines s'écartent le moins de sa configuration prolongée), à égalité
+# le premier du balayage (x, puis y, puis z).
+# ⚠ **L'ATTENDU EST RECALCULÉ ICI, SANS `MB.purete` NI LE TRANCHEUR** (charte §6) : la pureté y est écrite
+# autrement — chaque case voisine comparée à la case du cœur qu'elle PROLONGE, trouvée par min/max.
+# ⚠ Et la section vérifie qu'elle ÉPROUVE le choix : il faut des clés où le plus pur n'est PAS le premier
+# du balayage, sinon « prendre le premier » passerait pour juste.
 
-func _aucun_morceau_sculpte_n_est_jete() -> void:
-	print("\n14. tout sommet récoltable livre son morceau — aucun n'est jeté en silence")
-
-	# L'attendu, dérivé du modèle seul : les sommets INTÉRIEURS qui portent une surface.
+func _une_tuile_par_cle() -> void:
+	print("\n14. une tuile par clé — celle du sommet le plus pur")
 	var pleines: Dictionary = BlocsMaitres.cases(0)
-	var attendus := 0
-	var par_cle := {}
+	var attendu := {}          # clé → sommet attendu
+	var meilleure := {}        # clé → pureté
+	var premier := {}          # clé → premier sommet du balayage
+	var sommets_par_cle := {}
+	var plafond: int = MB.plafond_de(pleines)
 	for vx in range(0, BlocsMaitres.COTE - 1):
 		for vy in range(0, BlocsMaitres.COTE - 1):
 			for vz in range(0, BlocsMaitres.COTE - 1):
 				var v := Vector3i(vx, vy, vz)
-				var r: Dictionary = MB.classer(MB.bits(pleines, v))
-				if not r["surface"]:
+				var r: Dictionary = Tranchage.cle_du_sommet(pleines, v, plafond)
+				if r.is_empty():
 					continue
-				attendus += 1
-				par_cle[r["nom"]] = int(par_cle.get(r["nom"], 0)) + 1
+				var cle: String = r["cle"]
+				sommets_par_cle[cle] = int(sommets_par_cle.get(cle, 0)) + 1
+				if not premier.has(cle):
+					premier[cle] = v
+				var p := _purete_a_la_main(pleines, v)
+				if not meilleure.has(cle) or p < int(meilleure[cle]):
+					meilleure[cle] = p
+					attendu[cle] = v
+	var lot: MeshLibrary = BlocsMaitres.librairie()["lot"]
+	var sommets: Dictionary = lot.get_meta(BlocsMaitres.META_SOMMETS, {})
+	var faux: Array = []
+	for cle in attendu:
+		if not sommets.has(cle) or sommets[cle] != attendu[cle]:
+			faux.append("%s : %s au lieu de %s" % [cle, sommets.get(cle, "rien"), attendu[cle]])
+	_dire(faux.is_empty() and sommets.size() == attendu.size(),
+		"chaque tuile vient du sommet le plus pur de sa clé (%d / %d) : %s"
+		% [attendu.size() - faux.size(), attendu.size(), str(faux.slice(0, 4))])
+	var repetees := 0
+	var pas_le_premier := 0
+	for cle in attendu:
+		if int(sommets_par_cle[cle]) > 1:
+			repetees += 1
+		if attendu[cle] != premier[cle]:
+			pas_le_premier += 1
+	_dire(repetees > 10 and pas_le_premier > 5,
+		"le choix est éprouvé : %d clés répétées, %d où le plus pur n'est pas le premier du balayage"
+		% [repetees, pas_le_premier])
+	# Et la tuile du témoin lié est la même : `tuiles_du_temoin` rend ce que le trancheur a choisi.
+	var tt: Dictionary = BlocsMaitres.tuiles_du_temoin()
+	var memes := 0
+	for cle in tt:
+		if sommets.get(cle) == tt[cle]["sommet"]:
+			memes += 1
+	_dire(memes == attendu.size(), "tuiles_du_temoin rend les mêmes sommets que le lot (%d / %d)"
+		% [memes, attendu.size()])
+	print("   → %d clés, %d répétées, %d où le plus pur n'est pas le premier" % [attendu.size(), repetees,
+		pas_le_premier])
 
-	var resultat: Dictionary = BlocsMaitres.librairie()
-	var lot: MeshLibrary = resultat["lot"]
-	var items: int = lot.get_item_list().size()
-	_dire(items == attendus,
-		"le modèle rend %d sommet(s) récoltable(s), le lot ne porte que %d item(s) — %d morceau(x) "
-		% [attendus, items, attendus - items] + "sculpté(s) sont jeté(s) en silence")
 
-	# — ET IL Y EN A VRAIMENT PLUSIEURS PAR CLÉ. Sans ce contrôle, un témoin où chaque classe n'apparaît
-	#   qu'une fois rendrait la section verte sans rien éprouver.
-	var multiples := 0
-	var le_plus := 0
-	for cle in par_cle:
-		if int(par_cle[cle]) > 1:
-			multiples += 1
-		le_plus = maxi(le_plus, int(par_cle[cle]))
-	_dire(multiples > 10,
-		"seules %d classe(s) apparaissent plus d'une fois dans le témoin : la règle des exemplaires "
-		% multiples + "n'est pas réellement éprouvée")
-	_dire(le_plus > 20,
-		"la classe la plus répétée n'apparaît que %d fois : trop peu pour éprouver le tirage" % le_plus)
-
-	# — CHAQUE CLÉ LIVRÉE A AUTANT D'ITEMS QUE LE MODÈLE LUI DONNE DE SOMMETS. C'est le contrôle qui
-	#   attrape un jet PARTIEL — un plafond d'exemplaires posé en douce, par exemple.
-	var items_par_cle := {}
-	for id in lot.get_item_list():
-		var classe: String = MB.nom_nu(lot.get_item_name(id))
-		items_par_cle[classe] = int(items_par_cle.get(classe, 0)) + 1
-	var depareillees: Array = []
-	for classe in par_cle:
-		if int(items_par_cle.get(classe, 0)) != int(par_cle[classe]):
-			depareillees.append("%s : %d sommets, %d items"
-				% [classe, int(par_cle[classe]), int(items_par_cle.get(classe, 0))])
-	_dire(depareillees.is_empty(),
-		"%d classe(s) ne livrent pas autant d'items que le modèle leur donne de sommets : %s"
-		% [depareillees.size(), str(depareillees.slice(0, 4))])
-
-	print("   → %d sommets récoltables, %d items livrés, %d classes répétées (la plus vue : %d fois)"
-		% [attendus, items, multiples, le_plus])
+## La pureté, écrite AUTREMENT que `MB.purete` : pour chaque case des 4³ autour du sommet, la case du cœur
+## qu'elle prolonge est obtenue par min/max, et l'on compte les désaccords.
+func _purete_a_la_main(pleines: Dictionary, v: Vector3i) -> int:
+	var n := 0
+	for x in range(v.x - 1, v.x + 3):
+		for y in range(v.y - 1, v.y + 3):
+			for z in range(v.z - 1, v.z + 3):
+				var coeur := Vector3i(mini(maxi(x, v.x), v.x + 1), mini(maxi(y, v.y), v.y + 1),
+					mini(maxi(z, v.z), v.z + 1))
+				if pleines.has(Vector3i(x, y, z)) != pleines.has(coeur):
+					n += 1
+	return n
 
 
 ## §16 — LE TÉMOIN LIÉ PROUVE TOUS LES RACCORDS (charte §3, une tuile par clé, 30 septembre 2026).

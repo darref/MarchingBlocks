@@ -190,7 +190,7 @@ public sealed class WitnessTests
             if (!uv || !texture) { without++; first = first ?? kv.Key; }
         }
         Debug.Log($"fake artist: {set.Tiles.Count} tiles, {without} without texture or UVs");
-        Assert.Greater(set.Tiles.Count, 500, "the fake artist's set is incomplete");
+        Assert.AreEqual(52, set.Tiles.Count, "the fake artist's set is not one tile per key of the world");
         Assert.AreEqual(0, without, $"tiles without the artist's texture or UVs, e.g. {first}. "
             + $"glTFast says: {ImporterReport("Assets/faux.mbset/tiles.glb")}");
     }

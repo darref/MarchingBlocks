@@ -1072,12 +1072,11 @@ static func librairie() -> Dictionary:
 	var pieces := {}
 	var provenance := {}
 	var erreurs: Array = []
-	# ⚠ **LES REMARQUES REMONTENT DÉSORMAIS, ET ELLES ÉCRIVAIENT DANS LE VIDE.** Les deux appels ne
-	# passaient pas ce paramètre : `verifier_couture` calculait ses relevés dans le tableau par DÉFAUT,
-	# neuf à chaque appel et lu par personne. Le seul contrôle qui juge l'accord des coutures tournait
-	# donc pour rien. Avec les exemplaires il devient la garde principale (charte §3).
+	# ⚠ **LES REMARQUES REMONTENT, ET ELLES ÉCRIVAIENT DANS LE VIDE.** Les deux appels ne passaient pas ce
+	# paramètre : `verifier_couture` calculait ses relevés dans le tableau par DÉFAUT, neuf à chaque appel
+	# et lu par personne. Le seul contrôle qui juge l'accord des coutures tournait donc pour rien.
 	var remarques: Array = []
-	var exemplaires := {}
+	var sources := {}
 
 	for i in BLOCS.size():
 		# ⚠ LA MÊME GÉOMÉTRIE QUE L'EXPORT : le catalogue avec lequel on peint doit être celui que
@@ -1096,12 +1095,10 @@ static func librairie() -> Dictionary:
 			if pieces.has(nom):
 				continue   # le premier bloc gagne
 			pieces[nom] = recolte[nom]
-			# ⚠ LA FAMILLE SUIT SA REPRÉSENTANTE. Prendre les exemplaires d'un bloc et la tuile d'un autre
-			# donnerait des coutures qui ne s'accordent avec rien — et ce serait muet.
-			exemplaires[nom] = du_bloc[nom]
+			sources[nom] = du_bloc[nom]
 			provenance[nom] = BLOCS[i]["nom"]
 
-	var resultat: Dictionary = _assembler(pieces, exemplaires)
+	var resultat: Dictionary = _assembler(pieces, sources)
 	resultat["erreurs"] = erreurs
 	resultat["remarques"] = remarques
 	resultat["provenance"] = provenance
@@ -1113,15 +1110,14 @@ const META_SOMMETS := "sommets_du_temoin"
 
 
 ## Monte la `MeshLibrary` à partir des pièces récoltées. ⚠ PARTAGÉ par `librairie()` et
-## `librairie_depuis_glb()` : deux montages séparés auraient divergé, et l'un des deux aurait fini
-## par remettre un repli que l'autre refuse.
-## `exemplaires` — {clé: [{mesh, sommet}, …]} tel que le trancheur le rend. Chaque clé posée y prend
-## ses exemplaires 1..N−1 en plus de la tuile de nom nu.
-static func _assembler(pieces: Dictionary, exemplaires: Dictionary = {}) -> Dictionary:
+## `librairie_depuis_glb()` (tranché ou lié) : deux montages séparés auraient divergé, et l'un des deux
+## aurait fini par remettre un repli que l'autre refuse.
+## `sources` — {clé: {"mesh", "sommet", …}} : d'où vient chaque tuile (le trancheur ou la relecture liée).
+## ⚠ **UNE TUILE PAR CLÉ, DE NOM NU** (charte §3, 30 septembre 2026) : plus d'« exemplaires » `~k`.
+static func _assembler(pieces: Dictionary, sources: Dictionary = {}) -> Dictionary:
 	var lot := MeshLibrary.new()
 	var manquantes: Array = []
 	var variantes := 0
-	var comptes := {}
 	var id := 0
 	for c in MB.classes():
 		# ⚠ **UNE CLASSE EN CONTACT DIAGONAL N'EST PAS « MANQUANTE » : ELLE EST HORS DU MONDE.** Le
@@ -1133,7 +1129,7 @@ static func _assembler(pieces: Dictionary, exemplaires: Dictionary = {}) -> Dict
 		if mesh == null or mesh.get_surface_count() == 0:
 			manquantes.append(c["nom"])   # ⚠ PAS de repli : l'absence doit se voir
 		else:
-			id = _poser_la_famille(lot, id, c["nom"], mesh, c["bits"], exemplaires, comptes)
+			id = _poser_la_tuile(lot, id, c["nom"], mesh, c["bits"])
 
 		# ── LA VARIANTE D'AIR LIBRE ─────────────────────────────────────────────────────────────────
 		#
@@ -1147,60 +1143,27 @@ static func _assembler(pieces: Dictionary, exemplaires: Dictionary = {}) -> Dict
 		var dehors: ArrayMesh = pieces.get(MB.nom_en_contexte(c["nom"], true), null)
 		if dehors == null or dehors.get_surface_count() == 0:
 			continue
-		id = _poser_la_famille(lot, id, MB.nom_en_contexte(c["nom"], true), dehors, c["bits"],
-			exemplaires, comptes)
+		id = _poser_la_tuile(lot, id, MB.nom_en_contexte(c["nom"], true), dehors, c["bits"])
 		variantes += 1
 
-	# LA PROVENANCE : pour chaque tuile du lot (par son NOM), le sommet du témoin où elle a été découpée.
-	# ⚠ **PAR LE NOM ET NON PAR L'INDICE** : `_poser_la_famille` saute un exemplaire vide sans renuméroter
-	# les suivants, et le peintre tasse les trous (`MassifPeint._familles`). Le nom est ce que le rendu
-	# porte vraiment ; c'est lui qu'on suit, et la légende de l'atelier World le lit (« d'où vient cette
-	# tuile ? »). Il voyage dans le cache avec le lot (une méta de ressource).
+	# LA PROVENANCE : pour chaque tuile du lot (par son NOM), le sommet du témoin d'où elle vient. La légende
+	# de l'atelier World la lit (« d'où vient cette tuile ? »). Elle voyage dans le cache avec le lot.
 	var sommets := {}
 	for item in lot.get_item_list():
 		var nom: String = lot.get_item_name(item)
-		var famille: Array = exemplaires.get(MB.cle_sans_exemplaire(nom), [])
-		var k: int = MB.indice_d_exemplaire(nom)
-		if k < famille.size() and (famille[k] as Dictionary).has("sommet"):
-			sommets[nom] = famille[k]["sommet"]
+		if (sources.get(nom, {}) as Dictionary).has("sommet"):
+			sommets[nom] = sources[nom]["sommet"]
 	lot.set_meta(META_SOMMETS, sommets)
-
-	var en_trop := 0
-	for cle in comptes:
-		en_trop += int(comptes[cle]) - 1
-	return {"lot": lot, "manquantes": manquantes, "variantes": variantes,
-		"exemplaires": comptes, "exemplaires_en_plus": en_trop}
+	return {"lot": lot, "manquantes": manquantes, "variantes": variantes}
 
 
-## Pose la tuile d'une clé ET tous ses exemplaires. Rend l'`id` suivant.
-##
-## ⚠ **LE NOM NU RESTE L'EXEMPLAIRE 0**, jamais « ...~0 » : c'est ce qui fait qu'un peintre qui ignore
-## les exemplaires — le repli procédural, un lot d'avant cette version — trouve toujours sa tuile
-## (charte §9.4). Le repli n'est pas une commodité : sans lui, des cubes rouges sur des lots sains.
-##
-## ⚠ **MÊME COLLISION POUR TOUTE LA FAMILLE.** Un exemplaire ne change que l'ASPECT ; lui donner sa
-## propre forme de collision ferait que deux mondes identiques ne se traversent pas pareil selon le
-## tirage — et le tirage n'est pas quelque chose que le joueur peut voir.
-static func _poser_la_famille(lot: MeshLibrary, id: int, cle: String, mesh: ArrayMesh, bits: int,
-		exemplaires: Dictionary, comptes: Dictionary) -> int:
+## Pose la tuile d'une clé, de nom nu. Rend l'`id` suivant.
+static func _poser_la_tuile(lot: MeshLibrary, id: int, cle: String, mesh: ArrayMesh, bits: int) -> int:
 	lot.create_item(id)
 	lot.set_item_name(id, cle)
 	lot.set_item_mesh(id, mesh)
 	lot.set_item_shapes(id, RP.collision(bits))
-	id += 1
-	var famille: Array = exemplaires.get(cle, [])
-	for k in range(1, famille.size()):
-		var autre: ArrayMesh = famille[k]["mesh"]
-		if autre == null or autre.get_surface_count() == 0:
-			continue
-		lot.create_item(id)
-		lot.set_item_name(id, MB.nom_d_exemplaire(cle, k))
-		lot.set_item_mesh(id, autre)
-		lot.set_item_shapes(id, RP.collision(bits))
-		id += 1
-	if famille.size() > 1:
-		comptes[cle] = famille.size()
-	return id
+	return id + 1
 
 
 ## ── L'ALLER-RETOUR : UN SEUL `.glb` ─────────────────────────────────────────────────────────────────
@@ -1380,62 +1343,21 @@ static func occurrences_du_temoin(i := 0) -> Array:
 	return sortie
 
 
-## LA PURETÉ d'un sommet : combien des 64 cases qui l'entourent (décalages −1..2) diffèrent de sa propre
-## configuration PROLONGÉE (chaque case copie la case de ses huit la plus proche). 0 = le milieu d'une
-## forme sans rien autour ; plus c'est haut, plus un voisin a laissé sa trace dans la tuile.
-static func purete(pleines: Dictionary, v: Vector3i) -> int:
-	var n := 0
-	for dx in range(-1, 3):
-		for dy in range(-1, 3):
-			for dz in range(-1, 3):
-				var proche: Vector3i = v + Vector3i(clampi(dx, 0, 1), clampi(dy, 0, 1), clampi(dz, 0, 1))
-				if pleines.has(v + Vector3i(dx, dy, dz)) != pleines.has(proche):
-					n += 1
-	return n
-
-
 ## LA TUILE DE CHAQUE CLÉ dans le témoin calculé : {clé: {"mesh" (repère de référence), "sommet"}}.
 ##
-## ⚠ **L'EXEMPLAIRE LE PLUS PUR, PAS LE PREMIER DU BALAYAGE.** Dans le témoin aminci, une tuile porte les
-## marches que ses VOISINS y ont taillées : l'exemplaire pris au pied d'un pilier montrerait ce pilier
-## absent à chacune de ses 244 occurrences. Mesuré le 30 septembre : aucune paroi du témoin n'est pure
-## (charte §3) — on prend donc la moins marquée, à égalité le premier du balayage.
-## ⚠ Tous les exemplaires d'une clé ont la même SECTION (`verifier_sections` : 0 remarque sur le témoin),
-## donc le choix ne touche que l'intérieur de la tuile, jamais un raccord.
-## ⚠ **LE CHOIX SE FAIT SUR LES CASES, LA DÉCOUPE PAR LE TRANCHEUR** : la pureté ne lit que l'occupation,
-## donc on sait quel sommet garder AVANT de découper, et `Tranchage.trancher(…, seuls)` ne découpe que ces
-## 52-là — ~1 s au lieu des ~15 s d'un tranchage complet, par la MÊME route (charte §6).
-## ⚠ À égalité de pureté, le premier du balayage (x, puis y, puis z), comme l'ordre des exemplaires.
+## ⚠ **C'EST LE TRANCHEUR QUI CHOISIT** (une tuile par clé, le sommet le plus PUR — `MB.purete`, charte §3) :
+## cette fonction n'écrit aucune règle, elle rend ce que `Tranchage.trancher` a découpé. Une seconde règle
+## de choix, ici, finirait par livrer d'autres tuiles que le lot du témoin (charte §6).
+## ⚠ Pourquoi le plus pur : dans le témoin aminci, une tuile porte les marches que ses VOISINS y ont
+## taillées ; celle d'un pied de pilier montrerait ce pilier absent à chacune de ses 244 occurrences.
 static func tuiles_du_temoin() -> Dictionary:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
-	var pleines: Dictionary = cases(0)
-	var plafond: int = MB.plafond_de(pleines)
-	var choisi := {}
-	var meilleure := {}
-	for vx in COTE - 1:
-		for vy in COTE - 1:
-			for vz in COTE - 1:
-				var v := Vector3i(vx, vy, vz)
-				var r: Dictionary = Tranchage.cle_du_sommet(pleines, v, plafond)
-				if r.is_empty():
-					continue
-				var p: int = purete(pleines, v)
-				if not meilleure.has(r["cle"]) or p < int(meilleure[r["cle"]]):
-					meilleure[r["cle"]] = p
-					choisi[r["cle"]] = v
-	var seuls := {}
-	for cle in choisi:
-		seuls[choisi[cle]] = true
 	var fautes: Array = []
 	var remarques: Array = []
-	var exemplaires := {}
+	var sources := {}
 	Tranchage.trancher(maillage_moitie(0), Vector3i.ONE * COTE, 1.0, creuses(0), fautes, false, remarques,
-		exemplaires, Vector3.ZERO, seuls)
-	var sortie := {}
-	for cle in exemplaires:
-		var e: Dictionary = exemplaires[cle][0]
-		sortie[cle] = {"mesh": e["mesh"], "sommet": e["sommet"], "purete": meilleure.get(cle, -1)}
-	return sortie
+		sources, Vector3.ZERO)
+	return sources
 
 
 ## EXPORTE LE TÉMOIN LIÉ dans un `.glb`. Rend "" si tout va bien, sinon la raison.
@@ -1467,7 +1389,7 @@ static func exporter_le_temoin_lie(chemin: String) -> String:
 static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> String:
 	var FormatNeutre := load("res://addons/marchingblocks_core/format_neutre.gd")
 	for cle in maillages:
-		(maillages[cle] as ArrayMesh).resource_name = FormatNeutre.nom_de_tuile(cle, 0)
+		(maillages[cle] as ArrayMesh).resource_name = FormatNeutre.nom_de_tuile(cle)
 	var grille := GridMap.new()
 	var racine := Node3D.new()
 	racine.name = "MarchingBlocksWitness"
@@ -1571,7 +1493,7 @@ static func _tuile_pour_l_artiste(mesh: ArrayMesh, k: int, n: int) -> ArrayMesh:
 
 
 ## LE TÉMOIN LIÉ RELU : {} si le fichier n'en est pas un (le travail se tranche alors comme avant), sinon
-## {"pieces": {clé: mesh}, "exemplaires": {clé: [{mesh, sommet}]}, "occurrences", "hors"}.
+## {"pieces": {clé: mesh}, "sources": {clé: {mesh, sommet}}, "occurrences", "hors"}.
 ##
 ## ⚠ **C'EN EST UN SI LA MAJORITÉ DE SES OBJETS TOMBE SUR LES PLACES DU TÉMOIN** (le centre d'un sommet à
 ## surface) : déduit, pas déclaré. Un objet ailleurs — un rocher, un reste — est compté dans `hors`, et
@@ -1627,7 +1549,7 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 		return {}
 
 	var pieces := {}
-	var exemplaires := {}
+	var sources := {}
 	var pleines: Dictionary = cases(0)
 	var cles: Array = par_cle.keys()
 	cles.sort()
@@ -1668,14 +1590,14 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 		# lisible du témoin.
 		var sommet: Vector3i = liste[0]["sommet"]
 		for e in liste:
-			if purete(pleines, e["sommet"]) < purete(pleines, sommet):
+			if MB.purete(pleines, e["sommet"]) < MB.purete(pleines, sommet):
 				sommet = e["sommet"]
 		pieces[cle] = tuile
-		exemplaires[cle] = [{"mesh": tuile, "sommet": sommet}]
+		sources[cle] = {"mesh": tuile, "sommet": sommet}
 	if hors > 0:
 		remarques.append(("objets : %d objet(s) ne sont sur aucune place du témoin et sont ignorés — un prop "
 			+ "entier (rocher, décor) n'est pas encore pris en charge") % hors)
-	return {"pieces": pieces, "exemplaires": exemplaires, "occurrences": porteurs - hors, "hors": hors}
+	return {"pieces": pieces, "sources": sources, "occurrences": porteurs - hors, "hors": hors}
 
 
 ## La pose d'un nœud glTF dans la scène, parents compris. `poses` sert de mémoire (les parents d'abord).
@@ -2026,7 +1948,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 			bits_par_nom[c["nom"]] = c["bits"]
 		Tranchage.verifier_sections(lie["pieces"], bits_par_nom, remarques_liees)
 		Tranchage.verifier_couture_texture(lie["pieces"], remarques_liees)
-		var assemble: Dictionary = _assembler(lie["pieces"], lie["exemplaires"])
+		var assemble: Dictionary = _assembler(lie["pieces"], lie["sources"])
 		assemble["erreurs"] = erreurs
 		assemble["remarques"] = remarques_liees
 		var prov := {}
@@ -2056,11 +1978,22 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 
 	var fautes: Array = []
 	var remarques: Array = []
-	var exemplaires := {}
+	var sources := {}
 	# ⚠ LE BLOC EST À L'ORIGINE (§4) : on le dit au trancheur, au lieu de le lui faire déduire d'une boîte
 	# que le relief de l'artiste a le droit de déformer.
 	var recolte: Dictionary = Tranchage.trancher(solide, Vector3i.ONE * COTE, 1.0,
-		creuses(0), fautes, false, remarques, exemplaires, Vector3.ZERO)
+		creuses(0), fautes, false, remarques, sources, Vector3.ZERO)
+	# ⚠ **UN TRAVAIL NON LIÉ NE LIVRE QU'UNE COPIE PAR TUILE, ET ON LE DIT** (charte §3) : un bloc d'un seul
+	# tenant (tout joint, ou un .obj) montre chaque tuile à plusieurs endroits ; le trancheur n'en lit que la
+	# plus lisible. Ce que l'artiste a sculpté ailleurs n'arrive pas dans le monde — l'absence doit se voir.
+	var cles_a_plusieurs := 0
+	for cle in sources:
+		if int(sources[cle].get("copies", 1)) > 1:
+			cles_a_plusieurs += 1
+	if not sculptes.is_empty() and cles_a_plusieurs > 0:
+		remarques.append(("non lié : ce travail est d'un seul tenant, et %d tuile(s) y apparaissent à plusieurs "
+			+ "endroits ; seule la copie la plus lisible de chacune est lue. Exporte le témoin LIÉ pour que "
+			+ "chaque copie soit la même tuile") % cles_a_plusieurs)
 	for f in fautes:
 		erreurs.append("« %s » : %s" % [BLOCS[0]["nom"], f])
 	# ⚠ ON LE DIT : plusieurs objets sont tous du terrain tant que les props entiers (§9 bis) n'existent
@@ -2073,7 +2006,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		pieces[nom] = recolte[nom]
 		provenance[nom] = BLOCS[0]["nom"]
 
-	var resultat: Dictionary = _assembler(pieces, exemplaires)
+	var resultat: Dictionary = _assembler(pieces, sources)
 	resultat["erreurs"] = erreurs
 	resultat["remarques"] = remarques
 	resultat["provenance"] = provenance

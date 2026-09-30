@@ -375,10 +375,11 @@ func _carte(carte: Dictionary, temoin: Mesh) -> Control:
 ##
 ## Dans World, le bandeau ne montre plus toutes les formes : il dit, pour la tuile sous la souris, DE
 ## QUELLE FORME du témoin elle a été découpée — la photo de la forme, un renvoi qui pointe l'endroit
-## EXACT (le sommet d'où vient cet exemplaire), et un bouton qui va l'y voir.
-## ⚠ **L'ENDROIT EXACT, PAS SEULEMENT LA FORME** : une clé vue 81 fois porte 81 exemplaires, et le tirage
-## en choisit UN par position (charte §3). Le lot sait d'où vient chacun (`BlocsMaitres.META_SOMMETS`) :
-## c'est là, et nulle part ailleurs, que l'artiste doit sculpter pour changer CETTE tuile-ci.
+## EXACT (le sommet d'où vient la tuile), et un bouton qui va l'y voir.
+## ⚠ **L'ENDROIT EXACT, PAS SEULEMENT LA FORME** : le lot sait d'où vient chaque tuile
+## (`BlocsMaitres.META_SOMMETS`). Depuis le 30 septembre 2026 une clé porte UNE tuile (charte §3) : avec le
+## témoin lié, la sculpter à n'importe laquelle de ses copies la change partout ; avec un travail non lié,
+## seul ce coin-là est lu.
 
 func regler_atelier(a: String) -> void:
 	atelier = a
@@ -498,14 +499,10 @@ func montrer_provenance(info: Dictionary) -> void:
 func _dire_la_provenance(info: Dictionary, nom: String, source: Vector3i) -> void:
 	var MB := FT.MB
 	var candidates: Array = FT.cartes_du_sommet(cartes, source)
-	var cle: String = MB.cle_sans_exemplaire(nom)
-	var combien := 0
-	for autre in ((info["lot"] as MeshLibrary).get_meta(BM.META_SOMMETS, {}) as Dictionary):
-		if MB.cle_sans_exemplaire(autre) == cle:
-			combien += 1
-	var contexte := " (open-air version)" if cle.ends_with(MB.SUFFIXE_DEHORS) else ""
-	_p_detail.text = "Copy %d of %d of this tile%s, cut at the witness corner (%d, %d, %d)." \
-		% [MB.indice_d_exemplaire(nom) + 1, maxi(1, combien), contexte, source.x, source.y, source.z]
+	var contexte := " (open-air version)" if nom.ends_with(MB.SUFFIXE_DEHORS) else ""
+	# ⚠ UNE TUILE PAR CLÉ (charte §3) : plus de « copy k of N » — la tuile est la même partout où elle revient.
+	_p_detail.text = "This tile%s was cut at the witness corner (%d, %d, %d); it is the same wherever it appears." \
+		% [contexte, source.x, source.y, source.z]
 	_p_titre.text = "THIS TILE WAS CUT FROM"
 	if candidates.is_empty():
 		_p_nom.text = "The witness"

@@ -48,6 +48,16 @@ namespace MarchingBlocks.Paint.Tests
         }
 
         [Test]
+        public void AListOfCopiesIsRefused()
+        {
+            var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(ConformancePath()));
+            conf["tiles"] = new Dictionary<string, object> { ["corner_b1h0"] = new List<object> { "corner_b1h0", "corner_b1h0_2" } };
+            StringAssert.Contains("one tile per key", Rule.Check(conf));
+            conf["tiles"] = new Dictionary<string, object> { ["corner_b1h0"] = "corner_b1h0" };
+            Assert.AreEqual("", Rule.Check(conf));
+        }
+
+        [Test]
         public void ANewerFormatIsRefused()
         {
             var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(ConformancePath()));

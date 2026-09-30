@@ -42,12 +42,13 @@ func _initialize() -> void:
 		if not par_classe.has(k):
 			par_classe[k] = {"n": 0, "ex": {}}
 		par_classe[k]["n"] += 1
-		par_classe[k]["ex"][p["k"]] = true
 	var cles := par_classe.keys()
 	cles.sort_custom(func(a, b): return par_classe[a]["n"] > par_classe[b]["n"])
 	print("poses : ", poses.size())
 	for k in cles:
-		print("  %6d  %-40s exemplaires distincts %d / %d" % [par_classe[k]["n"], k, par_classe[k]["ex"].size(),
+		# ⚠ Une tuile par clé depuis le 30 septembre 2026 (charte §3) : plus d'exemplaires à compter ; la sonde
+		# dit ce qui est posé, et le témoin d'origine en comptait jusqu'à 51 par clé (la mesure qui a tout lancé).
+		print("  %6d  %-40s (sommets du témoin portant cette clé : %d)" % [par_classe[k]["n"], k,
 			int(comptes.get(k.replace(" [dehors]", MB.SUFFIXE_DEHORS if k.ends_with("]") else ""), 0))])
 	# Deux parois droites : la falaise du fond (v.z = -18) et le bloc de devant (v.z = 14).
 	var par_sommet := {}
@@ -59,7 +60,7 @@ func _initialize() -> void:
 			var ligne := "  y=%3d " % y
 			for x in range(-4, 5):
 				var p = par_sommet.get(Vector3i(x, y, zz))
-				ligne += ("%-18s" % ("%s%s~%d" % [String(p["nom"]).trim_prefix("mb_"), "*" if p["dehors"] else "", p["k"]])) if p else "        .         "
+				ligne += ("%-18s" % ("%s%s" % [String(p["nom"]).trim_prefix("mb_"), "*" if p["dehors"] else ""])) if p else "        .         "
 			print(ligne)
 	# ── PISTE : choisir l'exemplaire par le voisinage ÉLARGI (4³ cases autour du sommet).
 	# Les exemplaires de chaque clé, dans l'ordre du balayage du trancheur (vx, vy, vz croissants).

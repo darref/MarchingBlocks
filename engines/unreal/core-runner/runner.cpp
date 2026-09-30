@@ -205,6 +205,23 @@ namespace
 		for (auto& Entry : Newer.Object)
 			if (Entry.first == "version") Entry.second.Integer = FRule::SupportedVersion + 1;
 		if (FRule::CheckManifest(Newer).empty()) { ++Failed; std::printf("  FAIL a newer format is accepted\n"); }
+		// One tile per key: a list of copies per key must be refused, never misread.
+		FJsonValue Copies;
+		Copies.Type = FJsonValue::EType::Object;
+		FJsonValue List;
+		List.Type = FJsonValue::EType::Array;
+		List.Array.resize(2);
+		for (FJsonValue& N : List.Array) { N.Type = FJsonValue::EType::String; N.String = "corner_b1h0"; }
+		Copies.Object.push_back({"corner_b1h0", List});
+		if (FRule::CheckTiles(Copies).find("one tile per key") == std::string::npos)
+		{ ++Failed; std::printf("  FAIL a list of copies is accepted\n"); }
+		FJsonValue One;
+		One.Type = FJsonValue::EType::Object;
+		FJsonValue Name;
+		Name.Type = FJsonValue::EType::String;
+		Name.String = "corner_b1h0";
+		One.Object.push_back({"corner_b1h0", Name});
+		if (!FRule::CheckTiles(One).empty()) { ++Failed; std::printf("  FAIL one tile per key is refused\n"); }
 		std::printf("%d cases, %zu placements, %d failure(s)\n", Cases, Placements, Failed);
 		return Failed;
 	}

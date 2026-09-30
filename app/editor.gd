@@ -1197,7 +1197,7 @@ func _aller_a_la_tuile(cle: String) -> void:
 	var pleines: Dictionary = BM.cases(0)
 	var meilleure: int = liste[0]
 	for i in liste:
-		if BM.purete(pleines, t.occurrences[i]["sommet"]) < BM.purete(pleines, t.occurrences[meilleure]["sommet"]):
+		if MB.purete(pleines, t.occurrences[i]["sommet"]) < MB.purete(pleines, t.occurrences[meilleure]["sommet"]):
 			meilleure = i
 	var sommet: Vector3i = t.occurrences[meilleure]["sommet"]
 	var huit: Array = []
@@ -1973,13 +1973,9 @@ func _poser_lot(bilan: Dictionary, quoi: String, source: String, entete := "") -
 	_enregistrer()
 	_aller_a("monde")
 
-	var en_plus: int = int(bilan.get("exemplaires_en_plus", 0))
 	var texte := entete
 	texte += "[color=#b4bd85][b]Library ready[/b][/color] (%s → layer « %s ») — %d tile(s) for %d classes" \
-		% [quoi, _couches[_active]["nom"], lot.get_item_list().size() - en_plus,
-		MB.pieces_a_sculpter().size()]
-	if en_plus > 0:
-		texte += ", + %d sculpted copy(ies)" % en_plus
+		% [quoi, _couches[_active]["nom"], lot.get_item_list().size(), MB.pieces_a_sculpter().size()]
 	if bilan.get("lie", false):
 		texte += " — read tile by tile from %d linked copies, nothing sliced" % int(bilan.get("occurrences", 0))
 	texte += "\n"

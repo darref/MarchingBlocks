@@ -22,11 +22,20 @@ namespace MBPaint
 		if (Version > SupportedVersion)
 			return "made by a newer MarchingBlocks (format " + std::to_string(Version) + ", this plugin reads "
 				+ std::to_string(SupportedVersion) + "): update the plugin";
-		for (const char* Field : {"corners", "table", "classes", "context", "copies"})
+		for (const char* Field : {"corners", "table", "classes", "context"})
 			if (!Manifest.Find(Field)) return std::string("not a MarchingBlocks tileset: '") + Field + "' is missing";
 		if (Manifest["table"].Type != FJsonValue::EType::Array || Manifest["table"].Size() != 256)
 			return "the table must have 256 entries";
 		if (Manifest["corners"].Size() != 8) return "corners must have 8 entries";
+		if (Manifest.Find("tiles")) return CheckTiles(Manifest["tiles"]);
+		return "";
+	}
+
+	std::string FRule::CheckTiles(const FJsonValue& InTiles)
+	{
+		for (const auto& Entry : InTiles.Object)
+			if (Entry.second.Type != FJsonValue::EType::String)
+				return "tile '" + Entry.first + "' must be one tile name (one tile per key)";
 		return "";
 	}
 
@@ -51,16 +60,14 @@ namespace MBPaint
 		const FJsonValue& Context = Manifest["context"];
 		if (Context.Find("band")) Band = static_cast<int>(Context["band"].AsInt());
 		if (Context.Find("outdoor_suffix")) OutdoorSuffix = Context["outdoor_suffix"].String;
-		const FJsonValue& Copies = Manifest["copies"];
-		for (size_t P = 0; P < 3; ++P) Primes[P] = Copies["hash"][P].AsInt();
-		Mask = Copies["mask"].AsInt();
 
 		const FJsonValue& Source = InTiles ? *InTiles : Manifest["tiles"];
-		for (const auto& Entry : Source.Object)
+		if (!CheckTiles(Source).empty())
 		{
-			std::vector<std::string>& Names = Tiles[Entry.first];
-			for (const FJsonValue& N : Entry.second.Array) Names.push_back(N.String);
+			ClassIds.clear();   // an empty rule: a refused manifest places nothing
+			return;
 		}
+		for (const auto& Entry : Source.Object) Tiles[Entry.first] = Entry.second.String;
 	}
 
 	bool FRule::HasTile(const std::string& Key) const
@@ -108,14 +115,7 @@ namespace MBPaint
 			FPlacement P;
 			P.Vertex = V;
 			P.QuarterTurns = TableTurns[static_cast<size_t>(Bits)];
-			if (!Chosen.empty())
-			{
-				const std::vector<std::string>& List = Tiles.at(Chosen);
-				const uint64_t H = (static_cast<uint64_t>(static_cast<int64_t>(V.X)) * static_cast<uint64_t>(Primes[0]))
-					^ (static_cast<uint64_t>(static_cast<int64_t>(V.Y)) * static_cast<uint64_t>(Primes[1]))
-					^ (static_cast<uint64_t>(static_cast<int64_t>(V.Z)) * static_cast<uint64_t>(Primes[2]));
-				P.Tile = List[static_cast<size_t>((H & static_cast<uint64_t>(Mask)) % List.size())];
-			}
+			if (!Chosen.empty()) P.Tile = Tiles.at(Chosen);
 			Result.push_back(std::move(P));
 		}
 		std::sort(Result.begin(), Result.end(), [](const FPlacement& A, const FPlacement& B) { return A.Vertex < B.Vertex; });

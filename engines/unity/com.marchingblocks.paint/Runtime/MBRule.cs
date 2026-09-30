@@ -1,7 +1,7 @@
 // MarchingBlocks Paint for Unity — THE PLACEMENT RULE, implemented from the tileset format itself.
 //
-// This file reads nothing but a tileset manifest (tileset.json): its table, corners, classes, context
-// and copies. It has no Unity dependency: Tests/conformance.json (the reference cases, shipped with
+// This file reads nothing but a tileset manifest (tileset.json): its table, corners, classes and
+// context. It has no Unity dependency: Tests/conformance.json (the reference cases, shipped with
 // every MarchingBlocks plugin) proves it places exactly what the MarchingBlocks tool places.
 //
 // Everything here is in FORMAT space: right-handed, +Y up, 1 unit = 1 cell (glTF). Converting to
@@ -13,7 +13,7 @@
 //   3. table[bits] gives [class, quarter_turns]; class -1 places nothing;
 //   4. an outdoor-capable class is OUTDOOR when no empty cell among the 8 has a full cell above it,
 //      from v.y + 2 up to the highest full cell of the layer; outdoor tries "<id>_outdoor" first;
-//   5. the copy is picked by a spatial hash of v, in 64-bit integers, so a world always looks the same;
+//   5. each key has exactly one tile, tiles[key];
 //   6. a missing key gives a null tile — show an error marker, never fill in.
 
 using System;
@@ -50,15 +50,14 @@ namespace MarchingBlocks.Paint
 
         public readonly Int3[] Corners;
         public readonly Int3 PieceOffset;
-        public readonly Dictionary<string, List<string>> Tiles;
+        /// <summary>{key: tile name} — one tile per key.</summary>
+        public readonly Dictionary<string, string> Tiles;
         readonly int[] tableClass = new int[256];
         readonly int[] tableTurns = new int[256];
         readonly string[] classIds;
         readonly bool[] outdoorPossible;
         readonly int band;
         readonly string outdoorSuffix;
-        readonly long[] primes;
-        readonly long mask;
 
         /// <summary>"" when the manifest is usable, otherwise the reason. A NEWER format is refused:
         /// its rule may mean something else, and placing anyway would be a silent lie.</summary>
@@ -67,15 +66,25 @@ namespace MarchingBlocks.Paint
             long version = manifest.TryGetValue("version", out var v) ? MBJson.AsLong(v) : 0;
             if (version > SupportedVersion)
                 return $"made by a newer MarchingBlocks (format {version}, this plugin reads {SupportedVersion}): update the plugin";
-            foreach (var field in new[] { "corners", "table", "classes", "context", "copies" })
+            foreach (var field in new[] { "corners", "table", "classes", "context" })
                 if (!manifest.ContainsKey(field))
                     return $"not a MarchingBlocks tileset: '{field}' is missing";
             if (((List<object>)manifest["table"]).Count != 256)
                 return "the table must have 256 entries";
+            return CheckTiles(manifest.TryGetValue("tiles", out var t) ? t as Dictionary<string, object> : null);
+        }
+
+        /// <summary>"" when every key names exactly one tile, otherwise the reason.</summary>
+        public static string CheckTiles(Dictionary<string, object> tiles)
+        {
+            if (tiles == null) return "";
+            foreach (var kv in tiles)
+                if (!(kv.Value is string))
+                    return $"tile '{kv.Key}' must be one tile name (one tile per key)";
             return "";
         }
 
-        /// <param name="tiles">{key: [tile names]} — null to use the manifest's own "tiles".</param>
+        /// <param name="tiles">{key: tile name} — null to use the manifest's own "tiles".</param>
         public Rule(Dictionary<string, object> manifest, Dictionary<string, object> tiles = null)
         {
             string why = Check(manifest);
@@ -105,19 +114,13 @@ namespace MarchingBlocks.Paint
             var context = (Dictionary<string, object>)manifest["context"];
             band = context.TryGetValue("band", out var bd) ? (int)MBJson.AsLong(bd) : 2;
             outdoorSuffix = context.TryGetValue("outdoor_suffix", out var sf) ? (string)sf : "_outdoor";
-            var copies = (Dictionary<string, object>)manifest["copies"];
-            var hash = (List<object>)copies["hash"];
-            primes = new[] { MBJson.AsLong(hash[0]), MBJson.AsLong(hash[1]), MBJson.AsLong(hash[2]) };
-            mask = MBJson.AsLong(copies["mask"]);
 
-            Tiles = new Dictionary<string, List<string>>();
+            Tiles = new Dictionary<string, string>();
             var source = tiles ?? (manifest.TryGetValue("tiles", out var tv) ? (Dictionary<string, object>)tv : new Dictionary<string, object>());
+            string whyTiles = CheckTiles(source);
+            if (whyTiles != "") throw new ArgumentException(whyTiles);
             foreach (var kv in source)
-            {
-                var names = new List<string>();
-                foreach (var n in (List<object>)kv.Value) names.Add((string)n);
-                Tiles[kv.Key] = names;
-            }
+                Tiles[kv.Key] = (string)kv.Value;
         }
 
         static Int3 ToInt3(List<object> a) => new Int3((int)MBJson.AsLong(a[0]), (int)MBJson.AsLong(a[1]), (int)MBJson.AsLong(a[2]));
@@ -146,13 +149,7 @@ namespace MarchingBlocks.Paint
                     chosen = id + outdoorSuffix;
                 if (chosen == null && Has(id))
                     chosen = id;
-                string tile = null;
-                if (chosen != null)
-                {
-                    var list = Tiles[chosen];
-                    long h = (v.x * primes[0]) ^ (v.y * primes[1]) ^ (v.z * primes[2]);
-                    tile = list[(int)((h & mask) % list.Count)];
-                }
+                string tile = chosen != null ? Tiles[chosen] : null;
                 result.Add(new Placement { Vertex = v, Tile = tile, QuarterTurns = tableTurns[bits] });
             }
             result.Sort((a, b) =>
@@ -162,7 +159,7 @@ namespace MarchingBlocks.Paint
             return result;
         }
 
-        bool Has(string key) => Tiles.TryGetValue(key, out var l) && l.Count > 0;
+        bool Has(string key) => Tiles.TryGetValue(key, out var t) && !string.IsNullOrEmpty(t);
 
         // Outdoor: every EMPTY cell among the 8 has nothing full above the vertex's two-cell band.
         bool IsOutdoor(HashSet<Int3> cells, Int3 v, int top)

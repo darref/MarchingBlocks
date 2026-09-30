@@ -218,8 +218,9 @@ C'est le partage de responsabilité, et il a été énoncé par Jordan mot pour 
 
 ### La moitié du contrat qui n'était PAS écrite : les EXEMPLAIRES — DÉCIDÉ (Jordan, 27 septembre 2026)
 
-⚠ **RENVERSÉ LE 30 SEPTEMBRE 2026** par « une tuile par clé, en copies liées » (section suivante). Ce qui
-suit reste vrai du code tant qu'il n'est pas réécrit.
+⚠ **RENVERSÉ LE 30 SEPTEMBRE 2026** par « une tuile par clé, en copies liées » (section suivante), **ET RETIRÉ
+DU CODE LE MÊME JOUR** (étape 5) : ce qui suit est de l'HISTOIRE — plus de nom `~k`, plus de tirage par
+hachage, ni dans l'appli, ni dans le format, ni dans les trois greffons.
 
 Le contrat disait « toute liberté pour chaque tuile, à l'intérieur de sa case ». Il ne disait pas ce
 qu'il advient de **deux cases de MÊME CLASSE sculptées différemment** — et c'est la première chose
@@ -264,7 +265,7 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
   UN endroit réapparaîtra ailleurs. **Un atlas ne porte pas d'unicité** — c'est le modèle, pas un
   défaut, et l'acheteur doit le lire AVANT d'acheter.
 
-### UNE TUILE PAR CLÉ, EN COPIES LIÉES AU TÉMOIN — DÉCIDÉ (Jordan, 30 septembre 2026), PAS ÉCRIT
+### UNE TUILE PAR CLÉ, EN COPIES LIÉES AU TÉMOIN — DÉCIDÉ (Jordan, 30 septembre 2026), ÉCRIT LE MÊME JOUR
 
 ⚠ **CECI RENVERSE « ON GARDE TOUT » (ci-dessus).** Le constat, MESURÉ sur `testtripotextured`
 (`DEV_TOOLS/sonde_tuiles_falaise.gd`) : une falaise droite était bien `plaque_b2h2` partout, au bon
@@ -379,10 +380,45 @@ témoin montre ce que le monde montrera.
   - Gardé par `fumee_appli` (193 ; attendus : les listes du modèle, les copies recomptées par
     `cle_du_sommet`, les fantômes comptés sur les bits). Cinq mutations rouges.
   - ⚠ Pas jugé par Jordan : lisibilité des photos, phrases de rôle.
-- **PAS ENCORE ÉCRIT** : la simplification du format et des trois greffons (plus
-  d'exemplaires). La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections.
+- **FAIT (30 septembre 2026) — LES EXEMPLAIRES RETIRÉS DE BOUT EN BOUT** (étape 5). ⚠ Pas seulement du
+  format : si le format ne portait plus d'exemplaires mais que l'appli continuait d'en tirer, l'appli
+  peindrait une mosaïque et les moteurs une tuile — deux descriptions du même monde (§6).
+  - **Le trancheur choisit AVANT de découper** : pour chaque clé, le sommet le plus PUR (`MB.purete`, qui vit
+    désormais dans le MODÈLE — elle ne lit que les cases), à égalité le premier du balayage ; il ne découpe
+    que ceux-là. `tuiles_du_temoin` n'est plus qu'un appel au trancheur (une seule règle de choix), et
+    `librairie()` rend **52 items, un par clé, de nom nu**. Un travail NON LIÉ (tout joint, un .obj) ne
+    livre donc que la copie la plus lisible de chaque tuile, et le rapport le DIT (remarque « non lié »).
+  - **Le peintre** pose le nom nu, sans tirage (`MB.poses` lit la seule PRÉSENCE d'une clé, et ne rend plus
+    d'indice) ; un lot d'avant qui traîne des `~k` n'en pose aucun. Le cache passe au format 3.
+  - **Le format neutre, toujours v1** (rien n'est publié) : `tiles = {clé: nom}`, plus de champ `copies`,
+    plus d'étape « Copy » dans la règle écrite (l'étape 5 dit « une tuile par clé »). Un manifeste qui porte
+    encore une LISTE par clé est REFUSÉ par les trois greffons, avec sa raison. Cas d'épreuve régénérés :
+    18 cas, 1 624 poses, 460 d'air libre, 46 marqueurs — et chaque tuile attendue est LA tuile d'une clé.
+  - **MESURÉ** : les 15 suites Godot vertes ; banc .NET 18 cas / 1 624 poses / 0 échec ; banc C++ (clang de
+    Unity, drapeaux d'Unreal) 18 / 1 624 / 0 ; **Unity 6.6 : 22 tests sur 22** (sur le projet d'essai du
+    worktree, réimporté de zéro) ; **Unreal 5.8.3 : `RunUAT BuildPlugin`, BUILD SUCCESSFUL, aucun avertissement**
+    (l'en-tête public `MBRule.h` a changé). ⚠ Ni Unity ni Unreal n'ont été TENUS EN MAIN.
+  - **Mutations, toutes rouges** : Godot et cœur — le trancheur qui prend le premier du balayage (18 / 52
+    justes), l'égalité départagée à l'envers (47 / 52), la pureté qui ne prolonge pas, la pose qui rend un
+    indice, le peintre qui range les `~k` sous leur clé (170 cases), le greffon qui accepte une liste ou ne
+    retombe pas sur le nom nu, la remarque « non lié » tue ; .NET et C++ — pas de repli sur le nom nu, une
+    liste de copies acceptée, le contexte d'air libre ignoré.
+  - ⚠ **LE §14 DE `test_blocs_maitres` ÉPROUVE LE CHOIX** : il recalcule la pureté AUTREMENT (min/max, sans
+    `MB.purete`) et exige des clés où le plus pur n'est PAS le premier du balayage (34 sur 52) — sinon
+    « prendre le premier » passerait pour juste.
+  - ⚠ **LE §15 (UV CANONIQUES) A CHANGÉ D'AUTORITÉ** : le lot ne porte plus qu'une copie par clé, donc la
+    cohérence entre copies se juge sur l'OBJ du témoin, relu tel quel (549 occurrences, repère recalculé
+    dans le test), puis la tuile du lot doit porter ces UV-là (0 écart).
+  - ⚠ **`preparer_essai_unity.gd` ÉCRIVAIT DANS UN CHEMIN EN DUR** (`D:/MarchingBlocks/…`) : lancé depuis un
+    autre checkout, il aurait fait éprouver à Unity l'ANCIEN paquet. Il dérive désormais du projet ouvert.
+  - ⚠ **`global_blender_bevel_and_tripo_texture.mbset`** (le jeu exporté par Jordan, dans le dépôt) est au
+    format d'avant — des LISTES par clé : les greffons le refusent désormais. À réexporter depuis l'appli.
+  - La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections — OUVERT.
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
+
+⚠ **ÉCRIT AVANT « UNE TUILE PAR CLÉ » (30 septembre 2026)** : là où ce qui suit dit « exemplaire », lire
+« tuile ». La condition sur les CLÉS tient toujours ; la réserve sur les exemplaires tombe avec eux.
 
 La question posée : un rocher sculpté À CHEVAL sur un plan de coupe peut-il se retrouver dans le monde
 peint tel qu'il était dans le témoin ? Aujourd'hui, NON : le trancheur le coupe en deux, la découpe ne
@@ -654,15 +690,15 @@ qui ajoute une arête à ses deux bouts : un sommet de valence 4 y apparaît en 
 Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : un dossier `<nom>.mbset/`.
 
 ```
-  tileset.json   la règle ET les tuiles : table des 256, coins, décalage, classes, contexte, hachage,
-                 rules_text, et tiles = {clé: [noms des exemplaires]}, missing
+  tileset.json   la règle ET les tuiles : table des 256, coins, décalage, classes, contexte,
+                 rules_text, et tiles = {clé: nom de SA tuile}, missing
   tiles.glb      un nœud par tuile, maillage centré sur l'origine, nœud à l'identité, matériaux
   README.txt     la règle en clair
 ```
 
 - ⚠ **LE FICHIER PORTE LA RÈGLE.** Trois greffons qui réécriraient la classification, c'est la seconde
-  description qui diverge (§6). La table est PRÉ-CALCULÉE ; le contexte et l'exemplaire, qui se
-  recalculent en jeu, sont ÉCRITS (`FormatNeutre.regle()`, ligne à ligne) et gardés par des cas
+  description qui diverge (§6). La table est PRÉ-CALCULÉE ; le contexte, qui se
+  recalcule en jeu, est ÉCRIT (`FormatNeutre.regle()`, ligne à ligne) et gardés par des cas
   d'épreuve.
 - ⚠ **LA RÉFÉRENCE EST `MB.poses()`**, extraite de `massif_peint.gd` pour l'être : le peintre de l'appli
   l'appelle, et les cas d'épreuve sont calculés par elle. Une référence qu'on ne peut pas appeler sans
@@ -680,7 +716,8 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   application F EST la conversion ; une pièce se pose en F(v + piece_offset), tournée de F·R·F⁻¹ —
   une vraie rotation même quand F est un miroir. Ajouté avant toute publication, donc toujours v1.
 - ⚠ **LES NOMS SORTENT EN ANGLAIS ET EN `[a-z0-9_]`** (§7, et certains moteurs refusent `~` ou `.`) :
-  `mb_arete_creuse_b2h2_dehors` → `edge_inner_b2h2_outdoor`, exemplaires `_2`, `_3`… La traduction vit
+  `mb_arete_creuse_b2h2_dehors` → `edge_inner_b2h2_outdoor` (une tuile par clé : son nom EST l'id de la
+  clé ; les exemplaires `_2`, `_3`… ont vécu du 27 au 30 septembre 2026). La traduction vit
   dans `format_neutre.gd` ET NULLE PART AILLEURS ; les greffons ne décodent jamais un nom, ils lisent
   `tiles`. Gardé : aucun id en double, aucun hors de l'alphabet.
 - ⚠ **UN SHADER DE GODOT NE VOYAGE PAS** : une tuile à `ShaderMaterial` part avec un matériau standard
@@ -690,8 +727,9 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
 - **LES CAS D'ÉPREUVE** (`FormatNeutre.cas_d_epreuve()`, écrits par `DEV_TOOLS/generer_cas_d_epreuve.gd`
   dans `conformance.json`, LIVRÉ AVEC CHAQUE GREFFON) : 9 mondes (case seule, sol, falaise de 3,
   surplomb, tunnel, grotte close, contact diagonal, coordonnées négatives, relief irrégulier) × 2 jeux
-  (riche : variantes d'air libre et 3 exemplaires ; nu : noms nus seuls) = 18 cas, **1 624 poses — 460
-  d'air libre, 203 exemplaires au-delà du premier, 46 marqueurs**. Un greffon doit les passer à 100 %.
+  (riche : toutes les clés, variantes d'air libre comprises ; nu : noms nus seuls) = 18 cas, **1 624 poses
+  — 460 d'air libre, 46 marqueurs** (régénérés le 30 septembre 2026 sans exemplaires : du 27 au 30, le jeu
+  riche portait 3 exemplaires par clé). Un greffon doit les passer à 100 %.
   ⚠ Le test vérifie AUSSI que les cas exercent ce qu'ils prétendent : un cas qui ne pose aucune tuile
   d'air libre ne garderait pas le contexte (§6).
   ⚠ **ET IL ROUGIT SI LE FICHIER LIVRÉ EST PÉRIMÉ** : changer la règle sans régénérer les cas est vu.
@@ -1183,7 +1221,8 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   ⚠ « Slice the work » peignait jusque-là les cases du témoin en les remplaçant : c'était la preuve de
   l'aller-retour. Elle vit désormais dans un bouton à part, **« Paint the witness shape »**.
   ⚠ **ET CETTE PREUVE N'EST PLUS À L'IDENTIQUE DEPUIS LES EXEMPLAIRES** (§3) : le peintre tire
-  l'exemplaire d'un sommet par hachage de sa position, pas d'après l'endroit où il fut sculpté. Même
+  l'exemplaire d'un sommet par hachage de sa position, pas d'après l'endroit où il fut sculpté [⚠ plus
+  vrai depuis le 30 septembre 2026 : une tuile par clé, et avec le témoin lié la preuve est à l'identique]. Même
   forme, mêmes classes ; un coin sculpté ici peut reparaître là.
 - **LE PROJET** (`app/projet.gd`, `.mbproj` en JSON) porte les couches et leurs cases, **s'enregistre
   après chaque changement** (branché sur l'historique) et se rouvre au lancement. On écrit à côté puis
@@ -1440,16 +1479,15 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Quinze suites, **8 370 vérifications, 0 échec** (30 septembre 2026, relevées après la planche des tuiles),
+  Quinze suites, **8 328 vérifications, 0 échec** (30 septembre 2026, relevées après le retrait des exemplaires),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
-  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 469,
-  `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
-  `test_outils` 57, `fumee_appli` 193, `test_greffon_peinture` 176, `test_faux_artiste` 35,
+  `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
+  `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
+  `test_outils` 57, `fumee_appli` 193, `test_greffon_peinture` 179, `test_faux_artiste` 36,
   `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18.
-  ⚠ Les bancs Unity et Unreal n'ont PAS été relancés depuis le témoin de 825 cases ; `preparer_essai_unity.gd`
-  réécrit leur attendu.
+  Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
@@ -1458,7 +1496,9 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.
-  ⚠ Les trois suites qui ont grossi portent les gardes des exemplaires : `test_marching_blocks` §16
+  ⚠ [30 septembre 2026 : ces gardes sont REMPLACÉES par celles d'« une tuile par clé » — §16 la pureté et
+  la pose sans tirage, §10 le peintre qui pose le nom nu, §14 la tuile du sommet le plus pur.]
+  Les trois suites qui ont grossi portent les gardes des exemplaires : `test_marching_blocks` §16
   (nommage et tirage), `test_massif_peint` §10 (le peintre les pose, et un lot sans exemplaires marche
   encore), `test_blocs_maitres` §14 (aucun morceau sculpté n'est jeté). **Onze mutations délibérées,
   toutes rouges** — dont la seule qui compte vraiment : remettre le `if pieces.has(cle): continue`
@@ -1630,7 +1670,7 @@ désormais le greffon.
    - ⚠ **UN `.glb` SCULPTÉ SUR L'ANCIEN 8³ NE REVIENT PLUS** : le bloc est retrouvé par sa POSITION
      dans une boîte de 12³ (§4), et sa forme a changé. Il faut réexporter le témoin avant de sculpter.
 
-6. ~~**LES EXEMPLAIRES**~~ — **FAITS** (27 septembre 2026). Le trancheur ne jette plus rien : **52 clés,
+6. ~~**LES EXEMPLAIRES**~~ — **FAITS** (27 septembre 2026), **RETIRÉS le 30** (§3, une tuile par clé). Le trancheur ne jette plus rien : **52 clés,
    541 items, 489 exemplaires** là où 489 morceaux sculptés partaient à la poubelle sans un mot
    (§3). Le peintre en tire un par hachage de la POSITION, donc identique à chaque reconstruction.
    Les remarques de couture s'affichent pour la première fois.

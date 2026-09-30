@@ -456,7 +456,7 @@ func _la_provenance(ed: Control) -> void:
 	if source == null:
 		return
 	var modele: Dictionary = Tranchage.cle_du_sommet(BM.cases(0), source, MB.plafond_de(BM.cases(0)))
-	_egal(modele.get("cle", ""), MB.cle_sans_exemplaire(nom),
+	_egal(modele.get("cle", ""), nom,
 		"le sommet source porte, dans le témoin, la MÊME clé que la tuile posée")
 	_vrai(not leg.provenance.is_empty() and leg._p_voir.visible and leg._p_photo.texture != null,
 		"le bandeau nomme la forme, montre sa photo et offre « Show it in the witness »")

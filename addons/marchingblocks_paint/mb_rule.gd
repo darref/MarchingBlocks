@@ -2,8 +2,8 @@
 extends RefCounted
 ## THE PLACEMENT RULE of the MarchingBlocks tileset format — implemented from the format itself.
 ##
-## This file reads nothing but a tileset manifest (`tileset.json`): its `table`, `corners`, `classes`,
-## `context` and `copies`. It deliberately does not use any MarchingBlocks internals: it is the rule as
+## This file reads nothing but a tileset manifest (`tileset.json`): its `table`, `corners`, `classes`
+## and `context`. It deliberately does not use any MarchingBlocks internals: it is the rule as
 ## any engine would implement it, and `conformance.json` (shipped next to it) proves it matches the
 ## reference implementation, case by case.
 ##
@@ -13,7 +13,7 @@ extends RefCounted
 ##   3. table[bits] gives [class, quarter_turns]; class -1 places nothing;
 ##   4. an outdoor-capable class is OUTDOOR when no empty cell among the 8 has a full cell above it,
 ##      from v.y + 2 up to the highest full cell of the layer; outdoor tries "<id>_outdoor" first;
-##   5. the copy is picked by a spatial hash of v, so the same world always looks the same;
+##   5. each key has exactly one tile, tiles[key];
 ##   6. a missing key is returned as null — show an error marker, never fill in.
 
 const FORMAT := "marchingblocks-tileset"
@@ -27,16 +27,19 @@ static func check(manifest: Dictionary) -> String:
 	if int(manifest.get("version", 0)) > SUPPORTED_VERSION:
 		return "made by a newer MarchingBlocks (format %d, this plugin reads %d): update the plugin" \
 			% [int(manifest.get("version", 0)), SUPPORTED_VERSION]
-	for field in ["corners", "table", "classes", "context", "copies"]:
+	for field in ["corners", "table", "classes", "context"]:
 		if not manifest.has(field):
 			return "not a MarchingBlocks tileset: '%s' is missing" % field
 	if (manifest["table"] as Array).size() != 256:
 		return "the table must have 256 entries"
+	for key in manifest.get("tiles", {}):
+		if not manifest["tiles"][key] is String:
+			return "tile '%s' must be one tile name (one tile per key)" % key
 	return ""
 
 
 ## Every placement for a layer: [x, y, z, tile name or null, quarter_turns], sorted by vertex.
-## `cells`: {Vector3i: true}. `rule`: the manifest. `tiles`: {key: [tile names]} (the manifest's `tiles`).
+## `cells`: {Vector3i: true}. `rule`: the manifest. `tiles`: {key: tile name} (the manifest's `tiles`).
 static func placements(cells: Dictionary, rule: Dictionary, tiles: Dictionary) -> Array:
 	var corners: Array = []
 	for c in rule["corners"]:
@@ -45,8 +48,6 @@ static func placements(cells: Dictionary, rule: Dictionary, tiles: Dictionary) -
 	var classes: Array = rule["classes"]
 	var band: int = int(rule["context"].get("band", 2))
 	var suffix: String = str(rule["context"].get("outdoor_suffix", "_outdoor"))
-	var primes: Array = rule["copies"]["hash"]
-	var mask: int = int(rule["copies"]["mask"])
 
 	var top := -2147483648
 	for c in cells:
@@ -70,15 +71,13 @@ static func placements(cells: Dictionary, rule: Dictionary, tiles: Dictionary) -
 		var id: String = classes[cls]["id"]
 		var chosen := ""
 		if bool(classes[cls]["outdoor_possible"]) and _outdoor(cells, v, corners, top, band):
-			if (tiles.get(id + suffix, []) as Array).size() > 0:
+			if str(tiles.get(id + suffix, "")) != "":
 				chosen = id + suffix
-		if chosen == "" and (tiles.get(id, []) as Array).size() > 0:
+		if chosen == "" and str(tiles.get(id, "")) != "":
 			chosen = id
 		var tile = null
 		if chosen != "":
-			var copies: Array = tiles[chosen]
-			var h: int = (v.x * int(primes[0])) ^ (v.y * int(primes[1])) ^ (v.z * int(primes[2]))
-			tile = copies[(h & mask) % copies.size()]
+			tile = str(tiles[chosen])
 		out.append([v.x, v.y, v.z, tile, int(entry[1])])
 	out.sort_custom(func(a: Array, b: Array) -> bool:
 		if a[0] != b[0]:

@@ -42,6 +42,12 @@ static class Program
         conf["version"] = (long)Rule.SupportedVersion + 1;
         bool refused = Rule.Check(conf) != "";
         if (!refused) { failed++; Console.WriteLine("  FAIL a newer format is accepted"); }
+        conf["version"] = (long)Rule.SupportedVersion;
+        // One tile per key: a manifest that still lists copies per key must be refused, never misread.
+        conf["tiles"] = new Dictionary<string, object> { ["corner_b1h0"] = new List<object> { "corner_b1h0", "corner_b1h0_2" } };
+        if (!Rule.Check(conf).Contains("one tile per key")) { failed++; Console.WriteLine("  FAIL a list of copies is accepted"); }
+        conf["tiles"] = new Dictionary<string, object> { ["corner_b1h0"] = "corner_b1h0" };
+        if (Rule.Check(conf) != "") { failed++; Console.WriteLine("  FAIL one tile per key is refused"); }
         Console.WriteLine($"{cases} cases, {placements} placements, {failed} failure(s)");
 
         string toolsPath = args.Length > 1 ? args[1] : "../com.marchingblocks.paint/Tests/tools_conformance.json";

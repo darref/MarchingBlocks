@@ -330,9 +330,10 @@ func _aller_retour() -> String:
 	l.append(_titre("Proving the round trip"))
 	l.append("[b]Paint the witness shape[/b] fills a layer with the witness's own cells. Slice your work "
 		+ "into it: the result must give your block back.")
-	l.append(_note("Every sculpted copy of a tile is kept, and the painter draws one by position. So the "
-		+ "rebuilt block has the same shape and the same tiles, but a corner sculpted here may appear "
-		+ "there: an atlas carries no unique detail."))
+	l.append(_note("A class has ONE tile, the same everywhere it appears. With the linked witness, the "
+		+ "rebuilt block is exactly the witness. A single-mesh work (everything joined, or an .obj) only "
+		+ "gives the clearest copy of each tile — the report says so: anything sculpted on the other copies "
+		+ "does not reach the world. An atlas carries no unique detail."))
 	return "\n".join(l)
 
 

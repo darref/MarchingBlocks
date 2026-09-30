@@ -831,65 +831,46 @@ static func nom_en_contexte(nom: String, dehors: bool) -> String:
 	return (nom + SUFFIXE_DEHORS) if dehors else nom
 
 
-## ── LES EXEMPLAIRES ────────────────────────────────────────────────────
+## ── UNE TUILE PAR CLÉ (charte §3, Jordan, 30 septembre 2026) ─────────────────────────────────────
 ##
-## ⚠ **CE NOMMAGE VIT ICI ET NULLE PART AILLEURS.** Le trancheur l'écrit, le peintre le lit ; deux
-## descriptions du même fait divergeraient, et le jour où elles divergent le peintre cherche une tuile
-## que le lot n'a pas — donc un cube rouge sur un lot parfaitement valide (charte §6).
-const SUFFIXE_EXEMPLAIRE := "~"
+## ⚠ **LES « EXEMPLAIRES » ONT VÉCU ICI DU 27 AU 30 SEPTEMBRE 2026** : N morceaux par clé, nommés
+## `<clé>~k`, tirés par un hachage de la position. Une falaise droite devenait une mosaïque de 30 morceaux
+## découpés à 30 endroits du témoin — mesuré, et rien ne le justifiait. Une clé porte désormais UNE tuile,
+## de nom nu, et le témoin lié en montre toutes les occurrences. La variété, si elle revient, reviendra en
+## variantes VOULUES dont l'appli fige les sections.
 
-
-## Le nom du k-ième EXEMPLAIRE d'une clé — un des N morceaux que l'artiste a sculptés pour cette
-## même classe, à N endroits du bloc.
-##
-## ⚠ **« EXEMPLAIRE » ET NON « VARIANTE », ET LE MOT EST LE FOND.** « Variante » désigne déjà dans ce
-## greffon la variante d'AIR LIBRE, qui est une autre CLASSE de tuile (`_dehors`). Un exemplaire est
-## la même classe, le même contexte, une autre SCULPTURE. Deux sens pour un mot, c'est peindre
-## l'inverse de ce qu'on croit sans qu'aucune erreur ne le signale (charte §6).
-##
-## ⚠ **k = 0 REND LE NOM NU, ET CE N'EST PAS UNE COMMODITÉ.** C'est ce qui fait qu'un lot à variantes
-## reste lisible MOT POUR MOT par un peintre qui n'en connaît aucune — le repli procédural, un lot
-## d'avant cette version (charte §9.4). Nommer la première « ...~0 » suffirait à faire apparaître des
-## cubes rouges partout sur des lots sains.
-static func nom_d_exemplaire(cle: String, k: int) -> String:
-	return cle if k <= 0 else cle + SUFFIXE_EXEMPLAIRE + str(k)
-
-
-## La clé (classe + contexte) que porte un nom d'exemplaire, le suffixe retiré.
-## ⚠ On n'ampute QUE si ce qui suit le `~` est un entier STRICTEMENT POSITIF : un nom de classe qui
-## contiendrait un `~` par ailleurs ne doit pas se faire couper en deux.
-static func cle_sans_exemplaire(nom: String) -> String:
-	var i: int = nom.rfind(SUFFIXE_EXEMPLAIRE)
-	if i < 0:
-		return nom
-	var queue: String = nom.substr(i + 1)
-	return nom.substr(0, i) if queue.is_valid_int() and queue.to_int() > 0 else nom
-
-
-## L'indice d'exemplaire que porte un nom — 0 s'il n'en porte pas, donc pour la tuile de nom nu.
-static func indice_d_exemplaire(nom: String) -> int:
-	var i: int = nom.rfind(SUFFIXE_EXEMPLAIRE)
-	if i < 0:
-		return 0
-	var queue: String = nom.substr(i + 1)
-	return queue.to_int() if queue.is_valid_int() and queue.to_int() > 0 else 0
+## LA PURETÉ d'un sommet : combien des 64 cases qui l'entourent (décalages −1..2) diffèrent de sa propre
+## configuration PROLONGÉE (chaque case copie la case de ses huit la plus proche). 0 = le milieu d'une
+## forme sans rien autour ; plus c'est haut, plus un voisin a laissé sa trace dans la tuile.
+## ⚠ **ELLE VIT DANS LE MODÈLE** — elle ne lit que les cases — parce que le trancheur (quel sommet livre la
+## tuile d'une clé), le témoin lié (d'où vient une tuile) et l'écran (quelle copie montrer) la lisent tous.
+static func purete(pleines: Dictionary, v: Vector3i) -> int:
+	var n := 0
+	for dx in range(-1, 3):
+		for dy in range(-1, 3):
+			for dz in range(-1, 3):
+				var proche: Vector3i = v + Vector3i(clampi(dx, 0, 1), clampi(dy, 0, 1), clampi(dz, 0, 1))
+				if pleines.has(v + Vector3i(dx, dy, dz)) != pleines.has(proche):
+					n += 1
+	return n
 
 
 ## ── LA RÈGLE DE POSE, EN UNE FONCTION PURE ────────────────────────────────────────────────────────
 ##
 ## **CE QUE LE PEINTRE POSE, POUR UNE COUCHE** : une entrée par sommet qui porte une surface —
-## {"sommet", "nom" (la classe), "cle" (la clé choisie, "" si le lot ne l'a pas), "k" (l'exemplaire),
-## "orientation" (index de GridMap), "dehors" (la variante d'air libre a été prise)}.
+## {"sommet", "nom" (la classe), "cle" (la clé choisie, "" si le lot ne l'a pas), "orientation" (index de
+## GridMap), "dehors" (la variante d'air libre a été prise)}.
 ##
 ## ⚠ **ELLE EST LA RÉFÉRENCE DU FORMAT NEUTRE (charte §4, 27 septembre 2026).** Le peintre de l'appli
 ## l'appelle, et les CAS D'ÉPREUVE que les greffons Godot, Unity et Unreal doivent reproduire à
 ## l'identique sont calculés par elle. Elle vivait dans `massif_peint.gd`, mêlée aux `GridMap` : une
 ## référence qu'on ne peut pas appeler sans grille n'en est pas une.
 ##
-## `comptes` — {clé: nombre d'exemplaires} : c'est TOUT ce qu'elle a besoin de savoir du lot.
+## `cles` — {clé: …} : les clés que le lot porte (seule la PRÉSENCE compte). C'est TOUT ce qu'elle a
+## besoin de savoir du lot.
 ## ⚠ La variante d'air libre d'abord, le nom nu ensuite (charte §9.4) ; une clé absente rend `cle = ""`,
 ## et c'est au peintre de poser son cube rouge.
-static func poses(pleines: Dictionary, comptes: Dictionary) -> Array:
+static func poses(pleines: Dictionary, cles: Dictionary) -> Array:
 	var sommets := {}
 	for c in pleines:
 		for s in sommets_de(c):
@@ -906,42 +887,20 @@ static func poses(pleines: Dictionary, comptes: Dictionary) -> Array:
 		var dehors := false
 		if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond):
 			var variante: String = nom_en_contexte(r["nom"], true)
-			if int(comptes.get(variante, 0)) > 0:
+			if cles.has(variante):
 				cle = variante
 				dehors = true
-		if cle == "" and int(comptes.get(r["nom"], 0)) > 0:
+		if cle == "" and cles.has(r["nom"]):
 			cle = r["nom"]
-		var n: int = int(comptes.get(cle, 0)) if cle != "" else 0
 		sortie.append({"sommet": sommet, "nom": r["nom"], "cle": cle,
-			"k": exemplaire_du_sommet(sommet, n) if n > 0 else 0,
 			"orientation": r["orientation"], "dehors": dehors})
 	return sortie
 
 
-## QUEL EXEMPLAIRE POSER À CE SOMMET — un tirage DÉTERMINÉ par la position, jamais aléatoire.
-##
-## ⚠ **`randi()` AURAIT ÉTÉ UN DÉFAUT, PAS UN RACCOURCI.** Le massif se reconstruit à chaque case
-## peinte, à chaque Ctrl+Z et à chaque rechargement de la scène : un tirage aléatoire redessinerait un
-## AUTRE monde à chaque reconstruction, et l'artiste ne pourrait jamais juger ce qu'il voit ni le
-## retrouver demain. La position est la seule graine qui ne bouge pas.
-##
-## ⚠ Hachage spatial de Teschner — trois grands premiers, mêlés par OU-exclusif. Multiplier sans
-## mêler (`x + y * n + z * n * n`) rendrait des exemplaires en BANDES RÉGULIÈRES, c'est-à-dire le motif
-## visible qu'on cherche précisément à casser.
-static func exemplaire_du_sommet(sommet: Vector3i, combien: int) -> int:
-	if combien <= 1:
-		return 0
-	var h: int = (sommet.x * 73856093) ^ (sommet.y * 19349663) ^ (sommet.z * 83492791)
-	return (h & 0x7fffffff) % combien
-
-
-## Le nom de CLASSE d'une tuile, suffixes retirés. ⚠ C'est par là que les contrôles existants comparent
-## ce qui est POSÉ à ce que les règles DISENT, sans être desserrés pour autant.
-## ⚠ **LES DEUX SUFFIXES, ET DANS CET ORDRE** : un nom s'écrit `<classe>[_dehors][~k]`, donc la
-## l'exemplaire se retire AVANT le contexte. Ne retirer que `_dehors` laissait les contrôles d'octants et
-## de couture chercher des bits sous « mb_x_dehors~3 », qu'aucune table ne porte.
+## Le nom de CLASSE d'une tuile, le suffixe d'air libre retiré. ⚠ C'est par là que les contrôles existants
+## comparent ce qui est POSÉ à ce que les règles DISENT, sans être desserrés pour autant.
 static func nom_nu(nom: String) -> String:
-	return cle_sans_exemplaire(nom).trim_suffix(SUFFIXE_DEHORS)
+	return nom.trim_suffix(SUFFIXE_DEHORS)
 
 
 ## Ce sommet est-il sous le ciel ? `plafond` borne le balayage vers le haut.

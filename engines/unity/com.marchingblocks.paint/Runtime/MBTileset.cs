@@ -61,18 +61,18 @@ namespace MarchingBlocks.Paint
 
             var missing = new List<string>();
             foreach (var key in set.Rule.Tiles)
-                foreach (var name in key.Value)
+            {
+                string name = key.Value;
+                if (!nodes.TryGetValue(name, out var node) || node.GetComponent<MeshFilter>() == null)
+                { missing.Add(name); continue; }
+                var r = node.GetComponent<MeshRenderer>();
+                set.Tiles[name] = new Tile
                 {
-                    if (!nodes.TryGetValue(name, out var node) || node.GetComponent<MeshFilter>() == null)
-                    { missing.Add(name); continue; }
-                    var r = node.GetComponent<MeshRenderer>();
-                    set.Tiles[name] = new Tile
-                    {
-                        Mesh = node.GetComponent<MeshFilter>().sharedMesh,
-                        Materials = r != null ? r.sharedMaterials : new Material[0],
-                        Pose = toRoot * node.localToWorldMatrix,
-                    };
-                }
+                    Mesh = node.GetComponent<MeshFilter>().sharedMesh,
+                    Materials = r != null ? r.sharedMaterials : new Material[0],
+                    Pose = toRoot * node.localToWorldMatrix,
+                };
+            }
             if (missing.Count > 0)
             {
                 error = $"{missing.Count} tile(s) listed in tileset.json are not in tiles.glb: " +
