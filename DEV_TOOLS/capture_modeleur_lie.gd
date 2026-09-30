@@ -51,6 +51,7 @@ func _derouler() -> void:
 	v._caler()
 	await _images(10)
 	_photo("modeleur_lie_1_edition")
+	_taches(_ecran._modeleur, v, "1")
 
 	var mo = _ecran._modeleur
 	# La paroi à l'air libre : l'occurrence en édition au départ ; on choisit ses faces tournées vers +Z local.
@@ -73,12 +74,37 @@ func _derouler() -> void:
 		pires = maxi(pires, dt)
 	print("G sur « %s » (%d faces, %d copies) : %.1f ms par mouvement en moyenne, %.1f au pire"
 		% [mo.cle, mo.maillage.faces.size(), mo.temoin.occurrences_de(mo.cle).size(), total / 10000.0, pires / 1000.0])
-	mo._saisie = "0.5"
+	mo._saisie = "0.1"
 	mo._axe = "y"
 	mo._mettre_a_jour()
 	mo.confirmer()
 	await _images(10)
 	_photo("modeleur_lie_2_paroi_tiree")
+	_taches(_ecran._modeleur, v, "2")
+
+	# LES COUPES SUR LES BORDS (point 3) : un loop cut à travers un bord de la paroi, puis ses sommets neufs tirés
+	# d'un quart de case — reportés et entraînés dans les autres tuiles, aucune fente ne doit s'ouvrir.
+	var anneau_bord := Vector2i(-1, -1)
+	for ar in mo.maillage.aretes():
+		for r in mo.maillage.anneau(ar):
+			var pa: Vector3 = mo.maillage.sommets[r[0]]
+			var pb: Vector3 = mo.maillage.sommets[r[1]]
+			for axe in 3:
+				if anneau_bord.x < 0 and absf(absf(pa[axe]) - 0.5) < 0.0005 and absf(pa[axe] - pb[axe]) < 0.0005:
+					anneau_bord = ar
+	mo.modal = "loop"
+	mo._anneau_vise = [anneau_bord]
+	mo._couper_la_boucle()
+	mo.souris = v.size * 0.5
+	mo.commencer("G")
+	mo._saisie = "0.1"
+	mo._axe = "z"
+	mo._mettre_a_jour()
+	mo.confirmer()
+	await _images(10)
+	_photo("modeleur_lie_3_boucle_tiree")
+	print("boucle : %d sommets neufs tirés de 0,25 en Z" % mo.sel_s.size())
+	_taches(mo, v, "3")
 
 	# LA PLANCHE DES TUILES : l'onglet ouvert, puis la paroi survolée (ses copies allumées dans la vue).
 	_ecran._regler_edition(false)
@@ -112,3 +138,56 @@ func _photo(nom: String) -> void:
 	var chemin := _dossier.path_join(nom + ".png")
 	var err := img.save_png(chemin)
 	print("%s → %s" % [nom, chemin if err == OK else "ÉCHEC %d" % err])
+
+
+func _taches(mo, v, nom: String) -> void:
+	# LES TACHES : pour chaque pixel noir enclavé, le premier triangle touché (recherche BRUTE dans le
+	# témoin assemblé) est-il vu de DOS ? Un triangle de dos est écarté au rendu : on voit le fond à travers.
+	var img := root.get_texture().get_image()
+	var assemble: ArrayMesh = mo.temoin.assemble()
+	var tris := PackedVector3Array()
+	for s in assemble.get_surface_count():
+		var ar: Array = assemble.surface_get_arrays(s)
+		for i in (ar[Mesh.ARRAY_INDEX] as PackedInt32Array):
+			tris.append((ar[Mesh.ARRAY_VERTEX] as PackedVector3Array)[i])
+	var cam: Camera3D = v._camera
+	var de_dos := 0
+	var de_face := 0
+	var rien := 0
+	var echantillons := 0
+	for y in range(0, img.get_height(), 2):
+		for x in range(0, img.get_width(), 2):
+			var c := img.get_pixel(x, y)
+			if c.r > 0.12 or c.g > 0.12 or c.b > 0.14:
+				continue
+			var entoure := true
+			for dxy in [Vector2i(-6, 0), Vector2i(6, 0), Vector2i(0, -6), Vector2i(0, 6)]:
+				var q: Vector2i = Vector2i(x, y) + dxy
+				if q.x < 0 or q.y < 0 or q.x >= img.get_width() or q.y >= img.get_height():
+					entoure = false
+					continue
+				var cq := img.get_pixel(q.x, q.y)
+				if cq.r + cq.g + cq.b < 0.8:
+					entoure = false
+			if not entoure or echantillons >= 40:
+				continue
+			echantillons += 1
+			var o: Vector3 = cam.project_ray_origin(Vector2(x, y) * (v.size / Vector2(img.get_size())))
+			var d: Vector3 = cam.project_ray_normal(Vector2(x, y) * (v.size / Vector2(img.get_size())))
+			var meilleur := INF
+			var dos := false
+			for k in range(0, tris.size(), 3):
+				var p = Geometry3D.ray_intersects_triangle(o, d, tris[k], tris[k + 1], tris[k + 2])
+				if p != null and o.distance_to(p) < meilleur:
+					meilleur = o.distance_to(p)
+					# Godot enroule en HORAIRE : la face avant a le produit vectoriel À L'OPPOSÉ de la normale.
+					dos = (tris[k + 1] - tris[k]).cross(tris[k + 2] - tris[k]).dot(d) < 0.0
+			if meilleur == INF:
+				rien += 1
+			elif dos:
+				de_dos += 1
+				var r: Dictionary = mo.temoin.rayon(o, d)
+				print("  de dos à %s ; le rayon du témoin dit %s" % [o + d * meilleur, r])
+			else:
+				de_face += 1
+	print(nom + " — taches : %d pixels sondés — premier triangle vu de DOS %d, de face %d, aucun %d" % [echantillons, de_dos, de_face, rien])

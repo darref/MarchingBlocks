@@ -585,6 +585,7 @@ var _sections_finies := false
 ## clavier (G, un axe, une valeur, Entrée). ⚠ L'ATTENDU EST HORS DE `sections.gd` : les VRAIS JOINTS du témoin
 ## (deux occurrences voisines, les sommets qui y coïncident dans le monde) doivent rester fermés.
 func _les_sections_dans_le_modeleur(ed: Control) -> void:
+	const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 	ed._aller_a("witness")
 	ed._regler_edition(true)
 	var mo: Node3D = ed._modeleur
@@ -663,6 +664,72 @@ func _les_sections_dans_le_modeleur(ed: Control) -> void:
 		if t.tuiles[c].sommets != photo[c]:
 			apres_echap += 1
 	_vrai(pendant >= 2 and apres_echap == 0, "pendant le geste %d autres tuiles suivent ; Échap les rend toutes" % pendant)
+	# POINT 3 — LES COUPES SUR LES BORDS : un loop cut dont l'anneau traverse un bord, puis un couteau parti d'une
+	# arête de bord. Chaque sommet neuf est reporté dans les tuiles qui partagent ce bord.
+	_egal(_sans_partenaire(t), 0, "avant les coupes, tout sommet de joint a son partenaire")
+	var faces_avant := {}
+	for c in t.tuiles:
+		faces_avant[c] = t.tuiles[c].faces.size()
+	var anneau_bord := Vector2i(-1, -1)
+	for ar in mo.maillage.aretes():
+		for r in mo.maillage.anneau(ar):
+			var pa: Vector3 = mo.maillage.sommets[r[0]]
+			var pb: Vector3 = mo.maillage.sommets[r[1]]
+			for axe in 3:
+				if anneau_bord.x < 0 and absf(absf(pa[axe]) - 0.5) < 0.0005 and absf(pa[axe] - pb[axe]) < 0.0005:
+					anneau_bord = ar
+	_vrai(anneau_bord.x >= 0, "la paroi a un anneau qui traverse un bord")
+	mo.modal = "loop"
+	mo._anneau_vise = [anneau_bord]
+	mo._couper_la_boucle()
+	var coupees := 0
+	for c in t.tuiles:
+		# ⚠ LES SOMMETS, PAS LES FACES : reporter un point de bord l'INSÈRE dans les faces existantes (vu : 0 compté).
+		if c != paroi and t.tuiles[c].sommets.size() != (photo[c] as PackedVector3Array).size():
+			coupees += 1
+	_vrai(coupees >= 2, "Ctrl+R sur un bord : la coupe est reportée dans %d autres tuiles" % coupees)
+	_egal(_sans_partenaire(t), 0, "après le loop cut, tout sommet de joint a son partenaire")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues_coupe := 0
+	for c in t.tuiles:
+		if t.tuiles[c].faces.size() == faces_avant[c] and t.tuiles[c].sommets == photo[c]:
+			rendues_coupe += 1
+	_egal(rendues_coupe, t.tuiles.size(), "UN Ctrl+Z défait la coupe dans toutes les tuiles")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_egal(_sans_partenaire(t), 0, "Ctrl+Y la refait, partout")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Le couteau : d'une arête de bord au milieu d'une autre arête de la même face.
+	var coup: Array = []
+	for f in mo.maillage.faces.size():
+		var face: PackedInt32Array = mo.maillage.faces[f]
+		if face.size() != 4 or not coup.is_empty():
+			continue
+		for k in 4:
+			var a := face[k]
+			var b := face[(k + 1) % 4]
+			var pa: Vector3 = mo.maillage.sommets[a]
+			var pb: Vector3 = mo.maillage.sommets[b]
+			var sur_le_bord := false
+			for axe in 3:
+				if absf(absf(pa[axe]) - 0.5) < 0.0005 and absf(pa[axe] - pb[axe]) < 0.0005:
+					sur_le_bord = true
+			if sur_le_bord and coup.is_empty():
+				var c2 := face[(k + 2) % 4]
+				var d2 := face[(k + 3) % 4]
+				coup = [{"arete": ME.arete(a, b), "t": 0.5, "point": (pa + pb) * 0.5},
+					{"arete": ME.arete(c2, d2), "t": 0.5, "point": (mo.maillage.sommets[c2] + mo.maillage.sommets[d2]) * 0.5}]
+	_vrai(not coup.is_empty(), "une face de la paroi a une arête sur un bord")
+	mo.modal = "knife"
+	mo._couteau = coup
+	mo._finir_le_couteau()
+	var coupees_k := 0
+	for c in t.tuiles:
+		# ⚠ LES SOMMETS, PAS LES FACES : reporter un point de bord l'INSÈRE dans les faces existantes (vu : 0 compté).
+		if c != paroi and t.tuiles[c].sommets.size() != (photo[c] as PackedVector3Array).size():
+			coupees_k += 1
+	_vrai(coupees_k >= 2 and _sans_partenaire(t) == 0,
+		"K parti d'un bord : la coupe est reportée dans %d autres tuiles, tout joint a son partenaire" % coupees_k)
+	ed._unhandled_key_input(_cle(KEY_Z, true))
 	ed._minuterie_temoin.stop()
 	ed._regler_edition(false)
 	_sections_finies = true
@@ -702,6 +769,35 @@ func _paires_des_joints(t: RefCounted) -> Array:
 				if index_b.has(k):
 					paires.append([oa["cle"], i, oa["pose"], ob["cle"], index_b[k], ob["pose"]])
 	return paires
+
+
+## Les sommets posés sur le plan d'un joint du témoin qui n'ont PAS de partenaire exact dans la tuile d'en face
+## (écrit hors de `sections.gd`, comme dans `test_sections`).
+func _sans_partenaire(t: RefCounted) -> int:
+	var occ := {}
+	for o in t.occurrences:
+		occ[o["sommet"]] = o
+	var n := 0
+	for s in occ:
+		var oa: Dictionary = occ[s]
+		for axe in 3:
+			for sens in [-1, 1]:
+				var e := Vector3i.ZERO
+				e[axe] = sens
+				if not occ.has(s + e):
+					continue
+				var ob: Dictionary = occ[s + e]
+				var tb: RefCounted = t.tuiles[ob["cle"]]
+				var index_b := {}
+				for j in tb.sommets.size():
+					index_b[Vector3i(((ob["pose"] as Transform3D) * tb.sommets[j] * 10000.0).round())] = true
+				var ta: RefCounted = t.tuiles[oa["cle"]]
+				var plan: float = float(s[axe]) + 1.0 + 0.5 * sens
+				for i in ta.sommets.size():
+					var pw: Vector3 = (oa["pose"] as Transform3D) * ta.sommets[i]
+					if absf(pw[axe] - plan) <= 0.0005 and not index_b.has(Vector3i((pw * 10000.0).round())):
+						n += 1
+	return n
 
 
 func _joints_ouverts(t: RefCounted, paires: Array) -> int:

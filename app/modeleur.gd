@@ -971,6 +971,35 @@ func _contraindre_et_propager() -> void:
 		_rafraichir_tuile(c)
 
 
+## LA COMPLÉTION APRÈS UNE COUPE (point 3) : un sommet neuf posé sur un bord est reporté sur chaque face de sa
+## classe, dans toutes les tuiles (`Sections.completer`). Rend vrai quand d'autres tuiles ont été coupées — le
+## geste est alors émis ici, en UN lot (une annulation pour toutes).
+## ⚠ Seuls le loop cut et le couteau passent ici (Jordan, 30 septembre 2026). Extruder, inset, biseau,
+## subdiviser sur un bord n'y passent PAS encore : leurs sommets neufs restent sans correspondants.
+func _completer_apres(avant_actif: RefCounted, nom: String) -> bool:
+	if sections == null:
+		return false
+	var copies := {}
+	var r: Dictionary = sections.completer(func(c: String) -> void:
+		if c != cle:
+			copies[c] = temoin.tuiles[c].copie())
+	if int(r["echecs"]) > 0:
+		dit.emit("[color=#e0603c]%d border point(s) could not be carried to a matching tile[/color] — "
+			% int(r["echecs"]) + "that border does not run there.")
+	if copies.is_empty():
+		return false
+	var avant := TL.Lot.new()
+	var apres := TL.Lot.new()
+	avant.tuiles[cle] = avant_actif
+	apres.tuiles[cle] = maillage.copie()
+	for c in copies:
+		avant.tuiles[c] = copies[c]
+		apres.tuiles[c] = temoin.tuiles[c].copie()
+		_rafraichir_tuile(c)
+	change.emit(avant, apres, nom)
+	return true
+
+
 ## Un geste qui a touché d'autres tuiles : UNE annulation pour toutes (un `TL.Lot` avant, un après).
 func _emettre_le_lot(avant_actif: RefCounted, nom: String) -> void:
 	var avant := TL.Lot.new()
@@ -1106,7 +1135,8 @@ func _couper_la_boucle() -> void:
 	_vider_selection()
 	for i in neufs:
 		sel_s[i] = true
-	_emettre(avant, "Loop cut")
+	if not _completer_apres(avant, "Loop cut"):
+		_emettre(avant, "Loop cut")
 	redessiner()
 	dit.emit("[b]Loop cut[/b] — %d new vertices, selected: G to slide them. [i]Ctrl+Z undoes it.[/i]" % neufs.size())
 
@@ -1180,7 +1210,8 @@ func _finir_le_couteau() -> void:
 		dit.emit("[color=#e0603c]Nothing cut[/color] — each step of the knife must stay on ONE face. "
 			+ "[i]Place the points again, face by face.[/i]")
 		return
-	_emettre(avant, "Knife")
+	if not _completer_apres(avant, "Knife"):
+		_emettre(avant, "Knife")
 	redessiner()
 	dit.emit("[b]Knife[/b] done. [i]Ctrl+Z undoes it.[/i]")
 

@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_les_correspondants(t, paires)
 	_la_projection(t)
 	_la_propagation_garde_les_joints(t, paires)
+	_la_completion(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -198,6 +199,141 @@ func _la_propagation_garde_les_joints(t0: RefCounted, paires: Array) -> void:
 	var d2: Vector3 = s2.projeter(e2["cle"], e2["i"], Vector3(0.05, 0.05, 0.05))
 	s2.deplacer({e2["cle"]: {e2["i"]: d2}})
 	_dire(_ouvertes(t2, paires) > 0, "contrôle : sans propagation, le même déplacement ouvre %d joint(s)" % _ouvertes(t2, paires))
+
+
+## LA COMPLÉTION (point 3) : une coupe qui pose un sommet sur un bord doit le poser sur chaque face de sa
+## classe. L'autorité est la même : les VRAIS JOINTS — tout sommet posé sur le plan d'un joint doit y trouver un
+## partenaire dans la tuile d'en face (`_sans_partenaire`, calculé sans `sections.gd`).
+func _la_completion(t0: RefCounted) -> void:
+	var s0 = Sections.new(t0)
+	_dire(s0.absences() == 0 and _sans_partenaire(t0) == 0, "le témoin calculé est complet : aucune absence, aucun sommet de joint sans partenaire")
+	var r0: Dictionary = s0.completer()
+	_dire(r0["coupes"] == 0 and r0["echecs"] == 0, "sur un témoin complet, la complétion ne fait rien (%s)" % [r0])
+	# Une coupe simulée : un sommet neuf au milieu d'une arête de bord — d'abord de la paroi, puis d'une classe
+	# SYMÉTRIQUE (son orbite doit suivre).
+	for cas in ["paroi", "symetrique"]:
+		var t: RefCounted = t0.copie()
+		var s = Sections.new(t)
+		var e := _arete_de_bord(s, t, cas)
+		_dire(not e.is_empty(), "une arête de bord à couper existe (%s)" % cas)
+		if e.is_empty():
+			continue
+		var m: RefCounted = t.tuiles[e["cle"]]
+		var milieu: Vector3 = (m.sommets[e["a"]] + m.sommets[e["b"]]) * 0.5
+		m._inserer_sur_arete(Vector2i(mini(e["a"], e["b"]), maxi(e["a"], e["b"])), milieu)
+		var ouverts: int = _sans_partenaire(t)
+		_dire(ouverts > 0 and s.absences() > 0, "contrôle (%s) : la coupe seule laisse %d sommet(s) de joint sans partenaire" % [cas, ouverts])
+		var sauvees: Array = []
+		var r: Dictionary = s.completer(func(c): sauvees.append(c))
+		_dire(r["echecs"] == 0 and r["coupes"] > 0 and (r["touchees"] as Array).size() > 1,
+			"complétée (%s) : %d coupe(s) reportée(s) dans %d tuiles, 0 échec" % [cas, r["coupes"], (r["touchees"] as Array).size()])
+		_dire(sauvees.size() == (r["touchees"] as Array).size(), "chaque tuile touchée est sauvée UNE fois, avant sa modification")
+		_dire(s.absences() == 0 and _sans_partenaire(t) == 0,
+			"et tout sommet de joint retrouve son partenaire (%d sans, %d absences)" % [_sans_partenaire(t), s.absences()])
+		# Le sommet neuf est désormais PARTAGÉ : le déplacer ne rouvre rien — et ne REPLIE aucune face.
+		# ⚠ VU À L'IMAGE (capture_modeleur_lie) : un point reporté seulement INSÉRÉ dans le contour d'une face en
+		# fait un pentagone qui, tiré, devient gauche ou concave ; sa triangulation se replie et ouvre des trous.
+		s.indexer()
+		var neuf: int = m.sommets.size() - 1
+		var d: Vector3 = s.projeter(e["cle"], neuf, Vector3(0.16, 0.2, -0.12))
+		s.deplacer(s.propager(e["cle"], {neuf: d}))
+		_dire(d.length() > 0.0 and _sans_partenaire(t) == 0, "le sommet neuf, déplacé et propagé, ne rouvre aucun joint (%s)" % cas)
+		_dire(_retournes(t) == 0, "et aucune face ne se replie : %d triangle(s) retourné(s) (%s)" % [_retournes(t), cas])
+	# Un VRAI loop cut du maillage éditable, dont l'anneau traverse un bord.
+	var t3: RefCounted = t0.copie()
+	var s3 = Sections.new(t3)
+	var fait := false
+	for cle in t3.tuiles:
+		if fait:
+			break
+		var m3: RefCounted = t3.tuiles[cle]
+		for ar in m3.aretes():
+			var anneau: Array = m3.anneau(ar)
+			var traverse := false
+			for r in anneau:
+				var pa: Vector3 = m3.sommets[r[0]]
+				var pb: Vector3 = m3.sommets[r[1]]
+				for axe in 3:
+					if absf(absf(pa[axe]) - 0.5) < 0.0005 and absf(pa[axe] - pb[axe]) < 0.0005:
+						traverse = true
+			if traverse and not anneau.is_empty():
+				m3.couper_en_boucle(ar, 0.5)
+				fait = true
+				break
+	_dire(fait, "un anneau qui traverse un bord existe, et il est coupé")
+	var r3: Dictionary = s3.completer()
+	_dire(r3["echecs"] == 0 and _sans_partenaire(t3) == 0 and s3.absences() == 0,
+		"un vrai loop cut sur un bord, complété : %d coupe(s) reportée(s), tout joint a son partenaire" % r3["coupes"])
+
+
+## Les triangles dont la normale s'oppose à celle de leur face (Newell) : une face repliée, donc un trou.
+func _retournes(t: RefCounted) -> int:
+	var n := 0
+	for cle in t.tuiles:
+		var m: RefCounted = t.tuiles[cle]
+		for f in m.faces.size():
+			var face: PackedInt32Array = m.faces[f]
+			if face.size() <= 3:
+				continue
+			var nrm: Vector3 = m.normale(f)
+			for tri in m.trianguler(f):
+				var a: Vector3 = m.sommets[face[tri[0]]]
+				var b: Vector3 = m.sommets[face[tri[1]]]
+				var c: Vector3 = m.sommets[face[tri[2]]]
+				if (b - a).cross(c - a).dot(nrm) < -1e-9:
+					n += 1
+	return n
+
+
+## Une arête de bord (ses deux bouts sur le même plan) dans la paroi, ou dans une tuile d'une classe symétrique.
+func _arete_de_bord(s, t: RefCounted, cas: String) -> Dictionary:
+	var groupes: Array = Sections.classes()["groupes"]
+	for cle in t.tuiles:
+		if cas == "paroi" and cle != "mb_plaque_b2h2_dehors":
+			continue
+		var m: RefCounted = t.tuiles[cle]
+		for face in m.faces:
+			for k in (face as PackedInt32Array).size():
+				var a: int = face[k]
+				var b: int = face[(k + 1) % (face as PackedInt32Array).size()]
+				if not (s.est_de_bord(cle, a) and s.est_de_bord(cle, b)):
+					continue
+				for fa in s.bords[cle][a]:
+					for fb in s.bords[cle][b]:
+						if fa["noeud"] != fb["noeud"] or (m.sommets[a] as Vector3).distance_to(m.sommets[b]) < 0.05:
+							continue
+						if cas == "symetrique" and (groupes[fa["classe"]] as Array).size() < 2:
+							continue
+						return {"cle": cle, "a": a, "b": b}
+	return {}
+
+
+## Les sommets posés sur le plan d'un joint du témoin qui n'ont PAS de partenaire exact dans la tuile d'en face.
+func _sans_partenaire(t: RefCounted) -> int:
+	var occ := {}
+	for o in t.occurrences:
+		occ[o["sommet"]] = o
+	var n := 0
+	for s in occ:
+		var oa: Dictionary = occ[s]
+		for axe in 3:
+			for sens in [-1, 1]:
+				var e := Vector3i.ZERO
+				e[axe] = sens
+				if not occ.has(s + e):
+					continue
+				var ob: Dictionary = occ[s + e]
+				var tb: RefCounted = t.tuiles[ob["cle"]]
+				var index_b := {}
+				for j in tb.sommets.size():
+					index_b[Vector3i(((ob["pose"] as Transform3D) * tb.sommets[j] * 10000.0).round())] = true
+				var ta: RefCounted = t.tuiles[oa["cle"]]
+				var plan: float = float(s[axe]) + 1.0 + 0.5 * sens
+				for i in ta.sommets.size():
+					var pw: Vector3 = (oa["pose"] as Transform3D) * ta.sommets[i]
+					if absf(pw[axe] - plan) <= 0.0005 and not index_b.has(Vector3i((pw * 10000.0).round())):
+						n += 1
+	return n
 
 
 func _ouvertes(t: RefCounted, paires: Array) -> int:

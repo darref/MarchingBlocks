@@ -172,8 +172,115 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 			# ⚠ LES CARTES DU SOMMET SONT CALCULÉES ICI, UNE FOIS : la propagation les appliquait en les
 			# recomposant à chaque visite — 86 ms pour 328 sommets, un G qui suivait la souris à 10 images/s.
 			var vc: Array = compose(g, _carte_de[n])
-			sortie.append({"noeud": n, "classe": k, "canon": canon, "g": g, "axe": axe, "vc": vc, "rt": inverse(vc)})
+			sortie.append({"noeud": n, "classe": k, "canon": canon, "g": g, "axe": axe, "vc": vc, "rt": inverse(vc),
+				"q": q})
 	return sortie
+
+
+## ── LA COMPLÉTION (point 3) : une coupe qui ajoute un sommet sur un bord l'ajoute PARTOUT ─────────────
+##
+## Après une coupe (loop cut, couteau…) sur une tuile, sa section peut porter un point que les autres faces de
+## sa classe n'ont pas. La règle est générale, et c'est pourquoi elle ne suit aucun outil en particulier :
+## **dans une classe, toute face porte TOUS les points de la classe, et toute leur ORBITE sous son groupe de
+## symétries.** Un point absent d'une face est posé en FENDANT l'arête de bord de cette face qui le contient.
+## ⚠ IDEMPOTENTE : sur un témoin complet, elle ne fait rien. Un point qui ne tombe sur aucune arête (la section
+## de cette face ne passe pas par là) est un ÉCHEC compté, jamais inventé.
+## `sauver` est appelé UNE fois par tuile, AVANT sa première modification (l'annulation en garde la copie).
+## Rend {"touchees": [clés], "coupes": n, "echecs": n}.
+func completer(sauver := Callable()) -> Dictionary:
+	indexer()
+	var racines := {}   # nœud → {point racine (Vector2i): true}
+	for cle in bords:
+		for i in bords[cle]:
+			for f in bords[cle][i]:
+				if not racines.has(f["noeud"]):
+					racines[f["noeud"]] = {}
+				racines[f["noeud"]][f["q"]] = true
+	var touchees := {}
+	var coupes := 0
+	var echecs := 0
+	for k in points.size():
+		var orbite := {}
+		for canon in points[k]:
+			for h in _groupes[k]:
+				orbite[appliquer_i(h, canon)] = true
+		for n in _noeuds_de_classe[k]:
+			var p: PackedStringArray = String(n).split("|")
+			var cle: String = p[0]
+			if not temoin.tuiles.has(cle):
+				continue
+			var axe := int(p[1])
+			var signe := int(p[2])
+			var presents: Dictionary = racines.get(n, {})
+			for r in orbite:
+				if presents.has(r):
+					continue
+				var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
+				var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
+				q3[axe] = 0.5 * signe
+				var e: Vector2i = _arete_de_bord_qui_contient(temoin.tuiles[cle], axe, signe, q3)
+				if e.x < 0:
+					echecs += 1
+					continue
+				if not touchees.has(cle):
+					touchees[cle] = true
+					if sauver.is_valid():
+						sauver.call(cle)
+				if temoin.tuiles[cle]._inserer_sur_arete(e, q3) >= 0:
+					coupes += 1
+					presents[r] = true
+				else:
+					echecs += 1
+	indexer()
+	return {"touchees": touchees.keys(), "coupes": coupes, "echecs": echecs}
+
+
+## Une arête dont les deux bouts sont sur le plan (axe, signe) et qui contient `p` STRICTEMENT entre eux.
+func _arete_de_bord_qui_contient(m: RefCounted, axe: int, signe: int, p: Vector3) -> Vector2i:
+	var plan := 0.5 * signe
+	for face in m.faces:
+		for k in (face as PackedInt32Array).size():
+			var a: int = face[k]
+			var b: int = face[(k + 1) % (face as PackedInt32Array).size()]
+			var pa: Vector3 = m.sommets[a]
+			var pb: Vector3 = m.sommets[b]
+			if absf(pa[axe] - plan) >= EPS or absf(pb[axe] - plan) >= EPS:
+				continue
+			var ab := pb - pa
+			var l2 := ab.length_squared()
+			if l2 < 1e-12:
+				continue
+			var t := (p - pa).dot(ab) / l2
+			if t <= 1e-4 or t >= 1.0 - 1e-4:
+				continue
+			if (pa + ab * t).distance_to(p) < 1e-4:
+				return Vector2i(mini(a, b), maxi(a, b))
+	return Vector2i(-1, -1)
+
+
+## Combien de points manquent aux faces de leur classe (orbite comprise) — 0 sur un témoin complet.
+func absences() -> int:
+	indexer()
+	var racines := {}
+	for cle in bords:
+		for i in bords[cle]:
+			for f in bords[cle][i]:
+				if not racines.has(f["noeud"]):
+					racines[f["noeud"]] = {}
+				racines[f["noeud"]][f["q"]] = true
+	var n_abs := 0
+	for k in points.size():
+		var orbite := {}
+		for canon in points[k]:
+			for h in _groupes[k]:
+				orbite[appliquer_i(h, canon)] = true
+		for n in _noeuds_de_classe[k]:
+			if not temoin.tuiles.has(String(n).split("|")[0]):
+				continue
+			for r in orbite:
+				if not (racines.get(n, {}) as Dictionary).has(r):
+					n_abs += 1
+	return n_abs
 
 
 ## Le sommet `i` de la tuile `cle` est-il un sommet de bord (posé sur une face qui a une classe) ?

@@ -449,7 +449,7 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
     STABILISATEUR quand une symétrie fixe le point), `propager` (de proche en proche : un sommet d'arête
     passe d'une classe à l'autre ; les composantes reçues par ses deux faces se FUSIONNENT), `deplacer`
     (depuis les positions de départ, jamais cumulé), `photo`.
-  - **MESURÉ** (`DEV_TOOLS/test_sections.gd`, 12) — attendus hors de `sections.gd` : les chiffres de la sonde
+  - **MESURÉ** (`DEV_TOOLS/test_sections.gd`, 12 au point 1) — attendus hors de `sections.gd` : les chiffres de la sonde
     (246 nœuds, 10 classes de tailles [12 … 32], 8 + 2 symétriques) ; et les **VRAIS JOINTS du témoin** : deux
     occurrences voisines posées dans le monde, **10 384 paires** de sommets qui y coïncident, chacune
     retrouvée parmi les correspondants ; 984 sommets de bord (738 sur une face, 246 sur une arête) restent
@@ -474,9 +474,9 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
     : les cartes étaient recomposées à chaque visite, et chaque sommet atteint relisait toute la liste de son
     point (une trentaine de membres). Cartes précalculées à l'indexation, point canonique traité UNE fois :
     **2,6 ms** — et **9,1 ms par mouvement** mesurés dans l'appli avec fenêtre (tirer les faces de la paroi).
-  - **Vu à l'image** (`capture_modeleur_lie.gd`, les faces avant et arrière de la paroi tirées d'une demi-case) :
+  - **Vu à l'image** (`capture_modeleur_lie.gd`, les faces avant et arrière de la paroi tirées — d'une demi-case alors, 0,1 depuis le point 3) :
     plus AUCUNE fente aux joints, là où la même capture en ouvrait une à chacun avant ce point.
-  - Gardé par `fumee_appli` (203, +10 : un sommet de bord de la paroi mené au CLAVIER — G, un axe, 0.1,
+  - Gardé par `fumee_appli` (203 au point 2, +10 : un sommet de bord de la paroi mené au CLAVIER — G, un axe, 0.1,
     Entrée). ⚠ **L'attendu est hors de `sections.gd`** : les VRAIS joints du témoin restent fermés ; 23 autres
     tuiles suivent ; le long de la normale le sommet ne bouge pas ; un Ctrl+Z rend les 52 tuiles, Ctrl+Y le
     refait ; Échap rend tout. **Cinq mutations rouges** (sans contrainte ni propagation, sans projection, les
@@ -484,7 +484,38 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
     édition) — et les six du cœur rejouées après l'optimisation, plus une nouvelle (traiter un point pour
     toute la classe), toutes rouges.
   - ⚠ **PAS TENU EN MAIN.**
-- **À ÉCRIRE** : les coupes (point 3).
+- **POINT 3, ÉCRIT — LES COUPES SUR LES BORDS** (`Sections.completer`, appelée par le modeleur après un **loop
+  cut** et un **couteau**). Une coupe qui pose un sommet sur un bord laisse, dans chaque autre face de sa classe,
+  un point absent : la complétion prend l'ORBITE de chaque point canonique (le groupe de symétries de la classe),
+  et pour chaque nœud qui ne l'a pas, le ramène dans le repère de la tuile (l'INVERSE de sa carte), trouve
+  l'arête de bord qui le contient et l'y insère. Chaque tuile coupée est sauvée AVANT d'être touchée : la
+  coupe et ses reports font UN `TL.Lot`, un Ctrl+Z. Un point sans arête qui le porte est un ÉCHEC compté et
+  DIT à l'écran, jamais inventé.
+  - **MESURÉ** (`test_sections`, 30) — attendu hors de `sections.gd` : les VRAIS joints du témoin (tout sommet
+    de joint retrouve son partenaire dans le monde). Témoin complet : la complétion ne fait rien. Une coupe
+    simulée sur la paroi laisse **244** sommets de joint sans partenaire (contrôle), complétée : **29 coupes dans
+    24 tuiles, 0 échec, 0 sans partenaire** ; dans une classe SYMÉTRIQUE : 31 → 0, 47 coupes dans 14 tuiles ;
+    le sommet neuf, déplacé puis propagé, ne rouvre aucun joint ; un vrai loop cut à travers un bord : 57 coupes
+    reportées. Dans l'appli (`fumee_appli` 211) : Ctrl+R et K sur un bord de la paroi reportés dans les autres
+    tuiles, joints appariés, UN Ctrl+Z défait la coupe dans les 52 tuiles, Ctrl+Y la refait.
+  - **Mutations rouges** : orbite oubliée (seuls les points canoniques), carte au lieu de son inverse, le
+    modeleur qui ne complète pas, les tuiles coupées non sauvées, et l'instrument lui-même (absences toujours
+    nulles : les contrôles rougissent).
+  - ⚠ **PAS COUVERTS** : E, I, Ctrl+B et la subdivision SUR un bord (ils posent des sommets de bord neufs sans
+    les reporter) — `verifier_sections` le dira au tranchage. Un sommet inséré dans une face à plus de quatre
+    côtés la laisse pentagone, sans la fendre.
+  - **Vu à l'image** (`capture_modeleur_lie.gd`) : paroi tirée, loop cut à travers un bord, boucle tirée — pas
+    une fente. La capture compte désormais les pixels sombres enclavés dont le premier triangle est vu de DOS.
+  - ⚠ **CE COMPTEUR A TROUVÉ UNE LIMITE, PAS UN DÉFAUT** : avec la paroi tirée d'une DEMI-case et la boucle d'un
+    quart, des faces d'AUTRES tuiles se REPLIENT (normale nulle) et le fond passe au travers. Le déplacement
+    propagé est juste — c'est le même vecteur dans la section partagée —, mais une tuile voisine n'a pas la
+    place : dans `mb_equerre_b2h1_a`, le point reporté au milieu d'une arête de 0,25, poussé de 0,25, dépasse
+    son bout. Avec des tirages dans la marge (0,1), zéro tache.
+  - **OUVERT — À TRANCHER PAR JORDAN** : quand un geste replie une face dans une tuile qu'on n'édite pas, faut-il
+    (a) BRIDER le geste à la plus grande amplitude sans repli dans aucune copie, (b) le laisser faire et le
+    DIRE (« N faces repliées dans K tuiles »), ou (c) rien, comme Blender qui laisse replier sa propre tuile ?
+    Aujourd'hui : (c).
+  - ⚠ **PAS TENU EN MAIN.**
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
@@ -1550,14 +1581,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 350 vérifications, 0 échec** (30 septembre 2026, relevées après le modeleur des sections partagées),
+  Seize suites, **8 376 vérifications, 0 échec** (30 septembre 2026, relevées après les coupes des sections partagées),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
-  `test_outils` 57, `fumee_appli` 203, `test_greffon_peinture` 179, `test_faux_artiste` 36,
-  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 12.
+  `test_outils` 57, `fumee_appli` 211, `test_greffon_peinture` 179, `test_faux_artiste` 36,
+  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 30.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
