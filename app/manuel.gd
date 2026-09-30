@@ -162,7 +162,7 @@ func _demarrer() -> String:
 	l.append("Then paint: [b]left click[/b] applies the tool, [b]right click[/b] does the opposite. "
 		+ "Every stroke is undone by one " + _touche("Ctrl+Z") + ".")
 	l.append(_titre("3. Bring your own art"))
-	l.append("[b]Export the witness…[/b] writes one .obj for Blender. Sculpt it, export it as .glb, then "
+	l.append("[b]Export the witness…[/b] writes one .glb for Blender, every tile a linked copy. Sculpt it, export it as .glb, then "
 		+ "[b]Import the work…[/b] to see it as the slicer will read it, and [b]Slice the work[/b] to "
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
 	l.append("Then open [b]Play test[/b] and walk it: " + _touche("Z Q S D") + " to move, "
@@ -226,8 +226,8 @@ func _outils() -> String:
 	l.append("[b]Extend up / down[/b], [b]Widen[/b], [b]Hollow[/b], [b]Extend facing[/b] act on the "
 		+ "selection if there is one, otherwise on the whole floor y.")
 	l.append("[b]Extend facing[/b] extends away from the matter: it picks the direction most cells face "
-		+ "(air in front, matter behind) and copies them one cell that way. Select a wall to thicken "
-		+ "it, a cave ceiling to lower it.")
+		+ "(air in front, matter behind) and copies them one cell that way. The selection follows, so "
+		+ "click again to keep going. Select a wall to thicken it, a cave ceiling to lower it.")
 	return "\n".join(l)
 
 
@@ -260,6 +260,16 @@ func _modeleur() -> String:
 	l.append("[i]The Witness workspace is a modeller: you can shape the witness here, with Blender's "
 		+ "gestures and shortcuts, instead of sending it away. What you model is saved next to the project "
 		+ "and joins the works of step 2 (Project), where you slice it.[/i]")
+	l.append(_titre("One tile per class, linked copies"))
+	l.append("The witness is made of the [b]52 tiles[/b] a world uses, and every place it shows a tile is a "
+		+ "[b]linked copy[/b] of it. Click any copy: you edit [b]that tile[/b], and every copy follows as you "
+		+ "move the mouse — what you see is exactly what a painted world will show, joints included. Clicking a "
+		+ "copy of another tile switches to that tile (the selection belongs to a tile). Axes stay the "
+		+ "world's: " + _touche("G") + " " + _touche("Z") + " moves up, whichever way the copy is turned.")
+	l.append("[b]The tiles[/b] tab of the strip above the view shows all of them: a photo of each tile in its "
+		+ "cell (the ghost cubes are the full half-cells around the corner), open air or under rock, what it "
+		+ "does in a world and how many copies the witness shows. Hover a tile to light up its copies; click "
+		+ "it to go to the clearest one — in edit mode, it becomes the tile you edit.")
 	l.append(_titre("Editing  " + _touche("Tab")))
 	l.append(_touche("Tab") + " enters and leaves edit mode. " + _touche("1") + " " + _touche("2") + " "
 		+ _touche("3") + " select vertices, edges or faces. A click selects what you [b]see[/b]; "
@@ -298,20 +308,22 @@ func _modeleur() -> String:
 func _aller_retour() -> String:
 	var l := PackedStringArray()
 	l.append(_titre("What the artist receives"))
-	l.append("[b]One .obj[/b] (and its .mtl): the whole witness, at the origin, tiles already shrunk to "
-		+ "half their cell to show the margin. [b]Fully welded[/b] — one vertex per position, the six "
-		+ "families as six named materials — and flat-shaded in Blender. " + _touche("Alt+J")
-		+ " (Tris to Quads) brings back the edge loops.")
+	l.append("[b]One .glb[/b]: the whole witness at the origin, built from the tiles the world will use — "
+		+ "[b]one tile per class[/b], and every place the witness uses it is a [b]linked copy[/b] of it "
+		+ "(Blender's linked duplicates: all the copies share one mesh). Sculpt any copy and every copy "
+		+ "follows, live. What the witness shows is exactly what a painted world will show, joints "
+		+ "included. Tiles are already shrunk to half their cell to show the margin, the six families "
+		+ "are six named materials, and the UVs are canonical: paint one copy, you painted the tile.")
 	l.append("[b]Bring it back as .glb[/b] (File → Export → glTF 2.0): it carries your textures, UVs "
-		+ "and materials. An .obj is accepted too. Moving or rotating the OBJECT is fine — what counts "
-		+ "is where the block sits in the viewport.")
-	l.append(_note("Why an .obj on the way out: in glTF every material is a separate primitive, and "
-		+ "Blender shares no vertex between primitives — the witness would arrive cut along every "
-		+ "colour border. OBJ faces share one vertex list, whatever their material."))
+		+ "and materials. It is read tile by tile — nothing is sliced — so relief that spills onto a "
+		+ "neighbouring tile stays with the tile you sculpted it on.")
+	l.append(_note("Import it with « Merge Vertices » ticked: in glTF every material is a separate "
+		+ "primitive, so inside a tile the colour borders arrive cut. The copies stay linked either way."))
 	l.append(_titre("The contract"))
-	l.append("[b]Total freedom inside each cell.[/b] Relief may spill half a cell around the block.")
-	l.append("[b]Do not move the block[/b]: its position identifies it when it comes back, not its name. "
-		+ "(Blender's own axis conversion is taken into account: the block is read where you see it.)")
+	l.append("[b]Total freedom inside each cell.[/b] Relief may spill half a cell into the neighbours.")
+	l.append("[b]Do not move, rotate or Join the objects[/b]: each tile is identified by its position "
+		+ "when it comes back, not its name. A copy sculpted on its own, moved or rotated no longer "
+		+ "agrees with its siblings: the report names it, and the most common version is kept.")
 	l.append("[b]Do not change which cells are full[/b]: the filling fixes the tile classes.")
 	l.append("[b]The seams are the artist's responsibility.[/b] The slicer cuts straight through the "
 		+ "cell centres and judges nothing else — the report lists the seam remarks.")

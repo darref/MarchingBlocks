@@ -199,8 +199,8 @@ const BLOCS := [
 				"#######.....",
 				"#....##.#...",
 				"#.#..##.####",
-				"#....##..###",
-				"#...##...###",
+				"###..##..###",
+				"##..##...###",
 				"#........###",
 				"#....#...###",
 				"#..###...#..",
@@ -214,7 +214,7 @@ const BLOCS := [
 				"#....##.####",
 				"#.#..##.####",
 				"#....#...###",
-				"#........###",
+				"##.......###",
 				"#..#.....###",
 				"#....#######",
 				"#..#######..",
@@ -253,7 +253,7 @@ const BLOCS := [
 				"............",
 				".###........",
 				".#..........",
-				".#..........",
+				".#....#.....",
 				"............",
 				"............",
 				".........#..",
@@ -1344,6 +1344,377 @@ static func exporter_le_bloc(chemin: String) -> String:
 	return ""
 
 
+## ── LE TÉMOIN LIÉ — une tuile par clé, en copies liées (Jordan, 30 septembre 2026) ─────────────────
+##
+## Le témoin devient le MONDE PEINT DE SA PROPRE FORME : chaque sommet à surface (bords compris) porte
+## une OCCURRENCE de la tuile de sa clé, et toutes les occurrences d'une clé partagent UN maillage. Dans
+## Blender ce sont des copies liées (mesuré, charte §3) : on en sculpte une, toutes suivent.
+##
+## ⚠ **IL SE RELIT TUILE PAR TUILE, SANS TRANCHER.** Assembler les occurrences pour retrancher le tout
+## couperait un relief qui déborde d'une tuile sur sa voisine et l'attribuerait à la voisine : ses copies
+## ne seraient plus identiques, et le monde ne montrerait plus ce que montre le témoin — la promesse même
+## des copies liées. Le tranchage reste pour un travail NON lié (tout joint en un objet).
+## ⚠ **LA CLÉ D'UN NŒUD SE DÉDUIT DE SA POSITION, JAMAIS DE SON NOM** (§4) : le nœud est posé au centre de
+## son sommet, tourné comme le peintre tourne la tuile. Les noms sont là pour l'artiste.
+
+
+## Les occurrences du témoin `i` : [{sommet, cle, orientation}], dans l'ordre des sommets (x, y, z).
+## ⚠ TOUS les sommets à surface, ceux du bord compris : le témoin lié les montre, et un joint de bord
+## prouve un raccord comme un autre (`Tranchage.raccords_du_temoin` les compte aussi).
+static func occurrences_du_temoin(i := 0) -> Array:
+	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
+	var pleines: Dictionary = cases(i)
+	var plafond: int = MB.plafond_de(pleines)
+	var vus := {}
+	for c in pleines:
+		for s in MB.sommets_de(c):
+			vus[s] = true
+	var sommets: Array = vus.keys()
+	sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+	var sortie: Array = []
+	for s in sommets:
+		var r: Dictionary = Tranchage.cle_du_sommet(pleines, s, plafond)
+		if not r.is_empty():
+			sortie.append({"sommet": s, "cle": r["cle"], "orientation": r["orientation"]})
+	return sortie
+
+
+## LA PURETÉ d'un sommet : combien des 64 cases qui l'entourent (décalages −1..2) diffèrent de sa propre
+## configuration PROLONGÉE (chaque case copie la case de ses huit la plus proche). 0 = le milieu d'une
+## forme sans rien autour ; plus c'est haut, plus un voisin a laissé sa trace dans la tuile.
+static func purete(pleines: Dictionary, v: Vector3i) -> int:
+	var n := 0
+	for dx in range(-1, 3):
+		for dy in range(-1, 3):
+			for dz in range(-1, 3):
+				var proche: Vector3i = v + Vector3i(clampi(dx, 0, 1), clampi(dy, 0, 1), clampi(dz, 0, 1))
+				if pleines.has(v + Vector3i(dx, dy, dz)) != pleines.has(proche):
+					n += 1
+	return n
+
+
+## LA TUILE DE CHAQUE CLÉ dans le témoin calculé : {clé: {"mesh" (repère de référence), "sommet"}}.
+##
+## ⚠ **L'EXEMPLAIRE LE PLUS PUR, PAS LE PREMIER DU BALAYAGE.** Dans le témoin aminci, une tuile porte les
+## marches que ses VOISINS y ont taillées : l'exemplaire pris au pied d'un pilier montrerait ce pilier
+## absent à chacune de ses 244 occurrences. Mesuré le 30 septembre : aucune paroi du témoin n'est pure
+## (charte §3) — on prend donc la moins marquée, à égalité le premier du balayage.
+## ⚠ Tous les exemplaires d'une clé ont la même SECTION (`verifier_sections` : 0 remarque sur le témoin),
+## donc le choix ne touche que l'intérieur de la tuile, jamais un raccord.
+## ⚠ **LE CHOIX SE FAIT SUR LES CASES, LA DÉCOUPE PAR LE TRANCHEUR** : la pureté ne lit que l'occupation,
+## donc on sait quel sommet garder AVANT de découper, et `Tranchage.trancher(…, seuls)` ne découpe que ces
+## 52-là — ~1 s au lieu des ~15 s d'un tranchage complet, par la MÊME route (charte §6).
+## ⚠ À égalité de pureté, le premier du balayage (x, puis y, puis z), comme l'ordre des exemplaires.
+static func tuiles_du_temoin() -> Dictionary:
+	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
+	var pleines: Dictionary = cases(0)
+	var plafond: int = MB.plafond_de(pleines)
+	var choisi := {}
+	var meilleure := {}
+	for vx in COTE - 1:
+		for vy in COTE - 1:
+			for vz in COTE - 1:
+				var v := Vector3i(vx, vy, vz)
+				var r: Dictionary = Tranchage.cle_du_sommet(pleines, v, plafond)
+				if r.is_empty():
+					continue
+				var p: int = purete(pleines, v)
+				if not meilleure.has(r["cle"]) or p < int(meilleure[r["cle"]]):
+					meilleure[r["cle"]] = p
+					choisi[r["cle"]] = v
+	var seuls := {}
+	for cle in choisi:
+		seuls[choisi[cle]] = true
+	var fautes: Array = []
+	var remarques: Array = []
+	var exemplaires := {}
+	Tranchage.trancher(maillage_moitie(0), Vector3i.ONE * COTE, 1.0, creuses(0), fautes, false, remarques,
+		exemplaires, Vector3.ZERO, seuls)
+	var sortie := {}
+	for cle in exemplaires:
+		var e: Dictionary = exemplaires[cle][0]
+		sortie[cle] = {"mesh": e["mesh"], "sommet": e["sommet"], "purete": meilleure.get(cle, -1)}
+	return sortie
+
+
+## EXPORTE LE TÉMOIN LIÉ dans un `.glb`. Rend "" si tout va bien, sinon la raison.
+##
+## Une racine `MarchingBlocksWitness` à l'origine ; un enfant par occurrence, posé au centre de son
+## sommet (`v + (1,1,1)`) et tourné comme le peintre ; un maillage PARTAGÉ par clé, nommé en anglais
+## (`FormatNeutre.nom_de_tuile`), aux UV canoniques et aux six matériaux de la légende.
+## ⚠ **L'EXPORT DE GODOT NE PARTAGE RIEN** — mesuré : 1 048 maillages pour 1 048 nœuds, même quand les
+## `MeshInstance3D` portent le même `Mesh`. On relie dans le `GLTFState`, après `append_from_scene`.
+## ⚠ **COUTURES AUX BORDS DE COULEUR, DANS UNE TUILE** : en glTF un matériau est une primitive (charte §4).
+## Entre deux tuiles il n'y a de toute façon rien à souder — ce sont des objets. L'import de Blender
+## « Merge Vertices » les recoud.
+static func exporter_le_temoin_lie(chemin: String) -> String:
+	var tuiles: Dictionary = tuiles_du_temoin()
+	var atlas: Dictionary = atlas_du_temoin(0)
+	var rang := {}
+	for k in (atlas["cles"] as Array).size():
+		rang[atlas["cles"][k]] = k
+	var maillages := {}
+	for cle in tuiles:
+		maillages[cle] = _tuile_pour_l_artiste(tuiles[cle]["mesh"], int(rang.get(cle, atlas["cles"].size())),
+			int(atlas["n"]))
+	return ecrire_le_temoin_lie(chemin, maillages)
+
+
+## ÉCRIT UN TÉMOIN LIÉ : `maillages` = {clé: ArrayMesh dans le repère de référence, matériaux compris}.
+## ⚠ UNE SEULE ÉCRITURE pour l'export du témoin calculé et pour le témoin modélisé dans l'appli
+## (`TemoinLie.vers_glb`) : deux écritures finiraient par poser les nœuds différemment.
+static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> String:
+	var FormatNeutre := load("res://addons/marchingblocks_core/format_neutre.gd")
+	for cle in maillages:
+		(maillages[cle] as ArrayMesh).resource_name = FormatNeutre.nom_de_tuile(cle, 0)
+	var grille := GridMap.new()
+	var racine := Node3D.new()
+	racine.name = "MarchingBlocksWitness"
+	var cle_du_noeud := {}
+	var n := 0
+	for o in occurrences_du_temoin(0):
+		if not maillages.has(o["cle"]):
+			continue   # une clé que le témoin calculé ne livre pas : `librairie()` l'a déjà signalée
+		var mi := MeshInstance3D.new()
+		mi.mesh = maillages[o["cle"]]
+		mi.name = "%s_%d" % [maillages[o["cle"]].resource_name, n]
+		mi.transform = Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
+			Vector3(o["sommet"]) + Vector3.ONE)
+		racine.add_child(mi)
+		mi.owner = racine
+		cle_du_noeud[String(mi.name)] = o["cle"]
+		n += 1
+	grille.free()
+	var document := GLTFDocument.new()
+	var etat := GLTFState.new()
+	var err: int = document.append_from_scene(racine, etat)
+	if err != OK:
+		racine.free()
+		return "append_from_scene a rendu %d" % err
+	var anciens: Array = etat.get_meshes()
+	var nouveaux: Array[GLTFMesh] = []
+	var indice_de_cle := {}
+	for nd: GLTFNode in etat.get_nodes():
+		if nd.mesh < 0:
+			continue
+		var cle: String = cle_du_noeud.get(nd.resource_name, "")
+		if cle == "":
+			racine.free()
+			return "nœud inattendu dans l'état glTF : « %s »" % nd.resource_name
+		if not indice_de_cle.has(cle):
+			indice_de_cle[cle] = nouveaux.size()
+			var gm: GLTFMesh = anciens[nd.mesh]
+			gm.resource_name = maillages[cle].resource_name
+			gm.original_name = maillages[cle].resource_name
+			nouveaux.append(gm)
+		nd.mesh = indice_de_cle[cle]
+	etat.set_meshes(nouveaux)
+	err = document.write_to_filesystem(etat, chemin)
+	racine.free()
+	if err != OK:
+		return "write_to_filesystem a rendu %d pour « %s »" % [err, chemin]
+	return ""
+
+
+## Une tuile telle qu'elle part chez l'artiste : une surface par TEINTE de la légende (matériau nommé,
+## sans couleur de sommet — le glTF la multiplierait par celle du matériau), les UV canoniques, pas de
+## normales (ombrage plat). Un sommet par (position, UV) : deux faces d'une même teinte qui ne partagent
+## pas leur UV au coin gardent chacune le sien.
+static func _tuile_pour_l_artiste(mesh: ArrayMesh, k: int, n: int) -> ArrayMesh:
+	var paquets := {}
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var c: PackedColorArray = arrays[Mesh.ARRAY_COLOR] if arrays[Mesh.ARRAY_COLOR] != null \
+			else PackedColorArray()
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+			else PackedInt32Array(range(v.size()))
+		for t in range(0, ordre.size() - 2, 3):
+			var a: Vector3 = v[ordre[t]]
+			var b: Vector3 = v[ordre[t + 1]]
+			var d: Vector3 = v[ordre[t + 2]]
+			var teinte: Dictionary = RP.teinte_de(c[ordre[t]] if c.size() > ordre[t] else Color.WHITE)
+			var nom: String = teinte["nom"]
+			if not paquets.has(nom):
+				paquets[nom] = {"couleur": teinte["couleur"], "sommets": [], "uv": [], "indices": [],
+					"connus": {}}
+			var paquet: Dictionary = paquets[nom]
+			var uv: PackedVector2Array = _uv_de_la_piece(k, n, a, b, d)
+			var trois: Array = [a, b, d]
+			for j in 3:
+				var p: Vector3 = trois[j]
+				var cle := "%d|%d|%d|%d|%d" % [roundi(p.x * 100000.0), roundi(p.y * 100000.0),
+					roundi(p.z * 100000.0), roundi(uv[j].x * 1000000.0), roundi(uv[j].y * 1000000.0)]
+				if not paquet["connus"].has(cle):
+					paquet["connus"][cle] = paquet["sommets"].size()
+					paquet["sommets"].append(p)
+					paquet["uv"].append(uv[j])
+				paquet["indices"].append(paquet["connus"][cle])
+	var sortie := ArrayMesh.new()
+	for teinte in RP.TEINTES:
+		var nom: String = teinte["nom"]
+		if not paquets.has(nom):
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array(paquets[nom]["sommets"])
+		arrays[Mesh.ARRAY_TEX_UV] = PackedVector2Array(paquets[nom]["uv"])
+		arrays[Mesh.ARRAY_INDEX] = PackedInt32Array(paquets[nom]["indices"])
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		var matiere := StandardMaterial3D.new()
+		matiere.resource_name = nom
+		matiere.albedo_color = paquets[nom]["couleur"]
+		sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
+	return sortie
+
+
+## LE TÉMOIN LIÉ RELU : {} si le fichier n'en est pas un (le travail se tranche alors comme avant), sinon
+## {"pieces": {clé: mesh}, "exemplaires": {clé: [{mesh, sommet}]}, "occurrences", "hors"}.
+##
+## ⚠ **C'EN EST UN SI LA MAJORITÉ DE SES OBJETS TOMBE SUR LES PLACES DU TÉMOIN** (le centre d'un sommet à
+## surface) : déduit, pas déclaré. Un objet ailleurs — un rocher, un reste — est compté dans `hors`, et
+## la remarque le dit ; les props entiers (§9 bis) ne sont pas encore écrits.
+## ⚠ **LA TUILE D'UNE CLÉ EST CE QUE MONTRENT SES OCCURRENCES, RAMENÉ À LA RÉFÉRENCE** : pour chaque nœud,
+## (pose attendue)⁻¹ × (pose lue) × maillage. Des copies encore liées donnent la même chose par
+## construction ; des copies DÉLIÉES (Join, Apply, Make Single User) aussi, tant qu'elles n'ont pas
+## divergé. Une occurrence qui diffère — sculptée seule, déplacée, tournée — est une ERREUR : on garde ce
+## que montre le plus grand nombre, et on le dit. Jamais départagées en silence.
+static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Dictionary:
+	if chemin.get_extension().to_lower() != "glb" and chemin.get_extension().to_lower() != "gltf":
+		return {}
+	var document := GLTFDocument.new()
+	var etat := GLTFState.new()
+	if document.append_from_file(chemin, etat) != OK:
+		return {}
+	var noeuds: Array = etat.get_nodes()
+	var maillages: Array = etat.get_meshes()
+	var poses: Array = []
+	poses.resize(noeuds.size())
+	for i in noeuds.size():
+		poses[i] = _pose_gltf(noeuds, i, poses)
+
+	var occurrence_de := {}
+	for o in occurrences_du_temoin(0):
+		occurrence_de[o["sommet"]] = o
+	var grille := GridMap.new()
+	var par_cle := {}
+	var porteurs := 0
+	var hors := 0
+	for i in noeuds.size():
+		var nd: GLTFNode = noeuds[i]
+		if nd.mesh < 0:
+			continue
+		porteurs += 1
+		var pose: Transform3D = poses[i]
+		var sommet := Vector3i((pose.origin - Vector3.ONE).round())
+		if pose.origin.distance_to(Vector3(sommet) + Vector3.ONE) > 0.01 or not occurrence_de.has(sommet):
+			hors += 1
+			continue
+		var o: Dictionary = occurrence_de[sommet]
+		var attendue := Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
+			Vector3(sommet) + Vector3.ONE)
+		if not par_cle.has(o["cle"]):
+			par_cle[o["cle"]] = []
+		par_cle[o["cle"]].append({"sommet": sommet, "mesh": nd.mesh,
+			"vers_reference": attendue.affine_inverse() * pose})
+	grille.free()
+	# ⚠ **LA MOITIÉ DES PLACES DU TÉMOIN, PAS SEULEMENT LA MOITIÉ DES OBJETS** : un bloc d'un seul tenant
+	# posé à l'origine tombe pile sur la place du sommet (−1,−1,−1), qui porte une surface — vu rougir
+	# (`test_blocs_maitres` §17). Un seul objet bien placé ne fait pas un témoin lié.
+	if porteurs == 0 or hors * 2 >= porteurs or (porteurs - hors) * 2 < occurrence_de.size():
+		return {}
+
+	var pieces := {}
+	var exemplaires := {}
+	var pleines: Dictionary = cases(0)
+	var cles: Array = par_cle.keys()
+	cles.sort()
+	for cle in cles:
+		var liste: Array = par_cle[cle]
+		# Même maillage et même passage à la référence : même tuile, sans rien recalculer.
+		var familles := {}
+		for e in liste:
+			var t: Transform3D = e["vers_reference"]
+			var pas := Vector3.ONE * 0.0001
+			var cle_pose := "%d|%s|%s|%s|%s" % [e["mesh"], t.basis.x.snapped(pas), t.basis.y.snapped(pas),
+				t.basis.z.snapped(pas), t.origin.snapped(pas)]
+			if not familles.has(cle_pose):
+				familles[cle_pose] = {"exemple": e, "nombre": 0}
+			familles[cle_pose]["nombre"] += 1
+		# Puis par la GÉOMÉTRIE : des copies déliées mais identiques restent une seule tuile.
+		var par_forme := {}
+		for fp in familles:
+			var e: Dictionary = familles[fp]["exemple"]
+			var tuile: ArrayMesh = _transformer(_en_array_mesh((maillages[e["mesh"]] as GLTFMesh).mesh),
+				e["vers_reference"])
+			var empreinte: String = _empreinte_de_forme(tuile)
+			if not par_forme.has(empreinte):
+				par_forme[empreinte] = {"tuile": tuile, "nombre": 0, "sommet": e["sommet"]}
+			par_forme[empreinte]["nombre"] += int(familles[fp]["nombre"])
+		var gagnante := ""
+		for f in par_forme:
+			if gagnante == "" or int(par_forme[f]["nombre"]) > int(par_forme[gagnante]["nombre"]):
+				gagnante = f
+		if par_forme.size() > 1:
+			erreurs.append(("« %s » : ses %d occurrences ne montrent plus la même tuile (%d formes) — une copie "
+				+ "sculptée seule, déplacée ou tournée ; on garde celle du plus grand nombre (%d)")
+				% [cle, liste.size(), par_forme.size(), par_forme[gagnante]["nombre"]])
+		var tuile: ArrayMesh = par_forme[gagnante]["tuile"]
+		if tuile.get_surface_count() > 0 and tuile.surface_get_arrays(0)[Mesh.ARRAY_NORMAL] == null:
+			tuile = normales_plates(tuile)
+		# La provenance : l'occurrence la plus pure, pour que « d'où vient cette tuile ? » montre un coin
+		# lisible du témoin.
+		var sommet: Vector3i = liste[0]["sommet"]
+		for e in liste:
+			if purete(pleines, e["sommet"]) < purete(pleines, sommet):
+				sommet = e["sommet"]
+		pieces[cle] = tuile
+		exemplaires[cle] = [{"mesh": tuile, "sommet": sommet}]
+	if hors > 0:
+		remarques.append(("objets : %d objet(s) ne sont sur aucune place du témoin et sont ignorés — un prop "
+			+ "entier (rocher, décor) n'est pas encore pris en charge") % hors)
+	return {"pieces": pieces, "exemplaires": exemplaires, "occurrences": porteurs - hors, "hors": hors}
+
+
+## La pose d'un nœud glTF dans la scène, parents compris. `poses` sert de mémoire (les parents d'abord).
+static func _pose_gltf(noeuds: Array, i: int, poses: Array) -> Transform3D:
+	if poses[i] != null:
+		return poses[i]
+	var nd: GLTFNode = noeuds[i]
+	var pose: Transform3D = nd.xform
+	if nd.parent >= 0:
+		pose = _pose_gltf(noeuds, nd.parent, poses) * pose
+	poses[i] = pose
+	return pose
+
+
+## L'empreinte d'une forme : ses triangles (au dix-millième), triés — indépendante de l'ordre des sommets,
+## des surfaces et des indices. Deux copies déliées d'une même tuile ont la même.
+static func _empreinte_de_forme(mesh: ArrayMesh) -> String:
+	var tris: Array = []
+	for s in mesh.get_surface_count():
+		var arrays: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
+			else PackedInt32Array(range(v.size()))
+		for t in range(0, ordre.size() - 2, 3):
+			var coins: Array = []
+			for j in 3:
+				var p: Vector3 = v[ordre[t + j]]
+				coins.append("%d,%d,%d" % [roundi(p.x * 10000.0), roundi(p.y * 10000.0), roundi(p.z * 10000.0)])
+			# le triangle commence par son plus petit coin, sans changer son sens
+			var m: int = 0
+			for j in 3:
+				if coins[j] < coins[m]:
+					m = j
+			tris.append("%s;%s;%s" % [coins[m], coins[(m + 1) % 3], coins[(m + 2) % 3]])
+	tris.sort()
+	return ";".join(PackedStringArray(tris)).md5_text()
+
+
 ## ── LES UV CANONIQUES DU TÉMOIN — PROPOSÉ (28 septembre 2026) ──────────────────────────────────────
 ##
 ## ⚠ **TOUS LES EXEMPLAIRES D'UNE CLÉ PARTAGENT LES MÊMES UV.** L'UV d'un point ne dépend que de sa clé,
@@ -1422,29 +1793,39 @@ static func _uv_du_temoin(i: int) -> Callable:
 		var k: int = rang.get(r.get("cle", ""), reservee)
 		var inverse: Basis = (bases[r["orientation"]] as Basis).transposed() if not r.is_empty() \
 			else Basis()
-		# Godot enroule en HORAIRE : la normale sortante est l'OPPOSÉ du produit vectoriel.
-		var normale: Vector3 = inverse * -(b - a).cross(c - a)
-		var axe: int = 0
-		for j in 3:
-			if absf(normale[j]) > absf(normale[axe]):
-				axe = j
-		var sens: int = axe * 2 + (0 if normale[axe] > 0.0 else 1)
-		var tuile: int = k * 6 + sens
-		var coin := Vector2(tuile % n, tuile / n)
-		var sortie := PackedVector2Array()
-		for p in [a, b, c]:
-			var q: Vector3 = inverse * (p - (Vector3(v) + Vector3.ONE))
-			var st: Vector2
-			match sens:
-				0: st = Vector2(-q.z, q.y)
-				1: st = Vector2(q.z, q.y)
-				2: st = Vector2(q.x, -q.z)
-				3: st = Vector2(q.x, q.z)
-				4: st = Vector2(q.x, q.y)
-				_: st = Vector2(-q.x, q.y)
-			var dans: Vector2 = (st + Vector2.ONE * 0.5).clamp(Vector2.ZERO, Vector2.ONE)
-			sortie.append((coin + Vector2.ONE * UV_MARGE + dans * (1.0 - 2.0 * UV_MARGE)) / float(n))
-		return sortie
+		var centre_du_sommet: Vector3 = Vector3(v) + Vector3.ONE
+		return _uv_de_la_piece(k, n, inverse * (a - centre_du_sommet), inverse * (b - centre_du_sommet),
+			inverse * (c - centre_du_sommet))
+
+
+## LES UV D'UN TRIANGLE DE PIÈCE, dans le repère de RÉFÉRENCE de sa clé (centré sur le sommet), sommets
+## dans l'ordre HORAIRE de Godot. `k` est le rang de la clé dans l'atlas, `n` son côté en tuiles.
+## ⚠ **UNE SEULE RÈGLE POUR L'OBJ ET POUR LE TÉMOIN LIÉ** : `_uv_du_temoin` y ramène un triangle du bloc,
+## `exporter_le_temoin_lie` un triangle de tuile, déjà dans ce repère. Deux copies divergeraient.
+## ⚠ Une rotation garde le produit vectoriel : la normale se calcule aussi bien après qu'avant.
+static func _uv_de_la_piece(k: int, n: int, qa: Vector3, qb: Vector3, qc: Vector3) -> PackedVector2Array:
+	# Godot enroule en HORAIRE : la normale sortante est l'OPPOSÉ du produit vectoriel.
+	var normale: Vector3 = -(qb - qa).cross(qc - qa)
+	var axe: int = 0
+	for j in 3:
+		if absf(normale[j]) > absf(normale[axe]):
+			axe = j
+	var sens: int = axe * 2 + (0 if normale[axe] > 0.0 else 1)
+	var tuile: int = k * 6 + sens
+	var coin := Vector2(tuile % n, tuile / n)
+	var sortie := PackedVector2Array()
+	for q in [qa, qb, qc]:
+		var st: Vector2
+		match sens:
+			0: st = Vector2(-q.z, q.y)
+			1: st = Vector2(q.z, q.y)
+			2: st = Vector2(q.x, -q.z)
+			3: st = Vector2(q.x, q.z)
+			4: st = Vector2(q.x, q.y)
+			_: st = Vector2(-q.x, q.y)
+		var dans: Vector2 = (st + Vector2.ONE * 0.5).clamp(Vector2.ZERO, Vector2.ONE)
+		sortie.append((coin + Vector2.ONE * UV_MARGE + dans * (1.0 - 2.0 * UV_MARGE)) / float(n))
+	return sortie
 
 
 ## L'OBJ DU TÉMOIN : une liste de sommets COMMUNE, puis les faces de chaque teinte sous son `usemtl`.
@@ -1635,6 +2016,28 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 	var erreurs: Array = []
 	var sculptes: Array = []
 	var absents: Array = []
+
+	# ⚠ LE TÉMOIN LIÉ D'ABORD (charte §3, 30 septembre 2026) : il se relit tuile par tuile, sans trancher.
+	var remarques_liees: Array = []
+	var lie: Dictionary = tuiles_liees(chemin, erreurs, remarques_liees)
+	if not lie.is_empty():
+		var bits_par_nom := {}
+		for c in MB.classes():
+			bits_par_nom[c["nom"]] = c["bits"]
+		Tranchage.verifier_sections(lie["pieces"], bits_par_nom, remarques_liees)
+		Tranchage.verifier_couture_texture(lie["pieces"], remarques_liees)
+		var assemble: Dictionary = _assembler(lie["pieces"], lie["exemplaires"])
+		assemble["erreurs"] = erreurs
+		assemble["remarques"] = remarques_liees
+		var prov := {}
+		for cle in lie["pieces"]:
+			prov[cle] = BLOCS[0]["nom"]
+		assemble["provenance"] = prov
+		assemble["sculptes"] = [BLOCS[0]["nom"]]
+		assemble["absents"] = []
+		assemble["lie"] = true
+		assemble["occurrences"] = lie["occurrences"]
+		return assemble
 
 	var solide: ArrayMesh = travail_depuis_glb(chemin, journal)
 	# ⚠ ON REMONTE LE MOTIF PRÉCIS, jamais « illisible » : les trois échecs possibles n'ont ni la même
@@ -1929,8 +2332,13 @@ static func _tous_les_noeuds(racine: Node) -> Array:
 ## mesuré sur le faux travail d'artiste, 2 676 triangles relus sur 33 428 écrits. Chaque objet garde sa
 ## pose et ses surfaces (donc ses matériaux) ; le nombre d'objets lus est noté en méta (`objets`).
 ## ⚠ Ils sont tous tranchés comme du TERRAIN : un prop entier (charte §9 bis) n'est pas encore écrit.
+## ⚠ **UNE SURFACE PAR MATÉRIAU, PLUS PAR OBJET — CORRIGÉ LE 30 SEPTEMBRE 2026.** Godot plafonne un maillage
+## à 256 surfaces ; le témoin lié en demandait ~3 000 (1 056 objets × leurs teintes) et l'affichage perdait
+## tout ce qui dépassait, avec une erreur du moteur par surface refusée — vu en menant l'appli, aucun test
+## ne lisait assez d'objets pour le voir. Les surfaces de même matériau sont fusionnées.
 static func _tous_les_maillages(racine: Node) -> ArrayMesh:
-	var sortie := ArrayMesh.new()
+	var paquets := {}   # matériau (ou null) → [tableaux de surface déjà posés]
+	var ordre: Array = []
 	var objets := 0
 	for noeud in _tous_les_noeuds(racine):
 		var brut: Variant = noeud.get("mesh")
@@ -1941,12 +2349,69 @@ static func _tous_les_maillages(racine: Node) -> ArrayMesh:
 			continue
 		var pose: ArrayMesh = _transformer(converti, _pose_dans_la_scene(noeud, racine))
 		for s in pose.get_surface_count():
-			sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, pose.surface_get_arrays(s))
-			sortie.surface_set_material(sortie.get_surface_count() - 1, pose.surface_get_material(s))
+			var m: Material = pose.surface_get_material(s)
+			if not paquets.has(m):
+				paquets[m] = []
+				ordre.append(m)
+			paquets[m].append(pose.surface_get_arrays(s))
 		objets += 1
 	if objets == 0:
 		return null
+	var sortie := ArrayMesh.new()
+	for m in ordre:
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _fusionner_les_surfaces(paquets[m]))
+		sortie.surface_set_material(sortie.get_surface_count() - 1, m)
 	sortie.set_meta("objets", objets)
+	return sortie
+
+
+## Fusionne des tableaux de surface en un seul, indices décalés. Un attribut n'est gardé que si TOUTES les
+## surfaces le portent (sinon il ne saurait pas quoi valoir sur les autres) ; les tangentes sont retirées,
+## comme dans `_transformer`.
+static func _fusionner_les_surfaces(liste: Array) -> Array:
+	if liste.size() == 1:
+		return liste[0]
+	var garder := {}
+	for attribut in [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_COLOR]:
+		var partout := true
+		for a in liste:
+			if a[attribut] == null:
+				partout = false
+		garder[attribut] = partout
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var uv2 := PackedVector2Array()
+	var c := PackedColorArray()
+	var idx := PackedInt32Array()
+	for a in liste:
+		var base: int = v.size()
+		var sv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		v.append_array(sv)
+		if garder[Mesh.ARRAY_NORMAL]:
+			n.append_array(a[Mesh.ARRAY_NORMAL])
+		if garder[Mesh.ARRAY_TEX_UV]:
+			uv.append_array(a[Mesh.ARRAY_TEX_UV])
+		if garder[Mesh.ARRAY_TEX_UV2]:
+			uv2.append_array(a[Mesh.ARRAY_TEX_UV2])
+		if garder[Mesh.ARRAY_COLOR]:
+			c.append_array(a[Mesh.ARRAY_COLOR])
+		var si = a[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (si as PackedInt32Array) if si != null else PackedInt32Array(range(sv.size()))
+		for i in ordre:
+			idx.append(base + i)
+	var sortie: Array = []
+	sortie.resize(Mesh.ARRAY_MAX)
+	sortie[Mesh.ARRAY_VERTEX] = v
+	sortie[Mesh.ARRAY_INDEX] = idx
+	if garder[Mesh.ARRAY_NORMAL]:
+		sortie[Mesh.ARRAY_NORMAL] = n
+	if garder[Mesh.ARRAY_TEX_UV]:
+		sortie[Mesh.ARRAY_TEX_UV] = uv
+	if garder[Mesh.ARRAY_TEX_UV2]:
+		sortie[Mesh.ARRAY_TEX_UV2] = uv2
+	if garder[Mesh.ARRAY_COLOR]:
+		sortie[Mesh.ARRAY_COLOR] = c
 	return sortie
 
 

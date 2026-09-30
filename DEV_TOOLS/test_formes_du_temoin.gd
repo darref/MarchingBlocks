@@ -2,8 +2,8 @@ extends SceneTree
 ## LES FORMES DU TÉMOIN — la table qui bâtit le témoin ET nourrit la légende de l'atelier Witness.
 ##
 ## ⚠ Les attendus viennent d'AILLEURS que la fonction éprouvée (charte §6) : les cases du finisseur sont
-## celles qu'imprime `planete_paysage.gd` (la réparation, puis l'atome posé en (5,4,5)), recopiées de sa
-## sortie ; les centres et les comptes sont calculés à la main.
+## celles qu'imprime `planete_paysage.gd` (la réparation, l'atome du finisseur posé en (5,4,5), puis les
+## deux atomes des raccords en (1,4,5) et (6,8,3)), recopiées de sa sortie ; les centres et les comptes sont calculés à la main.
 
 const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
@@ -19,18 +19,21 @@ func _initialize() -> void:
 
 	# ── 1. La table EST le témoin, à la réparation et au finisseur près ────────────────────────────────
 	# Sortie de `planete_paysage.gd` : réparation en (3,6,7), (6,7,2), (5,7,4) ; puis « un L, une case sur
-	# le COIN » en (5,4,5) — le L (0,0,0) (1,0,0) (0,0,1) et la case (0,1,0).
+	# le COIN » en (5,4,5) — le L (0,0,0) (1,0,0) (0,0,1) et la case (0,1,0) ; puis LES RACCORDS (30
+	# septembre 2026) : « un L, une case sur l'AUTRE BOUT » en (1,4,5) — le L et la case (0,1,1) —, et
+	# « une case seule » en (6,8,3).
 	var attendu := [Vector3i(3, 6, 7), Vector3i(6, 7, 2), Vector3i(5, 7, 4),
-		Vector3i(5, 4, 5), Vector3i(6, 4, 5), Vector3i(5, 4, 6), Vector3i(5, 5, 5)]
+		Vector3i(5, 4, 5), Vector3i(6, 4, 5), Vector3i(5, 4, 6), Vector3i(5, 5, 5),
+		Vector3i(1, 4, 5), Vector3i(2, 4, 5), Vector3i(1, 4, 6), Vector3i(1, 5, 6), Vector3i(6, 8, 3)]
 	attendu.sort()
 	_egal(FT.cases_du_finisseur(), attendu,
-		"le témoin livré = les formes + les 7 cases de la réparation et du finisseur, rien d'autre")
+		"le témoin livré = les formes + les 12 cases de la réparation, du finisseur et des raccords, rien d'autre")
 	var temoin: Dictionary = BM.cases(0)
 	var rebati: Dictionary = FT.batir()
 	for c in attendu:
 		rebati[c] = true
-	_egal(rebati.size(), temoin.size(), "les formes rebâtissent les 820 cases du témoin")
-	_egal(temoin.size(), 820, "le témoin a 820 cases (charte §2)")
+	_egal(rebati.size(), temoin.size(), "les formes rebâtissent les 825 cases du témoin")
+	_egal(temoin.size(), 825, "le témoin a 825 cases (charte §2)")
 
 	# ── 2. La légende ────────────────────────────────────────────────────────────────────────────────
 	var l: Array = FT.legende()
@@ -101,7 +104,7 @@ func _initialize() -> void:
 				recoltes += 1
 				if FT.cartes_du_sommet(l, s).is_empty():
 					orphelins.append(s)
-	_egal(recoltes, 541, "541 sommets récoltés (charte §3)")
+	_egal(recoltes, 549, "549 sommets récoltés (charte §3)")
 	_egal(orphelins, [], "chacun appartient à au moins une carte")
 
 	# ── 5. La provenance, portée par le lot ────────────────────────────────────────────────────────────
@@ -144,9 +147,9 @@ func _initialize() -> void:
 		vus[s] = true
 		if Tranchage.cle_du_sommet(pleines, s, plafond).get("cle", "") == MB.cle_sans_exemplaire(nom):
 			justes += 1
-	_egal(items.size(), 541, "le lot du témoin : 541 tuiles")
-	_egal(justes, 541, "les 541 viennent chacune d'un sommet qui porte leur clé")
-	_egal(vus.size(), 541, "et de 541 sommets DIFFÉRENTS : aucun exemplaire n'en désigne un autre")
+	_egal(items.size(), 549, "le lot du témoin : 549 tuiles")
+	_egal(justes, 549, "les 549 viennent chacune d'un sommet qui porte leur clé")
+	_egal(vus.size(), 549, "et de 549 sommets DIFFÉRENTS : aucun exemplaire n'en désigne un autre")
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))

@@ -218,6 +218,9 @@ C'est le partage de responsabilité, et il a été énoncé par Jordan mot pour 
 
 ### La moitié du contrat qui n'était PAS écrite : les EXEMPLAIRES — DÉCIDÉ (Jordan, 27 septembre 2026)
 
+⚠ **RENVERSÉ LE 30 SEPTEMBRE 2026** par « une tuile par clé, en copies liées » (section suivante). Ce qui
+suit reste vrai du code tant qu'il n'est pas réécrit.
+
 Le contrat disait « toute liberté pour chaque tuile, à l'intérieur de sa case ». Il ne disait pas ce
 qu'il advient de **deux cases de MÊME CLASSE sculptées différemment** — et c'est la première chose
 qu'un artiste fait, puisque « sculpter un paysage » veut dire rendre ce coin-ci différent de celui-là.
@@ -260,6 +263,124 @@ d'**exemplaires** que le modèle lui donne de sommets, et le peintre en **tire u
   exemplaires, pas 81 emplacements : le tirage choisit lequel, jamais où. Une clé de voûte sculptée à
   UN endroit réapparaîtra ailleurs. **Un atlas ne porte pas d'unicité** — c'est le modèle, pas un
   défaut, et l'acheteur doit le lire AVANT d'acheter.
+
+### UNE TUILE PAR CLÉ, EN COPIES LIÉES AU TÉMOIN — DÉCIDÉ (Jordan, 30 septembre 2026), PAS ÉCRIT
+
+⚠ **CECI RENVERSE « ON GARDE TOUT » (ci-dessus).** Le constat, MESURÉ sur `testtripotextured`
+(`DEV_TOOLS/sonde_tuiles_falaise.gd`) : une falaise droite était bien `plaque_b2h2` partout, au bon
+contexte, mais chaque case tirait par hachage un exemplaire parmi 30 (51 sous une dalle), découpés à 30
+endroits du témoin et peints en conséquence — une mosaïque que rien ne justifie. Et **aucun** de ces
+exemplaires n'est au milieu d'une paroi droite, même à 4³. Choisir l'exemplaire par voisinage (proposé
+puis abandonné) réduisait le désordre sans l'éliminer, et le raccord de deux exemplaires qui ne se
+sont jamais touchés au témoin ne se VOIT nulle part pendant qu'on sculpte.
+
+**DÉCIDÉ** : une seule tuile par clé, et le témoin devient le MONDE PEINT DE SA PROPRE FORME — chaque
+occurrence d'une clé (1 048 sommets, bords compris) EST la tuile livrée, en copie liée : on en sculpte
+une, toutes suivent pendant le geste, rotations comprises. Plus de décor, plus rien de jeté, et le
+témoin montre ce que le monde montrera.
+
+- ⚠ **LE RACCORD DEVIENT GARANTI PAR CONSTRUCTION, À UNE CONDITION MESURABLE** : dans chaque seau de
+  `verifier_sections` (axe, motif), les nœuds (clé, pose, face) doivent être RELIÉS par des joints du
+  témoin — l'égalité des sections est transitive, donc un témoin étanche rend tout monde étanche. Un
+  joint vaut pour ses quarts de tour seulement si base(Q·b) = Q·base(b) aux deux bouts.
+  **MESURÉ** (`sonde_raccords_lies.gd`, planète de 12³) : 2 124 joints, **23 seaux sur 36 d'un seul
+  tenant** ; les 13 autres laissent chacun un morceau de 1 ou 2 nœuds, qui se ramènent à **4 groupes**
+  sur des clés rares — `tetra_b3h1`/`vrille_d_b3h1`, `vrille_g_b1h3`/`equerre_creuse_b3h2_a_dehors`,
+  `pointe_creuse_b3h3`/`tetra_b1h3`, `vrille_d_b3h1_dehors`.
+  **FAIT (30 septembre 2026) — LES RACCORDS** : la règle vit dans le cœur (`Tranchage.raccords_du_temoin`),
+  et `planete_paysage.gd` a une quatrième étape après le finisseur, même discipline (des atomes ajoutés,
+  aucun contact diagonal, ni tuile gagnée ni perdue), cherchée près des clés en cause. **Deux atomes,
+  cinq cases** : un L surmonté en (1,4,5) sur la paroi ouest de la salle, une case sur le tablier de
+  l'arche en (6,8,3). **36 seaux sur 36 d'un seul tenant.** Le témoin passe à **825 cases** et **549
+  sommets récoltés** (les « 820 » et « 541 » écrits ailleurs ici décrivent le témoin d'avant) ; la carte
+  « Twists » les porte (déduites). Gardé par `test_blocs_maitres` §16 — l'attendu négatif (sans les cinq
+  cases : 23 reliés, 14 en trop, sept clés rares) vient de la sonde écrite à part. Quatre mutations
+  rouges : aucun quart de tour transféré, quarts de tour sans condition (24 au lieu de 23 : la condition
+  compte), côté oublié, nœuds du témoin au lieu de ceux du monde. ⚠ **Pas jugé à l'œil par Jordan** :
+  la case sur l'arche se voit à peine sur la vignette.
+  ⚠ C'est une condition SUFFISANTE : un morceau que le contexte empêcherait de rencontrer les autres
+  n'aurait pas besoin d'être relié.
+- **MESURÉ — LES COPIES LIÉES SURVIVENT À BLENDER 5.1** (`sonde_copies_liees.gd` + `.py`) : 1 048 nœuds sur
+  52 maillages partagés → Blender importe **52 maillages liés** ; une retouche sur UNE occurrence est suivie
+  par les autres ; l'export par défaut rend 52 maillages partagés, **0 pose de nœud changée**, la retouche
+  dans le fichier. ⚠ **L'EXPORT DE GODOT NE PARTAGE RIEN** (1 048 maillages pour 1 048 nœuds, mesuré) :
+  on relie dans le `GLTFState` après `append_from_scene`.
+- ⚠ **LE TÉMOIN LIÉ PART EN .glb, PLUS EN OBJ** : l'OBJ n'a pas d'instances. Il n'est plus un maillage
+  soudé mais des tuiles jointives. Un « Join » ou un « Apply » dans Blender casse les liens : deux
+  occurrences d'une clé qui divergent se SIGNALENT, jamais ne se départagent en silence.
+- **FAIT (30 septembre 2026) — L'EXPORT ET LA RELECTURE LIÉS** (`BlocsMaitres.exporter_le_temoin_lie`,
+  `tuiles_liees`, branchée en tête de `librairie_depuis_glb`). L'étape 1 de l'appli écrit ce `.glb`.
+  - ⚠ **IL SE RELIT TUILE PAR TUILE, SANS TRANCHER** : retrancher l'assemblage couperait un relief qui
+    déborde sur la voisine et l'attribuerait à elle — ses copies divergeraient. La clé d'un nœud vient de
+    sa POSITION (centre du sommet) ; la tuile est (pose attendue)⁻¹ × (pose lue) × maillage. Des copies
+    déliées mais identiques restent une tuile ; une copie sculptée seule, déplacée ou tournée est une
+    ERREUR qui nomme la clé, et la version du plus grand nombre est gardée. Un fichier est lié si la
+    moitié des places du témoin au moins y sont occupées (un bloc d'un seul tenant posé à l'origine
+    tombait sur la place (−1,−1,−1) — vu rougir). Le tranchage reste pour un travail non lié.
+  - **La tuile d'une clé** est l'exemplaire le plus PUR du témoin calculé (le moins de cases de ses 4³
+    qui s'écartent de sa configuration prolongée) : sinon une marche taillée par un voisin absent se
+    répéterait à chaque occurrence. Les UV canoniques passent par `_uv_de_la_piece`, la règle de l'OBJ.
+  - **MESURÉ** : 1 056 occurrences, 52 maillages, 264 Ko, export 15 s (il tranche le témoin calculé
+    pour choisir), relecture **0,2 s** au lieu de ~17 s, 52 tuiles identiques à celles parties. **Dans
+    Blender 5.1** (`sonde_copies_liees`, sur le VRAI export) : 52 maillages liés, avec ou sans « Merge
+    Vertices » ; une retouche d'UNE copie suivie par les 244 ; relu : 52 tuiles, 0 erreur, seule la tuile
+    retouchée a changé. **Dans l'appli, avec fenêtre** (`capture_temoin_lie.gd`) : Export → Import d'un
+    retour de Blender → Slice → monde peint : le monde montre ce que montrait le témoin, à l'image.
+  - ⚠ **UN DÉFAUT VU EN MENANT L'APPLI, QU'AUCUN TEST NE LISAIT** : `_tous_les_maillages` faisait une
+    surface par objet, et Godot plafonne un maillage à 256 : l'écran n'affichait que 5 710 triangles sur
+    31 472. Fusion par matériau ; gardé (§17).
+  - ⚠ **LA LÉGENDE SUIT LA TUILE, PLUS LA FACE** : chaque occurrence porte les teintes de sa clé, dont le
+    contexte se décide par SOMMET. À la lisière d'un surplomb (sous le pont) les sols font un damier
+    vert / orange — c'est ce que le monde posera. Pas jugé par Jordan.
+  - Gardé par `test_blocs_maitres` §17 (14 vérifications, attendus recomptés hors des fonctions éprouvées,
+    fichiers fautifs bâtis en retouchant l'état glTF) ; six mutations rouges.
+- **FAIT (30 septembre 2026) — LE MODELEUR PAR TUILE, PROPAGÉ EN DIRECT.** Le modèle vit dans le cœur
+  (`temoin_lie.gd` : 52 `MaillageEdite` dans le repère de référence de leur clé, UN tableau de matériaux
+  partagé par référence, les occurrences DÉDUITES, le rayon, l'assemblage, le `.glb` lié par
+  `BlocsMaitres.ecrire_le_temoin_lie` — la même écriture que l'export). Il s'enregistre en
+  `<projet>_witness.mbtiles` ; ⚠ un ancien `.mbmesh` (témoin d'un seul tenant) n'est ni converti ni écrasé,
+  et l'écran le dit.
+  - **L'écran** (`modeleur.gd`) édite la tuile de l'occurrence cliquée : ce qui dessine l'édition est posé
+    à l'occurrence (`_edition`), les autres sont une MultiMesh PAR TUILE qui partage son maillage
+    (`_propager`, à chaque mouvement de souris). ⚠ **TOUT CE QUI PARLE À LA CAMÉRA PASSE PAR LA POSE** :
+    « G X 1 » va vers +X DU MONDE sur une copie tournée. Changer de tuile vide la sélection. L'annulation
+    est par tuile (instantané marqué de sa clé) : un Ctrl+Z défait un geste sur une tuile qu'on n'édite
+    plus. La boîte B écarte ce qu'une AUTRE copie cache.
+  - `BlocsMaitres.tuiles_du_temoin` ne découpe plus que les 52 sommets retenus (`Tranchage.trancher(…,
+    seuls)`, la même route) : **1,8 s au lieu de 15 s, 52 tuiles identiques** (mêmes sommets, mêmes formes).
+  - **MESURÉ** : entrée en édition 2,2 s ; un G sur la paroi à l'air libre (16 faces, 244 copies) coûte
+    **0,5 ms** par mouvement (l'ancien redessin complet : ~250 ms). Vu à l'image (`capture_modeleur_lie.gd`) :
+    toutes les copies de la paroi suivent, et les fentes des joints s'ouvrent sous l'œil.
+  - Gardé par `test_temoin_lie` (18, rayon comparé à une recherche BRUTE sur le témoin assemblé) et
+    `fumee_appli` (181 : clic qui active l'occurrence, copies qui suivent, autre tuile, annulation croisée,
+    copie tournée, B et l'occlusion, enregistrement relu lié, réouverture). **Sept mutations rouges** ; deux
+    d'abord MUETTES, par des tests trop étroits : « les axes ne sont pas ramenés à la tuile » (Z ne le
+    prouve pas — un quart de tour autour de +Y garde le haut : il fallait G X sur une copie tournée), et
+    « poser une tuile ne re-partage pas les matériaux » (compter les matériaux ne voit pas une COPIE de
+    même taille : il fallait `is_same`).
+  - ⚠ **LA GARDE D'OCCLUSION A MENTI DEUX FOIS AVANT D'ÊTRE JUSTE** : une occurrence entièrement cachée
+    (0 face vue), puis des rayons tirés de l'œil alors que la vue de face est ORTHOGRAPHIQUE.
+  - ⚠ **PAS TENU EN MAIN.** Ni le modeleur lié souris en main, ni la route Blender par Jordan.
+- **FAIT (30 septembre 2026) — LA PLANCHE DES TUILES** (`app/planche_tuiles.gd`), l'onglet « The tiles » du
+  bandeau de Witness, à côté de « Shapes ». Une carte par tuile, dans l'ordre du modèle : la PHOTO de la
+  tuile dans sa case, avec en fantôme (gris neutre) les demi-cases pleines de sa classe ; son nom anglais
+  (`FormatNeutre`), air libre / sous roche, ce qu'elle fait dans un monde, et ×copies. Survol : toutes ses
+  copies allumées en PETITS cubes (`remplir_zone(…, taille)`) ; clic : la vue cadre la copie la plus pure,
+  et en édition elle passe en édition. Photos reprises après chaque enregistrement.
+  - ⚠ **« CE QU'ELLE FAIT » N'EST ÉCRIT QUE POUR LES FAMILLES SÛRES** (dalles, arêtes, coins, équerres
+    simples) ; les autres disent « un passage tordu entre deux niveaux », sans inventer de paysage.
+  - ⚠ Bâtie à la demande (premier passage sur l'onglet), sur le témoin qu'on édite s'il est chargé, sinon sur
+    le témoin calculé, que le modeleur reprend ensuite (pas de second calcul).
+  - **Vu à l'image, trois défauts corrigés** : fantômes de la même couleur que la zone allumée ; les 244 copies
+    d'une paroi allumées en cubes d'une case faisaient une masse ; une tuile de PLAFOND photographiée
+    d'au-dessus était de dos, donc invisible (on la prend par en dessous quand le haut est plus plein).
+    Et un masquage : le membre `onglet` était caché par une variable locale du même nom — la fumée PENDAIT
+    au lieu d'échouer.
+  - Gardé par `fumee_appli` (193 ; attendus : les listes du modèle, les copies recomptées par
+    `cle_du_sommet`, les fantômes comptés sur les bits). Cinq mutations rouges.
+  - ⚠ Pas jugé par Jordan : lisibilité des photos, phrases de rôle.
+- **PAS ENCORE ÉCRIT** : la simplification du format et des trois greffons (plus
+  d'exemplaires). La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections.
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
@@ -401,6 +522,8 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
   attribut : tout ce qui change d'une face à l'autre (matériau, UV, couleur) coupe le maillage. Soudé à
   100 % mesuré dans Blender : l'OBJ (15 546 sommets, 0 couture, six matériaux) ou le .glb importé avec
   « Merge Vertices ».
+- ⚠ **REMPLACÉ LE 30 SEPTEMBRE 2026 : le témoin part en .glb LIÉ** (§3, une tuile par clé) — l'OBJ n'a pas
+  de copies liées. `exporter_le_bloc` reste, pour `DEV_TOOLS/` et le travail non lié.
 - **DÉCIDÉ (Jordan, 27 septembre 2026) — LE TÉMOIN PART EN OBJ, LE TRAVAIL REVIENT EN .glb.** Le témoin
   n'est qu'une ébauche (de la géométrie, six teintes) : l'OBJ ne lui coûte rien et arrive soudé. Le
   retour garde tout ce que le glTF porte — textures, UV, normales, PBR. Un `.obj` est accepté au retour
@@ -1317,14 +1440,16 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Treize suites, **8 080 vérifications, 0 échec** (29 septembre 2026, recomptées après le dépliage du
-  modeleur), plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
+  Quinze suites, **8 370 vérifications, 0 échec** (30 septembre 2026, relevées après la planche des tuiles),
+  plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
-  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 432,
-  `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 7, `test_projet` 31,
-  `test_outils` 57, `fumee_appli` 140, `test_greffon_peinture` 120, `test_faux_artiste` 35,
-  `test_maillage_edite` 153.
+  `test_marching_blocks` 2 027, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 469,
+  `test_massif_peint` 86, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
+  `test_outils` 57, `fumee_appli` 193, `test_greffon_peinture` 176, `test_faux_artiste` 35,
+  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18.
+  ⚠ Les bancs Unity et Unreal n'ont PAS été relancés depuis le témoin de 825 cases ; `preparer_essai_unity.gd`
+  réécrit leur attendu.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

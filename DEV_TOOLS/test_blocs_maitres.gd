@@ -68,6 +68,8 @@ func _initialize() -> void:
 	_la_geometrie_livree_est_saine()
 	_la_legende_du_temoin_dit_le_contexte()
 	_aucun_morceau_sculpte_n_est_jete()
+	_le_temoin_prouve_tous_les_raccords()
+	_le_temoin_lie_fait_l_aller_retour()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -890,3 +892,256 @@ func _aucun_morceau_sculpte_n_est_jete() -> void:
 
 	print("   → %d sommets récoltables, %d items livrés, %d classes répétées (la plus vue : %d fois)"
 		% [attendus, items, multiples, le_plus])
+
+
+## §16 — LE TÉMOIN LIÉ PROUVE TOUS LES RACCORDS (charte §3, une tuile par clé, 30 septembre 2026).
+##
+## Chaque seau de `verifier_sections` doit être relié d'un seul tenant par les joints du témoin : alors
+## un témoin étanche rend TOUT monde étanche.
+## ⚠ **L'ATTENDU NÉGATIF VIENT D'AILLEURS** : le témoin d'avant les raccords (on ôte les cinq cases que
+## `planete_paysage.gd` a posées) a été mesuré par `DEV_TOOLS/sonde_raccords_lies.gd`, écrite À PART du
+## cœur — 36 seaux, 23 reliés, 14 morceaux en trop, sur sept clés rares. Le cœur doit le retrouver au
+## chiffre près : une règle plus laxiste (un quart de tour transféré sans condition) ou plus stricte
+## (aucun quart de tour) le déplace, et ce test rougit.
+const _CASES_DES_RACCORDS := [Vector3i(1, 4, 5), Vector3i(2, 4, 5), Vector3i(1, 4, 6), Vector3i(1, 5, 6),
+	Vector3i(6, 8, 3)]
+const _CLES_A_PART_AVANT := ["mb_equerre_creuse_b3h2_a_dehors", "mb_pointe_creuse_b3h3", "mb_tetra_b1h3",
+	"mb_tetra_b3h1", "mb_vrille_d_b3h1", "mb_vrille_d_b3h1_dehors", "mb_vrille_g_b1h3"]
+
+func _le_temoin_prouve_tous_les_raccords() -> void:
+	var t: Dictionary = BlocsMaitres.cases(0)
+	var r: Dictionary = Tranchage.raccords_du_temoin(t)
+	_dire(r["seaux"] == 36, "§16 le témoin porte 36 seaux de faces (rend %d)" % r["seaux"])
+	_dire(r["en_trop"] == 0 and r["relies"] == r["seaux"],
+		"§16 chaque seau est relié d'un seul tenant (%d sur %d, morceaux à part : %s)"
+		% [r["relies"], r["seaux"], r["morceaux"]])
+
+	var avant: Dictionary = t.duplicate()
+	for c in _CASES_DES_RACCORDS:
+		_dire(avant.has(c), "§16 la case de raccord %s est dans le témoin" % c)
+		avant.erase(c)
+	var ra: Dictionary = Tranchage.raccords_du_temoin(avant)
+	_dire(ra["seaux"] == 36 and ra["relies"] == 23 and ra["en_trop"] == 14,
+		"§16 sans les raccords : 36 seaux, 23 reliés, 14 en trop, comme la sonde (rend %d, %d, %d)"
+		% [ra["seaux"], ra["relies"], ra["en_trop"]])
+	var cles := {}
+	for m in (ra["morceaux"] as Array):
+		for n in (m["noeuds"] as Array):
+			cles[String(n).split("|")[0]] = true
+	var vues: Array = cles.keys()
+	vues.sort()
+	_dire(vues == _CLES_A_PART_AVANT, "§16 sans les raccords, les faces à part sont celles des sept clés rares (%s)" % [vues])
+
+	# Une seule case ne relie aucun seau : chaque seau réunit des faces de clés qu'elle ne montre pas.
+	var seule: Dictionary = Tranchage.raccords_du_temoin({Vector3i.ZERO: true})
+	_dire(seule["relies"] == 0 and seule["seaux"] == 36, "§16 une case seule ne relie aucun seau (rend %d)" % seule["relies"])
+
+
+## §17 — LE TÉMOIN LIÉ FAIT L'ALLER-RETOUR (charte §3, une tuile par clé, 30 septembre 2026).
+##
+## ⚠ **LES ATTENDUS NE PASSENT PAS PAR LES FONCTIONS ÉPROUVÉES** : le nombre d'occurrences est recompté
+## sommet par sommet par `MB.porte_une_surface` (et non par `occurrences_du_temoin`) ; le nombre de tuiles
+## vient des listes du MODÈLE (35 + 17) ; le partage se lit dans le JSON du fichier, la clé de chaque nœud
+## étant redéduite de SA translation. Les fichiers fautifs sont bâtis ici, en retouchant l'état glTF.
+func _le_temoin_lie_fait_l_aller_retour() -> void:
+	var dossier := ProjectSettings.globalize_path("user://test_temoin_lie")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var chemin := dossier.path_join("temoin_lie.glb")
+	var raison: String = BlocsMaitres.exporter_le_temoin_lie(chemin)
+	_dire(raison == "", "§17 l'export du témoin lié réussit (« %s »)" % raison)
+
+	var t: Dictionary = BlocsMaitres.cases(0)
+	var sommets := {}
+	for c in t:
+		for s in MB.sommets_de(c):
+			sommets[s] = true
+	var a_surface := 0
+	for s in sommets:
+		if MB.porte_une_surface(MB.bits(t, s)):
+			a_surface += 1
+	var tuiles_du_monde: int = MB.pieces_a_sculpter().size() + MB.exterieures_a_sculpter().size()
+
+	var json: Dictionary = _json_du_glb(chemin)
+	var noeuds: Array = json.get("nodes", [])
+	var plafond: int = MB.plafond_de(t)
+	var maillage_de_cle := {}
+	var porteurs := 0
+	var partage_juste := true
+	for nd in noeuds:
+		if not nd.has("mesh"):
+			continue
+		porteurs += 1
+		var tr: Array = nd.get("translation", [0, 0, 0])
+		var sommet := Vector3i(roundi(tr[0]) - 1, roundi(tr[1]) - 1, roundi(tr[2]) - 1)
+		var cle: String = Tranchage.cle_du_sommet(t, sommet, plafond).get("cle", "?")
+		if maillage_de_cle.has(cle) and maillage_de_cle[cle] != int(nd["mesh"]):
+			partage_juste = false
+		maillage_de_cle[cle] = int(nd["mesh"])
+	_dire(porteurs == a_surface, "§17 une occurrence par sommet à surface, bords compris (%d pour %d)" % [porteurs, a_surface])
+	_dire((json.get("meshes", []) as Array).size() == tuiles_du_monde,
+		"§17 un maillage par tuile du monde (%d pour %d)" % [(json.get("meshes", []) as Array).size(), tuiles_du_monde])
+	var distincts := {}
+	for cle in maillage_de_cle:
+		distincts[maillage_de_cle[cle]] = true
+	_dire(partage_juste and distincts.size() == maillage_de_cle.size() and not maillage_de_cle.has("?"),
+		"§17 toutes les occurrences d'une clé (redéduite de leur place) partagent UN maillage, à elle seule")
+
+	# ── Relu tel quel : les tuiles qui sont parties.
+	var parties: Dictionary = BlocsMaitres.tuiles_du_temoin()
+	var b: Dictionary = BlocsMaitres.librairie_depuis_glb(chemin)
+	_dire(b.get("lie", false) and b["erreurs"].is_empty() and b["remarques"].is_empty(),
+		"§17 relu comme témoin lié, sans erreur ni remarque (%s / %s)" % [b["erreurs"], b["remarques"]])
+	var lot: MeshLibrary = b["lot"]
+	var identiques := 0
+	for id in lot.get_item_list():
+		var nom: String = lot.get_item_name(id)
+		if parties.has(nom) and BlocsMaitres._empreinte_de_forme(lot.get_item_mesh(id)) \
+				== BlocsMaitres._empreinte_de_forme(parties[nom]["mesh"]):
+			identiques += 1
+	_dire(lot.get_item_list().size() == tuiles_du_monde and identiques == tuiles_du_monde,
+		"§17 relu : %d tuiles, dont %d identiques à celles parties (attendu %d)" % [lot.get_item_list().size(), identiques, tuiles_du_monde])
+
+	# ── Ce que l'écran AFFICHE (`travail_depuis_glb`) porte toutes les occurrences, triangle pour triangle.
+	# ⚠ Vu en menant l'appli : une surface par objet dépassait le plafond de 256 surfaces de Godot, et
+	# l'affichage perdait l'essentiel du témoin lié.
+	var attendus := 0
+	for nd in noeuds:
+		if not nd.has("mesh"):
+			continue
+		var tr2: Array = nd.get("translation", [0, 0, 0])
+		var s2 := Vector3i(roundi(tr2[0]) - 1, roundi(tr2[1]) - 1, roundi(tr2[2]) - 1)
+		var id2: int = lot.find_item_by_name(Tranchage.cle_du_sommet(t, s2, plafond).get("cle", ""))
+		if id2 >= 0:
+			attendus += _triangles(lot.get_item_mesh(id2))
+	var affiche: ArrayMesh = BlocsMaitres.travail_depuis_glb(chemin)
+	_dire(affiche != null and affiche.get_surface_count() <= 256 and _triangles(affiche) == attendus,
+		"§17 l'écran affiche toutes les occurrences : %d triangles pour %d" % [_triangles(affiche) if affiche else -1, attendus])
+
+	# ── Des copies DÉLIÉES mais identiques (Make Single User) : une seule tuile, aucune erreur.
+	var delie := dossier.path_join("delie.glb")
+	_retoucher_le_glb(chemin, delie, func(etat: GLTFState) -> void:
+		var anciens: Array = etat.get_meshes()
+		var nouveaux: Array[GLTFMesh] = []
+		for nd: GLTFNode in etat.get_nodes():
+			if nd.mesh < 0:
+				continue
+			var copie := GLTFMesh.new()
+			copie.mesh = (anciens[nd.mesh] as GLTFMesh).mesh
+			nd.mesh = nouveaux.size()
+			nouveaux.append(copie)
+		etat.set_meshes(nouveaux))
+	_dire((_json_du_glb(delie).get("meshes", []) as Array).size() == porteurs, "§17 le fichier délié porte un maillage par occurrence")
+	var bd: Dictionary = BlocsMaitres.librairie_depuis_glb(delie)
+	_dire(bd.get("lie", false) and bd["erreurs"].is_empty() and (bd["lot"] as MeshLibrary).get_item_list().size() == tuiles_du_monde,
+		"§17 délié mais identique : %d tuiles, erreurs %s" % [(bd["lot"] as MeshLibrary).get_item_list().size(), bd["erreurs"]])
+
+	# ── UNE copie sculptée seule : une erreur qui nomme la clé, et la tuile du plus grand nombre gardée.
+	var cle_paroi := "mb_plaque_b2h2_dehors"
+	var seule := dossier.path_join("sculptee_seule.glb")
+	_retoucher_le_glb(chemin, seule, func(etat: GLTFState) -> void:
+		var nd: GLTFNode = _premier_noeud_de(etat, t, cle_paroi)
+		var source: ArrayMesh = BlocsMaitres._en_array_mesh((etat.get_meshes()[nd.mesh] as GLTFMesh).mesh)
+		var im := ImporterMesh.new()
+		for s in source.get_surface_count():
+			var arrays: Array = source.surface_get_arrays(s)
+			if s == 0:
+				var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				v[0] += Vector3(0.0, 0.0, 0.2)
+				arrays[Mesh.ARRAY_VERTEX] = v
+			im.add_surface(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, source.surface_get_material(s))
+		var gm := GLTFMesh.new()
+		gm.mesh = im
+		var liste: Array[GLTFMesh] = []
+		liste.assign(etat.get_meshes())
+		liste.append(gm)
+		etat.set_meshes(liste)
+		nd.mesh = liste.size() - 1)
+	var bs: Dictionary = BlocsMaitres.librairie_depuis_glb(seule)
+	var nomme := false
+	for e in bs["erreurs"]:
+		if String(e).contains(cle_paroi):
+			nomme = true
+	_dire(bs["erreurs"].size() == 1 and nomme, "§17 une copie sculptée seule est une erreur qui nomme sa clé (%s)" % [bs["erreurs"]])
+	var gardee: int = (bs["lot"] as MeshLibrary).find_item_by_name(cle_paroi)
+	_dire(gardee >= 0 and BlocsMaitres._empreinte_de_forme((bs["lot"] as MeshLibrary).get_item_mesh(gardee))
+		== BlocsMaitres._empreinte_de_forme(parties[cle_paroi]["mesh"]), "§17 et la tuile gardée est celle du plus grand nombre")
+
+	# ── UNE copie tournée d'un quart de tour : même verdict.
+	var tournee := dossier.path_join("tournee.glb")
+	_retoucher_le_glb(chemin, tournee, func(etat: GLTFState) -> void:
+		var nd: GLTFNode = _premier_noeud_de(etat, t, cle_paroi)
+		nd.xform = Transform3D(Basis(Vector3.UP, PI / 2.0) * nd.xform.basis, nd.xform.origin))
+	var bt: Dictionary = BlocsMaitres.librairie_depuis_glb(tournee)
+	_dire(bt["erreurs"].size() == 1 and String(bt["erreurs"][0]).contains(cle_paroi),
+		"§17 une copie tournée est une erreur qui nomme sa clé (%s)" % [bt["erreurs"]])
+
+	# ── Un objet hors de toute place : ignoré, et DIT.
+	var hors := dossier.path_join("hors.glb")
+	_retoucher_le_glb(chemin, hors, func(etat: GLTFState) -> void:
+		var nd: GLTFNode = _premier_noeud_de(etat, t, cle_paroi)
+		var rocher := GLTFNode.new()
+		rocher.resource_name = "rock"
+		rocher.mesh = nd.mesh
+		rocher.parent = nd.parent
+		rocher.xform = Transform3D(Basis(), Vector3(5.3, 9.1, 5.7))
+		var liste: Array[GLTFNode] = []
+		liste.assign(etat.get_nodes())
+		liste.append(rocher)
+		etat.set_nodes(liste)
+		if rocher.parent >= 0:
+			var parent: GLTFNode = liste[rocher.parent]
+			var enfants: PackedInt32Array = parent.children
+			enfants.append(liste.size() - 1)
+			parent.children = enfants
+		else:
+			var racines: PackedInt32Array = etat.root_nodes
+			racines.append(liste.size() - 1)
+			etat.root_nodes = racines)
+	var bh: Dictionary = BlocsMaitres.librairie_depuis_glb(hors)
+	_dire(bh.get("lie", false) and bh["erreurs"].is_empty() and bh["remarques"].size() == 1
+		and String(bh["remarques"][0]).begins_with("objets : 1 "),
+		"§17 un objet hors place est ignoré et signalé (%s / %s)" % [bh["erreurs"], bh["remarques"]])
+
+	# ── Un travail NON lié (un seul objet, le bloc à l'origine) n'est pas pris pour un témoin lié.
+	var bloc := dossier.path_join("bloc.glb")
+	BlocsMaitres.exporter_le_bloc(bloc)
+	_dire(BlocsMaitres.tuiles_liees(bloc, [], []).is_empty(), "§17 un bloc d'un seul tenant n'est pas un témoin lié")
+
+
+func _json_du_glb(chemin: String) -> Dictionary:
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	if f == null:
+		return {}
+	f.seek(12)
+	var longueur := f.get_32()
+	f.get_32()
+	return JSON.parse_string(f.get_buffer(longueur).get_string_from_utf8())
+
+
+func _retoucher_le_glb(source: String, cible: String, retouche: Callable) -> void:
+	var document := GLTFDocument.new()
+	var etat := GLTFState.new()
+	document.append_from_file(source, etat)
+	retouche.call(etat)
+	document.write_to_filesystem(etat, cible)
+
+
+## Le premier nœud (dans l'ordre du fichier) posé sur un sommet de la clé `cle` — redéduite de sa place.
+func _premier_noeud_de(etat: GLTFState, t: Dictionary, cle: String) -> GLTFNode:
+	var plafond: int = MB.plafond_de(t)
+	for nd: GLTFNode in etat.get_nodes():
+		if nd.mesh < 0:
+			continue
+		var sommet := Vector3i((nd.xform.origin - Vector3.ONE).round())
+		if Tranchage.cle_du_sommet(t, sommet, plafond).get("cle", "") == cle:
+			return nd
+	return null
+
+
+func _triangles(mesh: Mesh) -> int:
+	var n := 0
+	for s in mesh.get_surface_count():
+		var a: Array = mesh.surface_get_arrays(s)
+		n += ((a[Mesh.ARRAY_INDEX] as PackedInt32Array).size() if a[Mesh.ARRAY_INDEX] != null
+			else (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+	return n

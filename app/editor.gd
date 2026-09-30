@@ -45,6 +45,7 @@ const Manuel := preload("res://app/manuel.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
@@ -303,6 +304,10 @@ func _batir() -> void:
 	# LE SENS INVERSE, dans World : la tuile survolée dit de quelle forme du témoin elle vient.
 	_vue.tuile_survolee.connect(_legende_formes.montrer_provenance)
 	_legende_formes.voir_dans_le_temoin.connect(_voir_dans_le_temoin)
+	# LA PLANCHE DES TUILES (charte §3) : le témoin qu'on édite s'il est chargé, sinon le témoin calculé.
+	_legende_formes.fournir_temoin = _temoin_pour_la_planche
+	_legende_formes.tuile_choisie.connect(_aller_a_la_tuile)
+	_legende_formes.copies_survolees.connect(func(c: Array) -> void: _vue.montrer_zone(c, 0.45))
 	_minuterie_temoin = Timer.new()
 	_minuterie_temoin.one_shot = true
 	_minuterie_temoin.wait_time = 1.0
@@ -733,12 +738,14 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var etape1 := Section.new("1 · Export the witness", true, Icones.icone("exporter"))
 	pile.add_child(etape1)
 	_etapes_artiste.append(etape1)
-	etape1.contenu.add_child(_texte("Send the block to Blender as one welded .obj.", 11, Palette.GRIS))
+	etape1.contenu.add_child(_texte("Send the block to Blender as linked copies: one tile per class, "
+		+ "sculpt one copy and every copy follows.", 11, Palette.GRIS))
 	etape1.contenu.add_child(_bouton("Export the witness…",
-		"Writes the witness as ONE .obj (+ its .mtl) for Blender — fully welded, six named materials.\n"
-		+ "Do not MOVE it: its position identifies it "
-		+ "when it comes back, not its name.\nTiles are already shrunk to half their cell, to show "
-		+ "the margin you have.", func() -> void: _demander("exporter"), "exporter", Palette.PRINCIPAL))
+		"Writes the witness as ONE .glb for Blender: every tile of the world is an object, and all the "
+		+ "copies of a tile share ONE mesh (linked duplicates).\nSculpt any copy: they all follow, and "
+		+ "the witness shows exactly what the painted world will show.\nDo not MOVE the objects, do not "
+		+ "Join them: their POSITION identifies each tile when it comes back, not its name.",
+		func() -> void: _demander("exporter"), "exporter", Palette.PRINCIPAL))
 
 	var etape2 := Section.new("2 · Import your work", true, Icones.icone("importer"))
 	pile.add_child(etape2)
@@ -1168,6 +1175,43 @@ func _contexte() -> void:
 
 ## « Show it in the witness » (World) : on va dans Witness, la forme allumée, la place EXACTE de la tuile
 ## marquée, la vue cadrée dessus sous l'angle de la photo de la forme.
+## Le témoin calculé en tuiles, gardé tant que le modeleur ne l'a pas pris (la planche peut le demander avant).
+var _temoin_calcule: RefCounted
+
+
+func _temoin_pour_la_planche() -> RefCounted:
+	if _modeleur.temoin != null:
+		return _modeleur.temoin
+	if _temoin_calcule == null:
+		_temoin_calcule = TL.depuis_le_temoin_calcule()
+	return _temoin_calcule
+
+
+## Un clic sur une tuile de la planche : la vue cadre sa copie la plus LISIBLE (la plus pure, celle dont les
+## voisins ont laissé le moins de traces), une boîte blanche la montre, et en édition elle passe en édition.
+func _aller_a_la_tuile(cle: String) -> void:
+	var t: RefCounted = _temoin_pour_la_planche()
+	var liste: Array = t.occurrences_de(cle)
+	if liste.is_empty():
+		return
+	var pleines: Dictionary = BM.cases(0)
+	var meilleure: int = liste[0]
+	for i in liste:
+		if BM.purete(pleines, t.occurrences[i]["sommet"]) < BM.purete(pleines, t.occurrences[meilleure]["sommet"]):
+			meilleure = i
+	var sommet: Vector3i = t.occurrences[meilleure]["sommet"]
+	var huit: Array = []
+	for k in 8:
+		huit.append(sommet + MB.COINS[k])
+	_vue.cadrer_zone(huit, _vue._azimut, _vue._elevation, 9.0)
+	_vue.montrer_tuile(sommet)
+	if _vue.edition and _modeleur.temoin == t:
+		_modeleur.activer(meilleure)
+	_dire(("[b]%s[/b] — %d copies in the witness; the white box is the clearest one. %s")
+		% [FormatNeutre.id_de_cle(cle), liste.size(), "It is now the tile you edit." if _vue.edition
+		else "Press Tab to edit it: every copy follows."])
+
+
 func _voir_dans_le_temoin(sommet: Vector3i, carte: Dictionary, azimut: float, elevation: float) -> void:
 	_aller_a("witness")
 	var huit: Array = []
@@ -1379,30 +1423,49 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 
 ## Entre ou sort de l'édition. La première fois, le maillage se charge : le témoin modélisé enregistré
 ## s'il existe, sinon le témoin calculé.
+## ⚠ **LE TÉMOIN LIÉ (charte §3, 30 septembre 2026)** : on édite UNE TUILE PAR CLÉ, et toutes ses copies
+## suivent. Le `.mbtiles` fait foi (tuiles, matériaux) ; à défaut, le témoin calculé en tuiles (~2 s, sans
+## panneau d'attente : il guette une image, qui ne vient pas en headless).
+## ⚠ Un ancien `.mbmesh` (le témoin d'un seul tenant d'avant les copies liées) n'est PAS converti : on ne
+## sait pas quelle copie d'une clé il faudrait garder. Il reste sur le disque, et on le DIT.
 func _regler_edition(oui: bool) -> void:
-	if oui and _modeleur.maillage == null:
-		# ⚠ LE .mbmesh FAIT FOI (il garde quelle face porte quel matériau) ; le .glb n'en est qu'une sortie,
-		# relue seulement s'il est seul (un modèle d'avant les matériaux).
-		var m: RefCounted = null
+	var dit_ancien := ""
+	if oui and _modeleur.temoin == null:
+		var t: RefCounted = null
 		var natif := _chemin_modele_natif()
 		if FileAccess.file_exists(natif):
 			var d = JSON.parse_string(FileAccess.get_file_as_string(natif))
 			if d is Dictionary:
-				m = ME.depuis_dictionnaire(d)
-		var chemin := _chemin_temoin_modele()
-		if m == null and FileAccess.file_exists(chemin):
-			var lu: ArrayMesh = BM.travail_depuis_glb(chemin)
-			if lu != null:
-				m = ME.depuis(lu)
-		if m == null:
-			m = ME.depuis(BM.maillage_moitie(0))
-		_modeleur.charger(m)
+				t = TL.depuis_dictionnaire(d)
+		if t == null:
+			# Celui que la planche des tuiles a peut-être déjà construit : le modeleur le prend.
+			t = _temoin_calcule if _temoin_calcule != null else TL.depuis_le_temoin_calcule()
+			_temoin_calcule = null
+			if FileAccess.file_exists(_chemin_temoin_modele().get_basename() + ".mbmesh"):
+				dit_ancien = ("\n[color=#f2ca79]An older single-mesh model was found[/color] (%s): it is kept on "
+					+ "disk but not used — the linked editor starts from the computed witness.") \
+					% (_chemin_temoin_modele().get_basename() + ".mbmesh").get_file()
+		_modeleur.charger_temoin(t, _occurrence_de_depart(t))
 		_redire_les_materiaux()
+		_legende_formes.rafraichir_tuiles()
 	_vue.regler_edition(oui)
 	_bouton_edition.set_pressed_no_signal(oui)
 	if oui:
-		_dire("[b]Edit mode[/b] — %d faces. 1 2 3 pick vertices, edges or faces; G R S E I, Ctrl+R, X M F "
-			% _modeleur.maillage.faces.size() + "work as in Blender. [i]Tab to stop editing.[/i]")
+		_dire(("[b]Edit mode[/b] — %d tiles, shown as %d linked copies. Click any copy: you edit its tile, and "
+			+ "every copy follows. 1 2 3 pick vertices, edges or faces; G R S E I, Ctrl+R, X M F work as in "
+			+ "Blender. [i]Tab to stop editing.[/i]%s")
+			% [_modeleur.temoin.tuiles.size(), _modeleur.temoin.occurrences.size(), dit_ancien])
+
+
+## L'occurrence en édition au départ : la première de la tuile la plus partagée (la paroi à l'air libre),
+## celle qu'on sculpte d'abord.
+func _occurrence_de_depart(t: RefCounted) -> int:
+	var meilleure := ""
+	for c in t.tuiles:
+		if meilleure == "" or t.occurrences_de(c).size() > t.occurrences_de(meilleure).size():
+			meilleure = c
+	var liste: Array = t.occurrences_de(meilleure)
+	return int(liste[0]) if not liste.is_empty() else 0
 
 
 func _geste_modeleur(nom: String) -> void:
@@ -1559,7 +1622,7 @@ func _retoucher(cle: String, valeur: Variant) -> void:
 	if _remplit_materiau or _modeleur.maillage == null or _modeleur.materiau_courant < 0:
 		return
 	if _materiau_avant == null:
-		_materiau_avant = _modeleur.maillage.copie()
+		_materiau_avant = _modeleur.instantane()
 	_modeleur.regler_materiau(_modeleur.materiau_courant, cle, valeur)
 	if cle in ["nom", "texture"]:
 		_redire_les_materiaux()
@@ -1571,17 +1634,31 @@ func _inscrire_les_retouches() -> void:
 		return
 	var avant := _materiau_avant
 	_materiau_avant = null
-	_geste_du_modeleur(avant, _modeleur.maillage.copie(), "Material")
+	_geste_du_modeleur(avant, _modeleur.instantane(), "Material")
 
 
+## Repart du témoin calculé : TOUTES les tuiles, en UNE annulation (une par tuile, dans la même action).
 func _remettre_le_temoin() -> void:
 	_regler_edition(true)
-	_geste_du_modeleur(_modeleur.maillage.copie(), ME.depuis(BM.maillage_moitie(0)), "Reset")
-	_modeleur.remplacer(ME.depuis(BM.maillage_moitie(0)))
+	var neuf: RefCounted = TL.depuis_le_temoin_calcule()
+	_histoire.create_action("Witness: Reset")
+	for c in _modeleur.temoin.tuiles:
+		if not neuf.tuiles.has(c):
+			continue
+		var avant: RefCounted = _modeleur.temoin.tuiles[c].copie()
+		avant.set_meta("cle", c)
+		var apres: RefCounted = neuf.tuiles[c].copie()
+		apres.set_meta("cle", c)
+		_histoire.add_do_method(_modeleur.remplacer.bind(apres))
+		_histoire.add_undo_method(_modeleur.remplacer.bind(avant))
+	_histoire.add_do_method(_temoin_modifie)
+	_histoire.add_undo_method(_temoin_modifie)
+	_histoire.commit_action()
 
 
+## ⚠ `.mbtiles` ET NON `.mbmesh` : l'ancien fichier (le témoin d'un seul tenant) n'est jamais écrasé.
 func _chemin_modele_natif() -> String:
-	return _chemin_temoin_modele().get_basename() + ".mbmesh"
+	return _chemin_temoin_modele().get_basename() + ".mbtiles"
 
 
 func _chemin_temoin_modele() -> String:
@@ -1592,18 +1669,20 @@ func _chemin_temoin_modele() -> String:
 
 ## Écrit le témoin modélisé, et le range dans la liste des travaux (étape 2) — remplacé, jamais doublé.
 func _enregistrer_le_temoin_modele() -> String:
-	if _modeleur.maillage == null:
+	if _modeleur.temoin == null:
 		return ""
 	var chemin := _chemin_temoin_modele()
 	var f := FileAccess.open(_chemin_modele_natif(), FileAccess.WRITE)
 	if f != null:
-		f.store_string(JSON.stringify(_modeleur.maillage.vers_dictionnaire()))
+		f.store_string(JSON.stringify(_modeleur.temoin.vers_dictionnaire()))
 		f.close()
-	var raison: String = _modeleur.vers_glb(chemin)
+	# ⚠ LE .glb EST LIÉ : le trancheur le relit tuile par tuile, comme un travail revenu de Blender.
+	var raison: String = _modeleur.temoin.vers_glb(chemin)
 	if raison != "":
 		_dire("[color=#e0603c]The modelled witness could not be saved:[/color] %s" % raison)
 		return raison
-	var maillage: ArrayMesh = _modeleur.maillage.vers_array_mesh(false)
+	_legende_formes.rafraichir_tuiles()   # les photos de la planche montrent ce qu'on a sculpté
+	var maillage: ArrayMesh = _modeleur.temoin.assemble()
 	var deja := -1
 	for i in _travaux.size():
 		if String(_travaux[i]["chemin"]) == chemin:
@@ -1724,13 +1803,14 @@ func _demander(quoi: String) -> void:
 		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
 		_dialogue.current_file = _projet.get_file() if quoi == "enregistrer" else ""
 	else:
-		# ⚠ LE TÉMOIN PART EN .obj (soudé), LE TRAVAIL REVIENT EN .glb — ou en .obj (charte §4).
+		# ⚠ LE TÉMOIN PART EN .glb LIÉ (charte §3, 30 septembre 2026) : l'OBJ n'a pas de copies liées.
+		# Le travail revient en .glb — ou en .obj, qui se tranche alors comme avant.
 		if quoi == "exporter":
-			_dialogue.add_filter("*.obj", "Wavefront OBJ")
+			_dialogue.add_filter("*.glb", "glTF binary (linked witness)")
 		else:
 			_dialogue.add_filter("*.glb, *.obj", "Sculpted work")
 		_dialogue.title = "Export the witness" if quoi == "exporter" else "Import the work"
-		_dialogue.current_file = "marchingblocks_witness.obj" if quoi == "exporter" else ""
+		_dialogue.current_file = "marchingblocks_witness.glb" if quoi == "exporter" else ""
 	_dialogue.popup_centered_ratio(0.6)
 
 
@@ -1763,8 +1843,10 @@ func _exporter(fichier: String) -> void:
 		_dire("[color=#e0603c]REFUSED — %d problem(s) in the witness:[/color]\n  %s"
 			% [fautes.size(), "\n  ".join(PackedStringArray(fautes.slice(0, 6)))])
 		return
+	if fichier.get_extension().to_lower() != "glb":
+		fichier = fichier.get_basename() + ".glb"
 	await _attendre("Exporting the witness", fichier.get_file())
-	var raison: String = BM.exporter_le_bloc(fichier)
+	var raison: String = BM.exporter_le_temoin_lie(fichier)
 	_fin_attente()
 	if raison != "":
 		_dire("[color=#e0603c]Export failed:[/color] %s" % raison)
@@ -1772,12 +1854,16 @@ func _exporter(fichier: String) -> void:
 	var total: int = MB.pieces_a_sculpter().size()
 	var dehors: int = MB.exterieures_a_sculpter().size()
 	_dire(("[color=#b4bd85][b]Witness written[/b][/color] → %s\n"
-		+ "One block of %d × %d × %d · %d tiles to sculpt: %d classes underground, %d also in open air.\n"
-		+ "Tiles already shrunk to HALF their cell. No normals: Blender opens it FLAT-shaded, welded.\n\n"
-		+ "[color=#f2ca79]Do not MOVE the block[/color] — its POSITION identifies it when it comes back.\n"
-		+ "Relief may spill half a cell around the block; beyond that it is lost.\n"
+		+ "One block of %d × %d × %d · %d tiles to sculpt (%d classes, %d also in open air), shown as "
+		+ "%d linked copies.\n"
+		+ "Sculpt ANY copy of a tile: every copy follows. What you see is what the world will show.\n"
+		+ "No normals: Blender opens it FLAT-shaded. Import with « Merge Vertices » to weld the colour "
+		+ "borders inside a tile.\n\n"
+		+ "[color=#f2ca79]Do not MOVE, rotate or Join the objects[/color] — each tile is identified by "
+		+ "its POSITION when it comes back. A copy sculpted on its own is reported.\n"
 		+ "Do not change WHICH cells are full: the filling fixes the tile classes.")
-		% [fichier, BM.COTE, BM.COTE, BM.COTE, total + dehors, total, dehors])
+		% [fichier, BM.COTE, BM.COTE, BM.COTE, total + dehors, total, dehors,
+		BM.occurrences_du_temoin(0).size()])
 
 
 ## On AFFICHE le travail, tel que le trancheur le lira — rien n'est tranché.
@@ -1806,10 +1892,24 @@ func _importer(fichier: String) -> void:
 		_travail_actif = _travaux.size() - 1
 	_redire_les_travaux()
 	_travail_vu(true)
-	var ecart: int = BM.ecart_au_temoin(travail)
-	var ecart_dit: String = ("[color=#f2ca79]No vertex moved compared to the witness: slicing will give "
-		+ "the witness tiles back.[/color]") if ecart == 0 \
-		else "%d new vertex position(s) compared to the witness." % ecart
+	# ⚠ UN TÉMOIN LIÉ SE DIT AUTREMENT (charte §3) : ses copies montrent la tuile choisie partout, donc il
+	# n'est pas identique au témoin continu, et compter ses sommets « déplacés » mentirait dès l'export.
+	# Ce qui compte, c'est combien de copies ont été lues, et lesquelles divergent.
+	var erreurs_liees: Array = []
+	var lie: Dictionary = BM.tuiles_liees(fichier, erreurs_liees, [])
+	var ecart_dit: String
+	if not lie.is_empty():
+		ecart_dit = "Linked witness: %d copies of %d tiles, read tile by tile." \
+			% [int(lie["occurrences"]), (lie["pieces"] as Dictionary).size()]
+		if not erreurs_liees.is_empty():
+			ecart_dit += ("\n[color=#e0603c]%d tile(s) whose copies no longer agree[/color] (a copy sculpted "
+				+ "on its own, moved or rotated — the most common one will be kept):\n  %s") \
+				% [erreurs_liees.size(), "\n  ".join(PackedStringArray(erreurs_liees.slice(0, 5)))]
+	else:
+		var ecart: int = BM.ecart_au_temoin(travail)
+		ecart_dit = ("[color=#f2ca79]No vertex moved compared to the witness: slicing will give "
+			+ "the witness tiles back.[/color]") if ecart == 0 \
+			else "%d new vertex position(s) compared to the witness." % ecart
 	_dire(("[color=#b4bd85][b]Work imported[/b][/color] ← %s\n%s\n\nThe view shows it as the slicer "
 		+ "will read it: whatever leaves the block's box is gone.\n[i]« Slice the work » re-reads the "
 		+ "file when clicked — saving again in Blender meanwhile is enough.[/i]") % [fichier, ecart_dit])
@@ -1880,6 +1980,8 @@ func _poser_lot(bilan: Dictionary, quoi: String, source: String, entete := "") -
 		MB.pieces_a_sculpter().size()]
 	if en_plus > 0:
 		texte += ", + %d sculpted copy(ies)" % en_plus
+	if bilan.get("lie", false):
+		texte += " — read tile by tile from %d linked copies, nothing sliced" % int(bilan.get("occurrences", 0))
 	texte += "\n"
 	var manquantes: Array = bilan.get("manquantes", [])
 	if not manquantes.is_empty():

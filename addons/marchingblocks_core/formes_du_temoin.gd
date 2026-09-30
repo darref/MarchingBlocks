@@ -12,8 +12,8 @@ extends RefCounted
 ## case pleine l'emporte. Réordonner cette table change le témoin — `test_formes_du_temoin` le garde en
 ## rebâtissant le bloc et en le comparant à `BlocsMaitres.BLOCS`.
 ##
-## ⚠ **CE QUI N'EST DANS AUCUNE FORME SE DÉDUIT, IL NE SE DÉCLARE PAS** : la réparation et le finisseur
-## de `planete_paysage.gd` ajoutent quelques cases qu'aucune forme n'explique. `cases_du_finisseur()` les
+## ⚠ **CE QUI N'EST DANS AUCUNE FORME SE DÉDUIT, IL NE SE DÉCLARE PAS** : la réparation, le finisseur
+## et les raccords (30 septembre 2026) de `planete_paysage.gd` ajoutent quelques cases qu'aucune forme n'explique. `cases_du_finisseur()` les
 ## rend par DIFFÉRENCE entre le témoin livré et ce que bâtissent les formes — une liste écrite ici
 ## mentirait le jour où l'on recolle un autre témoin.
 ##
@@ -192,7 +192,7 @@ const FORMES := [
 ## La carte des cases que le finisseur et la réparation ont ajoutées — pas dans `FORMES` : déduite.
 const FINISSEUR := {
 	"id": "finisseur", "nom": "Twists",
-	"monde": "Small twisted steps no landscape shape makes. They carry rare tiles: sculpt them too.",
+	"monde": "Small twisted steps no landscape shape makes. They carry rare tiles and prove their seams: sculpt them too.",
 }
 
 

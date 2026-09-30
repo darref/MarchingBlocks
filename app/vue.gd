@@ -399,8 +399,8 @@ func basculer_ortho() -> bool:
 
 
 ## LA ZONE D'UNE FORME — allumée à travers la roche : la salle d'une grotte est DEDANS le bloc.
-func montrer_zone(cases: Array) -> void:
-	LegendeFormes.remplir_zone(_zone_vue, cases if mode == "temoin" else [])
+func montrer_zone(cases: Array, taille := 1.0) -> void:
+	LegendeFormes.remplir_zone(_zone_vue, cases if mode == "temoin" else [], taille)
 
 
 ## Montre la place d'une pièce (le sommet `v` est au centre de la case `v + (1, 1, 1)`), ou rien (`null`).

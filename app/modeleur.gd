@@ -77,14 +77,42 @@ var _aretes_mi: MeshInstance3D
 var _sommets_mm: MultiMeshInstance3D
 var _apercu_mi: MeshInstance3D
 
+## ── LE TÉMOIN LIÉ (charte §3, une tuile par clé, 30 septembre 2026) ────────────────────────────────
+##
+## Le modeleur édite LA TUILE DE L'OCCURRENCE VISÉE, dans le repère de référence de sa clé : `maillage` est
+## `temoin.tuiles[cle]`, et `pose` dit où l'occurrence active est posée. Tout ce qui dessine l'édition vit
+## sous `_edition`, posé à l'occurrence ; toutes les autres occurrences sont dessinées par `_occurrences`,
+## une MultiMesh PAR TUILE qui partage le maillage de sa tuile — sculpter l'une les change toutes, à chaque
+## mouvement de souris (`_propager`).
+## ⚠ **TOUT CE QUI PARLE À LA CAMÉRA PASSE PAR LA POSE** (`_origine`, `_direction`, `_ecran`, `_oeil`,
+## `_axe_camera`, `_vers_la_tuile`) : « G Z 1 » monte toujours d'une case DANS LE MONDE, quelle que soit la
+## rotation de la copie qu'on sculpte. Sans témoin lié, la pose est l'identité : rien ne change.
+## ⚠ Cliquer une occurrence d'une AUTRE tuile change de tuile, et vide la sélection (les indices sont ceux
+## d'une tuile) — comme les copies liées de Blender, qu'on édite une à la fois. Une autre occurrence de la
+## MÊME tuile garde la sélection.
+var temoin: RefCounted
+var occurrence := -1
+var cle := ""
+var pose := Transform3D.IDENTITY
+var _edition: Node3D
+var _occurrences: Node3D
+var _mm_de := {}          # clé → MultiMeshInstance3D
+var _rang_dans_mm := {}   # occurrence → rang dans la MultiMesh de sa tuile
+
 
 func _init() -> void:
 	name = "Modeleur"
+	_edition = Node3D.new()
+	_edition.name = "Edition"
+	add_child(_edition)
+	_occurrences = Node3D.new()
+	_occurrences.name = "Occurrences"
+	add_child(_occurrences)
 	# ⚠ PAS DE `material_override` : chaque surface porte son matériau (`MaillageEdite.vers_array_mesh_de`).
 	_faces_mi = MeshInstance3D.new()
-	add_child(_faces_mi)
+	_edition.add_child(_faces_mi)
 	_faces_dyn_mi = MeshInstance3D.new()
-	add_child(_faces_dyn_mi)
+	_edition.add_child(_faces_dyn_mi)
 	_sel_mi = _instance_translucide(Color(ORANGE, 0.35))
 	_aretes_mi = MeshInstance3D.new()
 	var ma := StandardMaterial3D.new()
@@ -93,11 +121,11 @@ func _init() -> void:
 	ma.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_aretes_mi.material_override = ma
 	_aretes_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_aretes_mi)
+	_edition.add_child(_aretes_mi)
 	_aretes_dyn_mi = MeshInstance3D.new()
 	_aretes_dyn_mi.material_override = ma
 	_aretes_dyn_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_aretes_dyn_mi)
+	_edition.add_child(_aretes_dyn_mi)
 	_sommets_mm = MultiMeshInstance3D.new()
 	var boite := BoxMesh.new()
 	boite.size = Vector3.ONE * 0.05
@@ -111,14 +139,14 @@ func _init() -> void:
 	mm.mesh = boite
 	_sommets_mm.multimesh = mm
 	_sommets_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(_sommets_mm)
+	_edition.add_child(_sommets_mm)
 	_apercu_mi = MeshInstance3D.new()
 	var mp := StandardMaterial3D.new()
 	mp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	mp.albedo_color = Color(1, 0.9, 0.2)
 	mp.no_depth_test = true
 	_apercu_mi.material_override = mp
-	add_child(_apercu_mi)
+	_edition.add_child(_apercu_mi)
 
 
 func _instance_translucide(c: Color) -> MeshInstance3D:
@@ -130,7 +158,7 @@ func _instance_translucide(c: Color) -> MeshInstance3D:
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
+	_edition.add_child(mi)
 	return mi
 
 
@@ -140,11 +168,138 @@ func charger(m: RefCounted) -> void:
 	redessiner()
 
 
-## Pose un maillage tel quel — c'est ce que l'annulation appelle.
+## CHARGE UN TÉMOIN LIÉ : une MultiMesh par tuile pour les occurrences, puis l'occurrence `active` en édition.
+func charger_temoin(t: RefCounted, active := 0) -> void:
+	temoin = t
+	for enfant in _occurrences.get_children():
+		enfant.queue_free()
+	_mm_de = {}
+	_rang_dans_mm = {}
+	var par_cle := {}
+	for i in t.occurrences.size():
+		var c: String = t.occurrences[i]["cle"]
+		if not par_cle.has(c):
+			par_cle[c] = []
+		_rang_dans_mm[i] = (par_cle[c] as Array).size()
+		par_cle[c].append(i)
+	for c in par_cle:
+		var mmi := MultiMeshInstance3D.new()
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = t.tuiles[c].vers_array_mesh()
+		mm.instance_count = (par_cle[c] as Array).size()
+		for k in (par_cle[c] as Array).size():
+			mm.set_instance_transform(k, t.occurrences[par_cle[c][k]]["pose"])
+		mmi.multimesh = mm
+		_occurrences.add_child(mmi)
+		_mm_de[c] = mmi
+	occurrence = -1
+	cle = ""
+	activer(clampi(active, 0, t.occurrences.size() - 1))
+
+
+## L'occurrence `i` passe en édition : sa tuile devient `maillage`, et elle est dessinée par `_edition` (on
+## la cache dans sa MultiMesh). Changer de TUILE vide la sélection ; une autre occurrence de la même la garde.
+func activer(i: int) -> void:
+	if temoin == null or i < 0 or i >= temoin.occurrences.size():
+		return
+	if occurrence >= 0:
+		_montrer_l_occurrence(occurrence, true)
+	var ancienne := cle
+	occurrence = i
+	cle = temoin.occurrences[i]["cle"]
+	pose = temoin.occurrences[i]["pose"]
+	_edition.transform = pose
+	_montrer_l_occurrence(i, false)
+	maillage = temoin.tuiles[cle]
+	if cle != ancienne:
+		_vider_selection()
+		redessiner()
+	else:
+		_dessiner_selection()
+
+
+func _montrer_l_occurrence(i: int, oui: bool) -> void:
+	var c: String = temoin.occurrences[i]["cle"]
+	if not _mm_de.has(c):
+		return
+	var t: Transform3D = temoin.occurrences[i]["pose"]
+	if not oui:
+		t = Transform3D(Basis().scaled(Vector3.ZERO), t.origin)
+	(_mm_de[c] as MultiMeshInstance3D).multimesh.set_instance_transform(_rang_dans_mm[i], t)
+
+
+## LA PROPAGATION : la tuile du témoin EST le maillage édité (un geste peut l'avoir remplacé par une copie),
+## et toutes ses occurrences redessinées d'un coup — elles partagent le même maillage Godot.
+func _propager() -> void:
+	if temoin == null or cle == "":
+		return
+	temoin.tuiles[cle] = maillage
+	if _mm_de.has(cle):
+		(_mm_de[cle] as MultiMeshInstance3D).multimesh.mesh = maillage.vers_array_mesh()
+
+
+## Pose un maillage tel quel — c'est ce que l'annulation appelle. Avec un témoin lié, `m` porte en méta la
+## clé de sa tuile (`instantane`) : c'est CETTE tuile qui est remplacée, où que soit l'édition.
 func remplacer(m: RefCounted) -> void:
-	maillage = m.copie()
+	if temoin != null and m.has_meta("cle"):
+		var c: String = m.get_meta("cle")
+		temoin.poser_tuile(c, m)
+		if _mm_de.has(c):
+			(_mm_de[c] as MultiMeshInstance3D).multimesh.mesh = temoin.tuiles[c].vers_array_mesh()
+		# Les matériaux reviennent avec la tuile, et ils sont communs : celles qui en portent se redessinent.
+		_rafraichir_les_tuiles_qui_portent(-2)
+		if c != cle:
+			redessiner()   # la tuile en édition garde sa sélection, mais ses matériaux ont pu revenir
+			return
+		maillage = temoin.tuiles[c]
+	else:
+		maillage = m.copie()
 	_vider_selection()
 	redessiner()
+
+
+## Une copie du maillage édité, marquée de la clé de sa tuile — ce que l'annulation garde.
+func instantane() -> RefCounted:
+	var m: RefCounted = maillage.copie()
+	if cle != "":
+		m.set_meta("cle", cle)
+	return m
+
+
+## Émet un geste fini : `avant` (pris au début) et l'état présent, marqués de la clé de la tuile.
+func _emettre(avant: RefCounted, nom: String) -> void:
+	if cle != "":
+		avant.set_meta("cle", cle)
+	change.emit(avant, instantane(), nom)
+
+
+# ── LA CAMÉRA, VUE DEPUIS LA TUILE ──────────────────────────────────────────────────────────────────
+
+func _origine(p: Vector2) -> Vector3:
+	return pose.affine_inverse() * camera.project_ray_origin(p)
+
+
+func _direction(p: Vector2) -> Vector3:
+	return (pose.basis.inverse() * camera.project_ray_normal(p)).normalized()
+
+
+func _ecran(q: Vector3) -> Vector2:
+	return camera.unproject_position(pose * q)
+
+
+func _oeil() -> Vector3:
+	return pose.affine_inverse() * camera.global_position
+
+
+## Un axe de la caméra (0 = droite, 1 = haut, 2 = vers l'œil), dans le repère de la tuile.
+func _axe_camera(i: int) -> Vector3:
+	return pose.basis.inverse() * camera.global_transform.basis[i]
+
+
+## Une direction du monde, dans le repère de la tuile.
+func _vers_la_tuile(v: Vector3) -> Vector3:
+	return pose.basis.inverse() * v
 
 
 # ── LE DESSIN ───────────────────────────────────────────────────────────────────────────────────────
@@ -158,6 +313,7 @@ func redessiner() -> void:
 	_faces_mi.mesh = maillage.vers_array_mesh()
 	# La grille des rayons est une PHOTO du maillage : elle se rebâtit à chaque changement dessiné.
 	maillage.preparer_rayons()
+	_propager()
 	_dessiner_selection()
 
 
@@ -248,12 +404,14 @@ func _redessiner_le_geste_topologique() -> void:
 				liste.append(e)
 	_aretes_dyn_mi.mesh = _lignes(liste, {})
 	_dessiner_voile()
+	_propager()
 
 
 func _redessiner_le_geste() -> void:
 	_faces_dyn_mi.mesh = maillage.vers_array_mesh_de(_faces_mobiles)
 	_aretes_dyn_mi.mesh = _lignes(_aretes_mobiles, _aretes_choisies())
 	_dessiner_voile()
+	_propager()
 
 
 func _lignes(liste: Array, choisies: Dictionary) -> ArrayMesh:
@@ -419,9 +577,17 @@ func tout_choisir(oui: bool) -> void:
 ## rayon trouve d'abord la face visible, puis le sommet ou l'arête DE CETTE FACE le plus proche du clic —
 ## jamais un sommet caché derrière, qui se projetterait au même endroit.
 func cliquer(p: Vector2, ajouter: bool, boucle := false) -> void:
+	# AVEC UN TÉMOIN LIÉ, on vise d'abord l'OCCURRENCE (toutes les copies, pas seulement celle en édition) :
+	# elle passe en édition, et la face touchée est une face de SA tuile.
+	var hit: Dictionary
+	if temoin != null:
+		hit = temoin.rayon(camera.project_ray_origin(p), camera.project_ray_normal(p))
+		if not hit.is_empty() and int(hit["occurrence"]) != occurrence:
+			activer(int(hit["occurrence"]))
 	if not ajouter:
 		_vider_selection()
-	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(p), camera.project_ray_normal(p))
+	if temoin == null:
+		hit = maillage.lancer_rayon_rapide(_origine(p), _direction(p))
 	if hit.is_empty():
 		_dessiner_selection()
 		return
@@ -452,7 +618,7 @@ func cliquer(p: Vector2, ajouter: bool, boucle := false) -> void:
 				var meilleur := -1
 				var d_min := INF
 				for i in face:
-					var d: float = camera.unproject_position(maillage.sommets[i]).distance_to(p)
+					var d: float = _ecran(maillage.sommets[i]).distance_to(p)
 					if d < d_min:
 						d_min = d
 						meilleur = i
@@ -473,8 +639,8 @@ func _arete_proche(face: PackedInt32Array, p: Vector2) -> Vector2i:
 	for k in face.size():
 		var a := face[k]
 		var b := face[(k + 1) % face.size()]
-		var pa := camera.unproject_position(maillage.sommets[a])
-		var pb := camera.unproject_position(maillage.sommets[b])
+		var pa := _ecran(maillage.sommets[a])
+		var pb := _ecran(maillage.sommets[b])
 		var d := p.distance_to(Geometry2D.get_closest_point_to_segment(p, pa, pb))
 		if d < d_min:
 			d_min = d
@@ -490,20 +656,20 @@ func choisir_dans(r: Rect2) -> void:
 		"sommet":
 			for i in maillage.sommets.size():
 				var p: Vector3 = maillage.sommets[i]
-				if r.has_point(camera.unproject_position(p)) and _vu(p):
+				if r.has_point(_ecran(p)) and _vu(p):
 					sel_s[i] = true
 		"arete":
 			for e in _aretes():
 				var a: Vector3 = maillage.sommets[e.x]
 				var b: Vector3 = maillage.sommets[e.y]
-				if r.has_point(camera.unproject_position(a)) and r.has_point(camera.unproject_position(b)) \
+				if r.has_point(_ecran(a)) and r.has_point(_ecran(b)) \
 						and _vu((a + b) * 0.5):
 					sel_a[e] = true
 		"face":
 			for f in maillage.faces.size():
 				var c: Vector3 = maillage.centre(f)
 				# ⚠ EN X-RAY, LES FACES DE DOS AUSSI (comme Blender) : l'écart de dos n'est qu'une part de « ce qu'on voit ».
-				if r.has_point(camera.unproject_position(c)) and camera.is_position_in_frustum(c) \
+				if r.has_point(_ecran(c)) and camera.is_position_in_frustum(pose * c) \
 						and (rayons_x or (maillage.normale(f).dot(_vers_l_oeil(c)) > 0.0 and _vu(c))):
 					sel_f[f] = true
 	_dessiner_selection()
@@ -512,17 +678,26 @@ func choisir_dans(r: Rect2) -> void:
 ## La direction du point vers l'œil (en orthographique, l'œil est à l'infini derrière l'écran).
 func _vers_l_oeil(p: Vector3) -> Vector3:
 	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
-		return camera.global_transform.basis.z
-	return (camera.global_position - p).normalized()
+		return _axe_camera(2)
+	return (_oeil() - p).normalized()
 
 
 ## Le point est-il VU ? Toujours vrai en X-ray (Alt+Z).
 func _vu(p: Vector3) -> bool:
 	if rayons_x:
 		return true
-	var oeil: Vector3 = camera.global_position
+	# ⚠ AVEC UN TÉMOIN LIÉ, CE QUI CACHE PEUT ÊTRE UNE AUTRE OCCURRENCE : le rayon interroge tout le témoin
+	# (vu rougir dans `fumee_appli` : la seule tuile en édition ne cachait jamais rien).
+	if temoin != null:
+		var pw: Vector3 = pose * p
+		var ow: Vector3 = camera.global_position
+		if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+			ow = pw + camera.global_transform.basis.z * 1000.0
+		var h: Dictionary = temoin.rayon(ow, pw - ow)
+		return h.is_empty() or float(h["distance"]) >= ow.distance_to(pw) - 2e-3
+	var oeil: Vector3 = _oeil()
 	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
-		oeil = p + camera.global_transform.basis.z * 1000.0
+		oeil = p + _axe_camera(2) * 1000.0
 	return maillage.visible_depuis(oeil, p, 2e-3)
 
 
@@ -631,18 +806,18 @@ func _mettre_a_jour() -> void:
 		"G":
 			var delta := _glissement()
 			if _saisie != "":
-				delta = (axe if axe != Vector3.ZERO else AXES["x"]) * _valeur(0.0)
+				delta = (axe if axe != Vector3.ZERO else _vers_la_tuile(AXES["x"])) * _valeur(0.0)
 			elif axe != Vector3.ZERO:
 				delta = axe * delta.dot(axe)
 			t = Transform3D(Basis(), delta)
-			dit.emit("[b]%s[/b]  %s   %s" % [_nom_geste, _dire_vecteur(delta), _aide_axe()])
+			dit.emit("[b]%s[/b]  %s   %s" % [_nom_geste, _dire_vecteur(pose.basis * delta), _aide_axe()])
 		"R":
 			# ⚠ L'ANGLE À L'ÉCRAN, AUTOUR DE L'AXE QUI POINTE VERS L'ŒIL : l'écran a son y vers le bas, donc un
 			# angle qui croît y tourne dans le sens HORAIRE, soit −angle autour de l'axe vers l'œil. Un axe
 			# imposé qui regarde de l'autre côté inverse le sens, pour que la pièce suive toujours la souris.
 			# Tapé, l'angle est en degrés, main droite autour de l'axe (celui de Blender).
-			var ps := camera.unproject_position(_pivot)
-			var vers_oeil := camera.global_transform.basis.z
+			var ps := _ecran(_pivot)
+			var vers_oeil := _axe_camera(2)
 			var autour: Vector3 = axe if axe != Vector3.ZERO else vers_oeil
 			var angle := -((souris - ps).angle() - (_souris0 - ps).angle())
 			if autour.dot(vers_oeil) < 0.0:
@@ -652,7 +827,7 @@ func _mettre_a_jour() -> void:
 			t = Transform3D(Basis(), _pivot) * Transform3D(Basis(autour.normalized(), angle), Vector3.ZERO) 				* Transform3D(Basis(), -_pivot)
 			dit.emit("[b]Rotate[/b]  %.1f°   %s" % [rad_to_deg(angle), _aide_axe()])
 		"S":
-			var ps := camera.unproject_position(_pivot)
+			var ps := _ecran(_pivot)
 			var f := souris.distance_to(ps) / maxf(1.0, _souris0.distance_to(ps))
 			if _saisie != "":
 				f = _valeur(1.0)
@@ -682,28 +857,28 @@ static func _dire_vecteur(v: Vector3) -> String:
 func _direction_d_axe() -> Vector3:
 	if _axe == "normale":
 		return _normale_extrusion
-	return AXES.get(_axe, Vector3.ZERO)
+	return _vers_la_tuile(AXES.get(_axe, Vector3.ZERO))
 
 
 ## Le déplacement monde qui suit la souris, dans le plan de l'écran passant par le pivot.
 func _glissement() -> Vector3:
-	var n := -camera.global_transform.basis.z
+	var n := -_axe_camera(2)
 	var plan := Plane(n, _pivot)
-	var p0 = plan.intersects_ray(camera.project_ray_origin(_souris0), camera.project_ray_normal(_souris0))
-	var p1 = plan.intersects_ray(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	var p0 = plan.intersects_ray(_origine(_souris0), _direction(_souris0))
+	var p1 = plan.intersects_ray(_origine(souris), _direction(souris))
 	if p0 == null or p1 == null:
 		return Vector3.ZERO
 	return p1 - p0
 
 
 func _ecart_ecran() -> float:
-	var ps := camera.unproject_position(_pivot)
+	var ps := _ecran(_pivot)
 	return souris.distance_to(ps) - _souris0.distance_to(ps)
 
 
 func _pixels_par_unite() -> float:
-	var droite := camera.global_transform.basis.x
-	return maxf(1.0, camera.unproject_position(_pivot + droite).distance_to(camera.unproject_position(_pivot)))
+	var droite := _axe_camera(0)
+	return maxf(1.0, _ecran(_pivot + droite).distance_to(_ecran(_pivot)))
 
 
 ## Ce qui a été TAPÉ, sinon `defaut`. « -2.5 », « 3 », « . » (rien) acceptés.
@@ -719,7 +894,7 @@ func confirmer() -> void:
 	modal = ""
 	var avant: RefCounted = _avant
 	_avant = null
-	change.emit(avant, maillage.copie(), _nom_geste)
+	_emettre(avant, _nom_geste)
 	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % _nom_geste)
 	redessiner()
 
@@ -781,7 +956,7 @@ func operer(nom: String) -> void:
 				sel_f[f] = true
 		_:
 			return
-	change.emit(avant, maillage.copie(), libelle)
+	_emettre(avant, libelle)
 	redessiner()
 	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % libelle)
 
@@ -797,7 +972,7 @@ func commencer_boucle() -> void:
 
 func _viser_boucle() -> void:
 	_anneau_vise = []
-	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	var hit: Dictionary = maillage.lancer_rayon_rapide(_origine(souris), _direction(souris))
 	var lp := PackedVector3Array()
 	if not hit.is_empty():
 		var e := _arete_proche(maillage.faces[hit["face"]], souris)
@@ -825,7 +1000,7 @@ func _couper_la_boucle() -> void:
 	_vider_selection()
 	for i in neufs:
 		sel_s[i] = true
-	change.emit(avant, maillage.copie(), "Loop cut")
+	_emettre(avant, "Loop cut")
 	redessiner()
 	dit.emit("[b]Loop cut[/b] — %d new vertices, selected: G to slide them. [i]Ctrl+Z undoes it.[/i]" % neufs.size())
 
@@ -845,7 +1020,7 @@ func commencer_couteau() -> void:
 
 
 func _point_vise_du_couteau() -> Dictionary:
-	var hit: Dictionary = maillage.lancer_rayon_rapide(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	var hit: Dictionary = maillage.lancer_rayon_rapide(_origine(souris), _direction(souris))
 	if hit.is_empty():
 		return {}
 	var e := _arete_proche(maillage.faces[hit["face"]], souris)
@@ -899,7 +1074,7 @@ func _finir_le_couteau() -> void:
 		dit.emit("[color=#e0603c]Nothing cut[/color] — each step of the knife must stay on ONE face. "
 			+ "[i]Place the points again, face by face.[/i]")
 		return
-	change.emit(avant, maillage.copie(), "Knife")
+	_emettre(avant, "Knife")
 	redessiner()
 	dit.emit("[b]Knife[/b] done. [i]Ctrl+Z undoes it.[/i]")
 
@@ -1083,7 +1258,7 @@ func nouveau_materiau() -> int:
 	maillage.materiaux.append({"nom": "Material %d" % (n + 1), "couleur": Color.from_hsv(fmod(0.08 + n * 0.17, 1.0), 0.45, 0.75),
 		"rugosite": 0.8, "metal": 0.0, "texture": "", "echelle": 1.0})
 	materiau_courant = n
-	change.emit(avant, maillage.copie(), "New material")
+	_emettre(avant, "New material")
 	redessiner()
 	return n
 
@@ -1096,7 +1271,7 @@ func assigner_courant() -> void:
 		return
 	var avant: RefCounted = maillage.copie()
 	maillage.assigner(fs, materiau_courant)
-	change.emit(avant, maillage.copie(), "Assign material")
+	_emettre(avant, "Assign material")
 	redessiner()
 	dit.emit("[b]Material[/b] %s → %d face(s). [i]Ctrl+Z undoes it.[/i]" % [
 		"legend colour" if materiau_courant < 0 else str(maillage.materiaux[materiau_courant]["nom"]), fs.size()])
@@ -1108,6 +1283,25 @@ func regler_materiau(k: int, cle: String, valeur: Variant) -> void:
 		return
 	maillage.materiaux[k][cle] = valeur
 	redessiner()
+	_rafraichir_les_tuiles_qui_portent(k)
+
+
+## Les matériaux sont PARTAGÉS par les 52 tuiles : en retoucher un redessine les occurrences des tuiles qui
+## le portent (`k` = −2 : toutes celles qui portent un matériau, après une annulation).
+func _rafraichir_les_tuiles_qui_portent(k: int) -> void:
+	if temoin == null:
+		return
+	for c in temoin.tuiles:
+		if c == cle or not _mm_de.has(c):
+			continue
+		var m: RefCounted = temoin.tuiles[c]
+		var porte := false
+		for x in m.mats:
+			if x == k or (k == -2 and x >= 0):
+				porte = true
+				break
+		if porte:
+			(_mm_de[c] as MultiMeshInstance3D).multimesh.mesh = m.vers_array_mesh()
 
 
 ## U — DÉPLIER : les faces choisies (tout le témoin si rien n'est choisi).
@@ -1117,7 +1311,7 @@ func deplier_selection() -> void:
 	var fs := _faces_choisies()
 	var avant: RefCounted = maillage.copie()
 	var r: Dictionary = maillage.deplier(fs)
-	change.emit(avant, maillage.copie(), "Unwrap")
+	_emettre(avant, "Unwrap")
 	redessiner()
 	dit.emit(("[b]Unwrapped[/b] — %d face(s) in %d island(s), laid out in the 0–1 square at one scale. "
 		+ "[i]Export UV layout… to paint on it; give the material the « UV » projection.[/i]")
@@ -1132,7 +1326,7 @@ func centre_de_la_selection() -> Variant:
 	var c := Vector3.ZERO
 	for i in ids:
 		c += maillage.sommets[i]
-	return c / float(ids.size())
+	return pose * (c / float(ids.size()))   # un point du MONDE : la vue y cadre
 
 
 ## Le maillage pour le trancheur et le fichier : sans normales (plat), avec ses teintes.

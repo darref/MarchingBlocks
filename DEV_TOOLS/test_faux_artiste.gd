@@ -104,8 +104,8 @@ func _le_faux_revient_entier() -> MeshLibrary:
 		"le faux se tranche avec %d erreur(s) : %s" % [(bilan["erreurs"] as Array).size(),
 		str((bilan["erreurs"] as Array).slice(0, 3))])
 	_dire((bilan["manquantes"] as Array).is_empty(), "le faux ne livre pas : %s" % str(bilan["manquantes"]))
-	_dire(lot.get_item_list().size() == 541,
-		"le faux livre %d items, le témoin en livre 541" % lot.get_item_list().size())
+	_dire(lot.get_item_list().size() == 549,
+		"le faux livre %d items, le témoin en livre 549" % lot.get_item_list().size())
 	var couture: Array = _remarques_de(bilan, "")
 	couture = couture.filter(func(r: String) -> bool: return r.begins_with("couture"))
 	_dire(couture.is_empty(), "un artiste DISCIPLINÉ reçoit %d remarque(s) de couture : %s"

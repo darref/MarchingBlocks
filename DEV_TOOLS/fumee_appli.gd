@@ -18,6 +18,7 @@ const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
+const PlancheTuiles := preload("res://app/planche_tuiles.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 
@@ -359,6 +360,8 @@ func _mener() -> void:
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
 	await _le_modeleur(ed)
+	_la_planche_des_tuiles(ed)
+	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
 	_la_provenance(ed)
@@ -487,6 +490,90 @@ func _la_provenance(ed: Control) -> void:
 	v.monde().lot = lot_avant
 	v.monde().reconstruire()
 	_provenance_finie = true
+
+
+var _planche_finie := false
+
+
+## LA PLANCHE DES TUILES (charte §3) : l'onglet « The tiles » du bandeau de Witness. ⚠ LES ATTENDUS VIENNENT
+## D'AILLEURS : le nombre de cartes, des listes du MODÈLE ; les copies allumées, recomptées sommet par sommet
+## par la règle du trancheur (`cle_du_sommet`) ; les demi-cases fantômes, comptées sur les bits de la classe.
+func _la_planche_des_tuiles(ed: Control) -> void:
+	ed._aller_a("witness")
+	var leg = ed._legende_formes
+	leg.montrer_onglet("tuiles")
+	var pl = leg.planche
+	var attendues: int = MB.pieces_a_sculpter().size() + MB.exterieures_a_sculpter().size()
+	_egal(pl.cartes.size(), attendues, "la planche montre une carte par tuile du monde")
+	_vrai(pl.visible and not leg._defile.visible, "l'onglet des tuiles remplace celui des formes")
+	var t: Dictionary = BM.cases(0)
+	var plafond: int = MB.plafond_de(t)
+	var copies_de := {}
+	var vus := {}
+	for c in t:
+		for s in MB.sommets_de(c):
+			if vus.has(s):
+				continue
+			vus[s] = true
+			var k: String = Tranchage.cle_du_sommet(t, s, plafond).get("cle", "")
+			if k != "":
+				copies_de[k] = int(copies_de.get(k, 0)) + 1
+	var fantomes_justes := true
+	var photos := true
+	for cle in pl.cartes:
+		var bits := -1
+		for c in MB.classes():
+			if c["nom"] == MB.nom_nu(cle):
+				bits = c["bits"]
+		var pleins := 0
+		for k in 8:
+			if bits & (1 << k):
+				pleins += 1
+		var vue: SubViewport = pl.cartes[cle]["vue"]
+		var boites := 0
+		for enfant in vue.get_children():
+			if enfant is MeshInstance3D and (enfant as MeshInstance3D).mesh is BoxMesh:
+				boites += 1
+		fantomes_justes = fantomes_justes and boites == pleins
+		var tuile: MeshInstance3D = pl.cartes[cle]["tuile"]
+		photos = photos and tuile.mesh != null and tuile.mesh.get_surface_count() > 0
+	_vrai(fantomes_justes, "chaque photo montre en fantôme les demi-cases pleines de SA classe")
+	_vrai(photos, "chaque photo porte le maillage de sa tuile")
+	var paroi := "mb_plaque_b2h2_dehors"
+	(pl.cartes[paroi]["fond"] as Control).mouse_entered.emit()
+	_egal(ed._vue._zone_vue.multimesh.instance_count, int(copies_de.get(paroi, -1)),
+		"survoler la paroi allume TOUTES ses copies (recomptées par le trancheur)")
+	(pl.cartes[paroi]["fond"] as Control).mouse_exited.emit()
+	_vrai(not ed._vue._zone_vue.visible, "et quitter la carte les éteint")
+	_vrai(PlancheTuiles.role_de(paroi).contains("wall") and PlancheTuiles.role_de("mb_plaque_b4h0").contains("ground"),
+		"la paroi dit qu'elle est un mur, le sol qu'il est un sol")
+	# Le clic, hors édition : une boîte blanche sur une copie de CETTE tuile.
+	var coin := "mb_coin_b1h0_dehors"
+	leg.tuile_choisie.emit(coin)
+	var v = ed._vue
+	var sommet := Vector3i((v._tuile_vue.position - Vector3.ONE).round())
+	_vrai(v._tuile_vue.visible and Tranchage.cle_du_sommet(t, sommet, plafond).get("cle", "") == coin,
+		"un clic montre une copie de la tuile choisie")
+	# En édition : la tuile choisie passe en édition.
+	ed._regler_edition(true)
+	leg.tuile_choisie.emit(coin)
+	_egal(ed._modeleur.cle, coin, "en édition, un clic sur la carte met la tuile en édition")
+	# Les photos suivent la sculpture : un sommet de la tuile déplacé, la photo le montre après rafraîchissement.
+	var mo: Node3D = ed._modeleur
+	var avant: AABB = (pl.cartes[coin]["tuile"] as MeshInstance3D).mesh.get_aabb()
+	var bas := 0
+	for i in mo.maillage.sommets.size():
+		if mo.maillage.sommets[i].y < mo.maillage.sommets[bas].y:
+			bas = i
+	mo.maillage.sommets[bas] += Vector3(0, -0.4, 0)
+	leg.rafraichir_tuiles()
+	var apres: AABB = (pl.cartes[coin]["tuile"] as MeshInstance3D).mesh.get_aabb()
+	_vrai(apres.position.y < avant.position.y - 0.3, "la photo de la tuile montre la sculpture après rafraîchissement")
+	mo.maillage.sommets[bas] -= Vector3(0, -0.4, 0)
+	ed._regler_edition(false)
+	leg.montrer_onglet("formes")
+	_vrai(leg._defile.visible and not pl.visible, "l'onglet des formes revient")
+	_planche_finie = true
 
 
 ## LE PLAY TEST, mené par de VRAIES touches (`Input.parse_input_event`) : le personnage tombe sur un
@@ -631,10 +718,10 @@ func _le_modeleur(ed: Control) -> void:
 	_vrai(ed._droite_temoin.visible and not ed._droite.visible, "Witness : la barre du MODELEUR, pas celle de la peinture")
 	ed._input(_cle(KEY_TAB))
 	var mo: Node3D = ed._modeleur
-	_vrai(ed._vue.edition and mo.maillage != null and mo.visible, "Tab entre en édition, le témoin est chargé")
+	_vrai(ed._vue.edition and mo.temoin != null and mo.maillage != null and mo.visible,
+		"Tab entre en édition, le témoin LIÉ est chargé")
 	if mo.maillage == null:
 		return
-	var f0: int = mo.maillage.faces.size()
 	ed._input(_cle(KEY_3))
 	_egal(mo.mode_sel, "face", "3 : mode face")
 	# ⚠ ON RECADRE : les essais de vol de Navigate ont emmené la caméra ailleurs. Vue de face, sur le bloc.
@@ -646,7 +733,10 @@ func _le_modeleur(ed: Control) -> void:
 		await process_frame
 	var cam: Camera3D = ed._vue._camera
 	var centre_vue: Vector2 = ed._vue.size * 0.5
-	var hit: Dictionary = mo.maillage.lancer_rayon(cam.project_ray_origin(centre_vue), cam.project_ray_normal(centre_vue))
+	# ⚠ TÉMOIN LIÉ (charte §3) : le rayon trouve une OCCURRENCE ; la face est une face de SA tuile, et tout ce
+	# qui suit se juge dans le repère de cette tuile (une rotation autour de +Y garde le haut : « G Z 2 »
+	# monte de deux cases dans les deux repères).
+	var hit: Dictionary = mo.temoin.rayon(cam.project_ray_origin(centre_vue), cam.project_ray_normal(centre_vue))
 	_vrai(not hit.is_empty(), "le centre de la vue tombe sur le témoin")
 	if hit.is_empty():
 		return
@@ -656,7 +746,11 @@ func _le_modeleur(ed: Control) -> void:
 	clic.pressed = true
 	clic.position = centre_vue
 	ed._vue._gui_input(clic)
+	_vrai(mo.occurrence == int(hit["occurrence"]) and mo.cle == hit["cle"],
+		"le clic met l'occurrence visée en édition (« %s »)" % hit["cle"])
 	_egal(mo.sel_f, {f: true}, "un clic choisit la face VISIBLE sous la souris")
+	var cle_a: String = mo.cle
+	var f0: int = mo.maillage.faces.size()
 	var c0: Vector3 = mo.maillage.centre(f)
 	var n0: Vector3 = mo.maillage.normale(f)
 	# E 1 Entrée : extruder d'une case le long de la normale.
@@ -676,6 +770,17 @@ func _le_modeleur(ed: Control) -> void:
 	for k in [KEY_G, KEY_Z, KEY_2, KEY_ENTER]:
 		ed._input(_cle(k))
 	_vrai(mo.maillage.centre(f).is_equal_approx(c0 + Vector3(0, 2, 0)), "G Z 2 : la face MONTE de deux cases (Z = haut)")
+	# ⚠ LES AUTRES COPIES SUIVENT : le maillage partagé par les occurrences de la tuile porte la face montée.
+	var partage: Mesh = (mo._mm_de[cle_a] as MultiMeshInstance3D).multimesh.mesh
+	var dans_le_partage := {}
+	for s in partage.get_surface_count():
+		for q in (partage.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			dans_le_partage[Vector3i((q * 1000.0).round())] = true
+	var suivent := true
+	for i in (mo.maillage.faces[f] as PackedInt32Array):
+		suivent = suivent and dans_le_partage.has(Vector3i((mo.maillage.sommets[i] * 1000.0).round()))
+	_vrai(suivent and mo.temoin.tuiles[cle_a] == mo.maillage and mo.temoin.occurrences_de(cle_a).size() > 1,
+		"G Z 2 : les %d autres copies de la tuile montrent la face montée" % (mo.temoin.occurrences_de(cle_a).size() - 1))
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	# Échap annule un geste : rien ne change, rien ne s'inscrit.
 	ed._vue._gui_input(clic)
@@ -696,6 +801,37 @@ func _le_modeleur(ed: Control) -> void:
 	_vrai(mo.maillage.faces.size() > f0 and mo.modal == "", "le clic coupe l'anneau (%d faces, geste « %s »)" % [mo.maillage.faces.size(), mo.modal])
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	# B SUR TOUTE LA VUE : sans X-ray, seulement ce qu'on VOIT — moins qu'en X-ray, et aucune face de dos.
+	# ⚠ TÉMOIN LIÉ : ce qui cache une face peut être une AUTRE occurrence. On met donc en édition une
+	# occurrence dont le centre, vu de la caméra, est derrière une autre (le premier impact n'est pas elle).
+	var cachee := -1
+	var examinees := 0
+	for i in mo.temoin.occurrences.size():
+		if cachee >= 0:
+			break
+		var po: Transform3D = mo.temoin.occurrences[i]["pose"]
+		if not cam.is_position_in_frustum(po.origin) or not Rect2(Vector2.ZERO, ed._vue.size).has_point(cam.unproject_position(po.origin)):
+			continue
+		examinees += 1
+		# À DEMI : des faces tournées vers l'œil, dont certaines vues et d'autres cachées (par une autre copie).
+		var tu: RefCounted = mo.temoin.tuiles[mo.temoin.occurrences[i]["cle"]]
+		var vues_ici := 0
+		var cachees_ici := 0
+		for g in tu.faces.size():
+			var cw: Vector3 = po * tu.centre(g)
+			if (po.basis * tu.normale(g)).dot(cam.global_position - cw) <= 0.0:
+				continue
+			# ⚠ LES RAYONS DE LA VUE (la vue de face est ORTHOGRAPHIQUE : ils ne partent pas de l'œil).
+			var ecr: Vector2 = cam.unproject_position(cw)
+			var oo: Vector3 = cam.project_ray_origin(ecr)
+			var hc: Dictionary = mo.temoin.rayon(oo, cam.project_ray_normal(ecr))
+			if not hc.is_empty() and float(hc["distance"]) < oo.distance_to(cw) - 0.01:
+				cachees_ici += 1
+			else:
+				vues_ici += 1
+		if vues_ici > 0 and cachees_ici > 0:
+			cachee = i
+	_vrai(cachee >= 0, "une occurrence à demi cachée par d'autres est dans la vue")
+	mo.activer(maxi(cachee, 0))
 	ed._input(_cle(KEY_3))
 	mo.tout_choisir(false)
 	mo.rayons_x = false
@@ -703,7 +839,7 @@ func _le_modeleur(ed: Control) -> void:
 	var vues: Array = mo.sel_f.keys()
 	var dos := 0
 	for g in vues:
-		if mo.maillage.normale(g).dot(cam.global_position - mo.maillage.centre(g)) <= 0.0:
+		if (mo.pose.basis * mo.maillage.normale(g)).dot(cam.global_position - mo.pose * mo.maillage.centre(g)) <= 0.0:
 			dos += 1
 	mo.tout_choisir(false)
 	mo.rayons_x = true
@@ -718,8 +854,9 @@ func _le_modeleur(ed: Control) -> void:
 	# de dos sont déjà écartées par leur normale.
 	var tournees := 0
 	for g in mo.maillage.faces.size():
-		var cg: Vector3 = mo.maillage.centre(g)
-		if Rect2(Vector2.ZERO, ed._vue.size).has_point(cam.unproject_position(cg)) and cam.is_position_in_frustum(cg) 				and mo.maillage.normale(g).dot(cam.global_position - cg) > 0.0:
+		var cg: Vector3 = mo.pose * mo.maillage.centre(g)
+		if Rect2(Vector2.ZERO, ed._vue.size).has_point(cam.unproject_position(cg)) and cam.is_position_in_frustum(cg) \
+				and (mo.pose.basis * mo.maillage.normale(g)).dot(cam.global_position - cg) > 0.0:
 			tournees += 1
 	_vrai(vues.size() < tournees, "B sans X-ray : %d faces vues sur %d tournées vers l'œil — les cachées sont écartées"
 		% [vues.size(), tournees])
@@ -747,7 +884,7 @@ func _le_modeleur(ed: Control) -> void:
 		pc.button_index = MOUSE_BUTTON_LEFT
 		pc.pressed = true
 		# Un cheveu vers le centre de la face : on vise la face, pas son arête pile.
-		pc.position = cam.unproject_position(m.lerp(mo.maillage.centre(f), 0.05))
+		pc.position = cam.unproject_position(mo.pose * m.lerp(mo.maillage.centre(f), 0.05))
 		ed._vue._gui_input(pc)
 	ed._input(_cle(KEY_ENTER))
 	_egal(mo.maillage.faces.size(), f0 + 1, "K, deux clics, Entrée : la face visée est fendue en deux")
@@ -788,27 +925,82 @@ func _le_modeleur(ed: Control) -> void:
 	var img := Image.load_from_file(patron)
 	_vrai(img != null and img.get_width() == 2048, "le patron fait 2048 × 2048")
 	DirAccess.remove_absolute(patron)
-	# L'enregistrement : le fichier, relu, redonne le même maillage ; et il rejoint les travaux.
+	# UNE AUTRE TUILE : un clic sur une occurrence d'une autre clé la met en édition ; on l'extrude, on revient
+	# à la première, et Ctrl+Z défait l'extrusion de la tuile qu'on n'édite PLUS.
+	var ailleurs := Vector2(-1, -1)
+	var hit_b: Dictionary = {}
+	for gx in range(2, 18):
+		for gy in range(2, 18):
+			var pt: Vector2 = ed._vue.size * Vector2(gx / 20.0, gy / 20.0)
+			var h: Dictionary = mo.temoin.rayon(cam.project_ray_origin(pt), cam.project_ray_normal(pt))
+			if not h.is_empty() and h["cle"] != cle_a and ailleurs.x < 0:
+				ailleurs = pt
+				hit_b = h
+	_vrai(ailleurs.x >= 0, "une occurrence d'une autre tuile est visible")
+	if ailleurs.x >= 0:
+		var clic_b := InputEventMouseButton.new()
+		clic_b.button_index = MOUSE_BUTTON_LEFT
+		clic_b.pressed = true
+		clic_b.position = ailleurs
+		ed._vue._gui_input(clic_b)
+		var cle_b: String = mo.cle
+		_vrai(cle_b == hit_b["cle"] and mo.sel_f == {int(hit_b["face"]): true},
+			"un clic sur une autre tuile la met en édition, sa face choisie")
+		var fb0: int = mo.maillage.faces.size()
+		for k in [KEY_E, KEY_1, KEY_ENTER]:
+			ed._input(_cle(k))
+		_vrai(mo.temoin.tuiles[cle_b].faces.size() > fb0, "E sur l'autre tuile l'extrude")
+		ed._vue._gui_input(clic)
+		_egal(mo.cle, cle_a, "un clic ramène la première tuile en édition")
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		_egal(mo.temoin.tuiles[cle_b].faces.size(), fb0, "Ctrl+Z défait l'extrusion de la tuile qu'on n'édite plus")
+		_egal(mo.cle, cle_a, "et l'édition reste sur la tuile en cours")
+		ed._vue._gui_input(clic)
+	# UNE COPIE TOURNÉE : « G X 1 » déplace d'une case vers +X DU MONDE, quelle que soit la rotation de la copie
+	# (Z ne le prouverait pas : un quart de tour autour de +Y garde le haut).
+	var tournee := -1
+	for i in mo.temoin.occurrences.size():
+		var b: Basis = (mo.temoin.occurrences[i]["pose"] as Transform3D).basis
+		if tournee < 0 and not b.x.is_equal_approx(Vector3.RIGHT):
+			tournee = i
+	_vrai(tournee >= 0, "le témoin a des copies tournées")
+	if tournee >= 0:
+		mo.activer(tournee)
+		mo.choisir_mode("face")
+		mo.tout_choisir(false)
+		mo.sel_f = {0: true}
+		var avant_monde: Vector3 = mo.pose * mo.maillage.centre(0)
+		for k in [KEY_G, KEY_X, KEY_1, KEY_ENTER]:
+			ed._input(_cle(k))
+		var apres_monde: Vector3 = mo.pose * mo.maillage.centre(0)
+		_vrai((apres_monde - avant_monde).is_equal_approx(Vector3(1, 0, 0)),
+			"G X 1 sur une copie tournée : +1 en X du MONDE (%s)" % (apres_monde - avant_monde))
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		ed._vue._gui_input(clic)
+	# L'enregistrement : le .glb LIÉ se relit tuile par tuile, avec le matériau ; et il rejoint les travaux.
 	var raison: String = ed._enregistrer_le_temoin_modele()
 	var chemin: String = ed._chemin_temoin_modele()
 	_egal(raison, "", "le témoin modélisé s'enregistre")
-	var relu: ArrayMesh = BM.travail_depuis_glb(chemin)
-	_vrai(relu != null and ME.depuis(relu).faces.size() == mo.maillage.faces.size(),
-		"relu depuis son .glb, le témoin modélisé a le même nombre de faces")
+	var relu: Dictionary = BM.librairie_depuis_glb(chemin)
+	_vrai(relu.get("lie", false) and relu["erreurs"].is_empty() and (relu["lot"] as MeshLibrary).get_item_list().size() == mo.temoin.tuiles.size(),
+		"relu comme témoin lié : une tuile par clé, sans erreur (%s)" % [relu.get("erreurs")])
 	_vrai(ed._travaux.any(func(t): return String(t["chemin"]) == chemin), "il rejoint les travaux de l'étape 2")
 	var rouge := false
-	if relu != null:
-		for i in relu.get_surface_count():
-			var sm := relu.surface_get_material(i) as BaseMaterial3D
+	var id_a: int = (relu["lot"] as MeshLibrary).find_item_by_name(cle_a)
+	if id_a >= 0:
+		var tuile_relue: Mesh = (relu["lot"] as MeshLibrary).get_item_mesh(id_a)
+		for i in tuile_relue.get_surface_count():
+			var sm := tuile_relue.surface_get_material(i) as BaseMaterial3D
 			rouge = rouge or (sm != null and sm.albedo_color.is_equal_approx(Color(0.9, 0.1, 0.1)))
-	_vrai(rouge, "le .glb porte le matériau rouge (aucun override ne l'efface)")
-	# Rouvert : le .mbmesh fait foi — la face garde SON matériau.
+	_vrai(rouge, "la tuile relue porte le matériau rouge (aucun override ne l'efface)")
+	# Rouvert : le .mbtiles fait foi — la face garde SON matériau.
 	var faces_avant: int = mo.maillage.faces.size()
+	mo.temoin = null
 	mo.maillage = null
 	ed._regler_edition(false)
 	ed._regler_edition(true)
-	_vrai(mo.maillage != null and mo.maillage.faces.size() == faces_avant and mo.maillage.mat(f) == 0,
-		"rouvert depuis son .mbmesh : la face visée garde son matériau")
+	_vrai(mo.temoin != null and mo.temoin.tuiles[cle_a].faces.size() == faces_avant and mo.temoin.tuiles[cle_a].mat(f) == 0,
+		"rouvert depuis son .mbtiles : la face visée garde son matériau")
 	ed._minuterie_temoin.stop()
 	ed._minuterie_materiau.stop()
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(chemin))

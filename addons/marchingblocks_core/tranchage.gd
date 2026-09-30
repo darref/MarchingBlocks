@@ -142,7 +142,10 @@ static func boite_d_octant(t: int) -> AABB:
 ## rendait « le bloc mesure 1,000 de trop » et 579 remarques de couture.
 static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
 		erreurs: Array, peau := true, remarques: Array = [],
-		exemplaires: Dictionary = {}, origine: Variant = null) -> Dictionary:
+		exemplaires: Dictionary = {}, origine: Variant = null, seuls: Dictionary = {}) -> Dictionary:
+	# `seuls` — {sommet: true} : ne récolter QUE ces sommets (vide = tous). C'est ce qui permet au témoin lié
+	# de ne découper que ses 52 tuiles (`BlocsMaitres.tuiles_du_temoin`) par CETTE route, sans en écrire une
+	# seconde qui découperait autrement (charte §6).
 	var pieces := {}
 	if mesh == null:
 		erreurs.append("aucun bloc fourni")
@@ -231,6 +234,8 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 		for vy in range(premier, cases.y if peau else cases.y - 1):
 			for vz in range(premier, cases.z if peau else cases.z - 1):
 				var v := Vector3i(vx, vy, vz)
+				if not seuls.is_empty() and not seuls.has(v):
+					continue
 				var r: Dictionary = cle_du_sommet(pleines, v, plafond)
 				if r.is_empty():
 					continue
@@ -784,6 +789,168 @@ static func _poses_de(classe: int) -> Array:
 				"base": grille.get_basis_with_orthogonal_index(r["orientation"])})
 		grille.free()
 	return _poses_par_classe.get(classe, [])
+
+
+## LES RACCORDS QUE LE TÉMOIN PROUVE — une tuile par clé, en copies liées (charte §3, 30 septembre 2026).
+##
+## Le témoin lié est le monde peint de sa propre forme : chaque sommet à surface y montre LA tuile de sa
+## clé. Un joint étanche entre deux sommets voisins prouve que deux faces de tuile ont la même section.
+## Pour qu'un monde QUELCONQUE soit étanche, il faut que toutes les faces d'un même seau de
+## `verifier_sections` (axe, motif vu du plan) aient la même section — donc que, dans chaque seau, les
+## nœuds (clé, pose, axe, côté) soient RELIÉS par des joints du témoin : l'égalité est transitive.
+##
+## ⚠ **LES NŒUDS SONT CEUX DU MONDE, PAS CEUX DU TÉMOIN** : chaque clé du monde sans contact diagonal,
+## sous chaque pose de son orbite. Une clé que le témoin ne montre jamais laisse donc ses nœuds isolés.
+## ⚠ **UN JOINT VAUT POUR SES QUARTS DE TOUR SEULEMENT SI LE PEINTRE TOURNE LES DEUX TUILES AVEC LUI**
+## (base(Q·b) = Q·base(b) aux deux bouts). Sinon — une classe symétrique dont la tuile ne l'est pas —,
+## le joint tourné est un autre fait, que le témoin ne montre pas.
+## ⚠ C'est une condition SUFFISANTE : un morceau que le contexte empêcherait de rencontrer les autres
+## n'aurait pas besoin d'être relié. On ne raffine pas tant qu'elle se laisse tenir.
+##
+## Rend {"seaux", "relies", "en_trop" (morceaux au-delà d'un par seau), "morceaux": [{"seau", "noeuds"}]}
+## — `morceaux` liste les nœuds HORS du plus gros morceau de chaque seau, écrits « clé|bits|axe|côté ».
+static func raccords_du_temoin(pleines: Dictionary) -> Dictionary:
+	_preparer_les_raccords()
+	var plafond: int = MB.plafond_de(pleines)
+	var cle_de := {}
+	var bits_de := {}
+	for c in pleines:
+		for s in MB.sommets_de(c):
+			if cle_de.has(s):
+				continue
+			var r: Dictionary = cle_du_sommet(pleines, s, plafond)
+			cle_de[s] = r.get("cle", "")
+			bits_de[s] = r.get("bits", 0)
+	var parent := {}
+	for n in _seau_du_noeud:
+		parent[n] = n
+	for s in cle_de:
+		if cle_de[s] == "":
+			continue
+		for axe in 3:
+			var e := Vector3i.ZERO
+			e[axe] = 1
+			var w: Vector3i = s + e
+			if cle_de.get(w, "") == "":
+				continue
+			var motif: int = _motif_de_face(bits_de[s], axe, 1)
+			if motif == 0 or motif == 15:
+				continue
+			for q in 4:
+				var bs: int = _bits_tournes[q][bits_de[s]]
+				var bw: int = _bits_tournes[q][bits_de[w]]
+				if q > 0 and not (_tourne_avec[q][bits_de[s]] and _tourne_avec[q][bits_de[w]]):
+					continue
+				var d: Vector3i = _axe_tourne(q, axe)
+				var axe2: int = 0 if d.x != 0 else (1 if d.y != 0 else 2)
+				var cote_s: int = 1 if d[axe2] > 0 else 0
+				var na := "%s|%d|%d|%d" % [cle_de[s], bs, axe2, cote_s]
+				var nb := "%s|%d|%d|%d" % [cle_de[w], bw, axe2, 1 - cote_s]
+				if parent.has(na) and parent.has(nb):
+					parent[_racine(parent, na)] = _racine(parent, nb)
+	var par_seau := {}
+	for n in _seau_du_noeud:
+		var sk: String = _seau_du_noeud[n]
+		if not par_seau.has(sk):
+			par_seau[sk] = {}
+		var r: String = _racine(parent, n)
+		if not par_seau[sk].has(r):
+			par_seau[sk][r] = []
+		par_seau[sk][r].append(n)
+	var relies := 0
+	var en_trop := 0
+	var morceaux: Array = []
+	var seaux: Array = par_seau.keys()
+	seaux.sort()
+	for sk in seaux:
+		var comps: Dictionary = par_seau[sk]
+		if comps.size() == 1:
+			relies += 1
+			continue
+		en_trop += comps.size() - 1
+		var gros := ""
+		for r in comps:
+			if gros == "" or (comps[r] as Array).size() > (comps[gros] as Array).size():
+				gros = r
+		var hors: Array = []
+		for r in comps:
+			if r != gros:
+				hors.append_array(comps[r])
+		hors.sort()
+		morceaux.append({"seau": sk, "noeuds": hors})
+	return {"seaux": par_seau.size(), "relies": relies, "en_trop": en_trop, "morceaux": morceaux}
+
+
+static var _seau_du_noeud: Dictionary = {}
+static var _bits_tournes: Array = []   # [q][bits] → bits tournés de q quarts de tour autour de +Y
+static var _tourne_avec: Array = []    # [q][bits] → base(Q·b) == Q·base(b)
+static var _quarts: Array = []
+
+
+static func _preparer_les_raccords() -> void:
+	if not _seau_du_noeud.is_empty():
+		return
+	var grille := GridMap.new()   # ⚠ seulement pour lire les bases d'orientation, comme `_poses_de`
+	var base_de := {}
+	for b in 256:
+		var r: Dictionary = MB.classer(b)
+		if r["surface"]:
+			base_de[b] = grille.get_basis_with_orthogonal_index(r["orientation"])
+	grille.free()
+	for q in 4:
+		_quarts.append(Basis(Vector3.UP, q * PI / 2.0))
+	for q in 4:
+		var tournes: Array = []
+		var avec: Array = []
+		for b in 256:
+			var bt := 0
+			for t in 8:
+				if b & (1 << t) == 0:
+					continue
+				var c: Vector3 = _quarts[q] * (Vector3(MB.COINS[t]) - Vector3(0.5, 0.5, 0.5)) + Vector3(0.5, 0.5, 0.5)
+				var ci := Vector3i(c.round())
+				for u in 8:
+					if MB.COINS[u] == ci:
+						bt |= 1 << u
+			tournes.append(bt)
+			var ok := false
+			if base_de.has(b) and base_de.has(bt):
+				var attendu: Basis = _quarts[q] * base_de[b]
+				var vu: Basis = base_de[bt]
+				ok = (attendu.x - vu.x).length() < 1e-4 and (attendu.y - vu.y).length() < 1e-4 \
+					and (attendu.z - vu.z).length() < 1e-4
+			avec.append(ok)
+		_bits_tournes.append(tournes)
+		_tourne_avec.append(avec)
+	for c in MB.classes():
+		var bits: int = c["bits"]
+		if not MB.porte_une_surface(bits) or not MB.sans_contact_diagonal(bits):
+			continue
+		var cles: Array = [c["nom"]]
+		if MB.exterieur_possible(bits):
+			cles.append(MB.nom_en_contexte(c["nom"], true))
+		for cle in cles:
+			for pose in _poses_de(MB.classer(bits)["classe"]):
+				var b: int = pose["bits"]
+				for axe in 3:
+					for cote in [0, 1]:
+						var motif: int = _motif_de_face(b, axe, cote)
+						if motif == 0 or motif == 15:
+							continue
+						_seau_du_noeud["%s|%d|%d|%d" % [cle, b, axe, cote]] = "%d|%d" % [axe, motif]
+
+
+static func _axe_tourne(q: int, axe: int) -> Vector3i:
+	var e := Vector3.ZERO
+	e[axe] = 1.0
+	return Vector3i((_quarts[q] * e).round())
+
+
+static func _racine(parent: Dictionary, n: String) -> String:
+	while parent[n] != n:
+		parent[n] = parent[parent[n]]
+		n = parent[n]
+	return n
 
 
 ## Le motif (4 bits) des cases d'une face, VU DU PLAN : le côté (`cote`, 0 ou 1 sur `axe`) est oublié,

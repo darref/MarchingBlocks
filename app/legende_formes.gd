@@ -25,6 +25,7 @@ const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Palette := preload("res://app/palette.gd")
 const Panneau := preload("res://app/panneau.gd")
+const PlancheTuiles := preload("res://app/planche_tuiles.gd")
 
 ## Survol d'une carte : ses cases (vide = plus rien de survolé).
 signal zone_survolee(cases: Array)
@@ -32,6 +33,10 @@ signal zone_survolee(cases: Array)
 signal zone_choisie(cases: Array, azimut: float, elevation: float)
 ## World : « Show in the witness » — le sommet d'où vient la tuile, et la carte qui le contient.
 signal voir_dans_le_temoin(sommet: Vector3i, carte: Dictionary, azimut: float, elevation: float)
+## La planche des tuiles : un clic sur une tuile (l'écran y cadre, et la met en édition si l'on édite).
+signal tuile_choisie(cle: String)
+## La planche des tuiles : les copies de la tuile survolée (allumées en petits cubes).
+signal copies_survolees(cases: Array)
 
 const PHOTO := Vector2i(224, 126)
 const HAUTEUR := 238.0
@@ -50,6 +55,15 @@ var _anime: Tween
 ## "witness" : les cartes des formes. "monde" : D'OÙ VIENT la tuile qu'on survole — le sens inverse.
 var atelier := "witness"
 var _defile: ScrollContainer
+## ── LES DEUX ONGLETS DE WITNESS (charte §3, 30 septembre 2026) : les FORMES du témoin, et la PLANCHE des
+## tuiles qu'un monde emploie. `fournir_temoin` rend le témoin lié à montrer (celui qu'on édite s'il est
+## chargé) : la planche est bâtie au premier passage sur son onglet.
+var onglet_courant := "formes"
+var fournir_temoin: Callable
+var planche: ScrollContainer
+var _contenu: HBoxContainer
+var _bouton_formes: Button
+var _bouton_tuiles: Button
 ## Par identifiant de carte : {"texture", "camera", "angle"} — la provenance réutilise les photos.
 var _photos := {}
 var _provenance: Control
@@ -79,12 +93,23 @@ func _ready() -> void:
 	_panneau.offset_left = 0.0
 	_panneau.offset_right = 0.0
 	add_child(_panneau)
+	_contenu = HBoxContainer.new()
+	_contenu.add_theme_constant_override("separation", 10)
+	_panneau.add_child(_contenu)
+	_contenu.add_child(_onglets())
 	var defile := ScrollContainer.new()
 	# ⚠ SHOW_NEVER ET NON DISABLED : un défilement désactivé prend la hauteur de son contenu pour taille
 	# minimale, et le bandeau ne pourrait plus se replier.
 	defile.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
-	_panneau.add_child(defile)
+	defile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_contenu.add_child(defile)
 	_defile = defile
+	planche = PlancheTuiles.new()
+	planche.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	planche.visible = false
+	_contenu.add_child(planche)
+	planche.zone_survolee.connect(func(c: Array) -> void: copies_survolees.emit(c))
+	planche.tuile_choisie.connect(func(cle: String) -> void: tuile_choisie.emit(cle))
 	_rangee = HBoxContainer.new()
 	_rangee.add_theme_constant_override("separation", 10)
 	defile.add_child(_rangee)
@@ -168,7 +193,8 @@ func _dessiner_poignee() -> void:
 		Vector2(cx + 5, cy + s * 0.5)]), accent, 2.0, true)
 	var police: Font = Palette.gras()
 	_poignee.draw_string(police, Vector2(cx + 12, cy + 4),
-		"WHERE IS IT FROM?" if atelier == "monde" else "WITNESS SHAPES", HORIZONTAL_ALIGNMENT_LEFT,
+		"WHERE IS IT FROM?" if atelier == "monde" else ("THE TILES" if onglet_courant == "tuiles" else "WITNESS SHAPES"),
+		HORIZONTAL_ALIGNMENT_LEFT,
 		-1, 10, accent)
 
 
@@ -176,6 +202,48 @@ func _clic_poignee(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		basculer(not ouvert)
 		_poignee.accept_event()
+
+
+## Les deux onglets, à gauche du bandeau : les formes, ou les tuiles.
+func _onglets() -> Control:
+	var boite := VBoxContainer.new()
+	boite.add_theme_constant_override("separation", 4)
+	boite.custom_minimum_size = Vector2(92, 0)
+	_bouton_formes = _bouton_d_onglet("Shapes", "The shapes of the witness, and what each becomes in a world.")
+	_bouton_formes.pressed.connect(func() -> void: montrer_onglet("formes"))
+	boite.add_child(_bouton_formes)
+	_bouton_tuiles = _bouton_d_onglet("The tiles", "Every tile a world is built from, one per class, and "
+		+ "all its copies in the witness.")
+	_bouton_tuiles.pressed.connect(func() -> void: montrer_onglet("tuiles"))
+	boite.add_child(_bouton_tuiles)
+	_bouton_formes.set_pressed_no_signal(true)
+	return boite
+
+
+func _bouton_d_onglet(texte: String, aide: String) -> Button:
+	var b := Button.new()
+	b.text = texte
+	b.tooltip_text = aide
+	b.toggle_mode = true
+	b.add_theme_font_size_override("font_size", 11)
+	b.custom_minimum_size = Vector2(92, 26)
+	return b
+
+
+## Montre les formes ou la planche des tuiles. La planche se bâtit au premier passage.
+func montrer_onglet(nom: String) -> void:
+	onglet_courant = nom
+	if nom == "tuiles" and not planche.est_batie() and fournir_temoin.is_valid():
+		planche.batir(fournir_temoin.call())
+	_bouton_formes.set_pressed_no_signal(nom == "formes")
+	_bouton_tuiles.set_pressed_no_signal(nom == "tuiles")
+	regler_atelier(atelier)
+
+
+## Les photos de la planche reprises sur les tuiles du témoin (après un geste du modeleur).
+func rafraichir_tuiles() -> void:
+	if planche.est_batie() and fournir_temoin.is_valid():
+		planche.rafraichir(fournir_temoin.call())
 
 
 func _intro() -> Control:
@@ -314,7 +382,9 @@ func _carte(carte: Dictionary, temoin: Mesh) -> Control:
 
 func regler_atelier(a: String) -> void:
 	atelier = a
-	_defile.visible = a != "monde"
+	_contenu.visible = a != "monde"
+	_defile.visible = a != "monde" and onglet_courant == "formes"
+	planche.visible = a != "monde" and onglet_courant == "tuiles"
 	_provenance.visible = a == "monde"
 	if a == "monde":
 		montrer_provenance({})
@@ -536,11 +606,14 @@ static func nuage_de_zone(cases: Array, teinte: Color) -> MultiMeshInstance3D:
 	return instance
 
 
-static func remplir_zone(instance: MultiMeshInstance3D, cases: Array) -> void:
+## `taille` : la fraction de case de chaque cube — la planche des tuiles allume des cubes PLUS PETITS que la
+## case, sinon les 244 copies d'une paroi ne font qu'une masse (vu à l'image).
+static func remplir_zone(instance: MultiMeshInstance3D, cases: Array, taille := 1.0) -> void:
 	var mm := instance.multimesh
 	mm.instance_count = cases.size()
 	for i in cases.size():
-		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, Vector3(cases[i]) + Vector3.ONE * 0.5))
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * taille),
+			Vector3(cases[i]) + Vector3.ONE * 0.5))
 	instance.visible = not cases.is_empty()
 
 

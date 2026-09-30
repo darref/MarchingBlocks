@@ -31,6 +31,7 @@ extends SceneTree
 
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
+const TR := preload("res://addons/marchingblocks_core/tranchage.gd")
 
 const COTE := 12
 ## La roche de base : les couches 0 à SOCLE−1 sont pleines partout.
@@ -90,6 +91,7 @@ func _initialize() -> void:
 
 	_reparer()
 	_finir()
+	_raccorder()
 	_bilan()
 	if _couches:
 		_imprimer_les_couches()
@@ -288,6 +290,85 @@ func _exporter(pleines: Dictionary, chemin: String) -> void:
 # ⚠ **ELLE NE POSE QUE DES ATOMES, ET C'EST ASSUMÉ.** Ils ne ressemblent à rien — mais ils ne servent
 # qu'à ce qu'aucune forme ne porte, et les cacher serait pire que les montrer : l'artiste doit savoir
 # que le modèle lui demande une hélice.
+## ── LES RACCORDS (Jordan, 30 septembre 2026 : une tuile par clé, en copies liées) ─────────────────
+##
+## Le témoin lié prouve un raccord à chaque joint ; pour que TOUT monde soit étanche, chaque seau de
+## `verifier_sections` doit être relié d'un seul tenant (`Tranchage.raccords_du_temoin`). Mesuré le 30
+## septembre sur la planète : 23 seaux sur 36, et 4 groupes de faces à part, tous sur des clés RARES.
+##
+## ⚠ **MÊME DISCIPLINE QUE LE FINISSEUR** : il n'ajoute que des atomes, jamais ne creuse une forme ; il
+## refuse tout contact diagonal nouveau et toute tuile gagnée ou perdue (les 52, ni plus ni moins).
+## ⚠ **IL NE CHERCHE QU'À CÔTÉ DES CLÉS EN CAUSE** : un nœud à part ne se relie que par un joint qui le
+## porte, donc par un sommet de sa clé — ou par une occurrence neuve de cette clé, née à côté d'une
+## ancienne. Chercher partout coûterait des minutes par tour pour rien.
+func _raccorder() -> void:
+	print("── LES RACCORDS (relier chaque seau d'un seul tenant) ──")
+	var cible: Dictionary = _cible()
+	for tour in 8:
+		var avant: Dictionary = TR.raccords_du_temoin(_p)
+		if avant["en_trop"] == 0:
+			print("   ✓ les %d seaux sont reliés d'un seul tenant" % avant["seaux"])
+			return
+		var diag_avant: int = _contacts_diagonaux(_p)
+		var recolte_avant: Dictionary = _recolter(_p)
+		var pres: Dictionary = _pres_des_cles_en_cause(avant)
+		var meilleur := {}
+		var mieux: int = avant["en_trop"]
+		for atome in _atomes():
+			for place in _places(atome):
+				var proche := false
+				for d in (atome["cases"] as Array):
+					if pres.has(place + (d as Vector3i)):
+						proche = true
+						break
+				if not proche:
+					continue
+				var essai: Dictionary = _p.duplicate()
+				for d in (atome["cases"] as Array):
+					essai[place + (d as Vector3i)] = true
+				if _contacts_diagonaux(essai) > diag_avant:
+					continue
+				var recolte: Dictionary = _recolter(essai)
+				if _combien(recolte, cible) != _combien(recolte_avant, cible) or recolte.size() != recolte_avant.size():
+					continue
+				var apres: Dictionary = TR.raccords_du_temoin(essai)
+				if apres["en_trop"] < mieux or (apres["en_trop"] == mieux and not meilleur.is_empty()
+						and (atome["cases"] as Array).size() < (meilleur["atome"]["cases"] as Array).size()):
+					if apres["en_trop"] < mieux or not meilleur.is_empty():
+						mieux = apres["en_trop"]
+						meilleur = {"atome": atome, "place": place, "cases": essai}
+		if meilleur.is_empty():
+			print("   ⚠ %d morceau(x) en trop qu'aucun atome ne relie :" % avant["en_trop"])
+			for m in (avant["morceaux"] as Array):
+				print("      seau %s : %s" % [m["seau"], ", ".join(PackedStringArray(m["noeuds"]))])
+			return
+		_p = meilleur["cases"]
+		print("   %-34s en (%d,%d,%d)  → %d morceau(x) en trop"
+			% [meilleur["atome"]["nom"], meilleur["place"].x, meilleur["place"].y, meilleur["place"].z, mieux])
+
+
+## Les cases à deux pas (ou moins) d'un sommet dont la clé porte un nœud à part.
+func _pres_des_cles_en_cause(raccords: Dictionary) -> Dictionary:
+	var cles := {}
+	for m in (raccords["morceaux"] as Array):
+		for n in (m["noeuds"] as Array):
+			cles[String(n).split("|")[0]] = true
+	var plafond: int = MB.plafond_de(_p)
+	var sortie := {}
+	for x in range(-1, COTE):
+		for y in range(-1, COTE):
+			for z in range(-1, COTE):
+				var v := Vector3i(x, y, z)
+				var r: Dictionary = TR.cle_du_sommet(_p, v, plafond)
+				if r.is_empty() or not cles.has(r["cle"]):
+					continue
+				for dx in range(-2, 4):
+					for dy in range(-2, 4):
+						for dz in range(-2, 4):
+							sortie[v + Vector3i(dx, dy, dz)] = true
+	return sortie
+
+
 func _finir() -> void:
 	print("── LE FINISSEUR (il ne pose que ce qu'aucune forme n'a livré) ──")
 	var cible: Dictionary = _cible()
