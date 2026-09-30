@@ -30,6 +30,7 @@ extends SceneTree
 ##       --script res://DEV_TOOLS/planete_paysage.gd -- --glb=D:/MarchingBlocks/ART/planete_paysage.glb
 
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 
 const COTE := 12
 ## La roche de base : les couches 0 à SOCLE−1 sont pleines partout.
@@ -120,106 +121,16 @@ func _batir() -> void:
 	# cube blanc avec une encoche. **L'amplitude du relief doit être du même ordre que la hauteur du
 	# bloc**, sinon aucune forme ne se lit — et aucun compteur ne l'aurait signalé, puisque la
 	# couverture, elle, était bonne.
-
-	# LE SOCLE : deux couches de roche mère, partout.
-	_bloc(Vector3i(0, 0, 0), Vector3i(COTE - 1, 1, COTE - 1), true)
-	# LE GRAND MASSIF, à l'ouest, et LE MASSIF DE L'EST, plus bas. Entre eux, LE CANYON.
-	_bloc(Vector3i(0, 2, 0), Vector3i(5, 7, COTE - 1), true)
-	_bloc(Vector3i(9, 2, 0), Vector3i(COTE - 1, 5, COTE - 1), true)
-	_etape("LES DEUX MASSIFS et LE CANYON qui les sépare")
-
-	# L'ARCHE : deux piles montant du fond du canyon, un tablier qui les relie, un vide entre elles.
-	_bloc(Vector3i(6, 2, 3), Vector3i(6, 6, 4), true)
-	_bloc(Vector3i(8, 2, 3), Vector3i(8, 6, 4), true)
-	_bloc(Vector3i(6, 7, 3), Vector3i(8, 7, 4), true)
-	_etape("L'ARCHE (deux piles, un tablier, un vide entre elles)")
-
-	# LE PONT : un tablier d'une seule case, qui franchit le canyon d'une paroi à l'autre.
-	_bloc(Vector3i(6, 5, 8), Vector3i(8, 5, 9), true)
-	_etape("LE PONT (un tablier fin, d'une paroi à l'autre)")
-
-	# LA SALLE, creusée dans le grand massif.
-	_bloc(Vector3i(1, 3, 3), Vector3i(4, 5, 8), false)
-	_etape("LA SALLE (creusée dans le grand massif)")
-
-	# LA BOUCHE DE GROTTE : elle perce la paroi du canyon et ouvre la salle sur le dehors.
-	_bloc(Vector3i(5, 3, 5), Vector3i(5, 5, 7), false)
-	_etape("LA BOUCHE DE GROTTE (elle perce la paroi du canyon)")
-
-	# LA CHEMINÉE : un conduit du plafond de la salle jusqu'au ciel.
-	# ⚠ Elle perçait le plateau juste à côté de l'échancrure du promontoire : les deux entailles se
-	# touchaient en diagonale et mettaient le plateau en damier. Elle s'ouvre donc plus au nord.
-	_bloc(Vector3i(2, 6, 7), Vector3i(3, 7, 8), false)
-	_etape("LA CHEMINÉE (de la salle jusqu'au ciel)")
-
-	# L'AUVENT : le sommet du massif AVANCE au-dessus du canyon. ⚠ Un surplomb se fait en faisant
-	# avancer une lèvre sur un vide qui existe, jamais en évidant sous une lèvre en place — trois
-	# versions fausses l'ont appris, chacune remettant la matière en damier.
-	_bloc(Vector3i(6, 7, 6), Vector3i(6, 7, 9), true)
-	_etape("L'AUVENT (le massif surplombe le canyon)")
-
-	# LA CORNICHE : une banquette accrochée à mi-hauteur de la paroi du canyon.
-	# ⚠ Elle courait sous le PONT, un étage plus bas : la banquette et le tablier ne se touchaient
-	# alors que par une arête. Elle longe donc une autre portion de paroi.
-	_bloc(Vector3i(6, 4, 0), Vector3i(6, 4, 2), true)
-	_etape("LA CORNICHE (une banquette à mi-paroi)")
-
-	# LE TUNNEL : il traverse le massif de l'est et débouche dans le canyon.
-	_bloc(Vector3i(9, 3, 2), Vector3i(COTE - 1, 4, 3), false)
-	_etape("LE TUNNEL (il débouche dans le canyon)")
-
-	# LE PUITS : un trou vertical dans le massif de l'est, ouvert au ciel.
-	_bloc(Vector3i(10, 2, 9), Vector3i(11, 5, 10), false)
-	_etape("LE PUITS (un trou ouvert au ciel)")
-
-	# LA CRÊTE et son COL : une arête d'une case sur le massif de l'est, échancrée en son milieu.
-	_bloc(Vector3i(11, 6, 4), Vector3i(11, 7, COTE - 1), true)
-	_bloc(Vector3i(11, 6, 6), Vector3i(11, 7, 7), false)
-	_etape("LA CRÊTE et son COL")
-
-	# L'AIGUILLE : un piton isolé sur le massif de l'est.
-	_bloc(Vector3i(9, 6, 6), Vector3i(9, 8, 6), true)
-	_etape("L'AIGUILLE (un piton isolé)")
-
-	# LE PROMONTOIRE : une échancrure du plateau laisse un cap avancer.
-	_bloc(Vector3i(4, 7, 3), Vector3i(5, 7, 4), false)
-	_etape("LE PROMONTOIRE (le plateau échancré laisse un cap)")
-
-	# LA BUTTE : un monticule sur le grand massif.
-	_bloc(Vector3i(2, 8, 9), Vector3i(3, 8, 10), true)
-	_etape("LA BUTTE (un monticule)")
-
-	# LE PILIER DE SALLE, du sol au plafond.
-	_bloc(Vector3i(2, 3, 4), Vector3i(2, 5, 4), true)
-	_etape("LE PILIER DE SALLE (du sol au plafond)")
-
-	# L'ALCÔVE : la salle écartée d'un côté, sur toute sa hauteur.
-	_bloc(Vector3i(1, 3, 9), Vector3i(2, 5, 9), false)
-	_etape("L'ALCÔVE (la salle écartée d'un côté)")
-
-	# LE BOSSAGE : une bosse d'une case d'épaisseur sur la paroi de la salle.
-	_bloc(Vector3i(4, 3, 6), Vector3i(4, 4, 6), true)
-	_etape("LE BOSSAGE (une bosse sur la paroi)")
-
-	# LA BANQUETTE EN L, au pied des parois de la salle — un sol de GROTTE, que nulle forme de
-	# surface ne livrera jamais : le modèle est orienté.
-	_bloc(Vector3i(1, 3, 6), Vector3i(1, 3, 8), true)
-	_bloc(Vector3i(2, 3, 8), Vector3i(3, 3, 8), true)
-	_etape("LA BANQUETTE EN L (au pied des parois de la salle)")
-
-	# LA MARCHE D'ANGLE : un gradin en L sur le plateau, surmonté à son coin.
-	_bloc(Vector3i(1, 8, 1), Vector3i(3, 8, 1), true)
-	_bloc(Vector3i(1, 8, 2), Vector3i(1, 8, 3), true)
-	_bloc(Vector3i(1, 9, 1), Vector3i(1, 9, 1), true)
-	_etape("LA MARCHE D'ANGLE (un gradin en L, surmonté au coin)")
-
-	# LE CAILLOU AU BORD : une case seule au ras de la falaise.
-	_bloc(Vector3i(5, 8, 8), Vector3i(5, 8, 8), true)
-	_etape("LE CAILLOU AU BORD")
-
-	# LA STALACTITE : une case seule qui pend du plafond de la salle.
-	_bloc(Vector3i(3, 5, 7), Vector3i(3, 5, 7), true)
-	_etape("LA STALACTITE")
+	#
+	# ⚠ **LES FORMES VIVENT DANS LE CŒUR** (`formes_du_temoin.gd`, 29 septembre 2026) : la légende de
+	# l'atelier Witness les lit aussi, et deux descriptions d'un même paysage divergeraient (charte §6).
+	# Les leçons de pose de chaque forme (le pont qui ne passe plus au-dessus de la corniche, la cheminée
+	# ouverte plus au nord, l'auvent qu'on fait AVANCER au lieu d'évider dessous) y sont restées écrites.
+	for f in FT.FORMES:
+		for g in (f["gestes"] as Array):
+			_bloc(g[0], g[1], g[2])
+		if String(f["journal"]) != "":
+			_etape(f["journal"])
 
 
 func _bloc(a: Vector3i, b: Vector3i, plein: bool) -> void:

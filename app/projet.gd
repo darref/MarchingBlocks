@@ -18,6 +18,10 @@ const FORMAT := "marchingblocks-project"
 const VERSION := 1
 const EXTENSION := "mbproj"
 const DOSSIER_CACHE := "user://cache"
+## LE FORMAT DU CACHE. ⚠ 2 depuis le 29 septembre 2026 : le lot porte la PROVENANCE de chaque tuile (le
+## sommet du témoin d'où elle vient, lu par l'atelier World). Un lot d'avant ne la porte pas : il passe
+## pour périmé et se retranche, sinon « d'où vient cette tuile ? » resterait muet sans dire pourquoi.
+const FORMAT_DU_CACHE := 2
 
 ## La source « témoin calculé ». Toute autre source non vide est un chemin de `.glb`.
 const TEMOIN := "witness"
@@ -104,6 +108,7 @@ static func chemin_cache(source: String) -> String:
 static func mettre_en_cache(lot: MeshLibrary, source: String) -> String:
 	DirAccess.make_dir_recursive_absolute(DOSSIER_CACHE)
 	lot.set_meta("empreinte", empreinte(source))
+	lot.set_meta("format_du_cache", FORMAT_DU_CACHE)
 	var e: int = ResourceSaver.save(lot, chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
 	return "" if e == OK else "cache not written (error %d)" % e
 
@@ -120,4 +125,5 @@ static func lire_cache(source: String) -> Dictionary:
 	if lot == null:
 		return {"lot": null, "a_jour": false}
 	var e: String = empreinte(source)
-	return {"lot": lot, "a_jour": e != "" and str(lot.get_meta("empreinte", "")) == e}
+	return {"lot": lot, "a_jour": e != "" and str(lot.get_meta("empreinte", "")) == e
+		and int(lot.get_meta("format_du_cache", 1)) == FORMAT_DU_CACHE}

@@ -43,6 +43,7 @@ const Projet := preload("res://app/projet.gd")
 const Icones := preload("res://app/icones.gd")
 const Manuel := preload("res://app/manuel.gd")
 const Modeleur := preload("res://app/modeleur.gd")
+const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
@@ -76,6 +77,8 @@ var _gauche: Panneau
 var _droite: Panneau
 ## LA BARRE DU MODELEUR — la barre de droite de l'atelier Witness (Jordan, 29 septembre 2026).
 var _droite_temoin: Panneau
+## LA LÉGENDE DES FORMES du témoin — le bandeau repliable en haut de la vue, dans l'atelier Witness.
+var _legende_formes: LegendeFormes
 var _modeleur: Node3D
 var _bouton_edition: Button
 var _boutons_selmode := {}
@@ -288,6 +291,18 @@ func _batir() -> void:
 	_modeleur.dit.connect(_dire)
 	_droite_temoin = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite_temoin(_droite_temoin.get_meta("pile"))
+	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
+	_legende_formes = LegendeFormes.new()
+	_legende_formes.anchor_left = 0.0
+	_legende_formes.anchor_right = 1.0
+	_legende_formes.offset_left = LARGEUR_GAUCHE
+	_legende_formes.offset_right = -LARGEUR_DROITE
+	corps.add_child(_legende_formes)
+	_legende_formes.zone_survolee.connect(_vue.montrer_zone)
+	_legende_formes.zone_choisie.connect(_vue.cadrer_zone)
+	# LE SENS INVERSE, dans World : la tuile survolée dit de quelle forme du témoin elle vient.
+	_vue.tuile_survolee.connect(_legende_formes.montrer_provenance)
+	_legende_formes.voir_dans_le_temoin.connect(_voir_dans_le_temoin)
 	_minuterie_temoin = Timer.new()
 	_minuterie_temoin.one_shot = true
 	_minuterie_temoin.wait_time = 1.0
@@ -1021,6 +1036,8 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		["Extend down", "bas", "extruder_bas", "copies the cells one cell lower"],
 		["Widen", "elargir", "elargir", "adds a ring around the cells, in their plane"],
 		["Hollow", "creuser", "evider", "removes the cells whose four horizontal neighbours are full"],
+		["Extend facing", "face", "extruder_face", "copies the cells one cell away from the matter "
+			+ "behind them — a wall thickens toward the air, a cave ceiling comes down"],
 	]:
 		ops.append(_bouton(op[0], op[3] + " — the selection if there is one, otherwise floor y.",
 			_operer.bind(op[1]), op[2]))
@@ -1119,6 +1136,8 @@ func _aller_a(atelier: String) -> void:
 ##   Shortcuts (réf.)                        ✓         (ce ne sont que des gestes de peinture)
 ##   barre de droite                         ✓         (elle ne porte que des outils de peinture)
 ##   barre du modeleur            ✓                    (les outils de modélisation du témoin)
+##   légende des formes           ✓        ✓           (Witness : quelle forme devient quoi ;
+##                                                      World : d'où vient la tuile survolée)
 ##
 ## ⚠ LA BARRE DE DROITE ÉTAIT UN CADRE VIDE DANS LE TÉMOIN : ses sections se cachaient, le panneau
 ## restait, et mangeait un quart de la vue sur le bloc qu'on veut justement regarder.
@@ -1142,7 +1161,26 @@ func _contexte() -> void:
 	_zone_reference.visible = temoin or monde or projet
 	_droite.visible = monde
 	_droite_temoin.visible = temoin
+	_legende_formes.visible = temoin or monde
+	_legende_formes.regler_atelier(_atelier)
 	_contexte_des_outils()
+
+
+## « Show it in the witness » (World) : on va dans Witness, la forme allumée, la place EXACTE de la tuile
+## marquée, la vue cadrée dessus sous l'angle de la photo de la forme.
+func _voir_dans_le_temoin(sommet: Vector3i, carte: Dictionary, azimut: float, elevation: float) -> void:
+	_aller_a("witness")
+	var huit: Array = []
+	for t in 8:
+		huit.append(sommet + MB.COINS[t])
+	# ⚠ LA TUILE SEULE, PAS TOUTE LA FORME : la zone du plateau couvre la moitié du bloc, et son ambre
+	# noyait la boîte blanche qu'on venait montrer (vu à l'image). La forme, c'est la carte du bandeau.
+	_vue.cadrer_zone(huit, azimut, elevation, 13.0)
+	_vue.montrer_tuile(sommet)
+	_legende_formes.mettre_en_avant(carte["id"])
+	_dire("[b]%s[/b] — the white box is the exact spot this tile was cut from, witness corner (%d, %d, %d). "
+		% [carte["nom"], sommet.x, sommet.y, sommet.z]
+		+ "Sculpt there to change it.")
 
 
 ## DANS LA BARRE D'OUTILS : ce qui ne s'applique pas à l'outil choisi disparaît. Le pinceau (taille,
@@ -1992,11 +2030,31 @@ func _peindre_la_forme_du_temoin() -> void:
 func _operer(quoi: String) -> void:
 	var sur: String = ("the selection (%d cells)" % _vue.selection.size()) if not _vue.selection.is_empty() \
 		else "floor y = %d" % _vue.etage
-	var n := _appliquer(Etages.operer(_occupees(), _vue.etage, quoi, _vue.selection), quoi)
+	var op: Dictionary = Etages.operer(_occupees(), _vue.etage, quoi, _vue.selection)
+	var n := _appliquer(op, quoi)
 	if n == 0:
-		_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
+		if quoi == "face":
+			_dire("[i]Nothing to extend on %s.[/i] No cell has matter behind it and air in front." % sur)
+		else:
+			_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
+		return
+	if quoi == "face":
+		# La sélection suit, et l'étage aussi quand on monte ou descend : cliquer encore recommence.
+		var sens: Vector3i = op["sens"]
+		if not _vue.selection.is_empty():
+			_vue.regler_selection(op["selection"])
+		if sens.y != 0:
+			_compteur_etage.value = _vue.etage + sens.y
+		_dire(("[b]Extend facing[/b] %s on %s — %d cell(s) changed. [i]Click again to keep going; "
+			+ "Ctrl+Z undoes the cells.[/i]") % [_nom_du_sens(sens), sur, n])
 		return
 	_dire("[b]%s[/b] on %s — %d cell(s) changed. [i]Ctrl+Z undoes it.[/i]" % [quoi, sur, n])
+
+
+func _nom_du_sens(d: Vector3i) -> String:
+	return {Vector3i.UP: "up", Vector3i.DOWN: "down", Vector3i(1, 0, 0): "toward X +",
+		Vector3i(-1, 0, 0): "toward X −", Vector3i(0, 0, 1): "toward Z +",
+		Vector3i(0, 0, -1): "toward Z −"}.get(d, "")
 
 
 func _operer_selection(quoi: String) -> void:

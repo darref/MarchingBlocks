@@ -15,6 +15,9 @@ extends SceneTree
 const Projet := preload("res://app/projet.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
+const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 
@@ -298,7 +301,10 @@ func _mener() -> void:
 		"Witness : ni Save · open ni aller-retour — ils vivent dans Project seul")
 	_vrai(not ed._section_monde_peint.visible, "Witness : pas de Painted world")
 	_vrai(not ed._bouton_revoir_temoin.visible, "« Show the witness » absent quand on regarde déjà le témoin")
+	_la_legende_des_formes(ed)
 	ed._aller_a("monde")
+	_vrai(ed._legende_formes.visible and ed._legende_formes.atelier == "monde",
+		"World : le bandeau passe au sens inverse (d'où vient la tuile)")
 	_vrai(ed._droite.visible and not ed._section_temoin.visible and ed._section_raccourcis.visible
 		and ed._section_couches.visible, "World : outils, couches, raccourcis — et plus de section Witness")
 	_vrai(not ed._section_projet.visible and not ed._etapes_monde.any(func(e): return e.visible),
@@ -355,6 +361,8 @@ func _mener() -> void:
 	await _le_modeleur(ed)
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
+	_la_provenance(ed)
+	_vrai(_provenance_finie, "la provenance est allée JUSQU'AU BOUT")
 
 	ed.queue_free()
 	await process_frame
@@ -362,6 +370,123 @@ func _mener() -> void:
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
+
+
+## LA LÉGENDE DES FORMES (Jordan, 29 septembre 2026) : un bandeau en haut de la vue, dans Witness seul ;
+## survoler une carte allume sa zone dans la vue, un clic y cadre, la flèche replie le bandeau.
+## ⚠ Le centre de l'arche est calculé à la main (voir `test_formes_du_temoin`), pas par la fonction.
+func _la_legende_des_formes(ed: Control) -> void:
+	var leg: Control = ed._legende_formes
+	_vrai(leg.visible, "Witness : la légende des formes est là")
+	_egal(leg.cartes.size(), 23, "22 formes et le finisseur, une carte chacune")
+	var carte_arche: Control = null
+	for enfant in leg._rangee.get_children():
+		if enfant.has_meta("carte") and enfant.get_meta("carte")["id"] == "arche":
+			carte_arche = enfant
+	_vrai(carte_arche != null, "la carte de l'arche existe")
+	if carte_arche == null:
+		return
+	var zone: MultiMeshInstance3D = ed._vue._zone_vue
+	carte_arche.mouse_entered.emit()
+	_vrai(zone.visible and zone.multimesh.instance_count == 26, "survoler l'arche allume ses 26 cases dans la vue")
+	carte_arche.mouse_exited.emit()
+	_vrai(not zone.visible, "la quitter les éteint")
+	var clic := InputEventMouseButton.new()
+	clic.button_index = MOUSE_BUTTON_LEFT
+	clic.pressed = true
+	# ⚠ Le cadrage change l'orbite, et la suite (les flèches qui suivent la caméra) suppose celle d'avant.
+	var v: Control = ed._vue
+	var orbite := [v._cible, v._azimut, v._elevation, v._distance]
+	carte_arche.gui_input.emit(clic)
+	_vrai(ed._vue._cible.is_equal_approx(Vector3(7.5, 122.0 / 26.0 + 0.5, 4.0)), "un clic cadre la vue sur l'arche")
+	v._cible = orbite[0]
+	v._azimut = orbite[1]
+	v._elevation = orbite[2]
+	v._distance = orbite[3]
+	v._caler()
+	var h_ouvert: float = leg.size.y
+	_vrai(h_ouvert > 150.0, "le bandeau ouvert a sa hauteur (%.0f)" % h_ouvert)
+	leg._poignee.gui_input.emit(clic)
+	leg.basculer(leg.ouvert, false)   # fin de l'animation, sans attendre
+	_vrai(not leg.ouvert and leg.size.y < 30.0 and not leg._panneau.visible,
+		"un clic sur la flèche replie le bandeau (reste la poignée : %.0f)" % leg.size.y)
+	leg._poignee.gui_input.emit(clic)
+	leg.basculer(leg.ouvert, false)
+	_vrai(leg.ouvert and absf(leg.size.y - h_ouvert) < 0.5, "un second clic le rouvre")
+	ed._aller_a("monde")
+	carte_arche.mouse_entered.emit()
+	_vrai(not zone.visible, "hors du témoin, une zone survolée ne s'allume pas")
+	carte_arche.mouse_exited.emit()
+	ed._aller_a("witness")
+
+
+var _provenance_finie := false
+
+
+## LE SENS INVERSE, dans World : la tuile sous la souris dit de quelle forme du témoin elle vient, et
+## « Show it in the witness » y mène. Le monde est celui du Play test : un sol de 9 × 9 en y = 10, habillé
+## du témoin tranché. ⚠ L'attendu du sommet est calculé à la main ; celui de la provenance vient du MODÈLE
+## (`Tranchage.cle_du_sommet` sur les cases du témoin), pas de la méta qu'on éprouve.
+func _la_provenance(ed: Control) -> void:
+	ed._aller_a("monde")
+	var v: Control = ed._vue
+	var leg: Control = ed._legende_formes
+	_vrai(leg.visible and leg._provenance.visible and not leg._defile.visible,
+		"World : le bandeau montre la provenance, pas les cartes")
+	_egal(leg._p_nom.text, "Hover a tile", "rien de survolé : le bandeau dit quoi faire")
+	# Vu d'au-dessus, visé au centre : le rayon tombe sur le dessus de la case (24, 10, 24), en x = z = 24,3.
+	# Le sommet v porte la pièce [v + ½, v + 3/2] : ⌊24,3 − ½⌋ = 23, ⌊11 − ½⌋ = 10 → (23, 10, 23).
+	v._cible = Vector3(24.3, 11.0, 24.3)
+	v._azimut = 0.0
+	v._elevation = 1.45
+	v._distance = 10.0
+	v._caler()
+	var info: Dictionary = v.tuile_sous(v.size * 0.5)
+	_egal(info.get("sommet", null), Vector3i(23, 10, 23), "la tuile sous la souris : le sommet, à la main")
+	var nom: String = info.get("nom", "")
+	_vrai(nom != "" and not info["faute"], "une tuile y est posée (%s)" % nom)
+	v._survoler(v.size * 0.5)
+	_vrai(v._tuile_vue.visible and v._tuile_vue.position.is_equal_approx(Vector3(24, 11, 24)),
+		"la tuile survolée est marquée dans le monde, centrée sur son sommet")
+	var source: Variant = FT.sommet_source(info.get("lot", null), nom)
+	_vrai(source != null, "le lot sait d'où vient cette tuile")
+	if source == null:
+		return
+	var modele: Dictionary = Tranchage.cle_du_sommet(BM.cases(0), source, MB.plafond_de(BM.cases(0)))
+	_egal(modele.get("cle", ""), MB.cle_sans_exemplaire(nom),
+		"le sommet source porte, dans le témoin, la MÊME clé que la tuile posée")
+	_vrai(not leg.provenance.is_empty() and leg._p_voir.visible and leg._p_photo.texture != null,
+		"le bandeau nomme la forme, montre sa photo et offre « Show it in the witness »")
+	_vrai(leg._p_detail.text.contains("(%d, %d, %d)" % [source.x, source.y, source.z]), "et dit le coin exact")
+	v._survoler(Vector2(2, 2))   # du ciel : la tuile désignée RESTE, sinon on n'atteindrait jamais le bouton
+	_vrai(not leg.provenance.is_empty(), "passer sur du vide ne l'efface pas")
+	leg.voir()
+	_egal(ed._atelier, "witness", "« Show it in the witness » mène au témoin")
+	_vrai(v._cible.is_equal_approx(Vector3(source) + Vector3.ONE), "cadré sur le sommet source")
+	_vrai(v._tuile_vue.visible and v._tuile_vue.position.is_equal_approx(Vector3(source) + Vector3.ONE)
+		and not v._zone_vue.visible, "la place exacte marquée — la tuile seule, la forme ne la noie pas")
+	var encadree := ""
+	for enfant in leg._rangee.get_children():
+		if enfant.has_meta("carte") and (enfant as Control).get_theme_stylebox("panel") == enfant.get_meta("styles")[1]:
+			encadree = enfant.get_meta("carte")["id"]
+	_egal(encadree, leg.cartes.filter(func(c): return c["id"] == FT.cartes_du_sommet(leg.cartes, source)[0]["id"])[0]["id"],
+		"la carte de la forme est encadrée dans le bandeau")
+	_vrai(leg._defile.visible and not leg._provenance.visible, "Witness : le bandeau rend ses cartes")
+	# Le repli procédural ne vient d'aucun témoin : on le DIT.
+	ed._aller_a("monde")
+	var lot_avant: MeshLibrary = v.monde().lot
+	v.monde().lot = null
+	v.monde().reconstruire()
+	v._cible = Vector3(24.3, 11.0, 24.3)   # « Show it in the witness » a déplacé la caméra
+	v._azimut = 0.0
+	v._elevation = 1.45
+	v._distance = 10.0
+	v._caler()
+	v._survoler(v.size * 0.5)
+	_egal(leg._p_nom.text, "Not from a witness", "sur les tuiles intégrées, le bandeau dit qu'elles ne viennent d'aucun témoin")
+	v.monde().lot = lot_avant
+	v.monde().reconstruire()
+	_provenance_finie = true
 
 
 ## LE PLAY TEST, mené par de VRAIES touches (`Input.parse_input_event`) : le personnage tombe sur un
@@ -433,17 +558,22 @@ func _play_test(ed: Control) -> void:
 	ed._vue._distance = 8.0
 	for i in 5:
 		await process_frame
-	var oeil: Vector3 = ed._vue._camera.global_position
 	var espace: PhysicsDirectSpaceState3D = ed._vue._vue.find_world_3d().direct_space_state
-	var traverse := espace.intersect_ray(PhysicsRayQueryParameters3D.create(ed._vue._cible, oeil, 2))
-	var boule := PhysicsShapeQueryParameters3D.new()
-	var sphere := SphereShape3D.new()
-	sphere.radius = 0.15
-	boule.shape = sphere
-	boule.transform = Transform3D(Basis(), oeil)
-	boule.collision_mask = 2
-	_vrai(traverse.is_empty() and espace.intersect_shape(boule, 1).is_empty(),
-		"bras-ressort : rien du décor entre lui et l'œil, ni autour de l'œil (œil en %s)" % oeil)
+	_vrai(_oeil_degage(ed, espace), "bras-ressort : rien du décor entre lui et l'œil, ni autour de l'œil (œil en %s)"
+		% ed._vue._camera.global_position)
+	# LE PIVOT LISSÉ DANS LA ROCHE : `_cible` suit la tête avec retard, et peut rester une image derrière
+	# une arête. On l'y met exprès — DANS la dalle du sol (l'aminci la tient entre 10,25 et 10,75) — et
+	# l'on regarde d'un peu au-dessus. ⚠ Le bras qui partait de `_cible` butait sur la face par dessous
+	# et posait l'œil sous le sol.
+	# ⚠ Et la tête n'est libre que si la sphère tient DANS la capsule : plus large, collé à une paroi,
+	# le premier lancer partirait lui aussi de la roche.
+	_vrai(ed._vue.RAYON_DU_BRAS < p.RAYON, "la sphère du bras (%.2f) est plus fine que la capsule (%.2f)"
+		% [ed._vue.RAYON_DU_BRAS, p.RAYON])
+	ed._vue._elevation = 0.38
+	ed._vue._cible = Vector3(p.global_position.x, 10.5, p.global_position.z)
+	ed._vue._suivre(0.001)
+	_vrai(_oeil_degage(ed, espace), "bras-ressort : un pivot lissé resté dans la roche ne fait pas passer l'œil "
+		+ "à travers (œil en %s)" % ed._vue._camera.global_position)
 	ed._vue._elevation = 0.38
 	ed._vue._distance = 4.0
 	var d: float = ed._vue._distance
@@ -463,6 +593,22 @@ func _play_test(ed: Control) -> void:
 		"Échap rend World, sans personnage ni décor")
 	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
 	_play_test_fini = true
+
+
+## Rien du décor entre la TÊTE du personnage et l'œil, ni autour de l'œil. ⚠ Depuis la tête, pas depuis
+## `_cible` : le pivot lissé peut être dans la roche, et c'est justement ce qu'on éprouve.
+func _oeil_degage(ed: Control, espace: PhysicsDirectSpaceState3D) -> bool:
+	var tete: Vector3 = ed._vue.personnage.global_position + Vector3.UP * ed._vue.CAMERA_HAUTEUR
+	var oeil: Vector3 = ed._vue._camera.global_position
+	var boule := PhysicsShapeQueryParameters3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = 0.1
+	boule.shape = sphere
+	boule.transform = Transform3D(Basis(), oeil)
+	boule.collision_mask = 2
+	var q := PhysicsRayQueryParameters3D.create(tete, oeil, 2)
+	q.hit_back_faces = true
+	return espace.intersect_ray(q).is_empty() and espace.intersect_shape(boule, 1).is_empty()
 
 
 func _tenir(touche: Key, appuyee: bool) -> void:

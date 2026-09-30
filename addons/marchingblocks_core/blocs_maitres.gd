@@ -1108,6 +1108,10 @@ static func librairie() -> Dictionary:
 	return resultat
 
 
+## La méta d'un lot tranché : {nom de tuile: sommet du témoin d'où elle vient}.
+const META_SOMMETS := "sommets_du_temoin"
+
+
 ## Monte la `MeshLibrary` à partir des pièces récoltées. ⚠ PARTAGÉ par `librairie()` et
 ## `librairie_depuis_glb()` : deux montages séparés auraient divergé, et l'un des deux aurait fini
 ## par remettre un repli que l'autre refuse.
@@ -1146,6 +1150,20 @@ static func _assembler(pieces: Dictionary, exemplaires: Dictionary = {}) -> Dict
 		id = _poser_la_famille(lot, id, MB.nom_en_contexte(c["nom"], true), dehors, c["bits"],
 			exemplaires, comptes)
 		variantes += 1
+
+	# LA PROVENANCE : pour chaque tuile du lot (par son NOM), le sommet du témoin où elle a été découpée.
+	# ⚠ **PAR LE NOM ET NON PAR L'INDICE** : `_poser_la_famille` saute un exemplaire vide sans renuméroter
+	# les suivants, et le peintre tasse les trous (`MassifPeint._familles`). Le nom est ce que le rendu
+	# porte vraiment ; c'est lui qu'on suit, et la légende de l'atelier World le lit (« d'où vient cette
+	# tuile ? »). Il voyage dans le cache avec le lot (une méta de ressource).
+	var sommets := {}
+	for item in lot.get_item_list():
+		var nom: String = lot.get_item_name(item)
+		var famille: Array = exemplaires.get(MB.cle_sans_exemplaire(nom), [])
+		var k: int = MB.indice_d_exemplaire(nom)
+		if k < famille.size() and (famille[k] as Dictionary).has("sommet"):
+			sommets[nom] = famille[k]["sommet"]
+	lot.set_meta(META_SOMMETS, sommets)
 
 	var en_trop := 0
 	for cle in comptes:

@@ -72,10 +72,16 @@ const TRACES := {
 	# Le tranchage et les opérations
 	"couteau": '<path d="M19.5 3 7.5 15l2.5 2.5L21.5 6a2 2 0 0 0-2-3z"/><path d="M7.5 15l-4 4 2.5 2.5 4-4"/>',
 	"elargir": '<path d="M3 12h18M6.5 8.5 3 12l3.5 3.5M17.5 8.5 21 12l-3.5 3.5"/>',
-	"evider": '<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/>',
+	"extruder_face": '<path d="M5 3.5v17M5 7.5 2.5 10M5 12.5 2.5 15M5 17.5 2.5 20"/><path d="M9 12h11.5M16.5 8l4 4-4 4"/>',
+	"evider":'<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/>',
 	"gomme": '<path d="M20 20.5H9.5l-5.3-5.3a2 2 0 0 1 0-2.8L13.2 3.4a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L11 20.5"/><path d="M7.5 10.5l6 6"/>',
 	"aide": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 1 1 3.6 2.4c-.7.3-1.1.9-1.1 1.6v.6M12 17.2h.01"/>',
 }
+
+## L'enveloppe de chaque icône. ⚠ Les greffons la reprennent (`DEV_TOOLS/generer_icones_greffons.gd`) :
+## un trait retouché ici se relance là-bas.
+const ENTETE := ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" '
+	+ 'fill="none" stroke="#FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">')
 
 static var _cache := {}
 
@@ -87,9 +93,7 @@ static func icone(nom: String) -> Texture2D:
 	if not TRACES.has(nom):
 		push_error("Icônes : « %s » n'existe pas" % nom)
 		return null
-	var svg: String = ('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" '
-		+ 'fill="none" stroke="#FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'
-		+ TRACES[nom] + "</svg>")
+	var svg: String = ENTETE + TRACES[nom] + "</svg>"
 	var image := Image.new()
 	var e: int = image.load_svg_from_string(svg, TAILLE_RENDU / 24.0)
 	if e != OK:

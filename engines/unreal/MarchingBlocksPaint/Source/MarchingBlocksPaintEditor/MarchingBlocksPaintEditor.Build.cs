@@ -9,7 +9,7 @@ public class MarchingBlocksPaintEditor : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"Core", "CoreUObject", "Engine", "InputCore", "Slate", "SlateCore", "UnrealEd", "EditorFramework",
+			"Core", "CoreUObject", "Engine", "InputCore", "Slate", "SlateCore", "UnrealEd", "EditorFramework", "Projects",
 			"MarchingBlocksPaint",
 		});
 	}

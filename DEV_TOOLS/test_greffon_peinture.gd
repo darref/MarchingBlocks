@@ -25,9 +25,12 @@ const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
 const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
+const GENERATEUR_ICONES := preload("res://DEV_TOOLS/generer_icones_greffons.gd")
 
 var _ok := 0
 var _echecs := 0
+## La barre est allée jusqu'au bout : lu dans `_de_bout_en_bout`, qui tourne APRÈS elle.
+var _barre_finie := false
 
 
 func _initialize() -> void:
@@ -41,6 +44,8 @@ func _initialize() -> void:
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
 	_les_cas_de_monde()
+	_les_icones_livrees_sont_a_jour()
+	_la_barre_ne_montre_que_l_utile()
 	_de_bout_en_bout.call_deferred()
 
 
@@ -92,6 +97,107 @@ func _les_cas_livres_sont_a_jour() -> Dictionary:
 		_vrai(ici != null and JSON.stringify(ici) == JSON.stringify(frais),
 			"%s est absent ou PÉRIMÉ : relancer DEV_TOOLS/generer_cas_d_epreuve.gd" % cible)
 	return JSON.parse_string(FileAccess.get_file_as_string(CAS))
+
+
+# ── 3 bis. Les icônes des trois greffons sont celles de l'appli, AUJOURD'HUI ──────────────────────────
+# ⚠ Même parade que pour les cas : une icône retouchée dans `app/icones.gd` sans relancer le générateur
+# laisserait trois greffons dessiner autre chose que le logiciel.
+func _les_icones_livrees_sont_a_jour() -> void:
+	var frais: Dictionary = GENERATEUR_ICONES.sorties()
+	_vrai(not frais.has("erreur"), "générateur d'icônes : %s" % str(frais.get("erreur", "")))
+	if frais.has("erreur"):
+		return
+	var perimes: Array = []
+	for chemin in frais:
+		var ici := FileAccess.get_file_as_bytes(chemin) if FileAccess.file_exists(chemin) else PackedByteArray()
+		if ici != frais[chemin]:
+			perimes.append(chemin)
+	_vrai(perimes.is_empty(), "icônes absentes ou PÉRIMÉES : relancer DEV_TOOLS/generer_icones_greffons.gd — %s"
+		% str(perimes.slice(0, 3)))
+	# ⚠ ET CHAQUE ICÔNE DEMANDÉE PAR UN GREFFON EXISTE : un nom mal tapé rendrait un bouton vide, sans erreur
+	# à la compilation. Lu dans le TEXTE des sources, pas supposé.
+	var Icons: GDScript = load("res://addons/marchingblocks_paint/mb_icons.gd")
+	var connues: Dictionary = Icons.STROKES
+	var inconnues: Array = []
+	var motifs := {
+		"res://addons/marchingblocks_paint/mb_toolbar.gd": [r'(?:_toggle|_button|_menu)\([^,]+, "([a-z_]+)"',
+			r'Icons\.icon\("([a-z_]+)"'],
+		"res://engines/unity/com.marchingblocks.paint/Editor/MarchingBlocksWorldEditor.cs": [r'Icon\("([a-z_]+)"'],
+		"res://engines/unreal/MarchingBlocksPaint/Source/MarchingBlocksPaintEditor/Private/MarchingBlocksModeToolkit.cpp":
+			[r'(?:Toggle|Button|Op|Icon)\("([a-z_]+)"'],
+	}
+	var vus := 0
+	for f in motifs:
+		var texte := FileAccess.get_file_as_string(f)
+		_vrai(texte != "", "%s est illisible" % f)
+		for m in motifs[f]:
+			for r in RegEx.create_from_string(m).search_all(texte):
+				vus += 1
+				if not connues.has(r.get_string(1)):
+					inconnues.append("%s : %s" % [f.get_file(), r.get_string(1)])
+	_vrai(inconnues.is_empty(), "des greffons demandent des icônes qui n'existent pas : %s" % str(inconnues))
+	# Un motif qui ne trouve rien ne garde rien : les trois sources doivent en demander.
+	_vrai(vus >= 60, "les icônes demandées n'ont pas été trouvées dans les sources (%d)" % vus)
+	for nom in connues:
+		_vrai(Icons.icon(nom) != null, "l'icône « %s » ne se rend pas dans Godot" % nom)
+
+
+# ── 3 ter. La barre de Godot ne montre que ce que l'outil courant utilise ────────────────────────────
+# Comme la barre de droite de l'appli (`_contexte()`) : le pinceau pour Add · Dig · Select, Hollow pour la
+# Box, la sélection quand il y en a une, Paste quand le presse-papiers est plein. ⚠ `EditorPlugin` ne
+# s'instancie pas hors de l'éditeur : c'est pourquoi la barre vit dans son propre script, `mb_toolbar.gd`,
+# qui ne demande rien à l'éditeur.
+func _la_barre_ne_montre_que_l_utile() -> void:
+	var Barre: GDScript = load("res://addons/marchingblocks_paint/mb_toolbar.gd")
+	# ⚠ UNE ERREUR D'EXÉCUTION ABANDONNE LA FONCTION EN SILENCE (charte §6) : chaque étape qui peut rendre
+	# nul est vérifiée, et la dernière ligne pose une SENTINELLE.
+	if Barre == null or not Barre.can_instantiate():
+		_vrai(false, "mb_toolbar.gd ne compile pas")
+		return
+	var ed: Node = Editeur.new()
+	var barre: HBoxContainer = Barre.new()
+	barre.set("editor", ed)
+	var vus := func(nom: String) -> bool: return (barre.get(nom) as Control).visible
+	var etat := func(mode: String) -> String:
+		ed.mode = mode
+		ed.changed.emit()
+		return "%s %s" % [vus.call("_brush"), vus.call("_hollow")]
+	_egal(etat.call("add"), "true false", "Add : le pinceau, pas Hollow")
+	_egal(etat.call("select"), "true false", "Select : le pinceau, pas Hollow")
+	_egal(etat.call("rect"), "false false", "Rect : ni pinceau ni Hollow")
+	_egal(etat.call("box"), "false true", "Box : Hollow, pas de pinceau")
+	_vrai(not vus.call("_selection_bar") and not vus.call("_paste"), "rien de sélectionné ni copié : ni sélection ni Paste")
+	ed.selection = {Vector3i.ZERO: true, Vector3i.ONE: true}
+	ed.clipboard = [Vector3i.ZERO] as Array[Vector3i]
+	ed.changed.emit()
+	_vrai(vus.call("_selection_bar") and vus.call("_paste"), "une sélection et une copie : la sélection et Paste apparaissent")
+	_egal((barre.get("_selected") as Label).text, "2 selected", "le compte de la sélection")
+	# L'état se lit dans les boutons : la visée, l'outil, la forme, la taille.
+	ed.aim = "sculpt"
+	ed.shape = "disc"
+	ed.brush_size = 5
+	ed.mode = "dig"
+	ed.changed.emit()
+	_vrai((barre.get("_aim_buttons")["sculpt"] as Button).button_pressed
+		and not (barre.get("_aim_buttons")["grid"] as Button).button_pressed, "la visée enfoncée est Sculpt")
+	_vrai((barre.get("_mode_buttons")["dig"] as Button).button_pressed
+		and not (barre.get("_mode_buttons")["box"] as Button).button_pressed, "l'outil enfoncé est Dig")
+	_vrai((barre.get("_shape_buttons")["disc"] as Button).button_pressed, "la forme enfoncée est Disc")
+	_egal((barre.get("_size_value") as Label).text, "5", "la taille du pinceau")
+	# Et la barre MÈNE l'éditeur : un clic sur un bouton change l'outil.
+	(barre.get("_mode_buttons")["rect"] as Button).pressed.emit()
+	_egal(ed.mode, "rect", "un clic sur Rect choisit Rect")
+	var sans_icone := 0
+	var boutons := 0
+	for b in barre.find_children("*", "Button", true, false):
+		boutons += 1
+		if (b as Button).icon == null:
+			sans_icone += 1
+	_egal(sans_icone, 0, "boutons de la barre sans icône")
+	_vrai(boutons >= 25, "la barre porte %d boutons, on en attend au moins 25" % boutons)
+	barre.free()
+	ed.free()
+	_barre_finie = true
 
 
 # ── 4. Le greffon reproduit chaque cas, à 100 % ─────────────────────────────────────────────────────
@@ -296,7 +402,7 @@ func _les_outils_dans_la_vue() -> void:
 	# « OK »** — mesuré le 28 septembre 2026 : `Editeur.new()` a levé une erreur d'exécution, Godot a
 	# abandonné la fonction, et le reste a continué. On exige d'abord que chaque script se charge.
 	var tous_charges := true
-	for nom in ["mb_tools.gd", "mb_editor.gd", "mb_world.gd", "mb_rule.gd", "mb_tileset.gd", "plugin.gd"]:
+	for nom in ["mb_tools.gd", "mb_editor.gd", "mb_world.gd", "mb_rule.gd", "mb_tileset.gd", "mb_icons.gd", "mb_toolbar.gd", "plugin.gd"]:
 		var script := load("res://addons/marchingblocks_paint/" + nom) as GDScript
 		var charge := script != null and script.can_instantiate()
 		_vrai(charge, "addons/marchingblocks_paint/%s ne compile pas" % nom)
@@ -413,6 +519,7 @@ func _les_outils_dans_la_vue() -> void:
 
 # ── 5. De bout en bout : l'appli exporte, le greffon charge, pose, et redonne ce que l'appli pose ────
 func _de_bout_en_bout() -> void:
+	_vrai(_barre_finie, "SENTINELLE : l'épreuve de la barre s'est arrêtée en route (erreur d'exécution ?)")
 	_les_outils_dans_la_vue()
 	var bilan: Dictionary = BM.librairie()
 	var lot: MeshLibrary = bilan["lot"]

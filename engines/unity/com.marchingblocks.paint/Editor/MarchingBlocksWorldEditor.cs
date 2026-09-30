@@ -75,117 +75,231 @@ namespace MarchingBlocks.Paint.EditorTools
         }
 
         // ── The inspector ──────────────────────────────────────────────────────────────────────────
+        //
+        // The MarchingBlocks tool's right panel, compact: its icons (MBIcons, generated from the tool's own),
+        // its groups — aim, tool, brush, floor, selection — and its olive accent. It only shows what the
+        // current tool uses: the brush for Add · Dig · Select, Hollow for the Box, the selection when there
+        // is one, Paste when something is copied. Painting is all this does.
+
+        static readonly Color Olive = new Color(0.706f, 0.741f, 0.522f);
+        static readonly Color OliveOnLight = new Color(0.40f, 0.45f, 0.18f);
+        static readonly Color Red = new Color(0.878f, 0.376f, 0.235f);
+        static GUIStyle sectionStyle;
+
+        static Color Accent => EditorGUIUtility.isProSkin ? Olive : OliveOnLight;
+        // The icons are white: on the light skin they are drawn dark.
+        static Color Ink => EditorGUIUtility.isProSkin ? new Color(0.85f, 0.85f, 0.82f) : new Color(0.22f, 0.22f, 0.22f);
+
+        static GUIContent Icon(string name, string tip) => new GUIContent(MBIcons.Get(name), tip);
 
         public override void OnInspectorGUI()
         {
             var world = World;
-            DrawDefaultInspector();
-            EditorGUILayout.Space();
+            if (sectionStyle == null)
+                sectionStyle = new GUIStyle(EditorStyles.miniBoldLabel) { normal = { textColor = new Color(0.55f, 0.57f, 0.55f) } };
 
-            var big = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, fixedHeight = 30 };
-            bool now = GUILayout.Toggle(editing, editing ? "Editing the world — click here to stop" : "Edit the world", big);
+            serializedObject.Update();
+            DrawPropertiesExcluding(serializedObject, "m_Script", "floor");
+            serializedObject.ApplyModifiedProperties();
+            EditorGUILayout.Space(4);
+
+            var big = new GUIStyle(GUI.skin.button) { fontStyle = FontStyle.Bold, fixedHeight = 26 };
+            var background = GUI.backgroundColor;
+            if (editing) GUI.backgroundColor = Accent;
+            bool now = GUILayout.Toggle(editing, editing ? "Painting — click to stop" : "Paint the world", big);
+            GUI.backgroundColor = background;
             if (now != editing) { editing = now; CancelAll(); SceneView.RepaintAll(); }
 
-            using (new EditorGUI.DisabledScope(!editing))
+            if (editing)
             {
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    // While navigating no aim button is down, so clicking either one — even the kept aim —
-                    // is a choice, and a choice stops navigating.
-                    int shown = aim.Navigating ? -1 : (int)aim.Aim;
-                    int picked = GUILayout.Toolbar(shown, new[]
-                    {
-                        new GUIContent("Grid", "Aim at the floor plane (Tab alternates Grid and Sculpt)."),
-                        new GUIContent("Sculpt", "Aim at the matter itself (Tab alternates Grid and Sculpt)."),
-                    });
-                    if (picked != shown && picked >= 0) aim = aim.Choose((BrushAim)picked);
-                    bool navigate = GUILayout.Toggle(aim.Navigating, new GUIContent("Navigate · Space",
-                        "Space: fly around your world as usual in Unity, no click paints. Space again comes " +
-                        "back to the same aim."), GUI.skin.button, GUILayout.Width(130));
-                    if (navigate != aim.Navigating) { aim = aim.Space(); StopGesture(); }
-                }
-                EditorGUILayout.HelpBox(aim.Navigating
-                    ? $"Navigating: fly with the right mouse button and W A S D (Q E up and down), as usual in " +
-                      $"Unity; no click paints. Space comes back to {aim.Aim}."
-                    : aim.Aim == BrushAim.Grid
-                    ? "Grid: aims at the floor plane. Page Up / Page Down move it."
-                    : "Sculpt: aims at the matter itself — Add builds against the face you point at.",
-                    MessageType.None);
-                var newMode = (Mode)GUILayout.Toolbar((int)mode, new[] { "Add  A", "Dig  D", "Select  S", "Rect  G", "Box  B" });
-                if (newMode != mode) { mode = newMode; CancelAll(); }
-                EditorGUILayout.HelpBox(ModeHelp(), MessageType.None);
-
-                if (mode == Mode.Box)
-                    hollow = EditorGUILayout.ToggleLeft(new GUIContent("Hollow box",
-                        "Keeps only the skin of the box — walls, floor and ceiling: a room. A box thinner " +
-                        "than three cells on an axis has no inside, so it stays solid."), hollow);
-                if (mode == Mode.Add || mode == Mode.Dig || mode == Mode.Select)
-                {
-                    brushSize = EditorGUILayout.IntSlider("Brush size  [ ]", brushSize, 1, 7);
-                    shape = (BrushShape)GUILayout.Toolbar((int)shape, new[] { "Sphere", "Cube", "Disc" });
-                }
-                EditorGUILayout.LabelField("Floor", world.floor.ToString());
-
-                EditorGUILayout.Space();
-                EditorGUILayout.LabelField($"Selection — {selection.Count} cell(s)", EditorStyles.boldLabel);
-                using (new EditorGUI.DisabledScope(selection.Count == 0))
-                {
-                    Row(("Fill", () => Operate(SelectionOp.Fill)), ("Delete", () => Operate(SelectionOp.Delete)),
-                        ("Clear", ClearSelection));
-                    Row(("Extrude ↑", () => Operate(SelectionOp.ExtrudeUp)), ("Extrude ↓", () => Operate(SelectionOp.ExtrudeDown)));
-                    Row(("Grow", () => Operate(SelectionOp.Grow)), ("Shrink", () => Operate(SelectionOp.Shrink)),
-                        ("Connected", () => Operate(SelectionOp.Connected)));
-                    Row(("−X", () => Move(new Int3(-1, 0, 0))), ("+X", () => Move(new Int3(1, 0, 0))),
-                        ("−Y", () => Move(new Int3(0, -1, 0))), ("+Y", () => Move(new Int3(0, 1, 0))),
-                        ("−Z", () => Move(new Int3(0, 0, -1))), ("+Z", () => Move(new Int3(0, 0, 1))));
-                    Row(("Copy", Copy), ("Cut", Cut));
-                }
-                using (new EditorGUI.DisabledScope(clipboard.Count == 0))
-                    if (GUILayout.Button(pasting ? "Pasting — click in the Scene view (Esc cancels)" : $"Paste ({clipboard.Count} cells)"))
-                        StartPaste();
+                EditorGUIUtility.SetIconSize(new Vector2(18, 18));
+                try { ToolsPanel(world); }
+                finally { EditorGUIUtility.SetIconSize(Vector2.zero); }
             }
 
-            EditorGUILayout.Space();
+            EditorGUILayout.Space(2);
+            var content = GUI.contentColor;
             if (!string.IsNullOrEmpty(world.LastError))
                 EditorGUILayout.HelpBox(world.LastError, MessageType.Error);
             else
-                EditorGUILayout.LabelField($"{world.CellCount} cell(s) · {world.LastPlaced} tile(s)" +
-                                           (world.LastMissing > 0 ? $" · {world.LastMissing} missing (red)" : ""));
-            if (!string.IsNullOrEmpty(status)) EditorGUILayout.HelpBox(status, MessageType.Info);
+            {
+                if (world.LastMissing > 0) GUI.contentColor = Red;
+                EditorGUILayout.LabelField($"{world.CellCount} cells · {world.LastPlaced} tiles" +
+                                           (world.LastMissing > 0 ? $" · {world.LastMissing} missing" : ""), EditorStyles.miniLabel);
+                GUI.contentColor = content;
+            }
+            if (!string.IsNullOrEmpty(status))
+            {
+                GUI.contentColor = Accent;
+                EditorGUILayout.LabelField(status, EditorStyles.wordWrappedMiniLabel);
+                GUI.contentColor = content;
+            }
+        }
 
+        void ToolsPanel(MarchingBlocksWorld world)
+        {
+            Section("AIM · Tab          NAVIGATE · Space");
             using (new EditorGUILayout.HorizontalScope())
             {
-                if (GUILayout.Button("Rebuild")) world.Rebuild();
-                if (GUILayout.Button("Clear cells"))
+                // While navigating no aim button is down, so clicking either one — even the kept aim — is a
+                // choice, and a choice stops navigating.
+                int shown = aim.Navigating ? -1 : (int)aim.Aim;
+                int picked = Segmented(shown,
+                    Icon("grid", "Grid (Tab) — aims at the floor plane. Page Up / Page Down move it."),
+                    Icon("sculpt", "Sculpt (Tab) — aims at the matter itself: Add builds against the face you point at."));
+                if (picked != shown && picked >= 0) aim = aim.Choose((BrushAim)picked);
+                GUILayout.Space(8);
+                bool navigate = IconToggle(aim.Navigating, Icon("navigate", "Navigate (Space) — fly as usual in Unity " +
+                    "(right drag + W A S D, Q E); no click paints. Space again comes back to the same aim."));
+                if (navigate != aim.Navigating) { aim = aim.Space(); StopGesture(); }
+                GUILayout.FlexibleSpace();
+            }
+
+            Section("TOOL");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                var newMode = (Mode)Segmented((int)mode,
+                    Icon("add", "Add (A) — adds matter. Shift digs."),
+                    Icon("dig", "Dig (D) — removes matter. Shift adds."),
+                    Icon("select", "Select (S) — paints the selection over the matter. Shift adds, Ctrl removes."),
+                    Icon("rect", "Rect (G) — a FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."),
+                    Icon("box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."));
+                if (newMode != mode) { mode = newMode; CancelAll(); }
+                if (mode == Mode.Box)
+                {
+                    GUILayout.Space(8);
+                    hollow = IconToggle(hollow, Icon("hollow", "Hollow box — keeps the skin: a room. A box thinner " +
+                        "than three cells stays solid."));
+                }
+                GUILayout.FlexibleSpace();
+            }
+
+            if (mode == Mode.Add || mode == Mode.Dig || mode == Mode.Select)
+            {
+                Section("BRUSH · [ ]");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    shape = (BrushShape)Segmented((int)shape,
+                        Icon("sphere", "Sphere — a ball of cells."),
+                        Icon("cube", "Cube — a cube of cells."),
+                        Icon("disc", "Disc — flat, across the face you point at: fills or digs a wall without thickening it."));
+                    GUILayout.Space(8);
+                    brushSize = EditorGUILayout.IntSlider(brushSize, 1, 7);
+                }
+            }
+
+            Section("FLOOR · PgUp PgDn");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(Icon("floor", "The plane the Grid aim and the Rect paint on."), GUILayout.Width(22), GUILayout.Height(22));
+                int f = EditorGUILayout.DelayedIntField(world.floor, GUILayout.Width(60));
+                if (IconButton(Icon("down", "Page Down — one floor lower."))) f--;
+                if (IconButton(Icon("up", "Page Up — one floor higher."))) f++;
+                if (f != world.floor) { Undo.RecordObject(world, "Change floor"); world.floor = f; SceneView.RepaintAll(); }
+                GUILayout.FlexibleSpace();
+            }
+
+            if (selection.Count > 0)
+            {
+                Section($"SELECTION · {selection.Count} cells");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (IconButton(Icon("fill", "Fill — fills every selected cell with matter. Draw a Rect or a Box, then Fill it."))) Operate(SelectionOp.Fill);
+                    if (IconButton(Icon("delete", "Delete (Del) — removes the selected matter."), Red)) Operate(SelectionOp.Delete);
+                    if (IconButton(Icon("clear", "Clear (Esc) — forgets the selection. No cell changes."))) ClearSelection();
+                    GUILayout.Space(8);
+                    if (IconButton(Icon("extrude_up", "Extrude up — adds the layer above; the selection AND the floor follow it."))) Operate(SelectionOp.ExtrudeUp);
+                    if (IconButton(Icon("extrude_down", "Extrude down — adds the layer below; the selection and the floor follow it."))) Operate(SelectionOp.ExtrudeDown);
+                    GUILayout.Space(8);
+                    if (IconButton(Icon("grow", "Grow — selects the matter touching the selection by a face."))) Operate(SelectionOp.Grow);
+                    if (IconButton(Icon("shrink", "Shrink — drops the selected cells that touch an unselected one."))) Operate(SelectionOp.Shrink);
+                    if (IconButton(Icon("connected", "Connected — selects all the matter linked to the selection by faces."))) Operate(SelectionOp.Connected);
+                    GUILayout.FlexibleSpace();
+                }
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    // The same moves as the arrow keys, on fixed axes — the arrows follow the camera, these do not.
+                    GUILayout.Label(Icon("move", "Move — the arrow keys move it too (they follow the camera; Shift + up / down lift)."),
+                        GUILayout.Width(22), GUILayout.Height(22));
+                    foreach (var (label, offset) in new[] { ("−X", new Int3(-1, 0, 0)), ("+X", new Int3(1, 0, 0)),
+                                 ("−Y", new Int3(0, -1, 0)), ("+Y", new Int3(0, 1, 0)), ("−Z", new Int3(0, 0, -1)), ("+Z", new Int3(0, 0, 1)) })
+                        if (GUILayout.Button(new GUIContent(label, $"Moves the selected matter one cell ({label})."),
+                                EditorStyles.miniButton, GUILayout.Width(30), GUILayout.Height(24)))
+                            Move(offset);
+                    GUILayout.Space(8);
+                    if (IconButton(Icon("copy", "Copy (Ctrl+C) — copies the selected matter."))) Copy();
+                    if (IconButton(Icon("cut", "Cut (Ctrl+X) — copies, then deletes."))) Cut();
+                    GUILayout.FlexibleSpace();
+                }
+            }
+            if (clipboard.Count > 0)
+            {
+                Section("CLIPBOARD · Ctrl V");
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    bool on = IconToggle(pasting, Icon("paste", "Paste (Ctrl+V) — the copy follows the mouse; click in " +
+                        "the Scene view to place it, Esc cancels."));
+                    if (on && !pasting) StartPaste();
+                    else if (!on && pasting) CancelAll();
+                    GUILayout.Label(pasting ? "Click in the Scene view — Esc cancels" : $"{clipboard.Count} cells copied",
+                        EditorStyles.miniLabel, GUILayout.Height(24));
+                    GUILayout.FlexibleSpace();
+                }
+            }
+
+            Section("LAYER");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (IconButton(Icon("world", "Rebuild — lays the tiles again from the cells."))) world.Rebuild();
+                if (IconButton(Icon("erase", "Clear cells — erases every cell of this layer (Ctrl+Z brings them back)."), Red))
                 {
                     Undo.RecordObject(world, "Clear cells");
                     world.ClearCells();
                     world.Rebuild();
                     ClearSelection();
                 }
+                GUILayout.FlexibleSpace();
             }
         }
 
-        static string ModeHelp()
+        static void Section(string title)
         {
-            switch (mode)
+            EditorGUILayout.Space(3);
+            GUILayout.Label(title, sectionStyle);
+        }
+
+        // Icon buttons side by side, one of them down: the tool's choice rows. Returns the one picked.
+        static int Segmented(int current, params GUIContent[] items)
+        {
+            int picked = current;
+            for (int i = 0; i < items.Length; i++)
             {
-                case Mode.Add: return "Click or drag to add matter. Shift digs instead.";
-                case Mode.Dig: return "Click or drag to remove matter. Shift adds instead.";
-                case Mode.Select: return "Paint over the matter to select it. Shift adds to the selection; Ctrl deselects.";
-                case Mode.Rect: return "Drag a FLAT rectangle on the floor, whatever the aim. Empty cells included: " +
-                                       "draw a room's floor, then Fill and Extrude it. Shift adds, Ctrl removes.";
-                default: return "Drag a 3D box: the whole volume, empty cells included. In Sculpt its corners sit on the " +
-                                "matter, in Grid on the floor. Shift adds, Ctrl removes.";
+                var style = i == 0 ? EditorStyles.miniButtonLeft
+                    : i == items.Length - 1 ? EditorStyles.miniButtonRight : EditorStyles.miniButtonMid;
+                if (IconToggle(i == current, items[i], style) && i != current) picked = i;
             }
+            return picked;
         }
 
-        static void Row(params (string label, System.Action act)[] buttons)
+        // Down, its icon turns olive — the tool's accent.
+        static bool IconToggle(bool on, GUIContent content, GUIStyle style = null)
         {
-            using (new EditorGUILayout.HorizontalScope())
-                foreach (var b in buttons)
-                    if (GUILayout.Button(b.label)) b.act();
+            var c = GUI.contentColor;
+            GUI.contentColor = on ? Accent : Ink;
+            bool now = GUILayout.Toggle(on, content, style ?? EditorStyles.miniButton, GUILayout.Width(30), GUILayout.Height(24));
+            GUI.contentColor = c;
+            return now;
         }
+
+        static bool IconButton(GUIContent content, Color? tint = null)
+        {
+            var c = GUI.contentColor;
+            GUI.contentColor = tint ?? Ink;
+            bool pressed = GUILayout.Button(content, EditorStyles.miniButton, GUILayout.Width(30), GUILayout.Height(24));
+            GUI.contentColor = c;
+            return pressed;
+        }
+
 
         // ── The Scene view ─────────────────────────────────────────────────────────────────────────
 

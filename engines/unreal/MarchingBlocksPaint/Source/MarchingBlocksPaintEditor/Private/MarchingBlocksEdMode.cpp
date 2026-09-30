@@ -2,6 +2,7 @@
 
 #include "MarchingBlocksEdMode.h"
 
+#include "MarchingBlocksModeToolkit.h"
 #include "EditorViewportClient.h"
 #include "Engine/Selection.h"
 #include "Editor.h"
@@ -20,7 +21,7 @@ namespace MarchingBlocksEdModeDetail
 	const FLinearColor DigColour(0.9f, 0.35f, 0.25f);
 	const FLinearColor SelectColour(0.95f, 0.8f, 0.3f);
 	const FLinearColor SelectionColour(0.35f, 0.7f, 1.f);
-	// Past a few thousand wire boxes the viewport crawls; the counts are in the Details panel anyway.
+	// Past a few thousand wire boxes the viewport crawls; the counts are in the panel anyway.
 	constexpr int32 MaxDrawn = 3000;
 
 	MBPaint::EBrushShape Shape(EMarchingBlocksBrushShape S)
@@ -32,7 +33,13 @@ namespace MarchingBlocksEdModeDetail
 
 UMarchingBlocksEdMode::UMarchingBlocksEdMode()
 {
-	Info = FEditorModeInfo(ModeId, LOCTEXT("ModeName", "MarchingBlocks"), FSlateIcon(), true);
+	Info = FEditorModeInfo(ModeId, LOCTEXT("ModeName", "MarchingBlocks"),
+		FSlateIcon(FMarchingBlocksModeToolkit::StyleName, "MarchingBlocks.world"), true);
+}
+
+void UMarchingBlocksEdMode::CreateToolkit()
+{
+	Toolkit = MakeShareable(new FMarchingBlocksModeToolkit);
 }
 
 void UMarchingBlocksEdMode::Exit()

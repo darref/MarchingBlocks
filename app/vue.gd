@@ -26,11 +26,15 @@ signal colle(ancre: Vector3i)
 ## Une boîte au-delà de `Outils.VOLUME_MAXI` cases rend vide : l'écran doit le DIRE, sinon le glissé
 ## semble ne rien faire.
 signal boite_trop_grande
+## LA TUILE SOUS LA SOURIS, dans World (le sens inverse de la légende des formes) :
+## {"sommet", "nom" (l'item posé, "" s'il n'y en a pas), "faute" (un cube rouge), "lot"} ; {} = aucune.
+signal tuile_survolee(info: Dictionary)
 
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Personnage := preload("res://app/personnage.gd")
+const LegendeFormes := preload("res://app/legende_formes.gd")
 
 ## Jusqu'où porte le rayon de sculpture, en cases.
 const PORTEE := 400.0
@@ -62,6 +66,13 @@ var _grille_locale: MeshInstance3D
 ## L'APERÇU : les cases EXACTES que le prochain clic changera, avant qu'on clique.
 var _apercu: MultiMeshInstance3D
 var _selection_vue: MultiMeshInstance3D
+## LA ZONE D'UNE FORME DU TÉMOIN, allumée pendant qu'on survole sa carte (`legende_formes.gd`).
+var _zone_vue: MultiMeshInstance3D
+## LA TUILE désignée : celle qu'on survole dans World, ou celle d'où elle vient, dans le témoin. Une
+## boîte d'une case centrée sur le SOMMET — c'est exactement la place d'une pièce (charte §2).
+var _tuile_vue: MeshInstance3D
+## Le dernier sommet dit par `tuile_survolee` : on ne le redit pas à chaque pixel.
+var _tuile_dite: Variant = null
 
 ## LA BARRE D'OUTILS (charte §5, plan du 27 septembre 2026). La visée dit comment trouver le point :
 ## "grille" (le plan de l'étage) ou "sculpt" (la matière). L'outil dit ce qu'on en fait.
@@ -182,6 +193,22 @@ func _ready() -> void:
 	_boite_vue.visible = false
 	_vue.add_child(_boite_vue)
 
+	_zone_vue = LegendeFormes.nuage_de_zone([], LegendeFormes.TEINTE_ZONE)
+	_vue.add_child(_zone_vue)
+	_tuile_vue = MeshInstance3D.new()
+	var cube := BoxMesh.new()
+	cube.size = Vector3.ONE * 1.04
+	var mt := StandardMaterial3D.new()
+	mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mt.no_depth_test = true
+	mt.albedo_color = Color(1, 1, 1, 0.45)
+	cube.material = mt
+	_tuile_vue.mesh = cube
+	_tuile_vue.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_tuile_vue.visible = false
+	_vue.add_child(_tuile_vue)
+
 	_camera = Camera3D.new()
 	_camera.fov = 45
 	_vue.add_child(_camera)
@@ -213,6 +240,11 @@ func montrer(quoi: String) -> void:
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
 	_grille_locale.visible = false
+	if _zone_vue != null:
+		_zone_vue.visible = false
+	if _tuile_vue != null:
+		_tuile_vue.visible = false
+	_tuile_dite = null
 	if _boite_vue != null:
 		_boite_vue.visible = false
 	_dessiner_selection()
@@ -364,6 +396,76 @@ func basculer_ortho() -> bool:
 	else:
 		_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	return _camera.projection == Camera3D.PROJECTION_ORTHOGONAL
+
+
+## LA ZONE D'UNE FORME — allumée à travers la roche : la salle d'une grotte est DEDANS le bloc.
+func montrer_zone(cases: Array) -> void:
+	LegendeFormes.remplir_zone(_zone_vue, cases if mode == "temoin" else [])
+
+
+## Montre la place d'une pièce (le sommet `v` est au centre de la case `v + (1, 1, 1)`), ou rien (`null`).
+func montrer_tuile(sommet: Variant) -> void:
+	_tuile_vue.visible = sommet != null
+	if sommet != null:
+		_tuile_vue.position = Vector3(sommet as Vector3i) + Vector3.ONE
+
+
+## QUELLE TUILE EST SOUS LA SOURIS — dans la couche ACTIVE. Rend {} si le rayon ne touche rien.
+## ⚠ **LE RAYON TOUCHE UNE CASE ; LA TUILE EST CELLE DU SOMMET.** Le point touché est sur la face de la
+## case, et la pièce du sommet `v` occupe [v + ½, v + 3/2] (charte §2) : `v = ⌊p − ½⌋`. Sur l'axe de la
+## face, p est entier, et le sommet trouvé est celui qui chevauche les DEUX côtés de la face — celui
+## dont la pièce porte cette surface.
+## ⚠ **ON LIT CE QUI EST POSÉ, PAS CE QUE LA RÈGLE POSERAIT** : l'item de la grille `Rendu` à ce sommet,
+## et son nom. Recalculer la pose serait une seconde description du peintre (charte §6).
+func tuile_sous(position: Vector2) -> Dictionary:
+	var m := monde()
+	if m == null:
+		return {}
+	var origine: Vector3 = _camera.project_ray_origin(position)
+	var sens: Vector3 = _camera.project_ray_normal(position).normalized()
+	var r: Dictionary = Outils.rayon(_occupe_actif, origine, sens, PORTEE)
+	if not r["touche"]:
+		return {}
+	var c: Vector3i = r["case"]
+	var n: Vector3i = r["normale"]
+	var axe := 0 if n.x != 0 else (1 if n.y != 0 else 2)
+	var plan: float = float(c[axe]) + (1.0 if n[axe] > 0 else 0.0)
+	var p: Vector3 = origine + sens * ((plan - origine[axe]) / sens[axe])
+	p[axe] = plan
+	var sommet := Vector3i(floori(p.x - 0.5), floori(p.y - 0.5), floori(p.z - 0.5))
+	var rendu := m.get_node("Rendu") as GridMap
+	var fautes := m.get_node("Fautes") as GridMap
+	var id: int = rendu.get_cell_item(sommet)
+	var lot: MeshLibrary = rendu.mesh_library
+	return {"sommet": sommet, "nom": lot.get_item_name(id) if id >= 0 and lot != null else "",
+		"faute": fautes.get_cell_item(sommet) != -1, "lot": lot}
+
+
+func _dire_la_tuile(position: Vector2) -> void:
+	var info := tuile_sous(position) if mode == "monde" else {}
+	# ⚠ LE VIDE N'EFFACE PAS : pour aller cliquer « Show it in the witness », la souris quitte la tuile et
+	# traverse du ciel. La dernière tuile désignée reste dite jusqu'à ce qu'on en survole une autre.
+	if info.is_empty():
+		return
+	var ou: Variant = info.get("sommet", null)
+	var cle := [ou, info.get("nom", "")]
+	if cle == _tuile_dite:
+		return
+	_tuile_dite = cle
+	montrer_tuile(ou)
+	tuile_survolee.emit(info)
+
+
+## Cadrer une forme sous l'angle de sa photo, pour que la vue ressemble à la carte qu'on a cliquée.
+## `recul_mini` : pour une seule tuile, la distance de la photo collerait l'œil au bloc — on ne verrait
+## plus où elle est dans le témoin.
+func cadrer_zone(cases: Array, azimut: float, elevation: float, recul_mini := 4.0) -> void:
+	var centre: Vector3 = LegendeFormes.centre_de(cases)
+	_cible = centre
+	_azimut = azimut
+	_elevation = elevation
+	_distance = clampf(LegendeFormes.rayon_de(cases, centre) * 2.2 + 4.5, recul_mini, 60.0)
+	_caler()
 
 
 ## « . » du pavé — cadrer un point.
@@ -585,6 +687,7 @@ func _occupe_visible(c: Vector3i) -> bool:
 
 func _survoler(position: Vector2) -> void:
 	_derniere_souris = position
+	_dire_la_tuile(position)
 	# ⚠ EN NAVIGATE, RIEN N'EST VISÉ, DONC RIEN N'EST PROMIS : un aperçu laissé à l'écran ferait croire
 	# qu'un clic peindra.
 	if naviguer:
@@ -922,8 +1025,11 @@ func _placer_grille() -> void:
 
 const CAMERA_DISTANCE := 4.0
 const CAMERA_ELEVATION := 0.38
-## La sphère du bras-ressort : un peu plus que le demi-plan proche de la caméra (0,05 à 45°).
-const RAYON_DU_BRAS := 0.2
+## La sphère du bras-ressort : plus que le demi-plan proche de la caméra (~0,08 en diagonale), et
+## ⚠ PLUS FINE QUE LA CAPSULE du personnage (0,19) : centrée sur sa tête, elle tient DANS la capsule, qui
+## ne pénètre jamais le décor — donc le lancer ne part jamais de la roche. Il ignorerait sinon la paroi
+## où il commence (`cast_motion` ne voit pas ce que la forme touche déjà).
+const RAYON_DU_BRAS := 0.15
 ## Au clic gauche glissé, la hauteur de vue reste entre ces bornes : sous le sol, on ne voit rien.
 const ELEVATION_MINI := -0.35
 const ELEVATION_MAXI := 1.35
@@ -1074,32 +1180,44 @@ func _mener_le_jeu() -> void:
 ## vers l'œil, contre le décor ; la caméra se pose là où la sphère a dû s'arrêter.
 ## ⚠ **RENTRER TOUT DE SUITE, RESSORTIR EN DOUCEUR** : le ressort. Rentrer en retard, c'est passer une
 ## image à travers la paroi ; ressortir d'un coup, c'est un saut de caméra à chaque pilier franchi.
+## ⚠ **LE PIVOT LISSÉ PEUT ÊTRE DANS LA ROCHE** : `_cible` suit la tête avec retard, et dans un virage
+## serré, sous un plafond, il reste une image derrière une arête. Le bras partait de lui, donc de la roche,
+## et ignorait la paroi où il commençait. On lance d'abord la sphère de la VRAIE tête (libre par
+## construction, voir `RAYON_DU_BRAS`) vers le pivot lissé : le pivot s'arrête avant la paroi.
 func _suivre(dt: float) -> void:
-	var vers := personnage.global_position + Vector3.UP * CAMERA_HAUTEUR
-	_cible = vers if dt <= 0.0 else _cible.lerp(vers, minf(1.0, 18.0 * dt))
+	var tete := personnage.global_position + Vector3.UP * CAMERA_HAUTEUR
+	_cible = tete if dt <= 0.0 else _cible.lerp(tete, minf(1.0, 18.0 * dt))
 	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
+	var pivot := _cible
 	var libre := _distance
 	# ⚠ `find_world_3d()`, PAS `world_3d` : sur un SubViewport qui a son propre monde, `world_3d` est NUL.
 	# Le rayon de caméra d'avant ne tournait donc JAMAIS — et rien ne le disait.
 	var monde_3d := _vue.find_world_3d()
 	var espace := monde_3d.direct_space_state if monde_3d != null else null
 	if espace != null:
-		var q := PhysicsShapeQueryParameters3D.new()
-		var sphere := SphereShape3D.new()
-		sphere.radius = RAYON_DU_BRAS
-		q.shape = sphere
-		q.transform = Transform3D(Basis(), _cible)
-		q.motion = direction * _distance
-		q.collision_mask = 2
-		var r := espace.cast_motion(q)
-		if not r.is_empty():
-			libre = _distance * r[0]
+		pivot = tete + (_cible - tete) * _course_libre(espace, tete, _cible - tete)
+		libre = _distance * _course_libre(espace, pivot, direction * _distance)
 	# Le ressort : rentrer sans délai, ressortir en douceur.
 	if dt <= 0.0 or libre < _bras:
 		_bras = libre
 	else:
 		_bras = minf(libre, lerpf(_bras, libre, minf(1.0, 6.0 * dt)))
-	_camera.look_at_from_position(_cible + direction * _bras, _cible, Vector3.UP)
+	_camera.look_at_from_position(pivot + direction * _bras, pivot, Vector3.UP)
+
+
+## La part libre (0..1) d'un déplacement de la sphère du bras contre le décor du jeu.
+static func _course_libre(espace: PhysicsDirectSpaceState3D, depuis: Vector3, deplacement: Vector3) -> float:
+	if deplacement.length_squared() < 1e-10:
+		return 1.0
+	var q := PhysicsShapeQueryParameters3D.new()
+	var sphere := SphereShape3D.new()
+	sphere.radius = RAYON_DU_BRAS
+	q.shape = sphere
+	q.transform = Transform3D(Basis(), depuis)
+	q.motion = deplacement
+	q.collision_mask = 2
+	var r := espace.cast_motion(q)
+	return 1.0 if r.is_empty() else r[0]
 
 
 ## Clic droit glissé : la caméra tourne autour du personnage, en LACET seulement (Jordan). Clic GAUCHE

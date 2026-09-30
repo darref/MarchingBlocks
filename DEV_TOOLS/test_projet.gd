@@ -77,6 +77,13 @@ func _initialize() -> void:
 	_vrai(lu["lot"] != null and lu["a_jour"], "relu aussitôt, le cache est à jour")
 	if lu["lot"] != null:
 		_egal((lu["lot"] as MeshLibrary).get_item_name(0), "mb_essai", "le cache rend le même lot")
+	# Un cache d'avant la provenance (format 1) : même source, même empreinte, mais PÉRIMÉ — sinon « d'où
+	# vient cette tuile ? » resterait muet sur un lot qui ne sait pas le dire.
+	var ancien := MeshLibrary.new()
+	ancien.set_meta("empreinte", Projet.empreinte(source))
+	ResourceSaver.save(ancien, Projet.chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
+	_vrai(not Projet.lire_cache(source)["a_jour"], "un cache d'un format plus ancien est PÉRIMÉ")
+	Projet.mettre_en_cache(lot, source)
 
 	# Réenregistrer le fichier change sa taille : l'empreinte doit bouger.
 	_ecrire(source, "seconde version, plus longue")

@@ -2,14 +2,14 @@
 //
 // Select a MarchingBlocks World actor, then pick "MarchingBlocks" in the Modes menu. The rules live in
 // MBCore/MBTools (standard C++, proven by tools_conformance.json); this mode only aims, previews and
-// applies inside an undo transaction. Its settings and the selection operations are on the actor, in the
-// Details panel.
+// applies inside an undo transaction. Its panel (MarchingBlocksModeToolkit) sits in the mode toolbox: the
+// MarchingBlocks tool's right panel, compact; the settings it drives are saved on the actor.
 //
 //   AIM      Grid — the floor plane (Page Up / Page Down) · Sculpt — the matter itself. Tab alternates them.
 //   NAVIGATE Space, on and off: aims at nothing, no click paints, the viewport flies as usual. The aim is
-//            kept and comes back; choosing an aim (Tab, or in the Details panel) leaves navigation.
+//            kept and comes back; choosing an aim (Tab, or in the panel) leaves navigation.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)     Shift does the opposite
-//   BRUSH    size 1–7 ([ and ]); shape and Hollow on the actor
+//   BRUSH    size 1–7 ([ and ]), sphere / cube / disc; Hollow for the Box
 //   KEYS     Delete · Esc · arrows move the selection (they follow the camera; Shift + up / down lift)
 //            Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste
 //
@@ -40,15 +40,20 @@ public:
 	UMarchingBlocksEdMode();
 
 	virtual void Exit() override;
-	virtual bool UsesToolkits() const override { return false; }
+	virtual bool UsesToolkits() const override { return true; }
+	virtual void CreateToolkit() override;
 	virtual bool InputKey(FEditorViewportClient* ViewportClient, FViewport* Viewport, FKey Key, EInputEvent Event) override;
 	virtual bool MouseMove(FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 X, int32 Y) override;
 	virtual bool CapturedMouseMove(FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 X, int32 Y) override;
 	virtual void Draw(const FSceneView* View, FPrimitiveDrawInterface* PDI) override;
 	virtual bool IsSelectionAllowed(AActor* InActor, bool bInSelection) const override { return true; }
 
-private:
+	/** The MarchingBlocks World selected in the level — the one the mode and its panel act on. */
 	AMarchingBlocksWorld* Target() const;
+	/** Applies an aim transition (MBCore's): entering navigation ends the current stroke. */
+	void SetAimState(AMarchingBlocksWorld* World, const MBPaint::FAimState& State);
+
+private:
 	bool MouseRay(FEditorViewportClient* ViewportClient, FViewport* Viewport, FVector& Origin, FVector& Direction) const;
 	bool Aimed(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction, bool bAdd, MBPaint::FHit& Hit);
 	bool BoxCorner(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction, MBPaint::FCell& Corner);
@@ -58,7 +63,6 @@ private:
 	bool HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key);
 	MBPaint::FCell ArrowOffset(AMarchingBlocksWorld* World, FEditorViewportClient* ViewportClient, FKey Key, bool bShift) const;
 	MBPaint::EBrushTool Gesture(const AMarchingBlocksWorld* World, bool bInverse) const;
-	void SetAimState(AMarchingBlocksWorld* World, const MBPaint::FAimState& State);
 
 	// The current stroke.
 	bool bStroking = false;

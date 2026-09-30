@@ -1,0 +1,2145 @@
+{
+  "classes": [
+    {
+      "id": "empty_b0h0",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "corner_b1h0",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "edge_b2h0",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "corner_b0h1",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "edge_b1h1",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "diagonal_b1h1_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_b2h1_a",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "diagonal_b1h1_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_b2h1_b",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "edge_b0h2",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_b1h2_a",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_b1h2_b",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slab_b2h2",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "diagonal_b2h0",
+      "in_world": false,
+      "outdoor_possible": true
+    },
+    {
+      "id": "ell_b3h0",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "tripod_b2h1",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "tetra_b3h1",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "spike_b1h1",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_b2h1_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_b2h1_b",
+      "in_world": false,
+      "outdoor_possible": true
+    },
+    {
+      "id": "twist_left_b3h1",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slant_b1h2_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "twist_right_b2h2",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "hook_b2h2_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b3h2_a",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slant_b2h1_c",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "twist_right_b3h1",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slant_b1h2_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "hook_b2h2_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "twist_left_b2h2",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b3h2_b",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slab_b4h0",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "hook_b3h1",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b4h1",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "chicane_b2h2_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_inner_b3h2_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_inner_b3h2_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "edge_inner_b4h2",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "diagonal_b0h2",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "tripod_b1h2",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_b1h2_c",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "hook_b2h2_c",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_b0h3",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "tetra_b1h3",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "twist_right_b1h3",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b2h3_a",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "hook_b2h2_right",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "chicane_b2h2_b",
+      "in_world": false,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slant_inner_b3h2_c",
+      "in_world": false,
+      "outdoor_possible": true
+    },
+    {
+      "id": "twist_left_b1h3",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b2h3_b",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_inner_b2h3_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "edge_inner_b3h3",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "checker_b2h2",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "tripod_inner_b3h2",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "hook_b1h3",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "tripod_inner_b2h3",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "slant_inner_b2h3_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "diagonal_inner_b3h3_a",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "diagonal_inner_b4h2",
+      "in_world": false,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slant_inner_b2h3_c",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "diagonal_inner_b3h3_b",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "spike_inner_b3h3",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "corner_inner_b4h3",
+      "in_world": true,
+      "outdoor_possible": true
+    },
+    {
+      "id": "slab_b0h4",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "ell_inner_b1h4",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "edge_inner_b2h4",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "diagonal_inner_b2h4",
+      "in_world": false,
+      "outdoor_possible": false
+    },
+    {
+      "id": "corner_inner_b3h4",
+      "in_world": true,
+      "outdoor_possible": false
+    },
+    {
+      "id": "full_b4h4",
+      "in_world": false,
+      "outdoor_possible": false
+    }
+  ],
+  "context": {
+    "band": 2,
+    "outdoor_suffix": "_outdoor",
+    "rule": "open-sky-above-empty-cells"
+  },
+  "copies": {
+    "hash": [
+      73856093,
+      19349663,
+      83492791
+    ],
+    "mask": 2147483647
+  },
+  "corners": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      1,
+      0
+    ],
+    [
+      1,
+      1,
+      0
+    ],
+    [
+      0,
+      0,
+      1
+    ],
+    [
+      1,
+      0,
+      1
+    ],
+    [
+      0,
+      1,
+      1
+    ],
+    [
+      1,
+      1,
+      1
+    ]
+  ],
+  "format": "marchingblocks-tileset",
+  "frame_marker": {
+    "node": "mb_frame",
+    "points": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        2,
+        0
+      ],
+      [
+        0,
+        0,
+        3
+      ]
+    ]
+  },
+  "generator": "MarchingBlocks 0.1.0",
+  "missing": [],
+  "name": "global_blender_bevel_and_tripo_texture",
+  "piece_offset": [
+    1,
+    1,
+    1
+  ],
+  "rules_text": [
+    "MarchingBlocks tileset, format 1. The tiles are placed by the rule below; nothing else.",
+    "Frame: right-handed, +Y up (glTF). 1 unit = 1 cell. Cell c covers [c, c+1] on each axis.",
+    "A layer is a set of full cells. Layers are independent: a layer only ever reads its own cells.",
+    "1. Vertices. A full cell c touches the 8 vertices c - corners[t], t = 0..7.",
+    "2. Bits. At vertex v, bit t is 1 when cell v + corners[t] is full (t = x + 2y + 4z).",
+    "3. Class. table[bits] = [class, quarter_turns]. class = -1: nothing is placed at v.",
+    "4. Context. Only if classes[class].outdoor_possible. Let top = the highest y of any full cell of",
+    "   the layer. v is OUTDOOR when, for EVERY EMPTY cell e among its 8, no cell (e.x, y, e.z) is full",
+    "   for y from v.y + 2 to top inclusive. Outdoor: use key '<class id>_outdoor' if the tileset has it,",
+    "   otherwise fall back on the bare key '<class id>'. Indoor: the bare key.",
+    "5. Copy. n = number of copies of the key (tiles[key].length). With 64-bit signed integers,",
+    "   h = (v.x * 73856093) XOR (v.y * 19349663) XOR (v.z * 83492791); k = (h AND 0x7FFFFFFF) mod n.",
+    "   Place tiles[key][k].",
+    "6. Missing. If the key is absent (or n = 0), place a clearly visible error marker. Never fill in.",
+    "7. Pose. The tile mesh is centred on the origin. Place it at (v + piece_offset) * cell_size,",
+    "   rotated by quarter_turns * 90 degrees about +Y, right-hand rule (+Z turns towards +X).",
+    "Rebuilding after cell (x, y, z) changes: only the vertices of columns x-1..x, z-1..z at heights",
+    "   up to y can change (their bits, or their context).",
+    "Engines with another frame must convert the cell grid with the SAME mapping their glTF importer",
+    "   applies to meshes. A mirroring conversion reverses the direction of the quarter turns.",
+    "Frame: tiles.glb carries a marker node, frame_marker.node, whose mesh has exactly the vertices",
+    "   frame_marker.points = (0,0,0), (1,0,0), (0,2,0), (0,0,3). Read where your importer put them",
+    "   (node pose included): the lengths 1, 2, 3 tell each axis apart, the shortest gives the scale.",
+    "   That linear map F is the conversion. Place a piece at F(v + piece_offset) * cell_size,",
+    "   rotated by F * R * F^-1 where R is the quarter-turn rotation. The marker is not a tile."
+  ],
+  "table": [
+    [
+      -1,
+      0
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      4,
+      0
+    ],
+    [
+      5,
+      0
+    ],
+    [
+      6,
+      0
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      7,
+      0
+    ],
+    [
+      4,
+      3
+    ],
+    [
+      8,
+      0
+    ],
+    [
+      9,
+      0
+    ],
+    [
+      10,
+      0
+    ],
+    [
+      11,
+      0
+    ],
+    [
+      12,
+      0
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      13,
+      0
+    ],
+    [
+      14,
+      0
+    ],
+    [
+      7,
+      1
+    ],
+    [
+      8,
+      1
+    ],
+    [
+      15,
+      0
+    ],
+    [
+      16,
+      0
+    ],
+    [
+      17,
+      0
+    ],
+    [
+      18,
+      0
+    ],
+    [
+      19,
+      0
+    ],
+    [
+      20,
+      0
+    ],
+    [
+      21,
+      0
+    ],
+    [
+      22,
+      0
+    ],
+    [
+      23,
+      0
+    ],
+    [
+      24,
+      0
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      13,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      14,
+      3
+    ],
+    [
+      17,
+      1
+    ],
+    [
+      19,
+      1
+    ],
+    [
+      25,
+      0
+    ],
+    [
+      26,
+      0
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      15,
+      3
+    ],
+    [
+      6,
+      3
+    ],
+    [
+      16,
+      3
+    ],
+    [
+      27,
+      0
+    ],
+    [
+      28,
+      0
+    ],
+    [
+      29,
+      0
+    ],
+    [
+      30,
+      0
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      14,
+      1
+    ],
+    [
+      14,
+      2
+    ],
+    [
+      31,
+      0
+    ],
+    [
+      18,
+      1
+    ],
+    [
+      20,
+      1
+    ],
+    [
+      32,
+      0
+    ],
+    [
+      33,
+      0
+    ],
+    [
+      25,
+      3
+    ],
+    [
+      32,
+      3
+    ],
+    [
+      26,
+      3
+    ],
+    [
+      33,
+      3
+    ],
+    [
+      34,
+      0
+    ],
+    [
+      35,
+      0
+    ],
+    [
+      36,
+      0
+    ],
+    [
+      37,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      17,
+      2
+    ],
+    [
+      25,
+      1
+    ],
+    [
+      9,
+      1
+    ],
+    [
+      11,
+      1
+    ],
+    [
+      27,
+      1
+    ],
+    [
+      29,
+      1
+    ],
+    [
+      38,
+      0
+    ],
+    [
+      39,
+      0
+    ],
+    [
+      40,
+      0
+    ],
+    [
+      41,
+      0
+    ],
+    [
+      42,
+      0
+    ],
+    [
+      43,
+      0
+    ],
+    [
+      44,
+      0
+    ],
+    [
+      45,
+      0
+    ],
+    [
+      4,
+      1
+    ],
+    [
+      6,
+      1
+    ],
+    [
+      19,
+      2
+    ],
+    [
+      26,
+      1
+    ],
+    [
+      10,
+      1
+    ],
+    [
+      12,
+      1
+    ],
+    [
+      28,
+      1
+    ],
+    [
+      30,
+      1
+    ],
+    [
+      40,
+      2
+    ],
+    [
+      46,
+      0
+    ],
+    [
+      47,
+      0
+    ],
+    [
+      48,
+      0
+    ],
+    [
+      49,
+      0
+    ],
+    [
+      50,
+      0
+    ],
+    [
+      51,
+      0
+    ],
+    [
+      52,
+      0
+    ],
+    [
+      7,
+      2
+    ],
+    [
+      15,
+      1
+    ],
+    [
+      18,
+      2
+    ],
+    [
+      32,
+      1
+    ],
+    [
+      21,
+      1
+    ],
+    [
+      23,
+      1
+    ],
+    [
+      34,
+      1
+    ],
+    [
+      36,
+      1
+    ],
+    [
+      39,
+      2
+    ],
+    [
+      53,
+      0
+    ],
+    [
+      46,
+      2
+    ],
+    [
+      54,
+      0
+    ],
+    [
+      55,
+      0
+    ],
+    [
+      56,
+      0
+    ],
+    [
+      57,
+      0
+    ],
+    [
+      58,
+      0
+    ],
+    [
+      8,
+      2
+    ],
+    [
+      16,
+      1
+    ],
+    [
+      20,
+      2
+    ],
+    [
+      33,
+      1
+    ],
+    [
+      22,
+      1
+    ],
+    [
+      24,
+      1
+    ],
+    [
+      35,
+      1
+    ],
+    [
+      37,
+      1
+    ],
+    [
+      41,
+      2
+    ],
+    [
+      54,
+      2
+    ],
+    [
+      48,
+      2
+    ],
+    [
+      59,
+      0
+    ],
+    [
+      60,
+      0
+    ],
+    [
+      61,
+      0
+    ],
+    [
+      62,
+      0
+    ],
+    [
+      63,
+      0
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      17,
+      3
+    ],
+    [
+      7,
+      3
+    ],
+    [
+      18,
+      3
+    ],
+    [
+      38,
+      1
+    ],
+    [
+      40,
+      1
+    ],
+    [
+      39,
+      3
+    ],
+    [
+      46,
+      3
+    ],
+    [
+      9,
+      3
+    ],
+    [
+      21,
+      3
+    ],
+    [
+      10,
+      3
+    ],
+    [
+      22,
+      3
+    ],
+    [
+      42,
+      3
+    ],
+    [
+      49,
+      3
+    ],
+    [
+      43,
+      3
+    ],
+    [
+      50,
+      3
+    ],
+    [
+      5,
+      2
+    ],
+    [
+      25,
+      2
+    ],
+    [
+      15,
+      2
+    ],
+    [
+      32,
+      2
+    ],
+    [
+      39,
+      1
+    ],
+    [
+      41,
+      1
+    ],
+    [
+      53,
+      1
+    ],
+    [
+      54,
+      1
+    ],
+    [
+      27,
+      3
+    ],
+    [
+      34,
+      3
+    ],
+    [
+      28,
+      3
+    ],
+    [
+      35,
+      3
+    ],
+    [
+      55,
+      3
+    ],
+    [
+      60,
+      3
+    ],
+    [
+      56,
+      3
+    ],
+    [
+      61,
+      3
+    ],
+    [
+      4,
+      2
+    ],
+    [
+      19,
+      3
+    ],
+    [
+      8,
+      3
+    ],
+    [
+      20,
+      3
+    ],
+    [
+      40,
+      3
+    ],
+    [
+      47,
+      1
+    ],
+    [
+      41,
+      3
+    ],
+    [
+      48,
+      3
+    ],
+    [
+      11,
+      3
+    ],
+    [
+      23,
+      3
+    ],
+    [
+      12,
+      3
+    ],
+    [
+      24,
+      3
+    ],
+    [
+      44,
+      3
+    ],
+    [
+      51,
+      3
+    ],
+    [
+      45,
+      3
+    ],
+    [
+      52,
+      3
+    ],
+    [
+      6,
+      2
+    ],
+    [
+      26,
+      2
+    ],
+    [
+      16,
+      2
+    ],
+    [
+      33,
+      2
+    ],
+    [
+      46,
+      1
+    ],
+    [
+      48,
+      1
+    ],
+    [
+      54,
+      3
+    ],
+    [
+      59,
+      1
+    ],
+    [
+      29,
+      3
+    ],
+    [
+      36,
+      3
+    ],
+    [
+      30,
+      3
+    ],
+    [
+      37,
+      3
+    ],
+    [
+      57,
+      3
+    ],
+    [
+      62,
+      3
+    ],
+    [
+      58,
+      3
+    ],
+    [
+      63,
+      3
+    ],
+    [
+      9,
+      2
+    ],
+    [
+      27,
+      2
+    ],
+    [
+      21,
+      2
+    ],
+    [
+      34,
+      2
+    ],
+    [
+      42,
+      1
+    ],
+    [
+      44,
+      1
+    ],
+    [
+      55,
+      1
+    ],
+    [
+      57,
+      1
+    ],
+    [
+      42,
+      2
+    ],
+    [
+      55,
+      2
+    ],
+    [
+      49,
+      2
+    ],
+    [
+      60,
+      2
+    ],
+    [
+      64,
+      0
+    ],
+    [
+      65,
+      0
+    ],
+    [
+      65,
+      3
+    ],
+    [
+      66,
+      0
+    ],
+    [
+      11,
+      2
+    ],
+    [
+      29,
+      2
+    ],
+    [
+      23,
+      2
+    ],
+    [
+      36,
+      2
+    ],
+    [
+      43,
+      1
+    ],
+    [
+      45,
+      1
+    ],
+    [
+      56,
+      1
+    ],
+    [
+      58,
+      1
+    ],
+    [
+      44,
+      2
+    ],
+    [
+      57,
+      2
+    ],
+    [
+      51,
+      2
+    ],
+    [
+      62,
+      2
+    ],
+    [
+      65,
+      1
+    ],
+    [
+      66,
+      1
+    ],
+    [
+      67,
+      0
+    ],
+    [
+      68,
+      0
+    ],
+    [
+      10,
+      2
+    ],
+    [
+      28,
+      2
+    ],
+    [
+      22,
+      2
+    ],
+    [
+      35,
+      2
+    ],
+    [
+      49,
+      1
+    ],
+    [
+      51,
+      1
+    ],
+    [
+      60,
+      1
+    ],
+    [
+      62,
+      1
+    ],
+    [
+      43,
+      2
+    ],
+    [
+      56,
+      2
+    ],
+    [
+      50,
+      2
+    ],
+    [
+      61,
+      2
+    ],
+    [
+      65,
+      2
+    ],
+    [
+      67,
+      1
+    ],
+    [
+      66,
+      3
+    ],
+    [
+      68,
+      3
+    ],
+    [
+      12,
+      2
+    ],
+    [
+      30,
+      2
+    ],
+    [
+      24,
+      2
+    ],
+    [
+      37,
+      2
+    ],
+    [
+      50,
+      1
+    ],
+    [
+      52,
+      1
+    ],
+    [
+      61,
+      1
+    ],
+    [
+      63,
+      1
+    ],
+    [
+      45,
+      2
+    ],
+    [
+      58,
+      2
+    ],
+    [
+      52,
+      2
+    ],
+    [
+      63,
+      2
+    ],
+    [
+      66,
+      2
+    ],
+    [
+      68,
+      1
+    ],
+    [
+      68,
+      2
+    ],
+    [
+      -1,
+      0
+    ]
+  ],
+  "tiles": {
+    "corner_b0h1": [
+      "corner_b0h1",
+      "corner_b0h1_2",
+      "corner_b0h1_3",
+      "corner_b0h1_4",
+      "corner_b0h1_5",
+      "corner_b0h1_6",
+      "corner_b0h1_7",
+      "corner_b0h1_8"
+    ],
+    "corner_b1h0": [
+      "corner_b1h0",
+      "corner_b1h0_2",
+      "corner_b1h0_3",
+      "corner_b1h0_4",
+      "corner_b1h0_5"
+    ],
+    "corner_b1h0_outdoor": [
+      "corner_b1h0_outdoor",
+      "corner_b1h0_outdoor_2",
+      "corner_b1h0_outdoor_3",
+      "corner_b1h0_outdoor_4",
+      "corner_b1h0_outdoor_5",
+      "corner_b1h0_outdoor_6",
+      "corner_b1h0_outdoor_7",
+      "corner_b1h0_outdoor_8",
+      "corner_b1h0_outdoor_9",
+      "corner_b1h0_outdoor_10",
+      "corner_b1h0_outdoor_11",
+      "corner_b1h0_outdoor_12",
+      "corner_b1h0_outdoor_13",
+      "corner_b1h0_outdoor_14",
+      "corner_b1h0_outdoor_15",
+      "corner_b1h0_outdoor_16",
+      "corner_b1h0_outdoor_17",
+      "corner_b1h0_outdoor_18",
+      "corner_b1h0_outdoor_19",
+      "corner_b1h0_outdoor_20",
+      "corner_b1h0_outdoor_21",
+      "corner_b1h0_outdoor_22",
+      "corner_b1h0_outdoor_23",
+      "corner_b1h0_outdoor_24",
+      "corner_b1h0_outdoor_25",
+      "corner_b1h0_outdoor_26",
+      "corner_b1h0_outdoor_27",
+      "corner_b1h0_outdoor_28",
+      "corner_b1h0_outdoor_29",
+      "corner_b1h0_outdoor_30"
+    ],
+    "corner_inner_b3h4": [
+      "corner_inner_b3h4",
+      "corner_inner_b3h4_2",
+      "corner_inner_b3h4_3",
+      "corner_inner_b3h4_4",
+      "corner_inner_b3h4_5",
+      "corner_inner_b3h4_6",
+      "corner_inner_b3h4_7"
+    ],
+    "corner_inner_b4h3": [
+      "corner_inner_b4h3",
+      "corner_inner_b4h3_2",
+      "corner_inner_b4h3_3",
+      "corner_inner_b4h3_4",
+      "corner_inner_b4h3_5",
+      "corner_inner_b4h3_6",
+      "corner_inner_b4h3_7",
+      "corner_inner_b4h3_8",
+      "corner_inner_b4h3_9",
+      "corner_inner_b4h3_10",
+      "corner_inner_b4h3_11",
+      "corner_inner_b4h3_12",
+      "corner_inner_b4h3_13"
+    ],
+    "corner_inner_b4h3_outdoor": [
+      "corner_inner_b4h3_outdoor",
+      "corner_inner_b4h3_outdoor_2",
+      "corner_inner_b4h3_outdoor_3",
+      "corner_inner_b4h3_outdoor_4",
+      "corner_inner_b4h3_outdoor_5",
+      "corner_inner_b4h3_outdoor_6",
+      "corner_inner_b4h3_outdoor_7",
+      "corner_inner_b4h3_outdoor_8",
+      "corner_inner_b4h3_outdoor_9",
+      "corner_inner_b4h3_outdoor_10",
+      "corner_inner_b4h3_outdoor_11",
+      "corner_inner_b4h3_outdoor_12"
+    ],
+    "edge_b0h2": [
+      "edge_b0h2",
+      "edge_b0h2_2",
+      "edge_b0h2_3",
+      "edge_b0h2_4",
+      "edge_b0h2_5",
+      "edge_b0h2_6",
+      "edge_b0h2_7",
+      "edge_b0h2_8",
+      "edge_b0h2_9",
+      "edge_b0h2_10",
+      "edge_b0h2_11",
+      "edge_b0h2_12"
+    ],
+    "edge_b1h1": [
+      "edge_b1h1",
+      "edge_b1h1_2",
+      "edge_b1h1_3",
+      "edge_b1h1_4",
+      "edge_b1h1_5",
+      "edge_b1h1_6",
+      "edge_b1h1_7",
+      "edge_b1h1_8",
+      "edge_b1h1_9",
+      "edge_b1h1_10",
+      "edge_b1h1_11",
+      "edge_b1h1_12",
+      "edge_b1h1_13",
+      "edge_b1h1_14",
+      "edge_b1h1_15",
+      "edge_b1h1_16",
+      "edge_b1h1_17",
+      "edge_b1h1_18",
+      "edge_b1h1_19",
+      "edge_b1h1_20",
+      "edge_b1h1_21",
+      "edge_b1h1_22",
+      "edge_b1h1_23",
+      "edge_b1h1_24",
+      "edge_b1h1_25",
+      "edge_b1h1_26",
+      "edge_b1h1_27",
+      "edge_b1h1_28"
+    ],
+    "edge_b1h1_outdoor": [
+      "edge_b1h1_outdoor",
+      "edge_b1h1_outdoor_2",
+      "edge_b1h1_outdoor_3",
+      "edge_b1h1_outdoor_4",
+      "edge_b1h1_outdoor_5",
+      "edge_b1h1_outdoor_6",
+      "edge_b1h1_outdoor_7",
+      "edge_b1h1_outdoor_8",
+      "edge_b1h1_outdoor_9",
+      "edge_b1h1_outdoor_10",
+      "edge_b1h1_outdoor_11",
+      "edge_b1h1_outdoor_12",
+      "edge_b1h1_outdoor_13",
+      "edge_b1h1_outdoor_14",
+      "edge_b1h1_outdoor_15"
+    ],
+    "edge_b2h0": [
+      "edge_b2h0",
+      "edge_b2h0_2",
+      "edge_b2h0_3",
+      "edge_b2h0_4",
+      "edge_b2h0_5",
+      "edge_b2h0_6",
+      "edge_b2h0_7",
+      "edge_b2h0_8",
+      "edge_b2h0_9"
+    ],
+    "edge_b2h0_outdoor": [
+      "edge_b2h0_outdoor",
+      "edge_b2h0_outdoor_2",
+      "edge_b2h0_outdoor_3",
+      "edge_b2h0_outdoor_4",
+      "edge_b2h0_outdoor_5",
+      "edge_b2h0_outdoor_6",
+      "edge_b2h0_outdoor_7",
+      "edge_b2h0_outdoor_8",
+      "edge_b2h0_outdoor_9",
+      "edge_b2h0_outdoor_10",
+      "edge_b2h0_outdoor_11",
+      "edge_b2h0_outdoor_12",
+      "edge_b2h0_outdoor_13",
+      "edge_b2h0_outdoor_14",
+      "edge_b2h0_outdoor_15",
+      "edge_b2h0_outdoor_16",
+      "edge_b2h0_outdoor_17",
+      "edge_b2h0_outdoor_18",
+      "edge_b2h0_outdoor_19",
+      "edge_b2h0_outdoor_20",
+      "edge_b2h0_outdoor_21",
+      "edge_b2h0_outdoor_22",
+      "edge_b2h0_outdoor_23",
+      "edge_b2h0_outdoor_24",
+      "edge_b2h0_outdoor_25",
+      "edge_b2h0_outdoor_26",
+      "edge_b2h0_outdoor_27",
+      "edge_b2h0_outdoor_28",
+      "edge_b2h0_outdoor_29",
+      "edge_b2h0_outdoor_30",
+      "edge_b2h0_outdoor_31",
+      "edge_b2h0_outdoor_32",
+      "edge_b2h0_outdoor_33"
+    ],
+    "edge_inner_b2h4": [
+      "edge_inner_b2h4",
+      "edge_inner_b2h4_2",
+      "edge_inner_b2h4_3",
+      "edge_inner_b2h4_4",
+      "edge_inner_b2h4_5",
+      "edge_inner_b2h4_6",
+      "edge_inner_b2h4_7",
+      "edge_inner_b2h4_8",
+      "edge_inner_b2h4_9",
+      "edge_inner_b2h4_10",
+      "edge_inner_b2h4_11",
+      "edge_inner_b2h4_12",
+      "edge_inner_b2h4_13",
+      "edge_inner_b2h4_14",
+      "edge_inner_b2h4_15",
+      "edge_inner_b2h4_16",
+      "edge_inner_b2h4_17",
+      "edge_inner_b2h4_18",
+      "edge_inner_b2h4_19",
+      "edge_inner_b2h4_20",
+      "edge_inner_b2h4_21",
+      "edge_inner_b2h4_22",
+      "edge_inner_b2h4_23",
+      "edge_inner_b2h4_24",
+      "edge_inner_b2h4_25",
+      "edge_inner_b2h4_26"
+    ],
+    "edge_inner_b3h3": [
+      "edge_inner_b3h3",
+      "edge_inner_b3h3_2",
+      "edge_inner_b3h3_3",
+      "edge_inner_b3h3_4",
+      "edge_inner_b3h3_5",
+      "edge_inner_b3h3_6",
+      "edge_inner_b3h3_7",
+      "edge_inner_b3h3_8",
+      "edge_inner_b3h3_9",
+      "edge_inner_b3h3_10",
+      "edge_inner_b3h3_11",
+      "edge_inner_b3h3_12",
+      "edge_inner_b3h3_13"
+    ],
+    "edge_inner_b3h3_outdoor": [
+      "edge_inner_b3h3_outdoor",
+      "edge_inner_b3h3_outdoor_2",
+      "edge_inner_b3h3_outdoor_3",
+      "edge_inner_b3h3_outdoor_4",
+      "edge_inner_b3h3_outdoor_5",
+      "edge_inner_b3h3_outdoor_6",
+      "edge_inner_b3h3_outdoor_7",
+      "edge_inner_b3h3_outdoor_8",
+      "edge_inner_b3h3_outdoor_9",
+      "edge_inner_b3h3_outdoor_10",
+      "edge_inner_b3h3_outdoor_11",
+      "edge_inner_b3h3_outdoor_12",
+      "edge_inner_b3h3_outdoor_13",
+      "edge_inner_b3h3_outdoor_14"
+    ],
+    "edge_inner_b4h2": [
+      "edge_inner_b4h2",
+      "edge_inner_b4h2_2",
+      "edge_inner_b4h2_3",
+      "edge_inner_b4h2_4",
+      "edge_inner_b4h2_5",
+      "edge_inner_b4h2_6",
+      "edge_inner_b4h2_7",
+      "edge_inner_b4h2_8",
+      "edge_inner_b4h2_9",
+      "edge_inner_b4h2_10",
+      "edge_inner_b4h2_11",
+      "edge_inner_b4h2_12",
+      "edge_inner_b4h2_13",
+      "edge_inner_b4h2_14",
+      "edge_inner_b4h2_15",
+      "edge_inner_b4h2_16",
+      "edge_inner_b4h2_17",
+      "edge_inner_b4h2_18",
+      "edge_inner_b4h2_19",
+      "edge_inner_b4h2_20",
+      "edge_inner_b4h2_21",
+      "edge_inner_b4h2_22",
+      "edge_inner_b4h2_23",
+      "edge_inner_b4h2_24",
+      "edge_inner_b4h2_25",
+      "edge_inner_b4h2_26",
+      "edge_inner_b4h2_27",
+      "edge_inner_b4h2_28",
+      "edge_inner_b4h2_29",
+      "edge_inner_b4h2_30",
+      "edge_inner_b4h2_31",
+      "edge_inner_b4h2_32"
+    ],
+    "edge_inner_b4h2_outdoor": [
+      "edge_inner_b4h2_outdoor",
+      "edge_inner_b4h2_outdoor_2",
+      "edge_inner_b4h2_outdoor_3",
+      "edge_inner_b4h2_outdoor_4",
+      "edge_inner_b4h2_outdoor_5",
+      "edge_inner_b4h2_outdoor_6",
+      "edge_inner_b4h2_outdoor_7",
+      "edge_inner_b4h2_outdoor_8",
+      "edge_inner_b4h2_outdoor_9",
+      "edge_inner_b4h2_outdoor_10",
+      "edge_inner_b4h2_outdoor_11",
+      "edge_inner_b4h2_outdoor_12",
+      "edge_inner_b4h2_outdoor_13",
+      "edge_inner_b4h2_outdoor_14",
+      "edge_inner_b4h2_outdoor_15",
+      "edge_inner_b4h2_outdoor_16",
+      "edge_inner_b4h2_outdoor_17",
+      "edge_inner_b4h2_outdoor_18",
+      "edge_inner_b4h2_outdoor_19",
+      "edge_inner_b4h2_outdoor_20",
+      "edge_inner_b4h2_outdoor_21"
+    ],
+    "ell_b0h3": [
+      "ell_b0h3",
+      "ell_b0h3_2",
+      "ell_b0h3_3"
+    ],
+    "ell_b1h2_a": [
+      "ell_b1h2_a",
+      "ell_b1h2_a_2",
+      "ell_b1h2_a_3",
+      "ell_b1h2_a_4",
+      "ell_b1h2_a_5",
+      "ell_b1h2_a_6",
+      "ell_b1h2_a_7"
+    ],
+    "ell_b1h2_b": [
+      "ell_b1h2_b",
+      "ell_b1h2_b_2",
+      "ell_b1h2_b_3",
+      "ell_b1h2_b_4"
+    ],
+    "ell_b2h1_a": [
+      "ell_b2h1_a",
+      "ell_b2h1_a_2",
+      "ell_b2h1_a_3"
+    ],
+    "ell_b2h1_a_outdoor": [
+      "ell_b2h1_a_outdoor",
+      "ell_b2h1_a_outdoor_2"
+    ],
+    "ell_b2h1_b": [
+      "ell_b2h1_b"
+    ],
+    "ell_b2h1_b_outdoor": [
+      "ell_b2h1_b_outdoor",
+      "ell_b2h1_b_outdoor_2"
+    ],
+    "ell_b3h0": [
+      "ell_b3h0"
+    ],
+    "ell_b3h0_outdoor": [
+      "ell_b3h0_outdoor",
+      "ell_b3h0_outdoor_2",
+      "ell_b3h0_outdoor_3",
+      "ell_b3h0_outdoor_4",
+      "ell_b3h0_outdoor_5",
+      "ell_b3h0_outdoor_6",
+      "ell_b3h0_outdoor_7",
+      "ell_b3h0_outdoor_8",
+      "ell_b3h0_outdoor_9",
+      "ell_b3h0_outdoor_10",
+      "ell_b3h0_outdoor_11",
+      "ell_b3h0_outdoor_12",
+      "ell_b3h0_outdoor_13",
+      "ell_b3h0_outdoor_14",
+      "ell_b3h0_outdoor_15",
+      "ell_b3h0_outdoor_16"
+    ],
+    "ell_inner_b1h4": [
+      "ell_inner_b1h4",
+      "ell_inner_b1h4_2",
+      "ell_inner_b1h4_3",
+      "ell_inner_b1h4_4",
+      "ell_inner_b1h4_5",
+      "ell_inner_b1h4_6",
+      "ell_inner_b1h4_7"
+    ],
+    "ell_inner_b2h3_a": [
+      "ell_inner_b2h3_a",
+      "ell_inner_b2h3_a_2",
+      "ell_inner_b2h3_a_3",
+      "ell_inner_b2h3_a_4"
+    ],
+    "ell_inner_b2h3_b": [
+      "ell_inner_b2h3_b",
+      "ell_inner_b2h3_b_2",
+      "ell_inner_b2h3_b_3"
+    ],
+    "ell_inner_b3h2_a": [
+      "ell_inner_b3h2_a",
+      "ell_inner_b3h2_a_2"
+    ],
+    "ell_inner_b3h2_a_outdoor": [
+      "ell_inner_b3h2_a_outdoor"
+    ],
+    "ell_inner_b3h2_b": [
+      "ell_inner_b3h2_b",
+      "ell_inner_b3h2_b_2",
+      "ell_inner_b3h2_b_3"
+    ],
+    "ell_inner_b3h2_b_outdoor": [
+      "ell_inner_b3h2_b_outdoor"
+    ],
+    "ell_inner_b4h1": [
+      "ell_inner_b4h1",
+      "ell_inner_b4h1_2",
+      "ell_inner_b4h1_3",
+      "ell_inner_b4h1_4",
+      "ell_inner_b4h1_5",
+      "ell_inner_b4h1_6",
+      "ell_inner_b4h1_7",
+      "ell_inner_b4h1_8",
+      "ell_inner_b4h1_9",
+      "ell_inner_b4h1_10",
+      "ell_inner_b4h1_11",
+      "ell_inner_b4h1_12",
+      "ell_inner_b4h1_13",
+      "ell_inner_b4h1_14",
+      "ell_inner_b4h1_15",
+      "ell_inner_b4h1_16"
+    ],
+    "ell_inner_b4h1_outdoor": [
+      "ell_inner_b4h1_outdoor",
+      "ell_inner_b4h1_outdoor_2",
+      "ell_inner_b4h1_outdoor_3",
+      "ell_inner_b4h1_outdoor_4",
+      "ell_inner_b4h1_outdoor_5",
+      "ell_inner_b4h1_outdoor_6",
+      "ell_inner_b4h1_outdoor_7",
+      "ell_inner_b4h1_outdoor_8",
+      "ell_inner_b4h1_outdoor_9",
+      "ell_inner_b4h1_outdoor_10",
+      "ell_inner_b4h1_outdoor_11",
+      "ell_inner_b4h1_outdoor_12",
+      "ell_inner_b4h1_outdoor_13",
+      "ell_inner_b4h1_outdoor_14",
+      "ell_inner_b4h1_outdoor_15",
+      "ell_inner_b4h1_outdoor_16",
+      "ell_inner_b4h1_outdoor_17"
+    ],
+    "slab_b0h4": [
+      "slab_b0h4",
+      "slab_b0h4_2",
+      "slab_b0h4_3",
+      "slab_b0h4_4",
+      "slab_b0h4_5",
+      "slab_b0h4_6",
+      "slab_b0h4_7",
+      "slab_b0h4_8",
+      "slab_b0h4_9",
+      "slab_b0h4_10"
+    ],
+    "slab_b2h2": [
+      "slab_b2h2",
+      "slab_b2h2_2",
+      "slab_b2h2_3",
+      "slab_b2h2_4",
+      "slab_b2h2_5",
+      "slab_b2h2_6",
+      "slab_b2h2_7",
+      "slab_b2h2_8",
+      "slab_b2h2_9",
+      "slab_b2h2_10",
+      "slab_b2h2_11",
+      "slab_b2h2_12",
+      "slab_b2h2_13",
+      "slab_b2h2_14",
+      "slab_b2h2_15",
+      "slab_b2h2_16",
+      "slab_b2h2_17",
+      "slab_b2h2_18",
+      "slab_b2h2_19",
+      "slab_b2h2_20",
+      "slab_b2h2_21",
+      "slab_b2h2_22",
+      "slab_b2h2_23",
+      "slab_b2h2_24",
+      "slab_b2h2_25",
+      "slab_b2h2_26",
+      "slab_b2h2_27",
+      "slab_b2h2_28",
+      "slab_b2h2_29",
+      "slab_b2h2_30",
+      "slab_b2h2_31",
+      "slab_b2h2_32",
+      "slab_b2h2_33",
+      "slab_b2h2_34",
+      "slab_b2h2_35",
+      "slab_b2h2_36",
+      "slab_b2h2_37",
+      "slab_b2h2_38",
+      "slab_b2h2_39",
+      "slab_b2h2_40",
+      "slab_b2h2_41",
+      "slab_b2h2_42",
+      "slab_b2h2_43",
+      "slab_b2h2_44",
+      "slab_b2h2_45",
+      "slab_b2h2_46",
+      "slab_b2h2_47",
+      "slab_b2h2_48",
+      "slab_b2h2_49",
+      "slab_b2h2_50",
+      "slab_b2h2_51"
+    ],
+    "slab_b2h2_outdoor": [
+      "slab_b2h2_outdoor",
+      "slab_b2h2_outdoor_2",
+      "slab_b2h2_outdoor_3",
+      "slab_b2h2_outdoor_4",
+      "slab_b2h2_outdoor_5",
+      "slab_b2h2_outdoor_6",
+      "slab_b2h2_outdoor_7",
+      "slab_b2h2_outdoor_8",
+      "slab_b2h2_outdoor_9",
+      "slab_b2h2_outdoor_10",
+      "slab_b2h2_outdoor_11",
+      "slab_b2h2_outdoor_12",
+      "slab_b2h2_outdoor_13",
+      "slab_b2h2_outdoor_14",
+      "slab_b2h2_outdoor_15",
+      "slab_b2h2_outdoor_16",
+      "slab_b2h2_outdoor_17",
+      "slab_b2h2_outdoor_18",
+      "slab_b2h2_outdoor_19",
+      "slab_b2h2_outdoor_20",
+      "slab_b2h2_outdoor_21",
+      "slab_b2h2_outdoor_22",
+      "slab_b2h2_outdoor_23",
+      "slab_b2h2_outdoor_24",
+      "slab_b2h2_outdoor_25",
+      "slab_b2h2_outdoor_26",
+      "slab_b2h2_outdoor_27",
+      "slab_b2h2_outdoor_28",
+      "slab_b2h2_outdoor_29",
+      "slab_b2h2_outdoor_30"
+    ],
+    "slab_b4h0": [
+      "slab_b4h0",
+      "slab_b4h0_2",
+      "slab_b4h0_3",
+      "slab_b4h0_4",
+      "slab_b4h0_5",
+      "slab_b4h0_6",
+      "slab_b4h0_7",
+      "slab_b4h0_8",
+      "slab_b4h0_9",
+      "slab_b4h0_10",
+      "slab_b4h0_11",
+      "slab_b4h0_12",
+      "slab_b4h0_13",
+      "slab_b4h0_14",
+      "slab_b4h0_15",
+      "slab_b4h0_16",
+      "slab_b4h0_17",
+      "slab_b4h0_18"
+    ],
+    "slab_b4h0_outdoor": [
+      "slab_b4h0_outdoor",
+      "slab_b4h0_outdoor_2",
+      "slab_b4h0_outdoor_3",
+      "slab_b4h0_outdoor_4",
+      "slab_b4h0_outdoor_5",
+      "slab_b4h0_outdoor_6",
+      "slab_b4h0_outdoor_7",
+      "slab_b4h0_outdoor_8",
+      "slab_b4h0_outdoor_9",
+      "slab_b4h0_outdoor_10",
+      "slab_b4h0_outdoor_11",
+      "slab_b4h0_outdoor_12",
+      "slab_b4h0_outdoor_13",
+      "slab_b4h0_outdoor_14",
+      "slab_b4h0_outdoor_15",
+      "slab_b4h0_outdoor_16",
+      "slab_b4h0_outdoor_17",
+      "slab_b4h0_outdoor_18",
+      "slab_b4h0_outdoor_19",
+      "slab_b4h0_outdoor_20",
+      "slab_b4h0_outdoor_21",
+      "slab_b4h0_outdoor_22",
+      "slab_b4h0_outdoor_23",
+      "slab_b4h0_outdoor_24",
+      "slab_b4h0_outdoor_25",
+      "slab_b4h0_outdoor_26",
+      "slab_b4h0_outdoor_27",
+      "slab_b4h0_outdoor_28",
+      "slab_b4h0_outdoor_29",
+      "slab_b4h0_outdoor_30",
+      "slab_b4h0_outdoor_31",
+      "slab_b4h0_outdoor_32",
+      "slab_b4h0_outdoor_33",
+      "slab_b4h0_outdoor_34",
+      "slab_b4h0_outdoor_35",
+      "slab_b4h0_outdoor_36",
+      "slab_b4h0_outdoor_37",
+      "slab_b4h0_outdoor_38",
+      "slab_b4h0_outdoor_39",
+      "slab_b4h0_outdoor_40",
+      "slab_b4h0_outdoor_41",
+      "slab_b4h0_outdoor_42"
+    ],
+    "spike_b1h1": [
+      "spike_b1h1"
+    ],
+    "spike_inner_b3h3": [
+      "spike_inner_b3h3"
+    ],
+    "tetra_b1h3": [
+      "tetra_b1h3"
+    ],
+    "tetra_b3h1": [
+      "tetra_b3h1"
+    ],
+    "tetra_b3h1_outdoor": [
+      "tetra_b3h1_outdoor"
+    ],
+    "twist_left_b1h3": [
+      "twist_left_b1h3"
+    ],
+    "twist_left_b2h2": [
+      "twist_left_b2h2"
+    ],
+    "twist_left_b3h1": [
+      "twist_left_b3h1",
+      "twist_left_b3h1_2"
+    ],
+    "twist_left_b3h1_outdoor": [
+      "twist_left_b3h1_outdoor",
+      "twist_left_b3h1_outdoor_2"
+    ],
+    "twist_right_b1h3": [
+      "twist_right_b1h3",
+      "twist_right_b1h3_2",
+      "twist_right_b1h3_3"
+    ],
+    "twist_right_b2h2": [
+      "twist_right_b2h2",
+      "twist_right_b2h2_2"
+    ],
+    "twist_right_b3h1": [
+      "twist_right_b3h1"
+    ],
+    "twist_right_b3h1_outdoor": [
+      "twist_right_b3h1_outdoor",
+      "twist_right_b3h1_outdoor_2"
+    ]
+  },
+  "tiles_file": "tiles.glb",
+  "version": 1
+}

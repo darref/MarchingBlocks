@@ -9,6 +9,9 @@ extends RefCounted
 ## chaque appelant l'applique avec SON historique d'annulation.
 
 const VOISINES := [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]
+## Les six sens de « face » — l'ordre départage une égalité : le haut d'abord, comme « Extend up ».
+const SIX_SENS := [Vector3i.UP, Vector3i.DOWN, Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1),
+	Vector3i(0, 0, -1)]
 
 
 ## `occupees` — {Vector3i: true}. Rend {"poser": {Vector3i: true}, "effacer": {Vector3i: true}}.
@@ -48,6 +51,37 @@ static func operer(occupees: Dictionary, etage: int, quoi: String, portee: Dicti
 						break
 				if entoure:
 					a_effacer[p] = true
+		"face":
+			# ⚠ **ÉTENDRE DANS LE SENS OÙ L'ON REGARDE — DEMANDÉ PAR JORDAN (29 septembre 2026)** : « dans le
+			# sens opposé de la matière du monde ». Une case est TOURNÉE vers d devant du vide (p + d) et
+			# adossée à la matière (p − d). Le sens retenu est celui où le plus de cases sont tournées ;
+			# on recopie alors d'une case, comme « haut » et « bas » — un mur choisi s'épaissit vers
+			# l'air, un plafond de grotte descend, un sol monte. UN seul sens pour tout l'ensemble : une
+			# case par face libre ferait une couronne, c'est-à-dire « élargir » en trois dimensions.
+			var meilleur := Vector3i.ZERO
+			var compte_meilleur := 0
+			for d in SIX_SENS:
+				var n := 0
+				for c in occupees:
+					var p: Vector3i = c
+					if _dans(p, etage, portee) and not occupees.has(p + d) and occupees.has(p - d):
+						n += 1
+				if n > compte_meilleur:
+					compte_meilleur = n
+					meilleur = d
+			if meilleur != Vector3i.ZERO:
+				for c in occupees:
+					var p: Vector3i = c
+					if _dans(p, etage, portee) and not occupees.has(p + meilleur):
+						a_poser[p + meilleur] = true
+			# ⚠ **LA SÉLECTION SUIT L'EXTENSION — DEMANDÉ PAR JORDAN (30 septembre 2026)** : cliquer en
+			# continu, comme Extrude ↑ ↓. Elle est portée d'une case dans le sens retenu, donc sur le
+			# nouveau front, adossé à l'ancien : le clic suivant retrouve le même sens et recommence.
+			# Toute la sélection se déplace, cases vides comprises — c'est ELLE qui est « allée là ».
+			var suivie := {}
+			for c in portee:
+				suivie[c + meilleur] = true
+			return {"poser": a_poser, "effacer": a_effacer, "sens": meilleur, "selection": suivie}
 	return {"poser": a_poser, "effacer": a_effacer}
 
 

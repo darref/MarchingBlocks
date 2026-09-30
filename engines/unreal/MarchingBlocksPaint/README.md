@@ -20,28 +20,30 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 1. Place a **MarchingBlocks World** actor. In its Details panel, set **Tileset** (`tileset.json`) and
    **Tiles Folder** (where `tiles.glb` was imported).
 2. Select the actor, open the **Modes** menu and pick **MarchingBlocks**. Then paint in the viewport.
+   The mode's panel is the MarchingBlocks tool's panel, compact — aim, tool, brush, floor, selection —
+   and only shows what the current tool uses; hover an icon for its name and key.
 
 | Aim (Tab alternates) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |
 | Sculpt | aims at the matter itself — Add builds against the face you point at |
 
-**Navigate (Space)** is a switch, not an aim: Space turns it on and off (or tick *Navigate (Space)* in
-the Details panel). While it is on, no click paints and the viewport flies as usual (right drag +
+**Navigate (Space)** is a switch, not an aim: Space turns it on and off (or its button in the mode's
+panel). While it is on, no click paints and the viewport flies as usual (right drag +
 W A S D, Q E). Your aim is kept and comes back when you switch it off; choosing an aim — Tab, or in the
-Details panel — leaves navigation. In this mode Space no longer cycles the transform gizmo.
+panel — leaves navigation. In this mode Space no longer cycles the transform gizmo.
 
 | Keys | |
 |---|---|
 | A · D · S · G · B | Add · Dig · Select · Rect (flat, on the floor) · Box (3D volume) |
 | Shift | the opposite (Add ↔ Dig; adds to the selection) · Ctrl removes from it |
-| [ ] | brush size 1–7 (shape and Hollow box are in the Details panel) |
+| [ ] | brush size 1–7 — sphere, cube or disc in the panel |
 | Delete · Esc | delete the selection · clear it or cancel a paste |
 | Arrows | move the selection; they follow the camera. Shift + ↑ ↓ lift and lower |
 | Ctrl + C · X · V | copy · cut · paste (then click to place) |
 
 The selection operations — **Fill, Delete, Extrude ↑ ↓, Grow, Shrink, Connected, Copy, Cut, Paste** —
-are buttons in the Details panel. Extruding moves the floor with the selection, so *Rect, Fill, Extrude,
+are in the mode's panel once something is selected (and still on the actor's Details panel). Extruding moves the floor with the selection, so *Rect, Fill, Extrude,
 Fill…* raises a room. Every change is one Ctrl+Z.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you. One actor is one

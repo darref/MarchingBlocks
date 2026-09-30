@@ -16,7 +16,9 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 1. Drop a `.mbset` folder into `Assets/`. `tiles.glb` is imported by your glTF importer.
 2. Create an empty GameObject, add **MarchingBlocks World**, and assign **Tileset** (`tileset.json`)
    and **Tiles** (the imported `tiles.glb`).
-3. Click **Edit the world** in the inspector, then work in the Scene view. Ctrl+Z undoes every change.
+3. Click **Paint the world** in the inspector, then work in the Scene view. Ctrl+Z undoes every change.
+   The inspector is the MarchingBlocks tool's panel, compact — aim, tool, brush, floor, selection — and
+   only shows what the current tool uses; hover an icon for its name and key.
 
 | Aim (Tab alternates) | |
 |---|---|
@@ -26,7 +28,7 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 **Navigate · Space** is a switch, not an aim: Space (or its button, next to the aims) hands the mouse and
 keys back to Unity — fly as usual (right drag + W A S D, Q E) — and no click paints. Space again comes
 back to the aim you had; choosing an aim, by its button or by Tab, stops navigating too. Space and Tab are
-only taken while **Edit the world** is on; Shift + Space stays Unity's.
+only taken while **Paint the world** is on; Shift + Space stays Unity's.
 
 | Keys | |
 |---|---|

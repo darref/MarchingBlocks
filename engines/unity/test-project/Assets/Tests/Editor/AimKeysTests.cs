@@ -1,7 +1,7 @@
 // The aim keys THROUGH THE SCENE-VIEW EDITOR, not only through AimState: real Events are handed to
 // MarchingBlocksWorldEditor.SceneGUI, the body of OnSceneGUI, as the Scene view would. Checks what AimCheck cannot see:
 //   - Space and Tab are USED when they act, so Unity's other handlers never get them;
-//   - they act only while "Edit the world" is on for the selected world, and are left alone otherwise;
+//   - they act only while "Paint the world" is on for the selected world, and are left alone otherwise;
 //   - a held Space (Unity repeats KeyDown) toggles once; Shift + Space stays Unity's;
 //   - while navigating, a click neither paints nor is taken from Unity.
 // The editor's state is private and static: it is read and set through reflection.

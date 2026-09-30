@@ -49,6 +49,64 @@ func _initialize() -> void:
 	var vide: Dictionary = Etages.operer(croix, 7, "haut")
 	_egal(vide["poser"], [], "un étage vide ne rend rien à faire")
 
+	# ── « Extend facing » : dans le sens opposé de la matière. Attendus écrits à la main.
+	# Un massif x ∈ [−2, 0], y ∈ [0, 1], z ∈ [0, 1] ; on choisit sa face x = 0. Quatre cases regardent
+	# +X (adossées à x = −1) ; seules les deux du haut regardent +Y. Le mur s'épaissit vers +X, et
+	# SEULEMENT vers +X : pas de rangée posée dessus.
+	var massif := {}
+	var face_x := {}
+	for x in range(-2, 1):
+		for y in 2:
+			for z in 2:
+				massif[Vector3i(x, y, z)] = true
+				if x == 0:
+					face_x[Vector3i(x, y, z)] = true
+	var mur: Dictionary = Etages.operer(massif, 0, "face", face_x)
+	_egal(mur["poser"], [Vector3i(1, 0, 0), Vector3i(1, 1, 0), Vector3i(1, 0, 1), Vector3i(1, 1, 1)],
+		"extend facing épaissit un mur vers l'air, d'une case, sans couronne")
+
+	# ⚠ CLIQUER EN CONTINU : la sélection rendue est le nouveau front (x = 1), et un second clic, sur le
+	# monde augmenté, épaissit encore d'une case (x = 2) — jamais à nouveau x = 1, déjà plein.
+	_egal(mur["selection"], [Vector3i(1, 0, 0), Vector3i(1, 1, 0), Vector3i(1, 0, 1), Vector3i(1, 1, 1)],
+		"extend facing porte la sélection sur le nouveau front")
+	for c in mur["poser"]:
+		massif[c] = true
+	var encore: Dictionary = Etages.operer(massif, 0, "face", mur["selection"])
+	_egal(encore["poser"], [Vector3i(2, 0, 0), Vector3i(2, 1, 0), Vector3i(2, 0, 1), Vector3i(2, 1, 1)],
+		"un second clic d'extend facing continue dans le même sens")
+	_egal(encore["selection"], [Vector3i(2, 0, 0), Vector3i(2, 1, 0), Vector3i(2, 0, 1), Vector3i(2, 1, 1)],
+		"et la sélection suit encore")
+
+	# Un plafond de grotte : une dalle 2×2 à y = 2 sous une dalle à y = 3, rien dessous. Il descend.
+	var grotte := {}
+	for x in 2:
+		for z in 2:
+			grotte[Vector3i(x, 2, z)] = true
+			grotte[Vector3i(x, 3, z)] = true
+	var plafond: Dictionary = Etages.operer(grotte, 2, "face")
+	_egal(plafond["poser"], [Vector3i(0, 1, 0), Vector3i(1, 1, 0), Vector3i(0, 1, 1), Vector3i(1, 1, 1)],
+		"extend facing fait descendre un plafond de grotte")
+
+	# Une corniche de trois cases scellée dans un mur à x = −1 : rien ne l'adosse en hauteur, donc elle
+	# s'allonge vers +X. Sans l'adossement, le haut l'emporterait (trois cases à ciel ouvert contre une).
+	var corniche := {Vector3i(-1, 2, 0): true}
+	var choix := {}
+	for x in 3:
+		corniche[Vector3i(x, 2, 0)] = true
+		choix[Vector3i(x, 2, 0)] = true
+	var allonge: Dictionary = Etages.operer(corniche, 2, "face", choix)
+	_egal(allonge["poser"], [Vector3i(3, 2, 0)], "extend facing allonge une corniche loin du mur qui la porte")
+
+	# ⚠ L'ÉGALITÉ SE DÉPARTAGE DANS L'ORDRE DE `SIX_SENS` (+X avant −X, +Z, −Z) : sur la croix, chaque bras
+	# regarde son propre sens, quatre à égalité. Sans ce cas, départager par le DERNIER restait muet.
+	var croix_face: Dictionary = Etages.operer(croix, 0, "face")
+	_egal(croix_face["poser"], [Vector3i(2, 0, 0), Vector3i(1, 0, 1), Vector3i(1, 0, -1)],
+		"extend facing départage une égalité par le premier sens (+X), toute la croix le suit")
+
+	# Une case qui flotte n'est adossée à rien : aucun sens, rien à faire.
+	var seule: Dictionary = Etages.operer({Vector3i(4, 4, 4): true}, 4, "face")
+	_egal(seule["poser"], [], "extend facing ne fait rien sur une case adossée à rien")
+
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
 	quit(1 if _echecs > 0 else 0)

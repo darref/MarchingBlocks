@@ -707,6 +707,32 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   l'export glTF de Godot tient UN espace de noms pour nœuds et maillages — nommer le maillage dans la
   scène renommait le NŒUD en « …_22 », 14 tuiles introuvables, vu rougir. Le nom est posé dans l'état
   glTF, APRÈS `append_from_scene`, en recopiant celui du nœud (`GLTFMesh.resource_name`).
+- **L'UI DES TROIS GREFFONS RESSEMBLE AU LOGICIEL, EN COMPACT — DEMANDÉ PAR JORDAN (29 septembre 2026)** :
+  « en plus compact, et forcément minimale car on ne fait que peindre ». La barre de droite de l'appli,
+  repliée : ses ICÔNES, ses groupes (visée · outil · pinceau · étage · sélection), son olive, et **seulement
+  ce que l'outil courant utilise** (le pinceau pour Add · Dig · Select, Hollow pour la Box, la sélection
+  quand il y en a une, Paste quand on a copié) — la règle de `_contexte()`.
+  - Godot : `mb_toolbar.gd`, UNE rangée d'icônes au-dessus de la vue 3D. ⚠ **SORTIE DE `plugin.gd` POUR
+    ÊTRE ÉPROUVÉE** : `EditorPlugin` ne s'instancie pas hors de l'éditeur, et la section de test qui le
+    tentait s'arrêtait EN SILENCE sur « null » — une sentinelle le voit désormais. ⚠ **PAS `flat`** : Godot
+    ne dessine AUCUNE stylebox sur un bouton plat, et l'outil enfoncé n'était qu'une teinte olive
+    illisible (vu à l'image, `DEV_TOOLS/capture_barre_greffon.gd`) ; il porte la plaque olive de l'appli.
+  - Unity : l'inspecteur, bouton « Paint the world », rangées d'icônes segmentées. Unreal : un
+    `FModeToolkit` (`MarchingBlocksModeToolkit`, Slate) dans la boîte à outils du mode, qui lit l'acteur
+    SÉLECTIONNÉ à chaque dessin ; les réglages restent sur l'acteur (enregistrés avec le niveau).
+  - ⚠ **LES ICÔNES ONT UNE SEULE SOURCE, `app/icones.gd`** : `DEV_TOOLS/generer_icones_greffons.gd` écrit
+    les tracés SVG pour Godot (`mb_icons.gd`), des PNG en base64 pour Unity (`MBIcons.cs` — le SVG
+    demanderait un paquet, un PNG d'un paquet immuable des réglages d'import figés) et des PNG pour
+    Unreal (`Resources/Icons`, style Slate enregistré par le module éditeur). `test_greffon_peinture`
+    rougit si un fichier est PÉRIMÉ et si une source demande une icône qui n'existe pas (lu dans le TEXTE
+    des trois sources).
+  - **MESURÉ** : `test_greffon_peinture` (la barre : ce qui s'affiche par outil, l'état relu, un clic mène
+    l'éditeur, aucun bouton sans icône) ; **huit mutations, toutes rouges** (Hollow partout, pinceau
+    partout, sélection toujours, forme non relue, une icône mal nommée dans CHACUN des trois greffons, un
+    tracé retouché dans l'appli sans relancer). Unity 6.6 : **21 tests sur 21** (dont les 32 PNG décodés).
+    Unreal 5.8.3 : **BuildPlugin sans avertissement**, 32 icônes empaquetées.
+  - ⚠ **RIEN N'A ÉTÉ VU DANS LES TROIS ÉDITEURS** : la barre Godot a été photographiée hors de l'éditeur
+    (thème par défaut) ; l'inspecteur Unity et le panneau Unreal n'ont été ni dessinés ni cliqués.
 - **LE FORMAT DU MONDE PEINT v1 — DÉCIDÉ (Jordan, 29 septembre 2026)** : « dans WORLD, une section
   pour gérer le monde peint, déjà l'exporter vers les trois addons ». `addons/marchingblocks_core/
   format_monde.gd` écrit un dossier `<projet>.mbworld/` : `world.json` (les couches DANS L'ORDRE : nom,
@@ -1138,6 +1164,14 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     ⚠ **« L'ŒIL RESTE AU-DESSUS DU SOL » ÉTAIT UN MAUVAIS CRITÈRE** : près du bord, l'œil passe légitimement
     sous le plateau en le contournant. La garde vérifie qu'il n'y a RIEN entre le personnage et l'œil, ni
     autour de l'œil. Mutations rouges : bras ôté, retour de `world_3d`, clic gauche ignoré.
+    ⚠ **UNE SECONDE SPHÈRE SUR LA CAMÉRA NE SERT À RIEN ICI** (question de Jordan, 29 septembre 2026) :
+    lancer une sphère couvre déjà la largeur du plan proche sur tout le trajet. Le vrai trou était
+    ailleurs : le bras partait de `_cible`, le pivot LISSÉ, qui traîne derrière la tête et peut être
+    dans la roche — et une sphère lancée de l'intérieur bute sur la face par DESSOUS, donc garde l'œil
+    dedans (mesuré). Ce que `cast_motion` fait d'une forme qui CHEVAUCHE déjà une face n'est pas mesuré. Le bras part désormais de la
+    VRAIE tête, qui est libre par construction (sphère de 0,15 < capsule de 0,19), vers le pivot, puis
+    du pivot vers l'œil. Gardé par la fumée (pivot posé DANS la dalle du sol, la sphère plus fine que la
+    capsule), mutations rouges : bras lancé du pivot lissé (œil à y = 10,6 dans la dalle), rayon de 0,2.
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
@@ -1165,6 +1199,41 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     ateliers dans le défilement, Save · open dans Witness, étapes 3-4 dans World. **Vu à l'image** (`capture_app.gd`, Witness et World) : c'est là qu'on a
     vu le titre PROJECT doublé par la bande « Project » (devenue « Save · open ») et le rapport qui gardait
     les touches du jeu après en être sorti.
+- **LA LÉGENDE DES FORMES — DEMANDÉE PAR JORDAN (29 septembre 2026)** : « on ne reconnaît pas du premier
+  coup d'œil ce qu'il faut altérer au witness pour retrouver quoi et où dans le monde ». Dans Witness, un
+  bandeau en haut de la vue, entre les deux barres (`app/legende_formes.gd`) : une carte par forme — une
+  PHOTO du vrai témoin cadrée sur elle, un renvoi qui pointe la zone, le nom, ce qu'elle devient dans le
+  monde, le nombre de tuiles tranchées là. Une flèche qui longe son bord le replie. **Ajouté (PROPOSÉ)** :
+  survoler une carte allume la zone dans la vue, à travers la roche ; un clic y cadre, sous l'angle de la photo.
+  - ⚠ **LES FORMES VIVENT DANS LE CŒUR** (`formes_du_temoin.gd`) : `planete_paysage.gd` les lit pour bâtir
+    le témoin (sortie `--couches` IDENTIQUE, mesuré par `diff`), la légende aussi. Ce qu'aucune forme
+    n'explique (la réparation, l'atome du finisseur : 7 cases) se DÉDUIT par différence → la carte « Twists ».
+  - **MESURÉ** : l'union des 23 cartes rend les **52 tuiles** — aucune ne vient d'un endroit que la légende
+    ne montre pas. Presque aucune n'est propre à UNE carte (les formes se chevauchent).
+  - ⚠ **LES PHOTOS SONT PRISES À L'OUVERTURE**, une `SubViewport` par carte rendue une fois — pas des PNG
+    livrés, qui mentiraient au prochain témoin. L'angle est choisi parmi seize pour montrer le plus de cases
+    de la forme ; si plus d'un quart reste caché, le plan proche fait un ÉCORCHÉ (salle, pilier, banquette).
+    ⚠ Un seul regard tiré du centre passait par la bouche de grotte et déclarait la salle visible : vu rougir.
+  - Gardé par `test_formes_du_temoin` (107) et `fumee_appli` (+11). Sept mutations rouges (forme déplacée
+    dans la table, zone du plateau qui avale la salle, un seul regard, carte oubliée, légende partout, zone
+    allumée hors du témoin, flèche muette). Vu à l'image (`capture_legende_formes.gd`). ⚠ Pas tenu en main ;
+    le manuel (F1) n'en parle pas encore.
+  - **LE SENS INVERSE, DANS WORLD — DEMANDÉ PAR JORDAN (29 septembre 2026).** Le même bandeau (« WHERE IS IT
+    FROM? ») dit, pour la tuile sous la souris dans la couche active, la forme d'où elle vient, sa photo, un
+    renvoi vers le coin EXACT, « copy k of N », et **Show it in the witness** (Witness, la vue cadrée sur ce
+    coin, une boîte blanche à sa place, la carte encadrée).
+    - ⚠ **ON LIT CE QUI EST POSÉ** : l'item de la grille `Rendu` au sommet, puis son NOM dans la méta du lot
+      (`BlocsMaitres.META_SOMMETS`, écrite par `_assembler` depuis les exemplaires du trancheur). PAR LE NOM,
+      pas par l'indice : un exemplaire vide est sauté sans renuméroter, et le peintre tasse les trous.
+    - ⚠ **LE CACHE PASSE AU FORMAT 2** (`Projet.FORMAT_DU_CACHE`) : un lot d'avant ne porte pas la
+      provenance, il est périmé et se retranche.
+    - ⚠ **LE VIDE N'EFFACE PAS** : pour atteindre le bouton, la souris traverse du ciel.
+    - **MESURÉ** : les 541 tuiles du témoin remontent à 541 sommets DIFFÉRENTS qui portent, dans le modèle,
+      leur clé ; et chacun appartient à une carte. ⚠ **16 N'EN AVAIENT AUCUNE**, vu à l'image (« this corner
+      belongs to no named shape ») : la zone du plateau ignorait le massif de l'est. Corrigé, gardé.
+    - Gardé par `test_formes_du_temoin` (117), `test_projet` (32), `fumee_appli` (170). Sept mutations
+      rouges (exemplaires tassés, cache d'un vieux format cru, cartes non triées, sommet sans le
+      demi-décalage, le vide qui efface, zone de l'est ôtée, carte non encadrée).
 - ⚠ **RIEN DE CECI N'A ÉTÉ TENU EN MAIN PAR JORDAN.** Les captures (`capture_app.gd`) montrent les
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.

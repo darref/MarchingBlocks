@@ -6,6 +6,8 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 1. Copy `addons/marchingblocks_paint` into your project and enable **MarchingBlocks Paint**.
 2. Add a **MarchingBlocksWorld** node, and set its **Tileset** to the `tileset.json` of a `.mbset` folder.
 3. Select the node: a MarchingBlocks toolbar appears above the 3D viewport. Paint in the viewport.
+   The toolbar is the MarchingBlocks tool's panel in one row — aim, tool, brush, floor, selection — and
+   only shows what the current tool uses; hover an icon for its name and key.
    Every change is one Ctrl+Z. (Selecting its **Cells** child gives Godot's own GridMap editor instead —
    both paint the same cells.)
 

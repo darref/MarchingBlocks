@@ -223,8 +223,11 @@ func _outils() -> String:
 		+ "paste — into this layer or any other. The paste follows the mouse; click to place it.")
 	l.append(_note("Moving or pasting onto matter merges with it; it never erases it."))
 	l.append(_titre("Shape operations"))
-	l.append("[b]Extend up / down[/b], [b]Widen[/b], [b]Hollow[/b] act on the selection if there is "
-		+ "one, otherwise on the whole floor y.")
+	l.append("[b]Extend up / down[/b], [b]Widen[/b], [b]Hollow[/b], [b]Extend facing[/b] act on the "
+		+ "selection if there is one, otherwise on the whole floor y.")
+	l.append("[b]Extend facing[/b] extends away from the matter: it picks the direction most cells face "
+		+ "(air in front, matter behind) and copies them one cell that way. Select a wall to thicken "
+		+ "it, a cave ceiling to lower it.")
 	return "\n".join(l)
 
 
