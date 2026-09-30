@@ -145,7 +145,8 @@ func indexer() -> void:
 				var liste: Dictionary = points[f["classe"]]
 				if not liste.has(f["canon"]):
 					liste[f["canon"]] = []
-				liste[f["canon"]].append({"cle": cle, "i": i, "noeud": f["noeud"], "g": f["g"], "axe": f["axe"]})
+				liste[f["canon"]].append({"cle": cle, "i": i, "noeud": f["noeud"], "g": f["g"], "axe": f["axe"],
+					"rt": f["rt"]})
 		bords[cle] = par_sommet
 
 
@@ -168,7 +169,10 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 				if r.x < canon.x or (r.x == canon.x and r.y < canon.y):
 					canon = r
 					g = h
-			sortie.append({"noeud": n, "classe": k, "canon": canon, "g": g, "axe": axe})
+			# ⚠ LES CARTES DU SOMMET SONT CALCULÉES ICI, UNE FOIS : la propagation les appliquait en les
+			# recomposant à chaque visite — 86 ms pour 328 sommets, un G qui suivait la souris à 10 images/s.
+			var vc: Array = compose(g, _carte_de[n])
+			sortie.append({"noeud": n, "classe": k, "canon": canon, "g": g, "axe": axe, "vc": vc, "rt": inverse(vc)})
 	return sortie
 
 
@@ -200,12 +204,11 @@ func projeter(cle: String, i: int, d: Vector3) -> Vector3:
 				stab.append(h)
 		if stab.size() <= 1:
 			continue
-		var vers_canon: Array = compose(f["g"], _carte_de[f["noeud"]])
-		var dc: Vector2 = appliquer(vers_canon, _dans_la_face(d, f["axe"]))
+		var dc: Vector2 = appliquer(f["vc"], _dans_la_face(d, f["axe"]))
 		var somme := Vector2.ZERO
 		for h in stab:
 			somme += appliquer(h, dc)
-		d = _hors_de_la_face(d, f["axe"], appliquer(inverse(vers_canon), somme / float(stab.size())))
+		d = _hors_de_la_face(d, f["axe"], appliquer(f["rt"], somme / float(stab.size())))
 	return d
 
 
@@ -223,19 +226,24 @@ func propager_plusieurs(depart: Dictionary) -> Dictionary:
 	for cle in depart:
 		for i in depart[cle]:
 			_poser(sortie, cle, i, depart[cle][i], file)
+	# ⚠ UN POINT CANONIQUE SE TRAITE UNE FOIS : tous ses membres reçoivent le même mouvement, et le relire depuis
+	# chacun d'eux (une trentaine) faisait O(sommets × membres) — encore 40 ms après avoir précalculé les cartes.
+	var faits := {}
 	while not file.is_empty():
 		var x: Array = file.pop_front()
 		var c: String = x[0]
 		var i: int = x[1]
 		var d: Vector3 = sortie[c][i]
 		for f in (bords.get(c, {}) as Dictionary).get(i, []):
-			var vers_canon: Array = compose(f["g"], _carte_de[f["noeud"]])
-			var dc: Vector2 = appliquer(vers_canon, _dans_la_face(d, f["axe"]))
+			var cle_point: Vector3i = Vector3i(f["classe"], (f["canon"] as Vector2i).x, (f["canon"] as Vector2i).y)
+			if faits.has(cle_point):
+				continue
+			faits[cle_point] = true
+			var dc: Vector2 = appliquer(f["vc"], _dans_la_face(d, f["axe"]))
 			for e in (points[f["classe"]] as Dictionary).get(f["canon"], []):
-				if e["cle"] == c and e["i"] == i and e["noeud"] == f["noeud"]:
+				if e["i"] == i and e["cle"] == c:
 					continue
-				var retour: Array = inverse(compose(e["g"], _carte_de[e["noeud"]]))
-				var de: Vector3 = _hors_de_la_face(Vector3.ZERO, e["axe"], appliquer(retour, dc))
+				var de: Vector3 = _hors_de_la_face(Vector3.ZERO, e["axe"], appliquer(e["rt"], dc))
 				_poser(sortie, e["cle"], e["i"], de, file)
 	return sortie
 

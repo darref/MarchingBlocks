@@ -461,7 +461,30 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
     MUETTE, et c'est une mutation ÉQUIVALENTE** : tout sommet posé sur une arête touche DEUX faces à classe
     (246 sur 246, aucun bord sur une face morte), son déplacement est donc déjà projeté sur l'arête, et ses
     deux faces lui transportent le même vecteur. La fusion reste, contre un état incohérent.
-- **À ÉCRIRE** : le modeleur (point 2) ; les coupes (point 3).
+- **POINT 2, ÉCRIT — LE MODELEUR** (`app/modeleur.gd`). Pendant **G, R, S** (édition proportionnelle
+  comprise), chaque sommet de BORD qui bouge est projeté (dans son plan, sur son arête), et ses correspondants
+  de TOUTES les tuiles suivent, à chaque mouvement de souris, depuis les positions de départ. Au début du geste,
+  une propagation-sonde dit ce qui PEUT bouger : les autres tuiles à redessiner, et les sommets de la tuile en
+  édition entraînés par ses propres bords (la face x+ d'une paroi et sa face x− se correspondent). Confirmé,
+  le geste émet un `TL.Lot` (toutes les tuiles touchées, avant et après) : **UN Ctrl+Z rend tout** ; Échap
+  rend les autres tuiles depuis la photo de départ.
+  - ⚠ **PAS PENDANT UNE EXTRUSION** : E pose des sommets neufs SUR ceux qu'il extrude, qui n'ont pas de
+    correspondants — c'est de la topologie, le point 3.
+  - ⚠ **LA PROPAGATION COÛTAIT 86 ms** (un G qui suivait la souris à 10 images/s, 328 sommets dans 49 tuiles)
+    : les cartes étaient recomposées à chaque visite, et chaque sommet atteint relisait toute la liste de son
+    point (une trentaine de membres). Cartes précalculées à l'indexation, point canonique traité UNE fois :
+    **2,6 ms** — et **9,1 ms par mouvement** mesurés dans l'appli avec fenêtre (tirer les faces de la paroi).
+  - **Vu à l'image** (`capture_modeleur_lie.gd`, les faces avant et arrière de la paroi tirées d'une demi-case) :
+    plus AUCUNE fente aux joints, là où la même capture en ouvrait une à chacun avant ce point.
+  - Gardé par `fumee_appli` (203, +10 : un sommet de bord de la paroi mené au CLAVIER — G, un axe, 0.1,
+    Entrée). ⚠ **L'attendu est hors de `sections.gd`** : les VRAIS joints du témoin restent fermés ; 23 autres
+    tuiles suivent ; le long de la normale le sommet ne bouge pas ; un Ctrl+Z rend les 52 tuiles, Ctrl+Y le
+    refait ; Échap rend tout. **Cinq mutations rouges** (sans contrainte ni propagation, sans projection, les
+    autres tuiles qui ne suivent pas, Échap qui ne les rend pas, une annulation pour la seule tuile en
+    édition) — et les six du cœur rejouées après l'optimisation, plus une nouvelle (traiter un point pour
+    toute la classe), toutes rouges.
+  - ⚠ **PAS TENU EN MAIN.**
+- **À ÉCRIRE** : les coupes (point 3).
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
@@ -1527,13 +1550,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 340 vérifications, 0 échec** (30 septembre 2026, relevées après le cœur des sections partagées),
+  Seize suites, **8 350 vérifications, 0 échec** (30 septembre 2026, relevées après le modeleur des sections partagées),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
-  `test_outils` 57, `fumee_appli` 193, `test_greffon_peinture` 179, `test_faux_artiste` 36,
+  `test_outils` 57, `fumee_appli` 203, `test_greffon_peinture` 179, `test_faux_artiste` 36,
   `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 12.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,

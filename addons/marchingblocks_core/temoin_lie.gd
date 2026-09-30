@@ -17,6 +17,12 @@ const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const FORMAT := "marchingblocks-linked-witness"
 const VERSION := 1
 
+## UN LOT DE TUILES, pour l'annulation d'un geste qui en touche PLUSIEURS (les sections partagées : tirer un
+## sommet de bord entraîne ses correspondants dans d'autres tuiles). {clé: copie de MaillageEdite}.
+class Lot extends RefCounted:
+	var tuiles := {}
+
+
 var tuiles := {}          # clé → MaillageEdite
 var materiaux: Array = []
 var occurrences: Array = []   # [{sommet, cle, orientation, pose: Transform3D}]

@@ -17,6 +17,8 @@ signal change(avant: RefCounted, apres: RefCounted, nom: String)
 signal dit(texte: String)
 
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
+const Sections := preload("res://addons/marchingblocks_core/sections.gd")
 
 const AXES := {"x": Vector3(1, 0, 0), "y": Vector3(0, 0, -1), "z": Vector3(0, 1, 0)}
 const ORANGE := Color(1.0, 0.55, 0.1)
@@ -97,6 +99,16 @@ var pose := Transform3D.IDENTITY
 var _edition: Node3D
 var _occurrences: Node3D
 var _mm_de := {}          # clé → MultiMeshInstance3D
+## ── LES SECTIONS PARTAGÉES (charte §3, point 2) ─────────────────────────────────────────────────────
+## Pendant G, R et S, un sommet de BORD ne glisse que dans son plan (le long de l'arête s'il en touche deux),
+## et entraîne ses correspondants de TOUTES les tuiles — le témoin ne peut plus s'ouvrir sous la main.
+## ⚠ PAS pendant une EXTRUSION : elle crée des sommets posés sur ceux qu'elle extrude, qui n'ont pas de
+## correspondants ; c'est une affaire de topologie, celle du point 3.
+var sections: RefCounted
+var _photo := {}             # clé → positions au début du geste (pour rejouer, et pour Échap)
+var _touchees := {}          # clé → true : les AUTRES tuiles que le geste peut toucher
+var _propages_ici: Array = []   # les sommets de la tuile en édition qui bougent par propagation
+var _sections_du_geste := false
 var _rang_dans_mm := {}   # occurrence → rang dans la MultiMesh de sa tuile
 
 
@@ -195,6 +207,7 @@ func charger_temoin(t: RefCounted, active := 0) -> void:
 		_mm_de[c] = mmi
 	occurrence = -1
 	cle = ""
+	sections = Sections.new(t)
 	activer(clampi(active, 0, t.occurrences.size() - 1))
 
 
@@ -239,9 +252,26 @@ func _propager() -> void:
 		(_mm_de[cle] as MultiMeshInstance3D).multimesh.mesh = maillage.vers_array_mesh()
 
 
+## Redessine les occurrences d'une tuile (hors de celle en édition, qui a son propre dessin).
+func _rafraichir_tuile(c: String) -> void:
+	if _mm_de.has(c):
+		(_mm_de[c] as MultiMeshInstance3D).multimesh.mesh = temoin.tuiles[c].vers_array_mesh()
+
+
 ## Pose un maillage tel quel — c'est ce que l'annulation appelle. Avec un témoin lié, `m` porte en méta la
-## clé de sa tuile (`instantane`) : c'est CETTE tuile qui est remplacée, où que soit l'édition.
+## clé de sa tuile (`instantane`) : c'est CETTE tuile qui est remplacée, où que soit l'édition. Un `TL.Lot`
+## en pose plusieurs d'un coup (un geste dont les sections partagées ont entraîné d'autres tuiles).
 func remplacer(m: RefCounted) -> void:
+	if temoin != null and m is TL.Lot:
+		for c in (m as TL.Lot).tuiles:
+			temoin.poser_tuile(c, (m as TL.Lot).tuiles[c])
+			_rafraichir_tuile(c)
+		_rafraichir_les_tuiles_qui_portent(-2)
+		if (m as TL.Lot).tuiles.has(cle):
+			maillage = temoin.tuiles[cle]
+			_vider_selection()
+		redessiner()
+		return
 	if temoin != null and m.has_meta("cle"):
 		var c: String = m.get_meta("cle")
 		temoin.poser_tuile(c, m)
@@ -339,6 +369,9 @@ func _preparer_le_geste() -> void:
 			if not mobiles.has(i) and _depart[i].distance_to(_pivot) <= loin + rayon_prop:
 				_candidats.append(i)
 				mobiles[i] = true
+	_preparer_les_sections(mobiles)
+	for i in _propages_ici:
+		mobiles[i] = true
 	_faces_mobiles = []
 	var statiques: Array = []
 	for f in maillage.faces.size():
@@ -773,6 +806,10 @@ func commencer(geste: String) -> bool:
 	_pivot = c / maxf(1.0, float(_ids.size()))
 	# Une extrusion vient de changer la topologie : le cache d'arêtes est périmé AVANT de préparer le geste.
 	_topo_sale = true
+	_sections_du_geste = sections != null and modal in ["G", "R", "S"] and _nom_geste != "Extrude"
+	if _sections_du_geste:
+		sections.indexer()
+		_photo = sections.photo()
 	if modal in ["G", "R", "S"]:
 		_preparer_le_geste()
 	if modal == "G" and _nom_geste == "Extrude" and _normale_extrusion != Vector3.ZERO:
@@ -839,6 +876,7 @@ func _mettre_a_jour() -> void:
 				* Transform3D(Basis(), -_pivot)
 			dit.emit("[b]Scale[/b]  %.3f   %s" % [f, _aide_axe()])
 	maillage.transformer(_ids, t, _depart, rayon_prop if proportionnel else 0.0, _candidats)
+	_contraindre_et_propager()
 	_redessiner_le_geste()
 
 
@@ -888,13 +926,76 @@ func _valeur(defaut: float) -> float:
 	return float(_saisie)
 
 
+## Au début d'un geste (et quand l'édition proportionnelle change de rayon) : ce que la propagation PEUT
+## atteindre depuis les sommets qui bougent — pour ne redessiner que ces tuiles-là à chaque mouvement.
+func _preparer_les_sections(mobiles: Dictionary) -> void:
+	_touchees = {}
+	_propages_ici = []
+	if not _sections_du_geste:
+		return
+	var sonde := {}
+	for i in mobiles:
+		if sections.est_de_bord(cle, i):
+			sonde[i] = Vector3.ONE
+	var atteints: Dictionary = sections.propager(cle, sonde)
+	for c in atteints:
+		if c == cle:
+			for i in atteints[c]:
+				if not mobiles.has(i):
+					_propages_ici.append(i)
+		else:
+			_touchees[c] = true
+
+
+## À chaque mouvement : chaque sommet de bord qui a bougé est ramené DANS son plan, et ses correspondants
+## suivent — dans la tuile en édition comme dans les autres, toujours depuis les positions de départ.
+func _contraindre_et_propager() -> void:
+	if not _sections_du_geste:
+		return
+	var deltas := {}
+	for liste in [_ids, _candidats]:
+		for i in liste:
+			if not sections.est_de_bord(cle, i):
+				continue
+			var d: Vector3 = sections.projeter(cle, i, maillage.sommets[i] - _depart[i])
+			maillage.sommets[i] = _depart[i] + d
+			deltas[i] = d
+	if deltas.is_empty():
+		return
+	var r: Dictionary = sections.propager(cle, deltas)
+	for i in r.get(cle, {}):
+		maillage.sommets[i] = _depart[i] + (r[cle][i] as Vector3)
+	r.erase(cle)
+	sections.deplacer(r, _photo)
+	for c in r:
+		_rafraichir_tuile(c)
+
+
+## Un geste qui a touché d'autres tuiles : UNE annulation pour toutes (un `TL.Lot` avant, un après).
+func _emettre_le_lot(avant_actif: RefCounted, nom: String) -> void:
+	var avant := TL.Lot.new()
+	var apres := TL.Lot.new()
+	avant.tuiles[cle] = avant_actif
+	apres.tuiles[cle] = maillage.copie()
+	for c in _touchees:
+		var a: RefCounted = temoin.tuiles[c].copie()
+		a.sommets = (_photo[c] as PackedVector3Array).duplicate()
+		avant.tuiles[c] = a
+		apres.tuiles[c] = temoin.tuiles[c].copie()
+	change.emit(avant, apres, nom)
+
+
 func confirmer() -> void:
 	if modal == "" or _avant == null:
 		return
 	modal = ""
 	var avant: RefCounted = _avant
 	_avant = null
-	_emettre(avant, _nom_geste)
+	if _sections_du_geste and not _touchees.is_empty():
+		_emettre_le_lot(avant, _nom_geste)
+	else:
+		_emettre(avant, _nom_geste)
+	_sections_du_geste = false
 	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % _nom_geste)
 	redessiner()
 
@@ -904,6 +1005,11 @@ func annuler() -> void:
 		return
 	if _avant != null:
 		maillage = _avant
+	if _sections_du_geste:
+		for c in _touchees:
+			temoin.tuiles[c].sommets = (_photo[c] as PackedVector3Array).duplicate()
+			_rafraichir_tuile(c)
+		_sections_du_geste = false
 	modal = ""
 	_avant = null
 	_apercu_mi.mesh = null

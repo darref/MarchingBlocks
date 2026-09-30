@@ -266,6 +266,10 @@ func _modeleur() -> String:
 		+ "move the mouse — what you see is exactly what a painted world will show, joints included. Clicking a "
 		+ "copy of another tile switches to that tile (the selection belongs to a tile). Axes stay the "
 		+ "world's: " + _touche("G") + " " + _touche("Z") + " moves up, whichever way the copy is turned.")
+	l.append("[b]Border vertices are shared.[/b] A vertex lying on a cell's cutting plane is the border every "
+		+ "neighbouring tile must match. With " + _touche("G") + " " + _touche("R") + " " + _touche("S") + " it "
+		+ "slides only within its plane (along the edge if it sits on two), and every matching vertex of every "
+		+ "other tile follows: the witness cannot open a crack. One " + _touche("Ctrl+Z") + " undoes it everywhere.")
 	l.append("[b]The tiles[/b] tab of the strip above the view shows all of them: a photo of each tile in its "
 		+ "cell (the ghost cubes are the full half-cells around the corner), open air or under rock, what it "
 		+ "does in a world and how many copies the witness shows. Hover a tile to light up its copies; click "

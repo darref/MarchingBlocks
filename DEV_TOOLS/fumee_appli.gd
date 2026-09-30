@@ -362,6 +362,8 @@ func _mener() -> void:
 	await _le_modeleur(ed)
 	_la_planche_des_tuiles(ed)
 	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
+	_les_sections_dans_le_modeleur(ed)
+	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
 	_la_provenance(ed)
@@ -574,6 +576,142 @@ func _la_planche_des_tuiles(ed: Control) -> void:
 	leg.montrer_onglet("formes")
 	_vrai(leg._defile.visible and not pl.visible, "l'onglet des formes revient")
 	_planche_finie = true
+
+
+var _sections_finies := false
+
+
+## LES SECTIONS PARTAGÉES DANS LE MODELEUR (charte §3, point 2) : un sommet de BORD de la paroi, déplacé au
+## clavier (G, un axe, une valeur, Entrée). ⚠ L'ATTENDU EST HORS DE `sections.gd` : les VRAIS JOINTS du témoin
+## (deux occurrences voisines, les sommets qui y coïncident dans le monde) doivent rester fermés.
+func _les_sections_dans_le_modeleur(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var t: RefCounted = mo.temoin
+	var paroi := "mb_plaque_b2h2_dehors"
+	mo.activer(int(t.occurrences_de(paroi)[0]))
+	mo.sections.indexer()
+	var i_bord := -1
+	var axe_face := -1
+	for i in (mo.sections.bords[paroi] as Dictionary):
+		var faces: Array = mo.sections.bords[paroi][i]
+		if faces.size() == 1 and i_bord < 0:
+			i_bord = i
+			axe_face = faces[0]["axe"]
+	_vrai(i_bord >= 0, "la paroi a un sommet de bord posé sur une seule face")
+	if i_bord < 0:
+		return
+	var paires: Array = _paires_des_joints(t)
+	_egal(_joints_ouverts(t, paires), 0, "avant le geste, les %d paires des joints du témoin coïncident" % paires.size())
+	var photo := {}
+	for c in t.tuiles:
+		photo[c] = (t.tuiles[c].sommets as PackedVector3Array).duplicate()
+	# Un axe du MONDE dans le plan du sommet, et un axe le long de sa normale (les lettres de Blender).
+	var normale_monde: Vector3 = (mo.pose.basis * _unitaire(axe_face)).abs()
+	var lettres := {KEY_X: Vector3(1, 0, 0), KEY_Z: Vector3(0, 1, 0), KEY_Y: Vector3(0, 0, 1)}
+	var dans_le_plan: Key = KEY_NONE
+	var le_long: Key = KEY_NONE
+	for k in lettres:
+		if (lettres[k] as Vector3).dot(normale_monde) < 0.5 and dans_le_plan == KEY_NONE:
+			dans_le_plan = k
+		elif (lettres[k] as Vector3).dot(normale_monde) > 0.5:
+			le_long = k
+	mo.choisir_mode("sommet")
+	mo.tout_choisir(false)
+	mo.sel_s = {i_bord: true}
+	var avant_monde: Vector3 = mo.pose * mo.maillage.sommets[i_bord]
+	for k in [KEY_G, dans_le_plan, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	var ecart: Vector3 = mo.pose * mo.maillage.sommets[i_bord] - avant_monde
+	_vrai(absf(ecart.length() - 0.1) < 1e-4, "G %s 0.1 : le sommet de bord glisse d'un dixième de case dans son plan (%s)"
+		% [OS.get_keycode_string(dans_le_plan), ecart])
+	var changees := 0
+	for c in t.tuiles:
+		if c != paroi and t.tuiles[c].sommets != photo[c]:
+			changees += 1
+	_vrai(changees >= 2, "ses correspondants suivent, dans %d autres tuiles" % changees)
+	_egal(_joints_ouverts(t, paires), 0, "après le geste, tous les joints du témoin coïncident encore")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets == photo[c]:
+			rendues += 1
+	_egal(rendues, t.tuiles.size(), "UN Ctrl+Z rend toutes les tuiles touchées")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(absf((mo.pose * mo.maillage.sommets[i_bord] - avant_monde).length() - 0.1) < 1e-4
+		and _joints_ouverts(t, paires) == 0, "Ctrl+Y le refait, joints fermés")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Le long de la normale : le sommet de bord ne quitte pas son plan.
+	mo.sel_s = {i_bord: true}
+	for k in [KEY_G, le_long, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai((mo.pose * mo.maillage.sommets[i_bord]).is_equal_approx(avant_monde),
+		"G %s 0.1 (le long de la normale) : le sommet de bord ne quitte pas son plan" % OS.get_keycode_string(le_long))
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Échap rend tout, y compris les autres tuiles.
+	mo.sel_s = {i_bord: true}
+	for k in [KEY_G, dans_le_plan, KEY_0, KEY_PERIOD, KEY_1]:
+		ed._input(_cle(k))
+	var pendant := 0
+	for c in t.tuiles:
+		if c != paroi and t.tuiles[c].sommets != photo[c]:
+			pendant += 1
+	ed._input(_cle(KEY_ESCAPE))
+	var apres_echap := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets != photo[c]:
+			apres_echap += 1
+	_vrai(pendant >= 2 and apres_echap == 0, "pendant le geste %d autres tuiles suivent ; Échap les rend toutes" % pendant)
+	ed._minuterie_temoin.stop()
+	ed._regler_edition(false)
+	_sections_finies = true
+
+
+func _unitaire(axe: int) -> Vector3:
+	var e := Vector3.ZERO
+	e[axe] = 1.0
+	return e
+
+
+## Les VRAIS JOINTS du témoin : pour deux occurrences voisines, les sommets qui coïncident dans le monde sur
+## leur plan commun (la même autorité que `test_sections`, écrite hors de `sections.gd`).
+func _paires_des_joints(t: RefCounted) -> Array:
+	var occ := {}
+	for o in t.occurrences:
+		occ[o["sommet"]] = o
+	var paires: Array = []
+	for s in occ:
+		var oa: Dictionary = occ[s]
+		for axe in 3:
+			var e := Vector3i.ZERO
+			e[axe] = 1
+			if not occ.has(s + e):
+				continue
+			var ob: Dictionary = occ[s + e]
+			var ta: RefCounted = t.tuiles[oa["cle"]]
+			var tb: RefCounted = t.tuiles[ob["cle"]]
+			var index_b := {}
+			for j in tb.sommets.size():
+				index_b[Vector3i(((ob["pose"] as Transform3D) * tb.sommets[j] * 10000.0).round())] = j
+			for i in ta.sommets.size():
+				var pw: Vector3 = (oa["pose"] as Transform3D) * ta.sommets[i]
+				if absf(pw[axe] - (float(s[axe]) + 1.5)) > 0.0005:
+					continue
+				var k := Vector3i((pw * 10000.0).round())
+				if index_b.has(k):
+					paires.append([oa["cle"], i, oa["pose"], ob["cle"], index_b[k], ob["pose"]])
+	return paires
+
+
+func _joints_ouverts(t: RefCounted, paires: Array) -> int:
+	var n := 0
+	for p in paires:
+		var a: Vector3 = (p[2] as Transform3D) * (t.tuiles[p[0]].sommets[p[1]] as Vector3)
+		var b: Vector3 = (p[5] as Transform3D) * (t.tuiles[p[3]].sommets[p[4]] as Vector3)
+		if a.distance_to(b) > 1e-4:
+			n += 1
+	return n
 
 
 ## LE PLAY TEST, mené par de VRAIES touches (`Input.parse_input_event`) : le personnage tombe sur un
