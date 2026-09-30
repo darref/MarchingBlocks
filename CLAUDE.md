@@ -415,6 +415,54 @@ témoin montre ce que le monde montrera.
     format d'avant — des LISTES par clé : les greffons le refusent désormais. À réexporter depuis l'appli.
   - La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections — OUVERT.
 
+### LES SECTIONS PARTAGÉES — DEMANDÉ PAR JORDAN (30 septembre 2026), MESURÉ, PAS ÉCRIT
+
+Jordan : les sommets du bord d'une paroi doivent être partagés avec ceux du bord correspondant d'un coin,
+d'une lèvre de plateau… — « la seule manière d'avoir un witness monolithique sans trous ». Les copies liées
+tiennent une tuile identique à elle-même ; elles ne tiennent rien ENTRE deux clés (vu à l'image : tirer une
+paroi ouvre une fente à chaque joint). Il faut que la section d'une face — ses sommets sur le plan de coupe
+— soit UNE donnée partagée par toutes les faces qui peuvent se trouver face à face dans un monde.
+
+**MESURÉ** (`DEV_TOOLS/sonde_sections_partagees.gd`, sur les 52 tuiles du témoin calculé) :
+- **246 faces de référence** (clé, axe, signe) au motif ni vide ni plein ; reliées par les 36 seaux de
+  `verifier_sections` sous CHAQUE pose du peintre (une face tombe dans un seau par pose), elles forment
+  **10 classes** de 12 à 32 faces, chacune touchant 7 à 24 tuiles.
+- **8 classes sans contrainte, 2 qui imposent une SYMÉTRIE d'ordre 2** (deux chemins donnent deux cartes :
+  la section doit se superposer à elle-même par leur écart).
+- **1 230 sommets de bord ; dans chaque classe, chaque point existe dans CHAQUE face, et les deux classes
+  symétriques le sont** : 0 absence, 0 point hors symétrie. Tout le système des coutures tient en
+  **50 points** (3 à 7 par classe). **Contrôle négatif** : un seul sommet de paroi décalé d'un centième
+  dans son plan → 30 absences dans sa classe de 30 faces (vu rougir).
+- 246 sommets sont sur une ARÊTE de case (deux plans à la fois : ils ne pourront glisser que le long de
+  l'arête, et lient deux classes) ; aucun sur un coin de case ; aucun bord posé sur une face de motif vide
+  ou plein.
+- ⚠ **CE QUE ÇA NE COUVRE PAS** : la route Blender (des objets distincts n'y partagent aucun sommet — il n'y
+  restera que la vérification) ; et un relief qui FRANCHIT un plan de coupe (règle (A)) n'a pas de sommet
+  sur le plan : `verifier_sections` ne le juge pas, le partage non plus.
+- **DÉCIDÉ (Jordan, 30 septembre 2026)** : les trois points, dans l'ordre — le cœur, le modeleur, les coupes.
+- **POINT 1, ÉCRIT — LE CŒUR** (`addons/marchingblocks_core/sections.gd`) :
+  - **les classes**, calculées UNE fois (elles ne dépendent que des clés et des poses) : pour chaque nœud, sa
+    classe et sa CARTE vers la racine ; pour chaque classe, son GROUPE de symétries ;
+  - **l'index des points** (`indexer`, à rebâtir quand la géométrie change) : chaque sommet de bord ramené
+    dans le repère de sa classe puis à un représentant CANONIQUE de son orbite sous le groupe ;
+  - `correspondants`, `projeter` (dans le plan, sur l'arête s'il en touche deux, et moyenné sur le
+    STABILISATEUR quand une symétrie fixe le point), `propager` (de proche en proche : un sommet d'arête
+    passe d'une classe à l'autre ; les composantes reçues par ses deux faces se FUSIONNENT), `deplacer`
+    (depuis les positions de départ, jamais cumulé), `photo`.
+  - **MESURÉ** (`DEV_TOOLS/test_sections.gd`, 12) — attendus hors de `sections.gd` : les chiffres de la sonde
+    (246 nœuds, 10 classes de tailles [12 … 32], 8 + 2 symétriques) ; et les **VRAIS JOINTS du témoin** : deux
+    occurrences voisines posées dans le monde, **10 384 paires** de sommets qui y coïncident, chacune
+    retrouvée parmi les correspondants ; 984 sommets de bord (738 sur une face, 246 sur une arête) restent
+    dans leur plan une fois projetés ; **13 déplacements propagés à 531 sommets, 0 conflit, 0 joint ouvert,
+    0 remarque de `verifier_sections`** — dont un point fixé par une symétrie et un sommet d'arête. Contrôle :
+    le même déplacement sans propagation ouvre 5 joints.
+  - **Mutations** : cinq rouges (normale gardée, symétrie canonique ignorée, pas de proche en proche, pas de
+    moyenne sur le stabilisateur, carte au lieu de son inverse). ⚠ **« écraser au lieu de fusionner » est
+    MUETTE, et c'est une mutation ÉQUIVALENTE** : tout sommet posé sur une arête touche DEUX faces à classe
+    (246 sur 246, aucun bord sur une face morte), son déplacement est donc déjà projeté sur l'arête, et ses
+    deux faces lui transportent le même vecteur. La fusion reste, contre un état incohérent.
+- **À ÉCRIRE** : le modeleur (point 2) ; les coupes (point 3).
+
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
 ⚠ **ÉCRIT AVANT « UNE TUILE PAR CLÉ » (30 septembre 2026)** : là où ce qui suit dit « exemplaire », lire
@@ -1479,14 +1527,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Quinze suites, **8 328 vérifications, 0 échec** (30 septembre 2026, relevées après le retrait des exemplaires),
+  Seize suites, **8 340 vérifications, 0 échec** (30 septembre 2026, relevées après le cœur des sections partagées),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
   `test_outils` 57, `fumee_appli` 193, `test_greffon_peinture` 179, `test_faux_artiste` 36,
-  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18.
+  `test_maillage_edite` 153, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 12.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
