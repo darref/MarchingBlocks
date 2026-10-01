@@ -244,8 +244,10 @@ func _couches() -> String:
 	l.append("[b]New layer[/b] starts from the computed witness. [b]Copy witness[/b] starts from a copy of "
 		+ "the active layer's: sculpt ice from rock without touching the rock. Editing one layer's witness "
 		+ "never changes another layer.")
-	l.append("[b]Slice this layer's witness[/b] (Project, step 3) gives the layer the tiles of its own "
-		+ "witness. A linked .glb back from Blender, sliced into a layer, [b]becomes its witness[/b] — "
+	l.append("[b]The world follows its witness[/b]: a second after you stop sculpting, the layer takes the "
+		+ "new tiles by itself — no button. [b]Slice this layer's witness[/b] (Project, step 3) does the same "
+		+ "on demand. A layer dressed by an unlinked work keeps it.")
+	l.append("A linked .glb back from Blender, sliced into a layer, [b]becomes its witness[/b] — "
 		+ "editable here, textures and UVs included; the previous one is kept next to it (.previous). "
 		+ "Slicing a new work into a layer [b]keeps its painting[/b] — only the tiles change.")
 	l.append(_titre("Projects"))

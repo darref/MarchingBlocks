@@ -569,19 +569,31 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	ed._enregistrer_le_temoin_modele()
 	_egal(FileAccess.get_md5(glb_a), md5_a, "le .glb de A garde ses octets : remodeler B ne touche pas A (le défaut d'avant)")
 
-	# L'état affiché : tranchée depuis SON témoin tel qu'il était, puis à retrancher quand il change.
+	# LE MONDE SUIT SON TÉMOIN (Jordan, 1er octobre 2026) : sans bouton, la couche B a pris les tuiles de SON
+	# témoin tel qu'il vient d'être sculpté — la paroi posée EST celle du témoin, au millième près.
 	var glb_b: String = ed._glb_du_temoin(cb)
-	cb["source"] = glb_b
-	var lot := MeshLibrary.new()
-	lot.set_meta("empreinte", Projet.empreinte(glb_b))
-	ed._vue.couche(ib).lot = lot
-	_vrai(ed._etat_de(ib).ends_with("sliced"), "l'état dit « sliced » quand les tuiles viennent du témoin tel qu'il est (%s)" % ed._etat_de(ib))
-	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait), et un
-	# témoin inchangé laisse l'état « sliced » à juste titre — vu en fausse alerte.
+	var lot_a = ed._vue.couche(ia).lot
+	_vrai(str(cb["source"]) == glb_b and ed._vue.couche(ib).lot != null, "la couche B a suivi son témoin : ses tuiles viennent de lui")
+	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
+		"la paroi posée dans le monde de B est celle de son témoin sculpté")
+	_vrai(ed._etat_de(ib).ends_with("sliced"), "et la liste dit qu'elle est à jour (%s)" % ed._etat_de(ib))
+	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait).
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(tb.tuiles[paroi].sommets == avant_b, "(Ctrl+Z a défait le geste dans B)")
+	var t0 := Time.get_ticks_msec()
 	ed._enregistrer_le_temoin_modele()
-	_vrai(ed._etat_de(ib).ends_with("slice again"), "et « slice again » dès que le témoin a changé (%s)" % ed._etat_de(ib))
+	print("   (le monde de B suit son témoin en %d ms)" % (Time.get_ticks_msec() - t0))
+	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
+		"Ctrl+Z dans le témoin : le monde de B le suit aussi")
+	_vrai(ed._vue.couche(ia).lot == lot_a, "et le monde de A n'a pas bougé")
+	# Une couche habillée par un travail EXTERNE non lié le garde : son témoin n'est pas sa source.
+	var lot_b = ed._vue.couche(ib).lot
+	cb["source"] = "D:/ailleurs/travail_non_lie.glb"
+	ed._temoins_sales[tb] = true
+	ed._enregistrer_le_temoin_modele()
+	_vrai(str(cb["source"]) == "D:/ailleurs/travail_non_lie.glb" and ed._vue.couche(ib).lot == lot_b,
+		"une couche habillée par un travail externe le garde quand son témoin change")
+	cb["source"] = glb_b
 	ed._unhandled_key_input(_cle(KEY_Y, true))
 	var apres_un: PackedVector3Array = tb.tuiles[paroi].sommets.duplicate()
 
@@ -1604,3 +1616,31 @@ func _egal(a, b, quoi: String) -> void:
 	else:
 		_echecs += 1
 		print("  ✗ %s — rendu %s, attendu %s" % [quoi, a, b])
+
+
+## La tuile d'une clé dans un lot (son nom nu), ou null.
+func _tuile_du_lot(lot: MeshLibrary, cle: String) -> Mesh:
+	if lot == null:
+		return null
+	var id := lot.find_item_by_name(cle)
+	return lot.get_item_mesh(id) if id >= 0 else null
+
+
+## La FORME d'un maillage : ses positions (au millième) et son aire — indépendante de la triangulation.
+func _forme_de(mesh: Mesh) -> String:
+	if mesh == null:
+		return "aucune"
+	var pos := {}
+	var aire := 0.0
+	for s in mesh.get_surface_count():
+		var a: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var idx = a[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null else PackedInt32Array(range(v.size()))
+		for i in range(0, ordre.size() - 2, 3):
+			aire += (v[ordre[i + 1]] - v[ordre[i]]).cross(v[ordre[i + 2]] - v[ordre[i]]).length() * 0.5
+		for p in v:
+			pos["%d,%d,%d" % [roundi(p.x * 1000.0), roundi(p.y * 1000.0), roundi(p.z * 1000.0)]] = true
+	var l: Array = pos.keys()
+	l.sort()
+	return "%s|%.4f" % [";".join(PackedStringArray(l)).md5_text(), aire]

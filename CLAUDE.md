@@ -585,6 +585,14 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
   les teintes de la légende redeviennent des teintes — celles de l'export (nommées) comme celle du modeleur
   (UN matériau « legend », teintes en couleur de sommet : lu comme un vrai matériau, il peignait TOUTE la
   légende en blanc, vu rougir). ⚠ Un matériau qu'aucune face ne porte ne voyage pas (pas de primitive).
+- **LE MONDE SUIT SON TÉMOIN (Jordan, 1er octobre 2026 : « le monde ne se met pas à jour avec les changements
+  de son witness »)** : chaque écriture du témoin d'une couche (une seconde après le dernier geste) la rhabille
+  par `librairie_depuis_glb` sur son `.glb` lié — la route du tranchage, qui ne coûte que la relecture.
+  **MESURÉ** sur le monde de test (4 635 cases) : 114 ms d'écriture, 217 de relecture, 83 de reconstruction.
+  Une couche sans tuiles ou sur le témoin calculé passe à son témoin ; une couche habillée par un travail
+  EXTERNE non lié le garde. L'étape 3 « Slice this layer's witness » fait la même chose à la demande.
+  Gardé par `fumee_appli` (la paroi posée dans le monde EST celle du témoin, au millième ; Ctrl+Z suivi ; le
+  monde de A intact ; le travail externe gardé) ; deux mutations rouges.
 - Gardé par `test_projet` (35), `test_temoin_lie` (25) et `fumee_appli` (249). **Neuf mutations rouges** ;
   C7 (« le chemin enregistré ignoré ») d'abord MUETTE : pour une couche ordinaire le chemin enregistré et
   celui de l'id sont les mêmes, et le test ne relisait pas l'ancien témoin repris — ni n'y écrivait. Vu à
@@ -1705,13 +1713,13 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 457 vérifications, 0 échec** (1er octobre 2026, relevées après l'icône des dossiers éprouvée dans l'exe),
+  Seize suites, **8 461 vérifications, 0 échec** (1er octobre 2026, relevées après « le monde suit son témoin »),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 55,
-  `test_outils` 57, `fumee_appli` 255, `test_greffon_peinture` 179, `test_faux_artiste` 36,
+  `test_outils` 57, `fumee_appli` 259, `test_greffon_peinture` 179, `test_faux_artiste` 36,
   `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 25, `test_sections` 30.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,

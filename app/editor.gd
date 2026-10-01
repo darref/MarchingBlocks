@@ -803,8 +803,9 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	_bouton_trancher_travail.disabled = true
 	etape3.contenu.add_child(_bouton_trancher_travail)
 	etape3.contenu.add_child(_bouton("Slice this layer's witness",
-		"Slices the ACTIVE layer's own witness — the one you sculpt in Witness — and dresses the layer "
-		+ "with its tiles.\nIts painted cells stay as they are.", _trancher_temoin_de_la_couche, "cube"))
+		"Dresses the ACTIVE layer with the tiles of its own witness — the one you sculpt in Witness.\n"
+		+ "It happens by itself a second after each witness edit; this button does it on demand.\n"
+		+ "Its painted cells stay as they are.", _trancher_temoin_de_la_couche, "cube"))
 
 	var etape4 := Section.new("4 · Export to engines", true, Icones.icone("exporter"))
 	pile.add_child(etape4)
@@ -1817,9 +1818,32 @@ func _enregistrer_temoin(c: Dictionary) -> String:
 	var raison: String = t.vers_glb(_glb_du_temoin(c))
 	if raison != "":
 		_dire("[color=#e0603c]The witness of « %s » could not be saved:[/color] %s" % [c["nom"], raison])
+	else:
+		_suivre_son_temoin(c)
 	_oublier_la_vignette(c)
 	_enregistrer()
 	return raison
+
+
+## LE MONDE SUIT SON TÉMOIN (Jordan, 1er octobre 2026 : « le monde ne se met pas à jour avec les changements de
+## son witness ») : chaque fois que le témoin d'une couche est écrit, la couche reprend ses tuiles — sans
+## bouton. ⚠ C'EST LA MÊME ROUTE QUE LE TRANCHAGE (`librairie_depuis_glb` sur son `.glb` lié), et elle ne coûte
+## que la relecture : un témoin lié se relit tuile par tuile, sans trancher.
+## ⚠ Une couche habillée par un travail EXTERNE non lié (un .glb d'un seul tenant) le garde : son témoin n'est
+## pas sa source. Une couche sans tuiles, ou sur le témoin calculé, passe à son propre témoin.
+func _suivre_son_temoin(c: Dictionary) -> void:
+	var i: int = _couches.find(c)
+	var propre := _glb_du_temoin(c)
+	var s := str(c.get("source", ""))
+	if i < 0 or (s != "" and s != Projet.TEMOIN and s != propre):
+		return
+	var bilan: Dictionary = BM.librairie_depuis_glb(propre)
+	var lot: MeshLibrary = bilan.get("lot", null)
+	if lot == null or not bilan.get("lie", false):
+		return
+	Projet.mettre_en_cache(lot, propre)
+	c["source"] = propre
+	_vue.couche(i).lot = lot
 
 
 ## Étape 3 : la couche active prend les tuiles de SON témoin. ⚠ Un témoin jamais modelé est le témoin
