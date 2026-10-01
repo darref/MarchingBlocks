@@ -1395,11 +1395,19 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> Strin
 	racine.name = "MarchingBlocksWitness"
 	var cle_du_noeud := {}
 	var n := 0
+	# ⚠ SEULE LA PREMIÈRE OCCURRENCE D'UNE CLÉ PORTE SON MAILLAGE DANS LA SCÈNE (mesuré le 1er octobre 2026) :
+	# `append_from_scene` convertit le maillage de CHAQUE nœud — 1 056 relectures depuis le GPU pour 52 maillages,
+	# 1,1 s avec fenêtre. Les autres sont des `Node3D` qui reçoivent le maillage de leur clé dans l'état glTF,
+	# plus bas : même fichier.
+	var deja := {}
 	for o in occurrences_du_temoin(0):
 		if not maillages.has(o["cle"]):
 			continue   # une clé que le témoin calculé ne livre pas : `librairie()` l'a déjà signalée
-		var mi := MeshInstance3D.new()
-		mi.mesh = maillages[o["cle"]]
+		var mi: Node3D = Node3D.new()
+		if not deja.has(o["cle"]):
+			deja[o["cle"]] = true
+			mi = MeshInstance3D.new()
+			(mi as MeshInstance3D).mesh = maillages[o["cle"]]
 		mi.name = "%s_%d" % [maillages[o["cle"]].resource_name, n]
 		mi.transform = Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
 			Vector3(o["sommet"]) + Vector3.ONE)
@@ -1431,6 +1439,9 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> Strin
 			gm.original_name = maillages[cle].resource_name
 			nouveaux.append(gm)
 		nd.mesh = indice_de_cle[cle]
+	for nd: GLTFNode in etat.get_nodes():
+		if nd.mesh < 0 and cle_du_noeud.has(nd.resource_name):
+			nd.mesh = indice_de_cle[cle_du_noeud[nd.resource_name]]
 	etat.set_meshes(nouveaux)
 	err = document.write_to_filesystem(etat, chemin)
 	racine.free()
@@ -1550,6 +1561,7 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 
 	var pieces := {}
 	var sources := {}
+	var tableaux := {}   # clé → les tableaux de surface de sa tuile, quand ils sont ceux du maillage
 	var pleines: Dictionary = cases(0)
 	var cles: Array = par_cle.keys()
 	cles.sort()
@@ -1566,14 +1578,18 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 				familles[cle_pose] = {"exemple": e, "nombre": 0}
 			familles[cle_pose]["nombre"] += 1
 		# Puis par la GÉOMÉTRIE : des copies déliées mais identiques restent une seule tuile.
+		# ⚠ SUR LES TABLEAUX, PAS SUR DES `ArrayMesh` (mesuré le 1er octobre 2026) : relire un maillage qu'on vient
+		# de fabriquer le redescend du GPU — trois fois par tuile (forme, normales, sections), 0,9 s avec fenêtre
+		# à chaque enregistrement. Le maillage se fabrique une fois, à la fin, depuis les mêmes tableaux.
 		var par_forme := {}
 		for fp in familles:
 			var e: Dictionary = familles[fp]["exemple"]
-			var tuile: ArrayMesh = _transformer(_en_array_mesh((maillages[e["mesh"]] as GLTFMesh).mesh),
-				e["vers_reference"])
-			var empreinte: String = _empreinte_de_forme(tuile)
+			var surfaces: Array = []
+			for sf in _surfaces_lues((maillages[e["mesh"]] as GLTFMesh).mesh):
+				surfaces.append([_tableaux_poses(sf[0], e["vers_reference"]), sf[1]])
+			var empreinte: String = _empreinte_de_tableaux(surfaces.map(func(sf): return sf[0]))
 			if not par_forme.has(empreinte):
-				par_forme[empreinte] = {"tuile": tuile, "nombre": 0, "sommet": e["sommet"]}
+				par_forme[empreinte] = {"surfaces": surfaces, "nombre": 0, "sommet": e["sommet"]}
 			par_forme[empreinte]["nombre"] += int(familles[fp]["nombre"])
 		var gagnante := ""
 		for f in par_forme:
@@ -1583,9 +1599,13 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 			erreurs.append(("« %s » : ses %d occurrences ne montrent plus la même tuile (%d formes) — une copie "
 				+ "sculptée seule, déplacée ou tournée ; on garde celle du plus grand nombre (%d)")
 				% [cle, liste.size(), par_forme.size(), par_forme[gagnante]["nombre"]])
-		var tuile: ArrayMesh = par_forme[gagnante]["tuile"]
-		if tuile.get_surface_count() > 0 and tuile.surface_get_arrays(0)[Mesh.ARRAY_NORMAL] == null:
+		var surfaces_gagnantes: Array = par_forme[gagnante]["surfaces"]
+		var tuile: ArrayMesh = _mesh_de_surfaces(surfaces_gagnantes)
+		if not surfaces_gagnantes.is_empty() and surfaces_gagnantes[0][0][Mesh.ARRAY_NORMAL] == null:
 			tuile = normales_plates(tuile)
+		else:
+			tableaux[cle] = surfaces_gagnantes.map(func(sf): return sf[0])
+		_rendre_la_legende(tuile)
 		# La provenance : l'occurrence la plus pure, pour que « d'où vient cette tuile ? » montre un coin
 		# lisible du témoin.
 		var sommet: Vector3i = liste[0]["sommet"]
@@ -1597,7 +1617,48 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 	if hors > 0:
 		remarques.append(("objets : %d objet(s) ne sont sur aucune place du témoin et sont ignorés — un prop "
 			+ "entier (rocher, décor) n'est pas encore pris en charge") % hors)
-	return {"pieces": pieces, "sources": sources, "occurrences": porteurs - hors, "hors": hors}
+	return {"pieces": pieces, "sources": sources, "occurrences": porteurs - hors, "hors": hors, "tableaux": tableaux}
+
+
+## Les surfaces d'un maillage importé, [[tableaux, matériau]…] — un `ImporterMesh` se lit sans GPU.
+static func _surfaces_lues(brut: Variant) -> Array:
+	var sortie: Array = []
+	if brut is ImporterMesh:
+		var im := brut as ImporterMesh
+		for s in im.get_surface_count():
+			var arrays: Array = im.get_surface_arrays(s)
+			if not arrays.is_empty():
+				sortie.append([arrays, im.get_surface_material(s)])
+		return sortie
+	var m: ArrayMesh = _en_array_mesh(brut)
+	if m != null:
+		for s in m.get_surface_count():
+			sortie.append([m.surface_get_arrays(s), m.surface_get_material(s)])
+	return sortie
+
+
+static func _mesh_de_surfaces(surfaces: Array) -> ArrayMesh:
+	var sortie := ArrayMesh.new()
+	for sf in surfaces:
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, sf[0])
+		if sf[1] != null:
+			sortie.surface_set_material(sortie.get_surface_count() - 1, sf[1])
+	return sortie
+
+
+## LA LÉGENDE DU MODELEUR RETROUVE SA COULEUR DE SOMMET. Il l'écrit en UN matériau (« legend »), les teintes dans
+## la couleur des sommets ; mesuré le 1er octobre 2026 : relu par l'import glTF de Godot, ce matériau revenait SANS
+## `vertex_color_use_as_albedo` — blanc dans le monde, teinté dans le modeleur. C'est notre matériau, on le sait.
+static func _rendre_la_legende(tuile: ArrayMesh) -> void:
+	var ME := load("res://addons/marchingblocks_core/maillage_edite.gd")
+	var nom: String = ME.materiau_de_legende().resource_name
+	for s in tuile.get_surface_count():
+		var m := tuile.surface_get_material(s) as BaseMaterial3D
+		# ⚠ ET LES AUTRES SANS : l'import met ce drapeau sur TOUS les matériaux ; un fichier revenu de Blender qui
+		# porte des couleurs de sommet aurait alors multiplié les matériaux de l'artiste par elles. Dans le
+		# modeleur, seule la légende lit la couleur de sommet : le monde fait pareil.
+		if m != null:
+			m.vertex_color_use_as_albedo = m.resource_name == nom
 
 
 ## La pose d'un nœud glTF dans la scène, parents compris. `poses` sert de mémoire (les parents d'abord).
@@ -1615,9 +1676,15 @@ static func _pose_gltf(noeuds: Array, i: int, poses: Array) -> Transform3D:
 ## L'empreinte d'une forme : ses triangles (au dix-millième), triés — indépendante de l'ordre des sommets,
 ## des surfaces et des indices. Deux copies déliées d'une même tuile ont la même.
 static func _empreinte_de_forme(mesh: ArrayMesh) -> String:
-	var tris: Array = []
+	var liste: Array = []
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+		liste.append(mesh.surface_get_arrays(s))
+	return _empreinte_de_tableaux(liste)
+
+
+static func _empreinte_de_tableaux(liste: Array) -> String:
+	var tris: Array = []
+	for arrays in liste:
 		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var idx = arrays[Mesh.ARRAY_INDEX]
 		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \
@@ -1946,7 +2013,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		var bits_par_nom := {}
 		for c in MB.classes():
 			bits_par_nom[c["nom"]] = c["bits"]
-		Tranchage.verifier_sections(lie["pieces"], bits_par_nom, remarques_liees)
+		Tranchage.verifier_sections(lie["pieces"], bits_par_nom, remarques_liees, lie.get("tableaux", {}))
 		Tranchage.verifier_couture_texture(lie["pieces"], remarques_liees)
 		var assemble: Dictionary = _assembler(lie["pieces"], lie["sources"])
 		assemble["erreurs"] = erreurs
@@ -2273,20 +2340,32 @@ static func _tous_les_maillages(racine: Node) -> ArrayMesh:
 	var paquets := {}   # matériau (ou null) → [tableaux de surface déjà posés]
 	var ordre: Array = []
 	var objets := 0
+	# ⚠ UNE RELECTURE PAR MAILLAGE DISTINCT, ET LA POSE SUR LES TABLEAUX (mesuré le 1er octobre 2026) : avec une
+	# carte graphique, `surface_get_arrays` redescend les tableaux du GPU et un `ArrayMesh` neuf les y renvoie.
+	# Le témoin lié porte 52 maillages pour 1 056 nœuds : relire, refabriquer et relire encore à CHAQUE nœud
+	# prenait 4,6 s avec fenêtre (40 ms en headless, où tout reste en mémoire) — l'appli gelait à chaque
+	# enregistrement. Sortie identique : mêmes tableaux, mêmes paquets, même ordre.
+	var lus := {}   # maillage → [[tableaux, matériau] par surface]
 	for noeud in _tous_les_noeuds(racine):
 		var brut: Variant = noeud.get("mesh")
 		if brut == null:
 			continue
-		var converti: ArrayMesh = _en_array_mesh(brut)
-		if converti == null or converti.get_surface_count() == 0:
+		if not lus.has(brut):
+			var converti: ArrayMesh = _en_array_mesh(brut)
+			var surfaces: Array = []
+			if converti != null:
+				for s in converti.get_surface_count():
+					surfaces.append([converti.surface_get_arrays(s), converti.surface_get_material(s)])
+			lus[brut] = surfaces
+		if (lus[brut] as Array).is_empty():
 			continue
-		var pose: ArrayMesh = _transformer(converti, _pose_dans_la_scene(noeud, racine))
-		for s in pose.get_surface_count():
-			var m: Material = pose.surface_get_material(s)
+		var pose_du_noeud := _pose_dans_la_scene(noeud, racine)
+		for surface in lus[brut]:
+			var m: Material = surface[1]
 			if not paquets.has(m):
 				paquets[m] = []
 				ordre.append(m)
-			paquets[m].append(pose.surface_get_arrays(s))
+			paquets[m].append(_tableaux_poses(surface[0], pose_du_noeud))
 		objets += 1
 	if objets == 0:
 		return null
@@ -2368,36 +2447,45 @@ static func _pose_dans_la_scene(noeud: Node, racine: Node) -> Transform3D:
 static func _transformer(mesh: ArrayMesh, pose: Transform3D) -> ArrayMesh:
 	if pose.is_equal_approx(Transform3D.IDENTITY):
 		return mesh
-	var miroir: bool = pose.basis.determinant() < 0.0
-	var normale: Basis = pose.basis.inverse().transposed()
 	var sortie := ArrayMesh.new()
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
-		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-		for i in v.size():
-			v[i] = pose * v[i]
-		arrays[Mesh.ARRAY_VERTEX] = v
-		if arrays[Mesh.ARRAY_NORMAL] != null:
-			var n: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-			for i in n.size():
-				n[i] = (normale * n[i]).normalized()
-			arrays[Mesh.ARRAY_NORMAL] = n
-		# Les tangentes suivraient la même règle ; on les retire plutôt que de les laisser fausses —
-		# Godot les recalcule, et le trancheur n'en lit aucune.
-		arrays[Mesh.ARRAY_TANGENT] = null
-		if miroir:
-			var idx = arrays[Mesh.ARRAY_INDEX]
-			var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null 				else PackedInt32Array(range(v.size()))
-			for t in range(0, ordre.size() - 2, 3):
-				var tmp: int = ordre[t + 1]
-				ordre[t + 1] = ordre[t + 2]
-				ordre[t + 2] = tmp
-			arrays[Mesh.ARRAY_INDEX] = ordre
-		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _tableaux_poses(mesh.surface_get_arrays(s), pose))
 		var matiere: Material = mesh.surface_get_material(s)
 		if matiere != null:
 			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
 	return sortie
+
+
+## Des tableaux de surface posés par `pose` (une COPIE : les tableaux reçus ne changent pas). Les normales par
+## la transposée de l'inverse ; un miroir retourne l'ordre des triangles.
+static func _tableaux_poses(source: Array, pose: Transform3D) -> Array:
+	var arrays: Array = source.duplicate()
+	if pose.is_equal_approx(Transform3D.IDENTITY):
+		return arrays
+	var miroir: bool = pose.basis.determinant() < 0.0
+	var normale: Basis = pose.basis.inverse().transposed()
+	# ⚠ DES COPIES : un Packed*Array se passe PAR RÉFÉRENCE, et ces tableaux sont relus pour chaque nœud.
+	var v: PackedVector3Array = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).duplicate()
+	for i in v.size():
+		v[i] = pose * v[i]
+	arrays[Mesh.ARRAY_VERTEX] = v
+	if arrays[Mesh.ARRAY_NORMAL] != null:
+		var n: PackedVector3Array = (arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array).duplicate()
+		for i in n.size():
+			n[i] = (normale * n[i]).normalized()
+		arrays[Mesh.ARRAY_NORMAL] = n
+	# Les tangentes suivraient la même règle ; on les retire plutôt que de les laisser fausses —
+	# Godot les recalcule, et le trancheur n'en lit aucune.
+	arrays[Mesh.ARRAY_TANGENT] = null
+	if miroir:
+		var idx = arrays[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array).duplicate() if idx != null 				else PackedInt32Array(range(v.size()))
+		for t in range(0, ordre.size() - 2, 3):
+			var tmp: int = ordre[t + 1]
+			ordre[t + 1] = ordre[t + 2]
+			ordre[t + 2] = tmp
+		arrays[Mesh.ARRAY_INDEX] = ordre
+	return arrays
 
 
 ## Ramène à un `ArrayMesh` ce qu'un nœud importé porte comme maillage.
@@ -2408,8 +2496,22 @@ static func _transformer(mesh: ArrayMesh, pose: Transform3D) -> ArrayMesh:
 static func _en_array_mesh(brut: Variant) -> ArrayMesh:
 	if brut is ArrayMesh:
 		return brut
+	# ⚠ PAS `ImporterMesh.get_mesh()` (mesuré le 1er octobre 2026) : sa conversion FAUSSE des normales — une normale
+	# (0,008 ; 1 ; 0,008), juste dans le fichier ET dans les tableaux de l'ImporterMesh, en ressortait
+	# (0,008 ; 0,97 ; 0,241), 14° de travers : le monde s'éclairait autrement que le modeleur sur des faces
+	# sculptées. On bâtit le maillage nous-mêmes, depuis ces tableaux, surface par surface, matériau compris.
 	if brut is ImporterMesh:
-		return (brut as ImporterMesh).get_mesh()
+		var im := brut as ImporterMesh
+		var sortie_im := ArrayMesh.new()
+		for s in im.get_surface_count():
+			var arrays: Array = im.get_surface_arrays(s)
+			if arrays.is_empty():
+				continue
+			sortie_im.add_surface_from_arrays(im.get_surface_primitive_type(s), arrays)
+			var mat: Material = im.get_surface_material(s)
+			if mat != null:
+				sortie_im.surface_set_material(sortie_im.get_surface_count() - 1, mat)
+		return sortie_im
 	if brut is Mesh:
 		var source: Mesh = brut
 		var sortie := ArrayMesh.new()

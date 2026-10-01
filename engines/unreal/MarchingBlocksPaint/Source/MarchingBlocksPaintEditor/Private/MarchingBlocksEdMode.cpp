@@ -46,6 +46,7 @@ void UMarchingBlocksEdMode::Exit()
 {
 	bStroking = false;
 	bBoxing = false;
+	bHasShapeAnchor = false;
 	Preview.clear();
 	Super::Exit();
 }
@@ -150,6 +151,11 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 		PreviewColour = AddColour;
 		return;
 	}
+	if (World->Tool == EMarchingBlocksTool::Shape)
+	{
+		HoverShape(World, Origin, Direction);
+		return;
+	}
 	if (World->Tool == EMarchingBlocksTool::Rect || World->Tool == EMarchingBlocksTool::Box)
 	{
 		MBPaint::FCell Corner;
@@ -232,6 +238,11 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				}
 				return true;
 			}
+			if (World->Tool == EMarchingBlocksTool::Shape)
+			{
+				ClickShape(World, Origin, Direction);
+				return true;
+			}
 			if (World->Tool == EMarchingBlocksTool::Rect || World->Tool == EMarchingBlocksTool::Box)
 			{
 				MBPaint::FCell Corner;
@@ -254,6 +265,7 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 		}
 		if (Event == IE_Released)
 		{
+			if (World->Tool == EMarchingBlocksTool::Shape) return true;
 			if (bBoxing)
 			{
 				const MBPaint::FCellSet Volume = MBPaint::Tools::Box(BoxStart, BoxEnd, World->bHollowBox && World->Tool == EMarchingBlocksTool::Box);
@@ -318,6 +330,8 @@ void UMarchingBlocksEdMode::SetAimState(AMarchingBlocksWorld* World, const MBPai
 
 bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key)
 {
+	const bool bShaping = World->Tool == EMarchingBlocksTool::Shape;
+	if (Key == EKeys::A || Key == EKeys::D || Key == EKeys::S || Key == EKeys::G || Key == EKeys::B) bHasShapeAnchor = false;
 	if (Key == EKeys::A) World->Tool = EMarchingBlocksTool::Add;
 	else if (Key == EKeys::D) World->Tool = EMarchingBlocksTool::Dig;
 	else if (Key == EKeys::S) World->Tool = EMarchingBlocksTool::Select;
@@ -325,8 +339,16 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else if (Key == EKeys::B) World->Tool = EMarchingBlocksTool::Box;
 	else if (Key == EKeys::Tab) SetAimState(World, MBPaint::Tools::Tab(World->GetAimState()));
 	else if (Key == EKeys::SpaceBar) SetAimState(World, MBPaint::Tools::ToggleNavigate(World->GetAimState()));
-	else if (Key == EKeys::LeftBracket) World->BrushSize = FMath::Max(1, World->BrushSize - 1);
-	else if (Key == EKeys::RightBracket) World->BrushSize = FMath::Min(7, World->BrushSize + 1);
+	else if (Key == EKeys::LeftBracket)
+	{
+		if (bShaping) World->ShapeSize = FMath::Max(1, World->ShapeSize - 1);
+		else World->BrushSize = FMath::Max(1, World->BrushSize - 1);
+	}
+	else if (Key == EKeys::RightBracket)
+	{
+		if (bShaping) World->ShapeSize = FMath::Min(7, World->ShapeSize + 1);
+		else World->BrushSize = FMath::Min(7, World->BrushSize + 1);
+	}
 	else if (Key == EKeys::PageUp || Key == EKeys::PageDown)
 	{
 		const FScopedTransaction Transaction(LOCTEXT("Floor", "Change floor"));
@@ -336,12 +358,120 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else if (Key == EKeys::Delete) World->DeleteSelected();
 	else if (Key == EKeys::Escape)
 	{
-		if (World->bPasting || bBoxing) { World->bPasting = false; bBoxing = false; }
+		if (World->bPasting || bBoxing || bHasShapeAnchor) { World->bPasting = false; bBoxing = false; bHasShapeAnchor = false; }
 		else World->ClearSelection();
 	}
 	else return false;
 	Preview.clear();
 	return true;
+}
+
+// ── Special shapes ───────────────────────────────────────────────────────────────────────────────────
+//
+// A shape starts from a FACE, so it always aims at the matter, whatever the aim (the floor has no face).
+
+namespace MarchingBlocksEdModeDetail
+{
+	const TCHAR* ShapeName(EMarchingBlocksSpecialShape S)
+	{
+		return S == EMarchingBlocksSpecialShape::Well ? TEXT("Well") : S == EMarchingBlocksSpecialShape::Bridge ? TEXT("Bridge")
+			: S == EMarchingBlocksSpecialShape::Balcony ? TEXT("Balcony") : TEXT("Tunnel");
+	}
+
+	FString ShapeError(const std::string& Code)
+	{
+		if (Code == "needs_a_wall") return TEXT("click a WALL, a side face of the matter.");
+		if (Code == "needs_floor_or_ceiling") return TEXT("click a FLOOR or a CEILING, a top or bottom face.");
+		if (Code == "same_cell") return TEXT("the second end must be another cell.");
+		if (Code == "too_far") return TEXT("the two ends are too far apart.");
+		if (Code == "nothing_in_front") return TEXT("no wall in front within reach. Raise Shape Length, or Connect two walls.");
+		if (Code == "too_large") return TEXT("too large. Make it smaller or shorter.");
+		return UTF8_TO_TCHAR(Code.c_str());
+	}
+}
+
+bool UMarchingBlocksEdMode::WaitingForFirstEnd(const AMarchingBlocksWorld* World) const
+{
+	return World->bConnectEnds && !bHasShapeAnchor && World->SpecialShape != EMarchingBlocksSpecialShape::Balcony;
+}
+
+MBPaint::FShapeRequest UMarchingBlocksEdMode::ShapeRequest(const AMarchingBlocksWorld* World, const MBPaint::FHit& Hit) const
+{
+	MBPaint::FShapeRequest R = World->ShapeSettings();
+	R.A = Hit.Cell;
+	R.FaceA = Hit.Normal;
+	if (World->bConnectEnds && bHasShapeAnchor && World->SpecialShape != EMarchingBlocksSpecialShape::Balcony)
+	{
+		R.bConnect = true;
+		R.A = ShapeAnchor.Cell;
+		R.FaceA = ShapeAnchor.Normal;
+		R.B = Hit.Cell;
+		R.FaceB = Hit.Normal;
+	}
+	return R;
+}
+
+void UMarchingBlocksEdMode::HoverShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction)
+{
+	using namespace MarchingBlocksEdModeDetail;
+	const MBPaint::FHit Hit = World->RayAgainstCells(Origin, Direction);
+	PreviewColour = SelectColour;
+	if (bHasShapeAnchor) Preview.push_back(ShapeAnchor.Cell);
+	if (!Hit.bTouched) return;
+	if (WaitingForFirstEnd(World))
+	{
+		Preview.push_back(Hit.Cell);
+		return;
+	}
+	const MBPaint::FShapeResult R = MBPaint::Shapes::Build(World->GetCells(), ShapeRequest(World, Hit));
+	if (!R.Error.empty())
+	{
+		Preview.push_back(Hit.Cell);
+		PreviewColour = DigColour;
+		return;
+	}
+	const std::vector<MBPaint::FCell> Cells = MBPaint::Tools::Sorted(R.Clear.empty() ? R.Set : R.Clear);
+	Preview.insert(Preview.end(), Cells.begin(), Cells.end());
+	PreviewColour = R.Clear.empty() ? AddColour : DigColour;
+}
+
+// A click on the matter: the first end of a Connect, or the shape itself — ONE undo transaction.
+void UMarchingBlocksEdMode::ClickShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction)
+{
+	using namespace MarchingBlocksEdModeDetail;
+	const MBPaint::FHit Hit = World->RayAgainstCells(Origin, Direction);
+	if (!Hit.bTouched) return;
+	const FString Name = ShapeName(World->SpecialShape);
+	if (WaitingForFirstEnd(World))
+	{
+		const MBPaint::FShapeRequest R = World->ShapeSettings();
+		const MBPaint::FCell N = MBPaint::Shapes::NormalFor(R.Shape, World->GetCells(), Hit.Cell, Hit.Normal);
+		if (N.X == 0 && N.Y == 0 && N.Z == 0)
+			World->Status = Name + TEXT(" — ") + ShapeError(R.Shape == MBPaint::ESpecialShape::Well ? "needs_floor_or_ceiling" : "needs_a_wall");
+		else
+		{
+			bHasShapeAnchor = true;
+			ShapeAnchor = Hit;
+			World->Status = Name + TEXT(" — first end set. Click the second one (Esc forgets it).");
+		}
+		return;
+	}
+	const MBPaint::FShapeResult R = MBPaint::Shapes::Build(World->GetCells(), ShapeRequest(World, Hit));
+	if (!R.Error.empty())
+	{
+		World->Status = Name + TEXT(" — ") + ShapeError(R.Error);
+		return;
+	}
+	bHasShapeAnchor = false;
+	MBPaint::FChange Change;
+	Change.Set = R.Set;
+	Change.Clear = R.Clear;
+	const FScopedTransaction Transaction(FText::FromString(TEXT("MarchingBlocks ") + Name));
+	World->Modify();
+	const int32 Count = World->Apply(Change);
+	World->Status = FString::Printf(TEXT("%s — %d cell(s) changed%s. Ctrl+Z undoes it."), *Name, Count,
+		R.Repaired > 0 ? *FString::Printf(TEXT(", %d more so that no two cells touch by an edge only"), R.Repaired) : TEXT(""));
+	Preview.clear();
 }
 
 // The arrows FOLLOW THE CAMERA: "up" moves away from you along the format axis (X or Z) closest to where

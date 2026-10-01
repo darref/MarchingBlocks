@@ -10,6 +10,8 @@
 //            kept and comes back; choosing an aim (Tab, or in the panel) leaves navigation.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)     Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]), sphere / cube / disc; Hollow for the Box
+//   SHAPES   tunnel · well · bridge · balcony (MBCore/MBShapes), always aimed at the matter: one click straight
+//            out of a face, or Connect — two clicks on two faces anywhere (Esc forgets the first)
 //   KEYS     Delete · Esc · arrows move the selection (they follow the camera; Shift + up / down lift)
 //            Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste
 //
@@ -20,6 +22,7 @@
 #include "CoreMinimal.h"
 #include "Tools/UEdMode.h"
 #include "Tools/LegacyEdModeInterfaces.h"
+#include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
 #include "MarchingBlocksEdMode.generated.h"
 
@@ -52,6 +55,8 @@ public:
 	AMarchingBlocksWorld* Target() const;
 	/** Applies an aim transition (MBCore's): entering navigation ends the current stroke. */
 	void SetAimState(AMarchingBlocksWorld* World, const MBPaint::FAimState& State);
+	/** Forgets the first end of a Connect (the panel calls it when the shape or its ends change). */
+	void ForgetShapeAnchor() { bHasShapeAnchor = false; Preview.clear(); }
 
 private:
 	bool MouseRay(FEditorViewportClient* ViewportClient, FViewport* Viewport, FVector& Origin, FVector& Direction) const;
@@ -63,6 +68,10 @@ private:
 	bool HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key);
 	MBPaint::FCell ArrowOffset(AMarchingBlocksWorld* World, FEditorViewportClient* ViewportClient, FKey Key, bool bShift) const;
 	MBPaint::EBrushTool Gesture(const AMarchingBlocksWorld* World, bool bInverse) const;
+	bool WaitingForFirstEnd(const AMarchingBlocksWorld* World) const;
+	MBPaint::FShapeRequest ShapeRequest(const AMarchingBlocksWorld* World, const MBPaint::FHit& Hit) const;
+	void HoverShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
+	void ClickShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
 
 	// The current stroke.
 	bool bStroking = false;
@@ -73,6 +82,9 @@ private:
 	bool bBoxing = false;
 	MBPaint::FCell BoxStart;
 	MBPaint::FCell BoxEnd;
+	// The first end of a Connect.
+	bool bHasShapeAnchor = false;
+	MBPaint::FHit ShapeAnchor;
 
 	// What the preview draws, and in which colour.
 	std::vector<MBPaint::FCell> Preview;

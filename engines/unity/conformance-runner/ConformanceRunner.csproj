@@ -13,6 +13,7 @@
     <Compile Include="../com.marchingblocks.paint/Runtime/MBRule.cs" Link="MBRule.cs" />
     <Compile Include="../com.marchingblocks.paint/Runtime/MBJson.cs" Link="MBJson.cs" />
     <Compile Include="../com.marchingblocks.paint/Runtime/MBTools.cs" Link="MBTools.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBShapes.cs" Link="MBShapes.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/ToolsConformanceCheck.cs" Link="ToolsConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Runtime/MBWorldFile.cs" Link="MBWorldFile.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WorldConformanceCheck.cs" Link="WorldConformanceCheck.cs" />

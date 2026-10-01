@@ -108,6 +108,13 @@ func _deduire_les_occurrences() -> void:
 func _partager() -> void:
 	for cle in tuiles:
 		tuiles[cle].materiaux = materiaux
+		# ⚠ ET LE MÊME CACHE DE MATÉRIAUX GODOT (mesuré le 1er octobre 2026) : chaque tuile fabriquait le sien, donc
+		# sa propre copie d'un matériau du témoin — le .glb en portait une par tuile (« Green », « Green2 »…), et
+		# un témoin relu de Blender en aurait fait autant d'entrées.
+		tuiles[cle]._cache_godot = _cache_godot_commun
+
+
+var _cache_godot_commun := {}
 
 
 ## Remplace la tuile `cle` par une COPIE de `m` — c'est ce que l'annulation appelle. Les matériaux de `m`
@@ -165,6 +172,33 @@ func rayon(origine: Vector3, direction: Vector3) -> Dictionary:
 	return meilleur
 
 
+## L'ATLAS DU TÉMOIN (Jordan, 1er octobre 2026) : les îlots de TOUTES les tuiles rangés ensemble dans le carré
+## [0,1], à UNE échelle. Déplier tuile par tuile rangeait chacune dans le MÊME carré : deux tuiles d'un même
+## matériau partageaient leur peinture. `materiau` : −2 toutes les faces, sinon celles qui portent ce matériau
+## (−1, la légende). Les copies d'une tuile restent liées : une tuile a UNE place dans l'atlas, pas une par copie.
+func deplier_en_atlas(materiau := -2, angle := 66.0, marge := 0.004) -> Dictionary:
+	var plats: Array = []
+	var n_faces := 0
+	var touchees := {}
+	for c in tuiles:
+		var t: RefCounted = tuiles[c]
+		var choix: Array = []
+		for f in t.faces.size():
+			if materiau == -2 or t.mat(f) == materiau:
+				choix.append(f)
+		if choix.is_empty():
+			continue
+		for pl in t.ilots_a_plat(choix, angle):
+			pl["cle"] = c
+			plats.append(pl)
+		n_faces += choix.size()
+		touchees[c] = true
+	ME.ranger(plats, marge)
+	for pl in plats:
+		tuiles[pl["cle"]].poser_uvs([pl])
+	return {"tuiles": touchees.keys(), "ilots": plats.size(), "faces": n_faces}
+
+
 ## LE TÉMOIN ASSEMBLÉ, pour le montrer ou le ranger dans la liste des travaux : chaque occurrence posée.
 ## Une surface par matériau (Godot plafonne un maillage à 256 surfaces).
 func assemble() -> ArrayMesh:
@@ -183,11 +217,61 @@ func assemble() -> ArrayMesh:
 
 
 ## Le `.glb` lié (celui que le trancheur relit tuile par tuile). Rend "" ou la raison.
-func vers_glb(chemin: String) -> String:
+## ⚠ **DEUX DESTINATIONS, DEUX ÉCRITURES (1er octobre 2026)** :
+##   • pour le MONDE (le `.glb` de la couche) : avec les normales du modeleur — UNE par face. Sans elles, la
+##     relecture recalculait une normale par TRIANGLE, et une face sculptée (plus plane) s'éclairait dans le
+##     monde autrement que dans le modeleur ;
+##   • pour BLENDER (`pour_blender`) : sans normales (ombrage plat, comme le témoin calculé) et SOUDÉ — le
+##     modeleur écrit une soupe de triangles, et une soupe ne se sculpte pas dans Blender.
+func vers_glb(chemin: String, pour_blender := false) -> String:
 	var maillages := {}
 	for cle in tuiles:
-		maillages[cle] = tuiles[cle].vers_array_mesh(false)
+		var m: ArrayMesh = tuiles[cle].vers_array_mesh(not pour_blender)
+		maillages[cle] = _soudee(m) if pour_blender else m
 	return BM.ecrire_le_temoin_lie(chemin, maillages)
+
+
+## Un maillage SOUDÉ : un sommet par (position, UV, couleur), surface par surface, matériau gardé.
+static func _soudee(mesh: ArrayMesh) -> ArrayMesh:
+	var sortie := ArrayMesh.new()
+	for s in mesh.get_surface_count():
+		var a: Array = mesh.surface_get_arrays(s)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var uv = a[Mesh.ARRAY_TEX_UV]
+		var col = a[Mesh.ARRAY_COLOR]
+		var idx = a[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null else PackedInt32Array(range(v.size()))
+		var connus := {}
+		var nv := PackedVector3Array()
+		var nuv := PackedVector2Array()
+		var ncol := PackedColorArray()
+		var nidx := PackedInt32Array()
+		for i in ordre:
+			var p: Vector3 = v[i]
+			var cle := "%d|%d|%d" % [roundi(p.x * 100000.0), roundi(p.y * 100000.0), roundi(p.z * 100000.0)]
+			if uv != null:
+				cle += "|%d|%d" % [roundi(uv[i].x * 1000000.0), roundi(uv[i].y * 1000000.0)]
+			if col != null:
+				cle += "|" + (col[i] as Color).to_html()
+			if not connus.has(cle):
+				connus[cle] = nv.size()
+				nv.append(p)
+				if uv != null:
+					nuv.append(uv[i])
+				if col != null:
+					ncol.append(col[i])
+			nidx.append(connus[cle])
+		var b := []
+		b.resize(Mesh.ARRAY_MAX)
+		b[Mesh.ARRAY_VERTEX] = nv
+		b[Mesh.ARRAY_INDEX] = nidx
+		if uv != null:
+			b[Mesh.ARRAY_TEX_UV] = nuv
+		if col != null:
+			b[Mesh.ARRAY_COLOR] = ncol
+		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, b)
+		sortie.surface_set_material(sortie.get_surface_count() - 1, mesh.surface_get_material(s))
+	return sortie
 
 
 func vers_dictionnaire() -> Dictionary:

@@ -85,7 +85,8 @@ func _batir() -> void:
 	_page("3 · Layers & projects", _couches())
 	_page("4 · Modelling the witness", _modeleur())
 	_page("5 · The artist round trip", _aller_retour())
-	_page("6 · Shortcuts", _raccourcis())
+	_page("6 · The same look in your engine", _rendu())
+	_page("7 · Shortcuts", _raccourcis())
 
 
 func _page(nom: String, corps: String) -> void:
@@ -228,6 +229,21 @@ func _outils() -> String:
 	l.append("[b]Extend facing[/b] extends away from the matter: it picks the direction most cells face "
 		+ "(air in front, matter behind) and copies them one cell that way. The selection follows, so "
 		+ "click again to keep going. Select a wall to thicken it, a cave ceiling to lower it.")
+	l.append(_titre("Special shapes"))
+	l.append("[b]Tunnel[/b] digs into a wall, [b]Well[/b] into a floor or a ceiling, [b]Bridge[/b] builds a "
+		+ "deck across the air from a wall, [b]Balcony[/b] puts a slab with its rail against a wall. Pick one, "
+		+ "then click on the matter: the preview shows the exact cells, red to dig, green to add.")
+	l.append("[b]Straight[/b] — one click: the shape leaves the face square to it. A tunnel or a well goes "
+		+ "through to the next cave (or [b]Depth[/b] cells deep, a dead end); a bridge runs to the first wall "
+		+ "in front, within [b]Reach[/b].")
+	l.append("[b]Connect[/b] — two clicks, two faces anywhere: two caves, two cliffs. The shape leaves "
+		+ "each face square to it, then joins the two ends with a straight run, and both ends stay open. "
+		+ _touche("Esc") + " or a right click forgets the first end.")
+	l.append("Profiles: [b]Round[/b], [b]Square[/b], [b]Arch[/b] (a flat floor and a round vault — a "
+		+ "corridor you can walk). " + _touche("[") + " " + _touche("]") + " set the size.")
+	l.append(_note("Slanted walls work: a staircase wall at 45° is read as one slanted face, and the shape "
+		+ "leaves it at 45°. Where a slanted shape would make two cells touch by an edge only — which the "
+		+ "tiles forbid — it adds the missing cells itself, and says how many."))
 	return "\n".join(l)
 
 
@@ -273,9 +289,11 @@ func _couches() -> String:
 
 func _modeleur() -> String:
 	var l := PackedStringArray()
-	l.append("[i]The Witness workspace is a modeller: you can shape the witness here, with Blender's "
-		+ "gestures and shortcuts, instead of sending it away. What you model is saved next to the project "
-		+ "and joins the works of step 2 (Project), where you slice it.[/i]")
+	l.append("[i]The witness has two workspaces, on the same block: [b]Geometry[/b] is a modeller — shape the "
+		+ "witness with Blender's gestures and shortcuts, instead of sending it away — and [b]Texturing[/b] gives "
+		+ "its faces their materials, projections and UVs. In Texturing you select faces, but the geometry "
+		+ "keys (G, E, X…) do nothing: the screen sends you to Geometry. What you make is saved next to the "
+		+ "project.[/i]")
 	l.append(_titre("One tile per class, linked copies"))
 	l.append("The witness is made of the [b]52 tiles[/b] a world uses, and every place it shows a tile is a "
 		+ "[b]linked copy[/b] of it. Click any copy: you edit [b]that tile[/b], and every copy follows as you "
@@ -311,7 +329,7 @@ func _modeleur() -> String:
 		+ _touche("X") + " delete · " + _touche("M") + " merge at center · " + _touche("F")
 		+ " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
 	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you."))
-	l.append(_titre("Materials"))
+	l.append(_titre("Materials — in Witness texturing"))
 	l.append("[b]New material[/b], select faces, [b]Assign[/b]. A material has a colour, roughness, "
 		+ "metallic, an optional image, and how many cells one copy of the image covers. Images are "
 		+ "[b]projected from the position[/b] — Box (each face takes the side it faces), or flat from the "
@@ -320,6 +338,18 @@ func _modeleur() -> String:
 		+ "joins from one tile to the next in the painted world. Along the cut planes, the texture must be "
 		+ "the same for every tile — an automatic texturing tool that paints the block as one object will "
 		+ "look perfect here and break at every seam of the world."))
+	l.append(_titre("Paint — in Witness texturing"))
+	l.append(_touche("P") + " turns the brush on: [b]left drag paints[/b] the image of the material under the "
+		+ "mouse, right on the witness — every copy of the tile follows. " + _touche("Alt") + "+click picks a "
+		+ "colour. Size (in pixels of the image), hardness and opacity are in the Paint section. A material "
+		+ "without an image gets a canvas filled with its colour (" + str(1024) + " × " + str(1024) + "), and its "
+		+ "colour turns white so the paint is not darkened. Every stroke is one " + _touche("Ctrl+Z") + ".")
+	l.append(_note("Box projection repeats the image, so what you paint repeats too: good for a tileable "
+		+ "material, and it keeps the seams right. For paint that does not repeat, use [b]Unwrap all tiles "
+		+ "(atlas)[/b]: every face of the material, in every tile, unwrapped together into one image — each tile "
+		+ "gets its own place (U alone unwraps one tile into the whole square, on top of the others). A tile's "
+		+ "copies still share its paint: they are the same tile. Faces with the legend colour cannot be painted: "
+		+ "assign a material first."))
 	l.append(_titre("View"))
 	l.append("Middle drag turns, " + _touche("Shift") + " + middle drag slides, the wheel zooms. Numpad "
 		+ _touche("1") + " front, " + _touche("3") + " right, " + _touche("7") + " top (" + _touche("Ctrl")
@@ -357,6 +387,54 @@ func _aller_retour() -> String:
 		+ "gives the clearest copy of each tile — the report says so: anything sculpted on the other copies "
 		+ "does not reach the world. An atlas carries no unique detail."))
 	return "\n".join(l)
+
+
+## « POUR OBTENIR LE MÊME RENDU » (Jordan, 1er octobre 2026 : « au fur et à mesure qu'on paramètre l'ambiance
+## lumineuse, il faudra tenir à jour le mode d'emploi […] fais la liste »). ⚠ LES VALEURS SONT LUES DANS LA VUE
+## (`Vue.SOLEIL_ENERGIE`…), jamais recopiées : retoucher un réglage là-bas met cette page à jour.
+func _rendu() -> String:
+	const Vue := preload("res://app/vue.gd")
+	var l := PackedStringArray()
+	l.append("The tiles carry their geometry, normals, UVs and materials. The [b]light[/b] is your engine's: "
+		+ "to see in your game what you see here, set up the same scene. Every value below is the one this "
+		+ "app uses right now.")
+	l.append(_titre("Shading"))
+	l.append("[b]Flat, one normal per face[/b] — no smoothing. The tiles leave with the normals the modeller "
+		+ "shows: [b]import the normals from the file[/b]; do not let the engine recompute or smooth them "
+		+ "(Unity: Normals → Import; Unreal: Import Normals; Godot keeps them by default).")
+	l.append("Materials are standard PBR (base colour, roughness, metallic, texture). The legend colours of "
+		+ "the witness are [b]vertex colours[/b] on one material: enable « vertex colour as albedo » for it.")
+	l.append(_titre("Sun — a directional light"))
+	l.append("Rotation [b]%s°[/b] (pitch, yaw, roll), energy [b]%.2f[/b], [b]shadows on[/b]." % [
+		Vue.SOLEIL_ROTATION, Vue.SOLEIL_ENERGIE])
+	l.append(_titre("Ambient light"))
+	l.append("A flat [b]colour[/b] %s at energy [b]%.2f[/b] — not the sky: a world lit by its sky changes tone "
+		% [_couleur(Vue.AMBIANTE_COULEUR), Vue.AMBIANTE_ENERGIE] + "with it.")
+	l.append(_titre("Ambient occlusion — SSAO"))
+	l.append("On, intensity [b]%.1f[/b], and applied to the [b]direct light too[/b] (Godot: « Light Affect » "
+		% Vue.SSAO_INTENSITE + "[b]%.1f[/b]). Left at its default, SSAO only darkens the ambient light and " \
+		% Vue.SSAO_SUR_LE_SOLEIL + "vanishes in the sun.")
+	l.append(_titre("Bounced light — SSIL"))
+	l.append("On (screen-space indirect light, default settings): the colour of a floor bleeds into the walls "
+		+ "of a pit. Unity and Unreal have their own screen-space GI; any of them gives the same idea.")
+	l.append(_titre("Reflections"))
+	l.append("Metals [b]reflect[/b] their surroundings instead of being lit: give them something to reflect. "
+		+ "Here, a neutral procedural sky — top %s, horizon %s, ground %s — used for reflections only." % [
+		_couleur(Vue.REFLETS_HAUT), _couleur(Vue.REFLETS_HORIZON), _couleur(Vue.REFLETS_SOL)])
+	l.append(_note("Without it, a metallic wall in shadow turns black."))
+	l.append(_titre("Sky of the Play test"))
+	l.append("A procedural sky: top %s, horizon %s, ground %s, ground curve [b]%.1f[/b] (the dark ground "
+		% [_couleur(Vue.CIEL_HAUT), _couleur(Vue.CIEL_HORIZON), _couleur(Vue.CIEL_SOL), Vue.CIEL_COURBE_DU_SOL]
+		+ "only shows far below the horizon). It is the background and the reflections in the Play test.")
+	l.append(_titre("Anti-aliasing"))
+	l.append("MSAA [b]4×[/b].")
+	l.append(_note("Not used, on purpose: global illumination that is baked or voxel-based (Godot's SDFGI, "
+		+ "lightmaps). It does not follow geometry that changes while you sculpt."))
+	return "\n".join(l)
+
+
+func _couleur(c: Color) -> String:
+	return "[color=#%s]■[/color] [b]#%s[/b]" % [c.to_html(false), c.to_html(false)]
 
 
 func _raccourcis() -> String:

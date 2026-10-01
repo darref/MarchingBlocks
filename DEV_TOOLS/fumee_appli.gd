@@ -362,13 +362,21 @@ func _mener() -> void:
 		ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")),
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
+	_les_formes_speciales(ed)
+	_vrai(_formes_finies, "les formes spéciales sont allées JUSQU'AU BOUT")
+
 	await _le_modeleur(ed)
 	_la_planche_des_tuiles(ed)
 	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
 	await _les_couches_et_leurs_temoins(ed)
+	_la_bande_du_bas(ed)
+	_le_manuel_dit_le_rendu(ed)
+	_les_deux_ateliers_du_temoin(ed)
+	_peindre_le_temoin(ed)
 	_vrai(_couches_finies, "les couches et leurs témoins sont allés JUSQU'AU BOUT")
 	_l_enregistrement_se_dit(ed)
 	_les_sections_dans_le_modeleur(ed)
+	_les_gestes_topologiques_gardent_les_sections(ed)
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
@@ -457,8 +465,15 @@ func _la_provenance(ed: Control) -> void:
 	var nom: String = info.get("nom", "")
 	_vrai(nom != "" and not info["faute"], "une tuile y est posée (%s)" % nom)
 	v._survoler(v.size * 0.5)
-	_vrai(v._tuile_vue.visible and v._tuile_vue.position.is_equal_approx(Vector3(24, 11, 24)),
-		"la tuile survolée est marquée dans le monde, centrée sur son sommet")
+	_vrai(v._apercu.visible and not v._tuile_vue.visible,
+		"en peignant, UN seul repère sous la souris : l'aperçu des cases, pas la boîte de la tuile")
+	v.naviguer = true
+	v._survoler(v.size * 0.5)
+	_vrai(v._tuile_vue.visible and v._tuile_vue.position.is_equal_approx(Vector3(24, 11, 24))
+		and not v._apercu.visible, "en Navigate, la tuile survolée est marquée, centrée sur son sommet")
+	v.naviguer = false
+	v._survoler(v.size * 0.5)
+	_vrai(not v._tuile_vue.visible, "revenu à la peinture, la boîte de la tuile s'efface")
 	var source: Variant = FT.sommet_source(info.get("lot", null), nom)
 	_vrai(source != null, "le lot sait d'où vient cette tuile")
 	if source == null:
@@ -536,7 +551,7 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	_vrai(ta != null and ta == ca.get("_temoin"), "en édition, le modeleur tient le témoin de la couche active")
 	# Le témoin de A, écrit sur disque AVANT qu'on touche à B : ses octets ne doivent plus bouger.
 	ed._temoins_sales[ta] = true
-	ed._enregistrer_le_temoin_modele()
+	ed._enregistrer_le_temoin_modele(true)
 	var glb_a: String = ed._glb_du_temoin(ca)
 	var md5_a: String = FileAccess.get_md5(glb_a) if FileAccess.file_exists(glb_a) else ""
 	_vrai(md5_a != "", "le témoin de la couche A a son propre .glb (%s)" % glb_a.get_file())
@@ -566,8 +581,23 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 		ed._input(_cle(k))
 	_vrai(tb.tuiles[paroi].sommets != avant_b, "G Z 1 sculpte la paroi du témoin de B")
 	_vrai(ta.tuiles[paroi].sommets == avant_a, "le témoin de A n'a PAS bougé")
+	# ⚠ L'ENREGISTREMENT DIFFÉRÉ N'ÉCRIT QUE LE .mbtiles (1er octobre 2026 : il gelait l'appli) : le monde de B
+	# attend qu'on le regarde, et la liste le dit.
+	var lot_b_avant = ed._vue.couche(ib).lot
+	var md5_glb_b: String = FileAccess.get_md5(ed._glb_du_temoin(cb))
+	var t_diff := Time.get_ticks_msec()
 	ed._enregistrer_le_temoin_modele()
+	print("   (l'enregistrement différé : %d ms)" % (Time.get_ticks_msec() - t_diff))
+	_vrai(ed._vue.couche(ib).lot == lot_b_avant and FileAccess.get_md5(ed._glb_du_temoin(cb)) == md5_glb_b,
+		"l'enregistrement différé ne réécrit ni le .glb ni le monde (ils attendent qu'on les regarde)")
+	var relu_sculpte: RefCounted = TL.depuis_dictionnaire(JSON.parse_string(FileAccess.get_file_as_string(str(cb["temoin"]))))
+	_vrai(relu_sculpte != null and relu_sculpte.tuiles[paroi].sommets == tb.tuiles[paroi].sommets,
+		"mais le geste est sur disque (.mbtiles), tout de suite")
+	_vrai(ed._etat_de(ib).ends_with("when you open World"), "et la liste dit que le monde suivra (%s)" % ed._etat_de(ib))
+	ed._enregistrer_le_temoin_modele(true)
 	_egal(FileAccess.get_md5(glb_a), md5_a, "le .glb de A garde ses octets : remodeler B ne touche pas A (le défaut d'avant)")
+	ed._aller_a("monde")
+	ed._aller_a("witness")
 
 	# LE MONDE SUIT SON TÉMOIN (Jordan, 1er octobre 2026) : sans bouton, la couche B a pris les tuiles de SON
 	# témoin tel qu'il vient d'être sculpté — la paroi posée EST celle du témoin, au millième près.
@@ -580,9 +610,11 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait).
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(tb.tuiles[paroi].sommets == avant_b, "(Ctrl+Z a défait le geste dans B)")
-	var t0 := Time.get_ticks_msec()
 	ed._enregistrer_le_temoin_modele()
-	print("   (le monde de B suit son témoin en %d ms)" % (Time.get_ticks_msec() - t0))
+	var t0 := Time.get_ticks_msec()
+	ed._aller_a("monde")
+	print("   (le monde de B suit son témoin en %d ms, au passage dans World)" % (Time.get_ticks_msec() - t0))
+	ed._aller_a("witness")
 	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
 		"Ctrl+Z dans le témoin : le monde de B le suit aussi")
 	_vrai(ed._vue.couche(ia).lot == lot_a, "et le monde de A n'a pas bougé")
@@ -590,7 +622,7 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	var lot_b = ed._vue.couche(ib).lot
 	cb["source"] = "D:/ailleurs/travail_non_lie.glb"
 	ed._temoins_sales[tb] = true
-	ed._enregistrer_le_temoin_modele()
+	ed._enregistrer_le_temoin_modele(true)
 	_vrai(str(cb["source"]) == "D:/ailleurs/travail_non_lie.glb" and ed._vue.couche(ib).lot == lot_b,
 		"une couche habillée par un travail externe le garde quand son témoin change")
 	cb["source"] = glb_b
@@ -662,7 +694,7 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	t_vieux.tuiles[paroi].sommets[0] += Vector3(0, 0.125, 0)
 	var retouche: Vector3 = t_vieux.tuiles[paroi].sommets[0]
 	ed._temoins_sales[t_vieux] = true
-	ed._enregistrer_le_temoin_modele()
+	ed._enregistrer_le_temoin_modele(true)
 	var relu_vieux: RefCounted = TL.depuis_dictionnaire(JSON.parse_string(FileAccess.get_file_as_string(vieux_temoin)))
 	_vrai(relu_vieux != null and relu_vieux.tuiles[paroi].sommets[0].is_equal_approx(retouche)
 		and FileAccess.file_exists(vieux.get_basename() + "_witness.glb"),
@@ -1097,6 +1129,293 @@ func _paires_des_joints(t: RefCounted) -> Array:
 
 ## Les sommets posés sur le plan d'un joint du témoin qui n'ont PAS de partenaire exact dans la tuile d'en face
 ## (écrit hors de `sections.gd`, comme dans `test_sections`).
+## TOUT GESTE TOPOLOGIQUE REPORTE SES POINTS DE BORD (Jordan, 1er octobre 2026 : « la subdivision sans qu'elle
+## ne subdivise aussi ses voisines ne rompt-elle pas les sections partagées ? »). Une face de la paroi qui touche
+## un bord, subdivisée par le vrai bouton : chaque sommet de joint garde son partenaire, et UN Ctrl+Z rend tout.
+## Puis la suppression de cette face, qui change la FORME de la section : rien ne peut suivre, et l'écran le dit.
+func _les_gestes_topologiques_gardent_les_sections(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var t: RefCounted = mo.temoin
+	var paroi := "mb_plaque_b2h2_dehors"
+	mo.activer(int(t.occurrences_de(paroi)[0]))
+	mo.sections.indexer()
+	var f_bord := -1
+	for f in mo.maillage.faces.size():
+		var sur_le_bord := 0
+		for i in mo.maillage.faces[f]:
+			if mo.sections.est_de_bord(paroi, i):
+				sur_le_bord += 1
+		if sur_le_bord >= 2 and f_bord < 0:
+			f_bord = f
+	_vrai(f_bord >= 0, "la paroi a une face posée sur un bord")
+	if f_bord < 0:
+		return
+	_egal(_sans_partenaire(t), 0, "avant la subdivision, tout sommet de joint a son partenaire")
+	var photo := {}
+	for c in t.tuiles:
+		photo[c] = (t.tuiles[c].sommets as PackedVector3Array).duplicate()
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {f_bord: true}
+	mo.operer("subdiviser")
+	var reportees := 0
+	for c in t.tuiles:
+		if c != paroi and t.tuiles[c].sommets.size() != (photo[c] as PackedVector3Array).size():
+			reportees += 1
+	_vrai(reportees >= 2, "subdiviser une face de bord : ses points neufs sont reportés dans %d autres tuiles" % reportees)
+	_egal(_sans_partenaire(t), 0, "après la subdivision, tout sommet de joint a son partenaire (le trou d'avant)")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets == photo[c]:
+			rendues += 1
+	_egal(rendues, t.tuiles.size(), "UN Ctrl+Z défait la subdivision dans toutes les tuiles")
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {f_bord: true}
+	mo.operer("supprimer")
+	_vrai(ed._rapport.text.contains("changed the shape of a tile border") and ed._rapport.text.contains("gap"),
+		"supprimer une face de bord change la forme de la section : l'écran dit qu'il y aura une fente")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+
+
+## LA BANDE DU BAS (Jordan, 1er octobre 2026) : l'écran a un bord en bas, et les deux panneaux s'arrêtent AU-DESSUS
+## d'elle — ce qui est coupé l'est par leur défilement, pas par l'écran. Mesuré sur les rectangles posés.
+func _la_bande_du_bas(ed: Control) -> void:
+	var bande: Control = null
+	for n in ed.find_children("BandeDuBas", "Panel", true, false):
+		bande = n
+	_vrai(bande != null and bande.is_visible_in_tree() and bande.size.y >= 4 and bande.size.y <= 12,
+		"une bande fine borde le bas de l'écran (%s)" % (str(bande.size.y) if bande != null else "absente"))
+	if bande == null:
+		return
+	var bas := ed.get_global_rect().end.y
+	_vrai(absf(bande.get_global_rect().end.y - bas) < 1.0, "elle touche le bas de la fenêtre")
+	for p in [ed._gauche, ed._droite]:
+		_vrai(p.get_global_rect().end.y <= bande.get_global_rect().position.y + 0.5,
+			"le panneau %s s'arrête au-dessus d'elle" % p.name)
+
+
+## LE MANUEL DIT COMMENT OBTENIR LE MÊME RENDU (Jordan, 1er octobre 2026) — chaque technique, avec la valeur que la
+## vue emploie VRAIMENT : l'attendu est lu sur l'environnement et le soleil POSÉS dans la vue, pas sur les constantes
+## que la page cite — une page qui recopierait ses valeurs, ou une vue qui n'emploierait plus les siennes, rougit.
+func _le_manuel_dit_le_rendu(ed: Control) -> void:
+	var page: RichTextLabel = null
+	for d in ed._manuel.find_children("*", "ScrollContainer", true, false):
+		if String(d.name).contains("same look"):
+			for t in d.find_children("*", "RichTextLabel", true, false):
+				page = t
+	_vrai(page != null, "le manuel a une page « The same look in your engine »")
+	if page == null:
+		return
+	var texte: String = page.get_parsed_text()
+	var env: Environment = ed._vue._env
+	var soleil: DirectionalLight3D = null
+	for n in ed._vue._vue.get_children():
+		if n is DirectionalLight3D:
+			soleil = n
+	var attendus := {
+		"le soleil et son énergie": "energy %.2f" % soleil.light_energy,
+		"ses ombres": "shadows on",
+		"l'ambiante, sa couleur": "#" + env.ambient_light_color.to_html(false),
+		"l'ambiante, son énergie": "energy %.2f" % env.ambient_light_energy,
+		"le SSAO, son intensité": "intensity %.1f" % env.ssao_intensity,
+		"le SSAO sur la lumière directe": "Light Affect » %.1f" % env.ssao_light_affect,
+		"le SSIL": "SSIL",
+		"les reflets": "#" + (env.sky.sky_material as ProceduralSkyMaterial).sky_horizon_color.to_html(false),
+		"les normales par face": "one normal per face",
+		"le MSAA": "MSAA 4×",
+	}
+	var manquent: Array = []
+	for k in attendus:
+		if not texte.contains(attendus[k]):
+			manquent.append("%s (« %s »)" % [k, attendus[k]])
+	_vrai(manquent.is_empty(), "la page dit chaque réglage tel que la vue l'emploie (manquent : %s)" % [manquent])
+
+
+## WITNESS GEOMETRY ET WITNESS TEXTURING (Jordan, 1er octobre 2026) : le même témoin, deux mains. Les matériaux
+## ne sont que dans Texturing, l'édition de maillage que dans Geometry ; dans Texturing une touche de géométrie
+## ne touche à rien (et le dit), mais choisir et déplier marchent ; Tab et le mode de sélection se suivent.
+func _les_deux_ateliers_du_temoin(ed: Control) -> void:
+	var mo: Node3D = ed._modeleur
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var dans := func(panneau: Control, titre: String) -> bool:
+		for sct in panneau.find_children("*", "", true, false):
+			if sct.get("titre") is String and sct.titre == titre:
+				return true
+			if sct is Label and (sct as Label).text == titre:
+				return true
+		return false
+	_vrai(ed._droite_temoin.visible and not ed._droite_texture.visible, "Geometry montre sa barre, pas celle du texturing")
+	_vrai(not ed._liste_materiaux.is_visible_in_tree(), "les matériaux ne sont pas dans Witness geometry")
+	ed._aller_a("texture")
+	_vrai(ed._droite_texture.visible and not ed._droite_temoin.visible and ed._liste_materiaux.is_visible_in_tree(),
+		"Texturing montre sa barre, et les matériaux y sont")
+	_vrai(ed._vue.mode == "temoin" and ed._vue.edition, "le même témoin, toujours en édition")
+	_vrai((ed._boutons_edition as Array).size() == 2 and ed._boutons_edition.all(func(b): return b.button_pressed),
+		"les deux boutons d'édition se suivent")
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {0: true}
+	var avant: PackedVector3Array = mo.maillage.sommets.duplicate()
+	ed._input(_cle(KEY_G))
+	_vrai(ed._rapport.text.contains("Witness geometry"), "dans Texturing, G dit où est la géométrie")
+	for k in [KEY_Z, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(mo.maillage.sommets == avant and mo.modal == "", "et G Z 1 ne bouge rien")
+	ed._input(_cle(KEY_2))
+	_vrai(mo.mode_sel == "arete" and ed._boutons_selmode_tex["arete"].button_pressed and ed._boutons_selmode["arete"].button_pressed,
+		"2 choisit les arêtes, dans les deux barres")
+	ed._input(_cle(KEY_3))
+	ed._aller_a("witness")
+	mo.sel_f = {0: true}
+	for k in [KEY_G, KEY_Z, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(mo.maillage.sommets != avant, "revenu dans Geometry, G Z 1 déplace la face")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+
+
+## LA PEINTURE (Jordan, 1er octobre 2026) — un vrai trait à la souris sur une copie de la paroi, dans Witness
+## texturing : une face de la légende refuse (et le dit) ; une face à matériau reçoit une toile de sa couleur, le
+## matériau passe au blanc ; le texel touché prend la couleur du pinceau ; UN Ctrl+Z le rend, Ctrl+Y le refait ;
+## l'écriture met la toile sur le disque et dans le .glb ; Alt+clic lit la couleur ; Geometry éteint le pinceau.
+func _peindre_le_temoin(ed: Control) -> void:
+	const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+	var mo: Node3D = ed._modeleur
+	ed._aller_a("texture")
+	ed._regler_edition(true)
+	var t: RefCounted = mo.temoin
+	var cam: Camera3D = mo.camera
+	# Un point VU d'une copie de la paroi : le centre d'une de ses faces que le rayon de l'écran retrouve.
+	var paroi := "mb_plaque_b2h2_dehors"
+	var vise := {}
+	for i in t.occurrences_de(paroi):
+		var pose: Transform3D = t.occurrences[i]["pose"]
+		var tuile: RefCounted = t.tuiles[paroi]
+		for f in tuile.faces.size():
+			var c := Vector3.ZERO
+			for k in tuile.faces[f]:
+				c += tuile.sommets[k]
+			c /= tuile.faces[f].size()
+			var monde: Vector3 = pose * c
+			if cam.is_position_behind(monde):
+				continue
+			var ecran: Vector2 = cam.unproject_position(monde)
+			if not Rect2(Vector2(40, 40), ed._vue.size - Vector2(80, 80)).has_point(ecran):
+				continue
+			var hit: Dictionary = t.rayon(cam.project_ray_origin(ecran), cam.project_ray_normal(ecran))
+			if not hit.is_empty() and int(hit["occurrence"]) == i and int(hit["face"]) == f:
+				vise = {"occurrence": i, "face": f, "ecran": ecran, "local": c}
+				break
+		if not vise.is_empty():
+			break
+	_vrai(not vise.is_empty(), "une face de la paroi est visible à l'écran")
+	if vise.is_empty():
+		return
+	var tuile: RefCounted = t.tuiles[paroi]
+	var clic := func(pos: Vector2, appui: bool, alt := false) -> void:
+		var b := InputEventMouseButton.new()
+		b.button_index = MOUSE_BUTTON_LEFT
+		b.pressed = appui
+		b.alt_pressed = alt
+		b.position = pos
+		mo.souris_entree(b)
+	ed._bouton_pinceau.button_pressed = true
+	_vrai(mo.pinceau and ed._vue.edition, "P allume le pinceau, en édition")
+	# Une face de la légende ne se peint pas.
+	var mats_avant: int = t.materiaux.size()
+	if tuile.mat(int(vise["face"])) < 0:
+		clic.call(vise["ecran"], true)
+		clic.call(vise["ecran"], false)
+		_vrai(ed._rapport.text.contains("legend colour") and t.materiaux.size() == mats_avant,
+			"une face de la légende refuse le pinceau, et le dit")
+	# Un matériau pour toute la paroi.
+	mo.activer(int(vise["occurrence"]))
+	ed._bouton_pinceau.button_pressed = false
+	mo.choisir_mode("face")
+	mo.tout_choisir(true)
+	var k: int = mo.nouveau_materiau()
+	mo.assigner_courant()
+	var couleur_du_materiau: Color = t.materiaux[k]["couleur"]
+	ed._bouton_pinceau.button_pressed = true
+	ed._couleur_pinceau.color = Color(0.9, 0.1, 0.1)
+	ed._couleur_pinceau.color_changed.emit(Color(0.9, 0.1, 0.1))
+	clic.call(vise["ecran"], true)
+	var m := InputEventMouseMotion.new()
+	m.position = vise["ecran"] + Vector2(6, 0)
+	m.button_mask = MOUSE_BUTTON_MASK_LEFT
+	mo.souris_entree(m)
+	clic.call(vise["ecran"] + Vector2(6, 0), false)
+	var chemin: String = str(t.materiaux[k].get("texture", ""))
+	_vrai(chemin != "" and FileAccess.file_exists(chemin) and t.materiaux[k]["couleur"] == Color.WHITE,
+		"le matériau reçoit une toile, et passe au blanc (%s)" % chemin.get_file())
+	var img: Image = Peinture.toile(chemin).get("image", null) if chemin != "" else null
+	if img == null:
+		_vrai(false, "la toile se lit")
+		return
+	var uv: Vector2 = tuile.uv_au_point(int(vise["face"]), vise["local"])
+	var px: Vector2 = Peinture.vers_pixel(img, uv)
+	var lu := func() -> Color: return img.get_pixel(int(px.x), int(px.y))
+	_vrai(_proche(lu.call(), Color(0.9, 0.1, 0.1)), "le texel sous la souris a la couleur du pinceau (%s)" % lu.call())
+	var toile_avant := couleur_du_materiau
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(absf((lu.call() as Color).r - toile_avant.r) < 0.02 and absf((lu.call() as Color).g - toile_avant.g) < 0.02,
+		"UN Ctrl+Z rend le texel à la couleur de la toile (%s)" % lu.call())
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(_proche(lu.call(), Color(0.9, 0.1, 0.1)), "Ctrl+Y refait le trait")
+	ed._enregistrer_le_temoin_modele(true)
+	var relue := Image.load_from_file(chemin)
+	relue.convert(Image.FORMAT_RGBA8)
+	_vrai(_proche(relue.get_pixel(int(px.x), int(px.y)), Color(0.9, 0.1, 0.1)), "la toile peinte est écrite sur le disque")
+	var c: Dictionary = ed._couches[ed._active]
+	var f := FileAccess.open(ed._glb_du_temoin(c), FileAccess.READ)
+	f.seek(12)
+	var longueur := f.get_32()
+	f.get_32()
+	var json: Dictionary = JSON.parse_string(f.get_buffer(longueur).get_string_from_utf8())
+	_vrai((json.get("images", []) as Array).size() >= 1, "et elle part dans le .glb du témoin (le monde la portera)")
+	ed._couleur_pinceau.color = Color.BLACK
+	clic.call(vise["ecran"], true, true)
+	clic.call(vise["ecran"], false, true)
+	_vrai(_proche(ed._couleur_pinceau.color, Color(0.9, 0.1, 0.1)), "Alt+clic : la pipette lit la couleur peinte")
+	# L'ATLAS : le bouton déplie les faces du matériau dans TOUTES les tuiles, le matériau passe en UV ; UN Ctrl+Z.
+	mo.materiau_courant = k
+	var porteuses: Array = []
+	for cl in t.tuiles:
+		if (t.tuiles[cl].mats as Array).has(k):
+			porteuses.append(cl)
+	var uvs_avant := {}
+	for cl in porteuses:
+		uvs_avant[cl] = (t.tuiles[cl].uvs as Array).duplicate(true)
+	mo.deplier_en_atlas()
+	var depliees := 0
+	for cl in porteuses:
+		var m_t: RefCounted = t.tuiles[cl]
+		var toutes := true
+		for fc in m_t.faces.size():
+			if m_t.mat(fc) == k and m_t.uv(fc).is_empty():
+				toutes = false
+		depliees += int(toutes)
+	_vrai(depliees == porteuses.size() and str(t.materiaux[k].get("projection", "")) == "uv",
+		"« Unwrap all tiles (atlas) » déplie le matériau dans ses %d tuile(s), et le passe en UV" % porteuses.size())
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues := 0
+	for cl in porteuses:
+		rendues += int((t.tuiles[cl].uvs as Array) == uvs_avant[cl])
+	_vrai(rendues == porteuses.size() and str(t.materiaux[k].get("projection", "boite")) != "uv",
+		"UN Ctrl+Z rend les UV et la projection d'avant (%d / %d)" % [rendues, porteuses.size()])
+	ed._aller_a("witness")
+	_vrai(not mo.pinceau, "Geometry éteint le pinceau")
+
+
+## Deux couleurs égales à la quantification d'une image 8 bits près.
+func _proche(a: Color, b: Color) -> bool:
+	return absf(a.r - b.r) < 0.01 and absf(a.g - b.g) < 0.01 and absf(a.b - b.b) < 0.01
+
+
 func _sans_partenaire(t: RefCounted) -> int:
 	var occ := {}
 	for o in t.occurrences:
@@ -1538,7 +1857,7 @@ func _le_modeleur(ed: Control) -> void:
 		ed._unhandled_key_input(_cle(KEY_Z, true))
 		ed._vue._gui_input(clic)
 	# L'enregistrement : le .glb LIÉ se relit tuile par tuile, avec le matériau ; et il rejoint les travaux.
-	var raison: String = ed._enregistrer_le_temoin_modele()
+	var raison: String = ed._enregistrer_le_temoin_modele(true)
 	var chemin: String = ed._chemin_temoin_modele()
 	_egal(raison, "", "le témoin modélisé s'enregistre")
 	var relu: Dictionary = BM.librairie_depuis_glb(chemin)
@@ -1572,6 +1891,134 @@ func _le_modeleur(ed: Control) -> void:
 	ed._input(_cle(KEY_TAB))
 	_vrai(not ed._vue.edition and not mo.visible, "Tab sort de l'édition")
 	ed._aller_a("monde")
+
+
+## LES FORMES SPÉCIALES (Jordan, 1er octobre 2026), menées par de VRAIS clics à travers la caméra. Les
+## attendus sont déroulés à la main (les mêmes que `test_formes_speciales`) : un mur de 3, x = 30..32.
+var _formes_finies := false
+
+
+func _clic_vue(vue: Control, ou: Vector2, bouton := MOUSE_BUTTON_LEFT) -> void:
+	var c := InputEventMouseButton.new()
+	c.button_index = bouton
+	c.position = ou
+	c.pressed = true
+	vue._gui_input(c)
+	c.pressed = false
+	vue._gui_input(c)
+
+
+func _viser_depuis(vue: Control, cible: Vector3, azimut: float, distance: float) -> void:
+	vue._cible = cible
+	vue._azimut = azimut
+	vue._elevation = 0.0
+	vue._distance = distance
+	vue._caler()
+
+
+func _les_formes_speciales(ed: Control) -> void:
+	var vue = ed._vue
+	var g: GridMap = vue.cases()
+	var avant := g.get_used_cells().size()
+	var mur := {}
+	for x in range(30, 33):
+		for y in 6:
+			for z in range(-3, 4):
+				mur[Vector3i(x, y, z)] = true
+	ed._appliquer({"poser": mur, "effacer": {}}, "Add")
+	var plein := avant + 126
+	_egal(g.get_used_cells().size(), plein, "formes : le mur d'essai (3 × 6 × 7) est posé")
+
+	ed._choisir_forme_speciale("tunnel")
+	_vrai(vue.outil == "forme" and (ed._boutons_forme_speciale["tunnel"] as Button).button_pressed
+		and not ed._boutons_outil.values().any(func(b): return (b as Button).button_pressed),
+		"choisir Tunnel : l'outil devient la forme, aucun outil de pinceau ne reste enfoncé")
+	_vrai(ed._reglages_forme.visible and ed._ligne_profil.visible and not ed._garde_corps.visible
+		and not ed._ligne_taille.visible, "Tunnel : ses réglages et son profil, sans garde-corps ni pinceau")
+
+	# UN CLIC sur la face −X, en (30,2,0) : le tunnel traverse le mur, une croix de 5 cases × 3 tranches.
+	_viser_depuis(vue, Vector3(31.5, 2.5, 0.5), -PI / 2, 14.0)
+	var face_ouest: Vector2 = vue._camera.unproject_position(Vector3(30.0, 2.5, 0.5))
+	vue._survoler(face_ouest)
+	_egal(vue._apercu.multimesh.instance_count, 15, "l'aperçu montre les 15 cases que le tunnel creusera")
+	_clic_vue(vue, face_ouest)
+	_egal(g.get_used_cells().size(), plein - 15, "un clic creuse le tunnel")
+	_vrai(g.get_cell_item(Vector3i(30, 2, 0)) == -1 and g.get_cell_item(Vector3i(32, 2, 0)) == -1
+		and g.get_cell_item(Vector3i(31, 3, 0)) == -1 and g.get_cell_item(Vector3i(31, 2, 1)) == -1
+		and g.get_cell_item(Vector3i(31, 3, 1)) != -1, "… la croix exacte, de part en part")
+	_vrai(ed._rapport.text.contains("Tunnel") and ed._rapport.text.contains("opens"),
+		"… et l'écran dit qu'il débouche")
+	ed._histoire.undo()
+	_egal(g.get_used_cells().size(), plein, "UN Ctrl+Z rend le mur")
+
+	# CONNECT : une ancre sur la face ouest, Échap l'oublie, puis l'ouest et l'est.
+	ed._choisir_les_bouts("relier")
+	_vrai(not ed._ligne_longueur.visible, "Connect : la profondeur disparaît (les deux bouts la donnent)")
+	_clic_vue(vue, face_ouest)
+	_vrai(not vue.ancre_forme.is_empty() and vue._ancre_vue.visible and g.get_used_cells().size() == plein,
+		"Connect : le premier clic pose une ancre, montrée, sans rien changer")
+	ed._unhandled_key_input(_cle(KEY_ESCAPE))
+	_vrai(vue.ancre_forme.is_empty() and not vue._ancre_vue.visible, "Échap oublie l'ancre")
+	_clic_vue(vue, face_ouest)
+	_viser_depuis(vue, Vector3(31.5, 2.5, 0.5), PI / 2, 14.0)
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_egal(g.get_used_cells().size(), plein - 15, "Connect : le second clic, sur la face est, relie les deux faces")
+	_vrai(vue.ancre_forme.is_empty(), "… et l'ancre est consommée")
+	ed._histoire.undo()
+
+	# Le PUITS refuse une paroi, et le dit ; rien ne change.
+	ed._choisir_forme_speciale("puits")
+	ed._choisir_les_bouts("droit")
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_vrai(g.get_used_cells().size() == plein and ed._rapport.text.contains("FLOOR"),
+		"un puits cliqué sur une paroi est refusé, et l'écran dit pourquoi")
+	# … et en Connect, la PREMIÈRE ancre est refusée aussi : on ne pose pas un bout qui ne pourra rien donner.
+	ed._choisir_les_bouts("relier")
+	ed._rapport.text = ""
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_vrai(vue.ancre_forme.is_empty() and ed._rapport.text.contains("FLOOR"),
+		"Connect : une paroi n'est pas une première ancre de puits, et l'écran le dit")
+	ed._choisir_les_bouts("droit")
+
+	# Le PONT : une seconde paroi en x = 36..37, l'œil entre les deux. Tablier de 3 sur x = 33..35 (9 cases)
+	# et ses deux rebords (6) : 15 cases.
+	var mur2 := {}
+	for x in range(36, 38):
+		for y in 6:
+			for z in range(-3, 4):
+				mur2[Vector3i(x, y, z)] = true
+	ed._appliquer({"poser": mur2, "effacer": {}}, "Add")
+	var deux_murs: int = plein + 84
+	ed._choisir_forme_speciale("pont")
+	_vrai(ed._garde_corps.visible and not ed._ligne_profil.visible, "Bridge : le garde-corps, pas de profil")
+	_viser_depuis(vue, Vector3(34.5, 2.5, 0.5), PI / 2, 1.0)
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_egal(g.get_used_cells().size(), deux_murs + 15, "un pont de taille 2 avec rebords : 9 + 6 cases")
+	_vrai(g.get_cell_item(Vector3i(34, 2, 0)) != -1 and g.get_cell_item(Vector3i(34, 3, 0)) == -1
+		and g.get_cell_item(Vector3i(34, 3, 1)) != -1, "… le tablier, le passage libre, le rebord")
+	ed._histoire.undo()
+
+	# Le BALCON : profondeur 3 → 9 cases de dalle et 7 de rebord.
+	ed._choisir_forme_speciale("balcon")
+	_vrai(not ed._ligne_bouts.visible and ed._ligne_longueur.visible, "Balcony : un clic seulement, une profondeur")
+	ed._longueur_forme.value = 3
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_egal(g.get_used_cells().size(), deux_murs + 16, "un balcon de 3 × 3 avec son rebord : 16 cases")
+	ed._histoire.undo()
+
+	# [ et ] règlent la taille de la FORME quand une forme est choisie, pas celle du pinceau.
+	var pinceau: float = ed._taille.value
+	ed._unhandled_key_input(_cle(KEY_BRACKETRIGHT))
+	_vrai(ed._taille_forme.value == 3.0 and ed._taille.value == pinceau, "] grossit la forme, pas le pinceau")
+	ed._taille_forme.value = 2
+
+	ed._choisir_outil("ajouter")
+	_vrai(not ed._boutons_forme_speciale.values().any(func(b): return (b as Button).button_pressed)
+		and not ed._reglages_forme.visible, "revenir à Add relâche la forme et cache ses réglages")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	_egal(g.get_used_cells().size(), avant, "les murs d'essai défaits : la couche est rendue telle quelle")
+	_formes_finies = true
 
 
 func _cle(k: Key, ctrl := false) -> InputEventKey:

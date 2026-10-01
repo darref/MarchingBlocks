@@ -27,6 +27,7 @@ func _initialize() -> void:
 	_il_s_enregistre(t)
 	_il_part_en_glb_lie(t)
 	_il_revient_avec_sa_peinture(t)
+	_le_monde_s_eclaire_comme_le_modeleur(t)
 	_le_rayon_trouve_l_occurrence(t)
 	_sculpter_une_tuile_les_change_toutes(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
@@ -270,3 +271,95 @@ func _forme(mesh: Mesh) -> String:
 	var l: Array = pos.keys()
 	l.sort()
 	return "%s|%.4f" % [";".join(PackedStringArray(l)).md5_text(), aire]
+
+
+## LE MONDE S'ÉCLAIRE COMME LE MODELEUR (Jordan, 1er octobre 2026 : « pas le même shading, sur les lèvres »).
+## Trois défauts mesurés sur son témoin, chacun gardé ici sur un témoin CONSTRUIT : un matériau posé sur des faces
+## de trois tuiles, et un sommet relevé de 4 millièmes (une face qui n'est plus plane, comme après sculpture).
+##   • la couleur de sommet : seule la légende la lit, dans le monde comme dans le modeleur ;
+##   • un matériau du témoin = UN matériau dans le fichier, pas une copie par tuile ;
+##   • les normales : une par face, comme le modeleur — `ImporterMesh.get_mesh()` les faussait à la relecture.
+## Et pour Blender : soudé, sans normales.
+func _le_monde_s_eclaire_comme_le_modeleur(t0: RefCounted) -> void:
+	var t: RefCounted = t0.copie()
+	var k_mat: int = t.materiaux.size()
+	t.materiaux.append({"nom": "Grass", "couleur": Color(0.45, 0.85, 0.45), "rugosite": 1.0, "metal": 0.0,
+		"texture": "", "echelle": 1.0})
+	for cle in ["mb_plaque_b4h0_dehors", "mb_arete_b2h0_dehors", "mb_coin_b1h0_dehors"]:
+		t.tuiles[cle].assigner([0], k_mat)
+	var sol: RefCounted = t.tuiles["mb_plaque_b4h0_dehors"]
+	sol.sommets[sol.faces[1][0]] += Vector3(0.0, 0.004, 0.0)
+	var dossier := ProjectSettings.globalize_path("user://test_temoin_lie/ombrage")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var glb := dossier.path_join("monde.glb")
+	_dire(t.vers_glb(glb) == "", "le témoin du monde s'écrit")
+	var lot: MeshLibrary = BM.librairie_depuis_glb(glb)["lot"]
+	var mat_diff: Array = []
+	var nor_diff: Array = []
+	for cle in t.tuiles:
+		var a: ArrayMesh = t.tuiles[cle].vers_array_mesh()
+		var b: Mesh = lot.get_item_mesh(lot.find_item_by_name(cle))
+		if _materiaux_de(a) != _materiaux_de(b):
+			mat_diff.append(cle)
+		if _normales_de(a) != _normales_de(b):
+			nor_diff.append(cle)
+	_dire(mat_diff.is_empty(), "les tuiles du monde ont les matériaux du modeleur, couleur de sommet comprise (%s)" % [mat_diff])
+	_dire(nor_diff.is_empty(), "et ses normales — une par face, même sur une face sculptée (%s)" % [nor_diff])
+	var json: Dictionary = _json_glb(glb)
+	_dire((json["materials"] as Array).size() == 2, "un matériau du témoin = UN matériau dans le fichier, plus la légende (%d)" % (json["materials"] as Array).size())
+	var avec_couleur := 0
+	var prims := 0
+	for m in json["meshes"]:
+		for p in m["primitives"]:
+			prims += 1
+			if p["attributes"].has("COLOR_0"):
+				avec_couleur += 1
+	_dire(avec_couleur == prims - 3, "la couleur de sommet n'est écrite que sur la légende (%d primitives sur %d)" % [avec_couleur, prims])
+	# Pour Blender : soudé (un sommet sert plusieurs triangles), sans normales.
+	var pour_blender := dossier.path_join("blender.glb")
+	t.vers_glb(pour_blender, true)
+	var jb: Dictionary = _json_glb(pour_blender)
+	var normales := false
+	var soude := true
+	for m in jb["meshes"]:
+		for p in m["primitives"]:
+			normales = normales or p["attributes"].has("NORMAL")
+			var n_sommets: int = jb["accessors"][p["attributes"]["POSITION"]]["count"]
+			var n_coins: int = jb["accessors"][p["indices"]]["count"] if p.has("indices") else n_sommets
+			soude = soude and n_sommets < n_coins
+	_dire(not normales and soude, "pour Blender : sans normales, et soudé (des sommets partagés entre triangles)")
+
+
+func _materiaux_de(m: Mesh) -> Array:
+	var sortie: Array = []
+	for s in m.get_surface_count():
+		var b := m.surface_get_material(s) as BaseMaterial3D
+		sortie.append("%s %s %.2f %.2f vcol=%s tex=%s" % [b.resource_name, b.albedo_color.to_html(false), b.roughness,
+			b.metallic, b.vertex_color_use_as_albedo, b.albedo_texture != null] if b != null else "aucun")
+	sortie.sort()
+	return sortie
+
+
+## Les normales, rangées par triangle (le centre au millième) et par coin : comparables d'un maillage à l'autre.
+func _normales_de(m: Mesh) -> Dictionary:
+	var sortie := {}
+	for s in m.get_surface_count():
+		var a: Array = m.surface_get_arrays(s)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var n = a[Mesh.ARRAY_NORMAL]
+		var idx = a[Mesh.ARRAY_INDEX]
+		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null else PackedInt32Array(range(v.size()))
+		for i in range(0, ordre.size() - 2, 3):
+			var c: Vector3 = (v[ordre[i]] + v[ordre[i + 1]] + v[ordre[i + 2]]) / 3.0
+			for k in 3:
+				var cle := "%s|%s" % [Vector3i((c * 1000.0).round()), Vector3i((v[ordre[i + k]] * 1000.0).round())]
+				sortie[cle] = Vector3i(((n[ordre[i + k]] as Vector3) * 100.0).round()) if n != null else Vector3i.ZERO
+	return sortie
+
+
+func _json_glb(chemin: String) -> Dictionary:
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	f.seek(12)
+	var longueur := f.get_32()
+	f.get_32()
+	return JSON.parse_string(f.get_buffer(longueur).get_string_from_utf8())

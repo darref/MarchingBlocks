@@ -5,6 +5,7 @@
 #include "MBCore/MBFrame.h"
 #include "MBCore/MBJson.h"
 #include "MBCore/MBRule.h"
+#include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
 #include "MBCore/MBWorldFile.h"
 
@@ -14,6 +15,7 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -107,13 +109,33 @@ namespace
 		return true;
 	}
 
-	std::string RunToolCase(const FJsonValue& C, const FCellSet& World)
+	bool SpecialShapeOf(const std::string& S, ESpecialShape& Out)
+	{
+		if (S == "tunnel") Out = ESpecialShape::Tunnel;
+		else if (S == "well") Out = ESpecialShape::Well;
+		else if (S == "bridge") Out = ESpecialShape::Bridge;
+		else if (S == "balcony") Out = ESpecialShape::Balcony;
+		else return false;
+		return true;
+	}
+
+	bool ProfileOf(const std::string& S, EShapeProfile& Out)
+	{
+		if (S == "round") Out = EShapeProfile::Round;
+		else if (S == "square") Out = EShapeProfile::Square;
+		else if (S == "arch") Out = EShapeProfile::Arch;
+		else return false;
+		return true;
+	}
+
+	std::string RunToolCase(const FJsonValue& C, const FCellSet& World, const std::map<std::string, FCellSet>& ShapeWorlds)
 	{
 		const FJsonValue& I = C["input"];
 		const FJsonValue& E = C["expected"];
 		const std::string Kind = C["kind"].String;
 		const FCellSet Own = I.Find("cells") && I["cells"].Type == FJsonValue::EType::Array ? Cells(I["cells"]) : FCellSet();
-		const FCellSet& Here = I.Find("cells") && I["cells"].Type == FJsonValue::EType::Array ? Own : World;
+		const FCellSet& Here = I.Find("world") ? ShapeWorlds.at(I["world"].String)
+			: I.Find("cells") && I["cells"].Type == FJsonValue::EType::Array ? Own : World;
 		const FIsFull IsFull = [&Here](const FCell& X) { return Here.count(X) > 0; };
 		if (Kind == "ray")
 		{
@@ -169,6 +191,35 @@ namespace
 		if (Kind == "copy") return Same("clipboard", Tools::Copy(Here, Cells(I["selection"])), E["clipboard"], true);
 		if (Kind == "paste")
 			return SameChange(Tools::Paste(Here, Tools::Sorted(Cells(I["clipboard"])), Vec(I["anchor"])), E);
+		if (Kind == "wall_normal")
+		{
+			const FCell Got = Shapes::WallNormal(Here, Vec(I["cell"]), Vec(I["face"]));
+			return Got == Vec(E["normal"]) ? "" : "expected " + Show(Vec(E["normal"])) + ", got " + Show(Got);
+		}
+		if (Kind == "special_shape")
+		{
+			FShapeResult R;
+			FShapeRequest Q;
+			if (!SpecialShapeOf(I["shape"].String, Q.Shape)) R.Error = "unknown_shape";
+			else
+			{
+				if (!ProfileOf(I["profile"].String, Q.Profile)) return "unknown profile";
+				Q.A = Vec(I["a"]);
+				Q.FaceA = Vec(I["face_a"]);
+				Q.bConnect = I["connect"].Bool;
+				if (Q.bConnect) { Q.B = Vec(I["b"]); Q.FaceB = Vec(I["face_b"]); }
+				Q.Size = static_cast<int>(I["size"].AsInt());
+				Q.Length = static_cast<int>(I["length"].AsInt());
+				Q.bRail = I["rail"].Bool;
+				R = Shapes::Build(Here, Q);
+			}
+			const std::string Got = R.Error + "/" + (R.bOpened ? "true" : "false") + "/" + std::to_string(R.Repaired);
+			const std::string Want = E["error"].String + "/" + (E["opened"].Bool ? "true" : "false") + "/" + std::to_string(E["repaired"].AsInt());
+			if (Got != Want) return "error/opened/repaired: expected " + Want + ", got " + Got;
+			std::string Why = Same("set", Tools::Sorted(R.Set), E["set"], false);
+			if (Why.empty()) Why = Same("clear", Tools::Sorted(R.Clear), E["clear"], false);
+			return Why;
+		}
 		return "unknown kind " + Kind;
 	}
 
@@ -242,10 +293,18 @@ namespace
 			std::printf("  FAIL box_volume_max differs from the plugin's\n");
 		}
 		const FCellSet World = Cells(Conf["world"]);
+		std::map<std::string, FCellSet> ShapeWorlds;
+		if (Conf.Find("shape_worlds"))
+			for (const auto& Entry : Conf["shape_worlds"].Object) ShapeWorlds[Entry.first] = Cells(Entry.second);
+		if (Conf["limits"]["shape_length_max"].AsInt() != Shapes::LengthMax || Conf["limits"]["shape_span_max"].AsInt() != Shapes::SpanMax)
+		{
+			++Failed;
+			std::printf("  FAIL shape limits differ from the plugin's\n");
+		}
 		for (const FJsonValue& C : Conf["cases"].Array)
 		{
 			++Cases;
-			const std::string Why = RunToolCase(C, World);
+			const std::string Why = RunToolCase(C, World, ShapeWorlds);
 			if (!Why.empty()) { ++Failed; std::printf("  FAIL tools: %s — %s\n", C["name"].String.c_str(), Why.c_str()); }
 		}
 		std::printf("%d tools cases, %d failure(s)\n", Cases, Failed);

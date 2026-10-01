@@ -593,6 +593,93 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
   EXTERNE non lié le garde. L'étape 3 « Slice this layer's witness » fait la même chose à la demande.
   Gardé par `fumee_appli` (la paroi posée dans le monde EST celle du témoin, au millième ; Ctrl+Z suivi ; le
   monde de A intact ; le travail externe gardé) ; deux mutations rouges.
+- **LE MONDE S'ÉCLAIRE COMME LE MODELEUR (Jordan, 1er octobre 2026 : « les matériaux du monde se mettent parfois
+  mal à jour dans certaines tuiles, sur les lèvres, pas le même shading »).** `DEV_TOOLS/sonde_ombrage_monde.gd`
+  compare, tuile par tuile, ce que dessine le modeleur et ce que pose le monde (relu du `.glb`). Sur son témoin :
+  ⚠ **TROIS DÉFAUTS RÉELS, TOUS CORRIGÉS** —
+  - la COULEUR DE SOMMET était écrite sur toutes les surfaces : en COLOR_0 sur chaque primitive, l'import faisait
+    multiplier les matériaux de l'artiste par la teinte de la légende, et rendait la légende SANS ce drapeau
+    (blanche). Écrite sur la seule légende ; à la relecture, la légende le retrouve et les autres le perdent
+    (`_rendre_la_legende` : dans le modeleur, seule la légende lit la couleur de sommet) ;
+  - chaque tuile avait SON cache de matériaux Godot : un matériau du témoin partait en une copie par tuile
+    (« Green », « Green2 »…). Un cache commun au témoin (`_partager`) ;
+  - ⚠ **`ImporterMesh.get_mesh()` FAUSSE LES NORMALES** — mesuré : (0,008 ; 1 ; 0,008), juste dans le fichier
+    ET dans les tableaux de l'ImporterMesh, en ressortait (0,008 ; 0,97 ; 0,241), 14° de travers, sur des faces
+    sculptées. `_en_array_mesh` bâtit le maillage depuis les tableaux ; ça vaut aussi pour un travail de Blender.
+    Et le `.glb` du monde porte les normales du modeleur (une par FACE) : recalculées par triangle, une face
+    non plane s'éclairait autrement.
+  - En route : le témoin modélisé partait vers Blender en SOUPE de triangles (insculptable) ; `vers_glb(…,
+    pour_blender)` l'écrit soudé, sans normales.
+  Sonde après correction : 0 matériau, 0 normale différents sur les 52 tuiles. Gardé par `test_temoin_lie` (31 :
+  témoin construit, un sommet relevé de 4 millièmes) ; quatre mutations rouges, dont `get_mesh()` remis. ⚠ La
+  couleur de sommet réécrite partout est une mutation ÉQUIVALENTE pour l'éclairage (le drapeau forcé la neutralise).
+- **LES LAGS D'UNE SECONDE — MESURÉS ET CORRIGÉS (Jordan, 1er octobre 2026 : « des lags d'environ 1 seconde à des
+  moments différents, en édition de maillage, sélection, assignation de matériaux »).** `DEV_TOOLS/sonde_lags_appli.gd`
+  (AVEC fenêtre, projet jetable) chronomètre chaque image après chaque geste. ⚠ **LES GESTES N'Y ÉTAIENT POUR RIEN**
+  (3 à 30 ms) : c'était **L'ENREGISTREMENT DIFFÉRÉ**, une seconde après le dernier geste — d'où « à des moments
+  différents » —, qui **gelait l'appli 3,6 s**. Trois causes :
+  - ⚠ **AVEC UNE CARTE GRAPHIQUE, RELIRE UN `ArrayMesh` LE REDESCEND DU GPU, ET EN FABRIQUER UN L'Y RENVOIE.** En
+    headless tout reste en mémoire : les sondes headless ne le voyaient pas (`assemble` 40 ms headless, **4,6 s**
+    avec fenêtre). `_tous_les_maillages` relisait, refabriquait et relisait le maillage de CHACUN des 1 056 nœuds
+    pour 52 maillages ; `append_from_scene` convertissait chaque nœud (1,1 s) ; `tuiles_liees` et
+    `verifier_sections` relisaient trois fois chaque tuile qu'ils venaient de fabriquer (0,9 s). Désormais : une
+    lecture par maillage distinct, la pose sur les TABLEAUX (`_tableaux_poses`), un maillage par clé dans la scène
+    exportée, et les tableaux passés au contrôle des sections. ⚠ **UN `Packed*Array` SE PASSE PAR RÉFÉRENCE** :
+    le premier jet transformait en place les tableaux en cache — `test_blocs_maitres` §17 et `test_temoin_lie` ont
+    rougi, ils gardent ce refactor.
+  - ⚠ **LE .glb ET LE MONDE ATTENDENT QU'ON LES REGARDE** : l'enregistrement différé n'écrit plus que le
+    `.mbtiles` (ce qui fait foi, 10 ms) ; la couche est marquée `_glb_perime`, et `_rhabiller` réécrit son `.glb`
+    et rhabille son monde quand on passe dans World ou Play test, avant un export, un tranchage, à Ctrl+S, au
+    changement de projet et à la FERMETURE — qui n'écrivait RIEN : fermer moins d'une seconde après un geste le
+    perdait. La liste dit « follows its witness when you open World ».
+  - La vignette : une image de 2,2 s à son premier rendu (compilation des shaders), une fois par session.
+  **Mesuré après, avec fenêtre** : enregistrement différé **61 ms** (3 638 avant) ; le monde suit en ~0,35 s au
+  passage dans World. Gardé par `fumee_appli` (l'enregistrement différé ne touche ni le `.glb` ni le monde, le
+  geste est sur disque, la liste le dit, World rhabille) ; deux mutations rouges.
+- **LES GESTES TOPOLOGIQUES ROMPAIENT LES SECTIONS PARTAGÉES — MESURÉ ET CORRIGÉ (Jordan, 1er octobre 2026 : « la
+  subdivision sans qu'elle ne subdivise aussi ses voisines ne rompt-elle pas les sections partagées et fait des
+  trous ? »)**. Oui : seuls le loop cut et le couteau reportaient leurs points de bord (`Sections.completer`).
+  `DEV_TOOLS/sonde_operations_et_sections.gd` compte les absences après chaque geste sur une face de bord de la
+  paroi : subdiviser 54, biseauter une arête qui touche le bord 51, fusionner 32 — un point droit sur l'arête d'en
+  face tant qu'il ne bouge pas (une jonction en T), une fente dès qu'il bouge. **Le report les répare tous** (0
+  échec ; fusion : 30 sur 32). Tout geste topologique passe donc par `_completer_apres` (X, M, F, subdiviser, E, I,
+  Ctrl+B ; ~60 ms). ⚠ **CE QU'AUCUN REPORT NE RÉPARE** : extruder ou supprimer une face de bord change la FORME de
+  la section (108 et 2 échecs) — les tuiles d'en face n'ont pas cette forme. L'écran le DIT (« changed the shape of
+  a tile border… the world will show a gap there »), on ne comble pas (§3). Gardé par `fumee_appli` (subdiviser une
+  face de bord par le vrai bouton : 0 sommet de joint sans partenaire, UN Ctrl+Z ; supprimer : le message) ; deux
+  mutations rouges (488 sommets sans partenaire sans le report).
+- **L'ÉCLAIRAGE — SSAO + SSIL, AMBIANTE 1,1 (Jordan, 1er octobre 2026 : « une lumière ambiante afin que tout soit
+  au moins légèrement visible, voire du SDFGI pour le witness […] afin de bien voir les reliefs », puis « en mode
+  World aussi, on n'y voit rien »).** Jugé à l'image (`DEV_TOOLS/capture_eclairage.gd`, Witness et World) : les
+  faces à l'ombre s'éclaircissent, les creux prennent une ombre douce, le relief se lit. ⚠ **LE SDFGI A ÉTÉ ESSAYÉ ET
+  ÉCARTÉ, MESURÉ** : il ne voit PAS une géométrie modifiée (une dalle émissive posée après coup ne teinte rien ; le
+  contrôle — l'éteindre et le rallumer — la fait rougir partout) ; et le reconstruire après chaque geste NOIRCIT les
+  ombres ~45 images (0,75 s, écart moyen 137 à l'image 0). À ×1 il assombrit même les faces à l'ombre (le fond est
+  presque noir). ⚠ L'ambiante seule à 1,5 aplatit le relief. ⚠ Rien n'a été vu sur le monde texturé de Jordan.
+  **REPRIS LE MÊME JOUR, après les retours de Jordan :**
+  - « la lumière était bonne, c'était le MÉTALLIQUE sur les parois marron qui est trop fort » — ses matériaux du
+    modeleur portent du métal (`Material 2`, le marron : 0,57 ; `Material 3` : 1,0). ⚠ **UN MÉTAL REFLÈTE, IL NE
+    DIFFUSE PAS** : il reflétait le fond presque noir et tombait au noir à l'ombre. Les reflets viennent désormais
+    d'un CIEL NEUTRE de la teinte de l'ambiante (`reflected_light_source = SKY`), le fond reste uni. Vu à l'image :
+    un pavé marron à métal 0,57 s'éclaire comme son jumeau mat. (Un essai d'ombre portée adoucie a été RETIRÉ.)
+  - « le SSAO n'est visible qu'à l'ombre, car aucun mode smooth normals » — ⚠ **CE N'ÉTAIT PAS LES NORMALES** :
+    Godot n'applique l'occlusion qu'à l'AMBIANTE par défaut (`ssao_light_affect` = 0), qui ne pèse presque rien au
+    soleil. `ssao_light_affect` 0,6, intensité 2,5. Lisser les normales arrondirait les arêtes vives sans rien y
+    changer.
+  - **LE CIEL DU PLAY TEST** : un `ProceduralSkyMaterial` bleu-violet en haut (`#2e1a6e`), turquoise tirant sur le
+    bleu-violet à l'horizon (`#3c86b4`), un sol de ciel qui garde la teinte de l'horizon et ne s'assombrit que bas
+    (`ground_curve` 0,6). Montré EN JEU seulement (`background_mode`), où il sert aussi aux reflets ; l'ambiante
+    reste sa couleur. Vu à l'image (`capture_eclairage.gd`, personnage posé sur le plateau).
+  - **LE MODE D'EMPLOI DIT COMMENT OBTENIR LE MÊME RENDU (Jordan : « il faudra le tenir à jour […] fais la liste »)** :
+    la page 6 du manuel, « The same look in your engine » — normales par face (les importer, ne pas lisser),
+    soleil, ambiante, SSAO et son effet sur la lumière directe, SSIL, reflets, ciel du Play test, MSAA, et ce qui
+    est écarté exprès (SDFGI, lightmaps). ⚠ **UNE SEULE SOURCE** : les valeurs sont des constantes de `vue.gd`
+    (`SOLEIL_ENERGIE`, `AMBIANTE_COULEUR`…), que la vue applique et que la page cite. Gardé par `fumee_appli` :
+    l'attendu est lu sur l'environnement et le soleil POSÉS dans la vue ; une vue qui n'applique plus une valeur
+    rougit (mutation : `ssao_light_affect` à 0).
+  - **LA BANDE DU BAS (Jordan : « afin qu'on ne confonde pas les défilements qui filent sous leur limite avec un
+    logiciel qui dépasse de l'écran »)** : 8 px, teinte de la barre de titre, filet en haut ; les deux panneaux
+    s'arrêtent au-dessus. Gardé par `fumee_appli` (rectangles posés), une mutation rouge, vu à l'image.
 - Gardé par `test_projet` (35), `test_temoin_lie` (25) et `fumee_appli` (249). **Neuf mutations rouges** ;
   C7 (« le chemin enregistré ignoré ») d'abord MUETTE : pour une couche ordinaire le chemin enregistré et
   celui de l'id sont les mêmes, et le test ne relisait pas l'ancien témoin repris — ni n'y écrivait. Vu à
@@ -1446,6 +1533,50 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     ⚠ `trait` est devenu un MOT RÉSERVÉ de GDScript 4.7 : `var trait :=` ne compilait plus.
   - **PAS ENCORE ÉCRIT** : une projection cylindrique ; un vrai LSCM ; un rangement plus serré (la marge
     visée laisse ~20 % de patron vide). Rien n'a été tenu en main.
+  - **WITNESS GEOMETRY ET WITNESS TEXTURING — DÉCIDÉ (Jordan, 1er octobre 2026), ÉCRIT LE MÊME JOUR** : « faire
+    sortir du mode Witness, renommé Witness geometry, un second mode Witness texturing, vu que je compte y
+    rajouter de quoi dessiner la texture ou dessiner sur l'UV avec les outils de peinture classiques ». Cinq
+    ateliers (Project · World / Geometry · Texturing / Play test), le même témoin et la même édition dans les
+    deux ; seule la barre de droite change. Geometry : modes, sélection, transformations, maillage, vue, le
+    témoin modélisé. Texturing : modes, sélection, Materials (projection, dépliage U, patron UV) — et la
+    peinture à venir. Ce qui existe dans les deux barres (Tab, 1 2 3) se suit. ⚠ **DANS TEXTURING ON NE MODÈLE
+    PAS** : G R S E I K X M F O ne touchent à rien et l'écran renvoie à Geometry (`Modeleur.geometrie`) ; A, B,
+    U, 1 2 3 marchent. Gardé par `fumee_appli` (+9), deux mutations rouges ; vu à l'image (`capture_app.gd`).
+  - **LA PEINTURE — DÉCIDÉ ET ÉCRIT (Jordan, 1er octobre 2026 : « go pour la peinture »), PALIER 1 : en 3D, sans
+    calques.** Le cœur, `addons/marchingblocks_core/peinture.gd` : une TOILE par chemin d'image, PARTAGÉE (toutes les
+    tuiles qui portent le matériau lisent la même `ImageTexture` — `MaillageEdite.materiau_godot` la demande) ; le
+    tampon (dureté, opacité, l'image REPLIÉE comme la répétition de la texture), le trait, la pipette, l'écriture.
+    ⚠ **ON PEINT LÀ OÙ LE RENDU LIT** : `MaillageEdite.uv_au_point` rend l'UV que `vers_array_mesh_de` donne au point
+    touché (UV dépliés interpolés, sinon la projection du matériau). Dans Texturing, **P** : le clic gauche glissé
+    peint, Alt+clic lit la couleur ; un matériau sans image reçoit une toile de 1024² de sa couleur et passe au
+    BLANC (sinon sa couleur multiplierait la peinture) ; une face de la légende refuse, et le dit. UN Ctrl+Z par trait
+    — l'historique garde la RÉGION touchée, avant et après, pas l'image entière. Les toiles s'écrivent avec le témoin
+    (dans `<couche>_images/`), avant son `.glb`, qui les embarque : le monde les porte.
+    ⚠ **DEUX DÉFAUTS VUS À L'IMAGE, AUCUN TEST NE LES AURAIT DITS** (`DEV_TOOLS/capture_peinture.gd`, avec fenêtre) :
+    un trait parti d'une face de la légende ne peignait plus rien, même passé sur la matière ; et les traits sortaient
+    en POINTILLÉS — un trait n'était relié que sur une même face, et les faces des tuiles sont petites. Le mouvement
+    est désormais coupé en deux tant que deux impacts sont à plus d'un demi-rayon sur la toile.
+    ⚠ **LE HEADLESS NE GARDE PAS `ImageTexture.update`** (mesuré : avec fenêtre, si) : les gardes vérifient que la
+    texture du matériau EST la toile ; l'affichage se juge à l'image.
+    **MESURÉ** : `test_peinture` (19 : un tampon dur = les 45 texels du disque, mi-opacité, douceur, repli aux quatre
+    coins, trait sans trou, l'UV de `uv_au_point` = celle des tableaux du RENDU au centre de chaque triangle en Boîte,
+    plane et dépliée, toile partagée, annulation au bit près, écriture relue) ; `fumee_appli` (+11 : un vrai trait à la
+    souris sur une copie de la paroi, Ctrl+Z / Ctrl+Y, disque, `.glb`, pipette, Geometry qui éteint le pinceau). Six
+    mutations rouges.
+    ⚠ **LIMITES, À DIRE** : en Boîte, l'image se répète, donc la peinture aussi (un long trait dessine un motif) ; et
+    **le dépliage (U) range chaque tuile dans le MÊME carré** — deux tuiles d'un même matériau en projection UV
+    partagent leur peinture.
+  - **L'ATLAS DU TÉMOIN — ÉCRIT LE MÊME JOUR** (Jordan : « go ») : `TemoinLie.deplier_en_atlas` range les îlots de
+    TOUTES les tuiles ensemble, à une échelle ; le bouton « Unwrap all tiles (atlas) » le fait pour le matériau
+    courant et le passe en UV, UNE annulation pour toutes les tuiles. Le dépliage d'une tuile a été coupé en
+    `ilots_a_plat` · `ranger` · `poser_uvs` (sortie inchangée, `test_maillage_edite` 160 vert). **MESURÉ**
+    (`test_peinture` +5) : tout dans [0,1], densité égale à 2 % près, **0 texel revendiqué par deux tuiles**
+    (pixellisé à part, grille de 512) — et le contrôle, tuile par tuile, en partage des milliers ; mutation (un
+    rangement par tuile) : 7,8 millions de texels partagés, densité ×7. `fumee_appli` +2 (le bouton, un Ctrl+Z).
+    Vu à l'image (`capture_peinture.gd`, `2_atlas`). ⚠ **CE QUE ÇA NE DONNE PAS** : l'unicité par COPIE — une tuile
+    de plateau revient des centaines de fois, et sa peinture avec elle (« une tuile par clé »).
+    **OUVERT** : la gomme et les calques ; le panneau 2D du patron ; un curseur qui montre la taille du pinceau ;
+    les bandes de couture pendant qu'on peint.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -1634,6 +1765,68 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   panneaux, l'aperçu et la grille locale ; que le rayon tombe où l'œil l'attend, ça se juge souris
   en main.
 
+### LES FORMES SPÉCIALES — DÉCIDÉ (Jordan, 1er octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : garder « Shape operations », et un onglet **Special shapes** — un balcon contre une paroi ; un puits
+dans un sol et un tunnel dans une paroi, PERPENDICULAIRES, capables de rejoindre deux salles en restant
+ouverts aux deux embouchures ; un pont entre deux parois face à face. Et sa généralisation : une case sur
+une paroi, une case sur une autre, même diagonale, un PROFIL, et l'outil les relie.
+
+- **TUNNEL, PUITS ET PONT SONT UNE SEULE OPÉRATION** (`addons/marchingblocks_core/formes_speciales.gd`) : deux
+  ANCRES (une case, la normale de sa paroi) ; une JAMBE perpendiculaire à chaque paroi (`taille` cases, jamais
+  plus du tiers du trajet), un raccord droit entre leurs bouts ; un PROFIL balayé (rond, carré, arche — sol
+  plat et voûte —, et le tablier du pont avec son garde-corps), haut verrouillé sur +Y. Tunnel et puits
+  CREUSENT, pont et balcon REMPLISSENT. Un clic : tout droit, jusqu'au premier vide (tunnel, puits — sinon
+  `longueur` cases, un cul-de-sac DIT) ou la première matière en face (pont). Le balcon : une dalle à rebord.
+- **LA PAROI DIAGONALE** : un escalier de cases n'a que des faces ±X ±Z ; la normale est ESTIMÉE (somme des
+  faces horizontales exposées de la fenêtre 3³, arrondie à huit directions). ⚠ **UN PREMIER JET ÉCARTAIT LES
+  FACES DE DOS, ET C'ÉTAIT FAUX** — trouvé en cherchant à faire rougir sa mutation : sur une paroi en biais de
+  deux cases d'épaisseur il gardait les −Z (perpendiculaires) et pas les −X, et rendait (1,0,0). Sans filtre,
+  l'avant et l'arrière d'une paroi mince s'annulent symétriquement.
+- **TOUT EST EN ENTIERS** (centres de cases, distances au carré sur 64 bits) : la règle est réécrite en C# et
+  en C++, et un départage flottant aurait divergé sur les cases du bord.
+- ⚠ **SANS LA TRAVERSÉE DE L'AXE, UN CONDUIT FIN EN BIAIS ÉTAIT TROUÉ** : un profil de taille 1 ne gardait que
+  les cases dont le centre est SUR l'axe. Chaque segment ajoute les cases que son axe traverse, un axe à la fois
+  (égalité : le plus petit axe) — le conduit est toujours relié par les faces.
+- **DÉCIDÉ (Jordan, 1er octobre 2026) — LA FORME RÉPARE ELLE-MÊME LES CONTACTS DIAGONAUX QU'ELLE CRÉE** : par
+  tours, sans ordre (tous les damiers autour des cases changées au tour d'avant, appliqués d'un coup) ; creuser
+  vide la paire pleine, remplir comble la paire vide. Un damier qui préexistait loin d'elle n'est pas touché.
+  Ce n'est pas la complétion retirée au pinceau (§2) : c'est la forme générée qui doit être propre, et
+  l'écran DIT combien de cases il a ajoutées.
+- ⚠ **DEUX DÉFAUTS VUS EN ÉCRIVANT LES TESTS** : en un clic, le tunnel finissait sur la première case VIDE, et sa
+  dernière tranche creusait une rigole dans le sol de la salle atteinte (il finit sur la paroi d'en face) ; et
+  les boîtes du parcours de connexité débordaient du massif — le vide passait par l'extérieur, et « sans
+  traversée » restait muette.
+- **L'APPLI** : la section « Special shapes » sous « Shape operations » (World) ; Straight / Connect, le profil,
+  Size (`[ ]`), Depth / Reach, Rail — seulement ce que la forme lit. La forme vise TOUJOURS la matière de la
+  couche active ; l'aperçu montre les cases exactes, l'ancre d'un Connect en ambre ; un clic droit ou Échap
+  l'oublie ; une forme posée est UNE action (`_appliquer`), un Ctrl+Z. Le manuel (F1) en a une page.
+- **DÉCIDÉ (Jordan) — LES TROIS GREFFONS LES ONT** : `mb_shapes.gd`, `MBShapes.cs`, `MBCore/MBShapes.{h,cpp}`,
+  et leurs éditeurs (barre Godot, inspecteur Unity, panneau Slate et mode Unreal — réglages sur l'acteur).
+  `tools_conformance.json` porte 34 cas de plus (normales et formes), leurs mondes écrits UNE fois
+  (`shape_worlds`) : recopiés dans chaque cas, ils portaient le fichier à 1 Mo. Le générateur écrit une case par
+  ligne (186 Ko). `test_greffon_peinture` exige que les cas exercent chaque forme, droite et reliée, chaque
+  profil, chaque refus sauf « trop grand », un débouché et un cul-de-sac, une diagonale, une réparation.
+- **MESURÉ** : `test_formes_speciales` 79 (attendus déroulés à la main, ou jugés par un parcours du vide et par
+  `MB.contacts_par_arete`) ; `fumee_appli` (vrais clics par la caméra : aperçu de 15 cases, tunnel, Connect,
+  Échap, puits refusé — aussi en première ancre —, pont, balcon, `[ ]`) ; greffon Godot 103 cas et ses gestes ;
+  banc .NET et banc C++ (clang, drapeaux d'Unreal) 103 cas, 0 échec ; **Unity 6.6 : 26 tests sur 26** (dont
+  `ShapeEditorTests`, Undo compris) ; **Unreal 5.8.3 : BuildPlugin, BUILD SUCCESSFUL, aucun avertissement**.
+- **MUTATIONS, TOUTES ROUGES À LA FIN** : 20 sur le cœur, 7 sur l'appli, 3 par greffon sur la règle, 7 sur
+  l'éditeur Godot, 3 sur l'éditeur Unity. ⚠ **CINQ ONT D'ABORD ÉTÉ MUETTES** : le prolongement aux ancres et la
+  jambe sans bride (les embouchures donnaient sur de l'air : il fallait un sol de salle contre elles), la
+  traversée (le parcours débordait), le filtre de dos (c'était le code qui avait tort), l'ancre de Connect sans
+  validation (le refus n'était éprouvé qu'en un clic — dans l'appli ET dans le greffon). ⚠ **ET TROIS
+  « MUTATIONS » N'ONT RIEN ÉPROUVÉ** : un `sed` à la mauvaise indentation (rien remplacé, compté vert), un
+  `dotnet run --no-incremental` (le drapeau partait au programme, qui ne trouvait pas son fichier), une
+  mutation C++ qui ne compilait plus (`-Werror`). Rejouées avec un outil qui EXIGE le motif.
+- ⚠ **PAS TENU EN MAIN** : ni par Jordan ni dans les éditeurs des greffons — la barre Godot et l'inspecteur Unity
+  n'ont pas été dessinés, le mode Unreal ni ouvert ni cliqué. Vu à l'image dans l'appli seulement
+  (`capture_formes_speciales.gd`) : tunnel en coude, paroi à 45° percée, pont, balcon, puits, aperçu d'un pont
+  en Connect.
+- **OUVERT** : un raccord COURBE (aujourd'hui deux jambes et un segment droit) ; un escalier dans un puits ;
+  le coût d'un aperçu sur un long conduit de taille 7 (recalculé à chaque case visée, non mesuré).
+
 ## 6. Méthode — ce qui a été payé cher
 
 ⚠ **UN TEST QU'ON N'A PAS VU ROUGIR NE GARDE RIEN.** Toute propriété se garde par un scénario
@@ -1713,15 +1906,20 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 461 vérifications, 0 échec** (1er octobre 2026, relevées après « le monde suit son témoin »),
+  Dix-huit suites, **8 672 vérifications, 0 échec** (1er octobre 2026, relevées après les formes spéciales),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
-  18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
-  (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
+  18 cas de pose, 103 d'outils dont 34 de formes), g++ (`engines/unreal/core-runner` : les mêmes, et le repère)
+  et Unity 6.6 (26 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 55,
-  `test_outils` 57, `fumee_appli` 259, `test_greffon_peinture` 179, `test_faux_artiste` 36,
-  `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 25, `test_sections` 30.
-  Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
+  `test_outils` 57, `fumee_appli` 322, `test_greffon_peinture` 218, `test_faux_artiste` 36,
+  `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 31, `test_sections` 30, `test_peinture` 24, `test_formes_speciales` 79.
+  Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 103 cas d'outils / 0 échec, Unity 6.6 26 tests
+  sur 26, Unreal 5.8.3 BuildPlugin sans avertissement.
+  ⚠ **LE BANC C++ TOURNE AVEC LE clang DE UNITY** (`…/WebGLSupport/BuildTools/Emscripten/llvm/clang++.exe
+  --target=x86_64-pc-windows-msvc`, mêmes drapeaux que `build.sh`) ; et **`RunUAT BuildPlugin` ÉCHOUE SOUS UN
+  DOSSIER `-Package` PROFOND** (chemins de plus de 260 caractères, « OtherCompilationError » sans une ligne
+  d'erreur) : un dossier court, `%TEMP%\ueb`.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre

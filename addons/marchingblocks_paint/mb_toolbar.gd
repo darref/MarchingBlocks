@@ -12,6 +12,7 @@ extends HBoxContainer
 ## is built and checked without one (`plugin.gd` gives it the editor scale).
 
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
+const Shapes := preload("res://addons/marchingblocks_paint/mb_shapes.gd")
 const Icons := preload("res://addons/marchingblocks_paint/mb_icons.gd")
 const OLIVE := Color(0.706, 0.741, 0.522)
 const RED := Color(0.878, 0.376, 0.235)
@@ -35,6 +36,14 @@ var _size: HSlider
 var _size_value: Label
 var _shape_buttons := {}
 var _hollow: Button
+var _special_buttons := {}
+var _shape_bar: HBoxContainer
+var _ends_buttons := {}
+var _profile_bar: HBoxContainer
+var _profile_buttons := {}
+var _shape_size: SpinBox
+var _shape_length: SpinBox
+var _rail: Button
 var _brush: HBoxContainer
 var _selection_bar: HBoxContainer
 var _selected: Label
@@ -67,6 +76,40 @@ func _build() -> void:
 		_mode_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_mode(m[0]))
 	_hollow = _toggle(bar, "hollow", "Hollow box", "Keeps the skin of the box — a room. A box thinner than three "
 		+ "cells stays solid.", func() -> void: editor.hollow = _hollow.button_pressed)
+	# The special shapes: tools of their own, always aimed at the matter.
+	_gap(bar)
+	for m in [["tunnel", "Tunnel", "Digs into a WALL, square to it: one click goes through to the next cave (or Length "
+			+ "deep); Connect joins two walls anywhere, slanted ones included."],
+			["well", "Well", "Digs into a FLOOR or a CEILING, straight: one click stops in the cave below (or Length "
+			+ "deep); Connect joins a floor and a ceiling."],
+			["bridge", "Bridge", "Builds a deck out of a WALL across the air to the first wall in front; Connect "
+			+ "joins two walls, and the deck bends."],
+			["balcony", "Balcony", "A slab sticking out of a WALL at the height you click, with its rail."]]:
+		_special_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_special(m[0]))
+	# Their settings: only while a shape is the tool, and only what that shape reads.
+	_shape_bar = HBoxContainer.new()
+	_shape_bar.add_theme_constant_override("separation", 2)
+	bar.add_child(_shape_bar)
+	_gap(_shape_bar)
+	for e in [["straight", "Straight", "One click: straight out of the face, square to it.", false],
+			["connect", "Connect", "Two clicks: a face, then another one; both ends stay open. Escape forgets the first.", true]]:
+		var on: bool = e[3]
+		_ends_buttons[e[0]] = _toggle(_shape_bar, e[0], e[1], e[2], func() -> void: editor.set_connect(on))
+	_profile_bar = HBoxContainer.new()
+	_profile_bar.add_theme_constant_override("separation", 2)
+	_shape_bar.add_child(_profile_bar)
+	for pr in [["round", "Round", "A round tube."], ["square", "Square", "A square duct."],
+			["arch", "Arch", "A flat floor and a round vault: a corridor you can walk."]]:
+		_profile_buttons[pr[0]] = _toggle(_profile_bar, pr[0], pr[1], pr[2], func() -> void:
+			editor.profile = pr[0]
+			refresh())
+	_shape_size = _spin(_shape_bar, 1, 7, "Size ( [ and ] ): 1 is one cell across, 2 is three, 3 is five…",
+		func(v: int) -> void: editor.shape_size = v)
+	_shape_length = _spin(_shape_bar, 1, Shapes.LENGTH_MAX, "Length: how deep a straight tunnel or well goes when "
+		+ "it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out.",
+		func(v: int) -> void: editor.shape_length = v)
+	_rail = _toggle(_shape_bar, "rail", "Rail", "A one-cell rim along the open sides (bridge, balcony). Needs a size "
+		+ "of 2 or more.", func() -> void: editor.rail = _rail.button_pressed)
 	# The brush: only for Add, Dig and Select — Rect and Box have none.
 	_brush = HBoxContainer.new()
 	_brush.add_theme_constant_override("separation", 2)
@@ -213,6 +256,19 @@ func _plate(colour: Color) -> StyleBoxFlat:
 	return plate
 
 
+func _spin(parent: Control, low: int, high: int, tip: String, act: Callable) -> SpinBox:
+	var sb := SpinBox.new()
+	sb.min_value = low
+	sb.max_value = high
+	sb.select_all_on_focus = true
+	sb.tooltip_text = tip
+	sb.value_changed.connect(func(v: float) -> void:
+		if not _refreshing:
+			act.call(int(v)))
+	parent.add_child(sb)
+	return sb
+
+
 func _menu(parent: Control, icon: String, tip: String) -> MenuButton:
 	var m := MenuButton.new()
 	m.icon = Icons.icon(icon, _icon_px())
@@ -262,6 +318,22 @@ func refresh() -> void:
 	_hollow.set_pressed_no_signal(editor.hollow)
 	# Only what the current tool uses, as in the tool: Hollow for the Box, the brush for Add · Dig · Select.
 	_hollow.visible = editor.mode == "box"
+	var shaping: bool = editor.mode == "shape"
+	for sp in _special_buttons:
+		(_special_buttons[sp] as Button).set_pressed_no_signal(shaping and sp == editor.special)
+	_shape_bar.visible = shaping
+	_ends_buttons["straight"].visible = editor.special != "balcony"
+	_ends_buttons["connect"].visible = editor.special != "balcony"
+	(_ends_buttons["straight"] as Button).set_pressed_no_signal(not editor.connect_ends)
+	(_ends_buttons["connect"] as Button).set_pressed_no_signal(editor.connect_ends)
+	_profile_bar.visible = editor.special in ["tunnel", "well"]
+	for pr in _profile_buttons:
+		(_profile_buttons[pr] as Button).set_pressed_no_signal(pr == editor.profile)
+	_shape_size.set_value_no_signal(editor.shape_size)
+	_shape_length.set_value_no_signal(editor.shape_length)
+	_shape_length.visible = editor.special == "balcony" or not editor.connect_ends
+	_rail.visible = editor.special in ["bridge", "balcony"]
+	_rail.set_pressed_no_signal(editor.rail)
 	_brush.visible = editor.mode in ["add", "dig", "select"]
 	_size.set_value_no_signal(editor.brush_size)
 	_size_value.text = str(editor.brush_size)

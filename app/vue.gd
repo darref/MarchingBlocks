@@ -26,12 +26,17 @@ signal colle(ancre: Vector3i)
 ## Une boîte au-delà de `Outils.VOLUME_MAXI` cases rend vide : l'écran doit le DIRE, sinon le glissé
 ## semble ne rien faire.
 signal boite_trop_grande
+## Une forme spéciale posée d'un clic (ou au second clic d'un « Connect ») : `modif` = {poser, effacer}.
+signal forme_posee(modif: Dictionary, nom: String, info: Dictionary)
+## Ce qu'il faut DIRE d'une forme : un refus du cœur (`code` = son erreur), une ancre posée ou oubliée.
+signal forme_dite(code: String, info: Dictionary)
 ## LA TUILE SOUS LA SOURIS, dans World (le sens inverse de la légende des formes) :
 ## {"sommet", "nom" (l'item posé, "" s'il n'y en a pas), "faute" (un cube rouge), "lot"} ; {} = aucune.
 signal tuile_survolee(info: Dictionary)
 
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
+const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Personnage := preload("res://app/personnage.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
@@ -43,8 +48,27 @@ const TEINTE_CREUSER := Color(0.9, 0.38, 0.24, 0.36)
 const TEINTE_SELECTIONNER := Color(0.42, 0.62, 0.98, 0.3)
 const TEINTE_SELECTION := Color(0.42, 0.62, 0.98, 0.22)
 const TEINTE_BOITE := Color(0.42, 0.62, 0.98, 0.1)
+const TEINTE_ANCRE := Color(1.0, 0.82, 0.25, 0.6)
 
 var _vue: SubViewport
+
+# ── L'AMBIANCE LUMINEUSE — UNE SEULE SOURCE (1er octobre 2026). La vue la lit, et le manuel (F1, « Getting the same
+# look in your engine ») l'écrit au client depuis ces mêmes constantes : une page qui recopierait les valeurs
+# divergerait au premier réglage retouché (charte §6).
+const SOLEIL_ROTATION := Vector3(-48, -34, 0)
+const SOLEIL_ENERGIE := 1.15
+const AMBIANTE_COULEUR := Color("#8892a4")
+const AMBIANTE_ENERGIE := 1.1
+const SSAO_INTENSITE := 2.5
+const SSAO_SUR_LE_SOLEIL := 0.6
+const REFLETS_HAUT := Color("#8892a4")
+const REFLETS_HORIZON := Color("#9aa2b0")
+const REFLETS_SOL := Color("#5a606c")
+const CIEL_HAUT := Color("#2e1a6e")
+const CIEL_HORIZON := Color("#3c86b4")
+const CIEL_SOL := Color("#0c0e18")
+const CIEL_COURBE_DU_SOL := 0.6
+const MSAA := Viewport.MSAA_4X
 var _camera: Camera3D
 var _cible := Vector3(6, 4, 6)
 var _azimut := 0.7
@@ -92,6 +116,14 @@ var forme := "sphere"
 ## ⚠ **HOLLOW NE VAUT QUE POUR LA BOÎTE 3D.** Un rectangle du plan n'a pas de dedans : l'évidemment
 ## d'une boîte de moins de trois cases d'épaisseur la laisse pleine (`Outils.volume_de_la_boite`).
 var creux := false
+## LES FORMES SPÉCIALES (outil « forme ») — la règle vit dans `formes_speciales.gd`, la vue ne fait que
+## viser, montrer et émettre. `ancre_forme` : la première ancre d'un « Connect » ({case, face}), vide sinon.
+var forme_speciale := {"quoi": "tunnel", "relier": false, "profil": "rond", "taille": 2, "longueur": 8,
+	"garde_corps": true}
+var ancre_forme := {}
+var _cle_forme := ""
+var _forme_vue := {}
+var _ancre_vue: MultiMeshInstance3D
 ## La SÉLECTION — des cases de la couche active. ⚠ Un état d'écran, pas une donnée : elle n'est ni
 ## enregistrée ni annulable, et se vide quand on change de couche.
 var selection := {}
@@ -120,6 +152,8 @@ var _boite_vue: MeshInstance3D
 
 ## ── LE PLAY TEST ──
 var _env: Environment
+var _ciel_du_jeu: ProceduralSkyMaterial
+var _ciel_neutre: ProceduralSkyMaterial
 var personnage: CharacterBody3D
 ## Le décor qu'il foule : la SURFACE RENDUE des tuiles, pas les boîtes par case des grilles.
 var _decor: StaticBody3D
@@ -138,7 +172,7 @@ func _ready() -> void:
 	focus_mode = Control.FOCUS_CLICK
 	_vue = SubViewport.new()
 	_vue.own_world_3d = true
-	_vue.msaa_3d = Viewport.MSAA_4X
+	_vue.msaa_3d = MSAA
 	add_child(_vue)
 
 	var env := Environment.new()
@@ -146,15 +180,55 @@ func _ready() -> void:
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color("#101216")
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("#8892a4")
-	env.ambient_light_energy = 0.8
+	env.ambient_light_color = AMBIANTE_COULEUR
+	env.ambient_light_energy = AMBIANTE_ENERGIE
+	# ⚠ LA LUMIÈRE DES CREUX : SSAO + SSIL, EN ESPACE ÉCRAN (Jordan, 1er octobre 2026 : « une lumière ambiante
+	# afin que tout soit au moins légèrement visible […] afin de bien voir les reliefs qu'on crée », puis « en mode
+	# World aussi, on n'y voit rien »). Jugé à l'image (`DEV_TOOLS/capture_eclairage.gd`) : les faces à l'ombre
+	# s'éclaircissent, les creux prennent une ombre douce, le relief se lit — dans Witness et dans World.
+	# ⚠ PAS LE SDFGI, ESSAYÉ ET MESURÉ : il ne voit PAS une géométrie modifiée (une dalle émissive posée après coup
+	# ne teinte rien) tant qu'il ne se reconstruit pas, et le reconstruire après chaque geste noircit les ombres
+	# pendant ~45 images (0,75 s) — un clignotement à chaque enregistrement. L'espace écran suit chaque image.
+	# ⚠ Monter l'ambiante SEULE (1,5) rend tout visible mais APLATIT le relief.
+	env.ssao_enabled = true
+	# ⚠ L'OCCLUSION AU SOLEIL AUSSI (Jordan, 1er octobre 2026 : « le SSAO n'est visible qu'à l'ombre ») : par défaut
+	# elle n'assombrit que l'AMBIANTE (`ssao_light_affect` = 0), qui ne pèse presque rien au soleil. Ce n'est pas
+	# une affaire de normales lissées — lisser arrondirait les arêtes vives sans rien y changer.
+	env.ssao_light_affect = SSAO_SUR_LE_SOLEIL
+	env.ssao_intensity = SSAO_INTENSITE
+	env.ssil_enabled = true
+	# LE CIEL DU PLAY TEST (Jordan, 1er octobre 2026) : bleu-violet foncé en haut, turquoise tirant sur le
+	# bleu-violet à l'horizon, un sol de ciel peu visible repoussé vers le bas. Montré en jeu seulement
+	# (`background_mode`) ; l'ambiante reste sa COULEUR, pour que le monde s'éclaire pareil dedans et dehors.
+	var ciel := ProceduralSkyMaterial.new()
+	ciel.sky_top_color = CIEL_HAUT
+	ciel.sky_horizon_color = CIEL_HORIZON
+	ciel.sky_curve = 0.12
+	ciel.ground_horizon_color = CIEL_HORIZON
+	ciel.ground_bottom_color = CIEL_SOL
+	ciel.ground_curve = CIEL_COURBE_DU_SOL   # grand : le sol garde la teinte de l'horizon longtemps, son sombre arrive bas
+	ciel.sun_angle_max = 8.0
+	_ciel_du_jeu = ciel
+	# ⚠ CE QUE REFLÈTENT LES MÉTAUX (Jordan, 1er octobre 2026 : « le métallique sur les parois marron est trop
+	# fort ») : un métal n'éclaire presque pas par diffusion, il REFLÈTE son environnement — et le nôtre était le
+	# fond presque noir. Ses parois (métal 0,57) tombaient au noir à l'ombre. Hors du jeu, les reflets viennent
+	# d'un ciel NEUTRE, de la teinte de l'ambiante ; en jeu, du ciel qu'on voit.
+	_ciel_neutre = ProceduralSkyMaterial.new()
+	_ciel_neutre.sky_top_color = REFLETS_HAUT
+	_ciel_neutre.sky_horizon_color = REFLETS_HORIZON
+	_ciel_neutre.ground_horizon_color = REFLETS_HORIZON
+	_ciel_neutre.ground_bottom_color = REFLETS_SOL
+	_ciel_neutre.sun_angle_max = 0.0
+	env.sky = Sky.new()
+	env.sky.sky_material = _ciel_neutre
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
 	var monde_env := WorldEnvironment.new()
 	monde_env.environment = env
 	_vue.add_child(monde_env)
 
 	var soleil := DirectionalLight3D.new()
-	soleil.rotation_degrees = Vector3(-48, -34, 0)
-	soleil.light_energy = 1.15
+	soleil.rotation_degrees = SOLEIL_ROTATION
+	soleil.light_energy = SOLEIL_ENERGIE
 	soleil.shadow_enabled = true
 	_vue.add_child(soleil)
 
@@ -181,6 +255,7 @@ func _ready() -> void:
 
 	_apercu = _nuage_de_cases(1.03)
 	_selection_vue = _nuage_de_cases(1.01)
+	_ancre_vue = _nuage_de_cases(1.06)
 	_boite_vue = MeshInstance3D.new()
 	var boite := BoxMesh.new()
 	var mb := StandardMaterial3D.new()
@@ -446,14 +521,24 @@ func _dire_la_tuile(position: Vector2) -> void:
 	# ⚠ LE VIDE N'EFFACE PAS : pour aller cliquer « Show it in the witness », la souris quitte la tuile et
 	# traverse du ciel. La dernière tuile désignée reste dite jusqu'à ce qu'on en survole une autre.
 	if info.is_empty():
+		_marquer_la_tuile_dite()
 		return
 	var ou: Variant = info.get("sommet", null)
 	var cle := [ou, info.get("nom", "")]
-	if cle == _tuile_dite:
-		return
-	_tuile_dite = cle
-	montrer_tuile(ou)
-	tuile_survolee.emit(info)
+	if cle != _tuile_dite:
+		_tuile_dite = cle
+		tuile_survolee.emit(info)
+	_marquer_la_tuile_dite()
+
+
+## ⚠ **UN SEUL REPÈRE SOUS LA SOURIS (Jordan, 1er octobre 2026 : « le preview de case aligné sur la grille et
+## celui aligné sur la tuile […] c'est brouillon »).** Les deux se chevauchaient, décalés d'une demi-case
+## (la case `p` occupe [p, p+1], la tuile du sommet v occupe [v + ½, v + 3/2]). Quand on PEINT, le repère
+## est l'aperçu des cases, calé sur la grille : c'est ce que le clic changera. La boîte blanche de la tuile
+## ne se montre qu'en Navigate, où rien n'est peint et où l'on regarde le monde tuile par tuile. Le
+## bandeau « Where is it from? » suit la tuile survolée dans les deux cas.
+func _marquer_la_tuile_dite() -> void:
+	montrer_tuile(_tuile_dite[0] if naviguer and _tuile_dite != null else null)
 
 
 ## Cadrer une forme sous l'angle de sa photo, pour que la vue ressemble à la carte qu'on a cliquée.
@@ -710,6 +795,9 @@ func _survoler(position: Vector2) -> void:
 	if outil == "boite" or outil == "rect":
 		_survoler_boite(position)
 		return
+	if outil == "forme":
+		_survoler_forme(position)
+		return
 	if point.is_empty() or cases() == null:
 		_apercu.visible = false
 		return
@@ -770,6 +858,9 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 			if not point.is_empty():
 				colle.emit(Outils.ancre("ajouter", point))
 		annuler_collage()
+		return
+	if outil == "forme":
+		_cliquer_forme(bouton, position)
 		return
 	if outil == "boite" or outil == "rect":
 		var depart := _coin_vise(position)
@@ -858,6 +949,110 @@ func _finir_boite(bouton: int) -> void:
 	regler_selection(nouvelle)
 
 
+# ── les formes spéciales ─────────────────────────────────────────────────────────────────────────────
+
+## ⚠ **UNE FORME VISE TOUJOURS LA MATIÈRE DE LA COUCHE ACTIVE, QUELLE QUE SOIT LA VISÉE** : elle part d'une
+## FACE (une paroi, un sol), et seule la couche active peut changer. La grille n'a pas de face à offrir.
+func _point_forme(position: Vector2) -> Dictionary:
+	if cases() == null:
+		return {}
+	var r: Dictionary = Outils.rayon(_occupe_actif, _camera.project_ray_origin(position),
+		_camera.project_ray_normal(position), PORTEE)
+	return r if r["touche"] else {}
+
+
+## La demande faite au cœur pour ce point : un clic droit devant soi, ou la seconde ancre d'un « Connect ».
+func _demande_forme(point: Dictionary) -> Dictionary:
+	var r := forme_speciale.duplicate()
+	if bool(r["relier"]) and not ancre_forme.is_empty() and r["quoi"] != "balcon":
+		r["a"] = ancre_forme["case"]
+		r["face_a"] = ancre_forme["face"]
+		r["b"] = point["case"]
+		r["face_b"] = point["normale"]
+	else:
+		r["relier"] = false
+		r["a"] = point["case"]
+		r["face_a"] = point["normale"]
+	return r
+
+
+## ⚠ LE CŒUR N'EST RAPPELÉ QUE QUAND LA CASE OU LA FACE VISÉE CHANGE (ou les réglages) : un conduit long
+## parcourt des milliers de cases, et le refaire à chaque pixel ferait ramer la souris.
+func _forme_sous(point: Dictionary) -> Dictionary:
+	var demande := _demande_forme(point)
+	var cle := "%s|%s|%s" % [demande, ancre_forme, cases().get_instance_id()]
+	if cle != _cle_forme:
+		_cle_forme = cle
+		_forme_vue = FS.forme(_occupees_actives(), demande)
+	return _forme_vue
+
+
+## Rien à montrer tant qu'aucune ancre n'est posée en « Connect » : seule la case qui la recevrait s'allume.
+func _attend_la_premiere_ancre() -> bool:
+	return bool(forme_speciale["relier"]) and ancre_forme.is_empty() and forme_speciale["quoi"] != "balcon"
+
+
+func _survoler_forme(position: Vector2) -> void:
+	_montrer_ancre()
+	var point := _point_forme(position)
+	if point.is_empty():
+		_apercu.visible = false
+		return
+	if _attend_la_premiere_ancre():
+		_remplir(_apercu, [point["case"]], TEINTE_ANCRE)
+		return
+	var r := _forme_sous(point)
+	if r["erreur"] != "":
+		_remplir(_apercu, [point["case"]], TEINTE_CREUSER)
+		return
+	if not r["effacer"].is_empty():
+		_remplir(_apercu, r["effacer"].keys(), TEINTE_CREUSER)
+	else:
+		_remplir(_apercu, r["poser"].keys(), TEINTE_AJOUTER)
+
+
+func _montrer_ancre() -> void:
+	_remplir(_ancre_vue, [ancre_forme["case"]] if not ancre_forme.is_empty() else [], TEINTE_ANCRE)
+
+
+## Un clic : la première ancre d'un « Connect », ou la forme elle-même. Le clic DROIT oublie l'ancre.
+func _cliquer_forme(bouton: int, position: Vector2) -> void:
+	if bouton == MOUSE_BUTTON_RIGHT:
+		oublier_ancre()
+		return
+	var point := _point_forme(position)
+	if point.is_empty():
+		return
+	if _attend_la_premiere_ancre():
+		var n: Vector3i = FS.normale_de(forme_speciale["quoi"], _occupees_actives(), point["case"], point["normale"])
+		if n == Vector3i.ZERO:
+			forme_dite.emit("pas_un_sol" if forme_speciale["quoi"] == "puits" else "pas_de_paroi", {})
+			return
+		ancre_forme = {"case": point["case"], "face": point["normale"]}
+		_montrer_ancre()
+		forme_dite.emit("ancre", {"case": point["case"], "normale": n})
+		_survoler(position)
+		return
+	var r := _forme_sous(point)
+	if r["erreur"] != "":
+		forme_dite.emit(r["erreur"], r)
+		return
+	ancre_forme = {}
+	_cle_forme = ""
+	_montrer_ancre()
+	forme_posee.emit({"poser": r["poser"], "effacer": r["effacer"]}, forme_speciale["quoi"], r)
+
+
+func oublier_ancre() -> void:
+	if ancre_forme.is_empty():
+		return
+	ancre_forme = {}
+	_cle_forme = ""
+	_montrer_ancre()
+	forme_dite.emit("ancre_oubliee", {})
+	rafraichir()
+
+
 func _occupees_actives() -> Dictionary:
 	var occupees := {}
 	var g := cases()
@@ -918,6 +1113,7 @@ func _dessiner_selection() -> void:
 
 ## Rafraîchit ce qui dépend des cases : à rappeler après chaque changement de monde.
 func rafraichir() -> void:
+	_cle_forme = ""   # le monde a pu changer : l'aperçu d'une forme se recalcule
 	_dessiner_selection()
 	if _derniere_souris.x >= 0.0 and mode == "monde":
 		_survoler(_derniere_souris)
@@ -1095,6 +1291,8 @@ func commencer_partie() -> String:
 	_env.glow_intensity = 0.9
 	_env.glow_bloom = 0.05
 	_env.glow_hdr_threshold = 1.0
+	_env.background_mode = Environment.BG_SKY
+	_env.sky.sky_material = _ciel_du_jeu
 	_suivre(0.0)
 	return ""
 
@@ -1108,6 +1306,8 @@ func finir_partie() -> void:
 		_decor = null
 	if _env != null:
 		_env.glow_enabled = false
+		_env.background_mode = Environment.BG_COLOR
+		_env.sky.sky_material = _ciel_neutre
 	if not _orbite_d_avant.is_empty():
 		_cible = _orbite_d_avant[0]
 		_azimut = _orbite_d_avant[1]

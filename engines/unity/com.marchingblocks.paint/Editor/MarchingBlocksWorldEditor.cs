@@ -12,6 +12,8 @@
 //            choosing an aim (its button or Tab) stops navigating too. Rules: AimState in MBTools.cs.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)      Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
+//   SHAPES   Tunnel · Well · Bridge · Balcony (MBShapes.cs), always aimed at the matter: Straight is one
+//            click square out of a face, Connect is two clicks on two faces anywhere (Esc forgets the first)
 //   SELECT   Fill, Delete, Extrude ↑ ↓ (the floor follows), Grow, Shrink, Connected,
 //            Move (arrow keys follow the camera; Shift + ↑ ↓ raise and lower), Copy / Cut / Paste
 //
@@ -27,7 +29,7 @@ namespace MarchingBlocks.Paint.EditorTools
     [CustomEditor(typeof(MarchingBlocksWorld))]
     public sealed class MarchingBlocksWorldEditor : Editor
     {
-        enum Mode { Add, Dig, Select, Rect, Box }
+        enum Mode { Add, Dig, Select, Rect, Box, Shape }
 
         static bool editing;
         static AimState aim = AimState.Start;
@@ -37,6 +39,15 @@ namespace MarchingBlocks.Paint.EditorTools
         static int brushSize = 1;
         static BrushShape shape = BrushShape.Sphere;
         static bool hollow;
+        // The special shape (Mode.Shape): which one, one click or two, and its settings.
+        static SpecialShape special = SpecialShape.Tunnel;
+        static bool connectEnds;
+        static ShapeProfile profile = ShapeProfile.Round;
+        static int shapeSize = 2;
+        static int shapeLength = 8;
+        static bool rail = true;
+        // The first end of a Connect, or null.
+        static Hit? shapeAnchor;
 
         static readonly HashSet<Int3> selection = new HashSet<Int3>();
         static List<Int3> clipboard = new List<Int3>();
@@ -172,6 +183,49 @@ namespace MarchingBlocks.Paint.EditorTools
                         "than three cells stays solid."));
                 }
                 GUILayout.FlexibleSpace();
+            }
+
+            Section("SPECIAL SHAPES");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                int shown = mode == Mode.Shape ? (int)special : -1;
+                int picked = Segmented(shown,
+                    Icon("tunnel", "Tunnel — digs into a WALL, square to it: one click goes through to the next cave (or " +
+                        "Length deep); Connect joins two walls anywhere, slanted ones included."),
+                    Icon("well", "Well — digs into a FLOOR or a CEILING, straight: one click stops in the cave below (or " +
+                        "Length deep); Connect joins a floor and a ceiling."),
+                    Icon("bridge", "Bridge — a deck out of a WALL across the air to the first wall in front; Connect " +
+                        "joins two walls, and the deck bends."),
+                    Icon("balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."));
+                if (picked != shown && picked >= 0) { special = (SpecialShape)picked; mode = Mode.Shape; CancelAll(); }
+                GUILayout.FlexibleSpace();
+            }
+            if (mode == Mode.Shape)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (special != SpecialShape.Balcony)
+                    {
+                        int ends = Segmented(connectEnds ? 1 : 0,
+                            Icon("straight", "Straight — one click: straight out of the face, square to it."),
+                            Icon("connect", "Connect — two clicks: a face, then another one; both ends stay open. Esc forgets the first."));
+                        if ((ends == 1) != connectEnds) { connectEnds = ends == 1; CancelAll(); }
+                        GUILayout.Space(8);
+                    }
+                    if (special == SpecialShape.Tunnel || special == SpecialShape.Well)
+                        profile = (ShapeProfile)Segmented((int)profile,
+                            Icon("round", "Round — a round tube."),
+                            Icon("square", "Square — a square duct."),
+                            Icon("arch", "Arch — a flat floor and a round vault: a corridor you can walk."));
+                    if (special == SpecialShape.Bridge || special == SpecialShape.Balcony)
+                        rail = IconToggle(rail, Icon("rail", "Rail — a one-cell rim along the open sides. Needs a size of 2 or more."));
+                    GUILayout.FlexibleSpace();
+                }
+                shapeSize = EditorGUILayout.IntSlider(new GUIContent("Size", "[ and ] — 1 is one cell across, 2 is three, 3 is five…"), shapeSize, 1, 7);
+                if (special == SpecialShape.Balcony || !connectEnds)
+                    shapeLength = EditorGUILayout.IntSlider(new GUIContent(special == SpecialShape.Bridge ? "Reach" : "Depth",
+                        "How deep a straight tunnel or well goes when it finds no cave, how far a straight bridge looks for " +
+                        "a wall, how far a balcony sticks out."), shapeLength, 1, MBShapes.LengthMax);
             }
 
             if (mode == Mode.Add || mode == Mode.Dig || mode == Mode.Select)
@@ -327,6 +381,7 @@ namespace MarchingBlocks.Paint.EditorTools
 
             var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             if (pasting) { ScenePaste(e, ray); return; }
+            if (mode == Mode.Shape) { SceneShape(e, ray, id); return; }
             if (mode == Mode.Rect || mode == Mode.Box) { SceneBox(e, ray, id); return; }
             SceneBrush(e, ray, id);
         }
@@ -411,6 +466,101 @@ namespace MarchingBlocks.Paint.EditorTools
             foreach (var c in change.Set) placedThisStroke.Add(c);
             Undo.RecordObject(World, gesture == BrushTool.Add ? "Add matter" : "Dig matter");
             World.Apply(change);
+        }
+
+        // ── Special shapes ─────────────────────────────────────────────────────────────────────────
+        //
+        // A shape starts from a FACE, so it always aims at the matter, whatever the aim (the grid has none).
+
+        static readonly Dictionary<string, string> ShapeErrors = new Dictionary<string, string>
+        {
+            { "needs_a_wall", "click a WALL, a side face of the matter." },
+            { "needs_floor_or_ceiling", "click a FLOOR or a CEILING, a top or bottom face." },
+            { "same_cell", "the second end must be another cell." },
+            { "too_far", "the two ends are too far apart." },
+            { "nothing_in_front", "no wall in front within reach. Raise Reach, or Connect two walls." },
+            { "too_large", "too large. Make it smaller or shorter." },
+        };
+
+        static bool WaitingForFirstEnd => connectEnds && shapeAnchor == null && special != SpecialShape.Balcony;
+
+        static ShapeRequest RequestFor(Hit hit)
+        {
+            var r = new ShapeRequest { Shape = special, Profile = profile, Size = shapeSize, Length = shapeLength, Rail = rail,
+                A = hit.Cell, FaceA = hit.Normal };
+            if (connectEnds && shapeAnchor != null && special != SpecialShape.Balcony)
+            {
+                r.Connect = true;
+                r.A = shapeAnchor.Value.Cell;
+                r.FaceA = shapeAnchor.Value.Normal;
+                r.B = hit.Cell;
+                r.FaceB = hit.Normal;
+            }
+            return r;
+        }
+
+        void SceneShape(Event e, Ray ray, int id)
+        {
+            var hit = World.RayAgainstCells(ray);
+            if (shapeAnchor != null) DrawCells(new[] { shapeAnchor.Value.Cell }, SelectColour, 0.0f);
+            if (hit.Touched)
+            {
+                if (WaitingForFirstEnd) DrawCells(new[] { hit.Cell }, SelectColour, 0.04f);
+                else
+                {
+                    var r = MBShapes.Build(World.Cells, RequestFor(hit));
+                    if (r.Error != "") DrawCells(new[] { hit.Cell }, DigColour, 0.04f);
+                    else if (r.Clear.Count > 0) DrawCells(r.Clear, DigColour, 0.04f);
+                    else DrawCells(r.Set, AddColour, 0.04f);
+                }
+            }
+            if (e.type == EventType.MouseDown && e.button == 0 && !e.alt)
+            {
+                if (hit.Touched) ClickShape(hit);
+                GUIUtility.hotControl = id;
+                e.Use();
+            }
+            else if (e.type == EventType.MouseUp && e.button == 0 && GUIUtility.hotControl == id)
+            {
+                GUIUtility.hotControl = 0;
+                e.Use();
+            }
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag) SceneView.RepaintAll();
+        }
+
+        // A click on the matter: the first end of a Connect, or the shape itself — ONE undo step.
+        void ClickShape(Hit hit)
+        {
+            string name = special.ToString();
+            if (WaitingForFirstEnd)
+            {
+                if (MBShapes.NormalFor(special, World.Cells, hit.Cell, hit.Normal).Equals(new Int3(0, 0, 0)))
+                    status = $"{name} — {ShapeErrors[special == SpecialShape.Well ? "needs_floor_or_ceiling" : "needs_a_wall"]}";
+                else
+                {
+                    shapeAnchor = hit;
+                    status = $"{name} — first end set. Click the second one (Esc forgets it).";
+                }
+                Repaint();
+                return;
+            }
+            var r = MBShapes.Build(World.Cells, RequestFor(hit));
+            if (r.Error != "")
+            {
+                status = $"{name} — {(ShapeErrors.TryGetValue(r.Error, out var why) ? why : r.Error)}";
+                Repaint();
+                return;
+            }
+            shapeAnchor = null;
+            var change = new Change();
+            foreach (var c in r.Set) change.Set.Add(c);
+            foreach (var c in r.Clear) change.Clear.Add(c);
+            Undo.RecordObject(World, name);
+            int n = World.Apply(change);
+            status = $"{name} — {n} cell(s) changed" + (r.Repaired > 0 ? $", {r.Repaired} more so that no two cells touch by an edge only" : "") +
+                ". Ctrl+Z undoes it.";
+            Repaint();
+            SceneView.RepaintAll();
         }
 
         // The Rect ignores the aim: it always lies flat on the floor, the gesture that draws a room's floor.
@@ -537,12 +687,16 @@ namespace MarchingBlocks.Paint.EditorTools
                 case KeyCode.S: SetMode(Mode.Select); break;
                 case KeyCode.G: SetMode(Mode.Rect); break;
                 case KeyCode.B: SetMode(Mode.Box); break;
-                case KeyCode.LeftBracket: brushSize = Mathf.Max(1, brushSize - 1); break;
-                case KeyCode.RightBracket: brushSize = Mathf.Min(7, brushSize + 1); break;
+                case KeyCode.LeftBracket:
+                    if (mode == Mode.Shape) shapeSize = Mathf.Max(1, shapeSize - 1); else brushSize = Mathf.Max(1, brushSize - 1);
+                    break;
+                case KeyCode.RightBracket:
+                    if (mode == Mode.Shape) shapeSize = Mathf.Min(7, shapeSize + 1); else brushSize = Mathf.Min(7, brushSize + 1);
+                    break;
                 case KeyCode.PageUp: ChangeFloor(1); break;
                 case KeyCode.PageDown: ChangeFloor(-1); break;
                 case KeyCode.Escape:
-                    if (pasting || boxStart != null) CancelAll(); else ClearSelection();
+                    if (pasting || boxStart != null || shapeAnchor != null) CancelAll(); else ClearSelection();
                     break;
                 case KeyCode.UpArrow: case KeyCode.DownArrow: case KeyCode.LeftArrow: case KeyCode.RightArrow:
                     if (selection.Count == 0) return false;
@@ -657,6 +811,7 @@ namespace MarchingBlocks.Paint.EditorTools
         void CancelAll()
         {
             pasting = false;
+            shapeAnchor = null;
             boxStart = null;
             stroking = false;
         }

@@ -117,8 +117,10 @@ func _derouler() -> void:
 			mo.sel_f[f] = true
 	mo.assigner_courant()
 	mo.tout_choisir(false)
+	_ecran._aller_a("texture")   # les matériaux vivent dans Witness texturing
 	await _images(10)
 	_photo("1f_modeleur_materiau")
+	_ecran._aller_a("witness")
 	_ecran._regler_edition(false)
 
 	await _ecran._trancher_temoin()
@@ -214,7 +216,10 @@ func _derouler() -> void:
 	_photo("8b_manuel_modeleur")
 	_ecran._manuel.ouvrir(5)
 	await _images(10)
-	_photo("8c_manuel_raccourcis")
+	_photo("8c_manuel_rendu")
+	_ecran._manuel.ouvrir(6)
+	await _images(10)
+	_photo("8d_manuel_raccourcis")
 
 	_ecran.queue_free()
 	await process_frame

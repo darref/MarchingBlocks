@@ -76,6 +76,21 @@ const TRACES := {
 	"evider":'<rect x="3.5" y="3.5" width="17" height="17" rx="2.5"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/>',
 	"gomme": '<path d="M20 20.5H9.5l-5.3-5.3a2 2 0 0 1 0-2.8L13.2 3.4a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L11 20.5"/><path d="M7.5 10.5l6 6"/>',
 	"aide": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 1 1 3.6 2.4c-.7.3-1.1.9-1.1 1.6v.6M12 17.2h.01"/>',
+	# Les formes spéciales : une arche percée dans un mur, un trou dans un sol, un tablier entre deux
+	# falaises, une dalle à rebord contre une paroi.
+	"tunnel": '<path d="M3 20.5h18M3 20.5V4.5h18v16"/><path d="M8.5 20.5v-6a3.5 3.5 0 0 1 7 0v6"/>',
+	"puits": '<path d="M2.5 9 12 4.5 21.5 9 12 13.5z"/><ellipse cx="12" cy="9" rx="3.4" ry="1.6"/><path d="M12 13.5v7M9 17.5l3 3 3-3"/>',
+	"pont": '<path d="M2.5 21V10.5h4V21M17.5 21V10.5h4V21"/><path d="M6.5 10.5h11v2.5h-11"/><path d="M6.5 6.5h11M9.5 6.5v4M14.5 6.5v4"/>',
+	"balcon": '<path d="M4 3.5v17"/><path d="M4 14h15.5v2.5H4"/><path d="M4 9h15.5v5M11.5 9v5"/>',
+	# Un clic, tout droit — ou relier deux ancres.
+	"droit": '<path d="M3.5 12h12M11.5 7.5l4.5 4.5-4.5 4.5"/><path d="M20 4v16"/>',
+	"relier": '<circle cx="5" cy="18.5" r="2.2"/><circle cx="19" cy="5.5" r="2.2"/><path d="M7.2 18.5H11a3 3 0 0 0 3-3v-7a3 3 0 0 1 3-3"/>',
+	# Les profils d'un conduit.
+	"profil_rond": '<circle cx="12" cy="12" r="8"/>',
+	"profil_carre": '<rect x="4.5" y="4.5" width="15" height="15" rx="1"/>',
+	"profil_arche": '<path d="M4.5 20V12a7.5 7.5 0 0 1 15 0v8z"/>',
+	# Un garde-corps : une lisse, des balustres, sur un plancher.
+	"garde_corps": '<path d="M3 19.5h18M3 8.5h18M6 8.5v11M12 8.5v11M18 8.5v11"/>',
 }
 
 ## L'enveloppe de chaque icône. ⚠ Les greffons la reprennent (`DEV_TOOLS/generer_icones_greffons.gd`) :

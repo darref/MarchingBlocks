@@ -27,22 +27,28 @@ namespace MarchingBlocks.Paint.Tests
             if (MBJson.AsLong(limits["box_volume_max"]) != MBTools.BoxVolumeMax)
                 failures.Add($"box_volume_max is {limits["box_volume_max"]}, the plugin uses {MBTools.BoxVolumeMax}");
             var world = Cells(conf["world"]);
+            var shapeWorlds = new Dictionary<string, HashSet<Int3>>();
+            if (conf.TryGetValue("shape_worlds", out var sw))
+                foreach (var kv in (Dictionary<string, object>)sw) shapeWorlds[kv.Key] = Cells(kv.Value);
+            if (MBJson.AsLong(limits["shape_length_max"]) != MBShapes.LengthMax || MBJson.AsLong(limits["shape_span_max"]) != MBShapes.SpanMax)
+                failures.Add("shape limits differ from the plugin's");
             foreach (Dictionary<string, object> c in (List<object>)conf["cases"])
             {
                 cases++;
                 string why;
-                try { why = RunCase(c, world); }
+                try { why = RunCase(c, world, shapeWorlds); }
                 catch (Exception e) { why = e.GetType().Name + ": " + e.Message; }
                 if (why != null) failures.Add($"{c["name"]} — {why}");
             }
             return failures;
         }
 
-        static string RunCase(Dictionary<string, object> c, HashSet<Int3> world)
+        static string RunCase(Dictionary<string, object> c, HashSet<Int3> world, Dictionary<string, HashSet<Int3>> shapeWorlds)
         {
             var i = (Dictionary<string, object>)c["input"];
             var e = (Dictionary<string, object>)c["expected"];
-            HashSet<Int3> CellsOf(string key) => i[key] is string ? world : Cells(i[key]);
+            HashSet<Int3> CellsOf(string key) => i.ContainsKey("world") ? shapeWorlds[(string)i["world"]]
+                : i[key] is string ? world : Cells(i[key]);
             switch ((string)c["kind"])
             {
                 case "ray":
@@ -86,6 +92,32 @@ namespace MarchingBlocks.Paint.Tests
                     return Same("clipboard", MBTools.Copy(CellsOf("cells"), Cells(i["selection"])), e["clipboard"]);
                 case "paste":
                     return SameChange(MBTools.Paste(CellsOf("cells"), Cells(i["clipboard"]), Vec(i["anchor"])), e);
+                case "wall_normal":
+                {
+                    var got = MBShapes.WallNormal(CellsOf("cells"), Vec(i["cell"]), Vec(i["face"]));
+                    return got.Equals(Vec(e["normal"])) ? null : $"expected {Vec(e["normal"])}, got {got}";
+                }
+                case "special_shape":
+                {
+                    ShapeResult r;
+                    var shape = SpecialShapeOf((string)i["shape"]);
+                    if (shape == null) { r = new ShapeResult { Error = "unknown_shape" }; }
+                    else
+                    {
+                        var req = new ShapeRequest
+                        {
+                            Shape = shape.Value, A = Vec(i["a"]), FaceA = Vec(i["face_a"]), Connect = (bool)i["connect"],
+                            Profile = ProfileOf((string)i["profile"]), Size = (int)MBJson.AsLong(i["size"]),
+                            Length = (int)MBJson.AsLong(i["length"]), Rail = (bool)i["rail"],
+                        };
+                        if (req.Connect) { req.B = Vec(i["b"]); req.FaceB = Vec(i["face_b"]); }
+                        r = MBShapes.Build(CellsOf("cells"), req);
+                    }
+                    string got = $"{r.Error}/{r.Opened}/{r.Repaired}";
+                    string want = $"{(string)e["error"]}/{(bool)e["opened"]}/{MBJson.AsLong(e["repaired"])}";
+                    if (got != want) return $"error/opened/repaired: expected {want}, got {got}";
+                    return Same("set", r.Set, e["set"]) ?? Same("clear", r.Clear, e["clear"]);
+                }
             }
             return $"unknown kind {c["kind"]}";
         }
@@ -104,6 +136,12 @@ namespace MarchingBlocks.Paint.Tests
             string Show(List<Int3> x) => x.Count > 8 ? $"{x.Count} cells" : string.Join(" ", x);
             return $"{what}: expected {Show(w)}, got {Show(g)}";
         }
+
+        static SpecialShape? SpecialShapeOf(string s) => s == "tunnel" ? SpecialShape.Tunnel : s == "well" ? SpecialShape.Well
+            : s == "bridge" ? SpecialShape.Bridge : s == "balcony" ? SpecialShape.Balcony : (SpecialShape?)null;
+
+        static ShapeProfile ProfileOf(string s) => s == "round" ? ShapeProfile.Round : s == "square" ? ShapeProfile.Square
+            : s == "arch" ? ShapeProfile.Arch : throw new ArgumentException("profile " + s);
 
         static BrushTool ToolOf(string s) => s == "add" ? BrushTool.Add : s == "dig" ? BrushTool.Dig : s == "select" ? BrushTool.Select
             : throw new ArgumentException("tool " + s);

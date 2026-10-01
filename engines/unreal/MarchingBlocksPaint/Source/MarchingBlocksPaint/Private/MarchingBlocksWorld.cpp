@@ -95,6 +95,20 @@ int32 AMarchingBlocksWorld::Operate(MBPaint::ESelectionOp Op, const TCHAR* UndoN
 	return N;
 }
 
+MBPaint::FShapeRequest AMarchingBlocksWorld::ShapeSettings() const
+{
+	MBPaint::FShapeRequest R;
+	R.Shape = SpecialShape == EMarchingBlocksSpecialShape::Well ? MBPaint::ESpecialShape::Well
+		: SpecialShape == EMarchingBlocksSpecialShape::Bridge ? MBPaint::ESpecialShape::Bridge
+		: SpecialShape == EMarchingBlocksSpecialShape::Balcony ? MBPaint::ESpecialShape::Balcony : MBPaint::ESpecialShape::Tunnel;
+	R.Profile = ShapeProfile == EMarchingBlocksShapeProfile::Square ? MBPaint::EShapeProfile::Square
+		: ShapeProfile == EMarchingBlocksShapeProfile::Arch ? MBPaint::EShapeProfile::Arch : MBPaint::EShapeProfile::Round;
+	R.Size = ShapeSize;
+	R.Length = ShapeLength;
+	R.bRail = bShapeRail;
+	return R;
+}
+
 void AMarchingBlocksWorld::MoveSelection(const MBPaint::FCell& Offset)
 {
 	if (Selection.empty()) return;

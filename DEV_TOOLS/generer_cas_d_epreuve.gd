@@ -45,8 +45,14 @@ func _initialize() -> void:
 	quit(0)
 
 
+## ⚠ UNE CASE TIENT SUR UNE LIGNE : « [x, y, z] ». Indentés, les triplets prenaient cinq lignes chacun, et
+## les mondes des formes spéciales (1er octobre 2026) portaient `tools_conformance.json` à 460 Ko. Les
+## tests comparent le JSON RELU, jamais le texte : le format est libre.
 static func _ecrire(cas: Dictionary, cibles: Array) -> void:
 	var texte := JSON.stringify(cas, "  ")
+	var triplet := RegEx.new()
+	triplet.compile("\\[\\s*(-?\\d+),\\s*(-?\\d+),\\s*(-?\\d+)\\s*\\]")
+	texte = triplet.sub(texte, "[$1, $2, $3]", true)
 	for cible in cibles:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cible).get_base_dir())
 		var f := FileAccess.open(cible, FileAccess.WRITE)

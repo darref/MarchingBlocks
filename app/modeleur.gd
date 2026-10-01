@@ -15,10 +15,15 @@ extends Node3D
 
 signal change(avant: RefCounted, apres: RefCounted, nom: String)
 signal dit(texte: String)
+## Un trait de pinceau fini : la région touchée de la toile, avant et après (l'annulation).
+signal peint(chemin: String, avant: Image, apres: Image, position: Vector2i)
+## La pipette a lu une couleur.
+signal couleur_lue(couleur: Color)
 
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Sections := preload("res://addons/marchingblocks_core/sections.gd")
+const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
 
 const AXES := {"x": Vector3(1, 0, 0), "y": Vector3(0, 0, -1), "z": Vector3(0, 1, 0)}
 const ORANGE := Color(1.0, 0.55, 0.1)
@@ -1064,8 +1069,13 @@ func _contraindre_et_propager() -> void:
 ## LA COMPLÉTION APRÈS UNE COUPE (point 3) : un sommet neuf posé sur un bord est reporté sur chaque face de sa
 ## classe, dans toutes les tuiles (`Sections.completer`). Rend vrai quand d'autres tuiles ont été coupées — le
 ## geste est alors émis ici, en UN lot (une annulation pour toutes).
-## ⚠ Seuls le loop cut et le couteau passent ici (Jordan, 30 septembre 2026). Extruder, inset, biseau,
-## subdiviser sur un bord n'y passent PAS encore : leurs sommets neufs restent sans correspondants.
+## ⚠ **TOUT GESTE QUI CHANGE LA TOPOLOGIE PASSE ICI (1er octobre 2026)** — Jordan : « la subdivision, sans
+## subdiviser aussi ses voisines, ne rompt-elle pas les sections partagées ? » Si, mesuré
+## (`DEV_TOOLS/sonde_operations_et_sections.gd`) : seuls le loop cut et le couteau passaient ici, et une face de
+## bord subdivisée laissait 54 points de bord sans correspondant (biseau 51, fusion 32) — droits tant qu'ils
+## restent sur l'arête d'en face, une fente dès qu'ils bougent. Le report les répare tous (0 échec).
+## ⚠ CE QU'AUCUN REPORT NE RÉPARE : un geste qui change la FORME d'une section (extruder une face de bord,
+## la supprimer) — les tuiles d'en face n'ont pas cette forme. On le DIT (les échecs), on ne le comble pas.
 func _completer_apres(avant_actif: RefCounted, nom: String) -> bool:
 	if sections == null:
 		return false
@@ -1074,8 +1084,9 @@ func _completer_apres(avant_actif: RefCounted, nom: String) -> bool:
 		if c != cle:
 			copies[c] = temoin.tuiles[c].copie())
 	if int(r["echecs"]) > 0:
-		dit.emit("[color=#e0603c]%d border point(s) could not be carried to a matching tile[/color] — "
-			% int(r["echecs"]) + "that border does not run there.")
+		dit.emit(("[color=#e0603c]%s changed the shape of a tile border[/color] — the %d point(s) that meet it "
+			+ "in other tiles cannot follow, so the world will show a gap there. [i]Ctrl+Z undoes it; keep "
+			+ "border edges where they are, and move them with G instead.[/i]") % [nom, int(r["echecs"])])
 	if copies.is_empty():
 		return false
 	var avant := TL.Lot.new()
@@ -1110,12 +1121,12 @@ func confirmer() -> void:
 	modal = ""
 	var avant: RefCounted = _avant
 	_avant = null
+	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % _nom_geste)
 	if _sections_du_geste and not _touchees.is_empty():
 		_emettre_le_lot(avant, _nom_geste)
-	else:
+	elif not (_nom_geste in ["Extrude", "Inset", "Bevel"] and _completer_apres(avant, _nom_geste)):
 		_emettre(avant, _nom_geste)
 	_sections_du_geste = false
-	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % _nom_geste)
 	redessiner()
 
 
@@ -1181,9 +1192,10 @@ func operer(nom: String) -> void:
 				sel_f[f] = true
 		_:
 			return
-	_emettre(avant, libelle)
-	redessiner()
 	dit.emit("[b]%s[/b] done. [i]Ctrl+Z undoes it.[/i]" % libelle)
+	if not _completer_apres(avant, libelle):
+		_emettre(avant, libelle)
+	redessiner()
 
 
 ## Ctrl+R — le loop cut : l'anneau sous la souris s'éclaire en jaune ; un clic le coupe au milieu.
@@ -1313,6 +1325,8 @@ func _finir_le_couteau() -> void:
 func souris_entree(event: InputEvent) -> bool:
 	if maillage == null or camera == null:
 		return false
+	if pinceau and not geometrie and modal == "" and _peindre_a_la_souris(event):
+		return true
 	if event is InputEventMouseMotion:
 		souris = (event as InputEventMouseMotion).position
 		if modal in ["G", "R", "S", "I", "bevel"]:
@@ -1424,9 +1438,18 @@ func touche(k: InputEventKey) -> bool:
 		return false
 	# 1 2 3 de la RANGÉE DU HAUT, par leur place (sur un AZERTY, « 1 » est sous « & ») ; ceux du pavé
 	# numérique sont les VUES, et restent à l'écran.
+	# ⚠ DANS WITNESS TEXTURING, ON NE MODÈLE PAS (Jordan, 1er octobre 2026) : choisir les faces, B, A, U — les gestes
+	# de géométrie vivent dans Witness geometry, et on le DIT plutôt que de les laisser faire en silence.
+	if not geometrie and k.keycode in [KEY_G, KEY_R, KEY_S, KEY_E, KEY_I, KEY_K, KEY_X, KEY_DELETE, KEY_M, KEY_F, KEY_O]:
+		dit.emit("[i]%s is a geometry tool — open [b]Witness geometry[/b] to change the shape.[/i]"
+			% OS.get_keycode_string(k.keycode))
+		return true
 	if k.physical_keycode in [KEY_1, KEY_2, KEY_3] and k.keycode < KEY_KP_0:
 		choisir_mode({KEY_1: "sommet", KEY_2: "arete", KEY_3: "face"}[k.physical_keycode])
 		dit.emit("[i]%s select.[/i]" % {KEY_1: "Vertex", KEY_2: "Edge", KEY_3: "Face"}[k.physical_keycode])
+		return true
+	if not geometrie and k.keycode == KEY_P:
+		regler_pinceau(not pinceau)
 		return true
 	match k.keycode:
 		KEY_A:
@@ -1473,6 +1496,232 @@ static func _chiffre(k: InputEventKey) -> String:
 
 
 # ── LES MATÉRIAUX ───────────────────────────────────────────────────────────────────────────────────
+
+## Faux dans Witness texturing : les touches de géométrie y sont refusées.
+var geometrie := true
+
+
+# ── LA PEINTURE (Witness texturing, Jordan, 1er octobre 2026) ───────────────────────────────────────────
+#
+# Le pinceau peint la TOILE du matériau de la face touchée (`peinture.gd`), là où le rendu lit
+# (`MaillageEdite.uv_au_point`). Toutes les copies d'une tuile partagent la toile : on en peint une, toutes
+# suivent. Une face sans matériau (la teinte de la légende) ne se peint pas : on le dit.
+
+var pinceau := false
+var pinceau_couleur := Color("#b4603c")
+## En pixels de la toile.
+var pinceau_taille := 24.0
+var pinceau_durete := 0.5
+var pinceau_opacite := 1.0
+## Où naissent les toiles neuves (l'écran y met le dossier d'images de la couche).
+var dossier_toiles := ""
+## Le trait en cours : {chemin, avant (l'image au début), zone, cle, face, dernier (pixel)}.
+var _trait := {}
+
+
+func regler_pinceau(oui: bool) -> void:
+	pinceau = oui
+	if oui:
+		dit.emit("[b]Paint[/b] — left drag paints the material of the face you point at (every copy of the tile "
+			+ "follows) · Alt+click picks a colour · P stops painting. [i]Box projection repeats the image: what you "
+			+ "paint repeats too. For unique paint, Unwrap (U) and set the projection to UV.[/i]")
+	else:
+		_finir_le_trait()
+
+
+## Ce que touche la souris : la tuile, sa face, le point DANS LE REPÈRE DE LA TUILE.
+func _impact(p: Vector2) -> Dictionary:
+	if temoin != null:
+		var hit: Dictionary = temoin.rayon(camera.project_ray_origin(p), camera.project_ray_normal(p))
+		if hit.is_empty():
+			return {}
+		var o: Dictionary = temoin.occurrences[int(hit["occurrence"])]
+		return {"tuile": temoin.tuiles[hit["cle"]], "cle": hit["cle"], "face": int(hit["face"]),
+			"point": (o["pose"] as Transform3D).affine_inverse() * (hit["point"] as Vector3)}
+	var h: Dictionary = maillage.lancer_rayon_rapide(_origine(p), _direction(p))
+	if h.is_empty():
+		return {}
+	return {"tuile": maillage, "cle": cle, "face": int(h["face"]), "point": h["point"]}
+
+
+func _peindre_a_la_souris(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		if b.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		souris = b.position
+		_appui = b.pressed and not b.alt_pressed
+		if b.pressed:
+			if b.alt_pressed:
+				_pipette(b.position)
+			else:
+				_commencer_le_trait(b.position)
+		else:
+			_finir_le_trait()
+		return true
+	if event is InputEventMouseMotion:
+		var m := event as InputEventMouseMotion
+		souris = m.position
+		if _appui and (m.button_mask & MOUSE_BUTTON_MASK_LEFT):
+			# ⚠ UN TRAIT COMMENCE DÈS QU'IL ATTEINT UNE FACE QUI SE PEINT (vu à l'image, 1er octobre 2026) : parti
+			# d'une face de la légende, le geste ne peignait plus rien, même passé sur la matière.
+			if _trait.is_empty():
+				_commencer_le_trait(m.position, true)
+			else:
+				_poursuivre_le_trait(m.position)
+			return true
+	return false
+
+
+## Le bouton gauche est tenu, en peinture (le trait peut commencer en route).
+var _appui := false
+
+
+## Le chemin de la toile d'une face, la toile créée au besoin. "" si la face ne se peint pas (et on le dit).
+func _toile_de(i: Dictionary) -> String:
+	var tuile: RefCounted = i["tuile"]
+	var m: int = tuile.mat(int(i["face"]))
+	if m < 0 or m >= tuile.materiaux.size():
+		dit.emit("[color=#f2ca79]This face has the legend colour[/color] — select faces and [b]Assign[/b] a "
+			+ "material first: the brush paints a material's image.")
+		return ""
+	var chemin: String = str(tuile.materiaux[m].get("texture", ""))
+	if chemin == "":
+		chemin = _preparer_la_toile(m)
+	if Peinture.toile(chemin).is_empty():
+		dit.emit("[color=#e0603c]The image of this material cannot be read[/color] (%s)." % chemin)
+		return ""
+	return chemin
+
+
+## Une toile neuve pour le matériau `m` : unie, de SA couleur, et le matériau passe au blanc — sinon sa couleur
+## multiplierait l'image, et la peinture paraîtrait assombrie. UN geste (Ctrl+Z rend le matériau d'avant).
+func _preparer_la_toile(m: int) -> String:
+	var avant: RefCounted = instantane()
+	var d: Dictionary = maillage.materiaux[m]
+	var dossier := dossier_toiles if dossier_toiles != "" else "user://toiles"
+	var nom := str(d.get("nom", "material")).to_lower().replace(" ", "_").validate_filename()
+	var chemin := dossier.path_join("paint_%s_%d.png" % [nom, Time.get_ticks_msec()])
+	Peinture.nouvelle_toile(chemin, d.get("couleur", Color.WHITE))
+	d["texture"] = chemin
+	d["couleur"] = Color.WHITE
+	redessiner()
+	_rafraichir_les_tuiles_qui_portent(m)
+	_emettre(avant, "Paint canvas")
+	dit.emit("[b]New paint canvas[/b] for « %s » (%d × %d), filled with its colour." % [d.get("nom", ""),
+		Peinture.TAILLE, Peinture.TAILLE])
+	return chemin
+
+
+func _pixel(i: Dictionary, chemin: String) -> Vector2:
+	var uv: Vector2 = (i["tuile"] as RefCounted).uv_au_point(int(i["face"]), i["point"])
+	var img: Image = Peinture.toile(chemin)["image"]
+	# NON replié : un trait sur une face reste continu ; le tampon replie lui-même.
+	return Vector2(uv.x * img.get_width(), uv.y * img.get_height())
+
+
+func _commencer_le_trait(p: Vector2, en_route := false) -> void:
+	_finir_le_trait()
+	var i := _impact(p)
+	if i.is_empty():
+		return
+	if en_route:
+		# En route, une face qui ne se peint pas est simplement traversée (le refus a été dit à l'appui).
+		var m: int = (i["tuile"] as RefCounted).mat(int(i["face"]))
+		if m < 0 or m >= (i["tuile"] as RefCounted).materiaux.size():
+			return
+	var chemin := _toile_de(i)
+	if chemin == "":
+		return
+	var img: Image = Peinture.toile(chemin)["image"]
+	var px := _pixel(i, chemin)
+	_trait = {"chemin": chemin, "avant": img.duplicate(), "cle": i["cle"], "face": i["face"], "dernier": px,
+		"ecran": p,
+		"zone": Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite)}
+	Peinture.montrer(chemin)
+
+
+## ⚠ UN TRAIT CONTINU, MÊME D'UNE FACE À L'AUTRE (vu à l'image, 1er octobre 2026 : des pointillés). Entre deux
+## positions de souris, un trait n'est relié sur la toile que s'il reste sur la même face — et les faces des tuiles
+## sont petites. Le mouvement est donc COUPÉ EN DEUX tant que deux impacts successifs sont à plus d'un demi-rayon
+## l'un de l'autre sur la toile (cinq fois au plus : 32 points par mouvement).
+func _poursuivre_le_trait(p: Vector2) -> void:
+	_relier(_trait.get("ecran", p), p, 5)
+	_trait["ecran"] = p
+
+
+func _relier(de: Vector2, a: Vector2, profondeur: int) -> void:
+	if profondeur > 0 and de.distance_to(a) > 1.0:
+		var i := _impact(a)
+		var loin := true
+		if not i.is_empty() and i["cle"] == _trait["cle"] and int(i["face"]) == int(_trait["face"]):
+			loin = false
+		elif not i.is_empty():
+			var img: Image = Peinture.toile(_trait["chemin"])["image"]
+			var px := Peinture.vers_pixel(img, (i["tuile"] as RefCounted).uv_au_point(int(i["face"]), i["point"]))
+			var avant := Peinture.vers_pixel(img, (_trait["dernier"] as Vector2) / Vector2(img.get_size()))
+			loin = px.distance_to(avant) > pinceau_taille * 0.5
+		if loin:
+			var milieu := (de + a) * 0.5
+			_relier(de, milieu, profondeur - 1)
+			_relier(milieu, a, profondeur - 1)
+			return
+	_tamponner_en(a)
+
+
+func _tamponner_en(p: Vector2) -> void:
+	var i := _impact(p)
+	if i.is_empty():
+		return
+	var tuile: RefCounted = i["tuile"]
+	var m: int = tuile.mat(int(i["face"]))
+	# Le trait reste sur SA toile : une face d'un autre matériau ne reçoit rien.
+	if m < 0 or m >= tuile.materiaux.size() or str(tuile.materiaux[m].get("texture", "")) != _trait["chemin"]:
+		return
+	var chemin: String = _trait["chemin"]
+	var img: Image = Peinture.toile(chemin)["image"]
+	var px := _pixel(i, chemin)
+	var zone: Rect2i
+	if i["cle"] == _trait["cle"] and int(i["face"]) == int(_trait["face"]):
+		zone = Peinture.trait_(img, _trait["dernier"], px, pinceau_taille, pinceau_couleur, pinceau_durete,
+			pinceau_opacite)
+	else:
+		zone = Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite)
+	_trait["zone"] = zone if (_trait["zone"] as Rect2i).size == Vector2i.ZERO else (_trait["zone"] as Rect2i).merge(zone)
+	_trait["dernier"] = px
+	_trait["cle"] = i["cle"]
+	_trait["face"] = i["face"]
+	Peinture.montrer(chemin)
+
+
+func _finir_le_trait() -> void:
+	if _trait.is_empty():
+		return
+	var t := _trait
+	_trait = {}
+	var zone: Rect2i = t["zone"]
+	if zone.size == Vector2i.ZERO:
+		return
+	var img: Image = Peinture.toile(t["chemin"])["image"]
+	peint.emit(t["chemin"], (t["avant"] as Image).get_region(zone), img.get_region(zone), zone.position)
+
+
+func _pipette(p: Vector2) -> void:
+	var i := _impact(p)
+	if i.is_empty():
+		return
+	var tuile: RefCounted = i["tuile"]
+	var m: int = tuile.mat(int(i["face"]))
+	if m < 0 or m >= tuile.materiaux.size():
+		return
+	var chemin: String = str(tuile.materiaux[m].get("texture", ""))
+	var c: Color = tuile.materiaux[m].get("couleur", Color.WHITE)
+	if chemin != "":
+		c = Peinture.couleur_au(chemin, tuile.uv_au_point(int(i["face"]), i["point"])) * c
+	pinceau_couleur = Color(c.r, c.g, c.b, 1.0)
+	couleur_lue.emit(pinceau_couleur)
+	dit.emit("[i]Colour picked: #%s[/i]" % pinceau_couleur.to_html(false))
+
 
 ## Le matériau qu'on assigne : un indice de `maillage.materiaux`, ou −1 (la teinte de la légende).
 var materiau_courant := -1
@@ -1543,6 +1792,38 @@ func deplier_selection() -> void:
 	dit.emit(("[b]Unwrapped[/b] — %d face(s) in %d island(s), laid out in the 0–1 square at one scale. "
 		+ "[i]Export UV layout… to paint on it; give the material the « UV » projection.[/i]")
 		% [r["faces"], r["ilots"]])
+
+
+## L'ATLAS DU TÉMOIN : les faces du matériau courant (toutes, s'il n'y en a pas), dans TOUTES les tuiles, dépliées
+## ensemble ; le matériau passe en projection UV. UNE annulation pour toutes les tuiles touchées.
+func deplier_en_atlas() -> void:
+	if temoin == null:
+		deplier_selection()
+		return
+	var avant := TL.Lot.new()
+	for c in temoin.tuiles:
+		avant.tuiles[c] = temoin.tuiles[c].copie()
+	var k := materiau_courant
+	var r: Dictionary = temoin.deplier_en_atlas(k if k >= 0 else -2)
+	if k >= 0:
+		maillage.materiaux[k]["projection"] = "uv"
+	var apres := TL.Lot.new()
+	var garde := TL.Lot.new()
+	for c in r["tuiles"]:
+		garde.tuiles[c] = avant.tuiles[c]
+		apres.tuiles[c] = temoin.tuiles[c].copie()
+	if k >= 0 and not garde.tuiles.has(cle):
+		garde.tuiles[cle] = avant.tuiles[cle]
+		apres.tuiles[cle] = maillage.copie()
+	maillage = temoin.tuiles[cle]
+	redessiner()
+	for c in r["tuiles"]:
+		_rafraichir_tuile(c)
+	change.emit(garde, apres, "Unwrap the witness (atlas)")
+	dit.emit(("[b]Atlas[/b] — %d face(s) of %d tile(s) in %d island(s), unwrapped TOGETHER in the 0–1 square at one "
+		+ "scale: each tile has its own place, so its paint is its own (its copies still share it). %s")
+		% [r["faces"], (r["tuiles"] as Array).size(), r["ilots"], "The material now uses the UV projection."
+		if k >= 0 else "[i]Give the material the UV projection.[/i]"])
 
 
 ## Le pivot de la sélection (sa moyenne) — pour cadrer la vue (touche « . » du pavé).

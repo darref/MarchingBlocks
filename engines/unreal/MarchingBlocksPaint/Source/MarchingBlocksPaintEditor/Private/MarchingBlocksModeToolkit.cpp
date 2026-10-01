@@ -123,6 +123,37 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 		return Toggle(IconName, Tip, [World, Shape]() { AMarchingBlocksWorld* W = World(); return W && W->BrushShape == Shape; },
 			[World, Shape]() { if (AMarchingBlocksWorld* W = World()) W->BrushShape = Shape; });
 	};
+	// A special shape: the tool becomes Shape, and a first end of a Connect is forgotten.
+	auto SpecialToggle = [World, M](const ANSICHAR* IconName, const FText& Tip, EMarchingBlocksSpecialShape Special)
+	{
+		return Toggle(IconName, Tip,
+			[World, Special]() { AMarchingBlocksWorld* W = World(); return W && W->Tool == EMarchingBlocksTool::Shape && W->SpecialShape == Special; },
+			[World, M, Special]()
+			{
+				if (AMarchingBlocksWorld* W = World())
+				{
+					W->Tool = EMarchingBlocksTool::Shape;
+					W->SpecialShape = Special;
+					W->bPasting = false;
+					if (M.IsValid()) M->ForgetShapeAnchor();
+				}
+			});
+	};
+	auto EndsToggle = [World, M](const ANSICHAR* IconName, const FText& Tip, bool bConnect)
+	{
+		return Toggle(IconName, Tip, [World, bConnect]() { AMarchingBlocksWorld* W = World(); return W && W->bConnectEnds == bConnect; },
+			[World, M, bConnect]()
+			{
+				if (AMarchingBlocksWorld* W = World()) W->bConnectEnds = bConnect;
+				if (M.IsValid()) M->ForgetShapeAnchor();
+			});
+	};
+	auto ProfileToggle = [World](const ANSICHAR* IconName, const FText& Tip, EMarchingBlocksShapeProfile Profile)
+	{
+		return Toggle(IconName, Tip, [World, Profile]() { AMarchingBlocksWorld* W = World(); return W && W->ShapeProfile == Profile; },
+			[World, Profile]() { if (AMarchingBlocksWorld* W = World()) W->ShapeProfile = Profile; });
+	};
+	auto Shaping = [World]() { AMarchingBlocksWorld* W = World(); return W && W->Tool == EMarchingBlocksTool::Shape; };
 	auto Op = [World](const ANSICHAR* IconName, const FText& Tip, void (AMarchingBlocksWorld::*Fn)(), bool bDanger = false)
 	{
 		return Button(IconName, Tip, [World, Fn]() { if (AMarchingBlocksWorld* W = World()) (W->*Fn)(); }, bDanger);
@@ -211,6 +242,103 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 						Toggle("hollow", LOCTEXT("Hollow", "Hollow box — keeps the skin: a room. A box thinner than three cells stays solid."),
 							[World]() { AMarchingBlocksWorld* W = World(); return W && W->bHollowBox; },
 							[World]() { if (AMarchingBlocksWorld* W = World()) W->bHollowBox = !W->bHollowBox; })
+					]
+				]
+			]
+
+			// The special shapes: a tool of their own, always aimed at the matter; their settings only while it is
+			// the tool, and only what the shape reads.
+			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("Shapes", "SPECIAL SHAPES"))]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("tunnel", LOCTEXT("Tunnel", "Tunnel — digs into a WALL, square to it: one click goes through to the next cave (or Shape Length deep); Connect joins two walls anywhere, slanted ones included."), EMarchingBlocksSpecialShape::Tunnel)]
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("well", LOCTEXT("Well", "Well — digs into a FLOOR or a CEILING, straight: one click stops in the cave below (or Shape Length deep); Connect joins a floor and a ceiling."), EMarchingBlocksSpecialShape::Well)]
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("bridge", LOCTEXT("Bridge", "Bridge — a deck out of a WALL across the air to the first wall in front; Connect joins two walls, and the deck bends."), EMarchingBlocksSpecialShape::Bridge)]
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("balcony", LOCTEXT("Balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."), EMarchingBlocksSpecialShape::Balcony)]
+			]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SVerticalBox)
+				.Visibility_Lambda([Shaping, Shown]() { return Shown(Shaping()); })
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SHorizontalBox)
+						.Visibility_Lambda([World, Shown]() { AMarchingBlocksWorld* W = World(); return Shown(W && W->SpecialShape != EMarchingBlocksSpecialShape::Balcony); })
+						+ SHorizontalBox::Slot().AutoWidth()[EndsToggle("straight", LOCTEXT("Straight", "Straight — one click: straight out of the face, square to it."), false)]
+						+ SHorizontalBox::Slot().AutoWidth()[EndsToggle("connect", LOCTEXT("Connect", "Connect — two clicks: a face, then another one; both ends stay open. Esc forgets the first."), true)]
+						+ SHorizontalBox::Slot().AutoWidth()[Gap()]
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SHorizontalBox)
+						.Visibility_Lambda([World, Shown]()
+						{
+							AMarchingBlocksWorld* W = World();
+							return Shown(W && (W->SpecialShape == EMarchingBlocksSpecialShape::Tunnel || W->SpecialShape == EMarchingBlocksSpecialShape::Well));
+						})
+						+ SHorizontalBox::Slot().AutoWidth()[ProfileToggle("round", LOCTEXT("Round", "Round — a round tube."), EMarchingBlocksShapeProfile::Round)]
+						+ SHorizontalBox::Slot().AutoWidth()[ProfileToggle("square", LOCTEXT("Square", "Square — a square duct."), EMarchingBlocksShapeProfile::Square)]
+						+ SHorizontalBox::Slot().AutoWidth()[ProfileToggle("arch", LOCTEXT("Arch", "Arch — a flat floor and a round vault: a corridor you can walk."), EMarchingBlocksShapeProfile::Arch)]
+					]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SBox)
+						.Visibility_Lambda([World, Shown]()
+						{
+							AMarchingBlocksWorld* W = World();
+							return Shown(W && (W->SpecialShape == EMarchingBlocksSpecialShape::Bridge || W->SpecialShape == EMarchingBlocksSpecialShape::Balcony));
+						})
+						[
+							Toggle("rail", LOCTEXT("Rail", "Rail — a one-cell rim along the open sides. Needs a size of 2 or more."),
+								[World]() { AMarchingBlocksWorld* W = World(); return W && W->bShapeRail; },
+								[World]() { if (AMarchingBlocksWorld* W = World()) W->bShapeRail = !W->bShapeRail; })
+						]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+					[
+						SNew(STextBlock).Text(LOCTEXT("ShapeSize", "Size")).Font(FAppStyle::GetFontStyle("SmallFont"))
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(64.f)
+						[
+							SNew(SSpinBox<int32>).MinValue(1).MaxValue(7).MinSliderValue(1).MaxSliderValue(7)
+							.ToolTipText(LOCTEXT("ShapeSizeTip", "[ and ] — 1 is one cell across, 2 is three, 3 is five…"))
+							.Value_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W ? W->ShapeSize : 2; })
+							.OnValueChanged_Lambda([World](int32 V) { if (AMarchingBlocksWorld* W = World()) W->ShapeSize = FMath::Clamp(V, 1, 7); })
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth()[Gap()]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SHorizontalBox)
+						.Visibility_Lambda([World, Shown]()
+						{
+							AMarchingBlocksWorld* W = World();
+							return Shown(W && (W->SpecialShape == EMarchingBlocksSpecialShape::Balcony || !W->bConnectEnds));
+						})
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+						[
+							SNew(STextBlock).Text(LOCTEXT("ShapeLength", "Length")).Font(FAppStyle::GetFontStyle("SmallFont"))
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SBox).WidthOverride(64.f)
+							[
+								SNew(SSpinBox<int32>).MinValue(1).MaxValue(64).MinSliderValue(1).MaxSliderValue(64)
+								.ToolTipText(LOCTEXT("ShapeLengthTip", "How deep a straight tunnel or well goes when it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out."))
+								.Value_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W ? W->ShapeLength : 8; })
+								.OnValueChanged_Lambda([World](int32 V) { if (AMarchingBlocksWorld* W = World()) W->ShapeLength = FMath::Clamp(V, 1, 64); })
+							]
+						]
 					]
 				]
 			]

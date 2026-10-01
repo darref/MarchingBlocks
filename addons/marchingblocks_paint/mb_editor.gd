@@ -13,6 +13,8 @@ extends Node
 ##            W A S D, Q E) and no click paints. The aim is kept, and comes back as it was.
 ##   TOOLS    add (A) · dig (D) · select (S) · rect (G) · box (B)      Shift does the opposite
 ##   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
+##   SHAPES   tunnel · well · bridge · balcony (`mb_shapes.gd`), always aimed at the matter: Straight is one
+##            click square out of a face; Connect is two clicks, two faces anywhere (Escape forgets the first)
 ##   KEYS     Delete · Escape · arrows move the selection (they follow the camera; Shift + up / down
 ##            lift) · Ctrl+C / Ctrl+X / Ctrl+V
 ##
@@ -21,9 +23,10 @@ extends Node
 signal changed
 
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
+const Shapes := preload("res://addons/marchingblocks_paint/mb_shapes.gd")
 
 const AIMS := ["grid", "sculpt"]
-const MODES := ["add", "dig", "select", "rect", "box"]
+const MODES := ["add", "dig", "select", "rect", "box", "shape"]
 const REACH := 2000.0
 const MAX_DRAWN := 4000
 const ADD_COLOUR := Color(0.55, 0.82, 0.45, 0.35)
@@ -47,6 +50,15 @@ var mode := "add"
 var brush_size := 1
 var shape := "sphere"
 var hollow := false
+## The special shape (mode "shape"): which one, one click or two, and its settings.
+var special := "tunnel"
+var connect_ends := false
+var profile := "round"
+var shape_size := 2
+var shape_length := 8
+var rail := true
+## The first end of a Connect: {"cell", "face"}, empty otherwise.
+var shape_anchor := {}
 var selection := {}
 var clipboard: Array[Vector3i] = []
 var pasting := false
@@ -119,6 +131,20 @@ func set_mode(value: String) -> void:
 	changed.emit()
 
 
+## Picks a special shape: the mode becomes "shape".
+func set_special(value: String) -> void:
+	special = value
+	mode = "shape"
+	_cancel()
+	changed.emit()
+
+
+func set_connect(on: bool) -> void:
+	connect_ends = on
+	_cancel()
+	changed.emit()
+
+
 # ── Aiming ──────────────────────────────────────────────────────────────────────────────────────────
 
 ## {"hit", "cell", "normal"}: the matter in sculpt (when the ray meets it), the floor otherwise; {} when
@@ -159,6 +185,9 @@ func _gesture(inverse: bool) -> String:
 # ── Hover and strokes ───────────────────────────────────────────────────────────────────────────────
 
 func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
+	if mode == "shape":
+		_hover_shape(camera, position)
+		return
 	if pasting:
 		var p := aimed(camera, position, true)
 		var cells: Array = []
@@ -220,6 +249,10 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 	if b.alt_pressed:
 		return false
+	if mode == "shape":
+		if b.pressed:
+			click_shape(camera, b.position)
+		return true
 	if b.pressed:
 		if pasting:
 			var p := aimed(camera, b.position, true)
@@ -273,6 +306,95 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 		changed.emit()
 		return true
 	return false
+
+
+# ── Special shapes ──────────────────────────────────────────────────────────────────────────────────
+#
+# A shape starts from a FACE, so it always aims at the matter, whatever the aim (the grid has no face).
+
+const SHAPE_NAMES := {"tunnel": "Tunnel", "well": "Well", "bridge": "Bridge", "balcony": "Balcony"}
+const SHAPE_ERRORS := {
+	"needs_a_wall": "click a WALL, a side face of the matter.",
+	"needs_floor_or_ceiling": "click a FLOOR or a CEILING, a top or bottom face.",
+	"same_cell": "the second end must be another cell.",
+	"too_far": "the two ends are too far apart.",
+	"nothing_in_front": "no wall in front within reach. Raise the length, or Connect two walls.",
+	"too_large": "too large. Make it smaller or shorter.",
+	"unknown_shape": "unknown shape.",
+}
+
+
+func _matter_hit(camera: Camera3D, position: Vector2) -> Dictionary:
+	var cells: Dictionary = world.cells()
+	var r: Dictionary = Tools.ray(func(c: Vector3i) -> bool: return cells.has(c),
+		world.world_to_cells(camera.project_ray_origin(position)),
+		world.world_direction_to_cells(camera.project_ray_normal(position)), REACH)
+	return r if r["hit"] else {}
+
+
+func _waiting_for_first_end() -> bool:
+	return connect_ends and shape_anchor.is_empty() and special != "balcony"
+
+
+## What the shape would do with this face: the first end of a Connect is already set, or it is one click.
+func shape_request(hit: Dictionary) -> Dictionary:
+	var p := {"shape": special, "profile": profile, "size": shape_size, "length": shape_length, "rail": rail,
+		"connect": false, "a": hit["cell"], "face_a": hit["normal"]}
+	if connect_ends and not shape_anchor.is_empty() and special != "balcony":
+		p["connect"] = true
+		p["a"] = shape_anchor["cell"]
+		p["face_a"] = shape_anchor["face"]
+		p["b"] = hit["cell"]
+		p["face_b"] = hit["normal"]
+	return p
+
+
+func _hover_shape(camera: Camera3D, position: Vector2) -> void:
+	var hit := _matter_hit(camera, position)
+	var anchor_cells: Array = [] if shape_anchor.is_empty() else [shape_anchor["cell"]]
+	if hit.is_empty():
+		_show_preview(anchor_cells, SELECT_COLOUR)
+		return
+	if _waiting_for_first_end():
+		_show_preview([hit["cell"]], SELECT_COLOUR)
+		return
+	var r: Dictionary = Shapes.shape(world.cells(), shape_request(hit))
+	if r["error"] != "":
+		_show_preview([hit["cell"]], DIG_COLOUR)
+	elif not r["clear"].is_empty():
+		_show_preview(r["clear"].keys() + anchor_cells, DIG_COLOUR)
+	else:
+		_show_preview(r["set"].keys() + anchor_cells, ADD_COLOUR)
+
+
+## A click: the first end of a Connect, or the shape itself — ONE undo step.
+func click_shape(camera: Camera3D, position: Vector2) -> void:
+	var hit := _matter_hit(camera, position)
+	if hit.is_empty():
+		return
+	var name: String = SHAPE_NAMES.get(special, special)
+	if _waiting_for_first_end():
+		if Shapes.normal_for(special, world.cells(), hit["cell"], hit["normal"]) == Vector3i.ZERO:
+			var why: String = "needs_floor_or_ceiling" if special == "well" else "needs_a_wall"
+			status = "%s — %s" % [name, SHAPE_ERRORS[why]]
+		else:
+			shape_anchor = {"cell": hit["cell"], "face": hit["normal"]}
+			status = "%s — first end set. Click the second one (Escape forgets it)." % name
+		changed.emit()
+		hover(camera, position)
+		return
+	var r: Dictionary = Shapes.shape(world.cells(), shape_request(hit))
+	if r["error"] != "":
+		status = "%s — %s" % [name, SHAPE_ERRORS.get(r["error"], r["error"])]
+		changed.emit()
+		return
+	shape_anchor = {}
+	_commit("MarchingBlocks " + name, r["set"], r["clear"])
+	var n: int = r["set"].size() + r["clear"].size()
+	var more: String = (", %d more so that no two cells touch by an edge only" % r["repaired"]) if r["repaired"] > 0 else ""
+	status = "%s — %d cell(s) changed%s. Ctrl+Z undoes it." % [name, n, more]
+	changed.emit()
+	hover(camera, position)
 
 
 # ── Operations (the toolbar calls these too) ────────────────────────────────────────────────────────
@@ -420,10 +542,16 @@ func _key(camera: Camera3D, k: InputEventKey) -> bool:
 		KEY_SPACE:
 			set_navigating(true)
 		KEY_BRACKETLEFT:
-			brush_size = maxi(1, brush_size - 1)
+			if mode == "shape":
+				shape_size = maxi(1, shape_size - 1)
+			else:
+				brush_size = maxi(1, brush_size - 1)
 			changed.emit()
 		KEY_BRACKETRIGHT:
-			brush_size = mini(7, brush_size + 1)
+			if mode == "shape":
+				shape_size = mini(7, shape_size + 1)
+			else:
+				brush_size = mini(7, brush_size + 1)
 			changed.emit()
 		KEY_PAGEUP, KEY_PAGEDOWN:
 			var step := 1 if k.keycode == KEY_PAGEUP else -1
@@ -438,7 +566,7 @@ func _key(camera: Camera3D, k: InputEventKey) -> bool:
 		KEY_DELETE:
 			operate("delete")
 		KEY_ESCAPE:
-			if pasting or _box_start != null:
+			if pasting or _box_start != null or not shape_anchor.is_empty():
 				_cancel()
 			else:
 				clear_selection()
@@ -480,6 +608,7 @@ func _set_selection(cells: Dictionary) -> void:
 
 func _cancel() -> void:
 	pasting = false
+	shape_anchor = {}
 	_box_start = null
 	_stroking = false
 	if _preview != null and is_instance_valid(_preview):

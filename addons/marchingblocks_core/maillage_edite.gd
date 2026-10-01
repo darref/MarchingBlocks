@@ -259,7 +259,11 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 		a[Mesh.ARRAY_VERTEX] = pos
 		if avec_normales:
 			a[Mesh.ARRAY_NORMAL] = nor
-		a[Mesh.ARRAY_COLOR] = col
+		# ⚠ LA COULEUR DE SOMMET SUR LA SEULE LÉGENDE (mesuré le 1er octobre 2026) : écrite partout, elle partait en
+		# COLOR_0 sur chaque primitive du glTF, et l'import de Godot faisait multiplier les matériaux de l'artiste
+		# par la teinte de la légende — le monde s'éclairait autrement que le modeleur, tuile par tuile.
+		if m < 0:
+			a[Mesh.ARRAY_COLOR] = col
 		if m >= 0:
 			a[Mesh.ARRAY_TEX_UV] = uv_sortie
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
@@ -311,6 +315,34 @@ static func projeter(p: Vector3, n: Vector3, echelle: float, mode := "boite") ->
 var _cache_godot := {}
 
 
+## L'UV QUE LE RENDU DONNE AU POINT `p` DE LA FACE `f` — la règle de `vers_array_mesh_de`, au point près : les UV
+## dépliés de la face, interpolés sur le triangle qui porte `p` ; sinon la projection du matériau. Vector2.INF
+## pour une face sans matériau (la teinte de la légende n'a pas d'image).
+func uv_au_point(f: int, p: Vector3) -> Vector2:
+	var m := mat(f)
+	if m < 0 or m >= materiaux.size():
+		return Vector2.INF
+	var echelle: float = maxf(0.01, float(materiaux[m].get("echelle", 1.0)))
+	var mode: String = str(materiaux[m].get("projection", "boite"))
+	var n := normale(f)
+	var depl := uv(f) if mode == "uv" else PackedVector2Array()
+	if depl.is_empty():
+		return projeter(p, n, echelle, "boite" if mode == "uv" else mode)
+	var face: PackedInt32Array = faces[f]
+	var meilleur := Vector2.INF
+	var ecart := INF
+	for t in trianguler(f):
+		var a: Vector3 = sommets[face[t[0]]]
+		var b: Vector3 = sommets[face[t[1]]]
+		var c: Vector3 = sommets[face[t[2]]]
+		var w: Vector3 = Geometry3D.get_triangle_barycentric_coords(p, a, b, c)
+		var dehors := maxf(0.0, -minf(w.x, minf(w.y, w.z)))
+		if dehors < ecart:
+			ecart = dehors
+			meilleur = depl[t[0]] * w.x + depl[t[1]] * w.y + depl[t[2]] * w.z
+	return meilleur
+
+
 ## Le StandardMaterial3D d'un matériau (gardé tant que sa définition ne change pas).
 func materiau_godot(m: int) -> StandardMaterial3D:
 	var d: Dictionary = materiaux[m]
@@ -324,9 +356,9 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 	sm.metallic = float(d.get("metal", 0.0))
 	var chemin: String = str(d.get("texture", ""))
 	if chemin != "":
-		var img := Image.load_from_file(chemin) if FileAccess.file_exists(chemin) else null
-		if img != null:
-			sm.albedo_texture = ImageTexture.create_from_image(img)
+		# ⚠ LA TOILE PARTAGÉE (`peinture.gd`) : toutes les tuiles qui portent ce matériau lisent la MÊME texture,
+		# et un coup de pinceau la met à jour partout, sans rien redessiner.
+		sm.albedo_texture = load("res://addons/marchingblocks_core/peinture.gd").texture_de(chemin)
 	_cache_godot[cle] = sm
 	return sm
 
@@ -357,11 +389,19 @@ static func _couleur(v: Variant) -> Color:
 
 ## Déplie les faces `choix` (toutes si vide). Rend {"ilots": nombre, "faces": nombre}.
 func deplier(choix: Array = [], angle := 66.0, marge := 0.01) -> Dictionary:
+	var plats := ilots_a_plat(choix, angle)
+	ranger(plats, marge)
+	poser_uvs(plats)
+	return {"ilots": plats.size(), "faces": (choix if not choix.is_empty() else range(faces.size())).size()}
+
+
+## Les îlots de `choix` (toutes les faces s'il est vide), chacun MIS À PLAT sur son plan moyen, pas encore rangés :
+## [{"uv": {face: PackedVector2Array}, "min": Vector2, "taille": Vector2}]. `ranger` les place, `poser_uvs` les écrit
+## — séparés pour que l'atlas du témoin (`TemoinLie.deplier_en_atlas`) range ceux de TOUTES les tuiles ensemble.
+func ilots_a_plat(choix: Array = [], angle := 66.0) -> Array:
 	var dans := {}
 	for f in (choix if not choix.is_empty() else range(faces.size())):
 		dans[f] = true
-	while uvs.size() < faces.size():
-		uvs.append(PackedVector2Array())
 	var fpa := faces_par_arete()
 	var seuil := cos(deg_to_rad(angle))
 	var ilot_de := {}
@@ -407,7 +447,14 @@ func deplier(choix: Array = [], angle := 66.0, marge := 0.01) -> Dictionary:
 				bmax = bmax.max(t)
 			par_face[f] = u
 		plats.append({"uv": par_face, "min": bmin, "taille": bmax - bmin})
-	# 3. Le rangement, par étagères : les plus hauts d'abord, sur une largeur qui vise un carré.
+	return plats
+
+
+## 3. Le rangement, par étagères : les plus hauts d'abord, sur une largeur qui vise un carré ; puis tout est ramené
+## dans [0,1] à UNE échelle (la même densité de texels partout). Écrit les UV rangés dans chaque îlot.
+static func ranger(plats: Array, marge := 0.01) -> void:
+	if plats.is_empty():
+		return
 	var aire := 0.0
 	for pl in plats:
 		aire += (pl["taille"] as Vector2).x * (pl["taille"] as Vector2).y
@@ -437,8 +484,16 @@ func deplier(choix: Array = [], angle := 66.0, marge := 0.01) -> Dictionary:
 			var u: PackedVector2Array = pl["uv"][f]
 			for k in u.size():
 				u[k] = (u[k] - pl["min"] + pl["place"]) * echelle
-			uvs[f] = u
-	return {"ilots": ilots.size(), "faces": dans.size()}
+			pl["uv"][f] = u
+
+
+## Écrit les UV rangés des îlots dans le maillage.
+func poser_uvs(plats: Array) -> void:
+	while uvs.size() < faces.size():
+		uvs.append(PackedVector2Array())
+	for pl in plats:
+		for f in pl["uv"]:
+			uvs[f] = pl["uv"][f]
 
 
 func _aire(f: int) -> float:

@@ -704,7 +704,10 @@ static var _poses_par_classe: Dictionary = {}
 ## n'importe quelle pose —, donc toutes leurs sections doivent être la même. On compare chacune à la première, dans
 ## les deux sens : si toutes égalent la première, toutes s'égalent entre elles.
 ## ⚠ Un triangle d'aire nulle n'a pas de section : il ne compte pas.
-static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, remarques: Array) -> void:
+## `tableaux_de` (facultatif) : nom → les tableaux de surface de sa pièce, déjà en mémoire — relire un maillage
+## qu'on vient de fabriquer le redescend du GPU.
+static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, remarques: Array,
+		tableaux_de: Dictionary = {}) -> void:
 	var seaux := {}   # "axe|motif" → [{nom, segments: PackedVector2Array (paires)}]
 	var orphelines := 0
 	var orpheline_de := ""
@@ -712,7 +715,7 @@ static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, rema
 		var bits: int = bits_par_nom.get(MB.nom_nu(nom), bits_par_nom.get(nom, -1))
 		if bits < 0:
 			continue
-		var segments: PackedVector3Array = _segments_sur_les_plans(pieces[nom])
+		var segments: PackedVector3Array = _segments_sur_les_plans(pieces[nom], tableaux_de.get(nom, []))
 		for pose in _poses_de(MB.classer(bits)["classe"]):
 			var base: Basis = pose["base"]
 			var tournes := PackedVector3Array()
@@ -957,10 +960,14 @@ static func _motif_de_face(bits: int, axe: int, cote: int) -> int:
 
 ## Les arêtes d'un maillage (repère de pièce) posées sur une face de la boîte unité, par paires de points.
 ## ⚠ Une arête de la boîte est sur DEUX faces : elle est gardée une fois, et `_section` la lira sur chacune.
-static func _segments_sur_les_plans(mesh: Mesh) -> PackedVector3Array:
+static func _segments_sur_les_plans(mesh: Mesh, tableaux: Array = []) -> PackedVector3Array:
 	var sortie := PackedVector3Array()
-	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+	var liste: Array = tableaux
+	if liste.is_empty():
+		liste = []
+		for s in mesh.get_surface_count():
+			liste.append(mesh.surface_get_arrays(s))
+	for arrays in liste:
 		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var idx = arrays[Mesh.ARRAY_INDEX]
 		var ordre: PackedInt32Array = (idx as PackedInt32Array) if idx != null \

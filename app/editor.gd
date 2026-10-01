@@ -33,6 +33,7 @@ const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
+const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
@@ -47,6 +48,7 @@ const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
+const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
@@ -79,6 +81,11 @@ var _gauche: Panneau
 var _droite: Panneau
 ## LA BARRE DU MODELEUR — la barre de droite de l'atelier Witness (Jordan, 29 septembre 2026).
 var _droite_temoin: Panneau
+var _droite_texture: Panneau
+## Les boutons qui existent dans les DEUX barres du témoin (Geometry, Texturing) : ils se suivent.
+var _boutons_edition: Array = []
+var _etiquettes_temoin_couche: Array = []
+var _boutons_selmode_tex := {}
 ## LA LÉGENDE DES FORMES du témoin — le bandeau repliable en haut de la vue, dans l'atelier Witness.
 var _legende_formes: LegendeFormes
 var _modeleur: Node3D
@@ -189,6 +196,19 @@ var _compteur_etage: SpinBox
 var _section_selection: Control
 var _etiquette_selection: Label
 var _etiquette_portee: Label
+var _boutons_forme_speciale := {}
+var _boutons_bouts := {}
+var _boutons_profil := {}
+var _ligne_bouts: Control
+var _ligne_profil: Control
+var _ligne_longueur: Control
+var _etiquette_longueur: Label
+var _longueur_forme: SpinBox
+var _taille_forme: HSlider
+var _valeur_taille_forme: Label
+var _garde_corps: CheckButton
+var _reglages_forme: Control
+var _aide_forme: Label
 ## Le PRESSE-PAPIERS : des décalages relatifs (`Outils.copier`). Il n'appartient à aucune couche — on
 ## copie dans la roche et on colle dans la glace.
 var _presse_papiers: Array = []
@@ -197,6 +217,10 @@ var _presse_papiers: Array = []
 ## ⚠ `UndoRedo` N'EST PAS COMPTÉ PAR RÉFÉRENCE : il fuit si on ne le libère pas, avec les couches
 ## supprimées qu'il garde en vie.
 func _notification(quoi: int) -> void:
+	# ⚠ LA FERMETURE ÉCRIT CE QUI ATTENDAIT : la seconde d'attente après le dernier geste, et le `.glb` du monde.
+	# Sans elle, fermer juste après un geste le perdait.
+	if quoi == NOTIFICATION_WM_CLOSE_REQUEST and _minuterie_temoin != null:
+		_toujours_ecrire()
 	if quoi == NOTIFICATION_PREDELETE:
 		for m in _detachees:
 			m.free()
@@ -274,6 +298,7 @@ func _batir() -> void:
 	corps.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	corps.clip_contents = true
 	colonne.add_child(corps)
+	colonne.add_child(_bande_du_bas())
 
 	_vue = Vue.new()
 	_vue.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -281,6 +306,8 @@ func _batir() -> void:
 	_vue.touche.connect(_touche)
 	_vue.selection_changee.connect(_selection_changee)
 	_vue.colle.connect(_colle)
+	_vue.forme_posee.connect(_forme_posee)
+	_vue.forme_dite.connect(_forme_dite)
 	_vue.boite_trop_grande.connect(func() -> void:
 		_dire("[color=#e0603c]Box too large[/color] — more than %d cells. Draw a smaller one." \
 			% Outils.VOLUME_MAXI))
@@ -294,9 +321,15 @@ func _batir() -> void:
 	_modeleur = Modeleur.new()
 	_vue.brancher_modeleur(_modeleur)
 	_modeleur.change.connect(_geste_du_modeleur)
+	_modeleur.peint.connect(_trait_peint)
+	_modeleur.couleur_lue.connect(func(c: Color) -> void:
+		if _couleur_pinceau != null:
+			_couleur_pinceau.color = c)
 	_modeleur.dit.connect(_dire)
 	_droite_temoin = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite_temoin(_droite_temoin.get_meta("pile"))
+	_droite_texture = _panneau(corps, false, LARGEUR_DROITE)
+	_batir_droite_texture(_droite_texture.get_meta("pile"))
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -334,6 +367,26 @@ func _batir() -> void:
 	_dialogue.file_selected.connect(_fichier_choisi)
 	_dialogue.dir_selected.connect(_fichier_choisi)
 	add_child(_dialogue)
+
+
+## LA BANDE DU BAS (Jordan, 1er octobre 2026) : « une petite démarcation, afin qu'on ne confonde pas les
+## défilements qui filent sous leur limite avec un logiciel qui dépasse de l'écran ». Une bande fine, de la teinte
+## de la barre de titre, filet en haut : l'écran a un bord en bas comme en haut, et ce qui est coupé au-dessus
+## d'elle l'est par un défilement, pas par l'écran.
+func _bande_du_bas() -> Control:
+	_bande_bas = Panel.new()
+	_bande_bas.name = "BandeDuBas"
+	_bande_bas.custom_minimum_size = Vector2(0, HAUTEUR_BANDE_BAS)
+	_bande_bas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var style := Palette.fond(Palette.BARRE_TITRE, 0, 0)
+	style.border_color = Palette.FILET
+	style.border_width_top = 1
+	_bande_bas.add_theme_stylebox_override("panel", style)
+	return _bande_bas
+
+
+const HAUTEUR_BANDE_BAS := 8
+var _bande_bas: Panel
 
 
 func _barre_titre() -> Control:
@@ -617,8 +670,10 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	for a in [
 		["projet", "Project", "enregistrer", "Save, open, and the round trip with your artist: export, "
 			+ "import, slice, export to engines."],
-		["witness", "Witness", "cube", "The block your artist sculpts: look at it, export it, bring it back."],
 		["monde", "World", "monde", "Paint worlds with the sliced tiles."],
+		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
+		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
+			+ "of the witness tiles."],
 		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
 	]:
 		var b := Button.new()
@@ -633,7 +688,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		b.pressed.connect(_aller_a.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
-	# Quatre ateliers : en grille de deux, une rangée de quatre ne tient pas dans 300 px.
+	# ⚠ CINQ ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing, Jordan) : en grille de deux,
+	# une rangée ne tient pas dans 300 px. Les deux du témoin sont côte à côte, sur la même rangée.
 	tete.add_child(_grille(ateliers, 2))
 
 	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
@@ -1085,6 +1141,93 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		+ "the round trip holds.", _peindre_la_forme_du_temoin, "cube"))
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
+	_batir_formes_speciales(pile)
+
+
+## ── 4. LES FORMES SPÉCIALES (Jordan, 1er octobre 2026) — la règle vit dans `formes_speciales.gd`.
+## Quatre boutons, comme des OUTILS : on en choisit un, on clique dans la vue. Les réglages ne montrent que
+## ce que la forme choisie lit (le profil pour tunnel et puits, le garde-corps pour pont et balcon…).
+func _batir_formes_speciales(pile: VBoxContainer) -> void:
+	var sec := Section.new("Special shapes", true, Icones.icone("tunnel"))
+	pile.add_child(sec)
+	var choix := _rangee_de_choix(_boutons_forme_speciale, [
+		["tunnel", "Tunnel", "tunnel", "Digs a tunnel into a WALL, straight in from it. Click a wall: it goes "
+			+ "through to the next cave, or Depth cells deep.\nConnect: click a wall in one room, then a wall "
+			+ "in another — even a slanted one."],
+		["puits", "Well", "puits", "Digs a shaft into a FLOOR (or up into a ceiling), straight down. It stops "
+			+ "in the first cave below, or Depth cells deep.\nConnect: a floor, then a ceiling of the room "
+			+ "below."],
+		["pont", "Bridge", "pont", "Builds a deck out of a WALL, across the air, to the first wall in front.\n"
+			+ "Connect: two walls, even not facing each other — the deck bends."],
+		["balcon", "Balcony", "balcon", "A slab sticking out of a WALL at the height you click, with its rail."],
+	], _choisir_forme_speciale, Palette.OUTIL)
+	sec.contenu.add_child(choix)
+	for b in _boutons_forme_speciale.values():
+		(b as Button).set_pressed_no_signal(false)
+	_reglages_forme = VBoxContainer.new()
+	_reglages_forme.add_theme_constant_override("separation", 6)
+	sec.contenu.add_child(_reglages_forme)
+	_ligne_bouts = _rangee_de_choix(_boutons_bouts, [
+		["droit", "Straight", "droit", "One click: straight out of the face you click, perpendicular to it."],
+		["relier", "Connect", "relier", "Two clicks: a face, then another one. The shape leaves each face "
+			+ "square to it and joins them; both ends stay open.\nRight click or Esc forgets the first end."],
+	], _choisir_les_bouts)
+	_reglages_forme.add_child(_ligne_bouts)
+	_ligne_profil = _rangee_de_choix(_boutons_profil, [
+		["rond", "Round", "profil_rond", "A round tube."],
+		["carre", "Square", "profil_carre", "A square duct."],
+		["arche", "Arch", "profil_arche", "A flat floor and a round vault: a corridor you can walk."],
+	], _choisir_le_profil)
+	_reglages_forme.add_child(_ligne_profil)
+	var taille := HBoxContainer.new()
+	taille.add_theme_constant_override("separation", 10)
+	taille.add_child(_texte("Size", 12))
+	_taille_forme = HSlider.new()
+	_taille_forme.min_value = 1
+	_taille_forme.max_value = 7
+	_taille_forme.step = 1
+	_taille_forme.tick_count = 7
+	_taille_forme.ticks_on_borders = true
+	_taille_forme.value = 2
+	_taille_forme.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_taille_forme.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_taille_forme.tooltip_text = "[ and ] — the width: 1 is one cell, 2 is three cells across, 3 is five…"
+	_valeur_taille_forme = _texte("2", 12, Palette.OLIVE)
+	_valeur_taille_forme.add_theme_font_override("font", Palette.gras())
+	_valeur_taille_forme.custom_minimum_size = Vector2(18, 0)
+	_taille_forme.value_changed.connect(func(v: float) -> void:
+		_vue.forme_speciale["taille"] = int(v)
+		_valeur_taille_forme.text = str(int(v))
+		_vue.rafraichir())
+	taille.add_child(_taille_forme)
+	taille.add_child(_valeur_taille_forme)
+	_reglages_forme.add_child(taille)
+	var longueur := HBoxContainer.new()
+	_ligne_longueur = longueur
+	longueur.add_theme_constant_override("separation", 8)
+	_etiquette_longueur = _texte("Depth", 12)
+	longueur.add_child(_etiquette_longueur)
+	_longueur_forme = SpinBox.new()
+	_longueur_forme.min_value = 1
+	_longueur_forme.max_value = FS.LONGUEUR_MAXI
+	_longueur_forme.value = 8
+	_longueur_forme.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_longueur_forme.value_changed.connect(func(v: float) -> void:
+		_vue.forme_speciale["longueur"] = int(v)
+		_vue.rafraichir())
+	longueur.add_child(_longueur_forme)
+	_reglages_forme.add_child(longueur)
+	_garde_corps = CheckButton.new()
+	_garde_corps.text = "Rail"
+	_garde_corps.button_pressed = true
+	_garde_corps.tooltip_text = "A one-cell rim along the open sides. Needs a size of 2 or more."
+	_garde_corps.toggled.connect(func(v: bool) -> void:
+		_vue.forme_speciale["garde_corps"] = v
+		_vue.rafraichir())
+	_reglages_forme.add_child(_garde_corps)
+	_aide_forme = _texte("", 11, Palette.GRIS)
+	_aide_forme.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(_aide_forme)
 
 
 func _batir_attente(parent: Control) -> void:
@@ -1133,6 +1276,8 @@ func _fin_attente() -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
+	if atelier in ["monde", "jeu"]:
+		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier == "jeu" and _atelier != "jeu":
 		var refus: String = _vue.commencer_partie()
 		if refus != "":
@@ -1180,7 +1325,11 @@ func _aller_a(atelier: String) -> void:
 ## restait, et mangeait un quart de la vue sur le bloc qu'on veut justement regarder.
 func _contexte() -> void:
 	var projet := _atelier == "projet"
-	var temoin := _atelier == "witness"
+	# DEUX ATELIERS DU TÉMOIN (Jordan, 1er octobre 2026) : Geometry (le maillage) et Texturing (matériaux,
+	# projections, dépliage — et la peinture à venir). Ils montrent le même témoin ; seule la main change.
+	var geometrie := _atelier == "witness"
+	var texturing := _atelier == "texture"
+	var temoin := geometrie or texturing
 	var monde := _atelier == "monde"
 	var jeu := _atelier == "jeu"
 	_section_jeu.visible = jeu
@@ -1197,7 +1346,13 @@ func _contexte() -> void:
 	_section_raccourcis.visible = monde
 	_zone_reference.visible = temoin or monde or projet
 	_droite.visible = monde
-	_droite_temoin.visible = temoin
+	_droite_temoin.visible = geometrie
+	_droite_texture.visible = texturing
+	_modeleur.geometrie = not texturing
+	if not texturing and _modeleur.pinceau:
+		_modeleur.regler_pinceau(false)
+	if _bouton_pinceau != null:
+		_bouton_pinceau.set_pressed_no_signal(_modeleur.pinceau)
 	_legende_formes.visible = temoin or monde
 	_legende_formes.regler_atelier(_atelier)
 	_contexte_des_outils()
@@ -1263,6 +1418,33 @@ func _contexte_des_outils() -> void:
 	_ligne_taille.visible = pinceau
 	_ligne_forme.visible = pinceau
 	_creux.visible = _vue.outil == "boite"
+	if _reglages_forme == null:
+		return
+	var f: Dictionary = _vue.forme_speciale
+	var quoi: String = f["quoi"]
+	var active: bool = _vue.outil == "forme"
+	var relier: bool = bool(f["relier"]) and quoi != "balcon"
+	_reglages_forme.visible = active
+	_ligne_bouts.visible = quoi != "balcon"
+	_ligne_profil.visible = quoi in ["tunnel", "puits"]
+	_ligne_longueur.visible = not relier
+	_etiquette_longueur.text = "Reach" if quoi == "pont" else "Depth"
+	_longueur_forme.tooltip_text = {
+		"tunnel": "How deep a straight tunnel goes when it finds no cave behind the wall.",
+		"puits": "How deep a straight well goes when it finds no cave below.",
+		"pont": "How far a straight bridge looks for a wall in front.",
+		"balcon": "How far the balcony sticks out of the wall.",
+	}[quoi]
+	_garde_corps.visible = quoi in ["pont", "balcon"]
+	var surface: String = "floor or ceiling" if quoi == "puits" else "wall"
+	if not active:
+		_aide_forme.text = "Pick a shape, then click in the world."
+	elif quoi == "balcon":
+		_aide_forme.text = "Click a wall where the balcony floor goes."
+	elif relier:
+		_aide_forme.text = "Click the first %s, then the second. Right click or Esc forgets the first." % surface
+	else:
+		_aide_forme.text = "Click a %s: the shape goes straight out of it." % surface
 
 
 # ── LE MODELEUR DU TÉMOIN ────────────────────────────────────────────────────────────────────────────
@@ -1276,41 +1458,7 @@ func _contexte_des_outils() -> void:
 # route de tranchage finirait par trancher autrement (charte §6).
 
 func _batir_droite_temoin(pile: VBoxContainer) -> void:
-	var mode := Section.new("Edit mode", true, Icones.icone("cube"))
-	pile.add_child(mode)
-	# QUEL TÉMOIN ON ÉDITE : celui de la couche active (un témoin par couche, 30 septembre 2026).
-	_etiquette_temoin_couche = _texte("", 11, Palette.OLIVE)
-	mode.contenu.add_child(_etiquette_temoin_couche)
-	_bouton_edition = Button.new()
-	_bouton_edition.text = "Edit the witness  ·  Tab"
-	_bouton_edition.icon = Icones.icone("outils")
-	_bouton_edition.toggle_mode = true
-	_bouton_edition.focus_mode = Control.FOCUS_NONE
-	_bouton_edition.custom_minimum_size = Vector2(0, 34)
-	_bouton_edition.tooltip_text = ("Tab — edit the witness mesh, the way you would in Blender.\nTab again "
-		+ "looks at it without editing.")
-	_bouton_edition.toggled.connect(func(v: bool) -> void: _regler_edition(v))
-	mode.contenu.add_child(_bouton_edition)
-	mode.contenu.add_child(_petit_titre("SELECT  ·  1 2 3"))
-	mode.contenu.add_child(_rangee_de_choix(_boutons_selmode, [
-		["sommet", "Vertex", "ajouter", "1 — select vertices."],
-		["arete", "Edge", "rect", "2 — select edges."],
-		["face", "Face", "boite", "3 — select faces."],
-	], func(m: String) -> void:
-		_regler_edition(true)
-		_modeleur.choisir_mode(m), Palette.OUTIL))
-	(_boutons_selmode["face"] as Button).button_pressed = true
-
-	var sel := Section.new("Select", true, Icones.icone("selectionner"))
-	pile.add_child(sel)
-	sel.contenu.add_child(_texte("Click selects what you SEE · Shift+click adds or removes · Alt+click "
-		+ "selects a loop (a ring of faces in Face mode).", 11, Palette.GRIS))
-	sel.contenu.add_child(_grille([
-		_bouton("All  ·  A", "A — select everything.", func() -> void: _geste_modeleur("tout"), "grandir"),
-		_bouton("None  ·  Alt+A", "Alt+A — select nothing.", func() -> void: _geste_modeleur("rien"), "croix"),
-		_bouton("Box  ·  B", "B, then drag a rectangle. It also takes what is hidden behind.",
-			func() -> void: _geste_modeleur("B"), "boite"),
-	], 2))
+	_bouton_edition = _sections_d_edition(pile, "Witness geometry", _boutons_selmode)
 
 	var tr := Section.new("Transform", true, Icones.icone("deplacer"))
 	pile.add_child(tr)
@@ -1366,6 +1514,73 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			func() -> void: _dire("[i]%s view.[/i]" % ("Orthographic" if _vue.basculer_ortho() else "Perspective"))),
 	], 2))
 
+	var tem := Section.new("The modelled witness", true, Icones.icone("enregistrer"))
+	pile.add_child(tem)
+	tem.contenu.add_child(_texte("It saves itself next to the project, and joins the works of step 2 "
+		+ "(Project): slice it there, like an imported work.", 11, Palette.GRIS))
+	tem.contenu.add_child(_bouton("Reset to the computed witness",
+		"Starts again from the computed witness (Ctrl+Z brings your model back).", _remettre_le_temoin,
+		"gomme", Palette.DANGER))
+
+
+## Ce que les deux barres du témoin ont en commun : quel témoin on édite, Tab, les modes de sélection et la
+## sélection. Rend le bouton d'édition ; les deux barres se suivent (`_boutons_edition`).
+func _sections_d_edition(pile: VBoxContainer, titre: String, selmode: Dictionary) -> Button:
+	var mode := Section.new(titre, true, Icones.icone("cube" if selmode == _boutons_selmode else "texture"))
+	pile.add_child(mode)
+	# QUEL TÉMOIN ON ÉDITE : celui de la couche active (un témoin par couche, 30 septembre 2026).
+	var etiquette := _texte("", 11, Palette.OLIVE)
+	_etiquettes_temoin_couche.append(etiquette)
+	_etiquette_temoin_couche = etiquette
+	mode.contenu.add_child(etiquette)
+	var edition := Button.new()
+	edition.text = "Edit the witness  ·  Tab"
+	edition.icon = Icones.icone("outils")
+	edition.toggle_mode = true
+	edition.focus_mode = Control.FOCUS_NONE
+	edition.custom_minimum_size = Vector2(0, 34)
+	edition.tooltip_text = ("Tab — edit the witness mesh, the way you would in Blender.\nTab again "
+		+ "looks at it without editing.")
+	edition.toggled.connect(func(v: bool) -> void: _regler_edition(v))
+	_boutons_edition.append(edition)
+	mode.contenu.add_child(edition)
+	mode.contenu.add_child(_petit_titre("SELECT  ·  1 2 3"))
+	mode.contenu.add_child(_rangee_de_choix(selmode, [
+		["sommet", "Vertex", "ajouter", "1 — select vertices."],
+		["arete", "Edge", "rect", "2 — select edges."],
+		["face", "Face", "boite", "3 — select faces."],
+	], func(m: String) -> void:
+		_regler_edition(true)
+		_modeleur.choisir_mode(m)
+		_suivre_le_mode_de_selection(), Palette.OUTIL))
+	(selmode["face"] as Button).button_pressed = true
+
+	var sel := Section.new("Select", true, Icones.icone("selectionner"))
+	pile.add_child(sel)
+	sel.contenu.add_child(_texte("Click selects what you SEE · Shift+click adds or removes · Alt+click "
+		+ "selects a loop (a ring of faces in Face mode).", 11, Palette.GRIS))
+	sel.contenu.add_child(_grille([
+		_bouton("All  ·  A", "A — select everything.", func() -> void: _geste_modeleur("tout"), "grandir"),
+		_bouton("None  ·  Alt+A", "Alt+A — select nothing.", func() -> void: _geste_modeleur("rien"), "croix"),
+		_bouton("Box  ·  B", "B, then drag a rectangle. It also takes what is hidden behind.",
+			func() -> void: _geste_modeleur("B"), "boite"),
+	], 2))
+	return edition
+
+
+func _suivre_le_mode_de_selection() -> void:
+	for d in [_boutons_selmode, _boutons_selmode_tex]:
+		for m in d:
+			(d[m] as Button).set_pressed_no_signal(m == _modeleur.mode_sel)
+
+
+## LA BARRE DU TEXTURING (Jordan, 1er octobre 2026 : « faire sortir du mode Witness, renommé Witness geometry, un
+## second mode Witness texturing, vu que je compte y ajouter de quoi dessiner la texture ou dessiner sur l'UV »).
+## Choisir les faces, leur matière, la projection, le dépliage et son patron. La peinture viendra ici.
+func _batir_droite_texture(pile: VBoxContainer) -> void:
+	_sections_d_edition(pile, "Witness texturing", _boutons_selmode_tex)
+	pile.get_child(0).contenu.add_child(_texte("Geometry tools (move, extrude, cut…) are in Witness geometry. "
+		+ "Here: pick faces, give them a material, project or unwrap it.", 11, Palette.GRIS))
 	# ── LES MATÉRIAUX — DÉCIDÉ (Jordan, 29 septembre 2026) : matériaux + projections.
 	var mats := Section.new("Materials", true, Icones.icone("texture"))
 	pile.add_child(mats)
@@ -1431,6 +1646,12 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Export UV layout…", "Writes a PNG of the unwrapped edges, to paint on in your image editor.",
 			func() -> void: _demander("patron"), "exporter"),
 	], 2))
+	_edition_materiau.add_child(_bouton("Unwrap all tiles (atlas)", "Every face of this material, in EVERY tile, "
+		+ "unwrapped together into one image: each tile gets its own place, so painting one tile never paints "
+		+ "another. Its copies still share their paint (they are the same tile). Switches the material to UV.",
+		func() -> void:
+			_regler_edition(true)
+			_modeleur.deplier_en_atlas(), "grille", Palette.PRINCIPAL))
 	_etat_uv = _texte("", 11, Palette.AMBRE)
 	_edition_materiau.add_child(_etat_uv)
 	_edition_materiau.add_child(_texture_materiau)
@@ -1440,14 +1661,69 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("No image", "Colour only.", func() -> void: _retoucher("texture", ""), "croix"),
 	], 2))
 	_redire_les_materiaux()
+	_batir_peinture(pile)
 
-	var tem := Section.new("The modelled witness", true, Icones.icone("enregistrer"))
-	pile.add_child(tem)
-	tem.contenu.add_child(_texte("It saves itself next to the project, and joins the works of step 2 "
-		+ "(Project): slice it there, like an imported work.", 11, Palette.GRIS))
-	tem.contenu.add_child(_bouton("Reset to the computed witness",
-		"Starts again from the computed witness (Ctrl+Z brings your model back).", _remettre_le_temoin,
-		"gomme", Palette.DANGER))
+
+
+## LE PINCEAU (Jordan, 1er octobre 2026 : « dessiner la texture […] avec les outils de peinture classiques »).
+func _batir_peinture(pile: VBoxContainer) -> void:
+	var sec := Section.new("Paint", true, Icones.icone("texture"))
+	pile.add_child(sec)
+	sec.contenu.add_child(_texte("Paint the image of a face's material, right on the witness: every copy of "
+		+ "the tile follows. A material without an image gets a canvas filled with its colour. Box projection "
+		+ "repeats the image, so the paint repeats; for unique paint, Unwrap (U) and choose the UV projection.",
+		11, Palette.GRIS))
+	_bouton_pinceau = Button.new()
+	_bouton_pinceau.text = "Paint  ·  P"
+	_bouton_pinceau.icon = Icones.icone("remplir")
+	_bouton_pinceau.toggle_mode = true
+	_bouton_pinceau.focus_mode = Control.FOCUS_NONE
+	_bouton_pinceau.custom_minimum_size = Vector2(0, 34)
+	_bouton_pinceau.tooltip_text = "P — left drag paints, Alt+click picks a colour. P again selects faces."
+	_bouton_pinceau.toggled.connect(func(v: bool) -> void:
+		if v:
+			_regler_edition(true)
+		_modeleur.regler_pinceau(v))
+	sec.contenu.add_child(_bouton_pinceau)
+	_couleur_pinceau = ColorPickerButton.new()
+	_couleur_pinceau.text = "Colour"
+	_couleur_pinceau.color = _modeleur.pinceau_couleur
+	_couleur_pinceau.edit_alpha = false
+	_couleur_pinceau.custom_minimum_size = Vector2(0, 30)
+	_couleur_pinceau.color_changed.connect(func(c: Color) -> void: _modeleur.pinceau_couleur = c)
+	sec.contenu.add_child(_couleur_pinceau)
+	for r in [["Size (px)", 1.0, 200.0, 1.0, "pinceau_taille"], ["Hardness", 0.0, 1.0, 0.01, "pinceau_durete"],
+			["Opacity", 0.02, 1.0, 0.01, "pinceau_opacite"]]:
+		var ligne := HBoxContainer.new()
+		var t := _texte(r[0], 11, Palette.GRIS)
+		t.custom_minimum_size = Vector2(76, 0)
+		ligne.add_child(t)
+		var c := HSlider.new()
+		c.min_value = r[1]
+		c.max_value = r[2]
+		c.step = r[3]
+		c.value = _modeleur.get(r[4])
+		c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		c.focus_mode = Control.FOCUS_NONE
+		var prop: String = r[4]
+		c.value_changed.connect(func(v: float) -> void: _modeleur.set(prop, v))
+		ligne.add_child(c)
+		sec.contenu.add_child(ligne)
+		_curseurs_pinceau[prop] = c
+
+
+var _bouton_pinceau: Button
+var _couleur_pinceau: ColorPickerButton
+var _curseurs_pinceau := {}
+
+
+## Un trait fini : UNE annulation, qui remet la région de la toile d'avant (ou d'après).
+func _trait_peint(chemin: String, avant: Image, apres: Image, position: Vector2i) -> void:
+	_histoire.create_action("Witness: Paint")
+	_histoire.add_do_method(Peinture.poser_region.bind(chemin, apres, position))
+	_histoire.add_undo_method(Peinture.poser_region.bind(chemin, avant, position))
+	_histoire.commit_action(false)
+	_temoin_modifie(_modeleur.temoin)
 
 
 ## Entre ou sort de l'édition. La première fois, le maillage se charge : le témoin modélisé enregistré
@@ -1462,6 +1738,7 @@ func _regler_edition(oui: bool) -> void:
 	if oui:
 		# ⚠ LE TÉMOIN DE LA COUCHE ACTIVE (Jordan, 30 septembre 2026) : chaque couche a le sien.
 		var t: RefCounted = _temoin_de(_couches[_active])
+		_modeleur.dossier_toiles = _chemin_temoin_de(_couches[_active]).get_basename() + "_images"
 		if _modeleur.temoin != t:
 			_modeleur.charger_temoin(t, _occurrence_de_depart(t))
 			_redire_les_materiaux()
@@ -1471,7 +1748,8 @@ func _regler_edition(oui: bool) -> void:
 			dit_ancien = ("\n[color=#f2ca79]An older single-mesh model was found[/color] (%s): it is kept on "
 				+ "disk but not used — the linked editor starts from the computed witness.") % ancien.get_file()
 	_vue.regler_edition(oui)
-	_bouton_edition.set_pressed_no_signal(oui)
+	for b in _boutons_edition:
+		(b as Button).set_pressed_no_signal(oui)
 	if oui:
 		_dire(("[b]Edit mode — the witness of layer « %s »[/b] — %d tiles, shown as %d linked copies. Click "
 			+ "any copy: you edit its tile, and every copy follows. 1 2 3 pick vertices, edges or faces; G R S E I, "
@@ -1710,15 +1988,20 @@ func _chemin_temoin_modele() -> String:
 
 ## Écrit chaque témoin modifié — celui qu'on édite, et ceux qu'un Ctrl+Z a touchés dans d'autres couches.
 ## ⚠ Il n'entre PLUS dans la liste des travaux : la couche tranche son propre témoin (étape 3).
-func _enregistrer_le_temoin_modele() -> String:
+## `complet` : écrit AUSSI le `.glb` et rhabille le monde tout de suite (Ctrl+S, la fermeture, le tranchage).
+func _enregistrer_le_temoin_modele(complet := false) -> String:
 	if _modeleur.temoin != null:
 		_temoins_sales[_modeleur.temoin] = true
 	var raison := ""
+	# LES TOILES PEINTES d'abord : le .mbtiles cite leurs chemins, et le .glb les embarque.
+	for e in Peinture.enregistrer():
+		if str(e).begins_with("!"):
+			raison = "a paint canvas could not be written: " + str(e).substr(1)
 	for t in _temoins_sales.keys():
 		var c: Dictionary = _couche_du_temoin(t)
 		if c.is_empty():
 			continue   # la couche a été supprimée : son témoin revient avec elle (Ctrl+Z)
-		var r := _enregistrer_temoin(c)
+		var r := _enregistrer_temoin(c, complet)
 		if r != "":
 			raison = r
 	_temoins_sales.clear()
@@ -1803,8 +2086,15 @@ func _origine_du_temoin(c: Dictionary) -> String:
 	return "computed witness"
 
 
-## Écrit le témoin d'une couche : son `.mbtiles` et son `.glb` lié. Rend "" ou la raison.
-func _enregistrer_temoin(c: Dictionary) -> String:
+## Écrit le témoin d'une couche : son `.mbtiles` (ce qui fait foi) TOUT DE SUITE ; son `.glb` lié et le monde
+## qu'il habille, À LA DEMANDE (`_rhabiller`) — ou tout de suite avec `complet`. Rend "" ou la raison.
+## ⚠ **LE .glb ET LE MONDE ATTENDENT QU'ON LES REGARDE (mesuré le 1er octobre 2026)** : l'enregistrement part
+## une seconde après le dernier geste, et réécrire le `.glb` puis le relire pour reposer le monde gelait l'appli
+## 3,6 s avec fenêtre (0,5 s après les corrections de relecture) — Jordan : « des lags d'environ une seconde à
+## des moments différents ». Pendant qu'on modélise, le monde n'est pas affiché ; le `.mbtiles` s'écrit en 10 ms.
+## Le monde suit son témoin quand on passe dans World ou Play test, avant un export, un tranchage, à Ctrl+S,
+## au changement de projet et à la fermeture.
+func _enregistrer_temoin(c: Dictionary, complet := false) -> String:
 	var t = c.get("_temoin", null)
 	if t == null:
 		return ""
@@ -1815,14 +2105,39 @@ func _enregistrer_temoin(c: Dictionary) -> String:
 		return "cannot write %s" % c["temoin"]
 	f.store_string(JSON.stringify(t.vers_dictionnaire()))
 	f.close()
-	var raison: String = t.vers_glb(_glb_du_temoin(c))
-	if raison != "":
-		_dire("[color=#e0603c]The witness of « %s » could not be saved:[/color] %s" % [c["nom"], raison])
-	else:
-		_suivre_son_temoin(c)
+	c["_glb_perime"] = true
+	var raison := _rhabiller(c) if complet else ""
 	_oublier_la_vignette(c)
 	_enregistrer()
 	return raison
+
+
+## Le `.glb` lié d'une couche réécrit depuis son témoin, et son monde rhabillé — s'il était en retard.
+func _rhabiller(c: Dictionary) -> String:
+	if not c.get("_glb_perime", false) or c.get("_temoin", null) == null:
+		return ""
+	var raison: String = c["_temoin"].vers_glb(_glb_du_temoin(c))
+	if raison != "":
+		_dire("[color=#e0603c]The witness of « %s » could not be saved:[/color] %s" % [c["nom"], raison])
+		return raison
+	c.erase("_glb_perime")
+	_suivre_son_temoin(c)
+	return ""
+
+
+## Toutes les couches en retard sur leur témoin rattrapées (la seconde d'attente comprise).
+func _rhabiller_les_mondes() -> void:
+	if _minuterie_temoin != null and not _minuterie_temoin.is_stopped():
+		_minuterie_temoin.stop()
+		_enregistrer_le_temoin_modele()
+	var a_faire := false
+	for c in _couches:
+		a_faire = a_faire or c.get("_glb_perime", false)
+	if not a_faire:
+		return
+	for c in _couches:
+		_rhabiller(c)
+	_rafraichir_couches()
 
 
 ## LE MONDE SUIT SON TÉMOIN (Jordan, 1er octobre 2026 : « le monde ne se met pas à jour avec les changements de
@@ -1857,7 +2172,7 @@ func _trancher_temoin_de_la_couche() -> void:
 		return
 	_temoin_de(c)
 	_temoins_sales[c["_temoin"]] = true
-	_enregistrer_le_temoin_modele()
+	_enregistrer_le_temoin_modele(true)
 	var glb := _glb_du_temoin(c)
 	var bilan: Dictionary = await _trancher_source(glb)
 	_poser_lot(bilan, "the layer's witness", glb, "[b]Sliced from the witness of « %s »[/b]\n" % c["nom"])
@@ -1870,7 +2185,7 @@ func _copier_le_temoin() -> void:
 	var i := _ajouter_couche(Projet.couche("%s (copy)" % origine["nom"]))
 	var c: Dictionary = _couches[i]
 	c["_temoin"] = t
-	_enregistrer_temoin(c)
+	_enregistrer_temoin(c, true)
 	_activer(i)
 	_dire(("[b]New layer « %s »[/b] — its witness is a copy of « %s »'s: sculpt it (Witness) without touching "
 		+ "the original, then slice it (step 3).") % [c["nom"], origine["nom"]])
@@ -1951,6 +2266,8 @@ func _etat_de(i: int) -> String:
 		var a_jour: bool = lot != null and str(lot.get_meta("empreinte", "")) == Projet.empreinte(s) \
 			and not _temoins_sales.has(c.get("_temoin"))
 		etat = "sliced" if a_jour else "witness changed · slice again"
+		if c.get("_glb_perime", false):
+			etat = "sliced · follows its witness when you open World"
 	elif s == Projet.TEMOIN:
 		etat = "witness changed · slice again" if _origine_du_temoin(c) == "modelled" else "sliced"
 	else:
@@ -1989,7 +2306,7 @@ func _travail_vu(oui: bool) -> void:
 		_etiquette_vue.text = "showing: the computed witness"
 		_bouton_revoir_temoin.visible = false
 	# ⚠ ON RESTE DANS PROJECT : c'est là qu'on importe, et la liste des travaux n'existe que là.
-	_aller_a(_atelier if _atelier in ["projet", "witness"] else "projet")
+	_aller_a(_atelier if _atelier in ["projet", "witness", "texture"] else "projet")
 
 
 ## LA GRILLE DES TRAVAUX — un bouton par import, celui qu'on tranchera est enfoncé.
@@ -2111,7 +2428,7 @@ func _exporter(fichier: String) -> void:
 	# sinon le sien, tel qu'on l'a sculpté.
 	var c_export: Dictionary = _couches[_active]
 	var raison: String = BM.exporter_le_temoin_lie(fichier) if _origine_du_temoin(c_export) == "computed witness" \
-		else _temoin_de(c_export).vers_glb(fichier)
+		else _temoin_de(c_export).vers_glb(fichier, true)   # pour Blender : soudé, sans normales
 	_fin_attente()
 	if raison != "":
 		_dire("[color=#e0603c]Export failed:[/color] %s" % raison)
@@ -2211,7 +2528,7 @@ func _trancher_travail() -> void:
 		c["_temoin"] = lu
 		c.erase("_lie")
 		_temoins_sales[lu] = true
-		_enregistrer_le_temoin_modele()
+		_enregistrer_le_temoin_modele(true)
 		if _modeleur.temoin != null:
 			_modeleur.charger_temoin(lu, _occurrence_de_depart(lu))
 		var propre := _glb_du_temoin(c)
@@ -2489,6 +2806,7 @@ static func _axe_horizontal(v: Vector3) -> Vector3i:
 ## ⚠ UNE COUCHE SANS TUILES EST REFUSÉE, et on le dit : exporter le repli procédural livrerait des
 ## tuiles que personne n'a sculptées, sous le nom de l'artiste.
 func _exporter_le_jeu(dossier: String) -> void:
+	_rhabiller_les_mondes()
 	var massif: Node = _vue.monde()
 	if massif == null or _couches[_active]["source"] == "" or massif.lot == null:
 		_dire("[color=#e0603c]Nothing to export.[/color] This layer has no tiles yet — slice the witness "
@@ -2514,6 +2832,7 @@ func _exporter_le_jeu(dossier: String) -> void:
 
 ## LE MONDE ENTIER, toutes couches, vers les greffons (`format_monde.gd`).
 func _exporter_le_monde(dossier: String) -> void:
+	_rhabiller_les_mondes()
 	var couches: Array = []
 	for i in _couches.size():
 		var massif: Node = _vue.couche(i)
@@ -2626,8 +2945,85 @@ func _choisir_visee(v: String) -> void:
 func _choisir_outil(o: String) -> void:
 	_vue.outil = o
 	(_boutons_outil[o] as Button).button_pressed = true
+	for b in _boutons_forme_speciale.values():
+		(b as Button).set_pressed_no_signal(false)
+	_vue.oublier_ancre()
 	_contexte_des_outils()
 	_vue.rafraichir()
+
+
+func _choisir_forme_speciale(quoi: String) -> void:
+	_vue.outil = "forme"
+	_vue.forme_speciale["quoi"] = quoi
+	_vue.oublier_ancre()
+	for b in _boutons_outil.values():
+		(b as Button).set_pressed_no_signal(false)
+	(_boutons_forme_speciale[quoi] as Button).button_pressed = true
+	_basculer_navigation(false)
+	_contexte_des_outils()
+	_vue.rafraichir()
+
+
+func _choisir_les_bouts(v: String) -> void:
+	_vue.forme_speciale["relier"] = v == "relier"
+	(_boutons_bouts[v] as Button).button_pressed = true
+	_vue.oublier_ancre()
+	_contexte_des_outils()
+	_vue.rafraichir()
+
+
+func _choisir_le_profil(v: String) -> void:
+	_vue.forme_speciale["profil"] = v
+	(_boutons_profil[v] as Button).button_pressed = true
+	_vue.rafraichir()
+
+
+const NOMS_DE_FORME := {"tunnel": "Tunnel", "puits": "Well", "pont": "Bridge", "balcon": "Balcony"}
+
+
+## Une forme posée : UNE action, donc UN Ctrl+Z, par la seule entrée de tout ce qui change des cases.
+func _forme_posee(modif: Dictionary, quoi: String, info: Dictionary) -> void:
+	var nom: String = NOMS_DE_FORME.get(quoi, quoi)
+	var n := _appliquer(modif, nom)
+	if n == 0:
+		_dire("[i]%s: nothing to change here.[/i]" % nom)
+		return
+	var fin := ""
+	if quoi in ["tunnel", "puits"] and not bool(_vue.forme_speciale["relier"]):
+		fin = " It opens into the cave behind." if info.get("ouvert", false) \
+			else " It found no cave within %d cells: a dead end." % int(_vue.forme_speciale["longueur"])
+	var reparees: int = info.get("reparees", 0)
+	if reparees > 0:
+		fin += " %d more cell(s) so that no two cells touch by an edge only." % reparees
+	_dire("[b]%s[/b] — %d cell(s) changed.%s [i]Ctrl+Z undoes it.[/i]" % [nom, n, fin])
+
+
+func _forme_dite(code: String, info: Dictionary) -> void:
+	var quoi: String = _vue.forme_speciale["quoi"]
+	var nom: String = NOMS_DE_FORME.get(quoi, "")
+	var surface: String = "floor or ceiling" if quoi == "puits" else "wall"
+	match code:
+		"ancre":
+			var n: Vector3i = info["normale"]
+			_dire("[b]%s[/b] — first end set%s. Now click the second %s. [i]Right click or Esc forgets it.[/i]"
+				% [nom, " (a slanted wall: the shape leaves it at 45°)" if n.x != 0 and n.z != 0 else "", surface])
+		"ancre_oubliee":
+			_dire("[i]First end forgotten.[/i]")
+		"pas_de_paroi":
+			_dire("[color=#e0603c]%s[/color] — click a WALL, a side face of the matter." % nom)
+		"pas_un_sol":
+			_dire("[color=#e0603c]Well[/color] — click a FLOOR or a CEILING, a top or bottom face.")
+		"meme_case":
+			_dire("[color=#e0603c]%s[/color] — the second end must be another cell." % nom)
+		"trop_long":
+			_dire("[color=#e0603c]%s[/color] — the two ends are more than %d cells apart." % [nom, FS.ECART_MAXI])
+		"rien_en_face":
+			_dire("[color=#e0603c]Bridge[/color] — no wall within %d cells in front. Raise Reach, or Connect two walls."
+				% int(_vue.forme_speciale["longueur"]))
+		"trop_grand":
+			_dire("[color=#e0603c]%s[/color] — too large. Make it smaller or shorter." % nom)
+		_:
+			_dire("[color=#e0603c]%s[/color] — %s" % [nom, code])
 
 
 func _basculer_navigation(oui: bool) -> void:
@@ -2823,8 +3219,10 @@ func _rafraichir_couches() -> void:
 		_liste_couches.add_child(ligne)
 	if _nom_couche != null and not _couches.is_empty():
 		_nom_couche.text = _couches[_active]["nom"]
-	if _etiquette_temoin_couche != null and not _couches.is_empty():
-		_etiquette_temoin_couche.text = "Witness of layer « %s » — %s" % [_couches[_active]["nom"],
+	for e in _etiquettes_temoin_couche:
+		if _couches.is_empty():
+			break
+		e.text = "Witness of layer « %s » — %s" % [_couches[_active]["nom"],
 			_origine_du_temoin(_couches[_active])]
 	_dire_la_cible()
 
@@ -2893,6 +3291,8 @@ func _vider_le_projet() -> void:
 ## sinon RETRANCHÉE depuis sa source : c'est ce qui suit un `.glb` réenregistré dans Blender entre deux
 ## sessions.
 func _ouvrir(chemin: String) -> bool:
+	if not _couches.is_empty() and not _ouverture:
+		_toujours_ecrire()   # le projet qu'on quitte garde son dernier geste et son monde
 	var erreurs: Array = []
 	var etat: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(chemin), erreurs)
 	if etat.is_empty():
@@ -3037,12 +3437,19 @@ func _regler_les_associations(oui: bool) -> void:
 		else "[b]File icons & double-click removed[/b] from your Windows account. Tick the box to bring them back."))
 
 
-## Ctrl+S : écrit TOUT DE SUITE ce qui attendait (les témoins modifiés, le projet), et dit que c'était inutile.
-func _enregistrer_tout() -> void:
+## Ce qui attendait, écrit en entier : la seconde d'attente, les témoins, leurs `.glb`, le projet.
+func _toujours_ecrire() -> void:
 	if _minuterie_temoin != null:
 		_minuterie_temoin.stop()
-	_enregistrer_le_temoin_modele()
+	_enregistrer_le_temoin_modele(true)
+	for c in _couches:
+		_rhabiller(c)
 	_enregistrer()
+
+
+## Ctrl+S : écrit TOUT DE SUITE ce qui attendait (les témoins modifiés, le projet), et dit que c'était inutile.
+func _enregistrer_tout() -> void:
+	_toujours_ecrire()
 	_dire(("[color=#b4bd85][b]Everything is saved[/b][/color] — MarchingBlocks saves after every change, so "
 		+ "there is no need for Ctrl+S.\n[i]« Save as » (Project) puts the project where you want: %s[/i]")
 		% _projet)
@@ -3155,9 +3562,15 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_R:
 			_choisir_outil("rect")
 		KEY_BRACKETLEFT:
-			_taille.value -= 1
+			if _vue.outil == "forme":
+				_taille_forme.value -= 1
+			else:
+				_taille.value -= 1
 		KEY_BRACKETRIGHT:
-			_taille.value += 1
+			if _vue.outil == "forme":
+				_taille_forme.value += 1
+			else:
+				_taille.value += 1
 		KEY_PAGEUP:
 			_compteur_etage.value += 1
 		KEY_PAGEDOWN:
@@ -3168,6 +3581,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			if not _vue.collage.is_empty():
 				_vue.annuler_collage()
 				_dire("[i]Paste cancelled.[/i]")
+			elif not _vue.ancre_forme.is_empty():
+				_vue.oublier_ancre()
 			else:
 				_vue.vider_selection()
 		_:
@@ -3189,7 +3604,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if _manuel != null and _manuel.visible:
 		return
-	if k != null and k.pressed and _atelier == "witness" and _touche_du_temoin(k):
+	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
 	if k == null or not k.pressed or _atelier != "monde" or k.ctrl_pressed or k.alt_pressed:
@@ -3251,8 +3666,7 @@ func _touche_du_temoin(k: InputEventKey) -> bool:
 	var pris: bool = _modeleur.touche(k)
 	if pris:
 		_bouton_prop.set_pressed_no_signal(_modeleur.proportionnel)
-		for m in _boutons_selmode:
-			(_boutons_selmode[m] as Button).set_pressed_no_signal(m == _modeleur.mode_sel)
+		_suivre_le_mode_de_selection()
 	return pris
 
 

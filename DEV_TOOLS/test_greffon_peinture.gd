@@ -18,6 +18,7 @@ const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
+const Shapes := preload("res://addons/marchingblocks_paint/mb_shapes.gd")
 const Editeur := preload("res://addons/marchingblocks_paint/mb_editor.gd")
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
@@ -194,6 +195,25 @@ func _la_barre_ne_montre_que_l_utile() -> void:
 	# Et la barre MÈNE l'éditeur : un clic sur un bouton change l'outil.
 	(barre.get("_mode_buttons")["rect"] as Button).pressed.emit()
 	_egal(ed.mode, "rect", "un clic sur Rect choisit Rect")
+	# LES FORMES SPÉCIALES (1er octobre 2026) : un bouton les choisit, et la barre ne montre que ce que la forme
+	# lit — le profil pour tunnel et puits, le rebord pour pont et balcon, la longueur hors d'un Connect.
+	_vrai(not vus.call("_shape_bar"), "Rect : pas de réglages de forme")
+	(barre.get("_special_buttons")["bridge"] as Button).pressed.emit()
+	_vrai(ed.mode == "shape" and ed.special == "bridge", "un clic sur Bridge choisit la forme")
+	_vrai((barre.get("_special_buttons")["bridge"] as Button).button_pressed
+		and not (barre.get("_mode_buttons")["rect"] as Button).button_pressed, "Bridge enfoncé, Rect relâché")
+	_vrai(vus.call("_shape_bar") and not vus.call("_profile_bar") and vus.call("_rail") and not vus.call("_brush"),
+		"Bridge : ses réglages et le rebord, sans profil ni pinceau")
+	(barre.get("_special_buttons")["tunnel"] as Button).pressed.emit()
+	_vrai(vus.call("_profile_bar") and not vus.call("_rail"), "Tunnel : le profil, sans rebord")
+	(barre.get("_profile_buttons")["arch"] as Button).pressed.emit()
+	_egal(ed.profile, "arch", "un clic sur Arch choisit le profil")
+	(barre.get("_ends_buttons")["connect"] as Button).pressed.emit()
+	_vrai(ed.connect_ends and not vus.call("_shape_length"), "Connect : deux clics, plus de longueur")
+	(barre.get("_special_buttons")["balcony"] as Button).pressed.emit()
+	_vrai(not (barre.get("_ends_buttons")["connect"] as Button).visible and vus.call("_shape_length"),
+		"Balcony : un clic seulement, une profondeur")
+	ed.set_mode("add")
 	var sans_icone := 0
 	var boutons := 0
 	for b in barre.find_children("*", "Button", true, false):
@@ -285,6 +305,12 @@ func _les_cas_d_outils() -> void:
 	var boite_vide := false
 	var creuse := false
 	var operations := {}
+	var biais := false
+	var formes := {}
+	var profils := {}
+	var erreurs := {}
+	var ouverts := {}
+	var repares := false
 	for c in frais["cases"]:
 		sortes[c["kind"]] = true
 		match c["kind"]:
@@ -305,7 +331,27 @@ func _les_cas_d_outils() -> void:
 					creuse = creuse or (int(c["expected"]["count"]) > 0 and int(c["expected"]["count"]) < plein)
 			"selection":
 				operations[c["input"]["op"]] = true
-	_egal(sortes.size(), 9, "les cas d'outils couvrent les neuf sortes de fonctions")
+			"wall_normal":
+				var n: Array = c["expected"]["normal"]
+				biais = biais or (int(n[0]) != 0 and int(n[2]) != 0)
+			"special_shape":
+				var e: Dictionary = c["expected"]
+				formes[c["input"]["shape"] + ("+connect" if c["input"]["connect"] else "")] = true
+				profils[c["input"]["profile"]] = true
+				erreurs[e["error"]] = true
+				ouverts[e["opened"]] = true
+				repares = repares or int(e["repaired"]) > 0
+	# ⚠ LES FORMES SPÉCIALES (1er octobre 2026) : les cas doivent exercer ce qu'ils nomment — chaque forme,
+	# droite et reliée, chaque profil, chaque refus, une marche qui débouche et une aveugle, une paroi en
+	# biais, une réparation. Sans ça, un greffon qui ignore l'un d'eux passerait.
+	_egal(sortes.size(), 11, "les cas d'outils couvrent les onze sortes de fonctions")
+	_vrai(biais, "aucun cas de normale ne rend une diagonale : les parois en biais ne sont pas éprouvées")
+	for f in ["tunnel", "tunnel+connect", "well", "bridge", "bridge+connect", "balcony"]:
+		_vrai(formes.has(f), "aucun cas de forme « %s »" % f)
+	_egal(profils.size(), 3, "les trois profils ont leurs cas")
+	_egal(erreurs.size(), EO.ERREURS_EN.size() - 1, "chaque refus a son cas (sauf « trop grand », qu'aucun petit monde n'atteint), et un cas sans refus")
+	_vrai(ouverts.has(true) and ouverts.has(false), "une marche qui débouche ET une aveugle")
+	_vrai(repares, "aucun cas ne répare un damier : la réparation n'est pas éprouvée")
 	_vrai(touches >= 3 and manques >= 2, "les rayons doivent toucher ET manquer (%d / %d)" % [touches, manques])
 	_vrai(egalite, "aucun rayon n'éprouve une égalité exacte : départager à l'envers resterait muet")
 	_vrai(boite_vide, "aucune boîte ne dépasse la borne : la borne n'est pas éprouvée")
@@ -327,6 +373,9 @@ func _le_greffon_passe_les_cas_d_outils() -> void:
 		return
 	_egal(int(cas["limits"]["box_volume_max"]), Tools.BOX_VOLUME_MAX, "la borne des boîtes du greffon")
 	var monde := _ensemble(cas["world"])
+	_mondes_des_formes = {}
+	for nom in cas["shape_worlds"]:
+		_mondes_des_formes[nom] = _ensemble(cas["shape_worlds"][nom])
 	var rouges := 0
 	for c in cas["cases"]:
 		var pourquoi := _cas_d_outil(c, monde)
@@ -337,10 +386,15 @@ func _le_greffon_passe_les_cas_d_outils() -> void:
 	print("  outils du greffon Godot : %d cas, %d divergence(s)" % [(cas["cases"] as Array).size(), rouges])
 
 
+var _mondes_des_formes := {}
+
+
 func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 	var i: Dictionary = c["input"]
 	var e: Dictionary = c["expected"]
 	var ici: Dictionary = monde if i.get("cells", null) is String else _ensemble(i.get("cells", []))
+	if i.has("world"):
+		ici = _mondes_des_formes[i["world"]]
 	var plein := func(v: Vector3i) -> bool: return ici.has(v)
 	match c["kind"]:
 		"ray":
@@ -371,6 +425,22 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 			return _meme_liste(Tools.copy(ici, _ensemble(i["selection"])), e["clipboard"])
 		"paste":
 			return _meme_changement(Tools.paste(ici, _liste(i["clipboard"]), _vi(i["anchor"])), e)
+		"wall_normal":
+			var n := Shapes.wall_normal(ici, _vi(i["cell"]), _vi(i["face"]))
+			return "" if n == _vi(e["normal"]) else "attendu %s, rendu %s" % [_vi(e["normal"]), n]
+		"special_shape":
+			var p := {"shape": i["shape"], "a": _vi(i["a"]), "face_a": _vi(i["face_a"]), "connect": i["connect"],
+				"profile": i["profile"], "size": i["size"], "length": i["length"], "rail": i["rail"]}
+			if i["connect"]:
+				p["b"] = _vi(i["b"])
+				p["face_b"] = _vi(i["face_b"])
+			var r: Dictionary = Shapes.shape(ici, p)
+			var ecart := _meme_ensemble("set", r["set"], e["set"]) + _meme_ensemble("clear", r["clear"], e["clear"])
+			if r["error"] != e["error"]:
+				ecart += "erreur %s au lieu de %s ; " % [r["error"], e["error"]]
+			if r["opened"] != e["opened"] or int(r["repaired"]) != int(e["repaired"]):
+				ecart += "opened/repaired %s/%s au lieu de %s/%s" % [r["opened"], r["repaired"], e["opened"], e["repaired"]]
+			return ecart
 	return "sorte inconnue " + str(c["kind"])
 
 
@@ -528,6 +598,63 @@ func _les_outils_dans_la_vue() -> void:
 	_vrai(not monde.cells().has(Vector3i(1, 0, 1)) and monde.cells().has(Vector3i(2, 0, 1)),
 		"Move +X déplace la sélection d'une case sur X")
 	_egal(ed.selection, {Vector3i(2, 0, 1): true}, "et la sélection suit")
+
+	# LES FORMES SPÉCIALES, par la vraie caméra (1er octobre 2026). Un mur de 3 (x = 10..12), vu de −X.
+	# Attendu déroulé à la main : un tunnel droit, rond, de taille 2, en (10,2,2) face −X — une croix de 5
+	# cases sur les tranches x = 10..12 (la case (13,2,2) est vide : la marche s'arrête à la paroi d'en face).
+	var mur: Array = []
+	for x in range(10, 13):
+		for y in 5:
+			for z in 5:
+				mur.append(Vector3i(x, y, z))
+	monde.apply_cells(mur, [])
+	var plein: int = nb.call()
+	ed.set_special("tunnel")
+	ed.profile = "round"
+	ed.shape_size = 2
+	cam.look_at_from_position(Vector3(4, 2.5, 2.5), Vector3(10, 2.5, 2.5), Vector3.UP)
+	var face_ouest: Vector2 = cam.unproject_position(Vector3(10.0, 2.5, 2.5))
+	bouge.call(face_ouest)
+	_vrai(clic.call(face_ouest, true), "forme : le clic est PRIS")
+	clic.call(face_ouest, false)
+	_egal(nb.call(), plein - 15, "Tunnel droit : la croix de 15 cases, de part en part")
+	_vrai(not monde.cells().has(Vector3i(12, 2, 2)) and not monde.cells().has(Vector3i(11, 3, 2))
+		and monde.cells().has(Vector3i(11, 3, 3)), "… la croix exacte")
+	annul.undo()
+	_egal(nb.call(), plein, "UN Ctrl+Z rend le mur")
+	# Connect : l'ancre, Échap qui l'oublie, puis l'ouest et l'est.
+	ed.set_connect(true)
+	clic.call(face_ouest, true)
+	clic.call(face_ouest, false)
+	_vrai(not ed.shape_anchor.is_empty() and nb.call() == plein, "Connect : le premier clic pose une ancre, rien d'autre")
+	var echap := InputEventKey.new()
+	echap.keycode = KEY_ESCAPE
+	echap.pressed = true
+	ed.input(cam, echap)
+	_vrai(ed.shape_anchor.is_empty(), "Échap oublie l'ancre")
+	clic.call(face_ouest, true)
+	clic.call(face_ouest, false)
+	cam.look_at_from_position(Vector3(19, 2.5, 2.5), Vector3(13, 2.5, 2.5), Vector3.UP)
+	var face_est: Vector2 = cam.unproject_position(Vector3(13.0, 2.5, 2.5))
+	clic.call(face_est, true)
+	clic.call(face_est, false)
+	_egal(nb.call(), plein - 15, "Connect : le second clic relie les deux faces, la même croix")
+	_vrai(ed.shape_anchor.is_empty(), "… et l'ancre est consommée")
+	annul.undo()
+	# Le puits refuse une paroi, et le dit.
+	ed.set_special("well")
+	ed.set_connect(false)
+	clic.call(face_est, true)
+	clic.call(face_est, false)
+	_vrai(nb.call() == plein and ed.status.contains("FLOOR"), "un puits sur une paroi est refusé, et le dit")
+	ed.set_connect(true)
+	ed.status = ""
+	clic.call(face_est, true)
+	clic.call(face_est, false)
+	_vrai(ed.shape_anchor.is_empty() and ed.status.contains("FLOOR"),
+		"Connect : une paroi n'est pas une première ancre de puits, et le greffon le dit")
+	ed.set_connect(false)
+	ed.set_mode("add")
 
 	ed.world = null
 	for n in [ed, cam, monde]:

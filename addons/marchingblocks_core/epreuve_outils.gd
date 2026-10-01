@@ -250,5 +250,169 @@ static func cas_d_epreuve() -> Dictionary:
 			"expected": {"set": _cases(r["poser"]), "clear": _cases(r["effacer"]),
 				"selection": _cases(r["selection"])}})
 
-	return {"format": FORMAT, "version": VERSION, "rules_text": REGLES,
-		"limits": {"box_volume_max": Outils.VOLUME_MAXI}, "world": _cases(m), "cases": cas}
+	cas.append_array(_cas_des_formes())
+	# ⚠ LES MONDES DES FORMES SONT ÉCRITS UNE FOIS, et chaque cas les NOMME (`input.world`) : recopiés dans
+	# chaque cas, ils portaient le fichier à 1 Mo, livré avec chaque greffon.
+	var mondes_formes := {}
+	var mf := _mondes_des_formes()
+	for nom in mf:
+		mondes_formes[nom] = _cases(mf[nom])
+
+	return {"format": FORMAT, "version": VERSION, "rules_text": REGLES + REGLES_FORMES,
+		"limits": {"box_volume_max": Outils.VOLUME_MAXI, "shape_length_max": FS.LONGUEUR_MAXI,
+			"shape_span_max": FS.ECART_MAXI}, "world": _cases(m), "shape_worlds": mondes_formes, "cases": cas}
+
+
+# ── LES FORMES SPÉCIALES (1er octobre 2026) — `formes_speciales.gd`, mêmes parades ────────────────────
+
+const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
+
+const FORMES_SPECIALES_EN := {"tunnel": "tunnel", "puits": "well", "pont": "bridge", "balcon": "balcony"}
+const PROFILS_EN := {"rond": "round", "carre": "square", "arche": "arch"}
+const ERREURS_EN := {"": "", "pas_de_paroi": "needs_a_wall", "pas_un_sol": "needs_floor_or_ceiling",
+	"meme_case": "same_cell", "trop_long": "too_far", "rien_en_face": "nothing_in_front", "trop_grand": "too_large",
+	"forme_inconnue": "unknown_shape"}
+
+const REGLES_FORMES := [
+	"SPECIAL SHAPES — their cases name their world in input.world, a key of shape_worlds. Tunnel and well DIG (clear full cells), bridge and balcony ADD (set empty cells). Everything is integer: cell centres are the points, every test compares squared integers (64-bit), never a square root.",
+	"wall_normal(cells, c, face): sum the HORIZONTAL faces F (+-x, +-z) of every full cell q in the 3x3x3 window around c whose neighbour q + F is empty, all of them (back faces included). m = max(|sx|, |sz|); if m = 0 return face. n = (sign(sx) if 2|sx| >= m else 0, 0, sign(sz) if 2|sz| >= m else 0). If n . face <= 0 return face, else n.",
+	"normal for a shape: well — the face must be (0, +-1, 0) and IS the normal (else error needs_floor_or_ceiling); tunnel, bridge, balcony — the face must be horizontal and non-zero (else needs_a_wall), and the normal is wall_normal.",
+	"special_shape(cells, shape, a, face_a, connect, b, face_b, profile, size, length, rail): h = clamp(size, 1, 7) - 1; length = clamp(length, 1, shape_length_max). Unknown shape or profile: unknown_shape. The bridge's profile is always its deck. Errors change nothing.",
+	"balcony: n = normal of a, N = n.n, m = (-n.z, 0, n.x). For every d = (x, 0, z) with |x|, |z| <= length + h + 1: along = d.n, side = d.m; keep a + d when along > 0, along^2 <= length^2 N and side^2 <= h^2 N. With rail (h >= 1 and length >= 2), also a + d + (0,1,0) unless along^2 <= (length-1)^2 N and side^2 <= (h-1)^2 N.",
+	"one click (connect false): the direction s is -n to dig, +n to add. Walk k = 1..length, q = a + s k: dig stops at the first EMPTY q, and ends at q - s (the far wall cell) when k > 1, at q when k = 1 — opened = true; no empty cell: the end is a + s length, opened = false. A bridge stops at the first FULL q and ends there; none: error nothing_in_front. Points = [a, end].",
+	"connect (connect true): nb = normal of b (same errors). b = a: same_cell. |b - a|^2 > shape_span_max^2: too_far. Directions da, db: -normal to dig, +normal to add. Leg of each end P toward the other O: k = smallest k >= 0 with k^2 (d.d) >= (h+1)^2; w = d.(O - P); while k > 0 and w > 0 and 3 k w > |O - P|^2: k -= 1. Points = [a, a + da ka, b + db kb, b], consecutive duplicates removed.",
+	"sweep: for each segment P0 -> P1 (D = P1 - P0) the cells of its axis walk (below) belong to the shape; then every cell q in the box of P0 and P1 grown by h + 2 + max(e0, e1) (more than box_volume_max cells: error too_large), with d = q - P0 and t = d.D, inside when (t >= 0 or (e0 > 0 and t^2 <= e0^2 D.D)) and (t <= D.D or (e1 > 0 and (t - D.D)^2 <= e1^2 D.D)), where e0 = h unless P0 is the first point (then 0) and e1 = h unless P1 is the last (then 0). Frame: u = (-D.z, 0, D.x), v = (-D.x D.y, D.x^2 + D.z^2, -D.y D.z); if D.x = D.z = 0, u = (1,0,0), v = (0,0,1). A = d.u, B = d.v, UU = u.u, VV = v.v, H = h^2.",
+	"profiles: round A^2 VV + B^2 UU <= H UU VV; square A^2 <= H UU and B^2 <= H VV; arch: round when B >= 0, else square. Deck: A^2 <= H UU and 4 B^2 <= VV; with rail and h >= 1, a cell that is not deck with B > 0, 4 B^2 <= 9 VV and A^2 <= H UU is a rail when A^2 > (h-1)^2 UU, else a walkway; rails of every segment minus walkways of every segment join the shape.",
+	"axis walk from P0 to P1: one axis per step; after k_i steps on axis i the next crossing is at (2 k_i + 1) / (2 |D_i|); take the smallest, compared as (2 k_i + 1) |D_j| < (2 k_j + 1) |D_i|; on a tie the lowest axis (x, then y, then z).",
+	"then: dig clears the shape's full cells, add sets its empty cells. REPAIR, by rounds: the front is every changed cell; for each front cell c and each plane (xy, xz, yz), the four 2x2 squares containing c; in the world AFTER the change, a square whose diagonal cells are equal and the other diagonal opposite is a checkerboard: dig clears its FULL pair, add sets its EMPTY pair. Collect all of a round, apply them at once, they are the next front; repaired counts them.",
+]
+
+
+static func _cas_des_formes() -> Array:
+	var cas: Array = []
+	var mondes := _mondes_des_formes()
+	# ── wall_normal
+	for n in [["flat wall", "plat", Vector3i(0, 2, 0), Vector3i(1, 0, 0)],
+			["flat wall, other side", "plat", Vector3i(-3, 2, 0), Vector3i(-1, 0, 0)],
+			["45 degree staircase, clicked on +x", "escalier", Vector3i(0, 2, 0), Vector3i(1, 0, 0)],
+			["45 degree staircase, clicked on +z", "escalier", Vector3i(0, 2, 0), Vector3i(0, 0, 1)],
+			["thin slanted wall: back faces count", "mince", Vector3i(0, 2, 0), Vector3i(1, 0, 0)],
+			["a lone cell: the sum is zero", "seule", Vector3i(0, 0, 0), Vector3i(0, 0, -1)]]:
+		cas.append({"name": "wall_normal: " + n[0], "kind": "wall_normal",
+			"input": {"world": n[1], "cell": _v(n[2]), "face": _v(n[3])},
+			"expected": {"normal": _v(FS.normale_estimee(mondes[n[1]], n[2], n[3]))}})
+	# ── special_shape
+	var essais := [
+		["tunnel straight, round", "mur", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "profil": "rond", "taille": 2, "longueur": 8}],
+		["tunnel straight, square", "mur", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "profil": "carre", "taille": 2, "longueur": 8}],
+		["tunnel straight, arch", "mur", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "profil": "arche", "taille": 3, "longueur": 8}],
+		["tunnel straight, blind", "epais", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "profil": "rond", "taille": 1, "longueur": 4}],
+		["tunnel straight, ends on the far wall (not in the room's floor)", "sol", {"quoi": "tunnel", "a": Vector3i(0, 1, 0), "face_a": Vector3i(-1, 0, 0), "profil": "carre", "taille": 2, "longueur": 8}],
+		["tunnel straight, a wall one cell thick", "fin", {"quoi": "tunnel", "a": Vector3i(0, 2, 0), "face_a": Vector3i(-1, 0, 0), "profil": "rond", "taille": 1, "longueur": 8}],
+		["tunnel connect, face to face (legs capped)", "sol", {"quoi": "tunnel", "a": Vector3i(0, 1, 0), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(2, 1, 0), "face_b": Vector3i(1, 0, 0), "profil": "carre", "taille": 2}],
+		["tunnel connect, an elbow between two caves", "coude", {"quoi": "tunnel", "a": Vector3i(4, 2, 3), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(10, 3, 9), "face_b": Vector3i(0, 0, 1), "profil": "arche", "taille": 2}],
+		["tunnel connect, square elbow (joints extended)", "coude", {"quoi": "tunnel", "a": Vector3i(4, 2, 3), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(10, 3, 9), "face_b": Vector3i(0, 0, 1), "profil": "carre", "taille": 2}],
+		["tunnel connect, thin and oblique (axis walk, repair)", "massif", {"quoi": "tunnel", "a": Vector3i(0, 2, 0), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(8, 7, 3), "face_b": Vector3i(1, 0, 0), "profil": "rond", "taille": 1}],
+		["tunnel straight into a 45 degree wall", "dalle", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "profil": "rond", "taille": 2, "longueur": 12}],
+		["tunnel straight, a pocket makes a checkerboard: repaired", "poche", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "profil": "rond", "taille": 1, "longueur": 8}],
+		["well straight, blind", "socle", {"quoi": "puits", "a": Vector3i(0, 9, 0), "face_a": Vector3i(0, 1, 0), "profil": "rond", "taille": 1, "longueur": 4}],
+		["well straight into a cave, size 3", "grotte", {"quoi": "puits", "a": Vector3i(0, 9, 0), "face_a": Vector3i(0, 1, 0), "profil": "rond", "taille": 3, "longueur": 20}],
+		["well up from a cave ceiling", "grotte", {"quoi": "puits", "a": Vector3i(0, 4, 0), "face_a": Vector3i(0, -1, 0), "profil": "carre", "taille": 1, "longueur": 20}],
+		["bridge straight", "gorge", {"quoi": "pont", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 10}],
+		["bridge straight, with rail", "gorge", {"quoi": "pont", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 10, "garde_corps": true}],
+		["bridge connect, sloped", "gorge", {"quoi": "pont", "a": Vector3i(0, 1, 0), "face_a": Vector3i(1, 0, 0), "relier": true, "b": Vector3i(6, 4, 2), "face_b": Vector3i(-1, 0, 0), "taille": 2}],
+		["bridge connect, an elbow with rails", "equerre", {"quoi": "pont", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "relier": true, "b": Vector3i(9, 3, 11), "face_b": Vector3i(0, 0, -1), "taille": 3, "garde_corps": true}],
+		["balcony", "plat", {"quoi": "balcon", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 3}],
+		["balcony with rail", "plat", {"quoi": "balcon", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 3, "garde_corps": true}],
+		["balcony on a 45 degree wall, with rail", "escalier", {"quoi": "balcon", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 3, "garde_corps": true}],
+		["error: a well on a wall", "mur", {"quoi": "puits", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0)}],
+		["error: a tunnel on a floor", "socle", {"quoi": "tunnel", "a": Vector3i(0, 9, 0), "face_a": Vector3i(0, 1, 0)}],
+		["error: connect a cell to itself", "mur", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(0, 3, 0), "face_b": Vector3i(-1, 0, 0)}],
+		["error: the two ends too far apart", "mur", {"quoi": "tunnel", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0), "relier": true, "b": Vector3i(200, 3, 0), "face_b": Vector3i(1, 0, 0)}],
+		["error: a bridge with nothing in reach", "gorge", {"quoi": "pont", "a": Vector3i(0, 3, 0), "face_a": Vector3i(1, 0, 0), "taille": 2, "longueur": 4}],
+		["error: unknown shape", "mur", {"quoi": "escalier", "a": Vector3i(0, 3, 0), "face_a": Vector3i(-1, 0, 0)}],
+	]
+	for e in essais:
+		var monde: Dictionary = mondes[e[1]]
+		var r: Dictionary = e[2]
+		var res: Dictionary = FS.forme(monde, r)
+		var entree := {"world": e[1], "shape": FORMES_SPECIALES_EN.get(r["quoi"], r["quoi"]),
+			"a": _v(r["a"]), "face_a": _v(r["face_a"]), "connect": bool(r.get("relier", false)),
+			"profile": PROFILS_EN[r.get("profil", "rond")], "size": int(r.get("taille", 1)),
+			"length": int(r.get("longueur", 8)), "rail": bool(r.get("garde_corps", false))}
+		if entree["connect"]:
+			entree["b"] = _v(r["b"])
+			entree["face_b"] = _v(r["face_b"])
+		cas.append({"name": "special_shape: " + e[0], "kind": "special_shape", "input": entree,
+			"expected": {"set": _cases(res["poser"]), "clear": _cases(res["effacer"]),
+				"error": ERREURS_EN[res["erreur"]], "opened": res["ouvert"], "repaired": res["reparees"]}})
+	return cas
+
+
+## Les mondes des formes, petits : ils sont écrits en entier dans chaque cas.
+static func _mondes_des_formes() -> Dictionary:
+	var m := {}
+	var boite := func(d: Dictionary, a: Vector3i, b: Vector3i, plein: bool) -> void:
+		for x in range(a.x, b.x + 1):
+			for y in range(a.y, b.y + 1):
+				for z in range(a.z, b.z + 1):
+					if plein:
+						d[Vector3i(x, y, z)] = true
+					else:
+						d.erase(Vector3i(x, y, z))
+	var d := {}
+	boite.call(d, Vector3i(-3, 0, -4), Vector3i(0, 6, 4), true)
+	m["plat"] = d
+	d = {}
+	boite.call(d, Vector3i(0, 0, -4), Vector3i(2, 6, 4), true)
+	m["mur"] = d
+	var poche: Dictionary = d.duplicate()
+	poche.erase(Vector3i(1, 4, 1))
+	m["poche"] = poche
+	var sol: Dictionary = d.duplicate()
+	boite.call(sol, Vector3i(-4, 0, -4), Vector3i(6, 0, 4), true)
+	m["sol"] = sol
+	d = {}
+	boite.call(d, Vector3i(0, 0, -2), Vector3i(0, 4, 2), true)
+	m["fin"] = d
+	d = {}
+	boite.call(d, Vector3i(0, 0, -2), Vector3i(12, 6, 2), true)
+	m["epais"] = d
+	d = {}
+	boite.call(d, Vector3i(-3, 0, -3), Vector3i(3, 9, 3), true)
+	m["socle"] = d
+	var grotte: Dictionary = d.duplicate()
+	boite.call(grotte, Vector3i(-2, 1, -2), Vector3i(2, 3, 2), false)
+	m["grotte"] = grotte
+	d = {}
+	boite.call(d, Vector3i(-3, 0, -3), Vector3i(0, 5, 3), true)
+	boite.call(d, Vector3i(6, 0, -3), Vector3i(8, 5, 3), true)
+	m["gorge"] = d
+	d = {}
+	boite.call(d, Vector3i(-3, 0, -3), Vector3i(0, 5, 10), true)
+	boite.call(d, Vector3i(-3, 0, 11), Vector3i(12, 5, 13), true)
+	m["equerre"] = d
+	d = {}
+	boite.call(d, Vector3i(0, 0, 0), Vector3i(13, 6, 13), true)
+	boite.call(d, Vector3i(1, 1, 1), Vector3i(3, 4, 5), false)
+	boite.call(d, Vector3i(8, 2, 10), Vector3i(12, 5, 12), false)
+	m["coude"] = d
+	d = {}
+	boite.call(d, Vector3i(0, 0, -4), Vector3i(8, 8, 4), true)
+	m["massif"] = d
+	var escalier := {}
+	var mince := {}
+	var dalle := {}
+	for x in range(-6, 7):
+		for z in range(-6, 7):
+			if x + z <= 0:
+				boite.call(escalier, Vector3i(x, 0, z), Vector3i(x, 4, z), true)
+			if x + z <= 0 and x + z >= -1:
+				boite.call(mince, Vector3i(x, 0, z), Vector3i(x, 4, z), true)
+			if x + z <= 0 and x + z >= -5:
+				boite.call(dalle, Vector3i(x, 0, z), Vector3i(x, 6, z), true)
+	m["escalier"] = escalier
+	m["mince"] = mince
+	m["dalle"] = dalle
+	m["seule"] = {Vector3i(0, 0, 0): true}
+	return m

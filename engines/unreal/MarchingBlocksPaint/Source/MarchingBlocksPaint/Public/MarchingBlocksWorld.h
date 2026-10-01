@@ -16,6 +16,7 @@
 #include "GameFramework/Actor.h"
 #include "MBCore/MBFrame.h"
 #include "MBCore/MBRule.h"
+#include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
 #include "MarchingBlocksWorld.generated.h"
 
@@ -42,6 +43,30 @@ enum class EMarchingBlocksTool : uint8
 	Rect,
 	/** A 3D box: the whole volume, empty cells included. */
 	Box,
+	/** A special shape — tunnel, well, bridge or balcony (Special Shape below). Always aimed at the matter. */
+	Shape,
+};
+
+UENUM(BlueprintType)
+enum class EMarchingBlocksSpecialShape : uint8
+{
+	/** Digs into a WALL, square to it: one click goes through to the next cave (or Shape Length deep). */
+	Tunnel,
+	/** Digs into a FLOOR or a CEILING, straight: one click stops in the cave below (or Shape Length deep). */
+	Well,
+	/** A deck out of a WALL across the air, to the first wall in front (within Shape Length). */
+	Bridge,
+	/** A slab sticking out of a WALL at the height you click, with its rail. */
+	Balcony,
+};
+
+UENUM(BlueprintType)
+enum class EMarchingBlocksShapeProfile : uint8
+{
+	Round,
+	Square,
+	/** A flat floor and a round vault: a corridor you can walk. */
+	Arch,
 };
 
 UENUM(BlueprintType)
@@ -94,6 +119,32 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	bool bHollowBox = false;
 
+	/** The shape the Shape tool makes. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes")
+	EMarchingBlocksSpecialShape SpecialShape = EMarchingBlocksSpecialShape::Tunnel;
+
+	/** Off: one click, straight out of the face. On: two clicks on two faces anywhere — slanted walls included —
+	 *  joined with both ends open (Esc forgets the first). Not for the balcony. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Connect two faces"))
+	bool bConnectEnds = false;
+
+	/** Tunnel and well. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes")
+	EMarchingBlocksShapeProfile ShapeProfile = EMarchingBlocksShapeProfile::Round;
+
+	/** 1 is one cell across, 2 is three, 3 is five… ( [ and ] with the Shape tool). */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (ClampMin = "1", ClampMax = "7"))
+	int32 ShapeSize = 2;
+
+	/** One click: how deep a tunnel or well goes when it finds no cave, how far a bridge looks for a wall, how
+	 *  far a balcony sticks out. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (ClampMin = "1", ClampMax = "64"))
+	int32 ShapeLength = 8;
+
+	/** Bridge and balcony: a one-cell rim along the open sides. Needs a Shape Size of 2 or more. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Rail"))
+	bool bShapeRail = true;
+
 	// ── The selection operations: buttons in the Details panel. Each one is one undo step. ──
 
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void Fill();
@@ -124,6 +175,8 @@ public:
 	int32 Operate(MBPaint::ESelectionOp Op, const TCHAR* UndoName);
 	/** Moves the selected matter by Offset (format space), as one undo step. */
 	void MoveSelection(const MBPaint::FCell& Offset);
+	/** The special shape's settings as MBCore reads them; the ends (A, B) are the caller's. */
+	MBPaint::FShapeRequest ShapeSettings() const;
 
 	/** Sets the whole layer at once — its tile source and its cells (format space) — then rebuilds. Used by
 	 *  the world import. An empty TilesetFile is a layer WITHOUT tiles: its cells are kept, nothing is drawn,
