@@ -26,6 +26,7 @@ func _initialize() -> void:
 	_les_materiaux_sont_partages(t)
 	_il_s_enregistre(t)
 	_il_part_en_glb_lie(t)
+	_il_revient_avec_sa_peinture(t)
 	_le_rayon_trouve_l_occurrence(t)
 	_sculpter_une_tuile_les_change_toutes(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
@@ -128,6 +129,73 @@ func _il_part_en_glb_lie(t: RefCounted) -> void:
 		if id >= 0 and _forme(lot.get_item_mesh(id)) == _forme(t.tuiles[cle].vers_array_mesh(false)):
 			memes += 1
 	_dire(memes == t.tuiles.size(), "le lot relu porte les tuiles du modèle (%d / %d)" % [memes, t.tuiles.size()])
+
+
+## RELU D'UN .glb, LE TÉMOIN GARDE SA PEINTURE (30 septembre 2026 : un travail revenu de Blender devient le
+## témoin de sa couche, éditable). Un matériau à TEXTURE posé sur des faces DÉPLIÉES d'une tuile revient :
+## la même image (écrite en PNG), les mêmes faces, leurs UV ; la légende reste des teintes.
+func _il_revient_avec_sa_peinture(t0: RefCounted) -> void:
+	var t: RefCounted = t0.copie()
+	var dossier := ProjectSettings.globalize_path("user://test_temoin_lie/peinture")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var img := Image.create(8, 4, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.8, 0.2, 0.1))
+	img.set_pixel(0, 0, Color.WHITE)
+	var png := dossier.path_join("source.png")
+	img.save_png(png)
+	# ⚠ L'INDICE DU MATÉRIAU AJOUTÉ, PAS 0 : le témoin reçu porte déjà un matériau (laissé par un test plus
+	# haut) — assigner 0 peignait les faces de ce vieux matériau, sans texture ni projection « uv ».
+	var k_mat: int = t.materiaux.size()
+	t.materiaux.append({"nom": "Moss", "couleur": Color(0.5, 0.9, 0.5), "rugosite": 0.6, "metal": 0.1,
+		"texture": png, "echelle": 1.0, "projection": "uv"})
+	var cle := "mb_plaque_b2h2_dehors"
+	var tuile: RefCounted = t.tuiles[cle]
+	var peintes: Array = [0, 1]
+	tuile.assigner(peintes, k_mat)
+	tuile.deplier(peintes)
+	var uv_avant: Array = peintes.map(func(f): return tuile.uv(f))
+	var chemin := dossier.path_join("peint.glb")
+	_dire(t.vers_glb(chemin) == "", "le témoin peint s'écrit")
+	var r: RefCounted = TL.depuis_glb(chemin, dossier.path_join("images"))
+	_dire(r != null and r.tuiles.size() == t.tuiles.size(), "relu d'un .glb lié : toutes ses tuiles")
+	if r == null:
+		return
+	# Seul le matériau PORTÉ par des faces voyage (un matériau sans face n'a pas de primitive dans le glTF).
+	_dire(r.materiaux.size() == 1 and str(r.materiaux[0]["projection"]) == "uv",
+		"un seul matériau revient (celui que des faces portent), en projection « uv » (%d)" % r.materiaux.size())
+	var relue: RefCounted = r.tuiles[cle]
+	var avec_mat: Array = []
+	for f in relue.faces.size():
+		if relue.mat(f) == 0:
+			avec_mat.append(f)
+	var uv_apres: Array = avec_mat.map(func(f): return relue.uv(f))
+	var memes_uv := avec_mat.size() == peintes.size()
+	for u in uv_apres:
+		var trouve := false
+		for v in uv_avant:
+			var ens_u := {}
+			for p in (u as PackedVector2Array):
+				ens_u[Vector2i((p * 10000.0).round())] = true
+			var egal := (v as PackedVector2Array).size() == (u as PackedVector2Array).size()
+			for p in (v as PackedVector2Array):
+				egal = egal and ens_u.has(Vector2i((p * 10000.0).round()))
+			trouve = trouve or egal
+		memes_uv = memes_uv and trouve
+	_dire(memes_uv, "les faces peintes reviennent peintes, avec LEURS UV (%d faces)" % avec_mat.size())
+	var tex: String = str(r.materiaux[0]["texture"])
+	var relu_img := Image.load_from_file(tex) if FileAccess.file_exists(tex) else null
+	_dire(relu_img != null and relu_img.get_size() == img.get_size() and relu_img.get_pixel(0, 0).is_equal_approx(Color.WHITE),
+		"son image revient, écrite en PNG (%s)" % tex.get_file())
+	var teintes_avant := {}
+	var teintes_apres := {}
+	for f in tuile.faces.size():
+		if tuile.mat(f) < 0:
+			teintes_avant[tuile.teintes[f].to_html()] = true
+	for f in relue.faces.size():
+		if relue.mat(f) < 0:
+			teintes_apres[relue.teintes[f].to_html()] = true
+	_dire(teintes_apres == teintes_avant, "les faces de la légende gardent leurs teintes (%s)" % [teintes_apres.keys()])
+	_dire(_forme(relue.vers_array_mesh(false)) == _forme(tuile.vers_array_mesh(false)), "et la tuile garde sa forme")
 
 
 ## Le rayon contre une recherche BRUTE sur le témoin assemblé (chaque triangle, `Geometry3D`).

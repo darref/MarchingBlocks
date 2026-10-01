@@ -96,20 +96,36 @@ func _ajouter(face: PackedInt32Array, teinte: Color, m: int, u := PackedVector2A
 ## (`BlocsMaitres._quad` : [0,1,2] puis [0,2,3]) : une paire qui partage sa diagonale et reste plane redevient
 ## UN quad. Sans ça, l'artiste éditerait deux fois plus de faces, et ni la boucle d'arêtes ni le loop cut
 ## ne trouveraient leur chemin — ils ne suivent que des quads.
-static func depuis(mesh: Mesh, epsilon := 0.00001) -> RefCounted:
+## ⚠ **`materiau_de` (facultatif) RELIT LES MATÉRIAUX ET LES UV** — un travail revenu de Blender devient ainsi
+## éditable sans perdre sa peinture (charte §3, « le retour garde tout ce que le glTF porte »). Il reçoit le
+## matériau d'une surface et rend {"mat": indice (−1 = la légende), "teinte": Color ou null}. Une face à
+## matériau garde les UV de ses coins ; deux triangles ne se recollent en quad que s'ils ont le même
+## matériau ET les mêmes UV aux deux sommets qu'ils partagent (sinon la couture d'UV serait perdue).
+## Sans lui, rien ne change : la géométrie et les teintes, comme avant.
+static func depuis(mesh: Mesh, epsilon := 0.00001, materiau_de := Callable()) -> RefCounted:
 	var m: RefCounted = load("res://addons/marchingblocks_core/maillage_edite.gd").new()
 	var index := {}
 	var tris: Array = []
 	var couleurs_tri: Array = []
+	var mats_tri: Array = []
+	var uv_tri: Array = []   # par triangle : {sommet: uv} (vide sans matériau)
 	for s in mesh.get_surface_count():
 		var a: Array = mesh.surface_get_arrays(s)
 		var pos: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 		var col = a[Mesh.ARRAY_COLOR]
 		var ind = a[Mesh.ARRAY_INDEX]
+		var uv_src = a[Mesh.ARRAY_TEX_UV]
+		var mat_surface := -1
+		var teinte_surface = null
+		if materiau_de.is_valid():
+			var r: Dictionary = materiau_de.call(mesh.surface_get_material(s))
+			mat_surface = int(r.get("mat", -1))
+			teinte_surface = r.get("teinte", null)
 		var n: int = (ind as PackedInt32Array).size() if ind != null else pos.size()
 		for t in range(0, n, 3):
 			var ids := PackedInt32Array()
 			var teinte := Color.WHITE
+			var uv_ici := {}
 			# ⚠ ORDRE RETOURNÉ : Godot stocke en horaire, le modèle en trigonométrique.
 			for k in [0, 2, 1]:
 				var i: int = ind[t + k] if ind != null else t + k
@@ -121,21 +137,46 @@ static func depuis(mesh: Mesh, epsilon := 0.00001) -> RefCounted:
 				ids.append(index[cle])
 				if col != null and (col as PackedColorArray).size() > i:
 					teinte = col[i]
+				if mat_surface >= 0 and uv_src != null and (uv_src as PackedVector2Array).size() > i:
+					uv_ici[index[cle]] = uv_src[i]
+			if teinte_surface != null:
+				teinte = teinte_surface
 			if ids[0] == ids[1] or ids[1] == ids[2] or ids[0] == ids[2]:
 				continue
 			tris.append(ids)
 			couleurs_tri.append(teinte)
+			mats_tri.append(mat_surface)
+			uv_tri.append(uv_ici)
 	var i := 0
 	while i < tris.size():
 		if i + 1 < tris.size():
 			var q := _recoller(m.sommets, tris[i], tris[i + 1])
-			if not q.is_empty() and couleurs_tri[i] == couleurs_tri[i + 1]:
-				m._ajouter(q, couleurs_tri[i], -1)
+			if not q.is_empty() and couleurs_tri[i] == couleurs_tri[i + 1] and mats_tri[i] == mats_tri[i + 1] \
+					and _uv_accordes(uv_tri[i], uv_tri[i + 1]):
+				var uq := PackedVector2Array()
+				if not (uv_tri[i] as Dictionary).is_empty():
+					for v in q:
+						uq.append(uv_tri[i][v] if (uv_tri[i] as Dictionary).has(v) else uv_tri[i + 1][v])
+				m._ajouter(q, couleurs_tri[i], mats_tri[i], uq)
 				i += 2
 				continue
-		m._ajouter(tris[i], couleurs_tri[i], -1)
+		var ut := PackedVector2Array()
+		if not (uv_tri[i] as Dictionary).is_empty():
+			for v in tris[i]:
+				ut.append(uv_tri[i][v])
+		m._ajouter(tris[i], couleurs_tri[i], mats_tri[i], ut)
 		i += 1
 	return m
+
+
+## Deux triangles ont-ils les mêmes UV aux sommets qu'ils partagent ? (Vrai si aucun ne porte d'UV.)
+static func _uv_accordes(a: Dictionary, b: Dictionary) -> bool:
+	if a.is_empty() != b.is_empty():
+		return false
+	for v in a:
+		if b.has(v) and not (a[v] as Vector2).is_equal_approx(b[v]):
+			return false
+	return true
 
 
 ## Deux triangles qui partagent une arête, parcourue dans des SENS OPPOSÉS, coplanaires, et qui forment

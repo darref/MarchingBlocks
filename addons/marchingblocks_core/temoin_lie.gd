@@ -39,6 +39,58 @@ static func depuis_le_temoin_calcule() -> RefCounted:
 	return t
 
 
+## UN TÉMOIN LIÉ RELU D'UN `.glb` (revenu de Blender) — il devient éditable dans l'appli (charte §3,
+## Jordan, 30 septembre 2026 : au retour, le travail devient le témoin de la couche). null si le fichier
+## n'est pas un témoin lié.
+## ⚠ **ON GARDE LA PEINTURE** : chaque matériau devient UNE entrée du témoin (partagée par toutes les tuiles
+## qui le portent, reconnue par son objet), avec ses UV ; son image est écrite en PNG dans `dossier_images`
+## (le maillage éditable référence ses textures par chemin). Les six teintes de la légende redeviennent des
+## teintes (matériau −1), reconnues par leur NOM — c'est ainsi qu'elles partent (`BlocsMaitres`).
+static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = []) -> RefCounted:
+	var RP := load("res://addons/marchingblocks_core/repli_procedural.gd")
+	var lu: Dictionary = BM.tuiles_liees(chemin, erreurs, [])
+	if lu.is_empty():
+		return null
+	var t: RefCounted = load("res://addons/marchingblocks_core/temoin_lie.gd").new()
+	var legende := {}
+	for teinte in RP.TEINTES:
+		legende[str(teinte["nom"])] = teinte["couleur"]
+	var connus := {}   # id d'objet du matériau → indice
+	var materiau_de := func(mat: Material) -> Dictionary:
+		if mat == null:
+			return {"mat": -1, "teinte": null}
+		if legende.has(mat.resource_name):
+			return {"mat": -1, "teinte": legende[mat.resource_name]}
+		# ⚠ LE TÉMOIN MODÉLISÉ ÉCRIT SA LÉGENDE EN UN SEUL MATÉRIAU (« legend »), les teintes dans la couleur des
+		# sommets (`MaillageEdite.materiau_de_legende`) : lu comme un vrai matériau, il peignait TOUTES les
+		# faces de la légende d'un matériau blanc (vu rougir, `test_temoin_lie`).
+		if mat.resource_name == ME.materiau_de_legende().resource_name:
+			return {"mat": -1, "teinte": null}
+		var id := mat.get_instance_id()
+		if connus.has(id):
+			return {"mat": connus[id], "teinte": null}
+		var e := {"nom": mat.resource_name if mat.resource_name != "" else "Material %d" % (t.materiaux.size() + 1),
+			"couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": "", "echelle": 1.0, "projection": "uv"}
+		if mat is BaseMaterial3D:
+			var sm := mat as BaseMaterial3D
+			e["couleur"] = sm.albedo_color
+			e["rugosite"] = sm.roughness
+			e["metal"] = sm.metallic
+			if sm.albedo_texture != null and sm.albedo_texture.get_image() != null:
+				DirAccess.make_dir_recursive_absolute(dossier_images)
+				var png := dossier_images.path_join("%s_%d.png" % [chemin.get_file().get_basename(), t.materiaux.size()])
+				if sm.albedo_texture.get_image().save_png(png) == OK:
+					e["texture"] = png
+		connus[id] = t.materiaux.size()
+		t.materiaux.append(e)
+		return {"mat": connus[id], "teinte": null}
+	for cle in lu["pieces"]:
+		t.tuiles[cle] = ME.depuis(lu["pieces"][cle], 0.00001, materiau_de)
+	t._partager()
+	t._deduire_les_occurrences()
+	return t
+
+
 func _deduire_les_occurrences() -> void:
 	var grille := GridMap.new()
 	occurrences = []
