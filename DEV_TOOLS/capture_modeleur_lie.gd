@@ -151,6 +151,28 @@ func _derouler() -> void:
 	await _images(5)
 	_photo("planche_3_fin")
 
+	# LES COUCHES ET LEURS TÉMOINS : une copie du témoin, retouchée ; la liste dans Witness.
+	leg.montrer_onglet("formes")
+	_ecran._regler_edition(true)
+	_ecran._copier_le_temoin()
+	var mo2 = _ecran._modeleur
+	mo2.choisir_mode("face")
+	mo2.tout_choisir(false)
+	# La paroi (la tuile en édition au départ) : ses faces tournées vers ±Z local, tirées de 0,2.
+	for g in mo2.maillage.faces.size():
+		if absf(mo2.maillage.normale(g).z) > 0.9:
+			mo2.sel_f[g] = true
+	mo2.souris = v.size * 0.5
+	# ⚠ SEULEMENT SI LE GESTE DÉMARRE : appeler `_mettre_a_jour` sans geste en cours est une faute de la capture.
+	if mo2.commencer("G"):
+		mo2._saisie = "0.2"
+		mo2._axe = "y"
+		mo2._mettre_a_jour()
+		mo2.confirmer()
+	_ecran._enregistrer_le_temoin_modele()
+	await _images(10)
+	_photo("couches_1_witness")
+
 	if _reglages_avant != "":
 		var g2 := FileAccess.open(REGLAGES, FileAccess.WRITE)
 		g2.store_string(_reglages_avant)

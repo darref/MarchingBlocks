@@ -42,6 +42,7 @@ const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
 const Icones := preload("res://app/icones.gd")
 const Manuel := preload("res://app/manuel.gd")
+const Associations := preload("res://app/associations.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
@@ -118,6 +119,9 @@ var _section_jeu: Control
 var _titre_projet: Control
 var _section_projet: Control
 var _section_couches: Control
+var _etat_enregistre: Label
+var _case_associations: CheckButton
+var _etiquette_temoin_couche: Label
 var _section_monde_peint: Control
 var _titre_aller_retour: Control
 var _etapes_artiste: Array[Control] = []
@@ -211,6 +215,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	_regler_fenetre()
 	await _ouvrir_au_lancement()
+	_inscrire_les_fichiers()
 
 
 ## ⚠ LA FENÊTRE S'OUVRE MAXIMISÉE (Jordan, 27 septembre 2026 : « on a besoin de place ») — fenêtrée,
@@ -368,6 +373,15 @@ func _barre_titre() -> Control:
 	devise.add_theme_color_override("font_color", Palette.GRIS)
 	devise.add_theme_font_size_override("font_size", 12)
 	ligne.add_child(devise)
+	# ⚠ L'ENREGISTREMENT EST AUTOMATIQUE, ET IL SE VOIT (Jordan, 30 septembre 2026 : « il faut le dire au
+	# client ») : un client qui cherche Ctrl+S doit lire, sans chercher, que tout est déjà enregistré.
+	_etat_enregistre = Label.new()
+	_etat_enregistre.add_theme_font_size_override("font_size", 12)
+	_etat_enregistre.mouse_filter = Control.MOUSE_FILTER_PASS
+	_etat_enregistre.tooltip_text = ("MarchingBlocks saves every change by itself — no need for Ctrl+S.\n"
+		+ "« Save as » (Project) puts the project where you want; it keeps saving itself there.")
+	ligne.add_child(_etat_enregistre)
+	_dire_enregistre("enregistre")
 
 	# ⚠ LE BANDEAU EST UN BOUTON : il ouvre le manuel (Jordan). Il le DIT dans son texte — un bandeau
 	# cliquable qui ne se présente pas comme tel ne serait jamais cliqué.
@@ -665,6 +679,16 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		_bouton("Save as", "Writes the project where you want it. It keeps saving itself there.",
 			func() -> void: _demander("enregistrer"), "enregistrer"),
 	], 4))
+	# LES FICHIERS DANS WINDOWS (Jordan, 30 septembre 2026) : inscrits au premier lancement ; la case les retire
+	# — et le refus tient d'un lancement à l'autre.
+	_case_associations = CheckButton.new()
+	_case_associations.text = "File icons & double-click"
+	_case_associations.add_theme_font_size_override("font_size", 11)
+	_case_associations.tooltip_text = ("Gives .mbproj, .mbtiles, .mbset and .mbworld their MarchingBlocks icons, "
+		+ "and opens a project on double-click.\nOnly for your Windows account; untick to remove it.")
+	_case_associations.focus_mode = Control.FOCUS_NONE
+	_case_associations.toggled.connect(_regler_les_associations)
+	projet.contenu.add_child(_case_associations)
 
 	# ── LE TÉMOIN — en RÉFÉRENCE (Jordan) : on le consulte, on n'y travaille pas.
 	var temoin := Section.new("Witness", true, Icones.icone("cube"))
@@ -693,8 +717,11 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var couches := Section.new("Layers", true, Icones.icone("couches"))
 	pile.add_child(couches)
 	_section_couches = couches
-	couches.contenu.add_child(_texte("A layer holds its own cells AND its own tiles. Slicing dresses "
-		+ "the ACTIVE one.", 11, Palette.GRIS))
+	# ⚠ UNE COUCHE EST UN TÉMOIN ET UN MONDE PEINT (Jordan, 30 septembre 2026) : ses tuiles à sculpter
+	# (Witness) et ses cases à peindre (World). La même liste dans les deux ateliers : on choisit l'une, les
+	# deux suivent.
+	couches.contenu.add_child(_texte("A layer is a witness AND a painted world: its own tiles to sculpt "
+		+ "(Witness) and its own cells to paint (World). Pick one: both workshops follow.", 11, Palette.GRIS))
 	_liste_couches = VBoxContainer.new()
 	_liste_couches.add_theme_constant_override("separation", 4)
 	couches.contenu.add_child(_liste_couches)
@@ -704,13 +731,15 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	_nom_couche.focus_exited.connect(_renommer_couche)
 	couches.contenu.add_child(_nom_couche)
 	couches.contenu.add_child(_rangee([
-		_bouton("New layer", "Adds an empty layer and makes it the one you paint on.", _nouvelle_couche,
-			"plus"),
-		_bouton("Delete", "Deletes the active layer (Ctrl+Z brings it back).", _supprimer_couche,
-			"poubelle", Palette.DANGER),
+		_bouton("New layer", "Adds an empty layer, with the computed witness, and makes it active.",
+			_nouvelle_couche, "plus"),
+		_bouton("Copy witness", "Adds a layer whose witness is a COPY of the active layer's (no cells): "
+			+ "sculpt it into a variant — ice from rock — without touching the original.", _copier_le_temoin,
+			"copier"),
 	]))
-	_bouton_supprimer_couche = (couches.contenu.get_child(couches.contenu.get_child_count() - 1)
-		.get_child(1) as Button)
+	_bouton_supprimer_couche = _bouton("Delete layer", "Deletes the active layer (Ctrl+Z brings it back).",
+		_supprimer_couche, "poubelle", Palette.DANGER)
+	couches.contenu.add_child(_bouton_supprimer_couche)
 
 	# ── LE MONDE PEINT — DEMANDÉ PAR JORDAN (29 septembre 2026) : « dans WORLD, une section pour gérer le
 	# monde peint, déjà l'exporter vers les trois addons ». Toutes les couches partent ENSEMBLE, avec
@@ -773,9 +802,9 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 		+ "Its painted cells stay as they are.", _trancher_travail, "couteau", Palette.PRINCIPAL)
 	_bouton_trancher_travail.disabled = true
 	etape3.contenu.add_child(_bouton_trancher_travail)
-	etape3.contenu.add_child(_bouton("Slice the witness",
-		"Slices the computed witness into its tiles and dresses the ACTIVE layer with them.\n"
-		+ "Its painted cells stay as they are.", _trancher_temoin, "cube"))
+	etape3.contenu.add_child(_bouton("Slice this layer's witness",
+		"Slices the ACTIVE layer's own witness — the one you sculpt in Witness — and dresses the layer "
+		+ "with its tiles.\nIts painted cells stay as they are.", _trancher_temoin_de_la_couche, "cube"))
 
 	var etape4 := Section.new("4 · Export to engines", true, Icones.icone("exporter"))
 	pile.add_child(etape4)
@@ -1156,7 +1185,7 @@ func _contexte() -> void:
 	_section_jeu.visible = jeu
 	_titre_projet.visible = projet
 	_section_projet.visible = projet
-	_section_couches.visible = monde
+	_section_couches.visible = monde or temoin
 	_section_monde_peint.visible = monde
 	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
@@ -1180,11 +1209,7 @@ var _temoin_calcule: RefCounted
 
 
 func _temoin_pour_la_planche() -> RefCounted:
-	if _modeleur.temoin != null:
-		return _modeleur.temoin
-	if _temoin_calcule == null:
-		_temoin_calcule = TL.depuis_le_temoin_calcule()
-	return _temoin_calcule
+	return _temoin_de(_couches[_active])
 
 
 ## Un clic sur une tuile de la planche : la vue cadre sa copie la plus LISIBLE (la plus pure, celle dont les
@@ -1252,6 +1277,9 @@ func _contexte_des_outils() -> void:
 func _batir_droite_temoin(pile: VBoxContainer) -> void:
 	var mode := Section.new("Edit mode", true, Icones.icone("cube"))
 	pile.add_child(mode)
+	# QUEL TÉMOIN ON ÉDITE : celui de la couche active (un témoin par couche, 30 septembre 2026).
+	_etiquette_temoin_couche = _texte("", 11, Palette.OLIVE)
+	mode.contenu.add_child(_etiquette_temoin_couche)
 	_bouton_edition = Button.new()
 	_bouton_edition.text = "Edit the witness  ·  Tab"
 	_bouton_edition.icon = Icones.icone("outils")
@@ -1430,31 +1458,24 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 ## sait pas quelle copie d'une clé il faudrait garder. Il reste sur le disque, et on le DIT.
 func _regler_edition(oui: bool) -> void:
 	var dit_ancien := ""
-	if oui and _modeleur.temoin == null:
-		var t: RefCounted = null
-		var natif := _chemin_modele_natif()
-		if FileAccess.file_exists(natif):
-			var d = JSON.parse_string(FileAccess.get_file_as_string(natif))
-			if d is Dictionary:
-				t = TL.depuis_dictionnaire(d)
-		if t == null:
-			# Celui que la planche des tuiles a peut-être déjà construit : le modeleur le prend.
-			t = _temoin_calcule if _temoin_calcule != null else TL.depuis_le_temoin_calcule()
-			_temoin_calcule = null
-			if FileAccess.file_exists(_chemin_temoin_modele().get_basename() + ".mbmesh"):
-				dit_ancien = ("\n[color=#f2ca79]An older single-mesh model was found[/color] (%s): it is kept on "
-					+ "disk but not used — the linked editor starts from the computed witness.") \
-					% (_chemin_temoin_modele().get_basename() + ".mbmesh").get_file()
-		_modeleur.charger_temoin(t, _occurrence_de_depart(t))
-		_redire_les_materiaux()
-		_legende_formes.rafraichir_tuiles()
+	if oui:
+		# ⚠ LE TÉMOIN DE LA COUCHE ACTIVE (Jordan, 30 septembre 2026) : chaque couche a le sien.
+		var t: RefCounted = _temoin_de(_couches[_active])
+		if _modeleur.temoin != t:
+			_modeleur.charger_temoin(t, _occurrence_de_depart(t))
+			_redire_les_materiaux()
+			_legende_formes.rafraichir_tuiles()
+		var ancien := _projet.get_basename() + "_witness.mbmesh"
+		if _origine_du_temoin(_couches[_active]) == "computed witness" and FileAccess.file_exists(ancien):
+			dit_ancien = ("\n[color=#f2ca79]An older single-mesh model was found[/color] (%s): it is kept on "
+				+ "disk but not used — the linked editor starts from the computed witness.") % ancien.get_file()
 	_vue.regler_edition(oui)
 	_bouton_edition.set_pressed_no_signal(oui)
 	if oui:
-		_dire(("[b]Edit mode[/b] — %d tiles, shown as %d linked copies. Click any copy: you edit its tile, and "
-			+ "every copy follows. 1 2 3 pick vertices, edges or faces; G R S E I, Ctrl+R, X M F work as in "
-			+ "Blender. [i]Tab to stop editing.[/i]%s")
-			% [_modeleur.temoin.tuiles.size(), _modeleur.temoin.occurrences.size(), dit_ancien])
+		_dire(("[b]Edit mode — the witness of layer « %s »[/b] — %d tiles, shown as %d linked copies. Click "
+			+ "any copy: you edit its tile, and every copy follows. 1 2 3 pick vertices, edges or faces; G R S E I, "
+			+ "Ctrl+R, X M F work as in Blender. [i]Tab to stop editing.[/i]%s")
+			% [_couches[_active]["nom"], _modeleur.temoin.tuiles.size(), _modeleur.temoin.occurrences.size(), dit_ancien])
 
 
 ## L'occurrence en édition au départ : la première de la tuile la plus partagée (la paroi à l'air libre),
@@ -1497,18 +1518,40 @@ func _cadrer_la_selection() -> void:
 
 
 ## Chaque geste fini du modeleur : UNE action d'annulation, et le fichier réécrit une seconde plus tard.
+## ⚠ **L'ANNULATION VISE LE TÉMOIN D'OÙ VIENT LE GESTE, PAS CELUI QU'ON ÉDITE** (un témoin par couche,
+## 30 septembre 2026) : un Ctrl+Z après avoir changé de couche défait le geste dans SON témoin, et
+## l'enregistre — jamais dans celui de la couche devenue active.
 func _geste_du_modeleur(avant: RefCounted, apres: RefCounted, nom: String) -> void:
+	var t: RefCounted = _modeleur.temoin
 	_histoire.create_action("Witness: " + nom)
-	_histoire.add_do_method(_modeleur.remplacer.bind(apres))
-	_histoire.add_do_method(_temoin_modifie)
-	_histoire.add_undo_method(_modeleur.remplacer.bind(avant))
-	_histoire.add_undo_method(_temoin_modifie)
+	_histoire.add_do_method(_remplacer_temoin.bind(t, apres))
+	_histoire.add_undo_method(_remplacer_temoin.bind(t, avant))
 	_histoire.commit_action(false)
-	_temoin_modifie()
+	_temoin_modifie(t)
 
 
-func _temoin_modifie() -> void:
+func _remplacer_temoin(t: RefCounted, m: RefCounted) -> void:
+	if t == _modeleur.temoin:
+		_modeleur.remplacer(m)
+	elif m is TL.Lot:
+		for c in (m as TL.Lot).tuiles:
+			t.poser_tuile(c, (m as TL.Lot).tuiles[c])
+	elif m.has_meta("cle"):
+		t.poser_tuile(m.get_meta("cle"), m)
+	_temoin_modifie(t)
+
+
+## Les témoins modifiés depuis le dernier enregistrement (un par couche touchée).
+var _temoins_sales := {}
+
+
+func _temoin_modifie(t: RefCounted = null) -> void:
+	if t == null:
+		t = _modeleur.temoin
+	if t != null:
+		_temoins_sales[t] = true
 	_minuterie_temoin.start()
+	_dire_enregistre("en_cours")
 	_redire_les_materiaux()
 
 
@@ -1649,52 +1692,246 @@ func _remettre_le_temoin() -> void:
 		avant.set_meta("cle", c)
 		var apres: RefCounted = neuf.tuiles[c].copie()
 		apres.set_meta("cle", c)
-		_histoire.add_do_method(_modeleur.remplacer.bind(apres))
-		_histoire.add_undo_method(_modeleur.remplacer.bind(avant))
-	_histoire.add_do_method(_temoin_modifie)
-	_histoire.add_undo_method(_temoin_modifie)
+		_histoire.add_do_method(_remplacer_temoin.bind(_modeleur.temoin, apres))
+		_histoire.add_undo_method(_remplacer_temoin.bind(_modeleur.temoin, avant))
 	_histoire.commit_action()
 
 
+## Le témoin de la COUCHE ACTIVE : son `.mbtiles` (ce qui fait foi) et son `.glb` lié (ce qu'on tranche).
 ## ⚠ `.mbtiles` ET NON `.mbmesh` : l'ancien fichier (le témoin d'un seul tenant) n'est jamais écrasé.
 func _chemin_modele_natif() -> String:
-	return _chemin_temoin_modele().get_basename() + ".mbtiles"
+	return _chemin_temoin_de(_couches[_active])
 
 
 func _chemin_temoin_modele() -> String:
-	if _projet != "":
-		return _projet.get_basename() + "_witness.glb"
-	return "user://witness_model.glb"
+	return _glb_du_temoin(_couches[_active])
 
 
-## Écrit le témoin modélisé, et le range dans la liste des travaux (étape 2) — remplacé, jamais doublé.
+## Écrit chaque témoin modifié — celui qu'on édite, et ceux qu'un Ctrl+Z a touchés dans d'autres couches.
+## ⚠ Il n'entre PLUS dans la liste des travaux : la couche tranche son propre témoin (étape 3).
 func _enregistrer_le_temoin_modele() -> String:
-	if _modeleur.temoin == null:
-		return ""
-	var chemin := _chemin_temoin_modele()
-	var f := FileAccess.open(_chemin_modele_natif(), FileAccess.WRITE)
-	if f != null:
-		f.store_string(JSON.stringify(_modeleur.temoin.vers_dictionnaire()))
-		f.close()
-	# ⚠ LE .glb EST LIÉ : le trancheur le relit tuile par tuile, comme un travail revenu de Blender.
-	var raison: String = _modeleur.temoin.vers_glb(chemin)
-	if raison != "":
-		_dire("[color=#e0603c]The modelled witness could not be saved:[/color] %s" % raison)
-		return raison
+	if _modeleur.temoin != null:
+		_temoins_sales[_modeleur.temoin] = true
+	var raison := ""
+	for t in _temoins_sales.keys():
+		var c: Dictionary = _couche_du_temoin(t)
+		if c.is_empty():
+			continue   # la couche a été supprimée : son témoin revient avec elle (Ctrl+Z)
+		var r := _enregistrer_temoin(c)
+		if r != "":
+			raison = r
+	_temoins_sales.clear()
 	_legende_formes.rafraichir_tuiles()   # les photos de la planche montrent ce qu'on a sculpté
-	var maillage: ArrayMesh = _modeleur.temoin.assemble()
-	var deja := -1
-	for i in _travaux.size():
-		if String(_travaux[i]["chemin"]) == chemin:
-			deja = i
-	if deja >= 0:
-		_travaux[deja]["maillage"] = maillage
+	_rafraichir_couches()
+	# ⚠ L'ÉTAT CONCLUT TOUJOURS : sans témoin à écrire, `_enregistrer` n'aurait pas été appelé, et la barre
+	# serait restée sur « Saving… ».
+	_dire_enregistre("enregistre" if raison == "" else "echec")
+	return raison
+
+
+# ── LE TÉMOIN DE CHAQUE COUCHE — DÉCIDÉ (Jordan, 30 septembre 2026) ─────────────────────────────────────
+#
+# Une couche POSSÈDE son témoin lié : on le retrouve, on le remodifie, et le remodeler ne touche aucune
+# autre couche. ⚠ Avant, le témoin modélisé était UN par projet (`<projet>_witness.glb`) : le remodeler pour
+# une couche changeait la source d'une autre, qui était retranchée en silence au chargement suivant.
+# Le témoin se charge À LA DEMANDE et reste en mémoire (`_temoin`) : son `.mbtiles` s'il en a un ; sinon le
+# `.glb` lié qu'on lui a tranché (revenu de Blender) ; sinon le témoin calculé.
+
+## Le `.mbtiles` d'une couche : le sien, sinon celui qu'elle aura — `<projet>_layer<id>.mbtiles`.
+func _chemin_temoin_de(c: Dictionary) -> String:
+	if str(c.get("temoin", "")) != "":
+		return str(c["temoin"])
+	var base := _projet.get_basename() if _projet != "" else "user://witness"
+	return "%s_layer%s.mbtiles" % [base, str(c.get("id", "0"))]
+
+
+func _glb_du_temoin(c: Dictionary) -> String:
+	return _chemin_temoin_de(c).get_basename() + ".glb"
+
+
+func _temoin_de(c: Dictionary) -> RefCounted:
+	var deja = c.get("_temoin", null)
+	if deja != null:
+		return deja
+	var t: RefCounted = null
+	var chemin := str(c.get("temoin", ""))
+	if chemin != "" and FileAccess.file_exists(chemin):
+		var d = JSON.parse_string(FileAccess.get_file_as_string(chemin))
+		if d is Dictionary:
+			t = TL.depuis_dictionnaire(d)
+	if t == null and _source_liee(c):
+		t = TL.depuis_glb(str(c["source"]), _chemin_temoin_de(c).get_basename() + "_images")
+	if t == null:
+		if _temoin_calcule == null:
+			_temoin_calcule = TL.depuis_le_temoin_calcule()
+		t = _temoin_calcule.copie()
+	c["_temoin"] = t
+	return t
+
+
+## La couche qui possède ce témoin, {} si aucune (supprimée). ⚠ PAS DE MÉTA « couche » SUR LE TÉMOIN : la
+## couche garde son témoin, et le témoin qui garderait sa couche ferait un CYCLE — ni l'un ni l'autre ne
+## serait jamais libéré, matériaux et textures compris (vu en fuite à la sortie de la fumée).
+func _couche_du_temoin(t: RefCounted) -> Dictionary:
+	for c in _couches:
+		if c.get("_temoin", null) == t:
+			return c
+	return {}
+
+
+## La source de la couche est-elle un `.glb` LIÉ (un témoin revenu de Blender) ? Retenu : 0,2 s de lecture.
+func _source_liee(c: Dictionary) -> bool:
+	if c.has("_lie"):
+		return bool(c["_lie"])
+	var s := str(c.get("source", ""))
+	var lie: bool = s != "" and s != Projet.TEMOIN and s.get_extension().to_lower() in ["glb", "gltf"] \
+		and FileAccess.file_exists(s) and not BM.tuiles_liees(s, [], []).is_empty()
+	c["_lie"] = lie
+	return lie
+
+
+## D'où vient le témoin de la couche — ce que la liste en dit.
+func _origine_du_temoin(c: Dictionary) -> String:
+	if (str(c.get("temoin", "")) != "" and FileAccess.file_exists(str(c["temoin"]))) or _temoins_sales.has(c.get("_temoin")):
+		return "modelled"
+	if _source_liee(c):
+		return "from Blender (linked)"
+	var s := str(c.get("source", ""))
+	if s != "" and s != Projet.TEMOIN:
+		return "unlinked work"
+	return "computed witness"
+
+
+## Écrit le témoin d'une couche : son `.mbtiles` et son `.glb` lié. Rend "" ou la raison.
+func _enregistrer_temoin(c: Dictionary) -> String:
+	var t = c.get("_temoin", null)
+	if t == null:
+		return ""
+	if str(c.get("temoin", "")) == "":
+		c["temoin"] = _chemin_temoin_de(c)
+	var f := FileAccess.open(str(c["temoin"]), FileAccess.WRITE)
+	if f == null:
+		return "cannot write %s" % c["temoin"]
+	f.store_string(JSON.stringify(t.vers_dictionnaire()))
+	f.close()
+	var raison: String = t.vers_glb(_glb_du_temoin(c))
+	if raison != "":
+		_dire("[color=#e0603c]The witness of « %s » could not be saved:[/color] %s" % [c["nom"], raison])
+	_oublier_la_vignette(c)
+	_enregistrer()
+	return raison
+
+
+## Étape 3 : la couche active prend les tuiles de SON témoin. ⚠ Un témoin jamais modelé est le témoin
+## calculé : il se tranche comme tel (son lot est en cache, commun à toutes les couches qui l'ont).
+func _trancher_temoin_de_la_couche() -> void:
+	if _vue.monde() == null:
+		return
+	var c: Dictionary = _couches[_active]
+	if _origine_du_temoin(c) == "computed witness":
+		await _trancher_temoin()
+		return
+	_temoin_de(c)
+	_temoins_sales[c["_temoin"]] = true
+	_enregistrer_le_temoin_modele()
+	var glb := _glb_du_temoin(c)
+	var bilan: Dictionary = await _trancher_source(glb)
+	_poser_lot(bilan, "the layer's witness", glb, "[b]Sliced from the witness of « %s »[/b]\n" % c["nom"])
+
+
+## « Copy witness » : une couche neuve dont le témoin est une COPIE de celui de la couche active.
+func _copier_le_temoin() -> void:
+	var origine: Dictionary = _couches[_active]
+	var t: RefCounted = _temoin_de(origine).copie()
+	var i := _ajouter_couche(Projet.couche("%s (copy)" % origine["nom"]))
+	var c: Dictionary = _couches[i]
+	c["_temoin"] = t
+	_enregistrer_temoin(c)
+	_activer(i)
+	_dire(("[b]New layer « %s »[/b] — its witness is a copy of « %s »'s: sculpt it (Witness) without touching "
+		+ "the original, then slice it (step 3).") % [c["nom"], origine["nom"]])
+
+
+## La vignette d'une couche : son témoin, photographié une fois, reprise quand il change.
+var _vignettes: Node
+## ⚠ PAS `static` : un maillage statique survit à la fermeture avec son matériau — vu en fuite dans la fumée.
+var _maillage_calcule: Mesh
+
+
+func _vignette_de(c: Dictionary) -> Texture2D:
+	var deja = c.get("_vignette", null)
+	if deja != null:
+		return deja
+	if _vignettes == null:
+		_vignettes = Node.new()
+		_vignettes.name = "Vignettes"
+		add_child(_vignettes)
+	var mesh: Mesh
+	if _origine_du_temoin(c) == "computed witness" and c.get("_temoin", null) == null:
+		if _maillage_calcule == null:
+			_maillage_calcule = BM.maillage_moitie(0)
+		mesh = _maillage_calcule
 	else:
-		_travaux.append({"chemin": chemin, "maillage": maillage})
-		if _travail_actif < 0:
-			_travail_actif = _travaux.size() - 1
-	_redire_les_travaux()
-	return ""
+		mesh = _temoin_de(c).assemble()
+	var vue := SubViewport.new()
+	vue.size = Vector2i(84, 56)
+	vue.own_world_3d = true
+	vue.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Palette.FOND_VUE
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color("#8892a4")
+	env.ambient_light_energy = 0.8
+	var we := WorldEnvironment.new()
+	we.environment = env
+	vue.add_child(we)
+	var soleil := DirectionalLight3D.new()
+	soleil.rotation_degrees = Vector3(-48, -34, 0)
+	vue.add_child(soleil)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	vue.add_child(mi)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = 17.0
+	var direction := Vector3(1.0, 0.8, 1.3).normalized()
+	var centre := Vector3.ONE * float(BM.COTE) * 0.5
+	cam.transform = Transform3D(Basis.looking_at(-direction, Vector3.UP), centre + direction * 30.0)
+	vue.add_child(cam)
+	_vignettes.add_child(vue)
+	c["_vue_vignette"] = vue
+	c["_vignette"] = vue.get_texture()
+	return c["_vignette"]
+
+
+func _oublier_la_vignette(c: Dictionary) -> void:
+	var vue = c.get("_vue_vignette", null)
+	if vue != null and is_instance_valid(vue):
+		vue.queue_free()
+	c["_vue_vignette"] = null
+	c["_vignette"] = null
+
+
+## L'état d'une couche, en une ligne : ses cases, et si ses tuiles viennent de son témoin tel qu'il est.
+func _etat_de(i: int) -> String:
+	var c: Dictionary = _couches[i]
+	var n: int = (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells().size()
+	var s := str(c.get("source", ""))
+	var etat := ""
+	if s == "":
+		etat = "not sliced"
+	elif s == _glb_du_temoin(c):
+		# L'empreinte du lot POSÉ contre celle du fichier — sans relire le cache du disque à chaque rafraîchissement.
+		var lot: MeshLibrary = _vue.couche(i).lot
+		var a_jour: bool = lot != null and str(lot.get_meta("empreinte", "")) == Projet.empreinte(s) \
+			and not _temoins_sales.has(c.get("_temoin"))
+		etat = "sliced" if a_jour else "witness changed · slice again"
+	elif s == Projet.TEMOIN:
+		etat = "witness changed · slice again" if _origine_du_temoin(c) == "modelled" else "sliced"
+	else:
+		etat = "tiles from " + s.get_file()
+	return "%d cells · %s" % [n, etat]
 
 
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
@@ -1846,7 +2083,11 @@ func _exporter(fichier: String) -> void:
 	if fichier.get_extension().to_lower() != "glb":
 		fichier = fichier.get_basename() + ".glb"
 	await _attendre("Exporting the witness", fichier.get_file())
-	var raison: String = BM.exporter_le_temoin_lie(fichier)
+	# ⚠ LE TÉMOIN DE LA COUCHE ACTIVE : jamais modelé, c'est le témoin calculé (légende, UV canoniques) ;
+	# sinon le sien, tel qu'on l'a sculpté.
+	var c_export: Dictionary = _couches[_active]
+	var raison: String = BM.exporter_le_temoin_lie(fichier) if _origine_du_temoin(c_export) == "computed witness" \
+		else _temoin_de(c_export).vers_glb(fichier)
 	_fin_attente()
 	if raison != "":
 		_dire("[color=#e0603c]Export failed:[/color] %s" % raison)
@@ -1933,6 +2174,26 @@ func _trancher_travail() -> void:
 	if chemin == "":
 		_dire("No work selected.\n\n[i]Step 2: « Import the work… », then pick one in the list. "
 			+ "You slice what you have seen.[/i]")
+		return
+	# ⚠ UN TRAVAIL LIÉ (revenu de Blender) DEVIENT LE TÉMOIN DE LA COUCHE (Jordan, 30 septembre 2026) : éditable
+	# ensuite dans l'appli, avec sa peinture. L'ancien témoin de la couche est gardé à côté (« .previous »).
+	var c: Dictionary = _couches[_active]
+	var images := _chemin_temoin_de(c).get_basename() + "_images"
+	var lu: RefCounted = TL.depuis_glb(chemin, images) if chemin.get_extension().to_lower() in ["glb", "gltf"] else null
+	if lu != null:
+		var ancien := _chemin_temoin_de(c)
+		if FileAccess.file_exists(ancien):
+			DirAccess.copy_absolute(ancien, ancien.get_basename() + ".previous.mbtiles")
+		c["_temoin"] = lu
+		c.erase("_lie")
+		_temoins_sales[lu] = true
+		_enregistrer_le_temoin_modele()
+		if _modeleur.temoin != null:
+			_modeleur.charger_temoin(lu, _occurrence_de_depart(lu))
+		var propre := _glb_du_temoin(c)
+		var bilan_lie: Dictionary = await _trancher_source(propre)
+		_poser_lot(bilan_lie, "work", propre, ("[b]%s became the witness of « %s »[/b] — edit it in Witness, "
+			+ "slice it again in step 3.\n") % [chemin.get_file(), c["nom"]])
 		return
 	var bilan: Dictionary = await _trancher_source(chemin)
 	var entete := "[b]Sliced from[/b] %s\n" % chemin
@@ -2212,6 +2473,8 @@ func _exporter_le_jeu(dossier: String) -> void:
 	await _attendre("Exporting the tileset", _couches[_active]["nom"])
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
 	var r: Dictionary = FormatNeutre.exporter(massif.lot, dossier, _couches[_active]["nom"], version)
+	if r.has("dossier"):
+		Associations.marquer_dossier(str(r["dossier"]))
 	_fin_attente()
 	if r.has("erreur"):
 		_dire("[color=#e0603c]Export failed:[/color] %s" % r["erreur"])
@@ -2237,6 +2500,10 @@ func _exporter_le_monde(dossier: String) -> void:
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
 	var nom: String = _projet.get_file().get_basename() if _projet != "" else "world"
 	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version)
+	if r.has("dossier"):
+		Associations.marquer_dossier(str(r["dossier"]))
+		for sous in DirAccess.get_directories_at(str(r["dossier"])):
+			Associations.marquer_dossier(str(r["dossier"]).path_join(sous))
 	_fin_attente()
 	if r.has("erreur"):
 		_dire("[color=#e0603c]Export failed:[/color] %s" % r["erreur"])
@@ -2384,17 +2651,47 @@ func _dire_l_etage() -> void:
 func _ajouter_couche(etat: Dictionary) -> int:
 	var massif: Node = _vue.ajouter_couche()
 	massif.visible = etat["visible"]
-	_couches.append({"nom": etat["nom"], "source": etat["source"],
-		"visible": etat["visible"]})
+	var id := str(etat.get("id", ""))
+	for autre in _couches:
+		if str(autre.get("id", "")) == id:
+			id = ""
+	_couches.append({"nom": etat["nom"], "source": etat["source"], "visible": etat["visible"],
+		"temoin": str(etat.get("temoin", "")), "id": id if id != "" else _nouvel_id()})
 	return _couches.size() - 1
+
+
+## Un identifiant de couche libre : le plus grand, plus un. ⚠ Il nomme les fichiers de son témoin : il ne
+## change jamais, même si la couche change de nom.
+func _nouvel_id() -> String:
+	var n := 0
+	for c in _couches:
+		n = maxi(n, int(str(c.get("id", "0"))))
+	return str(n + 1)
 
 
 func _activer(i: int) -> void:
 	_active = clampi(i, 0, _couches.size() - 1)
 	_vue.activer(_active)
+	_suivre_le_temoin_de_la_couche()
 	_rafraichir_couches()
 	_dire_l_etage()
 	_enregistrer()
+
+
+## LE TÉMOIN SUIT LA COUCHE ACTIVE : si le modeleur en tient un, il prend celui de la nouvelle couche (le
+## geste en cours est abandonné, les témoins modifiés sont écrits d'abord). La planche suit aussi.
+func _suivre_le_temoin_de_la_couche() -> void:
+	if _ouverture or _couches.is_empty():
+		return
+	if _modeleur.temoin != null:
+		var t: RefCounted = _temoin_de(_couches[_active])
+		if t != _modeleur.temoin:
+			if _modeleur.modal != "":
+				_modeleur.annuler()
+			_enregistrer_le_temoin_modele()
+			_modeleur.charger_temoin(t, _occurrence_de_depart(t))
+			_redire_les_materiaux()
+	_legende_formes.reconstruire_tuiles()
 
 
 func _nouvelle_couche() -> void:
@@ -2475,6 +2772,15 @@ func _rafraichir_couches() -> void:
 			oeil.icon = Icones.icone("oeil" if v else "oeil_ferme")
 			_montrer_couche(i, v))
 		ligne.add_child(oeil)
+		# ⚠ UNE COUCHE = UN TÉMOIN + UN MONDE PEINT (Jordan, 30 septembre 2026) : la vignette de SON témoin, d'où
+		# il vient, et l'état de ses tuiles (tranchées depuis ce témoin tel qu'il est, ou à retrancher).
+		var vignette := TextureRect.new()
+		vignette.texture = _vignette_de(c)
+		vignette.custom_minimum_size = Vector2(56, 38)
+		vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		vignette.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ligne.add_child(vignette)
 		var choix := Button.new()
 		choix.toggle_mode = true
 		choix.button_group = groupe
@@ -2483,15 +2789,19 @@ func _rafraichir_couches() -> void:
 		choix.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		choix.clip_text = true
 		choix.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		choix.custom_minimum_size = Vector2(0, 40)
-		choix.text = "%s\n%s" % [c["nom"], _dire_la_source(c)]
-		choix.add_theme_font_size_override("font_size", 12)
-		choix.tooltip_text = "Paint on this layer.\nTiles: %s" % (c["source"] if c["source"] != "" else "none yet")
+		choix.custom_minimum_size = Vector2(0, 52)
+		choix.text = "%s\n%s\n%s" % [c["nom"], _origine_du_temoin(c), _etat_de(i)]
+		choix.add_theme_font_size_override("font_size", 11)
+		choix.tooltip_text = ("Make this layer active: Witness edits ITS witness, World paints ITS cells.\n"
+			+ "Witness: %s\nTiles: %s") % [_origine_du_temoin(c), c["source"] if c["source"] != "" else "none yet"]
 		choix.pressed.connect(_activer.bind(i))
 		ligne.add_child(choix)
 		_liste_couches.add_child(ligne)
 	if _nom_couche != null and not _couches.is_empty():
 		_nom_couche.text = _couches[_active]["nom"]
+	if _etiquette_temoin_couche != null and not _couches.is_empty():
+		_etiquette_temoin_couche.text = "Witness of layer « %s » — %s" % [_couches[_active]["nom"],
+			_origine_du_temoin(_couches[_active])]
 	_dire_la_cible()
 
 
@@ -2509,6 +2819,11 @@ func _dire_la_source(c: Dictionary) -> String:
 ## ⚠ UN PROJET QUI NE S'OUVRE PAS N'EST JAMAIS ÉCRASÉ : on en commence un autre, à côté. L'enregistrement
 ## automatique réécrirait sinon, au premier coup de pinceau, le seul exemplaire d'un monde abîmé.
 func _ouvrir_au_lancement() -> void:
+	# ⚠ UN DOUBLE-CLIC SUR UN .mbproj LANCE L'APPLI AVEC SON CHEMIN (`Associations`) : il l'emporte sur le dernier
+	# projet ouvert.
+	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
+	if passe != "" and await _ouvrir(passe):
+		return
 	var reglages := ConfigFile.new()
 	reglages.load(REGLAGES)
 	var dernier: String = reglages.get_value("projet", "dernier", "")
@@ -2539,6 +2854,9 @@ func _chemin_libre() -> String:
 
 func _vider_le_projet() -> void:
 	_histoire.clear_history()
+	_temoins_sales.clear()
+	_modeleur.temoin = null
+	_modeleur.maillage = null
 	for m in _detachees:
 		m.free()
 	_detachees.clear()
@@ -2570,12 +2888,24 @@ func _ouvrir(chemin: String) -> bool:
 		var note: String = await _habiller_couche(i)
 		if note != "":
 			notes.append(note)
+	# ⚠ UN PROJET D'AVANT LE 30 SEPTEMBRE 2026 a UN témoin modélisé (`<projet>_witness.mbtiles`) : il est confié à
+	# la couche qui le tranchait (sa source est `<projet>_witness.glb`), sinon à la couche active. Rien n'est
+	# copié ni écrasé : la couche le désigne.
+	var ancien := _projet.get_basename() + "_witness.mbtiles"
+	if FileAccess.file_exists(ancien) and not _couches.any(func(c): return str(c.get("temoin", "")) != ""):
+		var cible: int = etat["active"]
+		for k in _couches.size():
+			if str(_couches[k]["source"]) == _projet.get_basename() + "_witness.glb":
+				cible = k
+		_couches[cible]["temoin"] = ancien
+		notes.append("The modelled witness of this project now belongs to layer « %s »." % _couches[cible]["nom"])
 	_ouverture = false
 	_activer(etat["active"])
 	_retenir_le_projet()
 	_aller_a("monde")
-	_dire("[color=#b4bd85][b]Project opened[/b][/color] ← %s\n%d layer(s).%s" % [chemin, _couches.size(),
-		"" if notes.is_empty() else "\n\n" + "\n".join(PackedStringArray(notes))])
+	_dire("[color=#b4bd85][b]Project opened[/b][/color] ← %s\n%d layer(s). [i]Every change is saved as you "
+		% [chemin, _couches.size()] + "go — no need for Ctrl+S.[/i]%s"
+		% ("" if notes.is_empty() else "\n\n" + "\n".join(PackedStringArray(notes))))
 	return true
 
 
@@ -2626,6 +2956,7 @@ func _enregistrer() -> void:
 	if f == null:
 		_dire("[color=#e0603c]Project NOT saved[/color] — %s cannot be written (error %d)."
 			% [_projet, FileAccess.get_open_error()])
+		_dire_enregistre("echec")
 		return
 	f.store_string(Projet.vers_texte(sorties, _active))
 	f.close()
@@ -2633,6 +2964,80 @@ func _enregistrer() -> void:
 	if e != OK:
 		_dire("[color=#e0603c]Project NOT saved[/color] — %s could not replace the old file (error %d)."
 			% [_projet, e])
+		_dire_enregistre("echec")
+		return
+	# Un témoin modifié attend encore sa seconde : l'état reste « Saving… » jusqu'à ce qu'il soit écrit.
+	_dire_enregistre("en_cours" if _minuterie_temoin != null and not _minuterie_temoin.is_stopped() else "enregistre")
+
+
+## LES FICHIERS DANS WINDOWS : au premier lancement (et quand l'exécutable a changé de place ou de version),
+## l'appli inscrit ses icônes et le double-clic (`Associations`). ⚠ JAMAIS DEPUIS L'ÉDITEUR NI LES TESTS : c'est
+## l'exécutable de Godot qui ouvrirait alors les projets — seul l'exécutable exporté (`template`) s'inscrit.
+func _inscrire_les_fichiers() -> void:
+	var reglages := ConfigFile.new()
+	reglages.load(REGLAGES)
+	var livre: bool = OS.get_name() == "Windows" and OS.has_feature("template")
+	if _case_associations != null:
+		_case_associations.disabled = not livre
+		_case_associations.set_pressed_no_signal(livre and not bool(reglages.get_value("associations", "refus", false)))
+		if not livre:
+			_case_associations.tooltip_text += "\n(Only in the installed app, not from the Godot editor.)"
+	if not livre:
+		return
+	var exe := OS.get_executable_path()
+	var version := str(ProjectSettings.get_setting("application/config/version", ""))
+	if not Associations.a_inscrire(reglages, exe, version):
+		return
+	var raison: String = Associations.inscrire(exe)
+	if raison != "":
+		push_warning("MarchingBlocks: file icons not registered — %s" % raison)
+		return
+	reglages.set_value("associations", "exe", exe)
+	reglages.set_value("associations", "version", version)
+	reglages.save(REGLAGES)
+
+
+## La case de Project : retirer (et s'en souvenir), ou remettre.
+func _regler_les_associations(oui: bool) -> void:
+	if not (OS.get_name() == "Windows" and OS.has_feature("template")):
+		return
+	var reglages := ConfigFile.new()
+	reglages.load(REGLAGES)
+	var raison: String = Associations.inscrire(OS.get_executable_path()) if oui else Associations.desinscrire()
+	reglages.set_value("associations", "refus", not oui)
+	reglages.set_value("associations", "exe", OS.get_executable_path() if oui else "")
+	reglages.set_value("associations", "version", str(ProjectSettings.get_setting("application/config/version", "")) if oui else "")
+	reglages.save(REGLAGES)
+	_dire(("[color=#e0603c]File icons could not be changed:[/color] %s" % raison) if raison != ""
+		else ("[b]File icons & double-click on[/b] — .mbproj opens in MarchingBlocks." if oui
+		else "[b]File icons & double-click removed[/b] from your Windows account. Tick the box to bring them back."))
+
+
+## Ctrl+S : écrit TOUT DE SUITE ce qui attendait (les témoins modifiés, le projet), et dit que c'était inutile.
+func _enregistrer_tout() -> void:
+	if _minuterie_temoin != null:
+		_minuterie_temoin.stop()
+	_enregistrer_le_temoin_modele()
+	_enregistrer()
+	_dire(("[color=#b4bd85][b]Everything is saved[/b][/color] — MarchingBlocks saves after every change, so "
+		+ "there is no need for Ctrl+S.\n[i]« Save as » (Project) puts the project where you want: %s[/i]")
+		% _projet)
+
+
+## Le témoin d'enregistrement de la barre de titre : "enregistre", "en_cours" ou "echec".
+func _dire_enregistre(etat: String) -> void:
+	if _etat_enregistre == null:
+		return
+	match etat:
+		"en_cours":
+			_etat_enregistre.text = "● Saving…"
+			_etat_enregistre.add_theme_color_override("font_color", Palette.AMBRE)
+		"echec":
+			_etat_enregistre.text = "⚠ Not saved"
+			_etat_enregistre.add_theme_color_override("font_color", Color("#e0603c"))
+		_:
+			_etat_enregistre.text = "✓ Saved"
+			_etat_enregistre.add_theme_color_override("font_color", Palette.OLIVE)
 
 
 func _enregistrer_sous(chemin: String) -> void:
@@ -2672,6 +3077,12 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	if k == null or not k.pressed or k.echo or (_manuel != null and _manuel.visible):
 		return
 	if k.ctrl_pressed:
+		# ⚠ CTRL+S RÉPOND (30 septembre 2026) : il ne sert à rien, mais un client le tape par réflexe, et un
+		# raccourci muet lui ferait croire qu'il n'a rien enregistré. On écrit ce qui attendait, et on le DIT.
+		if k.keycode == KEY_S and not k.shift_pressed:
+			_enregistrer_tout()
+			get_viewport().set_input_as_handled()
+			return
 		if k.keycode == KEY_Z and not k.shift_pressed:
 			if _histoire.undo():
 				_dire("[i]Undone: %s[/i]" % _histoire.get_current_action_name())

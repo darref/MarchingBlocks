@@ -13,6 +13,7 @@ extends SceneTree
 ## puis rendu tel quel à la fin — même en cas d'échec.
 
 const Projet := preload("res://app/projet.gd")
+const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
@@ -295,8 +296,10 @@ func _mener() -> void:
 	_vrai(ed._bouton_trancher_travail.disabled, "rien d'importé : « Slice the selected work » est grisé")
 	ed._aller_a("witness")
 	_vrai(not ed._droite.visible, "Witness : pas de barre d'outils de peinture")
-	_vrai(ed._section_temoin.visible and not ed._section_raccourcis.visible and not ed._section_couches.visible,
-		"Witness : la section Witness, sans raccourcis de peinture ni couches")
+	# ⚠ LES COUCHES Y SONT (30 septembre 2026) : une couche est un témoin ET un monde peint — on la choisit
+	# dans les deux ateliers.
+	_vrai(ed._section_temoin.visible and not ed._section_raccourcis.visible and ed._section_couches.visible,
+		"Witness : la section Witness et les couches, sans raccourcis de peinture")
 	_vrai(not ed._section_projet.visible and not ed._etapes_artiste.any(func(e): return e.visible)
 		and not ed._etapes_monde.any(func(e): return e.visible),
 		"Witness : ni Save · open ni aller-retour — ils vivent dans Project seul")
@@ -362,6 +365,9 @@ func _mener() -> void:
 	await _le_modeleur(ed)
 	_la_planche_des_tuiles(ed)
 	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
+	await _les_couches_et_leurs_temoins(ed)
+	_vrai(_couches_finies, "les couches et leurs témoins sont allés JUSQU'AU BOUT")
+	_l_enregistrement_se_dit(ed)
 	_les_sections_dans_le_modeleur(ed)
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
@@ -495,6 +501,165 @@ func _la_provenance(ed: Control) -> void:
 
 
 var _planche_finie := false
+var _couches_finies := false
+
+
+## L'ENREGISTREMENT AUTOMATIQUE SE DIT (Jordan, 30 septembre 2026) : la barre de titre montre « Saved », un
+## geste du modeleur « Saving… » jusqu'à son écriture, et Ctrl+S — inutile — écrit ce qui attendait et le DIT.
+func _l_enregistrement_se_dit(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	ed._temoin_modifie(ed._modeleur.temoin)
+	_egal(ed._etat_enregistre.text, "● Saving…", "un geste du modeleur : la barre dit « Saving… » tant qu'il n'est pas écrit")
+	_vrai(not ed._minuterie_temoin.is_stopped(), "(et l'écriture attend sa seconde)")
+	var k := _cle(KEY_S, true)
+	ed._unhandled_key_input(k)
+	_vrai(ed._minuterie_temoin.is_stopped() and ed._temoins_sales.is_empty(), "Ctrl+S écrit TOUT DE SUITE ce qui attendait")
+	_egal(ed._etat_enregistre.text, "✓ Saved", "et la barre dit « Saved »")
+	_vrai(ed._rapport.text.contains("Everything is saved") and ed._rapport.text.contains("no need for Ctrl+S"),
+		"Ctrl+S dit que tout est déjà enregistré, et qu'il n'en faut pas")
+	_vrai(ed._etat_enregistre.tooltip_text.contains("no need for Ctrl+S"), "la bulle de la barre l'explique")
+	ed._regler_edition(false)
+
+
+## UN TÉMOIN PAR COUCHE (Jordan, 30 septembre 2026) — on le retrouve, on le remodifie, et le remodeler ne
+## touche AUCUNE autre couche. ⚠ Le défaut d'avant : un témoin modélisé par PROJET, qui changeait en silence
+## les tuiles d'une autre couche au chargement suivant. Jugé sur les positions des tuiles et sur les octets
+## des fichiers, jamais sur ce que l'écran en dit.
+func _les_couches_et_leurs_temoins(ed: Control) -> void:
+	var mo: Node3D = ed._modeleur
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var ia: int = ed._active
+	var ca: Dictionary = ed._couches[ia]
+	var ta: RefCounted = mo.temoin
+	_vrai(ta != null and ta == ca.get("_temoin"), "en édition, le modeleur tient le témoin de la couche active")
+	# Le témoin de A, écrit sur disque AVANT qu'on touche à B : ses octets ne doivent plus bouger.
+	ed._temoins_sales[ta] = true
+	ed._enregistrer_le_temoin_modele()
+	var glb_a: String = ed._glb_du_temoin(ca)
+	var md5_a: String = FileAccess.get_md5(glb_a) if FileAccess.file_exists(glb_a) else ""
+	_vrai(md5_a != "", "le témoin de la couche A a son propre .glb (%s)" % glb_a.get_file())
+
+	# « Copy witness » : une couche B, active, dont le témoin est une COPIE — mêmes formes, autre objet.
+	var n_avant: int = ed._couches.size()
+	ed._copier_le_temoin()
+	var ib: int = ed._active
+	var cb: Dictionary = ed._couches[ib]
+	var tb: RefCounted = mo.temoin
+	_vrai(ed._couches.size() == n_avant + 1 and ib != ia and tb != null and tb != ta and tb == cb.get("_temoin"),
+		"Copy witness : une couche neuve, active, et le modeleur passe à SON témoin")
+	var paroi := "mb_plaque_b2h2_dehors"
+	_vrai(tb.tuiles[paroi].sommets == ta.tuiles[paroi].sommets, "la copie a les mêmes tuiles que l'original")
+	_vrai(FileAccess.file_exists(str(cb["temoin"])) and str(cb["temoin"]).contains("_layer" + str(cb["id"]))
+		and FileAccess.file_exists(ed._glb_du_temoin(cb)), "la copie a SES fichiers (%s)" % str(cb["temoin"]).get_file())
+
+	# On sculpte B : G Z 1 sur une face de sa paroi.
+	var occ_b: int = tb.occurrences_de(paroi)[0]
+	mo.activer(occ_b)
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {0: true}
+	var avant_b: PackedVector3Array = tb.tuiles[paroi].sommets.duplicate()
+	var avant_a: PackedVector3Array = ta.tuiles[paroi].sommets.duplicate()
+	for k in [KEY_G, KEY_Z, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	_vrai(tb.tuiles[paroi].sommets != avant_b, "G Z 1 sculpte la paroi du témoin de B")
+	_vrai(ta.tuiles[paroi].sommets == avant_a, "le témoin de A n'a PAS bougé")
+	ed._enregistrer_le_temoin_modele()
+	_egal(FileAccess.get_md5(glb_a), md5_a, "le .glb de A garde ses octets : remodeler B ne touche pas A (le défaut d'avant)")
+
+	# L'état affiché : tranchée depuis SON témoin tel qu'il était, puis à retrancher quand il change.
+	var glb_b: String = ed._glb_du_temoin(cb)
+	cb["source"] = glb_b
+	var lot := MeshLibrary.new()
+	lot.set_meta("empreinte", Projet.empreinte(glb_b))
+	ed._vue.couche(ib).lot = lot
+	_vrai(ed._etat_de(ib).ends_with("sliced"), "l'état dit « sliced » quand les tuiles viennent du témoin tel qu'il est (%s)" % ed._etat_de(ib))
+	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait), et un
+	# témoin inchangé laisse l'état « sliced » à juste titre — vu en fausse alerte.
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(tb.tuiles[paroi].sommets == avant_b, "(Ctrl+Z a défait le geste dans B)")
+	ed._enregistrer_le_temoin_modele()
+	_vrai(ed._etat_de(ib).ends_with("slice again"), "et « slice again » dès que le témoin a changé (%s)" % ed._etat_de(ib))
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	var apres_un: PackedVector3Array = tb.tuiles[paroi].sommets.duplicate()
+
+	# On revient à A : le modeleur prend SON témoin. Puis Ctrl+Z : le geste revient dans le témoin de B.
+	ed._activer(ia)
+	_vrai(mo.temoin == ta, "changer de couche change le témoin en édition")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(tb.tuiles[paroi].sommets == avant_b, "Ctrl+Z, depuis la couche A, défait le geste DANS le témoin de B")
+	_vrai(ta.tuiles[paroi].sommets == avant_a and mo.temoin == ta, "et ne touche ni le témoin de A, ni l'édition")
+	ed._enregistrer_le_temoin_modele()
+	var relu_b: RefCounted = TL.depuis_dictionnaire(JSON.parse_string(FileAccess.get_file_as_string(str(cb["temoin"]))))
+	_vrai(relu_b != null and relu_b.tuiles[paroi].sommets == avant_b, "et le témoin de B est réécrit sur disque, défait")
+	_vrai(apres_un != avant_b, "(le geste avait bien changé B)")
+
+	# La liste : une ligne par couche, sa vignette, d'où vient son témoin.
+	ed._rafraichir_couches()
+	var lignes: Array = ed._liste_couches.get_children()
+	var textes: Array = []
+	var vignettes := true
+	for l in lignes:
+		var tr: TextureRect = null
+		var bouton: Button = null
+		for e in l.get_children():
+			if e is TextureRect:
+				tr = e
+			elif e is Button and (e as Button).button_group != null:
+				bouton = e
+		vignettes = vignettes and tr != null and tr.texture != null
+		textes.append(bouton.text if bouton != null else "")
+	_vrai(lignes.size() == ed._couches.size() and vignettes, "une ligne par couche, chacune avec la vignette de son témoin")
+	_vrai(String(textes[ib]).contains("modelled"), "la ligne de B dit que son témoin est modélisé (%s)" % String(textes[ib]).replace("\n", " · "))
+	_vrai(ed._etiquette_temoin_couche.text.contains(ca["nom"]), "Witness dit quel témoin on édite (%s)" % ed._etiquette_temoin_couche.text)
+
+	# Rouvert : chaque couche retrouve SON témoin, depuis son fichier.
+	cb["source"] = ""
+	ed._regler_edition(false)
+	ed._minuterie_temoin.stop()
+	ed._enregistrer()
+	var projet: String = ed._projet
+	await ed._ouvrir(projet)
+	var cb2: Dictionary = {}
+	for c in ed._couches:
+		if str(c.get("id", "")) == str(cb["id"]):
+			cb2 = c
+	_vrai(not cb2.is_empty() and str(cb2["temoin"]) == str(cb["temoin"]), "rouvert : la couche B garde le chemin de SON témoin")
+	if not cb2.is_empty():
+		_vrai(ed._temoin_de(cb2).tuiles[paroi].sommets == avant_b, "et le relit depuis son fichier")
+
+	# UN PROJET D'AVANT : son témoin unique (`<projet>_witness.mbtiles`) est confié à la couche active.
+	var vieux := ProjectSettings.globalize_path("user://fumee/avant.mbproj")
+	var vieux_temoin := vieux.get_basename() + "_witness.mbtiles"
+	DirAccess.copy_absolute(ProjectSettings.globalize_path(str(cb["temoin"])), vieux_temoin)
+	var f := FileAccess.open(vieux, FileAccess.WRITE)
+	f.store_string('{"format": "marchingblocks-project", "version": 1, "active": 0, "couches": [{"nom": "Old", "source": "", "cases": []}]}')
+	f.close()
+	await ed._ouvrir(vieux)
+	_egal(str(ed._couches[0]["temoin"]), vieux_temoin, "un projet d'avant : son témoin unique est confié à la couche")
+	_vrai(ed._rapport.text.contains("now belongs to layer"), "et le rapport le dit")
+	# ⚠ ET IL SE RELIT DEPUIS CE CHEMIN-LÀ, pas depuis celui que l'identifiant donnerait (« …_layer1 ») : sans
+	# cette relecture, ignorer le chemin enregistré restait une mutation MUETTE.
+	_vrai(ed._temoin_de(ed._couches[0]).tuiles[paroi].sommets == avant_b,
+		"et la couche relit l'ancien témoin, depuis SON chemin")
+	# Et une retouche s'ÉCRIT dans ce fichier-là (et dans le .glb voisin) : écrite ailleurs, elle serait perdue
+	# au chargement suivant — c'est ce que la lecture seule ne pouvait pas voir.
+	var t_vieux: RefCounted = ed._temoin_de(ed._couches[0])
+	t_vieux.tuiles[paroi].sommets[0] += Vector3(0, 0.125, 0)
+	var retouche: Vector3 = t_vieux.tuiles[paroi].sommets[0]
+	ed._temoins_sales[t_vieux] = true
+	ed._enregistrer_le_temoin_modele()
+	var relu_vieux: RefCounted = TL.depuis_dictionnaire(JSON.parse_string(FileAccess.get_file_as_string(vieux_temoin)))
+	_vrai(relu_vieux != null and relu_vieux.tuiles[paroi].sommets[0].is_equal_approx(retouche)
+		and FileAccess.file_exists(vieux.get_basename() + "_witness.glb"),
+		"une retouche du témoin repris s'écrit dans SON fichier (et son .glb à côté)")
+	# On rend le projet de la fumée.
+	await ed._ouvrir(projet)
+	for chemin in [vieux, vieux_temoin, vieux.get_basename() + "_witness.glb"]:
+		DirAccess.remove_absolute(chemin)
+	_couches_finies = true
 
 
 ## LA PLANCHE DES TUILES (charte §3) : l'onglet « The tiles » du bandeau de Witness. ⚠ LES ATTENDUS VIENNENT
@@ -1367,7 +1532,11 @@ func _le_modeleur(ed: Control) -> void:
 	var relu: Dictionary = BM.librairie_depuis_glb(chemin)
 	_vrai(relu.get("lie", false) and relu["erreurs"].is_empty() and (relu["lot"] as MeshLibrary).get_item_list().size() == mo.temoin.tuiles.size(),
 		"relu comme témoin lié : une tuile par clé, sans erreur (%s)" % [relu.get("erreurs")])
-	_vrai(ed._travaux.any(func(t): return String(t["chemin"]) == chemin), "il rejoint les travaux de l'étape 2")
+	# ⚠ IL N'ENTRE PLUS DANS LES TRAVAUX (30 septembre 2026) : c'est le témoin DE LA COUCHE, qu'elle tranche
+	# elle-même (étape 3) — son .glb et son .mbtiles portent son identifiant.
+	_vrai(not ed._travaux.any(func(t): return String(t["chemin"]) == chemin)
+		and chemin == ed._glb_du_temoin(ed._couches[ed._active]) and chemin.contains("_layer"),
+		"c'est le témoin de la couche active (%s), pas un travail de l'étape 2" % chemin.get_file())
 	var rouge := false
 	var id_a: int = (relu["lot"] as MeshLibrary).find_item_by_name(cle_a)
 	if id_a >= 0:

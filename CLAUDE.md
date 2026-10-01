@@ -551,6 +551,75 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
   - ⚠ **PAS TENU EN MAIN.**
   - ⚠ **PAS TENU EN MAIN.**
 
+### UN TÉMOIN PAR COUCHE, ET LA LISTE DES COUCHES DANS LES DEUX ATELIERS — DÉCIDÉ (Jordan, 30 septembre 2026), ÉCRIT
+
+Jordan : « un layer devrait conserver son witness pour pouvoir le retrouver et le remodifier », et « il faut
+un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensemble ».
+
+- ⚠ **LE DÉFAUT QUI LE JUSTIFIAIT** : le témoin modélisé était UN par PROJET (`<projet>_witness.glb`). Le
+  remodeler pour une couche changeait la source d'une autre, retranchée EN SILENCE au chargement suivant
+  (« source changée, on retranche »). Gardé : remodeler B laisse les OCTETS du `.glb` de A intacts.
+- **UNE COUCHE = UN TÉMOIN + UN MONDE PEINT.** `projet.gd` : chaque couche a un `id` STABLE (il nomme ses
+  fichiers, jamais son nom) et `temoin`, le chemin de SON `.mbtiles` ; son `.glb` lié est à côté
+  (`<projet>_layer<id>.*`). Un projet d'avant se relit (ni `id` ni `temoin`), et son témoin unique
+  (`<projet>_witness.mbtiles`) est CONFIÉ à la couche qui le tranchait, sinon à l'active — désigné, ni
+  copié ni écrasé, et le rapport le dit.
+- **Le témoin se charge à la demande** (`_temoin_de`) : son `.mbtiles` ; sinon le `.glb` lié qu'on lui a
+  tranché ; sinon une COPIE du témoin calculé. ⚠ **PAS DE MÉTA « couche » SUR LE TÉMOIN** : la couche garde
+  son témoin, et l'inverse faisait un CYCLE jamais libéré (vu en fuite à la sortie de la fumée : 58 objets,
+  matériaux et textures) — on retrouve la couche d'un témoin en cherchant dans la liste.
+- **Witness édite le témoin de la couche active, et le dit** (« Witness of layer « Rock » — modelled »).
+  Changer de couche change le témoin en édition (geste en cours abandonné, témoins modifiés écrits d'abord)
+  et la planche des tuiles. ⚠ **L'ANNULATION VISE LE TÉMOIN D'OÙ VIENT LE GESTE** : un Ctrl+Z après avoir
+  changé de couche défait le geste dans SON témoin et l'écrit, sans toucher l'édition en cours.
+- **La liste des couches est dans Witness ET World** : vignette de son témoin (photographiée une fois,
+  reprise à chaque enregistrement), origine (computed witness · modelled · from Blender (linked) · unlinked
+  work), état (cases · not sliced / sliced / witness changed · slice again / tiles from <fichier>) —
+  l'empreinte du lot POSÉ contre celle du fichier, sans relire le cache du disque. « New layer » (témoin
+  calculé), « Copy witness » (copie du témoin de l'active, sans cases), « Delete layer ».
+- **L'aller-retour** : l'étape 1 exporte le témoin de la couche active ; l'étape 3 « Slice this layer's
+  witness » ; un `.glb` LIÉ tranché dans une couche DEVIENT son témoin (l'ancien gardé en `.previous`), et
+  un travail non lié reste une simple source. Le témoin modélisé n'entre plus dans la liste des travaux.
+- **UN TÉMOIN RELU DE BLENDER GARDE SA PEINTURE** (`TemoinLie.depuis_glb`, `MaillageEdite.depuis(…,
+  materiau_de)`) : chaque matériau devient UNE entrée partagée, avec ses UV ; son image est écrite en PNG ;
+  les teintes de la légende redeviennent des teintes — celles de l'export (nommées) comme celle du modeleur
+  (UN matériau « legend », teintes en couleur de sommet : lu comme un vrai matériau, il peignait TOUTE la
+  légende en blanc, vu rougir). ⚠ Un matériau qu'aucune face ne porte ne voyage pas (pas de primitive).
+- Gardé par `test_projet` (35), `test_temoin_lie` (25) et `fumee_appli` (249). **Neuf mutations rouges** ;
+  C7 (« le chemin enregistré ignoré ») d'abord MUETTE : pour une couche ordinaire le chemin enregistré et
+  celui de l'id sont les mêmes, et le test ne relisait pas l'ancien témoin repris — ni n'y écrivait. Vu à
+  l'image (`capture_modeleur_lie.gd`). ⚠ Pas tenu en main par Jordan.
+
+### L'ENREGISTREMENT QUI SE DIT, ET LES FICHIERS DANS WINDOWS — DÉCIDÉ (Jordan, 30 septembre 2026), ÉCRIT
+
+- **« Si les enregistrements sont automatiques, il faut le dire au client. »** La barre de titre porte un
+  témoin : « ✓ Saved », « ● Saving… » (la seconde où un geste du modeleur attend d'être écrit), « ⚠ Not
+  saved » ; sa bulle explique qu'il ne faut pas de Ctrl+S. ⚠ **CTRL+S RÉPOND** : muet, il faisait croire au
+  client qu'il n'avait rien enregistré ; il écrit ce qui attendait et le DIT. Le rapport d'ouverture le
+  rappelle. Gardé par `fumee_appli` (deux mutations rouges).
+- **LES FICHIERS DANS WINDOWS** (« au premier lancement, double-clic oui, dossiers aussi ») — `app/associations.gd` :
+  icônes de `.mbproj` (et le double-clic qui l'ouvre), `.mbtiles`, et des DOSSIERS `.mbset/` / `.mbworld/`
+  (un `desktop.ini` posé à l'export). Dessinées depuis l'emblème par `MARQUE/generer_icones_fichiers.py`
+  (une seule source), converties en `.ico` (PNG dedans) dans les données de l'appli.
+  - ⚠ **UNE ICÔNE DE FICHIER VIENT DU REGISTRE, PAS DU FICHIER** : sans installateur, l'appli s'inscrit
+    elle-même, dans HKEY_CURRENT_USER SEULEMENT (ni administrateur, ni autres comptes), par un `.reg` en
+    UTF-16 importé par `reg import` (des arguments de `reg add` auraient livré guillemets et « %1 » à la
+    citation de la ligne de commande ; un chemin accentué exige l'Unicode). Au premier lancement, puis si
+    l'exe change de place ou de version ; jamais après un refus (la case « File icons & double-click » de
+    Project, qui retire tout et s'en souvient).
+  - ⚠ **JAMAIS DEPUIS L'ÉDITEUR NI LES TESTS** (`OS.has_feature("template")`) : c'est l'exécutable de Godot
+    qui ouvrirait alors les projets. Vérifié : 16 suites passées, la clé `.mbproj` absente du registre.
+  - Le double-clic : `projet_en_argument` — un `.mbproj` qui EXISTE, passé au lancement, l'emporte sur le
+    dernier projet ouvert.
+  - Gardé par `test_projet` (+14 : le `.ico` relu octet par octet, le `.reg` lu tel qu'écrit — partie
+    utilisateur seule, échappements, accents —, le `desktop.ini`, l'argument, la décision de s'inscrire).
+    Cinq mutations rouges.
+  - ⚠ **PAS ÉPROUVÉ EN VRAI (commité le 1er octobre 2026, avant la reconstruction de l'exe)** : l'exécutable
+    n'a pas été reconstruit avec ce code, donc l'inscription n'a JAMAIS tourné — ni `reg import` dans le
+    registre réel, ni les icônes dans l'Explorateur (cache, `ie4uinit`), ni le double-clic sur un `.mbproj`,
+    ni le `desktop.ini` d'un dossier exporté, ni la case qui retire tout. Seuls les TEXTES sont gardés. Les
+    couches avec leur témoin et « ✓ Saved » / Ctrl+S n'ont pas non plus tourné dans l'exe.
+
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
 ⚠ **ÉCRIT AVANT « UNE TUILE PAR CLÉ » (30 septembre 2026)** : là où ce qui suit dit « exemplaire », lire
@@ -1615,14 +1684,14 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 395 vérifications, 0 échec** (30 septembre 2026, relevées après la bride des sections partagées),
+  Seize suites, **8 451 vérifications, 0 échec** (30 septembre 2026, relevées après les icônes des fichiers),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
-  `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 32,
-  `test_outils` 57, `fumee_appli` 223, `test_greffon_peinture` 179, `test_faux_artiste` 36,
-  `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 18, `test_sections` 30.
+  `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 49,
+  `test_outils` 57, `fumee_appli` 255, `test_greffon_peinture` 179, `test_faux_artiste` 36,
+  `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 25, `test_sections` 30.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.
   ⚠ **APRÈS UN RENOMMAGE DE DOSSIER, LE CACHE DE CLASSES D'UNE AUTRE MACHINE EST PÉRIMÉ** (`.godot/`,
   hors git) : « Class "MassifPeint" hides a global script class » — `test_massif_peint` rendait **1**

@@ -234,14 +234,28 @@ func _outils() -> String:
 func _couches() -> String:
 	var l := PackedStringArray()
 	l.append(_titre("Layers"))
-	l.append("A layer is [b]one source of tiles[/b] — the computed witness, or one of your .glb works "
-		+ "— and [b]its own painted cells[/b]. Its tiles only look at its own cells: a rock layer and an "
-		+ "ice layer never bend each other.")
-	l.append("You paint on the [b]active[/b] layer; the others stay visible (the eye hides one). "
+	l.append("A layer is [b]a witness and a painted world[/b]: its own witness — the tiles you sculpt in "
+		+ "[b]Witness[/b] — and its own cells, painted in [b]World[/b]. Its tiles only look at its own cells: "
+		+ "a rock layer and an ice layer never bend each other.")
+	l.append("The layer list is in both workshops. Pick a layer and [b]both follow[/b]: Witness edits its "
+		+ "witness, World paints its cells. Each row shows a thumbnail of its witness, where the witness "
+		+ "comes from (computed, modelled, from Blender, or an unlinked work) and whether its tiles are up to "
+		+ "date (« slice again » when the witness changed since it was sliced).")
+	l.append("[b]New layer[/b] starts from the computed witness. [b]Copy witness[/b] starts from a copy of "
+		+ "the active layer's: sculpt ice from rock without touching the rock. Editing one layer's witness "
+		+ "never changes another layer.")
+	l.append("[b]Slice this layer's witness[/b] (Project, step 3) gives the layer the tiles of its own "
+		+ "witness. A linked .glb back from Blender, sliced into a layer, [b]becomes its witness[/b] — "
+		+ "editable here, textures and UVs included; the previous one is kept next to it (.previous). "
 		+ "Slicing a new work into a layer [b]keeps its painting[/b] — only the tiles change.")
 	l.append(_titre("Projects"))
 	l.append("A project ([b].mbproj[/b]) holds the layers, their cells and where their tiles come from. "
-		+ "It [b]saves itself after every change[/b] and reopens when you come back. "
+		+ "It [b]saves itself after every change[/b] and reopens when you come back — there is no need for "
+		+ _touche("Ctrl+S") + " (pressing it only confirms). The title bar says so: [b]✓ Saved[/b], or "
+		+ "[b]● Saving…[/b] for the second a witness edit waits to be written. "
+		+ "On first launch, MarchingBlocks gives its files their icons in Windows (.mbproj, .mbtiles, and the "
+		+ ".mbset / .mbworld folders it exports) and a [b]double-click on a .mbproj opens it[/b] — for your "
+		+ "Windows account only. Untick [b]File icons & double-click[/b] (Project) to remove it. "
 		+ "[b]Save as…[/b] puts it where you want; it keeps saving itself there.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "
 		+ "again on opening; if the .glb is gone, you see the last tiles sliced from it, and the report "

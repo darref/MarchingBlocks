@@ -240,6 +240,12 @@ func montrer_onglet(nom: String) -> void:
 	regler_atelier(atelier)
 
 
+## La planche rebâtie sur le témoin d'une AUTRE couche (la couche active a changé), si elle l'était déjà.
+func reconstruire_tuiles() -> void:
+	if planche.est_batie() and fournir_temoin.is_valid():
+		planche.batir(fournir_temoin.call())
+
+
 ## Les photos de la planche reprises sur les tuiles du témoin (après un geste du modeleur).
 func rafraichir_tuiles() -> void:
 	if planche.est_batie() and fournir_temoin.is_valid():

@@ -29,9 +29,14 @@ const FORMAT_DU_CACHE := 3
 const TEMOIN := "witness"
 
 
-## Une couche neuve : aucune source, aucune case.
-static func couche(nom: String) -> Dictionary:
-	return {"nom": nom, "source": "", "visible": true, "cases": {}}
+## Une couche neuve : aucune source, aucune case, aucun témoin à elle.
+## ⚠ **UNE COUCHE POSSÈDE SON TÉMOIN (Jordan, 30 septembre 2026)** : `temoin` est le chemin de SON témoin
+## lié (`.mbtiles`), "" tant qu'elle n'en a pas modélisé — elle montre alors le témoin calculé. Avant, le
+## témoin modélisé était UN par projet : le remodeler pour une couche changeait en silence les tuiles d'une
+## autre au chargement suivant (sa source avait changé, donc elle était retranchée).
+## `id` : un identifiant STABLE (le nom se change, et deux couches peuvent le porter), qui nomme ses fichiers.
+static func couche(nom: String, id := "") -> Dictionary:
+	return {"nom": nom, "source": "", "visible": true, "cases": {}, "temoin": "", "id": id}
 
 
 static func vers_texte(couches: Array, active: int) -> String:
@@ -42,7 +47,8 @@ static func vers_texte(couches: Array, active: int) -> String:
 			var v: Vector3i = p
 			plat.append_array([v.x, v.y, v.z])
 		sorties.append({"nom": c["nom"], "source": c["source"],
-			"visible": c["visible"], "cases": plat})
+			"visible": c["visible"], "cases": plat, "temoin": str(c.get("temoin", "")),
+			"id": str(c.get("id", ""))})
 	return JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties},
 		"\t")
 
@@ -81,8 +87,11 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 		var cases := {}
 		for k in range(0, (plat as Array).size(), 3):
 			cases[Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = true
+		# ⚠ Un projet d'avant le 30 septembre 2026 n'a ni `temoin` ni `id` : aucun témoin à la couche, et un
+		# identifiant donné par l'écran à l'ouverture.
 		couches.append({"nom": str(c.get("nom", "Layer %d" % (i + 1))), "source": str(c.get("source", "")),
-			"visible": bool(c.get("visible", true)), "cases": cases})
+			"visible": bool(c.get("visible", true)), "cases": cases, "temoin": str(c.get("temoin", "")),
+			"id": str(c.get("id", ""))})
 	var active: int = clampi(int(brut.get("active", 0)), 0, couches.size() - 1)
 	return {"couches": couches, "active": active}
 
