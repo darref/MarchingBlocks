@@ -30,6 +30,7 @@ func _initialize() -> void:
 	_la_toile_est_partagee()
 	_l_annulation_et_l_ecriture()
 	_l_atlas_du_temoin()
+	_l_empreinte_est_le_bord_du_tampon()
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -255,6 +256,63 @@ func _recouvrements(t: RefCounted) -> int:
 							doubles += 1
 						proprio[k] = c
 	return doubles
+
+
+## LE CURSEUR (Jordan, 1er octobre 2026 : « la taille du pinceau ») : l'empreinte que montre le curseur est le BORD
+## de ce que le tampon peint. Attendus d'ailleurs : des rayons calculés à la main depuis des UV posés à la main
+## (un îlot étiré 3 : 1) et depuis la formule de la Boîte ; puis ce que `tamponner` peint VRAIMENT — juste en
+## dedans de chaque point de l'empreinte, le texel est peint ; juste au-dehors, il ne l'est pas.
+func _l_empreinte_est_le_bord_du_tampon() -> void:
+	var m: RefCounted = _cube()
+	m.materiaux.append({"nom": "Rock", "couleur": Color.WHITE, "rugosite": 1.0, "metal": 0.0, "texture": "",
+		"echelle": 1.0, "projection": "uv"})
+	m.assigner(range(m.faces.size()), 0)
+	# La face du dessus (y = 1), sommets 2 6 7 3 : u = 0,1 + 0,75·x, v = 0,1 + 0,25·z — étirée 3 : 1.
+	while m.uvs.size() < m.faces.size():
+		m.uvs.append(PackedVector2Array())
+	m.uvs[3] = PackedVector2Array([Vector2(0.1, 0.1), Vector2(0.1, 0.35), Vector2(0.85, 0.35), Vector2(0.85, 0.1)])
+	var p := Vector3(0.5, 1.0, 0.5)
+	var taille := Vector2(256, 256)
+	var pts: PackedVector3Array = Peinture.empreinte(m, 3, p, 20.0, taille)
+	var ex := 0.0
+	var ez := 0.0
+	var hors_plan := 0
+	for q in pts:
+		ex = maxf(ex, absf(q.x - p.x))
+		ez = maxf(ez, absf(q.z - p.z))
+		if absf(q.y - 1.0) > 1e-5:
+			hors_plan += 1
+	# À la main : 1 case = 0,75 × 256 = 192 texels en x, 0,25 × 256 = 64 en z ; 20 texels = 0,1042 et 0,3125.
+	_dire(pts.size() == 48 and hors_plan == 0, "l'empreinte : 48 points, tous dans le plan de la face (%d hors)" % hors_plan)
+	_dire(absf(ex - 20.0 / 192.0) < 0.002 and absf(ez - 20.0 / 64.0) < 0.002,
+		"îlot étiré 3 : 1 — l'empreinte est une ELLIPSE de demi-axes 0,104 × 0,3125 (lu %.4f × %.4f)" % [ex, ez])
+	# Ce que le tampon peint : dur, plein, au point visé.
+	var img := Image.create(256, 256, false, Image.FORMAT_RGBA8)
+	img.fill(Color.BLACK)
+	var uvp: Vector2 = Vector2(0.1 + 0.75 * p.x, 0.1 + 0.25 * p.z)
+	Peinture.tamponner(img, uvp * taille, 20.0, Color.WHITE, 1.0, 1.0)
+	var mal := 0
+	for q in pts:
+		for f in [[0.9, true], [1.1, false]]:
+			var r: Vector3 = p + (q - p) * float(f[0])
+			var px := Vector2(0.1 + 0.75 * r.x, 0.1 + 0.25 * r.z) * taille
+			if (img.get_pixelv(Vector2i(px.floor())).r > 0.5) != bool(f[1]):
+				mal += 1
+	_dire(mal == 0, "à 90 %% de l'empreinte le tampon a peint, à 110 %% il n'a rien peint (%d points faux sur %d)" % [mal, pts.size() * 2])
+	# La Boîte, sur une paroi (x = 0), répétition 0,5 case : 2 répétitions par case, 512 texels ; 20 texels = 0,039.
+	m.materiaux[0]["projection"] = "boite"
+	m.materiaux[0]["echelle"] = 0.5
+	var pb: PackedVector3Array = Peinture.empreinte(m, 0, Vector3(0.0, 0.5, 0.5), 20.0, taille)
+	var rmin := INF
+	var rmax := 0.0
+	for q in pb:
+		var d: float = q.distance_to(Vector3(0.0, 0.5, 0.5))
+		rmin = minf(rmin, d)
+		rmax = maxf(rmax, d)
+	_dire(absf(rmin - 20.0 / 512.0) < 0.0005 and absf(rmax - 20.0 / 512.0) < 0.0005,
+		"Boîte, répétition 0,5 : un CERCLE de 20 / 512 case (lu %.4f … %.4f)" % [rmin, rmax])
+	var nue: RefCounted = _cube()
+	_dire(Peinture.empreinte(nue, 3, p, 20.0, taille).is_empty(), "une face de la légende n'a pas d'empreinte")
 
 
 func _cube() -> RefCounted:

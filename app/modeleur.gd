@@ -222,6 +222,7 @@ func charger_temoin(t: RefCounted, active := 0) -> void:
 	cle = ""
 	sections = Sections.new(t)
 	activer(clampi(active, 0, t.occurrences.size() - 1))
+	regler_les_bandes()
 
 
 ## L'occurrence `i` passe en édition : sa tuile devient `maillage`, et elle est dessinée par `_edition` (on
@@ -1524,9 +1525,159 @@ func regler_pinceau(oui: bool) -> void:
 	if oui:
 		dit.emit("[b]Paint[/b] — left drag paints the material of the face you point at (every copy of the tile "
 			+ "follows) · Alt+click picks a colour · P stops painting. [i]Box projection repeats the image: what you "
-			+ "paint repeats too. For unique paint, Unwrap (U) and set the projection to UV.[/i]")
+			+ "paint repeats too. For unique paint, Unwrap (U) and set the projection to UV.[/i] "
+			+ "[color=#e070d0]Striped bands[/color] mark the cut planes: paint them the same on every tile, or the "
+			+ "world shows a seam there.")
 	else:
 		_finir_le_trait()
+	_montrer_le_curseur({})
+	regler_les_bandes()
+
+
+# ── LE CURSEUR ET LES BANDES DE COUTURE (Jordan, 1er octobre 2026 : « go pour la taille du pinceau et les bandes
+# de couture ») ─────────────────────────────────────────────────────────────────────────────────────────
+#
+# LE CURSEUR est l'EMPREINTE du tampon (`Peinture.empreinte`) : le contour blanc est le bord du tampon, le contour
+# de la couleur du pinceau celui de la dureté (plein en dedans). Il est dessiné sur la face visée, dans son plan,
+# posé à l'occurrence. Sur une face qui ne se peint pas (la teinte de la légende), un petit anneau rouge.
+#
+# LES BANDES : la charte (§3, la texture) demande que, le long de chaque plan de coupe, la texture soit LA MÊME
+# pour toutes les tuiles. Les plans de coupe passent par les centres des cases — dans le repère du modeleur, aux
+# demi-entiers (une occurrence est posée au sommet + (1,1,1), entier, et sa tuile est coupée à ±0,5). Un calque
+# superposé (`material_overlay`, sur l'édition ET sur chaque MultiMesh) raye la bande où un plan de coupe
+# traverse la surface, et trace le plan lui-même. ⚠ Il ne juge rien : c'est la remarque de couture de texture
+# (`Tranchage.verifier_couture_texture`) qui juge, au tranchage.
+
+## Demi-largeur des bandes, en cases — PROPOSÉ : assez large pour qu'un pinceau la voie, assez fine pour ne pas
+## couvrir le cœur d'une tuile (un huitième de chaque côté laisse les trois quarts libres).
+const BANDE_DE_COUTURE := 0.0625
+const ROSE_COUTURE := Color(0.88, 0.44, 0.82)
+
+var bandes_de_couture := true
+var _bandes: ShaderMaterial
+var _curseur_mi: MeshInstance3D
+
+const SHADER_BANDES := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled, fog_disabled;
+uniform mat4 vers_modeleur;
+uniform float demi_largeur = 0.0625;
+uniform vec4 teinte : source_color = vec4(0.88, 0.44, 0.82, 1.0);
+varying vec3 p_m;
+void vertex() {
+	p_m = (vers_modeleur * (MODEL_MATRIX * vec4(VERTEX, 1.0))).xyz;
+}
+void fragment() {
+	vec3 n = normalize(cross(dFdx(p_m), dFdy(p_m)));
+	vec3 d = abs(fract(p_m) - 0.5);
+	float bande = 0.0;
+	float plan = 0.0;
+	for (int a = 0; a < 3; a++) {
+		if (abs(n[a]) < 0.95) {
+			bande = max(bande, step(d[a], demi_largeur));
+			plan = max(plan, 1.0 - smoothstep(0.0, 1.5 * fwidth(p_m[a]), d[a]));
+		}
+	}
+	float rayure = step(0.5, fract((p_m.x + p_m.y + p_m.z) * 20.0));
+	float alpha = max(bande * (0.22 + 0.3 * rayure), plan * 0.95);
+	if (alpha <= 0.0) {
+		discard;
+	}
+	ALBEDO = teinte.rgb;
+	ALPHA = alpha;
+}
+"""
+
+
+## Les bandes se montrent quand on PEINT (et que l'interrupteur de l'écran les veut).
+func regler_les_bandes() -> void:
+	var oui := pinceau and bandes_de_couture
+	if oui and _bandes == null:
+		_bandes = ShaderMaterial.new()
+		_bandes.shader = Shader.new()
+		_bandes.shader.code = SHADER_BANDES
+		_bandes.set_shader_parameter("demi_largeur", BANDE_DE_COUTURE)
+		_bandes.set_shader_parameter("teinte", ROSE_COUTURE)
+	if oui:
+		var vers := Transform3D.IDENTITY
+		if is_inside_tree():
+			vers = global_transform.affine_inverse()
+		_bandes.set_shader_parameter("vers_modeleur", Projection(vers))
+	for gi in instances_des_bandes():
+		(gi as GeometryInstance3D).material_overlay = _bandes if oui else null
+
+
+## Ce qui porte le calque des bandes : l'édition et les MultiMesh des occurrences.
+func instances_des_bandes() -> Array:
+	var r: Array = [_faces_mi, _faces_dyn_mi]
+	for c in _mm_de:
+		r.append(_mm_de[c])
+	return r
+
+
+## Le calque des bandes posé sur ces instances (null s'il est éteint) — pour l'écran et la fumée.
+func calque_des_bandes() -> Material:
+	return _faces_mi.material_overlay
+
+
+## Le curseur sous la souris : `i` est un impact (`_impact`), vide pour l'effacer.
+func _montrer_le_curseur(i: Dictionary) -> void:
+	if _curseur_mi == null:
+		_curseur_mi = MeshInstance3D.new()
+		_curseur_mi.name = "Curseur"
+		_curseur_mi.mesh = ImmediateMesh.new()
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.vertex_color_use_as_albedo = true
+		m.no_depth_test = true
+		m.render_priority = 2
+		_curseur_mi.material_override = m
+		_curseur_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_curseur_mi)
+	var im := _curseur_mi.mesh as ImmediateMesh
+	im.clear_surfaces()
+	empreinte_montree = PackedVector3Array()
+	if i.is_empty() or not pinceau or geometrie:
+		return
+	var tuile: RefCounted = i["tuile"]
+	var f := int(i["face"])
+	var pose: Transform3D = i.get("pose", Transform3D.IDENTITY)
+	var n: Vector3 = tuile.normale(f) * 0.004
+	var m: int = tuile.mat(f)
+	var chemin: String = str(tuile.materiaux[m].get("texture", "")) if m >= 0 and m < tuile.materiaux.size() else ""
+	var anneaux: Array = []
+	if m < 0 or m >= tuile.materiaux.size():
+		var rouge := PackedVector3Array()
+		var e1: Vector3 = tuile.normale(f).cross(Vector3.UP if absf(tuile.normale(f).y) < 0.9 else Vector3.RIGHT).normalized()
+		var e2: Vector3 = tuile.normale(f).cross(e1).normalized()
+		for k in 24:
+			var a := TAU * k / 24.0
+			rouge.append(i["point"] + (e1 * cos(a) + e2 * sin(a)) * 0.05)
+		anneaux.append([rouge, Color(0.95, 0.3, 0.25)])
+	else:
+		# Une toile pas encore créée le sera à la TAILLE d'une toile neuve.
+		var t := Peinture.toile(chemin) if chemin != "" else {}
+		var taille := Vector2(Peinture.TAILLE, Peinture.TAILLE)
+		if not t.is_empty():
+			taille = Vector2((t["image"] as Image).get_size())
+		empreinte_montree = Peinture.empreinte(tuile, f, i["point"], pinceau_taille, taille)
+		anneaux.append([empreinte_montree, Color.WHITE])
+		if pinceau_durete > 0.02 and pinceau_durete < 0.98:
+			anneaux.append([Peinture.empreinte(tuile, f, i["point"], pinceau_taille * pinceau_durete, taille),
+				Color(pinceau_couleur, 1.0)])
+	for anneau in anneaux:
+		var pts: PackedVector3Array = anneau[0]
+		if pts.is_empty():
+			continue
+		im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+		im.surface_set_color(anneau[1])
+		for k in pts.size() + 1:
+			im.surface_add_vertex(pose * (pts[k % pts.size()] + n))
+		im.surface_end()
+
+
+## L'empreinte que le curseur montre, dans le repère de la TUILE (vide sans curseur) — pour la fumée.
+var empreinte_montree := PackedVector3Array()
 
 
 ## Ce que touche la souris : la tuile, sa face, le point DANS LE REPÈRE DE LA TUILE.
@@ -1537,11 +1688,11 @@ func _impact(p: Vector2) -> Dictionary:
 			return {}
 		var o: Dictionary = temoin.occurrences[int(hit["occurrence"])]
 		return {"tuile": temoin.tuiles[hit["cle"]], "cle": hit["cle"], "face": int(hit["face"]),
-			"point": (o["pose"] as Transform3D).affine_inverse() * (hit["point"] as Vector3)}
+			"point": (o["pose"] as Transform3D).affine_inverse() * (hit["point"] as Vector3), "pose": o["pose"]}
 	var h: Dictionary = maillage.lancer_rayon_rapide(_origine(p), _direction(p))
 	if h.is_empty():
 		return {}
-	return {"tuile": maillage, "cle": cle, "face": int(h["face"]), "point": h["point"]}
+	return {"tuile": maillage, "cle": cle, "face": int(h["face"]), "point": h["point"], "pose": pose}
 
 
 func _peindre_a_la_souris(event: InputEvent) -> bool:
@@ -1562,6 +1713,7 @@ func _peindre_a_la_souris(event: InputEvent) -> bool:
 	if event is InputEventMouseMotion:
 		var m := event as InputEventMouseMotion
 		souris = m.position
+		_montrer_le_curseur(_impact(m.position))
 		if _appui and (m.button_mask & MOUSE_BUTTON_MASK_LEFT):
 			# ⚠ UN TRAIT COMMENCE DÈS QU'IL ATTEINT UNE FACE QUI SE PEINT (vu à l'image, 1er octobre 2026) : parti
 			# d'une face de la légende, le geste ne peignait plus rien, même passé sur la matière.

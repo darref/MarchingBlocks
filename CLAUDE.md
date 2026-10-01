@@ -1575,8 +1575,31 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     rangement par tuile) : 7,8 millions de texels partagés, densité ×7. `fumee_appli` +2 (le bouton, un Ctrl+Z).
     Vu à l'image (`capture_peinture.gd`, `2_atlas`). ⚠ **CE QUE ÇA NE DONNE PAS** : l'unicité par COPIE — une tuile
     de plateau revient des centaines de fois, et sa peinture avec elle (« une tuile par clé »).
-    **OUVERT** : la gomme et les calques ; le panneau 2D du patron ; un curseur qui montre la taille du pinceau ;
-    les bandes de couture pendant qu'on peint.
+  - **LE CURSEUR ET LES BANDES DE COUTURE — DÉCIDÉ ET ÉCRIT (Jordan, 1er octobre 2026 : « go pour la taille du
+    pinceau et les bandes de couture »).**
+    - **LE CURSEUR EST L'EMPREINTE DU TAMPON, PAS UN CERCLE** (`Peinture.empreinte`) : le rayon est en pixels de la
+      TOILE, et la face fait de son plan vers la toile une application linéaire (deux différences de
+      `uv_au_point`, la règle du rendu) ; dans chaque direction du plan, la distance qui y vaut le rayon. Une
+      ELLIPSE où l'îlot est étiré, un cercle de taille × répétition / largeur en Boîte. Contour blanc = le bord,
+      contour de la couleur du pinceau = la dureté ; un petit anneau rouge sur une face de la légende. Dessiné
+      dans le plan de la face, à l'occurrence, sans test de profondeur, à chaque mouvement de souris.
+    - **LES BANDES** : un calque (`material_overlay`, un shader) sur l'édition ET sur chaque MultiMesh des
+      occurrences, posé quand on PEINT (case « Seam bands » de la section Paint, cochée par défaut). Dans le
+      repère du modeleur, les plans de coupe sont aux DEMI-ENTIERS (une occurrence est posée au sommet + (1,1,1),
+      sa tuile coupée à ±0,5) : le calque raye la bande où un plan TRAVERSE la surface (la normale du fragment,
+      par `dFdx`/`dFdy`, n'est pas celle du plan) et trace le plan lui-même. Demi-largeur 1/16 de case —
+      **PROPOSÉ**. ⚠ Il ne juge rien : c'est `verifier_couture_texture` qui juge, au tranchage.
+    - **MESURÉ** : `test_peinture` (+5 : un îlot étiré 3 : 1 posé À LA MAIN rend une ellipse de 20/192 × 20/64
+      case ; ce que `tamponner` peint VRAIMENT — peint à 90 % de l'empreinte, rien à 110 % ; la Boîte, un cercle
+      de 20/512 ; la légende, rien) ; `fumee_appli` (+5 : survoler la paroi montre un cercle de taille /
+      largeur × répétition dans le plan de la face, attendu par la formule de la Boîte ; les bandes sur
+      l'édition et les 52 tuiles ; décoché, plus rien ; recoché ; Geometry éteint bandes et curseur). **Cinq
+      mutations rouges** : cercle à l'échelle moyenne, rayon pris sur un seul axe, bandes sur l'édition seule,
+      curseur jamais mis à jour, bandes sans le pinceau. Vu à l'image sous Xvfb, OpenGL
+      (`capture_peinture.gd`, `3_curseur_et_bandes`) : les bandes aux joints des tuiles, dessus et parois,
+      l'ellipse et l'anneau de dureté sous la souris. Le manuel (F1) le dit.
+    - ⚠ **PAS TENU EN MAIN** ; ni vu en Vulkan sur le PC. La largeur des bandes et leur rose se jugent à l'œil.
+    **OUVERT** : la gomme et les calques ; le panneau 2D du patron.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 

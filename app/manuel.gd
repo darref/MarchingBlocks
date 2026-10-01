@@ -350,6 +350,15 @@ func _modeleur() -> String:
 		+ "gets its own place (U alone unwraps one tile into the whole square, on top of the others). A tile's "
 		+ "copies still share its paint: they are the same tile. Faces with the legend colour cannot be painted: "
 		+ "assign a material first."))
+	l.append("Under the mouse, the [b]brush outline[/b] shows exactly where a dab stops on that face: white for "
+		+ "its edge, the brush colour for its hardness (full strength inside). It is drawn in the image's pixels, "
+		+ "so it is an ellipse where the unwrap stretches the face, and it grows with the material's repeat. A "
+		+ "small red ring means the face has no material.")
+	l.append(_note("[b]Seam bands[/b] — while painting, pink striped bands mark the cut planes, where one tile "
+		+ "meets the next in the painted world. Paint them the same on every tile (a tileable material, or "
+		+ "nothing), and keep the free drawing in the middle of the tiles. The bands only show where to be "
+		+ "careful; the slicer still checks the texture seams. Untick [b]Seam bands[/b] in the Paint section to "
+		+ "hide them."))
 	l.append(_titre("View"))
 	l.append("Middle drag turns, " + _touche("Shift") + " + middle drag slides, the wheel zooms. Numpad "
 		+ _touche("1") + " front, " + _touche("3") + " right, " + _touche("7") + " top (" + _touche("Ctrl")

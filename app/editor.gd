@@ -1710,8 +1710,20 @@ func _batir_peinture(pile: VBoxContainer) -> void:
 		ligne.add_child(c)
 		sec.contenu.add_child(ligne)
 		_curseurs_pinceau[prop] = c
+	# Les bandes de couture (Jordan, 1er octobre 2026) : elles se montrent pendant qu'on peint.
+	_case_bandes = CheckBox.new()
+	_case_bandes.text = "Seam bands"
+	_case_bandes.button_pressed = _modeleur.bandes_de_couture
+	_case_bandes.focus_mode = Control.FOCUS_NONE
+	_case_bandes.tooltip_text = ("While painting, striped bands mark the cut planes. Along them every tile must "
+		+ "carry the same texture, or the painted world shows a seam at each joint.")
+	_case_bandes.toggled.connect(func(v: bool) -> void:
+		_modeleur.bandes_de_couture = v
+		_modeleur.regler_les_bandes())
+	sec.contenu.add_child(_case_bandes)
 
 
+var _case_bandes: CheckBox
 var _bouton_pinceau: Button
 var _couleur_pinceau: ColorPickerButton
 var _curseurs_pinceau := {}

@@ -1381,6 +1381,38 @@ func _peindre_le_temoin(ed: Control) -> void:
 	clic.call(vise["ecran"], true, true)
 	clic.call(vise["ecran"], false, true)
 	_vrai(_proche(ed._couleur_pinceau.color, Color(0.9, 0.1, 0.1)), "Alt+clic : la pipette lit la couleur peinte")
+	# LE CURSEUR (Jordan, 1er octobre 2026) : survoler la paroi montre l'empreinte du tampon, dans le plan de la face.
+	# Attendu d'ailleurs : en Boîte l'UV est la position divisée par la répétition, donc un CERCLE de
+	# taille / largeur de la toile × répétition.
+	var survol := InputEventMouseMotion.new()
+	survol.position = vise["ecran"]
+	mo.souris_entree(survol)
+	var emp: PackedVector3Array = mo.empreinte_montree
+	var n_f: Vector3 = tuile.normale(int(vise["face"]))
+	var rayon_attendu: float = mo.pinceau_taille / float(img.get_width()) * float(t.materiaux[k].get("echelle", 1.0))
+	var ecart_max := 0.0
+	for q in emp:
+		ecart_max = maxf(ecart_max, maxf(absf(n_f.dot(q - vise["local"])),
+			absf(q.distance_to(vise["local"]) - rayon_attendu)))
+	_vrai(str(t.materiaux[k].get("projection", "boite")) == "boite" and emp.size() > 0 and ecart_max < 1e-3,
+		"survoler montre l'empreinte du pinceau : un cercle de %.4f case dans le plan de la face (écart %.5f)"
+		% [rayon_attendu, ecart_max])
+	# LES BANDES DE COUTURE : pendant qu'on peint, sur l'édition ET sur chaque MultiMesh des occurrences.
+	var calque: Material = mo.calque_des_bandes()
+	var portent := 0
+	var instances: Array = mo.instances_des_bandes()
+	for gi in instances:
+		portent += int(is_same((gi as GeometryInstance3D).material_overlay, calque))
+	_vrai(calque != null and instances.size() == 2 + t.tuiles.size() and portent == instances.size(),
+		"en peignant, les bandes de couture couvrent l'édition et les %d tuiles (%d / %d)" % [t.tuiles.size(), portent,
+		instances.size()])
+	ed._case_bandes.button_pressed = false
+	var eteintes := 0
+	for gi in instances:
+		eteintes += int((gi as GeometryInstance3D).material_overlay == null)
+	_vrai(eteintes == instances.size(), "« Seam bands » décoché : plus aucune bande (%d / %d)" % [eteintes, instances.size()])
+	ed._case_bandes.button_pressed = true
+	_vrai(mo.calque_des_bandes() != null, "recoché, elles reviennent")
 	# L'ATLAS : le bouton déplie les faces du matériau dans TOUTES les tuiles, le matériau passe en UV ; UN Ctrl+Z.
 	mo.materiau_courant = k
 	var porteuses: Array = []
@@ -1409,6 +1441,10 @@ func _peindre_le_temoin(ed: Control) -> void:
 		"UN Ctrl+Z rend les UV et la projection d'avant (%d / %d)" % [rendues, porteuses.size()])
 	ed._aller_a("witness")
 	_vrai(not mo.pinceau, "Geometry éteint le pinceau")
+	var restees := 0
+	for gi in mo.instances_des_bandes():
+		restees += int((gi as GeometryInstance3D).material_overlay != null)
+	_vrai(restees == 0 and mo.empreinte_montree.is_empty(), "et avec lui les bandes et le curseur (%d bandes restées)" % restees)
 
 
 ## Deux couleurs égales à la quantification d'une image 8 bits près.

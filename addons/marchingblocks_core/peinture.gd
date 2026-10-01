@@ -118,6 +118,37 @@ static func trait_(img: Image, de: Vector2, a: Vector2, rayon: float, couleur: C
 	return zone
 
 
+## L'EMPREINTE DU TAMPON SUR LA FACE — le curseur du pinceau (Jordan, 1er octobre 2026 : « voir la taille du
+## pinceau »). Les `n` points, dans le repère de la TUILE et dans le plan de la face `f` au point `p`, où le tampon
+## de `rayon` pixels s'arrête sur une toile de `taille` pixels.
+## ⚠ CE N'EST PAS UN CERCLE : le rayon est en pixels de la TOILE, et l'UV d'une face n'a ni la même échelle dans
+## les deux sens (un îlot déplié peut être étiré) ni la même d'une face à l'autre. On prend l'application LINÉAIRE
+## que la face fait de son plan vers la toile (`uv_au_point`, la règle du rendu, en deux différences), et l'on
+## suit, dans chaque direction du plan, la distance qui y vaut `rayon` pixels : une ellipse, exacte sur un
+## triangle. Vide si la face ne se peint pas (pas de matériau) ou si son UV est dégénéré.
+static func empreinte(tuile: RefCounted, f: int, p: Vector3, rayon: float, taille: Vector2, n := 48) -> PackedVector3Array:
+	var pts := PackedVector3Array()
+	var uv0: Vector2 = tuile.uv_au_point(f, p)
+	if not uv0.is_finite():
+		return pts
+	var nrm: Vector3 = tuile.normale(f)
+	if nrm.length_squared() < 1e-12:
+		return pts
+	var e1 := nrm.cross(Vector3.UP if absf(nrm.y) < 0.9 else Vector3.RIGHT).normalized()
+	var e2 := nrm.cross(e1).normalized()
+	const H := 0.01
+	var j1: Vector2 = (tuile.uv_au_point(f, p + e1 * H) - uv0) / H * taille
+	var j2: Vector2 = (tuile.uv_au_point(f, p + e2 * H) - uv0) / H * taille
+	if absf(j1.cross(j2)) < 1e-9:
+		return pts
+	for i in n:
+		var a := TAU * i / n
+		var d := e1 * cos(a) + e2 * sin(a)
+		var px := (j1 * cos(a) + j2 * sin(a)).length()
+		pts.append(p + d * (maxf(0.5, rayon) / px))
+	return pts
+
+
 ## Le trait ou le tampon est fini : la texture partagée montre l'image, et la toile est à écrire.
 static func montrer(chemin: String) -> void:
 	if not _toiles.has(chemin):

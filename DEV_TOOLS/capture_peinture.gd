@@ -106,6 +106,19 @@ func _derouler() -> void:
 		await _images(3)
 	await _images(10)
 	_photo("2_atlas")
+	# LE CURSEUR ET LES BANDES DE COUTURE : de près, la souris au repos sur la matière, un gros pinceau mi-dur.
+	_ecran._vue._distance = 7.0
+	_ecran._vue.cadrer(Vector3(6, 9, 6))
+	await _images(10)
+	mo.pinceau_taille = 60.0
+	mo.pinceau_durete = 0.5
+	mo.pinceau_couleur = Color(0.95, 0.85, 0.3)
+	var survol := InputEventMouseMotion.new()
+	survol.position = taille * 0.5
+	mo.souris_entree(survol)
+	await _images(5)
+	print("empreinte : %d points" % mo.empreinte_montree.size())
+	_photo("3_curseur_et_bandes")
 	print("rapport : ", _ecran._rapport.text.substr(0, 160))
 	if _reglages_avant != "":
 		var f := FileAccess.open(REGLAGES, FileAccess.WRITE)
