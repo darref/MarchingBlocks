@@ -614,11 +614,32 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
   - Gardé par `test_projet` (+14 : le `.ico` relu octet par octet, le `.reg` lu tel qu'écrit — partie
     utilisateur seule, échappements, accents —, le `desktop.ini`, l'argument, la décision de s'inscrire).
     Cinq mutations rouges.
-  - ⚠ **PAS ÉPROUVÉ EN VRAI (commité le 1er octobre 2026, avant la reconstruction de l'exe)** : l'exécutable
-    n'a pas été reconstruit avec ce code, donc l'inscription n'a JAMAIS tourné — ni `reg import` dans le
-    registre réel, ni les icônes dans l'Explorateur (cache, `ie4uinit`), ni le double-clic sur un `.mbproj`,
-    ni le `desktop.ini` d'un dossier exporté, ni la case qui retire tout. Seuls les TEXTES sont gardés. Les
-    couches avec leur témoin et « ✓ Saved » / Ctrl+S n'ont pas non plus tourné dans l'exe.
+  - **ÉPROUVÉ DANS L'EXE CHIFFRÉ (1er octobre 2026)** — reconstruit par `exporter_marchingblocks.sh` (journal
+    sans erreur, 0 chaîne témoin sur 7 en clair), lancé UNE fois sur `test.mbproj`, aucun geste, refermé par
+    WM_CLOSE (2 s) :
+    - **le registre** : avant, aucune clé ; après, dans HKCU et dans la vue fusionnée HKEY_CLASSES_ROOT (celle
+      de l'Explorateur), `.mbproj` → `MarchingBlocks.Project`, `.mbtiles` → `MarchingBlocks.Witness`, leurs
+      `DefaultIcon` sur les `.ico` écrits dans `…/app_userdata/MarchingBlocks/icones/`, la commande
+      `"D:\MarchingBlocks\build\MarchingBlocks.exe" "%1"` ; rien dans HKLM ; `reglages.cfg` retient exe et
+      version. ⚠ `assoc` et `ftype` disent « introuvable » : ils ne lisent que HKLM — ce n'est pas un défaut.
+      ⚠ Et une lecture par Git Bash avec `//ve` rendait « introuvable » sur des clés présentes : contre-vérifié
+      par PowerShell avant de conclure.
+    - ⚠ **L'OUVERTURE A RÉÉCRIT `test.mbproj` SANS GESTE** : la migration prévue (couche « Layer 1 » : `id` 1,
+      `temoin` = `test_witness.mbtiles`), rien d'autre — cases et témoins identiques au bit près.
+    - ⚠ **UN DÉFAUT RÉEL, VU LÀ ET NULLE PART AILLEURS : L'ICÔNE DES DOSSIERS NE POUVAIT PAS MARCHER.**
+      `marquer_dossier` posait les attributs par `attrib` via `OS.execute`, qui met chaque argument entre
+      guillemets ; `attrib` refuse « "+h" » (« Format incorrect du paramètre »)… en rendant 0. Le `desktop.ini`
+      était écrit, rien n'était posé : sans dossier en lecture seule, Windows ne le lit pas. Corrigé par
+      `FileAccess.set_hidden_attribute` / `set_read_only_attribute` (Godot ne sait pas poser « système », dont
+      l'icône n'a pas besoin). Gardé par `test_projet` (+6, Windows seulement : attributs relus par `attrib`,
+      re-marquage d'un `desktop.ini` caché, UTF-16, un dossier qui n'est ni `.mbset` ni `.mbworld`) ; trois
+      mutations rouges (l'ancienne route `attrib`, dossier sans lecture seule, `desktop.ini` caché non
+      découvert avant réécriture). La garde elle-même laissait d'abord son dossier jetable : un `FileAccess`
+      resté ouvert empêchait le ménage. L'exe a été reconstruit avec la correction, PAS relancé.
+  - ⚠ **RESTE À L'ŒIL DE JORDAN** : les icônes VUES dans l'Explorateur (cache d'icônes, `ie4uinit`) ; le
+    double-clic sur un `.mbproj` ; l'icône d'un dossier exporté DEPUIS L'APPLI (la fonction a été menée sur des
+    dossiers jetables, pas par le bouton d'export, qui demandait un geste) ; la case qui retire tout ; et, dans
+    l'exe, les couches avec leur témoin et « ✓ Saved » / Ctrl+S.
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
@@ -1684,12 +1705,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
 ### Outillage
 
 - **Tests** — `godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/<test>.gd`, code 0 ou 1.
-  Seize suites, **8 451 vérifications, 0 échec** (30 septembre 2026, relevées après les icônes des fichiers),
+  Seize suites, **8 457 vérifications, 0 échec** (1er octobre 2026, relevées après l'icône des dossiers éprouvée dans l'exe),
   plus trois bancs hors Godot : .NET (`engines/unity/conformance-runner` :
   18 cas de pose, 69 d'outils), g++ (`engines/unreal/core-runner` : les mêmes, et le repère) et Unity 6.6
   (10 tests), et un essai Blender (`essai_blender.gd`, il lui faut Blender) :
   `test_marching_blocks` 1 986, `test_repli_procedural` 3 922, `test_blocs_maitres` 1 468,
-  `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 49,
+  `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 55,
   `test_outils` 57, `fumee_appli` 255, `test_greffon_peinture` 179, `test_faux_artiste` 36,
   `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 25, `test_sections` 30.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 0 échec, Unity 6.6 22 tests sur 22.

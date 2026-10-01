@@ -190,23 +190,27 @@ static func _importer(chemin: String, texte: String) -> String:
 	return ""
 
 
-## L'ICÔNE D'UN DOSSIER EXPORTÉ (.mbset / .mbworld) : son `desktop.ini`, caché et système, et le dossier
-## marqué « lecture seule » — c'est ainsi que Windows lit l'icône d'un dossier. Sans effet hors de Windows, ou
-## si les icônes n'ont pas été écrites (appli jamais inscrite).
-## ⚠ UN `desktop.ini` CACHÉ NE SE RÉÉCRIT PAS TEL QUEL : Windows refuse de remplacer un fichier caché et système
-## par un fichier normal — on lui ôte ces attributs d'abord.
-static func marquer_dossier(dossier: String) -> void:
+## L'ICÔNE D'UN DOSSIER EXPORTÉ (.mbset / .mbworld) : son `desktop.ini`, caché, et le dossier marqué « lecture
+## seule » — c'est cet attribut du DOSSIER qui fait lire son `desktop.ini` à Windows. Sans effet hors de Windows,
+## ou si les icônes n'ont pas été écrites (appli jamais inscrite). Rend vrai si le dossier est marqué.
+## ⚠ PAS PAR `attrib` (mesuré le 1er octobre 2026, dans l'exe) : `OS.execute` met chaque argument entre
+## guillemets, `attrib` refuse un « "+h" » (« Format incorrect du paramètre »)… et rend le code 0. Rien n'était
+## posé, sans un mot. Godot pose lui-même caché et lecture seule ; il ne sait pas poser « système », dont
+## l'icône n'a pas besoin.
+## ⚠ UN `desktop.ini` CACHÉ NE SE RÉÉCRIT PAS TEL QUEL : Windows refuse de remplacer un fichier caché par un
+## fichier normal — on lui ôte l'attribut d'abord.
+static func marquer_dossier(dossier: String, icones := "") -> bool:
 	if OS.get_name() != "Windows":
-		return
+		return false
 	var genre := dossier.get_extension().to_lower()
 	if not DOSSIERS.has(genre):
-		return
-	var icone := dossier_des_icones().path_join(DOSSIERS[genre]["ico"])
+		return false
+	var icone := (icones if icones != "" else dossier_des_icones()).path_join(DOSSIERS[genre]["ico"])
 	if not FileAccess.file_exists(icone) or not DirAccess.dir_exists_absolute(dossier):
-		return
+		return false
 	var ini := dossier.path_join("desktop.ini")
 	if FileAccess.file_exists(ini):
-		OS.execute("attrib", ["-h", "-s", _windows(ini)], [], true)
-	if _ecrire_utf16(ini, desktop_ini(icone)):
-		OS.execute("attrib", ["+h", "+s", _windows(ini)], [], true)
-		OS.execute("attrib", ["+r", _windows(dossier)], [], true)
+		FileAccess.set_hidden_attribute(ini, false)
+	if not _ecrire_utf16(ini, desktop_ini(icone)):
+		return false
+	return FileAccess.set_hidden_attribute(ini, true) == OK and FileAccess.set_read_only_attribute(dossier, true) == OK

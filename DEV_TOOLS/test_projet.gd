@@ -198,3 +198,50 @@ func _les_fichiers_dans_windows() -> void:
 	_vrai(A.a_inscrire(r, "D:/ailleurs/a.exe", "0.1") and A.a_inscrire(r, "C:/a.exe", "0.2"), "exe déplacé ou nouvelle version : on se réinscrit")
 	r.set_value("associations", "refus", true)
 	_vrai(not A.a_inscrire(r, "D:/ailleurs/a.exe", "0.2"), "après un refus (la case décochée), plus jamais d'inscription automatique")
+	_l_icone_d_un_dossier()
+
+
+## L'ICÔNE D'UN DOSSIER EXPORTÉ, POSÉE POUR DE VRAI (Windows seulement) : un `desktop.ini` caché, le dossier en
+## lecture seule. ⚠ MESURÉ DANS L'EXE le 1er octobre 2026 : `attrib` lancé par `OS.execute` refusait ses arguments
+## en rendant 0, et rien n'était posé. L'attendu est relu par `attrib` lui-même (une autre autorité que Godot),
+## sur un dossier jetable et des icônes de test — jamais celles de l'appli.
+func _l_icone_d_un_dossier() -> void:
+	if OS.get_name() != "Windows":
+		return
+	const A := preload("res://app/associations.gd")
+	var racine := ProjectSettings.globalize_path(DOSSIER)
+	var icones := racine.path_join("icones")
+	var dossier := racine.path_join("essai.mbset")
+	_vrai(A.ecrire_les_icones(icones) == "", "les icônes de test sont écrites")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var marque_1: bool = A.marquer_dossier(dossier, icones)
+	_ecrire(dossier.path_join("tileset.json"), "{}")   # un export qui repasse dans un dossier déjà marqué
+	var marque_2: bool = A.marquer_dossier(dossier, icones)
+	_vrai(marque_1 and marque_2, "le dossier est marqué, et se re-marque (desktop.ini caché réécrit)")
+	_vrai(_attributs(dossier).contains("R"), "le dossier est en lecture seule (relu par attrib : « %s »)" % _attributs(dossier))
+	_vrai(_attributs(dossier.path_join("desktop.ini")).contains("H"), "son desktop.ini est caché (relu par attrib)")
+	var ini := FileAccess.open(dossier.path_join("desktop.ini"), FileAccess.READ)
+	var octets := ini.get_buffer(ini.get_length()) if ini != null else PackedByteArray()
+	ini = null   # ⚠ refermé : Windows ne supprime pas un fichier ouvert, et le ménage échouait sans un mot
+	_vrai(octets.size() > 2 and octets[0] == 0xff and octets[1] == 0xfe
+		and octets.slice(2).get_string_from_utf16().contains(r"icones\dossier_tuiles.ico,0"),
+		"son desktop.ini (UTF-16) désigne l'icône des jeux de tuiles")
+	_vrai(not A.marquer_dossier(racine.path_join("autre.txt"), icones), "un dossier qui n'est ni .mbset ni .mbworld n'est pas marqué")
+	# Ménage : lecture seule ôtée, puis tout supprimé.
+	FileAccess.set_read_only_attribute(dossier, false)
+	FileAccess.set_hidden_attribute(dossier.path_join("desktop.ini"), false)
+	for f in ["desktop.ini", "tileset.json"]:
+		DirAccess.remove_absolute(dossier.path_join(f))
+	DirAccess.remove_absolute(dossier)
+	for f in DirAccess.get_files_at(icones):
+		DirAccess.remove_absolute(icones.path_join(f))
+	DirAccess.remove_absolute(icones)
+
+
+## Les lettres d'attributs que `attrib` affiche devant le chemin (A, H, R, S…).
+func _attributs(chemin: String) -> String:
+	var sortie: Array = []
+	OS.execute("attrib", [chemin.replace("/", "\\")], sortie, true)
+	var ligne := "".join(PackedStringArray(sortie))
+	var i := ligne.find(chemin.replace("/", "\\").substr(0, 3))
+	return ligne.substr(0, i).strip_edges() if i > 0 else ""
