@@ -2038,6 +2038,26 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
+- **UNE TEINTE PAR ATELIER — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « une palette vraiment
+  différente et cohérente à chaque atelier : Fluids en bleu, World en rouge […] seule la barre de droite, qui est ce qui
+  est interne à l'atelier, doit changer de palette ; le soft garde en global sa palette », puis « la barre de droite et
+  le bouton de l'atelier lui-même ».
+  - **LES TEINTES** (`Palette.TEINTES_ATELIER`) : Project ambre, World rouge (un cramoisi, pas le rouge orangé du
+    DANGER — un « Clear » s'y lit encore), Fluids bleu, Geometry violet, Texturing rose, Play test vert. **PROPOSÉ** pour
+    les quatre que Jordan n'a pas choisies.
+  - **LA PALETTE GLOBALE NE BOUGE PAS** : `Palette.theme(accent)` rend, pour l'OLIVE, les constantes d'avant (les bandes
+    et filets aussi, `bande_de`) ; la barre de gauche, la barre de titre et le reste gardent l'olive.
+  - **CHAQUE BARRE DE DROITE** (`habiller_barre`, une fois, après sa construction) reçoit le thème de sa teinte (boutons,
+    curseurs, champs, cases, focus), un fond à peine teinté avec un filet de sa couleur, et ce que l'écran avait peint
+    en olive EN DUR dans ses descendants (valeurs, en-têtes de section, filets) passe à sa teinte (`_teinter`). ⚠ Une
+    étiquette olive créée PLUS TARD dans une barre (une liste rebâtie) garde l'olive : les boutons suivent le thème,
+    pas les surcharges posées après coup. **CHAQUE BOUTON D'ATELIER** (`habiller_bouton_d_atelier`) porte sa teinte
+    même au repos (icône, filet gauche), pleine une fois choisi.
+  - **MESURÉ** : `fumee_appli` (+19 : rouge pour World et bleu pour Fluids, écrits dans le test ; six teintes
+    distinctes, aucune olive ; chaque barre enfonce dans sa teinte, ses en-têtes la portent, chaque bouton aussi ; la
+    barre de gauche et ses sections gardent l'olive). Quatre mutations rouges (barres non habillées, boutons non
+    habillés, en-têtes non teintés, thème qui ignore l'accent). Vu à l'image (`DEV_TOOLS/capture_teintes_ateliers.gd`,
+    les six ateliers). ⚠ Pas jugé par Jordan (les quatre teintes choisies, leur force).
 - **LA BARRE DE GAUCHE ET LE CONTEXTE — DEMANDÉ PAR JORDAN (29 septembre 2026).**
   - **L'ATELIER EST ÉPINGLÉ EN HAUT** : il ne défile jamais.
   - **DEUX ZONES, CHACUNE SON DÉFILEMENT** : en haut ce qui compte (le projet, les couches, les quatre

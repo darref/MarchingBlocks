@@ -37,6 +37,106 @@ const DISCRET := "BoutonDiscret"
 
 static var _gras: FontVariation
 
+## ── UNE TEINTE PAR ATELIER (Jordan, 2 octobre 2026 : « une palette vraiment différente et cohérente à chaque
+## atelier : Fluids en bleu, World en rouge […] seule la barre de droite, qui est l'interne de l'atelier, doit changer
+## de palette ; de cette manière le soft garde en global sa palette » — puis : « la barre de droite et le bouton de
+## l'atelier lui-même »). L'olive reste la palette de tout le reste ; chaque atelier n'habille que SA barre de droite
+## et SON bouton. ⚠ World n'est pas le rouge du DANGER (`ROUGE`, orangé) : un cramoisi, pour qu'un « Clear » s'y lise.
+const TEINTES_ATELIER := {
+	"projet": Color("#f2ca79"),     # ambre : le projet, l'aller-retour
+	"monde": Color("#e5525e"),      # rouge (Jordan)
+	"fluides": Color("#4fa8ee"),    # bleu (Jordan)
+	"witness": Color("#a08cf5"),    # violet : la géométrie du témoin
+	"texture": Color("#e77fc9"),    # rose : la peinture
+	"jeu": Color("#6fcf8a"),        # vert : on joue
+}
+static var _themes_atelier := {}
+
+
+static func teinte(atelier: String) -> Color:
+	return TEINTES_ATELIER.get(atelier, OLIVE)
+
+
+## Le thème de la palette, dans la teinte d'un atelier (mis en mémoire : une barre le garde pour toujours).
+static func theme_d_atelier(atelier: String) -> Theme:
+	if not _themes_atelier.has(atelier):
+		_themes_atelier[atelier] = theme(teinte(atelier))
+	return _themes_atelier[atelier]
+
+
+## Les bandes et filets, teintés d'un accent. ⚠ POUR L'OLIVE, LES CONSTANTES MÊMES : la palette globale ne bouge pas.
+static func bande_de(accent: Color) -> Color:
+	return BANDE if accent == OLIVE else PANNEAU.lerp(accent, 0.1)
+
+
+static func bande_survol_de(accent: Color) -> Color:
+	return BANDE_SURVOL if accent == OLIVE else PANNEAU.lerp(accent, 0.17)
+
+
+## HABILLE la barre de droite d'un atelier, APRÈS sa construction : le thème de sa teinte (boutons, curseurs,
+## champs, cases…), le fond légèrement teinté avec un filet de sa couleur, et ce que l'écran a peint en olive EN
+## DUR dans ses descendants (valeurs, en-têtes de section, filets) passe à sa teinte.
+static func habiller_barre(barre: Control, atelier: String) -> void:
+	var a := teinte(atelier)
+	barre.theme = theme_d_atelier(atelier)
+	var fond_ := barre.get_theme_stylebox("panel") as StyleBoxFlat
+	if fond_ != null:
+		var s := fond_.duplicate() as StyleBoxFlat
+		s.bg_color = PANNEAU.lerp(a, 0.05)
+		s.border_color = Color(a, 0.75)
+		s.border_width_left = maxi(s.border_width_left, 2)
+		barre.add_theme_stylebox_override("panel", s)
+	_teinter(barre, a)
+
+
+## Le BOUTON de l'atelier, dans la barre de gauche : sa teinte, même au repos (icône et filet), pleine une fois choisi.
+static func habiller_bouton_d_atelier(bouton: Button, atelier: String) -> void:
+	var a := teinte(atelier)
+	bouton.theme = theme_d_atelier(atelier)
+	var repos := _boite(BOUTON)
+	repos.border_color = Color(a, 0.8)
+	repos.border_width_left = 3
+	bouton.add_theme_stylebox_override("normal", repos)
+	var survol := _boite(BOUTON_SURVOL)
+	survol.border_color = a
+	survol.border_width_left = 3
+	bouton.add_theme_stylebox_override("hover", survol)
+	var choisi := _boite(Color(a, 0.28), a)
+	choisi.border_width_left = 3
+	bouton.add_theme_stylebox_override("pressed", choisi)
+	bouton.add_theme_stylebox_override("hover_pressed", choisi)
+	for c in ["icon_normal_color", "icon_hover_color", "icon_focus_color"]:
+		bouton.add_theme_color_override(c, a)
+	for c in ["icon_pressed_color", "icon_hover_pressed_color", "font_pressed_color", "font_hover_pressed_color"]:
+		bouton.add_theme_color_override(c, a.lightened(0.25))
+
+
+## L'olive peint EN DUR (surcharges de couleur, bandes et filets des sections, rectangles) → la teinte.
+static func _teinter(n: Node, a: Color) -> void:
+	if n is Control:
+		var c := n as Control
+		for nom in ["font_color", "font_pressed_color", "font_hover_color", "font_hover_pressed_color",
+				"icon_normal_color", "icon_pressed_color", "icon_hover_color", "icon_hover_pressed_color"]:
+			if c.has_theme_color_override(nom) and c.get_theme_color(nom).is_equal_approx(OLIVE):
+				c.add_theme_color_override(nom, a)
+		for etat in ["normal", "pressed", "hover", "hover_pressed"]:
+			if not c.has_theme_stylebox_override(etat):
+				continue
+			var s := c.get_theme_stylebox(etat) as StyleBoxFlat
+			if s == null or not s.border_color.is_equal_approx(OLIVE):
+				continue
+			var t2 := s.duplicate() as StyleBoxFlat
+			t2.border_color = a
+			if t2.bg_color.is_equal_approx(BANDE):
+				t2.bg_color = bande_de(a)
+			elif t2.bg_color.is_equal_approx(BANDE_SURVOL):
+				t2.bg_color = bande_survol_de(a)
+			c.add_theme_stylebox_override(etat, t2)
+	if n is ColorRect and (n as ColorRect).color.is_equal_approx(OLIVE):
+		(n as ColorRect).color = a
+	for enfant in n.get_children():
+		_teinter(enfant, a)
+
 
 static func fond(couleur: Color, rayon := 0, marge := 10) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
@@ -80,7 +180,7 @@ static func _habiller_bouton(t: Theme, type: String, normal: Color, survol: Colo
 	t.set_stylebox("pressed", type, _boite(enfonce, bord_enfonce))
 	t.set_stylebox("hover_pressed", type, _boite(enfonce.lightened(0.08), bord_enfonce))
 	t.set_stylebox("disabled", type, _boite(normal.darkened(0.3)))
-	var focus := _boite(Color.TRANSPARENT, Color(OLIVE, 0.55))
+	var focus := _boite(Color.TRANSPARENT, Color(_accent_en_cours, 0.55))
 	focus.draw_center = false
 	t.set_stylebox("focus", type, focus)
 	for etat in ["font_color", "font_focus_color"]:
@@ -97,20 +197,25 @@ static func _habiller_bouton(t: Theme, type: String, normal: Color, survol: Colo
 	t.set_color("icon_disabled_color", type, Color(texte, 0.35))
 
 
-static func theme() -> Theme:
+## ⚠ `accent` : l'OLIVE pour l'écran entier ; la teinte d'un atelier pour sa barre de droite (`theme_d_atelier`).
+static var _accent_en_cours := OLIVE
+
+
+static func theme(accent := OLIVE) -> Theme:
+	_accent_en_cours = accent
 	var t := Theme.new()
 	t.default_font_size = 13
 
 	# Le bouton ordinaire : sombre, arrondi ; ENFONCÉ, il prend l'olive — c'est l'état qu'on doit lire
 	# de loin (quel outil, quelle visée).
-	_habiller_bouton(t, "Button", BOUTON, BOUTON_SURVOL, BOUTON_ENFONCE, TEXTE, OLIVE.lightened(0.2),
-		Color(OLIVE, 0.7))
+	_habiller_bouton(t, "Button", BOUTON, BOUTON_SURVOL, Color(accent, 0.2), TEXTE, accent.lightened(0.2),
+		Color(accent, 0.7))
 	t.set_constant("icon_max_width", "Button", 18)
 	t.set_constant("h_separation", "Button", 7)
 
 	# PRINCIPAL : l'action qu'on vient chercher dans la section (trancher, exporter).
 	t.set_type_variation(PRINCIPAL, "Button")
-	_habiller_bouton(t, PRINCIPAL, Color(OLIVE, 0.85), OLIVE, OLIVE.darkened(0.2), SOMBRE, SOMBRE)
+	_habiller_bouton(t, PRINCIPAL, Color(accent, 0.85), accent, accent.darkened(0.2), SOMBRE, SOMBRE)
 	t.set_font(("font"), PRINCIPAL, gras())
 
 	# DANGER : ce qui efface. Texte rouge, fond neutre : on le voit sans qu'il crie.
@@ -120,8 +225,8 @@ static func theme() -> Theme:
 
 	# OUTIL : les grands boutons carrés de la barre (icône au-dessus du nom).
 	t.set_type_variation(OUTIL, "Button")
-	_habiller_bouton(t, OUTIL, BOUTON, BOUTON_SURVOL, Color(OLIVE, 0.26), TEXTE, OLIVE.lightened(0.3),
-		OLIVE)
+	_habiller_bouton(t, OUTIL, BOUTON, BOUTON_SURVOL, Color(accent, 0.26), TEXTE, accent.lightened(0.3),
+		accent)
 	t.set_constant("icon_max_width", OUTIL, 22)
 	t.set_font_size("font_size", OUTIL, 11)
 
@@ -137,38 +242,38 @@ static func theme() -> Theme:
 		t.set_stylebox("pressed", type, _boite(Color.TRANSPARENT, Color.TRANSPARENT, 5, 4, 4))
 		t.set_stylebox("hover_pressed", type, _boite(BOUTON_SURVOL, Color.TRANSPARENT, 5, 4, 4))
 		t.set_color("font_color", type, TEXTE)
-		t.set_color("font_pressed_color", type, OLIVE.lightened(0.2))
+		t.set_color("font_pressed_color", type, accent.lightened(0.2))
 		t.set_color("font_hover_color", type, TEXTE)
-		t.set_color("font_hover_pressed_color", type, OLIVE.lightened(0.2))
+		t.set_color("font_hover_pressed_color", type, accent.lightened(0.2))
 
 	# Les champs.
 	for type in ["LineEdit", "SpinBox"]:
 		t.set_stylebox("normal", type, _boite(CHAMP, FILET, 5, 8, 5))
-		t.set_stylebox("focus", type, _boite(CHAMP, Color(OLIVE, 0.8), 5, 8, 5))
+		t.set_stylebox("focus", type, _boite(CHAMP, Color(accent, 0.8), 5, 8, 5))
 		t.set_color("font_color", type, TEXTE)
 		t.set_color("font_placeholder_color", type, Color(GRIS, 0.6))
-		t.set_color("caret_color", type, OLIVE)
-		t.set_color("selection_color", type, Color(OLIVE, 0.3))
+		t.set_color("caret_color", type, accent)
+		t.set_color("selection_color", type, Color(accent, 0.3))
 
 	# Les listes déroulantes et leurs menus.
 	t.set_stylebox("panel", "PopupMenu", _boite(SOMBRE, FILET, 5, 6, 6))
-	t.set_stylebox("hover", "PopupMenu", _boite(BOUTON_ENFONCE, Color.TRANSPARENT, 4, 6, 4))
+	t.set_stylebox("hover", "PopupMenu", _boite(Color(accent, 0.2), Color.TRANSPARENT, 4, 6, 4))
 	t.set_color("font_color", "PopupMenu", TEXTE)
-	t.set_color("font_hover_color", "PopupMenu", OLIVE.lightened(0.2))
+	t.set_color("font_hover_color", "PopupMenu", accent.lightened(0.2))
 
 	# Le curseur de taille.
 	var rail := _boite(CHAMP, FILET, 3, 0, 3)
 	t.set_stylebox("slider", "HSlider", rail)
-	var rempli := _boite(Color(OLIVE, 0.55), Color.TRANSPARENT, 3, 0, 3)
+	var rempli := _boite(Color(accent, 0.55), Color.TRANSPARENT, 3, 0, 3)
 	t.set_stylebox("grabber_area", "HSlider", rempli)
-	t.set_stylebox("grabber_area_highlight", "HSlider", _boite(Color(OLIVE, 0.75), Color.TRANSPARENT, 3, 0, 3))
+	t.set_stylebox("grabber_area_highlight", "HSlider", _boite(Color(accent, 0.75), Color.TRANSPARENT, 3, 0, 3))
 
 	# Les barres de défilement : fines, discrètes.
 	for type in ["VScrollBar", "HScrollBar"]:
 		t.set_stylebox("scroll", type, _boite(Color.TRANSPARENT, Color.TRANSPARENT, 3, 3, 3))
 		t.set_stylebox("grabber", type, _boite(Color(GRIS, 0.25), Color.TRANSPARENT, 3, 3, 3))
 		t.set_stylebox("grabber_highlight", type, _boite(Color(GRIS, 0.45), Color.TRANSPARENT, 3, 3, 3))
-		t.set_stylebox("grabber_pressed", type, _boite(Color(OLIVE, 0.6), Color.TRANSPARENT, 3, 3, 3))
+		t.set_stylebox("grabber_pressed", type, _boite(Color(accent, 0.6), Color.TRANSPARENT, 3, 3, 3))
 
 	# Les infobulles : on les lit souvent, elles doivent être nettes.
 	t.set_stylebox("panel", "TooltipPanel", _boite(SOMBRE, FILET, 5, 10, 7))
@@ -177,10 +282,10 @@ static func theme() -> Theme:
 
 	# Les onglets du manuel.
 	t.set_stylebox("panel", "TabContainer", _boite(PANNEAU, FILET, 5, 0, 0))
-	t.set_stylebox("tab_selected", "TabContainer", _boite(BANDE, Color(OLIVE, 0.6), 5, 14, 7))
+	t.set_stylebox("tab_selected", "TabContainer", _boite(bande_de(accent), Color(accent, 0.6), 5, 14, 7))
 	t.set_stylebox("tab_unselected", "TabContainer", _boite(Color.TRANSPARENT, Color.TRANSPARENT, 5, 14, 7))
 	t.set_stylebox("tab_hovered", "TabContainer", _boite(BOUTON_SURVOL, Color.TRANSPARENT, 5, 14, 7))
-	t.set_color("font_selected_color", "TabContainer", OLIVE.lightened(0.2))
+	t.set_color("font_selected_color", "TabContainer", accent.lightened(0.2))
 	t.set_color("font_unselected_color", "TabContainer", GRIS)
 	t.set_color("font_hovered_color", "TabContainer", TEXTE)
 	return t

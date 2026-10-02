@@ -394,6 +394,7 @@ func _mener() -> void:
 	_vrai(_exclusives_finies, "les couches exclusives sont allées JUSQU'AU BOUT")
 	_l_exemple_ne_s_impose_pas(ed)
 	await _l_exemple(ed)
+	_les_teintes_des_ateliers(ed)
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -2918,6 +2919,42 @@ func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
 ## L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : la VRAIE archive (`res://exemple/exemple.zip`, prise du projet de
 ## Jordan), ouverte par le bouton. ⚠ L'attendu vient de l'ARCHIVE, relue ici sans l'installeur : chaque couche y
 ## retrouve ses cases, et ses tuiles — aucune faute, aucun « missing » (un .glb absent donnerait des cubes rouges).
+## UNE TEINTE PAR ATELIER (Jordan, 2 octobre 2026) : sa barre de droite et son bouton la portent, le reste garde l'olive.
+## ⚠ L'attendu est écrit ICI (rouge pour World, bleu pour Fluids, demandés par Jordan ; six teintes distinctes), puis
+## relu sur ce que l'écran a POSÉ : le thème des barres, l'état enfoncé des boutons, l'en-tête d'une section.
+func _les_teintes_des_ateliers(ed: Control) -> void:
+	const Palette := preload("res://app/palette.gd")
+	var rouge: Color = Palette.teinte("monde")
+	var bleu: Color = Palette.teinte("fluides")
+	_vrai(rouge.r > rouge.g + 0.3 and rouge.r > rouge.b + 0.3, "World est ROUGE (%s)" % rouge.to_html(false))
+	_vrai(bleu.b > bleu.r + 0.3 and bleu.b > bleu.g, "Fluids est BLEU (%s)" % bleu.to_html(false))
+	var vues := {}
+	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu"]:
+		vues[Palette.teinte(a).to_html(false)] = true
+	_egal(vues.size(), 6, "six ateliers, six teintes différentes")
+	_vrai(not vues.has(Palette.OLIVE.to_html(false)), "aucun atelier n'a l'olive de l'écran")
+	for b in [[ed._droite, "monde"], [ed._droite_temoin, "witness"], [ed._droite_texture, "texture"],
+			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"]]:
+		var barre: Control = b[0]
+		var a: Color = Palette.teinte(b[1])
+		var enfonce := barre.get_theme_stylebox("pressed", "Button") as StyleBoxFlat
+		_vrai(enfonce != null and enfonce.bg_color.is_equal_approx(Color(a, 0.2)),
+			"la barre de droite de « %s » enfonce ses boutons dans sa teinte" % b[1])
+		var entete_teinte := false
+		for s in barre.find_children("*", "Button", true, false):
+			var bt := s as Button
+			if bt.has_theme_color_override("font_color") and bt.get_theme_color("font_color").is_equal_approx(a):
+				entete_teinte = true
+		_vrai(entete_teinte, "… et ses en-têtes de section la portent (« %s »)" % b[1])
+		var bouton: Button = ed._boutons_atelier[b[1]]
+		_vrai(bouton.get_theme_color("icon_normal_color").is_equal_approx(a), "le bouton de « %s » porte sa teinte, même au repos" % b[1])
+	var gauche_enfonce := ed._gauche.get_theme_stylebox("pressed", "Button") as StyleBoxFlat
+	_vrai(gauche_enfonce != null and gauche_enfonce.bg_color.is_equal_approx(Palette.BOUTON_ENFONCE),
+		"la barre de gauche garde la palette de l'écran (l'olive)")
+	_vrai(ed._section_couches.get_child(0).get_theme_color("font_color").is_equal_approx(Palette.OLIVE),
+		"… ses sections aussi")
+
+
 func _l_exemple(ed: Control) -> void:
 	const Exemple := preload("res://app/exemple.gd")
 	if not Exemple.disponible():

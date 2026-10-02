@@ -384,6 +384,10 @@ func _batir() -> void:
 	_batir_droite_jeu(_droite_jeu.get_meta("pile"))
 	_droite_fluides = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_fluides(_droite_fluides.get_meta("pile"))
+	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
+	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
+			[_droite_fluides, "fluides"]]:
+		Palette.habiller_barre(b[0], b[1])
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -747,6 +751,7 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		b.add_theme_constant_override("icon_max_width", 20)
 		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
+		Palette.habiller_bouton_d_atelier(b, a[0])   # chaque atelier se reconnaît à sa teinte (Jordan, 2 octobre 2026)
 		ateliers.append(b)
 	# ⚠ SIX ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing ; 2 octobre : Fluids sorti de World,
 	# Jordan) : en grille de deux, une rangée ne tient pas dans 300 px. Les paires vont ensemble : Project · Play test,
