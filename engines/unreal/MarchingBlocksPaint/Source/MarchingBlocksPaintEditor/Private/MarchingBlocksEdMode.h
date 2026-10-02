@@ -10,8 +10,9 @@
 //            kept and comes back; choosing an aim (Tab, or in the panel) leaves navigation.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)     Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]), sphere / cube / disc; Hollow for the Box
-//   SHAPES   tunnel · well · bridge · balcony (MBCore/MBShapes), always aimed at the matter: one click straight
-//            out of a face, or Connect — two clicks on two faces anywhere (Esc forgets the first)
+//   SHAPES   tunnel · well · bridge · balcony · stairs (MBCore/MBShapes), always aimed at the matter: one click
+//            straight out of a face, or Connect — two clicks on two faces anywhere (two floors for stairs; Esc
+//            forgets the first)
 //   KEYS     Delete · Esc · arrows move the selection (they follow the camera; Shift + up / down lift)
 //            Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste
 //

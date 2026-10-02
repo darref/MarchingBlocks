@@ -11,6 +11,7 @@ extends SceneTree
 
 const Projet := preload("res://app/projet.gd")
 const Vue := preload("res://app/vue.gd")
+const Exemple := preload("res://app/exemple.gd")
 
 const DOSSIER := "user://test_projet"
 
@@ -58,6 +59,23 @@ func _initialize() -> void:
 	_vrai(d_avant["couches"][0]["temoin"] == "" and d_avant["couches"][0]["id"] == "",
 		"un projet d'avant (sans témoin ni id par couche) se relit : aucun témoin à la couche")
 
+	# ── 1 ter. Les couches d'EAU (1er octobre 2026) : seules les sources s'enregistrent, et elles reviennent ──
+	var mer := Projet.couche_d_eau("Sea", "1")
+	mer["sources"] = [Vector3i(40, 2, -9)]
+	var rivieres := Projet.couche_d_eau("Rivers", "4")
+	rivieres["visible"] = false
+	rivieres["sources"] = [Vector3i(3, 7, 3), Vector3i(-5, 0, 12)]
+	var relu_e: Dictionary = Projet.depuis_texte(Projet.vers_texte([a], 0, [mer, rivieres]), [])
+	var eaux: Array = relu_e.get("eaux", [])
+	_egal(eaux.size(), 2, "les deux couches d'eau reviennent")
+	if eaux.size() == 2:
+		_egal([eaux[0]["nom"], eaux[0]["id"], eaux[0]["preset"], eaux[0]["visible"]], ["Sea", "1", "stylise", true],
+			"une couche d'eau revient : nom, id, preset, visible")
+		_egal(eaux[1]["visible"], false, "une couche d'eau cachée reste cachée")
+		_egal(eaux[1]["sources"], [Vector3i(3, 7, 3), Vector3i(-5, 0, 12)],
+			"ses sources reviennent DANS L'ORDRE, coordonnées négatives comprises")
+	_egal(d_avant.get("eaux", null), [], "un projet d'avant l'eau se relit sans couche d'eau")
+
 	# ── 2. Un fichier abîmé est refusé EN ENTIER ─────────────────────────────────────────────────
 	for cas in [
 		["pas du json {", "du texte qui n'est pas du JSON"],
@@ -68,6 +86,10 @@ func _initialize() -> void:
 			"des cases qui ne sont pas des triplets"],
 		['{"format": "marchingblocks-project", "version": 1, "couches": [{"nom": "a"}, 3]}',
 			"une couche qui n'est pas un objet — même après une couche saine"],
+		['{"format": "marchingblocks-project", "version": 1, "couches": [{}], "eaux": [{"sources": [1, 2]}]}',
+			"des sources d'eau qui ne sont pas des triplets"],
+		['{"format": "marchingblocks-project", "version": 1, "couches": [{}], "eaux": 5}',
+			"des couches d'eau qui ne sont pas une liste"],
 	]:
 		var e: Array = []
 		_vrai(Projet.depuis_texte(cas[0], e).is_empty() and not e.is_empty(), "refusé, avec sa raison : %s" % cas[1])
@@ -116,10 +138,75 @@ func _initialize() -> void:
 	_vrai(not Vue.sur_la_grille_centrale(Vector3i(0, 0, -25)), "la case −25 en z déborde : grille locale")
 
 	_les_fichiers_dans_windows()
+	_l_exemple()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
+
+
+## L'EXEMPLE LIVRÉ (2 octobre 2026) : une archive bâtie ICI, à la main — les attendus ne passent pas par l'emballeur.
+func _archive(chemin: String, fichiers: Dictionary) -> void:
+	var z := ZIPPacker.new()
+	z.open(chemin)
+	for n in fichiers:
+		z.start_file(n)
+		z.write_file(fichiers[n] if fichiers[n] is PackedByteArray else str(fichiers[n]).to_utf8_buffer())
+		z.close_file()
+	z.close()
+
+
+func _l_exemple() -> void:
+	var racine := DOSSIER + "/exemple"
+	var archive := DOSSIER + "/exemple.zip"
+	_vider(racine)   # une installation d'un passage précédent fausserait « s'installe » et « n'écrase pas »
+	var png := PackedByteArray([137, 80, 78, 71, 0, 255, 1, 2])
+	_archive(archive, {
+		"example.mbproj": '{"source": "{EXEMPLE}/example_witness.glb", "temoin": "{EXEMPLE}/example_witness.mbtiles"}',
+		"example_witness.mbtiles": '{"image": "{EXEMPLE}/example_witness_images/a.png"}',
+		"example_witness_images/a.png": png,
+		"STAMP": "0123456789abcdef0123",
+	})
+	var erreurs: Array = []
+	var chemin := Exemple.installer(archive, racine, erreurs)
+	var dossier := ProjectSettings.globalize_path(racine).path_join("0123456789ab")
+	_egal(chemin, dossier.path_join("example.mbproj"), "l'exemple s'installe dans un dossier nommé par son STAMP")
+	_egal(FileAccess.get_file_as_string(chemin),
+		'{"source": "%s/example_witness.glb", "temoin": "%s/example_witness.mbtiles"}' % [dossier, dossier],
+		"les chemins du projet pointent dans le dossier d'installation")
+	_egal(FileAccess.get_file_as_string(dossier.path_join("example_witness.mbtiles")),
+		'{"image": "%s/example_witness_images/a.png"}' % dossier, "… et ceux du témoin aussi")
+	_egal(FileAccess.get_file_as_bytes(dossier.path_join("example_witness_images/a.png")), png,
+		"une image est copiée telle quelle, octet pour octet")
+	_vrai(not FileAccess.file_exists(dossier.path_join("STAMP")), "le STAMP n'est pas copié")
+	# L'utilisateur modifie l'exemple : le réinstaller ne l'écrase pas.
+	_ecrire(chemin, "modifié par l'utilisateur")
+	_egal(Exemple.installer(archive, racine), chemin, "réinstaller rend le même projet")
+	_egal(FileAccess.get_file_as_string(chemin), "modifié par l'utilisateur", "… sans écraser ce qu'on y a fait")
+	# Un exemple plus récent va dans un AUTRE dossier.
+	_archive(archive, {"example.mbproj": "v2", "STAMP": "fedcba9876543210"})
+	var v2 := Exemple.installer(archive, racine)
+	_vrai(v2.contains("fedcba987654") and FileAccess.get_file_as_string(v2) == "v2"
+		and FileAccess.get_file_as_string(chemin) == "modifié par l'utilisateur",
+		"un exemple plus récent s'installe à côté, l'ancien reste")
+	# Refus.
+	_archive(archive, {"example.mbproj": "{}"})
+	erreurs = []
+	_vrai(Exemple.installer(archive, racine, erreurs) == "" and not erreurs.is_empty(), "une archive sans STAMP est refusée")
+	erreurs = []
+	_vrai(Exemple.installer(DOSSIER + "/absente.zip", racine, erreurs) == "" and not erreurs.is_empty(),
+		"pas d'archive : refusé, et dit")
+
+
+func _vider(dossier: String) -> void:
+	var d := DirAccess.open(dossier)
+	if d == null:
+		return
+	for f in d.get_files():
+		d.remove(f)
+	for s in d.get_directories():
+		_vider(dossier.path_join(s))
+		d.remove(s)
 
 
 func _ecrire(chemin: String, texte: String) -> void:

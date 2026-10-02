@@ -13,8 +13,9 @@ extends Node
 ##            W A S D, Q E) and no click paints. The aim is kept, and comes back as it was.
 ##   TOOLS    add (A) · dig (D) · select (S) · rect (G) · box (B)      Shift does the opposite
 ##   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
-##   SHAPES   tunnel · well · bridge · balcony (`mb_shapes.gd`), always aimed at the matter: Straight is one
-##            click square out of a face; Connect is two clicks, two faces anywhere (Escape forgets the first)
+##   SHAPES   tunnel · well · bridge · balcony · stairs (`mb_shapes.gd`), always aimed at the matter:
+##            Straight is one click square out of a face; Connect is two clicks, two faces anywhere (two
+##            floors for stairs; Escape forgets the first)
 ##   KEYS     Delete · Escape · arrows move the selection (they follow the camera; Shift + up / down
 ##            lift) · Ctrl+C / Ctrl+X / Ctrl+V
 ##
@@ -57,6 +58,8 @@ var profile := "round"
 var shape_size := 2
 var shape_length := 8
 var rail := true
+## One-click stairs: how deep each step is, 1 to Shapes.STEP_MAX cells.
+var stairs_step := 2
 ## The first end of a Connect: {"cell", "face"}, empty otherwise.
 var shape_anchor := {}
 var selection := {}
@@ -312,10 +315,13 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 #
 # A shape starts from a FACE, so it always aims at the matter, whatever the aim (the grid has no face).
 
-const SHAPE_NAMES := {"tunnel": "Tunnel", "well": "Well", "bridge": "Bridge", "balcony": "Balcony"}
+const SHAPE_NAMES := {"tunnel": "Tunnel", "well": "Well", "bridge": "Bridge", "balcony": "Balcony",
+	"stairs": "Stairs"}
 const SHAPE_ERRORS := {
 	"needs_a_wall": "click a WALL, a side face of the matter.",
 	"needs_floor_or_ceiling": "click a FLOOR or a CEILING, a top or bottom face.",
+	"needs_a_floor": "click two FLOORS, the top face of the matter.",
+	"too_steep": "too steep: one cell up for each cell across at most. Pick two floors further apart.",
 	"same_cell": "the second end must be another cell.",
 	"too_far": "the two ends are too far apart.",
 	"nothing_in_front": "no wall in front within reach. Raise the length, or Connect two walls.",
@@ -339,7 +345,7 @@ func _waiting_for_first_end() -> bool:
 ## What the shape would do with this face: the first end of a Connect is already set, or it is one click.
 func shape_request(hit: Dictionary) -> Dictionary:
 	var p := {"shape": special, "profile": profile, "size": shape_size, "length": shape_length, "rail": rail,
-		"connect": false, "a": hit["cell"], "face_a": hit["normal"]}
+		"step": stairs_step, "connect": false, "a": hit["cell"], "face_a": hit["normal"]}
 	if connect_ends and not shape_anchor.is_empty() and special != "balcony":
 		p["connect"] = true
 		p["a"] = shape_anchor["cell"]
@@ -374,9 +380,8 @@ func click_shape(camera: Camera3D, position: Vector2) -> void:
 		return
 	var name: String = SHAPE_NAMES.get(special, special)
 	if _waiting_for_first_end():
-		if Shapes.normal_for(special, world.cells(), hit["cell"], hit["normal"]) == Vector3i.ZERO:
-			var why: String = "needs_floor_or_ceiling" if special == "well" else "needs_a_wall"
-			status = "%s — %s" % [name, SHAPE_ERRORS[why]]
+		if Shapes.normal_for(special, world.cells(), hit["cell"], hit["normal"], true) == Vector3i.ZERO:
+			status = "%s — %s" % [name, SHAPE_ERRORS[Shapes.end_error(special, true)]]
 		else:
 			shape_anchor = {"cell": hit["cell"], "face": hit["normal"]}
 			status = "%s — first end set. Click the second one (Escape forgets it)." % name

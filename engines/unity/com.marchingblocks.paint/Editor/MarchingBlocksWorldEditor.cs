@@ -12,8 +12,9 @@
 //            choosing an aim (its button or Tab) stops navigating too. Rules: AimState in MBTools.cs.
 //   TOOLS    Add (A) · Dig (D) · Select (S) · Rect (G) · Box (B)      Shift does the opposite
 //   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
-//   SHAPES   Tunnel · Well · Bridge · Balcony (MBShapes.cs), always aimed at the matter: Straight is one
-//            click square out of a face, Connect is two clicks on two faces anywhere (Esc forgets the first)
+//   SHAPES   Tunnel · Well · Bridge · Balcony · Stairs (MBShapes.cs), always aimed at the matter: Straight
+//            is one click square out of a face, Connect is two clicks on two faces anywhere (two floors for
+//            Stairs; Esc forgets the first)
 //   SELECT   Fill, Delete, Extrude ↑ ↓ (the floor follows), Grow, Shrink, Connected,
 //            Move (arrow keys follow the camera; Shift + ↑ ↓ raise and lower), Copy / Cut / Paste
 //
@@ -46,6 +47,7 @@ namespace MarchingBlocks.Paint.EditorTools
         static int shapeSize = 2;
         static int shapeLength = 8;
         static bool rail = true;
+        static int stairsStep = 2;
         // The first end of a Connect, or null.
         static Hit? shapeAnchor;
 
@@ -196,7 +198,9 @@ namespace MarchingBlocks.Paint.EditorTools
                         "Length deep); Connect joins a floor and a ceiling."),
                     Icon("bridge", "Bridge — a deck out of a WALL across the air to the first wall in front; Connect " +
                         "joins two walls, and the deck bends."),
-                    Icon("balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."));
+                    Icon("balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."),
+                    Icon("stairs", "Stairs — click a WALL where they should arrive: they come down to the ground, Step " +
+                        "cells per step; Connect climbs from one floor to another, higher up."));
                 if (picked != shown && picked >= 0) { special = (SpecialShape)picked; mode = Mode.Shape; CancelAll(); }
                 GUILayout.FlexibleSpace();
             }
@@ -217,15 +221,20 @@ namespace MarchingBlocks.Paint.EditorTools
                             Icon("round", "Round — a round tube."),
                             Icon("square", "Square — a square duct."),
                             Icon("arch", "Arch — a flat floor and a round vault: a corridor you can walk."));
-                    if (special == SpecialShape.Bridge || special == SpecialShape.Balcony)
+                    if (special == SpecialShape.Bridge || special == SpecialShape.Balcony || special == SpecialShape.Stairs)
                         rail = IconToggle(rail, Icon("rail", "Rail — a one-cell rim along the open sides. Needs a size of 2 or more."));
                     GUILayout.FlexibleSpace();
                 }
                 shapeSize = EditorGUILayout.IntSlider(new GUIContent("Size", "[ and ] — 1 is one cell across, 2 is three, 3 is five…"), shapeSize, 1, 7);
                 if (special == SpecialShape.Balcony || !connectEnds)
-                    shapeLength = EditorGUILayout.IntSlider(new GUIContent(special == SpecialShape.Bridge ? "Reach" : "Depth",
+                    shapeLength = EditorGUILayout.IntSlider(new GUIContent(special == SpecialShape.Bridge ? "Reach"
+                        : special == SpecialShape.Stairs ? "Length" : "Depth",
                         "How deep a straight tunnel or well goes when it finds no cave, how far a straight bridge looks for " +
-                        "a wall, how far a balcony sticks out."), shapeLength, 1, MBShapes.LengthMax);
+                        "a wall, how far a balcony sticks out, how far stairs may run before they reach the ground."),
+                        shapeLength, 1, MBShapes.LengthMax);
+                if (special == SpecialShape.Stairs && !connectEnds)
+                    stairsStep = EditorGUILayout.IntSlider(new GUIContent("Step", "How deep each stair is, in cells (1 is steep)."),
+                        stairsStep, 1, MBShapes.StepMax);
             }
 
             if (mode == Mode.Add || mode == Mode.Dig || mode == Mode.Select)
@@ -476,6 +485,8 @@ namespace MarchingBlocks.Paint.EditorTools
         {
             { "needs_a_wall", "click a WALL, a side face of the matter." },
             { "needs_floor_or_ceiling", "click a FLOOR or a CEILING, a top or bottom face." },
+            { "needs_a_floor", "click two FLOORS, the top face of the matter." },
+            { "too_steep", "too steep: one cell up for each cell across at most. Pick two floors further apart." },
             { "same_cell", "the second end must be another cell." },
             { "too_far", "the two ends are too far apart." },
             { "nothing_in_front", "no wall in front within reach. Raise Reach, or Connect two walls." },
@@ -487,7 +498,7 @@ namespace MarchingBlocks.Paint.EditorTools
         static ShapeRequest RequestFor(Hit hit)
         {
             var r = new ShapeRequest { Shape = special, Profile = profile, Size = shapeSize, Length = shapeLength, Rail = rail,
-                A = hit.Cell, FaceA = hit.Normal };
+                Step = stairsStep, A = hit.Cell, FaceA = hit.Normal };
             if (connectEnds && shapeAnchor != null && special != SpecialShape.Balcony)
             {
                 r.Connect = true;
@@ -534,8 +545,8 @@ namespace MarchingBlocks.Paint.EditorTools
             string name = special.ToString();
             if (WaitingForFirstEnd)
             {
-                if (MBShapes.NormalFor(special, World.Cells, hit.Cell, hit.Normal).Equals(new Int3(0, 0, 0)))
-                    status = $"{name} — {ShapeErrors[special == SpecialShape.Well ? "needs_floor_or_ceiling" : "needs_a_wall"]}";
+                if (MBShapes.NormalFor(special, World.Cells, hit.Cell, hit.Normal, true).Equals(new Int3(0, 0, 0)))
+                    status = $"{name} — {ShapeErrors[MBShapes.EndError(special, true)]}";
                 else
                 {
                     shapeAnchor = hit;

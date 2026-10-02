@@ -140,7 +140,18 @@ static func boite_d_octant(t: int) -> AABB:
 ## côté du bloc et pas de l'autre grossit la boîte d'un seul côté, et la déduction DÉCALAIT TOUS LES PLANS
 ## DE COUPE. Mesuré sur le faux travail d'artiste : un liseré d'herbe qui surplombe les falaises du bord
 ## rendait « le bloc mesure 1,000 de trop » et 579 remarques de couture.
+## ⚠ LA MÉMOIRE DES RELECTURES N'EST ACTIVE QUE PENDANT CET APPEL (`Decoupe.memoriser`) : la sortie est celle
+## d'avant au bit près, sans redescendre du GPU ce qui a déjà été lu.
 static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
+		erreurs: Array, peau := true, remarques: Array = [],
+		sources: Dictionary = {}, origine: Variant = null) -> Dictionary:
+	Decoupe.memoriser(true)
+	var r := _trancher(mesh, cases, cellule, creuses, erreurs, peau, remarques, sources, origine)
+	Decoupe.memoriser(false)
+	return r
+
+
+static func _trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array,
 		erreurs: Array, peau := true, remarques: Array = [],
 		sources: Dictionary = {}, origine: Variant = null) -> Dictionary:
 	# `sources` (sortie) — {clé: {"mesh", "sommet", "copies"}} : d'où vient la tuile de chaque clé, et combien
@@ -265,17 +276,19 @@ static func trancher(mesh: Mesh, cases: Vector3i, cellule: float, creuses: Array
 
 		# Recentré sur l'origine, puis ramené à l'ÉCHELLE UNITÉ.
 		var centre := (Vector3(v) + Vector3.ONE) * cellule
-		var recentre: ArrayMesh = Decoupe.poser(morceau,
-			Transform3D(Basis().scaled(Vector3.ONE / cellule), Vector3.ZERO)
-				* Transform3D(Basis(), -centre))
 
 		# ⚠ ET RAMENÉ À SA RÉFÉRENCE. La pièce trouvée est la classe posée avec l'orientation
 		# `r["orientation"]` ; pour obtenir le mesh de RÉFÉRENCE il faut lui appliquer la
 		# rotation INVERSE. Une rotation étant orthogonale, son inverse est sa transposée.
 		# L'ancien trancheur se trompait de sens ici, et le test ne le voyait pas.
+		# ⚠ LES DEUX POSES EN UNE (1er octobre 2026) : chaque pose envoie un maillage au GPU et l'en relit. La
+		# rotation est une permutation de signes (des 0 et des ±1, exacts en flottant) : composée, elle rend les
+		# mêmes sommets au bit près — les suites du cœur le gardent.
 		var base: Basis = grille.get_basis_with_orthogonal_index(r["orientation"])
-		var reference: ArrayMesh = Decoupe.poser(recentre,
-			Transform3D(base.transposed(), Vector3.ZERO))
+		var reference: ArrayMesh = Decoupe.poser(morceau,
+			Transform3D(base.transposed(), Vector3.ZERO)
+				* Transform3D(Basis().scaled(Vector3.ONE / cellule), Vector3.ZERO)
+				* Transform3D(Basis(), -centre))
 		pieces[cle] = reference
 		sources[cle] = {"mesh": reference, "sommet": v, "copies": int(copies[cle])}
 		vues[cle] = MB.classes()[r["classe"]]["bits"]
@@ -325,7 +338,7 @@ static func verifier_couture_texture(pieces: Dictionary, remarques: Array) -> vo
 			if image.is_compressed():
 				image = image.duplicate()
 				image.decompress()
-			var arrays: Array = mesh.surface_get_arrays(s)
+			var arrays: Array = Decoupe.tableaux(mesh, s)
 			if arrays[Mesh.ARRAY_TEX_UV] == null:
 				continue
 			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -472,7 +485,7 @@ static func verifier_octants(pieces: Dictionary, bits_par_nom: Dictionary, erreu
 		var trouves := {}
 		var mesh: ArrayMesh = pieces[nom]
 		for s in mesh.get_surface_count():
-			var arrays: Array = mesh.surface_get_arrays(s)
+			var arrays: Array = Decoupe.tableaux(mesh, s)
 			if arrays.is_empty():
 				continue
 			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -966,7 +979,7 @@ static func _segments_sur_les_plans(mesh: Mesh, tableaux: Array = []) -> PackedV
 	if liste.is_empty():
 		liste = []
 		for s in mesh.get_surface_count():
-			liste.append(mesh.surface_get_arrays(s))
+			liste.append(Decoupe.tableaux(mesh, s))
 	for arrays in liste:
 		var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 		var idx = arrays[Mesh.ARRAY_INDEX]

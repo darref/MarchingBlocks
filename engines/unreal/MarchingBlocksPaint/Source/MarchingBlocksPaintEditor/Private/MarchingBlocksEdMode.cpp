@@ -375,13 +375,16 @@ namespace MarchingBlocksEdModeDetail
 	const TCHAR* ShapeName(EMarchingBlocksSpecialShape S)
 	{
 		return S == EMarchingBlocksSpecialShape::Well ? TEXT("Well") : S == EMarchingBlocksSpecialShape::Bridge ? TEXT("Bridge")
-			: S == EMarchingBlocksSpecialShape::Balcony ? TEXT("Balcony") : TEXT("Tunnel");
+			: S == EMarchingBlocksSpecialShape::Balcony ? TEXT("Balcony") : S == EMarchingBlocksSpecialShape::Stairs ? TEXT("Stairs")
+			: TEXT("Tunnel");
 	}
 
 	FString ShapeError(const std::string& Code)
 	{
 		if (Code == "needs_a_wall") return TEXT("click a WALL, a side face of the matter.");
 		if (Code == "needs_floor_or_ceiling") return TEXT("click a FLOOR or a CEILING, a top or bottom face.");
+		if (Code == "needs_a_floor") return TEXT("click two FLOORS, the top face of the matter.");
+		if (Code == "too_steep") return TEXT("too steep: one cell up for each cell across at most. Pick two floors further apart.");
 		if (Code == "same_cell") return TEXT("the second end must be another cell.");
 		if (Code == "too_far") return TEXT("the two ends are too far apart.");
 		if (Code == "nothing_in_front") return TEXT("no wall in front within reach. Raise Shape Length, or Connect two walls.");
@@ -445,9 +448,9 @@ void UMarchingBlocksEdMode::ClickShape(AMarchingBlocksWorld* World, const FVecto
 	if (WaitingForFirstEnd(World))
 	{
 		const MBPaint::FShapeRequest R = World->ShapeSettings();
-		const MBPaint::FCell N = MBPaint::Shapes::NormalFor(R.Shape, World->GetCells(), Hit.Cell, Hit.Normal);
+		const MBPaint::FCell N = MBPaint::Shapes::NormalFor(R.Shape, World->GetCells(), Hit.Cell, Hit.Normal, true);
 		if (N.X == 0 && N.Y == 0 && N.Z == 0)
-			World->Status = Name + TEXT(" — ") + ShapeError(R.Shape == MBPaint::ESpecialShape::Well ? "needs_floor_or_ceiling" : "needs_a_wall");
+			World->Status = Name + TEXT(" — ") + ShapeError(MBPaint::Shapes::EndError(R.Shape, true));
 		else
 		{
 			bHasShapeAnchor = true;

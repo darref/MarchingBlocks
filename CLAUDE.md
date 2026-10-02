@@ -21,6 +21,81 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 > projet, mais 3D au lieu de 2D »), et exportera vers TROIS greffons de peinture — Godot, Unity,
 > Unreal — **écrits APRÈS lui**.
 
+- **LES GREFFONS ATTENDENT LA FIN DU LOGICIEL — DÉCIDÉ (Jordan, 1er octobre 2026)** : « les greffons à faire
+  quand tout le dev du soft sera terminé, sinon allers-retours incessants ». Une fonction neuve du logiciel ne
+  se porte plus dans Godot, Unity et Unreal au fil de l'eau : on la note dans **LA LISTE DES GREFFONS À FAIRE**
+  (ci-dessous), et tout part d'un bloc quand le logiciel est fini. ⚠ Ce qui est DÉJÀ dans les greffons n'est pas
+  abandonné : un changement du logiciel ne doit pas les CASSER (un format lu par eux reste lisible, les gardes
+  de `test_greffon_peinture` et des bancs restent vertes) — il ne les fait simplement plus AVANCER.
+- **LA LISTE DES GREFFONS À FAIRE** (à tenir à jour à chaque fonction ajoutée au logiciel) :
+  - **les fluides** (§5, « le mode Fluids ») : lire la clé `water` de `world.json` (règle `regle_eau()`, et la
+    porter dans `regle()` et `world_conformance.json`) ; poser chaque nappe `water/<nom>.glb` avec un matériau
+    choisi par l'artiste, et les SIX presets réécrits dans chaque moteur (stylisé, clair, réfléchissant, et depuis
+    le 2 octobre 2026 lave, marais, acide luminescent — leurs aspects exportés : `lava`, `swamp`, `acid`) qui
+    lisent le contrat (COLOR_0 : courant, genre, profondeur) ; un emplacement de matériau par genre d'eau ; plus
+    tard, recalculer l'eau quand on peint (`fluides.gd` réécrit en C# et C++, avec ses cas d'épreuve) ; prévenir
+    l'artiste que les presets ne sont pas obligatoires.
+  - **la salle** (§5, « les formes spéciales ») : `FS.salle` réécrite en C# et en C++, ses cas dans
+    `tools_conformance.json`, et le geste « tracer un rectangle sur la grille » dans les trois éditeurs.
+  - **la règle multicouche** (§5, « les couches exclusives ») : un monde de plusieurs couches lu par un greffon
+    pose aujourd'hui chaque couche SEULE — une rainure à chaque frontière, là où l'appli n'en montre aucune.
+    Il faut : la règle dans `FormatNeutre.regle()` / `FormatMonde.regle()` (l'ordre des couches de `world.json`
+    EST la priorité ; une couche cachée sort de l'union), `MB.poses_en_couches` (la référence, déjà écrite) réécrite
+    dans les trois, des cas multicouches dans `world_conformance.json`, et l'exclusivité dans les pinceaux des trois
+    éditeurs (peindre une case la retire des autres couches du même monde, dans la même annulation).
+
+- **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
+  qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
+  **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
+  POUR LA 0.9 / 1.0 ET REMIS À UNE MISE À JOUR FUTURE** (§3, « le terrain monolithique et les props »).
+- **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
+  projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
+  continuer de faire tant que le dev n'est pas clos, figé ensuite ».
+  - `DEV_TOOLS/prendre_l_exemple.gd` emballe ce projet dans `exemple/exemple.zip` — LANCÉ PAR
+    `exporter_marchingblocks.sh` avant chaque export (un échec arrête l'export). Il ne fait que LIRE chez Jordan
+    (MD5 vérifiés). Les chemins absolus deviennent `{EXEMPLE}/…`, le nom « test » devient « example ».
+  - ⚠ **LE .glb DE CHAQUE TÉMOIN EST REFAIT DEPUIS SON .mbtiles** : chez Jordan `test_witness.glb` n'existe pas
+    (la couche tient de son CACHE, que l'acheteur n'a pas) — sans lui, l'exemple s'ouvrait en cubes rouges
+    (mesuré par mutation : Hills, 0 tuile, 75 153 fautes).
+  - **L'appli** (`app/exemple.gd`, bouton « Open the example » dans Project, et le manuel) l'installe dans
+    `user://example/<STAMP>/`, chemins réécrits, et l'ouvre comme un projet ordinaire. ⚠ **JAMAIS ÉCRASÉE** :
+    l'exemple s'enregistre tout seul ; un exemple plus récent (autre STAMP) s'installe à côté.
+  - **`MarchingBlocks.exe --open-example`** l'ouvre au lancement (une démo, et l'épreuve de l'exe sans clic).
+    **ÉPROUVÉ DANS L'EXE CHIFFRÉ** : l'archive est lue depuis le PCK chiffré, installée (7 fichiers), le monde
+    s'ouvre texturé, 2 couches, aucun cube rouge (capture d'écran) ; `test.mbproj` intact (MD5).
+  - **POUR LE FIGER** : créer `exemple/FIGE` (l'emballeur ne reprend plus rien), retirer `exemple/exemple.zip` du
+    `.gitignore` et le commiter — tant qu'il vit, il n'entre pas au dépôt (repris à chaque export).
+  - **MESURÉ** : 7 fichiers, 865 Ko ; `test_projet` 72 (archive bâtie à la main : chemins réécrits, image octet pour
+    octet, pas d'écrasement, un STAMP neuf à côté, refus) ; `fumee_appli` 535 (la VRAIE archive par le bouton, dans
+    un dossier de données vierge : 2 couches, leurs cases, leurs tuiles, 0 faute, rien de « missing »). Quatre
+    mutations rouges (chemins non réécrits, installation écrasée, STAMP ignoré, `.glb` non refaits).
+  - ⚠ **UN LANCEMENT DE L'EXE A OUVERT `test.mbproj` (2 octobre 2026, 07:11)** : le projet d'essai passé en argument
+    était refusé (mauvais `format`), et l'appli est retombée sur le DERNIER projet ouvert. Il a été réécrit à la
+    fermeture ; ses deux couches n'ont aucune case commune, donc la migration des couches exclusives n'a rien pu
+    lui retirer. Pour éprouver l'exe : un projet d'essai VALIDE, et `reglages.cfg` sauvé et rendu.
+
+- **LA CLÔTURE DE LA 1.1.0, AVANT TOUTE COMMUNICATION — DÉCIDÉ (Jordan, 1er octobre 2026)**, transmis par une
+  autre session à celle qui tient la stratégie de commercialisation : au moment de clore le développement de la
+  1.1.0, et AVANT que la communication commence, on fait **un monde entier, de taille raisonnable**, créé dans le
+  logiciel et/ou peint dans les **trois greffons** (Godot, Unity, Unreal), **en se filmant** pendant qu'on le fait ;
+  puis on **monte la vidéo du trailer** à partir de ces prises. C'est une étape du plan de sortie : le trailer
+  vient du vrai produit en train de servir, pas d'images arrangées.
+  - ⚠ Elle tombe APRÈS « les greffons attendent la fin du logiciel » (ci-dessus) : les trois greffons doivent
+    avoir rattrapé le logiciel avant qu'on y peigne pour la caméra.
+  - **PROPOSÉ (2 octobre 2026), dans la stratégie de lancement** (le document Claude « MarchingBlocks — stratégie de
+    lancement », section « La clôture de la 1.1.0 et le trailer », et son calendrier) : gel le 13 novembre, les
+    greffons rattrapent du 16 novembre au 4 décembre, le monde filmé du 7 au 13 décembre, le montage du 14 au 18,
+    et RIEN DE PUBLIC avant : la communication commence avec la page Steam et le trailer le 21 décembre, lancement
+    le 12 janvier 2027. Une île d'environ 64 × 24 × 64 cases ; Jordan à la souris (les plans de caméra peuvent être
+    scriptés) ; OBS Studio et DaVinci Resolve ; 60 s, et une version de 2 min.
+  - ⚠ **OUVERT, À JORDAN** : la charte dit « 1.1.0 », l'appli affiche v0.1.0 et le document numérotait l'accès
+    anticipé 0.1 ; le document propose que la 1.1.0 soit la version de lancement.
+  - **DÉCIDÉ (Jordan, 2 octobre 2026) : le lancement est un ACCÈS ANTICIPÉ, en 0.9.0** ; 1.0.0 à sa sortie (le prix
+    plein). Posé le même jour dans `project.godot` (`config/version`) et dans les propriétés de l'exe
+    (`export_presets.cfg`, 0.9.0.0). ⚠ La version entre dans l'empreinte du témoin calculé (`Projet.empreinte`) : à
+    la première ouverture, son lot est retranché une fois ; et l'exe se réinscrit dans Windows (version changée). Un 1.x se lit « fini », ce qu'un accès anticipé
+    dit justement ne pas être ; et un 1.1.0 sans 1.0 publié fait demander où est passée la 1.0.
+
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
   qu'on regarde et l'aller-retour avec l'artiste, droite = la main), trois ateliers — **Witness**,
@@ -738,6 +813,9 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
+⚠ **REPORTÉ (Jordan, 2 octobre 2026) : abandonné pour la 0.9 / 1.0, remis à une MISE À JOUR FUTURE.** Tout ce qui
+suit reste la conception retenue pour ce jour-là.
+
 ⚠ **ÉCRIT AVANT « UNE TUILE PAR CLÉ » (30 septembre 2026)** : là où ce qui suit dit « exemplaire », lire
 « tuile ». La condition sur les CLÉS tient toujours ; la réserve sur les exemplaires tombe avec eux.
 
@@ -1265,7 +1343,8 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
     `819204827d6121ec7e13d41aefdd4dcc`** (mesuré dans Godot ET Unity, qui s'accordent), et non 90 651 /
     `c3876f4f…`. Probablement la découpe sans triangles plats (`cb59fab`) — NON vérifié.
 - **OUVERT** : la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
-  jusqu'à la hauteur de la case changent) — ni l'appli ni les greffons ne la font encore (le Unity pose
+  jusqu'à la hauteur de la case changent) — l'APPLI la fait depuis le 1er octobre 2026 (§5, « Le geste d'une
+  case »), les greffons ne la font pas encore (le Unity pose
   un GameObject par tuile : à mesurer sur une vraie carte) ; **éprouver le greffon Unreal dans l'éditeur** (il compile
   sur 5.8, voir plus haut).
 
@@ -1531,6 +1610,22 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     miroir, ménage qui efface tout, U ignoré — et « une échelle par îlot », d'abord MUETTE sur le cube
     (îlots tous égaux) : un pavé 2×1×1 la fait rougir.
     ⚠ `trait` est devenu un MOT RÉSERVÉ de GDScript 4.7 : `var trait :=` ne compilait plus.
+  - **LE LASSO ET LE CERCLE — DEMANDÉS PAR JORDAN ET ÉCRITS (2 octobre 2026)** : « la sélection en mode Geometry de
+    Witness des vertices, edges ou faces au lasso, ou cercle ». Jordan : c'est la DERNIÈRE fonction du logiciel.
+    - les gestes de Blender : **Ctrl + clic droit glissé** = lasso (Maj + Ctrl retire), ou le bouton « Lasso » puis
+      le clic gauche ; **C** = le cercle : on PEINT au clic gauche, Maj ou le clic du milieu retire, la molette règle le
+      rayon, clic droit / Échap / Entrée finit. Le tracé se dessine sur un calque 2D de la vue.
+    - **UNE SEULE RÈGLE** (`_choisir_si`) pour la boîte, le lasso et le cercle : sommet par son point, face par son
+      centre (et la règle des faces de dos), arête par ses DEUX bouts (boîte, lasso) ou par son MILIEU (le cercle,
+      qu'on promène comme un pinceau) ; seulement ce qu'on voit, sauf en X-ray (Alt+Z). Le cercle AVALE les touches,
+      comme Blender.
+    - **MESURÉ** : `fumee_appli` 455, par de VRAIS événements de souris, attendus calculés par la caméra seule en X-ray
+      (le triangle, le disque, les milieux d'arêtes). Sept mutations rouges ; ⚠ deux pièges du TEST, pas du code : posé
+      au centre de l'écran, le triangle ne couvrait aucun sommet (« exactement eux » passait sur 0 = 0), et vue de face
+      depuis le bloc entier, une tuile de paroi faisait 3 pixels de large (les points du lasso tombaient à moins de
+      4 pixels) — caméra en perspective, tout près de la tuile. « Les arêtes par leurs deux bouts » d'abord MUETTE :
+      aucun test en mode arête. Vu à l'image (le contour du lasso, le cercle).
+    - ⚠ **PAS TENU EN MAIN.**
   - **PAS ENCORE ÉCRIT** : une projection cylindrique ; un vrai LSCM ; un rangement plus serré (la marge
     visée laisse ~20 % de patron vide). Rien n'a été tenu en main.
   - **WITNESS GEOMETRY ET WITNESS TEXTURING — DÉCIDÉ (Jordan, 1er octobre 2026), ÉCRIT LE MÊME JOUR** : « faire
@@ -1604,8 +1699,54 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
 - **LE MONDE PEINT NE DÉPEND PLUS DU TRAVAIL QUI L'HABILLE.** Une **couche** = une source de tuiles
-  (le témoin calculé ou un `.glb`) et SES cases, dans son propre `MassifPeint` : son voisinage ne
-  regarde que ses cases. Trancher change les tuiles de la couche ACTIVE, **jamais ses cases**.
+  (le témoin calculé ou un `.glb`) et SES cases, dans son propre `MassifPeint`. ~~Son voisinage ne regarde que
+  ses cases~~ — **RENVERSÉ le 2 octobre 2026** (« les couches exclusives », ci-dessous). Trancher change les
+  tuiles de la couche ACTIVE, **jamais ses cases**.
+- **LES COUCHES EXCLUSIVES, PRIORITÉ PAR L'ORDRE — DÉCIDÉ (Jordan, 2 octobre 2026 : « les layers de cases ne
+  devraient pas s'écraser les uns les autres à la repeinture ? la superposition est une idée moyenne », puis « go,
+  cases exclusives avec priorité par l'ordre »), ÉCRIT LE MÊME JOUR.**
+  - ⚠ **LE DÉFAUT QUI LE JUSTIFIAIT** : deux couches pouvaient porter la MÊME case (deux tuiles l'une dans l'autre),
+    et chacune, ne voyant que ses cases, fermait sa surface à la frontière : deux parois face à face, une RAINURE
+    visible là où deux couches se touchent (vu à l'image, `capture_couches_exclusives.gd`, photo 2).
+  - **UNE CASE N'APPARTIENT QU'À UNE COUCHE** : la poser dans la couche active la retire des autres, DANS LA MÊME
+    ANNULATION (`_vols`, action comme coup de pinceau ; un Ctrl+Z rend la case à celle qui l'avait). Creuser ne
+    touche que la couche active.
+  - **LE CHOIX DES TUILES LIT L'UNION DES COUCHES VISIBLES** (`MassifPeint.union`, un dictionnaire {case: rang}
+    PARTAGÉ par l'écran, vidé et rempli, jamais remplacé) ; **un sommet est posé par la couche de plus petit rang
+    parmi ses huit cases** (`MB.couche_du_sommet`), avec SES tuiles. Une frontière ne porte donc rien : le monde
+    est fermé comme s'il n'y avait qu'une couche. La référence pour les greffons : `MB.poses_en_couches`.
+  - **L'ORDRE DE LA LISTE EST LA PRIORITÉ** (le haut gagne), et **Up / Down** (Jordan, 2 octobre 2026 : « go pour
+    les boutons ↑ ↓ ») déplacent la couche active d'un cran — UNE action, un Ctrl+Z ; ses cases et son témoin ne
+    bougent pas (`_deplacer_couche`, `Vue.deplacer_couche`). Gardé par `fumee_appli` (527 : par le vrai bouton,
+    grisés aux bouts, la frontière change de propriétaire, Ctrl+Z) ; trois mutations rouges (union pas refaite,
+    pas d'annulation, la vue pas déplacée). Vu à l'image (`capture_couches_exclusives.gd`, `1b_B_au_dessus`). Une couche CACHÉE sort de l'union : le monde se
+    referme sans elle. Supprimer, rendre, cacher, montrer refont l'union et les rangs (`_refaire_l_union`) ; un
+    geste ne refait que les alentours des cases changées, dans CHAQUE couche (`_suivre_les_cases`).
+  - ⚠ `rang` < 0 : la couche est seule — l'ancienne règle mot pour mot (le greffon Godot, les sondes, les tests).
+  - ⚠ **UN PROJET D'AVANT** peut porter une case dans plusieurs couches : à l'ouverture la plus haute la garde, les
+    autres la perdent, et le rapport le dit (`_rendre_exclusives`).
+  - ⚠ **UN DÉFAUT VU EN FUMÉE** : une couche neuve est bâtie AVANT de recevoir son rang ; sa reconstruction locale
+    lisait encore ses seules cases, et ne posait plus RIEN. `reconstruire_autour` refait tout quand son état ne
+    lit pas l'union qu'il devrait (`is_same`).
+  - ⚠ **LA LISTE DES COUCHES NE RECOMPTAIT JAMAIS SES CASES après un geste** (« 0 cells » sur une couche peinte,
+    vu à l'image) ; depuis le vol, un geste change le compte d'une AUTRE couche. Rafraîchie une fois par image.
+  - ⚠ **L'EAU N'A PAS CHANGÉ** : elle lit toutes les couches, cachées comprises (« une case d'une autre couche, même
+    cachée, retient l'eau »).
+  - **MESURÉ** : `test_massif_peint` (§13, 96 : l'attendu par `MB.poses` sur l'union et un propriétaire recalculé
+    à la main ; seules, les deux couches posaient des tuiles en trop à la frontière ; reconstruction locale = complète,
+    y compris pour une couche rangée après sa construction) ; `fumee_appli` (le vol par une action et par un coup,
+    Ctrl+Z / Ctrl+Y, aucune case dans deux couches, les sommets posés par chaque couche = ceux dont elle est la
+    propriétaire — recalculés depuis les GRILLES, sans `couche_du_sommet` ni l'union de l'écran —, local = complet,
+    cachée / montrée, supprimée / rendue, la liste qui recompte, un projet d'avant migré et dit — 509).
+  - **DIX MUTATIONS, TOUTES ROUGES** (rejouées dans une copie) : la garde `is_same` ôtée, pas de vol, seule la
+    couche active refaite, la couche cachée gardée dans l'union, la migration qui ne retire rien, le coup sans
+    ses vols, la priorité au PLUS GRAND rang, la suppression sans refaire les rangs, une couche neuve sans rang,
+    la liste qui ne recompte pas. ⚠ La première passe de M8 n'a RIEN éprouvé : l'outil de mutation lisait son
+    motif par `unicode_escape`, qui déforme les accents (« MOTIF ABSENT ») — rejouée sur un motif ASCII.
+  - **Vu à l'image** (`capture_couches_exclusives.gd`, avec fenêtre) : deux couches tranchées sur le témoin, l'une
+    peinte par-dessus l'autre — en couches, une surface continue ; chacune seule, la rainure.
+  - ⚠ **LES GREFFONS NE LE FONT PAS ENCORE** : un monde exporté y montre la rainure — dans LA LISTE DES GREFFONS
+    À FAIRE (§0). ⚠ Pas tenu en main par Jordan.
   ⚠ « Slice the work » peignait jusque-là les cases du témoin en les remplaçant : c'était la preuve de
   l'aller-retour. Elle vit désormais dans un bouton à part, **« Paint the witness shape »**.
   ⚠ **ET CETTE PREUVE N'EST PLUS À L'IDENTIQUE DEPUIS LES EXEMPLAIRES** (§3) : le peintre tire
@@ -1613,8 +1754,42 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   vrai depuis le 30 septembre 2026 : une tuile par clé, et avec le témoin lié la preuve est à l'identique]. Même
   forme, mêmes classes ; un coin sculpté ici peut reparaître là.
 - **LE PROJET** (`app/projet.gd`, `.mbproj` en JSON) porte les couches et leurs cases, **s'enregistre
-  après chaque changement** (branché sur l'historique) et se rouvre au lancement. On écrit à côté puis
+  une seconde après le dernier changement** (branché sur l'historique ; avant le 1er octobre 2026, à CHAQUE
+  changement) et se rouvre au lancement. On écrit à côté puis
   on remplace. ⚠ Un projet qui ne s'ouvre pas n'est jamais écrasé : on en commence un autre.
+- **LE GESTE D'UNE CASE — MESURÉ ET CORRIGÉ (Jordan, 1er octobre 2026 : « une stratégie de sauvegarde meilleure
+  que tout le monde à chaque opération, qui fait lagger pour une toute petite opération »).**
+  `DEV_TOOLS/sonde_lags_monde.gd` (AVEC fenêtre, les 12 474 cases de `test.mbproj`) : poser UNE case coûtait
+  **~295 ms**, dont **~278 ms de reconstruction de la couche entière** et ~18 ms d'enregistrement. ⚠ **CE N'ÉTAIT
+  DONC PAS SURTOUT LA SAUVEGARDE** — et le pinceau reconstruisait tout à CHAQUE mouvement de souris.
+  - **LA RECONSTRUCTION LOCALE** (`MassifPeint.reconstruire_autour`) : seuls les sommets des colonnes x−1..x,
+    z−1..z, d'étage ≤ celui de la case, sont refaits — par `MB.pose_du_sommet`, la décision d'UN sommet SORTIE de
+    `MB.poses` (sortie inchangée : une règle, un endroit). Le peintre garde son état (cases, décision par sommet,
+    comptes) ; au-delà de 4 096 cases, si le lot a changé, ou si `Cases` ne compte plus ce que l'état connaît
+    (une case posée par une autre route), c'est la reconstruction complète. L'action de l'historique et le
+    coup de pinceau ne passent plus que les cases qu'ils touchent.
+  - ⚠ **UN DÉFAUT QUE LA SONDE A TROUVÉ, PAS LE TEST** : sans lot, `lot_courant()` rebâtissait les 68 maillages
+    du repli à CHAQUE appel — chaque reconstruction complète les payait, et la route locale ne reconnaissait
+    jamais son lot (premier passage : toujours ~330 ms). Le repli est bâti une fois par peintre.
+  - ⚠ Une couche SANS SOURCE rouverte n'était reconstruite par personne (le prochain geste le faisait en
+    entier) : `_habiller_couche` la reconstruit.
+  - **L'ENREGISTREMENT ATTEND UNE SECONDE DE CALME** (`_enregistrer_plus_tard`, comme le témoin) : vingt Ctrl+Z
+    font UNE écriture. Écrit tout de suite : Ctrl+S, la fermeture, le changement de projet (`_vider_le_projet`),
+    tout `_toujours_ecrire`. La barre dit « ● Saving… » tant qu'une écriture (projet ou témoin) attend.
+    L'écriture hors du fil principal a été écartée : ~18 ms une fois la seconde passée ne se sent pas.
+  - **MESURÉ APRÈS, avec fenêtre** : poser une case **~4 ms**, Ctrl+Z ~3,5 ms (au lieu de ~300).
+  - Gardé par `test_massif_peint` §11 (une suite de 162 gestes au hasard, graine fixe, comparée après CHAQUE
+    geste à un second massif reconstruit EN ENTIER — grilles `Rendu`, `Fautes`, orientations, bilan —, avec un
+    lot construit pour avoir des variantes d'air libre ET des fautes, puis sans lot ; un couvercle posé six
+    étages au-dessus d'un sol ; une case posée par une autre route) et `fumee_appli` (le geste ne reconstruit
+    pas tout, ne réécrit pas le disque tout de suite, la seconde passée le disque porte la case, Ctrl+Z attend,
+    Ctrl+S écrit). **Mutations rouges** : colonne x seule, ciel ignoré, plafond ou étage bas non relevés, garde
+    de compte ôtée, retrait non défait, route locale jamais prise, repli rebâti à chaque appel ; dans l'appli,
+    l'historique qui réécrit tout de suite, Ctrl+S qui ne vide pas l'attente, l'action qui reconstruit tout.
+  - ⚠ **SANS GARDE** : le coup de pinceau qui repasserait par la reconstruction complète (il ne serait que lent),
+    l'écriture au changement de projet par « New project », et « Saving… » tenu quand le témoin s'écrit avant le
+    projet. ⚠ La reconstruction COMPLÈTE coûte toujours ~280 ms (ouverture, changement de lot, « Clear »).
+    ⚠ **PAS TENU EN MAIN.**
 - **LE LOT TRANCHÉ N'EST QU'EN CACHE** (`user://cache`), marqué de l'empreinte de sa source — le MD5
   du `.glb`, pas sa date, précise à la seconde seulement. Source changée : on retranche. Source
   disparue : l'ancien lot en le DISANT, sinon un lot vide, donc des cubes rouges — jamais le repli.
@@ -1625,6 +1800,10 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   changeront. La sélection (un état d'écran, ni enregistré ni annulable) a ses opérations, et **les
   opérations d'étage portent sur elle quand elle existe**.
   - ⚠ **Add voit toutes les couches visibles, Dig et Select la seule active.**
+  - **CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE (Jordan, 1er octobre 2026)** : l'étage devient le `y` de la case
+    touchée (rayon contre les couches VISIBLES, quels que soient l'outil et la visée), rien n'est peint, et
+    l'écran le dit (aussi quand le rayon ne touche rien, ou hors de −64..64). Gardé par `fumee_appli` (vrai
+    clic sur une colonne), une mutation rouge. ⚠ Pas tenu en main.
   - ⚠ **LE VERROU DE COUP** : ce qu'un coup d'ajout pose est transparent à son propre rayon, sinon
     glisser bâtit une tour vers la caméra.
   - ⚠ **TOUT CE QUI CHANGE DES CASES PASSE PAR `_appliquer`.** Trois routes écrivaient chacune leur
@@ -1722,6 +1901,13 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     VRAIE tête, qui est libre par construction (sphère de 0,15 < capsule de 0,19), vers le pivot, puis
     du pivot vers l'œil. Gardé par la fumée (pivot posé DANS la dalle du sol, la sphère plus fine que la
     capsule), mutations rouges : bras lancé du pivot lissé (œil à y = 10,6 dans la dalle), rayon de 0,2.
+  - **LE VOL — DEMANDÉ PAR JORDAN (1er octobre 2026), ÉCRIT LE MÊME JOUR.** **F** (ou le bouton « Fly ») bascule ;
+    en vol, ni gravité ni pas : Espace ou E montent, A descend (Q / E sur un QWERTY, les touches de Navigate), Maj
+    va plus vite. ⚠ **IL HEURTE TOUJOURS LE DÉCOR** (`move_and_slide`) : traverser la roche ne dirait rien du monde.
+    ⚠ Pas Ctrl pour descendre : Ctrl+Z (avancer en AZERTY) aurait annulé. Pose de vol : tout le corps couché avec
+    la vitesse, bras en ailes, jambes qui traînent. Gardé par `fumee_appli` (373 : F, monter, planer une fois
+    lâché, le sol qui arrête la descente, retomber hors du vol) ; trois mutations rouges (gravité en vol, vol à
+    travers le décor, F non branché). ⚠ Ni vu à l'image ni tenu en main.
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.
@@ -1847,8 +2033,351 @@ une paroi, une case sur une autre, même diagonale, un PROFIL, et l'outil les re
   n'ont pas été dessinés, le mode Unreal ni ouvert ni cliqué. Vu à l'image dans l'appli seulement
   (`capture_formes_speciales.gd`) : tunnel en coude, paroi à 45° percée, pont, balcon, puits, aperçu d'un pont
   en Connect.
+- **LA SALLE (« Room ») — DEMANDÉE PAR JORDAN ET ÉCRITE (2 octobre 2026)** : « tracer une sélection en surface à plat
+  sur la grille, et extruder vers le haut ou le bas de tant d'étages, tout en conservant le creux dans le volume ».
+  - **la règle** (`FS.salle`) : un rectangle d'au moins 3 × 3 sur le plan de l'étage ; vers le HAUT il est le sol,
+    vers le BAS le plafond ; `etages` = la hauteur LIBRE (1 à 32) ; murs, sol et plafond d'une case, le dedans creux
+    (la roche qui s'y trouvait est creusée) ; la coque répare les contacts par une arête qu'elle crée. ⚠ HORS DE
+    `QUOI` et de `forme()` : elle se trace, elle ne s'ancre pas — et les cas d'épreuve des greffons n'ont pas bougé
+    (« les greffons attendent la fin du logiciel », §0 ; elle est dans la liste des greffons à faire).
+  - **l'écran** : le bouton Room, un glissé sur la grille comme Rect, l'aperçu de la coque (vert) et de ce qui sera
+    creusé (rouge), Floors et Up / Down, `[` `]` pour les étages, UN Ctrl+Z ; le manuel (F1) la décrit. Elle n'a pas
+    de porte : on en ouvre une au tunnel. ⚠ **SIX FORMES EN UNE RANGÉE ÉLARGISSAIENT TOUTE LA BARRE DE DROITE**, qui
+    débordait de l'écran (vu à l'image) : `_rangee_de_choix(…, colonnes)`, deux rangées de trois.
+  - **MESURÉ** : `test_formes_speciales` 122 (attendus à la main : coque de 26 cases et son dedans, vers le bas, le dedans
+    creusé dans la roche, la réparation jugée par `MB.contacts_par_arete`, les refus, la borne) ; `fumee_appli` 437 (un
+    VRAI glissé : 68 cases, le creux, Ctrl+Z, Down, une salle trop étroite refusée et dite, `]`). Sept mutations rouges ;
+    la fumée a d'abord attrapé l'aide qui disait encore « rises » après Down. Vu à l'image (aperçu, coupe du creux).
+  - ⚠ **PAS TENU EN MAIN.**
 - **OUVERT** : un raccord COURBE (aujourd'hui deux jambes et un segment droit) ; un escalier dans un puits ;
   le coût d'un aperçu sur un long conduit de taille 7 (recalculé à chaque case visée, non mesuré).
+
+#### STAIRS — DEMANDÉ PAR JORDAN (1er octobre 2026 : « ajoute une special shape Stairs »), ÉCRIT LE MÊME JOUR
+
+La demande tenait en une ligne ; **TOUTE LA FORME EST PROPOSÉE**, à valider à l'image et souris en main.
+- **D'UN CLIC, CONTRE UNE PAROI, IL ARRIVE AU NIVEAU CLIQUÉ** : on clique la paroi là où l'escalier doit
+  déboucher ; le palier est la rangée devant la case cliquée, et chaque rangée plus loin descend — `pas`
+  rangées par marche (« Step », 1 à `PAS_MAXI` = 4, 2 par défaut). La rangée est la distance à la paroi
+  arrondie AU-DESSUS (la règle du balcon : parois diagonales comprises). Il finit à la première rangée dont
+  tous les dessus sont déjà pleins (il a rejoint le sol), sinon au bout de « Length » rangées.
+- **CONNECT : DE SOL À SOL** (deux cases cliquées par leur DESSUS — une paroi est refusée, `pas_un_dessus`) :
+  de la plus basse à la plus haute, en ligne droite à plat, les marches se partagent la longueur
+  (dessus = L.y + t·R / D·D, en entiers) ; plus raide qu'une case par case est refusé (`trop_raide`). Le `pas`
+  n'y sert pas. Comme les conduits, la traversée de l'axe garde un escalier fin relié par les faces.
+- **CHAQUE COLONNE EST PLEINE JUSQU'AU SOL** ; au-dessus du vide (pas de sol à moins de 64 cases), une volée de
+  DEUX cases d'épaisseur — une seule laisserait deux marches voisines se toucher par une arête. Le garde-corps
+  (« Rail ») : une case au-dessus du dessus, sur les deux bords. L'escalier ne fait que REMPLIR : s'il entre
+  dans la roche, c'est au tunnel de dégager la tête.
+- ⚠ **SUR UNE PAROI DIAGONALE, UN ESCALIER DE TAILLE 1 NE TOUCHE PAS LA PAROI** : la bande latérale ne garde
+  que les cases de la diagonale, dont la plus proche est à la rangée 2. C'est la même règle que le balcon ;
+  la taille 2 y est pleine. Non corrigé.
+- **ÉCRIT PARTOUT OÙ VIVENT LES FORMES** : le cœur (`formes_speciales.gd`, `normale_de(…, relier)` et
+  `erreur_d_ancre`), l'appli (bouton Stairs, réglage Step, messages, page du manuel), et les trois greffons
+  (`mb_shapes.gd` / barre et éditeur Godot ; `MBShapes.cs` / inspecteur Unity ; `MBCore/MBShapes` / acteur,
+  mode et panneau Slate Unreal — `Stairs` AJOUTÉ EN DERNIER dans chaque énumération, pour ne pas renuméroter
+  ce qu'un niveau ou une scène a sauvé). L'icône `escalier` (`app/icones.gd`) part dans les trois.
+  `tools_conformance.json` : **115 cas** (+12 : un clic pas 1 et 2, Length, le vide, au pied de la paroi, la
+  paroi à 45° ; Connect droit, cliqué du haut, en biais ; trois refus) et le champ `step` ; quatre mondes de
+  plus (`falaise`, `plateau`, `pente`, `butte`). `test_greffon_peinture` exige `stairs` et `stairs+connect`.
+- **MESURÉ** : `test_formes_speciales` 110 (+31, attendus déroulés à la main : pas 1 et 2, Length, trois de
+  large avec garde-corps, le vide, la paroi diagonale, Connect dans les deux sens ; et une MARCHE À PIED sur la
+  surface — la butte ne se gravit pas sans l'escalier, se gravit avec) ; `fumee_appli` (+6 : un vrai clic pose
+  palier, marche, garde-corps et passage, un Ctrl+Z, Connect refuse une paroi et le dit) ; greffon Godot, banc
+  .NET et banc C++ (clang, drapeaux d'Unreal) **115 cas, 0 échec** ; **Unity 6.6 : 26 sur 26** ; **Unreal
+  5.8.3 : BuildPlugin, BUILD SUCCESSFUL, aucun avertissement**.
+- **MUTATIONS, TOUTES ROUGES** : dix sur le cœur (pas ignoré, jamais au sol, volée d'une case, pas de bascule
+  bas/haut, pas de `trop_raide`, sans traversée, garde-corps partout ×2, Connect qui accepte une paroi, rangée
+  arrondie en dessous), deux par greffon, une sur l'appli. ⚠ **« ARRONDIE EN DESSOUS » A D'ABORD ÉTÉ MUETTE** :
+  la paroi diagonale n'était jugée que par des propriétés (dans l'air, sans damier, une case par marche), que
+  l'autre arrondi respecte aussi — un cas déroulé à la main l'a fait rougir. ⚠ **ET L'OUTIL DE MUTATION A
+  MENTI DEUX FOIS** : un remplacement par un texte présent ailleurs dans le fichier ne pouvait pas être défait
+  (fichier laissé muté, réparé et vérifié en le régénérant), et `dotnet run --no-incremental` — le piège déjà
+  écrit ici — a rendu deux « rouges » sans rien compiler. Il rend désormais le contenu d'origine, et refuse
+  si quelqu'un d'autre a touché le fichier pendant la mesure (arrivé une fois sur `vue.gd`).
+- ⚠ **PAS TENU EN MAIN, NI VU À L'IMAGE** — ni dans l'appli, ni dans les trois éditeurs. Ni le ressenti dans le
+  Play test (une pente de pas 1 est à 45°, à la limite de ce que le personnage gravit).
+
+### LE MODE FLUIDS — DÉCIDÉ EN PARTIE (Jordan, 1er octobre 2026), PAS ÉCRIT
+
+Jordan : un clic pose du liquide — un plan animé, légèrement déformé, sous shader — qui reconnaît s'il est
+dans un creux fermé (lac, flaque), dans un creux qui déborde (rivière, cascade) ou dans le vide (océan qui
+cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde en temps réel.
+
+- **PROPOSÉ — ON ENREGISTRE LA SOURCE, JAMAIS LA SURFACE** : (case, niveau, preset). Lacs, rivières et
+  océans en sont DÉDUITS à chaque changement de cases (seules les étendues dont la boîte touche les cases
+  changées). Une seule opération : remplissage horizontal à la hauteur du clic — enfermé = lac ; une issue
+  plus basse = le lac redescend à son seuil et une rivière part de là en suivant la pente (*priority-flood*),
+  chaque chute verticale une cascade ; clic dans le vide = océan, rempli DEPUIS L'HORIZON. Seule l'animation
+  coule (carte de flux, comme `D:/RollingStones/CLIENT/eau.gd`) ; le plan ne fait que d'ondes légères.
+- ⚠ **L'EAU NE TOUCHE JAMAIS AUX CASES** (§3) ; une rivière sans issue ou une source sous la matière est DITE.
+- **DÉCIDÉ — UNE CAVITÉ EST SÈCHE SI AUCUN CONDUIT QUI Y MÈNE N'EST OUVERT SOUS L'EAU.** Reliée sous le
+  niveau, elle se remplit jusqu'au niveau (vases communicants : pas de poche d'air piégée) ; au-dessus, rien.
+- **DÉCIDÉ — L'EAU APPARTIENT AU MONDE ENTIER, DANS SES PROPRES COUCHES D'EAU**, indépendantes des couches de
+  tuiles : une couche d'eau = nom, visibilité, preset, sources. **PROPOSÉ** : elle se calcule contre TOUTES les
+  couches de tuiles, visibles ou non — cacher une couche pour travailler ne doit pas inonder le monde.
+- **DÉCIDÉ — ORDRE** : l'appli d'abord, l'eau CUITE à l'export (maillages + son contrat de données) ; la règle
+  dans les trois greffons ensuite, avec ses cas d'épreuve (comme les formes spéciales). ⚠ **« ENSUITE » = QUAND LE
+  LOGICIEL ENTIER SERA FINI** (Jordan, 1er octobre 2026, §0) : l'étape 5 est dans la liste des greffons à faire.
+- **PROPOSÉ — LE CONTRAT DE DONNÉES DE L'EAU** : chaque maillage exporté porte en attributs le vecteur de flux,
+  le type (lac, rivière, cascade, océan), la profondeur et un masque de rivage ; le greffon a UN emplacement de
+  matériau par type. ⚠ **UN SHADER NE VOYAGE PAS** (§4) : les trois presets — stylisé (RiverStones), transparent
+  à réfraction, réfléchissant — s'écrivent dans chaque moteur, et l'artiste est prévenu qu'ils sont des
+  EXEMPLES : son propre shader reçoit les mêmes données.
+- **ÉTAPE 1 ÉCRITE (1er octobre 2026) — LA RÈGLE DANS LE CŒUR** (`addons/marchingblocks_core/fluides.gd`), en
+  entiers, voisins dans un ordre fixe, tas départagé par l'ORDRE D'INSERTION (elle sera réécrite en C# et C++) :
+  - **la boîte du monde** est celle des cases pleines élargie d'une case ; ses côtés et son dessous sont
+    l'HORIZON. ⚠ **PAS SON DESSUS** : l'eau qui coule sur le toit le plus haut n'a pas quitté le monde ;
+  - **océan** : la source n'a rien de plein sous elle (`dans_le_vide`) ; remplissage depuis un coin de la boîte,
+    sans dépasser le niveau. Un océan sous le monde entier n'a aucune case : un plan seul ;
+  - **lac** : l'eau tombée au sol ne trouve à son étage aucune case d'où tomber ; remplissage PAR PRIORITÉ
+    (priorité = la plus haute altitude franchie) jusqu'à la première case qui touche l'horizon ou une autre eau
+    (P) : le lac est tout ce qui est sorti sous P, niveau P − 1. Un lac ne déborde pas ; dans une cavité close il
+    monte jusqu'à la hauteur du clic (« ferme ») ;
+  - **rivière** : à son étage, le plus court chemin vers une case d'où tomber, la chute, et ainsi de suite ; un
+    creux en route se remplit et déborde par son SEUIL (la première case du chemin à l'altitude P). ⚠ **LA CHUTE
+    NE S'ARRÊTE QU'AU FOND DE LA BOÎTE** : arrêtée au côté, une cascade au pied d'une falaise du bord du monde
+    s'interrompait en l'air (vu rougir dans trois cas) ;
+  - **`monde()`** calcule les océans d'abord, puis chaque autre source contre les océans SEULS : l'ordre des
+    sources ne change rien. `surface()` (pas sous la roche) et `profondeur()` (−1 au large) pour le contrat.
+  - **MESURÉ** (`DEV_TOOLS/test_fluides.gd`, 66) — attendus déroulés à la main : cuvette à ras bord (18 cases,
+    depuis le fond, le milieu et le ciel), échancrée (9), poche noyée sous le linteau (20), le départage de deux
+    seuils égaux, du haut d'un mur, un escalier et une rivière qui traverse une fosse — case par case —, une île
+    (181 cases d'océan, la cavité close sèche, la galerie noyée jusqu'au niveau, 32 de surface), une rivière qui
+    rejoint l'océan, une cavité close, les refus. Coût : océan de 3 676 cases + lac de 1 764 en **80 ms**
+    (48 × 8 × 48, headless).
+  - **16 mutations, toutes rouges.** ⚠ **TROIS D'ABORD MUETTES** : le départage à l'envers (la fosse était
+    SYMÉTRIQUE depuis son milieu, les deux ordres y tombaient d'accord — départ décalé d'une case) ; l'eau
+    voisine à l'étage (inatteignable par `monde()` — une case de rivière voisine d'un océan à son étage EST de
+    l'océan —, gardée par une `eau_fixe` construite) ; et le départ ramené au haut de la boîte, mutation
+    ÉQUIVALENTE, retirée du code. ⚠ « Jamais dans le vide » faisait PENDRE la suite : la descente du clic au sol
+    n'avait pas de borne ; bornée au fond de la boîte.
+  - ⚠ **CE QUI N'EST PAS DÉCIDÉ ET A ÉTÉ CHOISI POUR ÉCRIRE** (PROPOSÉ) : une rivière fait UNE case de large ;
+    elle suit le plus court chemin à plat, ce qui fait d'un clic sur une grande plaine une rivière qui rampe
+    jusqu'à la falaise la plus proche ; deux rivières se recouvrent sans se rejoindre.
+- **ÉTAPE 2 ÉCRITE (1er octobre 2026) — LE MODE FLUIDS DANS L'APPLI** : la section « Fluids » de la barre de
+  droite (World), l'outil **Water**, les couches d'eau (œil, active, New, Delete), le preset.
+  - **le clic** : la source est la case DEVANT la face visée (toutes les couches visibles), sinon sur le plan de
+    l'étage ; l'aperçu montre la surface et le cours à venir (rouge sur une eau déjà là) ; le clic droit retire
+    la source de l'eau visée ; un clic dans une eau existante ne pose rien et le dit. Chaque geste est UNE action
+    de l'historique.
+  - **l'eau suit le monde** : `_eau_perimee` (une fois par image) est appelée par `_reconstruire` (toute action
+    de cases, dans les deux sens) ET par `_touche` — ⚠ un coup de pinceau n'est PAS rejoué par l'historique, et
+    la garde qui ne passait que par `_appliquer` laissait muette l'absence de ce second appel. Elle se calcule
+    contre les cases de TOUTES les couches de tuiles, cachées comprises.
+  - **le projet** porte `eaux` (nom, visible, preset, id, SOURCES) ; un projet d'avant se relit sans eau ; une
+    entrée malformée refuse le fichier entier.
+  - **le maillage** (`addons/marchingblocks_core/eau_maillage.gd`) : nappe en rangée + 0,7 (sous le dessus du bord,
+    vu à 0,75), bande de rivière en rangée − 0,15, avancée de 0,45 sous chaque voisine pleine, l'océan prolongé à
+    ±2000 hors de la boîte. Le **contrat** dans les sommets : COLOR.rg le courant, COLOR.b le genre (0 / 0,5 / 1),
+    COLOR.a la profondeur / 8 — ⚠ **QUANTIFIÉ AU 1/255** (les couleurs de sommet sont stockées sur 8 bits : 0,25
+    y vaut 64/255).
+  - **le preset « stylise »** (`eau_presets.gd`) : l'eau de RiverStones (`D:/RollingStones/CLIENT/eau.gd` —
+    `D:/RiverStones` n'existe pas), courant lu dans les sommets, cascades en stries qui tombent. ⚠ `ALPHA = 1`
+    exprès (la passe transparente lit la profondeur), donc `depth_draw_always` : sans lui, la bande noyée au fond
+    d'une fosse se dessinait PAR-DESSUS le lac (vu à l'image).
+  - ⚠ **DEUX DÉFAUTS VUS À L'IMAGE, QU'AUCUN TEST NE LISAIT** (`DEV_TOOLS/capture_fluides.gd`, avec fenêtre) :
+    une bande par case « coule » mettait la bande de la LÈVRE en l'air au-dessus de chaque cascade, et laissait
+    sèche la case où l'eau retombe. Règle : une bande sur toute case du cours qui REPOSE SUR LA MATIÈRE ; la lame
+    est 0,1 en retrait du plan de la lèvre, recouverte par la bande d'en haut. Gardé (`test_fluides`, trois
+    mutations rouges).
+  - **MESURÉ** : `test_fluides` 86 (le maillage : hauteurs, débords, lames, sens des faces, contrat — attendus à la
+    main), `test_projet` 62, `fumee_appli` (de vrais clics : lac de 18, aperçu de 9, échancrure creuse → 9 puis
+    refermée → 18, une case d'une AUTRE couche CACHÉE retient l'eau, un vrai coup de pinceau, rivière qui sort puis
+    REJOINT la mer posée après, clic droit et Ctrl+Z, couche cachée, enregistrée, ROUVERTE). **23 mutations
+    rouges** (écran, vue, maillage, projet) ; ⚠ une d'abord MUETTE (le coup de pinceau, ci-dessus), une d'abord
+    INVALIDE (le motif ne couvrait que le début d'une ligne : l'appli ne compilait plus — un échec de compilation
+    n'est pas une garde qui rougit).
+  - ⚠ **UNE AUTRE SESSION TRAVAILLAIT EN MÊME TEMPS DANS LE DÉPÔT** (l'escalier des formes spéciales) : les
+    mutations qui réécrivent un fichier partagé pendant des minutes ont été rejouées dans une COPIE ; et deux
+    sessions qui lancent fumée et captures se passent `user://reglages.cfg` — la valeur « rendue » à la fin peut
+    être celle, provisoire, de l'autre. Une copie avec `config/use_custom_user_dir` n'en partage rien.
+  - ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** : le rendu (le lac à ras bord, les traits blancs au large, l'écume
+    au pied des cascades), les hauteurs de nappe sur de l'ART sculpté, le coût du recalcul sur une grande carte
+    pendant un coup de pinceau. Pas de nage au Play test.
+- **ÉTAPE 3 ÉCRITE (1er octobre 2026) — DEUX PRESETS DE PLUS** (`eau_presets.gd`, choisis par couche d'eau dans
+  « Look », enregistrés avec elle) :
+  - **« transparent »** (Clear) : le fond lu dans la texture d'écran, décalé par la normale des vagues, en
+    ÉMISSION (il est déjà éclairé) ; absorption de Beer-Lambert sur la profondeur verticale ; ce qui est DEVANT la
+    nappe n'est pas réfracté dedans ; éclairée (reflet du soleil) ;
+  - **« reflechissant »** (Reflective) : sombre et lisse, opacité = max(Fresnel, profondeur) ; reflets du ciel de
+    l'environnement, et du RELIEF par un rayon réfléchi marché contre le tampon de profondeur (le SSR du moteur
+    ignore les transparents). ⚠ Le miroir se calcule sur une normale APLATIE (`aplati` 0,3) : avec toute la houle,
+    le reflet partait en taches (vu au diagnostic, poids du reflet peint en rouge). ⚠ **DANS WORLD LE CIEL EST LE
+    CIEL NEUTRE GRIS** (la charte l'a voulu pour les métaux) : l'eau y paraît grise ; au Play test, elle reflète le
+    ciel bleu-violet — NON VU ;
+  - les deux partagent `COMMUN` (bruit, vagues tournées qui défilent dans le sens du courant, profondeur, stries) ;
+    une cascade y est de l'ÉCUME presque opaque — transparente comme une nappe, elle n'était qu'un fantôme gris
+    (vu à l'image).
+  - ⚠ **LE COMPILATEUR DE SHADERS NE TOURNE PAS EN HEADLESS** : deux fois, un paramètre de fonction portait le nom
+    d'un uniforme (« Redefinition of 'ampleur' », puis « 'ecume' ») et seule la capture avec fenêtre l'a dit.
+    `test_fluides` lit désormais le TEXTE de chaque preset (aucun paramètre au nom d'un uniforme ou d'un varying,
+    marqueurs remplacés, contrat lu) — vu rougir en remettant `ecume`. Une capture qui sort une ligne « SHADER
+    ERROR » est un échec.
+  - **MESURÉ** : `test_fluides` 100, `fumee_appli` 375 (la liste propose trois presets, Reflective change le shader
+    de la nappe, le preset s'enregistre) ; trois mutations rouges (preset ignoré, non enregistré, shader échangé).
+    Vu à l'image (`capture_fluides.gd`, dans une copie du projet). Le manuel (F1) décrit les trois.
+  - ⚠ **PAS JUGÉ PAR JORDAN** ; les réglages (absorption, réfraction, `aplati`, opacité mini) sont des choix à l'œil.
+- **ÉTAPE 4 ÉCRITE (1er octobre 2026) — L'EAU CUITE DANS LE MONDE EXPORTÉ** (`format_monde.gd`) :
+  - ⚠ **DANS LE `.mbworld`, PAS DANS UN `.mbset`** : un jeu de tuiles appartient à une couche de tuiles, l'eau au
+    monde entier. `world.json` gagne une clé `water` : par couche d'eau, nom, visibilité, `look` (« stylized »,
+    « clear », « reflective » — une SUGGESTION, un aspect inconnu est accepté), `mesh` (chemin RELATIF de
+    `water/<nom>.glb`, ou null) et `sources` (à plat, DANS L'ORDRE de pose). Chaque `.glb` : un nœud et un maillage
+    NOMMÉS (Unreal), un matériau `mb_water_<look>` à remplacer, et le contrat dans COLOR_0 et TEXCOORD_0, en espace
+    du format. La règle est écrite dans le README (`regle_eau()`).
+  - ⚠ **PAS ENCORE DANS `regle()` NI DANS `world_conformance.json`** : les trois lecteurs des greffons ne lisent que
+    `layers` (vérifié dans leur source), la clé en plus ne les fait pas refuser — gardé pour Godot (`mb_world_file`
+    lit ce monde). Les y mettre rendrait périmés les cas d'épreuve des trois greffons : c'est l'étape 5.
+  - ⚠ **LES NOMS SE LISENT DANS LE JSON DU FICHIER** : relu par l'importeur de Godot, le maillage s'appelle
+    « nœud_maillage » — la garde qui passait par lui rougissait sur un fichier juste.
+  - **MESURÉ** : `test_fluides` 121 (exporter un vrai monde, relire `world.json`, la nappe : mêmes sommets à la même
+    place, même contrat au 1/255 ; les refus de `lire_eau`) ; huit mutations rouges (chemin absolu, maillage sans
+    nom, sources perdues, aspect non traduit, source fractionnaire acceptée, pas de clé, README sans contrat, nappe
+    sans couleurs). Le BOUTON d'export ne passe pas par la fumée (panneau d'attente) : mené avec fenêtre par
+    `capture_fluides.gd`, qui relit ce qu'il a écrit.
+- **LA NAGE AU PLAY TEST — DEMANDÉE ET ÉCRITE (Jordan, 1er octobre 2026)** :
+  - **la règle dans le cœur** (`EauMaillage.niveau_au_point`) : la surface DESSINÉE de la colonne d'eau qui contient
+    un point (rangée du haut + 0,7), le large hors de la boîte pour les océans, −INF ailleurs. Seule l'eau DORMANTE
+    des couches d'eau VISIBLES compte (lacs, lacs des rivières, océans) : une bande de rivière est une lame, on y
+    marche. L'écran la donne à la vue avant de jouer (`_eau_pour_le_jeu`).
+  - **le personnage** (`personnage.gd`, un troisième régime à côté de la marche et du vol) : immergé de plus de
+    0,35, il nage — flottaison les pieds 0,55 sous la nappe, 2,2 cases/s (3,4 avec Maj), plongée avec la touche de
+    descente du vol (A en AZERTY), Espace pour remonter, et il se hisse sur une berge d'au plus une case en nageant
+    contre elle (la berge d'un lac à ras bord est 0,6 au-dessus de ses pieds). Une brasse à l'animation, du
+    surplace à l'arrêt. **Sous la nappe, la caméra voit à travers un voile** (le brouillard de l'environnement).
+  - ⚠ **SONDER LE TORSE, PAS LES PIEDS — VU ROUGIR** : au fond d'un lac, les pieds sont sur le dessus VU du plancher
+    (0,75 dans sa case) ; un point à +0,2 tombe dans la case PLEINE du plancher, hors de l'eau pour la règle, et il
+    marchait au fond.
+  - ⚠ **LA RÈGLE DIT CE QUE LE DESSIN MONTRE — UN DÉFAUT RÉEL, TROUVÉ PAR UNE MUTATION MUETTE** : « ne se hisse
+    pas » restait verte, parce que le test (« x < 61 ») était satisfait par un nageur COLLÉ à la face amincie du mur
+    (60,94). Resserré (il doit franchir le mur), il a rougi sur le vrai code : le centre du corps était entré dans la
+    case du mur, « hors de l'eau » pour la règle — il retombait au fond et ne sortait JAMAIS. Désormais un point
+    d'une case pleine à moins de `DEBORD` (0,45, l'avancée de la nappe dessinée sous la roche) d'une case d'eau est
+    dans cette eau.
+  - **MESURÉ** : `test_fluides` 132 (la surface : au fond, au-dessus de la nappe dans la case du haut, au-dessus du
+    lac, dans le mur, à 0,3 de l'eau dans la case du mur, au large, la galerie noyée, la cavité close) ;
+    `fumee_appli` 402 (de vraies touches : il flotte à 2,15 sans toucher le fond, plonge, la caméra se voile, il nage
+    au fond, remonte, nage moins vite qu'il ne marche, se hisse et FRANCHIT le mur ; hors du jeu, jamais de voile).
+    Onze mutations rouges (jamais nager, sonde aux pieds, ne se hisse pas, ne plonge pas, vitesse de marche, jamais
+    de voile, eau non donnée au jeu, nappe sans 0,7, pas de large, règle sans débord ×2).
+  - ⚠ **PAS TENU EN MAIN** : le ressenti (vitesse, flottaison, la sortie de l'eau), le voile. Pas de courant dans
+    une rivière, pas d'éclaboussure, pas de nage dans une couche d'eau cachée (sans garde).
+- **OUVERT** : le rivage se juge à l'image (la matière amincie est en retrait d'un quart de case — l'écume par
+  profondeur devrait le régler sans rien déclarer) ; la hauteur exacte du plan dans sa case ; l'océan au bord du
+  vide ; nager dans le Play test ; d'autres liquides (lave, marécage) comme simples presets.
+
+- **TROIS PRESETS DE FLUIDES DE PLUS — DEMANDÉ PAR JORDAN (2 octobre 2026)**, transmis par une autre session :
+  **lave**, **eau de marais**, **acide luminescent**. Ce sont des presets de couche d'eau, à côté des trois qui
+  existent (`eau_presets.gd`) : ça répond au « d'autres liquides (lave, marécage) comme simples presets » laissé
+  OUVERT ci-dessus. ⚠ Ils entrent dans **LA LISTE DES GREFFONS À FAIRE** (§0), comme les trois premiers : chacun
+  réécrit dans chaque moteur, sur le même contrat COLOR_0.
+  - **ÉCRITS (2 octobre 2026)** — `eau_presets.gd`, choisis par couche d'eau dans « Look » comme les trois autres,
+    sur le même contrat COLOR_0 (courant, genre, profondeur) et le même `COMMUN` :
+    - **« lave »** (Lava) : une CROÛTE sombre fendue en cellules (Voronoi, `bord_de_cellule`) dont les fentes
+      luisent en ÉMISSION, plus chaudes où c'est profond, qui dérivent avec le courant ; une cascade est une coulée
+      incandescente ;
+    - **« marais »** (Swamp water) : une eau trouble lue dans la texture d'écran, très absorbante, des plaques de
+      lentilles d'eau qui dérivent, des bulles RONDES (`bulle_ronde`), une cascade boueuse ;
+    - **« acide »** (Glowing acid) : un vert lumineux en ÉMISSION, des crêtes plus claires, des bulles, une écume de
+      rive ; ⚠ la cascade garde son vert (stries à 0,45) — à 0,9 d'écume elle n'était qu'un aplat jaune (vu à l'image).
+    - le `.mbworld` les écrit sous leurs aspects anglais (`FormatMonde.ASPECTS`, `regle_eau()` les nomme) ; le manuel
+      (F1) les décrit.
+  - **PROPOSÉ (points ouverts tranchés par défaut)** : au Play test, la lave et l'acide se NAGENT comme l'eau — pas
+    de dégâts, pas de mort (un outil de jugement, pas un jeu) ; l'acide et la lave LUISENT (émission) sans poser de
+    vraie lumière qui éclaire le décor (une lumière par case d'eau coûterait cher et ne voyagerait pas dans les
+    greffons) ; sous la surface, le VOILE est celui du liquide (`EauPresets.VOILES` : lave orange presque opaque,
+    marais brun-vert, acide vert ; l'eau garde le sien). Pour le voile, chaque case d'eau donnée au jeu porte le
+    preset de sa couche, et la case traversée se trouve par la MÊME règle que la surface
+    (`EauMaillage.case_d_eau_au_point`, sortie de `niveau_au_point`).
+  - **MESURÉ** : `test_fluides` 148 (six liquides, leurs aspects exportés écrits à la main, émission de la lave et de
+    l'acide, un voile chacun) ; `fumee_appli` (la liste « Look » porte les six noms ; plongé dans un lac de LAVE, le
+    voile est orange). Vu à l'image avec fenêtre (`DEV_TOOLS/capture_meteo.gd`) : lave sur le plateau, acide en
+    rivière et cascades, mer de marais ; aucune ligne « SHADER ERROR ».
+    Cinq mutations rouges : la lave qui rend le shader stylisé, la lave sans nom anglais, pas de voile pour le marais,
+    le voile toujours celui de l'eau, les cases données au jeu sans leur preset.
+  - ⚠ **PAS JUGÉ PAR JORDAN** : les couleurs, la taille des cellules de lave, l'opacité du marais ; le voile n'a été
+    vu qu'en chiffres (la fumée), pas à l'image.
+
+### LA BARRE DE PROGRESSION, LA BARRE DE RENDU DU PLAY TEST, UNE PASSE D'OPTIMISATION — DEMANDÉES ET ÉCRITES (Jordan, 1er octobre 2026)
+
+**La barre de progression** (« dans tout processus qui dépasse 0,4 s ») — `editor.gd` :
+- une PILE d'attentes (un tranchage pendant l'ouverture d'un projet) ; une barre À ÉTAPES qui avance entre deux étapes
+  (l'écran est repeint), ou qui DÉFILE pour un travail d'un seul tenant fait sur un autre fil (`_en_fond`,
+  WorkerThreadPool). ⚠ Sur le fil principal, un travail d'un seul tenant gèle tout, barre comprise.
+- **le tranchage passe sur un autre fil** : mesuré avec fenêtre, l'écran reste à 25 images/s pendant tout le tranchage,
+  52 tuiles, aucune erreur de fil (`DEV_TOOLS/capture_progres.gd`). ⚠ Le fil coûte ~40 % de plus (les appels au
+  RenderingServer s'y sérialisent) : choisi pour un écran vivant.
+- à étapes : l'ouverture d'un projet (une couche par étape), le monde qui suit son témoin avant World, le Play test
+  et les exports (`_rhabiller_avec_attente`) ; l'entrée dans le modeleur (~2 s) ; le départ du Play test et l'eau
+  s'il ont dépassé 0,4 s la dernière fois (`_durees`). ⚠ **`_aller_a` ET `_regler_edition` RESTENT SYNCHRONES** :
+  appelées d'endroits qui enchaînent juste après ; la barre passe par des enveloppes réservées aux gestes
+  (`_changer_d_atelier`, `_basculer_edition`). ⚠ **SANS FENÊTRE, `frame_post_draw` NE VIENT JAMAIS** : `_attendre`
+  ne l'attend plus en headless (la fumée pendait sur tout ce qui attendait).
+- ⚠ Avec le seul thème, la barre défilante n'était qu'un trait de quelques pixels (vu à l'image) : piste et
+  remplissage explicites.
+
+**La barre de rendu du Play test** — `Vue.REGLAGES_RENDU` (une liste, l'écran la montre) : soleil (direction,
+hauteur, force, couleur, ombres), ambiante, les trois couleurs du ciel, SSAO, SSIL, SDFGI, SSR, halo, brouillard,
+brouillard volumique, tone mapping, exposition, luminosité, contraste, saturation, et Reset. ⚠ Les défauts SONT les
+constantes déjà décidées ; les réglages ne valent qu'au Play test — en le quittant, `_rendre_le_travail` rend
+l'éclairage du travail. ⚠ Le voile sous l'eau l'emporte sur le brouillard choisi, et le rend en remontant (un seul
+endroit décide du brouillard). Le SDFGI, écarté du travail, est proposé ici (rien ne change pendant qu'on joue).
+Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
+
+**La passe d'optimisation** (un audit en lecture seule, puis des mesures) :
+- ⚠ **AVEC UNE CARTE GRAPHIQUE, TRANCHER LE TÉMOIN COÛTAIT 16,9 s, CONTRE 1,8 s SANS FENÊTRE — MESURÉ** : la découpe
+  relisait le bloc ENTIER depuis le GPU une fois par clé, et chaque pièce une fois par face. **La mémoire des
+  relectures** (`Decoupe.tableaux`, active le temps d'un `Tranchage.trancher`) et **les deux poses composées en une**
+  (une permutation de signes : exacte) : **7,8 s**. Sortie identique au bit près : `test_blocs_maitres` 1 468,
+  `test_tranchage`, `test_decoupe`, `test_faux_artiste`, `test_temoin_lie`, `test_massif_peint` verts. ⚠ On mémorise CE
+  QUE LA RELECTURE REND (couleurs 8 bits, normales compressées), pas l'envoi : sinon la sortie changerait. ⚠ Le
+  conteneur rendu est une COPIE — la garde de `test_blocs_maitres` était muette (rien ne relit un maillage déjà posé)
+  ; `test_decoupe` construit le cas (poser deux fois : 10..12 au lieu de 5..7 sans la copie, vu rougir).
+- **l'eau** : sans source, plus aucun recalcul ; pendant un coup de pinceau, en direct si le calcul est rapide
+  (< 50 ms), à la fin du coup sinon ; `_eau_sous` par un index ; le Play test ne recalcule l'eau que périmée.
+- **RESTE DE L'AUDIT, À MESURER AVANT D'Y TOUCHER** (impact estimé, rien de mesuré) : la découpe entière sur des
+  tableaux (le reste des 7,8 s : un envoi + une relecture par pièce et par face de couture) ; la règle de pose
+  (`sous_le_ciel` qui rebalaye chaque colonne, un dictionnaire alloué par sommet dans `classer`) ; « Slice this
+  layer's witness » et l'import lié qui relisent deux fois ; les 52 vignettes refaites à chaque enregistrement du
+  témoin ; les aperçus au survol (occupation rebâtie, MultiMesh rempli instance par instance) ; `FL.boite` recalculée
+  à chaque appel ; le décor du Play test rebâti à chaque entrée ; le MD5 du `.glb` à chaque rafraîchissement des
+  couches (⚠ pas de cache par date : la charte l'a déjà écarté, la date n'est précise qu'à la seconde).
+
+### LA MÉTÉO DU PLAY TEST — DEMANDÉE PAR JORDAN (2 octobre 2026), ÉCRITE LE MÊME JOUR
+
+Transmise par une autre session. Dans le Play test, une **météo réglable**, dans la **barre de droite** (celle des
+réglages de rendu) : **Rain**, **Blizzard**, **Hurricane**, **Slow snow**, **Hanging particles**, **Heat**, **Fog**,
+et **None** (rien).
+
+- ⚠ **ELLE N'EST PAS EXPORTABLE, ET L'ÉCRAN LE DIT** (demandé tel quel par Jordan) : ni dans le `.mbworld`, ni dans
+  les greffons. Elle sert à juger un monde peint sous différents temps, comme les réglages de rendu, et ne vaut
+  qu'au Play test. Elle n'entre donc PAS dans la liste des greffons à faire.
+- **PROPOSÉ (les points ouverts, tranchés par défaut)** : UN temps à la fois ; intensité et vent FIXES ; sur
+  l'IMAGE seulement (le personnage n'est ni poussé ni ralenti) ; retenue le temps de la SESSION (on la retrouve en
+  revenant au Play test, jamais enregistrée) ; « Reset » de la barre la remet à None.
+- **ÉCRIT** (`app/vue.gd` : `METEOS`, `METEO_PARTICULES`, `METEO_BROUILLARD`, `METEO_SOLEIL`, `regler_meteo`) : la
+  section « Weather » en tête de la barre de droite du Play test, une liste et la phrase « not saved with the
+  project, not exported to the .mbworld, and the engine plugins do not have it ». Pluie et ouragan : des traits
+  alignés sur leur vitesse (l'ouragan en biais) ; blizzard, neige lente, particules suspendues, chaleur : des disques
+  doux (`_disque_doux`). Les particules SUIVENT L'ŒIL (la boîte d'émission bouge avec la caméra, les gouttes lâchées
+  restent dans le monde). Chaque temps ASSOMBRIT (ou force, la chaleur) le soleil RÉGLÉ par un facteur, sans toucher
+  au réglage. En quittant le Play test, tout s'en va.
+- **UN SEUL ENDROIT DÉCIDE DU BROUILLARD** (`_appliquer_brouillard`), dans cet ordre : sous une nappe, le voile de
+  son liquide ; sinon le brouillard de la météo (Fog 0,07, Blizzard 0,08, Hurricane 0,05, Rain 0,02, Heat une brume
+  chaude 0,018) ; sinon celui de la barre de rendu. « Fog » n'ajoute donc rien : il REMPLACE, le temps qu'on le choisit.
+- ⚠ **LA CHALEUR N'EST PAS UNE ONDULATION DE L'IMAGE — VU À L'IMAGE** : un quad plein écran qui relisait l'écran
+  le relit AVANT les objets transparents, et il EFFAÇAIT la lave et la mer. Retiré : une brume chaude, un soleil
+  plus fort et des poussières qui montent. ⚠ Et les premières densités (2 500 gouttes dans 28 cases de côté) ne
+  montraient qu'une douzaine de traits : boîte resserrée autour de l'œil, nombres montés (9 000 à 12 000).
+- **MESURÉ** : `fumee_appli` (les huit temps proposés, la phrase dite, Rain : 9 000 gouttes, brouillard 0,02, soleil
+  1,15 × 0,45, les gouttes suivent l'œil ; Heat ; la barre cochée sous Heat garde la brume, Fog l'emporte, None rend
+  celui de la barre ; hors du Play test plus rien ; de retour, le blizzard revient ; Reset). Attendus recopiés à la
+  main, pas lus dans la vue. Vu à l'image (`capture_meteo.gd`, les huit temps).
+  **Huit mutations rouges** : le brouillard de la barre avant la météo, la météo pas reposée en entrant, gardée en
+  sortant, sans particules, le soleil sans facteur, Reset qui la garde, la liste qui ne règle rien, et les particules
+  qui ne suivent pas l'œil — ⚠ celle-ci d'abord MUETTE : le test regardait juste après la création, où la boîte est
+  déjà sur l'œil ; il déplace désormais le personnage de six cases avant de regarder.
+- ⚠ **PAS TENU EN MAIN** : le ressenti, le coût des particules sur une petite carte graphique (12 000 traits pour
+  l'ouragan), et le rendu de chaque temps se jugent à l'œil.
 
 ## 6. Méthode — ce qui a été payé cher
 
@@ -1937,8 +2466,19 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   `test_massif_peint` 82, `test_tranchage` 53, `test_decoupe` 17, `test_etages` 15, `test_projet` 55,
   `test_outils` 57, `fumee_appli` 322, `test_greffon_peinture` 218, `test_faux_artiste` 36,
   `test_maillage_edite` 160, `test_formes_du_temoin` 117, `test_temoin_lie` 31, `test_sections` 30, `test_peinture` 24, `test_formes_speciales` 79.
+  ⚠ **Plus `test_fluides` 86 (1er octobre 2026, après le relevé)** ; `test_projet` 62 et `fumee_appli` 373 depuis
+  le mode Fluids (et l'escalier d'une autre session) : le total ci-dessus n'a pas été relevé.
+  **Relevé suite par suite le 1er octobre 2026 au soir, après le geste d'une case (§5)**, 19 suites, 0 échec :
+  `test_massif_peint` 90, `fumee_appli` 391, `test_fluides` 121, `test_formes_speciales` 110,
+  `test_greffon_peinture` 221, `test_peinture` 29 ; les autres comme ci-dessus.
+  **Relevé le 2 octobre 2026, après les trois liquides et la météo**, 19 suites, **8 981 vérifications, 0 échec** :
+  `test_fluides` 148, `fumee_appli` 426, `test_decoupe` 20 ; les autres comme au relevé du 1er octobre au soir.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 103 cas d'outils / 0 échec, Unity 6.6 26 tests
   sur 26, Unreal 5.8.3 BuildPlugin sans avertissement.
+  **Relevé suite par suite le 2 octobre 2026 au soir, après les couches exclusives**, 19 suites, **9 118
+  vérifications, 0 échec** : `test_massif_peint` 96, `fumee_appli` 535 (après Up / Down et l'exemple), `test_projet` 72, `test_formes_speciales`
+  122, `test_peinture` 29, `test_greffon_peinture` 221 ; les autres comme au relevé précédent. Bancs hors Godot
+  non relancés (rien de ce qu'ils lisent n'a changé).
   ⚠ **LE BANC C++ TOURNE AVEC LE clang DE UNITY** (`…/WebGLSupport/BuildTools/Emscripten/llvm/clang++.exe
   --target=x86_64-pc-windows-msvc`, mêmes drapeaux que `build.sh`) ; et **`RunUAT BuildPlugin` ÉCHOUE SOUS UN
   DOSSIER `-Package` PROFOND** (chemins de plus de 260 caractères, « OtherCompilationError » sans une ligne
@@ -2143,7 +2683,8 @@ désormais le greffon.
    point 9) avec lui** (§1). Ce qu'il a appris reste vrai et reste ici en une ligne : le POM est un effet
    par PIXEL, il ne change jamais une silhouette — le relief réel est à l'artiste. Il a aussi révélé la
    légende par case (point 5), corrigée. `git show 72d1764` rend son code et ses mesures.
-9 bis. **LE TERRAIN MONOLITHIQUE ET LES PROPS RATTACHÉS** (§3) — DÉCIDÉ, pas écrit. D'abord les deux
+9 bis. **LE TERRAIN MONOLITHIQUE ET LES PROPS RATTACHÉS** (§3) — DÉCIDÉ, pas écrit ; **REPORTÉ à une mise à jour
+   future (Jordan, 2 octobre 2026)**. D'abord les deux
    mesures, puis l'import et la récolte, puis le format et les trois greffons.
    - **MESURÉ (29 septembre 2026) — le témoin EST d'un seul tenant** : l'aminci soudé forme UNE
      composante connexe, ses 31 120 triangles. « Tout le reste est un prop » ne prendra donc aucun

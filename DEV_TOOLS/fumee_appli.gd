@@ -363,9 +363,15 @@ func _mener() -> void:
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
 	_les_formes_speciales(ed)
+	_la_salle(ed)
+	_vrai(_salle_finie, "la salle est allée JUSQU'AU BOUT")
 	_vrai(_formes_finies, "les formes spéciales sont allées JUSQU'AU BOUT")
+	_ctrl_clic_cale_la_grille(ed)
+	_vrai(_ctrl_clic_fini, "le Ctrl+clic d'étage est allé JUSQU'AU BOUT")
 
 	await _le_modeleur(ed)
+	await _lasso_et_cercle(ed)
+	_vrai(_lasso_fini, "le lasso et le cercle sont allés JUSQU'AU BOUT")
 	_la_planche_des_tuiles(ed)
 	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
 	await _les_couches_et_leurs_temoins(ed)
@@ -382,6 +388,11 @@ func _mener() -> void:
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
 	_la_provenance(ed)
 	_vrai(_provenance_finie, "la provenance est allée JUSQU'AU BOUT")
+	await _les_fluides(ed)
+	_vrai(_fluides_finis, "les fluides sont allés JUSQU'AU BOUT")
+	await _les_couches_exclusives(ed)
+	_vrai(_exclusives_finies, "les couches exclusives sont allées JUSQU'AU BOUT")
+	await _l_exemple(ed)
 
 	ed.queue_free()
 	await process_frame
@@ -535,6 +546,36 @@ func _l_enregistrement_se_dit(ed: Control) -> void:
 		"Ctrl+S dit que tout est déjà enregistré, et qu'il n'en faut pas")
 	_vrai(ed._etat_enregistre.tooltip_text.contains("no need for Ctrl+S"), "la bulle de la barre l'explique")
 	ed._regler_edition(false)
+
+	# ⚠ LE PROJET AUSSI ATTEND SA SECONDE (Jordan, 1er octobre 2026 : « une toute petite opération fait lagger ») :
+	# un geste de cases ne réécrit plus le .mbproj tout de suite, et ne reconstruit que ses alentours.
+	# L'attendu vient du DISQUE (le fichier relu), pas de l'état de l'écran.
+	ed._aller_a("monde")
+	ed._enregistrer()
+	var sur_disque := FileAccess.get_file_as_string(ed._projet)
+	var loin := Vector3i(57, 0, 57)
+	var completes: int = ed._vue.monde().reconstructions_completes
+	ed._appliquer({"poser": {loin: true}, "effacer": {}}, "Add")
+	_vrai(ed._vue.monde().reconstructions_completes == completes,
+		"une case posée ne reconstruit que ses alentours (aucune reconstruction complète)")
+	_vrai(ed._vue.cases().get_cell_item(loin) != GridMap.INVALID_CELL_ITEM
+		and ed._vue.monde().get_node("Rendu").get_cell_item(loin) != GridMap.INVALID_CELL_ITEM,
+		"et la case est posée, ses pièces dessinées")
+	_egal(FileAccess.get_file_as_string(ed._projet), sur_disque, "un geste de cases ne réécrit PAS le projet tout de suite")
+	_vrai(not ed._minuterie_projet.is_stopped(), "(il attend sa seconde)")
+	_egal(ed._etat_enregistre.text, "● Saving…", "et la barre dit « Saving… »")
+	ed._minuterie_projet.timeout.emit()
+	var relu_geste: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	_vrai(not relu_geste.is_empty() and relu_geste["couches"][ed._active]["cases"].has(loin),
+		"la seconde passée, le projet sur disque porte la case")
+	_egal(ed._etat_enregistre.text, "✓ Saved", "et la barre dit « Saved »")
+	ed._histoire.undo()
+	_vrai(not ed._minuterie_projet.is_stopped(), "un Ctrl+Z attend lui aussi sa seconde")
+	ed._unhandled_key_input(_cle(KEY_S, true))
+	var relu_annule: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	_vrai(ed._minuterie_projet.is_stopped() and not relu_annule.is_empty()
+		and not relu_annule["couches"][ed._active]["cases"].has(loin),
+		"Ctrl+S écrit tout de suite le projet qui attendait (la case annulée n'y est plus)")
 
 
 ## UN TÉMOIN PAR COUCHE (Jordan, 30 septembre 2026) — on le retrouve, on le remodifie, et le remodeler ne
@@ -1538,6 +1579,7 @@ func _play_test(ed: Control) -> void:
 		sommet = maxf(sommet, p.global_position.y)
 	_touche_physique(KEY_SPACE, false)
 	_vrai(sommet - y0 > 1.0, "Espace le fait sauter de plus d'une case (%.2f)" % (sommet - y0))
+	await _le_vol(ed, p)
 	var az: float = ed._vue._azimut
 	var glisse := InputEventMouseMotion.new()
 	glisse.button_mask = MOUSE_BUTTON_MASK_RIGHT
@@ -1593,6 +1635,49 @@ func _play_test(ed: Control) -> void:
 		"Échap rend World, sans personnage ni décor")
 	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
 	_play_test_fini = true
+
+
+## LE VOL (Jordan, 1er octobre 2026), par les vraies touches : F le lance ; Espace monte et il RESTE en
+## l'air une fois lâchée ; A (Q physique) descend mais le sol l'arrête — il heurte toujours le décor ; F le
+## rend à la gravité, et il se repose. Attendus : le sol peint est à y = 10,75 (l'aminci), écrit à la main.
+func _le_vol(ed: Control, p: CharacterBody3D) -> void:
+	for i in 60:
+		await physics_frame
+	_vrai(p.is_on_floor() and not p.vol, "avant F : il marche, au sol")
+	_touche_physique(KEY_F, true)
+	_touche_physique(KEY_F, false)
+	await process_frame
+	_vrai(p.vol and ed._rapport.text.contains("Flying"), "F : il vole, et le rapport dit les touches du vol")
+	var y0: float = p.global_position.y
+	_touche_physique(KEY_SPACE, true)
+	for i in 40:
+		await physics_frame
+	_touche_physique(KEY_SPACE, false)
+	var haut: float = p.global_position.y
+	_vrai(haut - y0 > 2.0, "en vol, Espace tenu le fait monter (%.2f case)" % (haut - y0))
+	for i in 30:
+		await physics_frame
+	var arret: float = p.global_position.y
+	for i in 40:
+		await physics_frame
+	_vrai(arret - haut < 0.5 and absf(p.global_position.y - arret) < 0.02 and not p.is_on_floor(),
+		"Espace lâchée, il s'arrête vite et PLANE au lieu de retomber (%.2f → %.2f → %.2f)"
+		% [haut, arret, p.global_position.y])
+	_touche_physique(KEY_Q, true)
+	for i in 120:
+		await physics_frame
+	_touche_physique(KEY_Q, false)
+	_vrai(p.global_position.y > 10.6 and p.global_position.y < 11.0,
+		"A (Q physique) le fait descendre, et le sol l'ARRÊTE — il ne traverse pas (y = %.2f)" % p.global_position.y)
+	_touche_physique(KEY_SPACE, true)
+	for i in 30:
+		await physics_frame
+	_touche_physique(KEY_SPACE, false)
+	ed._basculer_vol()
+	_vrai(not p.vol and ed._rapport.text.contains("gravity"), "le bouton Fly le rend à la marche, et le dit")
+	for i in 90:
+		await physics_frame
+	_vrai(p.is_on_floor() and p.global_position.y < 10.9, "hors du vol, il retombe et se repose sur le sol")
 
 
 ## Rien du décor entre la TÊTE du personnage et l'œil, ni autour de l'œil. ⚠ Depuis la tête, pas depuis
@@ -2042,6 +2127,29 @@ func _les_formes_speciales(ed: Control) -> void:
 	_egal(g.get_used_cells().size(), deux_murs + 16, "un balcon de 3 × 3 avec son rebord : 16 cases")
 	ed._histoire.undo()
 
+	# L'ESCALIER : cliqué sur la paroi est en (32,2,0), il arrive au niveau y = 2. Taille 2 (z = −1..1), pas 2,
+	# trois rangées (Length 3, gardée du balcon) : dessus 2, 2, 1 en x = 33, 34, 35 ; le garde-corps en z = ±1.
+	ed._choisir_forme_speciale("escalier")
+	_vrai(ed._ligne_bouts.visible and ed._ligne_longueur.visible and ed._ligne_pas.visible
+		and ed._garde_corps.visible and not ed._ligne_profil.visible,
+		"Stairs : Straight / Connect, Length, Step et le garde-corps, pas de profil")
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_vrai(g.get_cell_item(Vector3i(33, 2, 0)) != -1 and g.get_cell_item(Vector3i(34, 2, 0)) != -1
+		and g.get_cell_item(Vector3i(35, 1, 0)) != -1 and g.get_cell_item(Vector3i(35, 2, 0)) == -1
+		and g.get_cell_item(Vector3i(33, 3, 0)) == -1 and g.get_cell_item(Vector3i(33, 3, 1)) != -1
+		and g.get_cell_item(Vector3i(33, 3, -1)) != -1,
+		"un clic pose l'escalier : le palier au niveau cliqué, la marche suivante plus bas, le garde-corps, le passage libre")
+	_vrai(ed._rapport.text.contains("Stairs"), "… et l'écran le dit")
+	ed._histoire.undo()
+	_egal(g.get_used_cells().size(), deux_murs, "UN Ctrl+Z rend les deux murs")
+	ed._choisir_les_bouts("relier")
+	_vrai(not ed._ligne_pas.visible, "Connect : le pas disparaît (les deux sols le donnent)")
+	ed._rapport.text = ""
+	_clic_vue(vue, vue._camera.unproject_position(Vector3(33.0, 2.5, 0.5)))
+	_vrai(vue.ancre_forme.is_empty() and ed._rapport.text.contains("FLOORS"),
+		"Connect : une paroi n'est pas une ancre d'escalier, et l'écran le dit")
+	ed._choisir_les_bouts("droit")
+
 	# [ et ] règlent la taille de la FORME quand une forme est choisie, pas celle du pinceau.
 	var pinceau: float = ed._taille.value
 	ed._unhandled_key_input(_cle(KEY_BRACKETRIGHT))
@@ -2055,6 +2163,831 @@ func _les_formes_speciales(ed: Control) -> void:
 	ed._histoire.undo()
 	_egal(g.get_used_cells().size(), avant, "les murs d'essai défaits : la couche est rendue telle quelle")
 	_formes_finies = true
+
+
+## CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE (Jordan, 1er octobre 2026). Attendu déroulé à la main : une colonne
+## (40, 0..4, 40) vue d'en haut, le rayon touche son sommet (40, 4, 40) → étage 4 ; dans le vide, rien ne change.
+var _ctrl_clic_fini := false
+
+
+func _ctrl_clic_cale_la_grille(ed: Control) -> void:
+	var vue = ed._vue
+	var g: GridMap = vue.cases()
+	var avant := g.get_used_cells().size()
+	var colonne := {}
+	for y in 5:
+		colonne[Vector3i(40, y, 40)] = true
+	ed._appliquer({"poser": colonne, "effacer": {}}, "Add")
+	ed._choisir_outil("ajouter")
+	vue.regler_etage(0)
+	ed._compteur_etage.value = 0
+	var c := InputEventMouseButton.new()
+	c.button_index = MOUSE_BUTTON_LEFT
+	c.ctrl_pressed = true
+	c.position = _viser_d_en_haut(vue, Vector3(40.5, 5.0, 40.5))
+	c.pressed = true
+	vue._gui_input(c)
+	c.pressed = false
+	vue._gui_input(c)
+	_egal(vue.etage, 4, "Ctrl+clic sur le sommet de la colonne : la grille passe à l'étage 4")
+	_egal(int(ed._compteur_etage.value), 4, "… et le compteur d'étage le suit")
+	_vrai(ed._rapport.text.contains("floor y = 4"), "… et l'écran le dit")
+	_egal(g.get_used_cells().size(), avant + 5, "Ctrl+clic ne peint rien (Add choisi)")
+	c.position = _viser_d_en_haut(vue, Vector3(140.5, 0.0, 140.5))
+	c.pressed = true
+	vue._gui_input(c)
+	c.pressed = false
+	vue._gui_input(c)
+	_vrai(vue.etage == 4 and ed._rapport.text.contains("no matter"),
+		"Ctrl+clic dans le vide : l'étage ne change pas, et l'écran le dit")
+	ed._compteur_etage.value = 0
+	ed._histoire.undo()
+	_egal(g.get_used_cells().size(), avant, "la colonne d'essai défaite")
+	_ctrl_clic_fini = true
+
+
+## LES FLUIDES (Jordan, 1er octobre 2026), menés par de VRAIS clics à travers la caméra. Attendus déroulés à la
+## main (les mêmes mondes que `test_fluides`) : une cuvette 5 × 5 en x, z = 60..64 (plancher y = 0, anneau de
+## murs y = 1..2), une colonne en (70, 0..3, 62), et le vide en (90, 0, 90).
+var _fluides_finis := false
+
+
+func _viser_d_en_haut(vue: Control, cible: Vector3) -> Vector2:
+	_viser_depuis(vue, cible, 0.6, 16.0)
+	vue._elevation = 1.2
+	vue._caler()
+	return vue._camera.unproject_position(cible)
+
+
+func _les_fluides(ed: Control) -> void:
+	var vue = ed._vue
+	ed._aller_a("monde")
+	var cuvette := {}
+	for x in range(60, 65):
+		for z in range(60, 65):
+			cuvette[Vector3i(x, 0, z)] = true
+			if x == 60 or x == 64 or z == 60 or z == 64:
+				cuvette[Vector3i(x, 1, z)] = true
+				cuvette[Vector3i(x, 2, z)] = true
+	ed._appliquer({"poser": cuvette, "effacer": {}}, "Add")
+
+	ed._choisir_eau()
+	_vrai(vue.outil == "eau" and ed._bouton_eau.button_pressed
+		and not ed._boutons_outil.values().any(func(b): return (b as Button).button_pressed),
+		"Water : l'outil devient l'eau, aucun outil de pinceau ne reste enfoncé")
+	_egal(ed._eaux.size(), 1, "Water : une couche d'eau est créée pour recevoir la source")
+	_vrai(not ed._ligne_taille.visible and not ed._reglages_forme.visible, "Water : ni pinceau ni réglages de forme")
+
+	# LE LAC : un clic sur le plancher (61..63 libres) — la cuvette se remplit à ras bord, 3 × 3 × 2 = 18 cases.
+	var plancher: Vector2 = _viser_d_en_haut(vue, Vector3(62.5, 1.0, 62.5))
+	vue._survoler(plancher)
+	_egal(vue._apercu.multimesh.instance_count, 9, "l'aperçu montre la surface du lac à venir (9 cases)")
+	_clic_vue(vue, plancher)
+	_egal(ed._eaux[0]["sources"], [Vector3i(62, 1, 62)], "un clic pose UNE source, devant la face visée")
+	ed._recalculer_eau()
+	var lac: Dictionary = ed._corps_eau[0][0]
+	_vrai(lac["genre"] == "lac" and lac["eau"].size() == 18 and lac["niveau"] == 2, "… un lac de 18 cases, niveau 2")
+	var nappe: MeshInstance3D = vue.nappes()[0]
+	_vrai(nappe.mesh != null and nappe.visible and (nappe.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		as PackedVector3Array).size() == 36, "… dessiné : 9 nappes dans la vue")
+	_vrai(nappe.material_override is ShaderMaterial, "… avec le preset de RiverStones")
+	_vrai(ed._rapport.text.contains("Lake"), "… et l'écran le dit")
+
+	# LE MONDE CHANGE, L'EAU SUIT : une échancrure dans le mur fait tomber le lac au niveau 1 ; Ctrl+Z le rend.
+	# ⚠ ON NE RECALCULE PAS À LA MAIN : on attend une image, c'est l'appli qui doit suivre d'elle-même.
+	ed._appliquer({"poser": {}, "effacer": {Vector3i(62, 2, 60): true}}, "Dig")
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "une échancrure creusée : le lac redescend (9 cases), sans un clic")
+	# ⚠ L'EAU APPARTIENT AU MONDE ENTIER : boucher l'échancrure dans une AUTRE couche, CACHÉE, retient le lac.
+	var rock: int = ed._active
+	ed._nouvelle_couche()
+	ed._montrer_couche(ed._active, false)
+	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "une case d'une autre couche, même cachée, retient l'eau")
+	ed._supprimer_couche()
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "supprimer la couche qui bouchait : le lac retombe")
+	ed._activer(rock)
+	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "le mur refermé : le lac remonte")
+
+	# ⚠ UN COUP DE PINCEAU N'EST PAS REJOUÉ PAR L'HISTORIQUE (les cases sont posées pendant le glissé) : c'est le
+	# coup lui-même qui doit rappeler l'eau. Un coup « Dig » sur le mur : le lac redescend ; Ctrl+Z le rend.
+	ed._coup_commence()
+	ed._touche({"poser": {}, "effacer": {Vector3i(62, 2, 64): true}}, "Dig")
+	ed._coup_fini()
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "un coup de pinceau dans le mur : le lac redescend")
+	ed._histoire.undo()
+	await process_frame
+	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "Ctrl+Z sur le coup : le lac remonte")
+
+	# Cliquer sur l'eau qui est déjà là ne pose rien.
+	_clic_vue(vue, plancher)
+	_vrai(ed._eaux[0]["sources"].size() == 1 and ed._rapport.text.contains("already"),
+		"un clic dans un lac ne pose pas de seconde source, et l'écran le dit")
+
+	# LA RIVIÈRE : la colonne (70, 0..3, 62) ; sur son sommet, l'eau va en +X et tombe jusqu'au bas du monde.
+	var colonne := {}
+	for y in 4:
+		colonne[Vector3i(70, y, 62)] = true
+	ed._appliquer({"poser": colonne, "effacer": {}}, "Add")
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(70.5, 4.0, 62.5)))
+	ed._recalculer_eau()
+	var riv: Dictionary = ed._corps_eau[0][1]
+	_vrai(riv["genre"] == "riviere" and riv["fin"] == "sort"
+		and riv["cours"][0]["case"] == Vector3i(70, 4, 62) and riv["cours"][1]["case"] == Vector3i(71, 4, 62),
+		"sur la colonne : une rivière, de (70,4,62) vers +X, qui quitte le monde")
+
+	# L'OCÉAN : dans le vide, sur le plan de l'étage 0. La rivière, recalculée, le REJOINT.
+	vue.regler_etage(0)
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(90.5, 0.0, 90.5)))
+	ed._recalculer_eau()
+	_egal(ed._eaux[0]["sources"].size(), 3, "dans le vide : une troisième source")
+	_vrai(ed._corps_eau[0][2]["genre"] == "ocean" and ed._corps_eau[0][2]["niveau"] == 0, "… un océan au niveau 0")
+	_vrai(ed._corps_eau[0][1]["fin"] == "rejoint", "… et la rivière le rejoint désormais")
+	_vrai(ed._corps_eau[0][0]["eau"].size() == 18, "… le lac, au-dessus de la mer, ne change pas")
+	ed._rafraichir_eaux()
+	_vrai((ed._liste_eaux.get_child(0).get_child(1) as Button).text.contains("1 sea, 1 lake, 1 river"),
+		"la liste des couches d'eau dit ce que porte la couche")
+
+	# LE CLIC DROIT RETIRE l'eau visée ; Ctrl+Z la rend.
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(62.5, 1.0, 62.5)), MOUSE_BUTTON_RIGHT)
+	_egal(ed._eaux[0]["sources"], [Vector3i(70, 4, 62), Vector3i(90, 0, 90)], "un clic droit sur le lac retire SA source")
+	ed._histoire.undo()
+	_egal(ed._eaux[0]["sources"][0], Vector3i(62, 1, 62), "Ctrl+Z la remet À SA PLACE dans la liste")
+
+	# LE PRESET (étape 3) : choisi dans la liste, il change le shader de la nappe, et il s'enregistre.
+	var noms_presets: Array = []
+	for i in ed._preset_eau.item_count:
+		noms_presets.append(ed._preset_eau.get_item_text(i))
+	_egal(noms_presets, ["Stylized (RiverStones)", "Clear (refraction)", "Reflective", "Lava", "Swamp water",
+		"Glowing acid"], "six liquides dans la liste, dont lave, marais et acide (2 octobre 2026)")
+	ed._preset_eau.select(2)
+	ed._preset_eau.item_selected.emit(2)
+	await process_frame
+	var mat: ShaderMaterial = (vue.nappes()[0] as MeshInstance3D).material_override
+	_vrai(ed._eaux[0]["preset"] == "reflechissant" and mat != null and mat.shader.code.contains("reflet_ecran"),
+		"choisir Reflective : la nappe prend le shader réfléchissant")
+
+	# Cacher la couche d'eau ; enregistrer ; relire.
+	ed._montrer_eau(0, false)
+	ed._recalculer_eau()
+	_vrai(not (vue.nappes()[0] as Node3D).visible, "une couche d'eau cachée n'est plus dessinée")
+	ed._enregistrer()
+	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	_vrai(relu.has("eaux") and relu["eaux"].size() == 1 and relu["eaux"][0]["sources"].size() == 3
+		and relu["eaux"][0]["visible"] == false and relu["eaux"][0]["preset"] == "reflechissant",
+		"le projet enregistre la couche d'eau : ses 3 sources, cachée, son preset")
+	ed._montrer_eau(0, true)
+
+	# Une nouvelle couche d'eau devient l'active ; la supprimer s'annule.
+	ed._nouvelle_eau()
+	_vrai(ed._eaux.size() == 2 and ed._eau_active == 1, "New : une seconde couche d'eau, active")
+	ed._supprimer_eau()
+	_egal(ed._eaux.size(), 1, "Delete : supprimée")
+	ed._histoire.undo()
+	_egal(ed._eaux.size(), 2, "Ctrl+Z la rend")
+	_vrai(vue._eaux.visible, "dans World, les nappes se montrent")
+
+	# ROUVRIR le projet : l'eau revient de ses seules sources, et se redéduit.
+	await ed._ouvrir(ed._projet)
+	await process_frame
+	_vrai(ed._eaux.size() == 2 and ed._eaux[0]["sources"].size() == 3 and ed._corps_eau.size() == 2
+		and ed._corps_eau[0][0]["genre"] == "lac" and ed._corps_eau[0][0]["eau"].size() == 18,
+		"rouvert : les deux couches d'eau, leurs sources, et le lac redéduit")
+
+	ed._choisir_outil("ajouter")
+	_vrai(not ed._bouton_eau.button_pressed, "revenir à Add relâche Water")
+	await _la_nage(ed)
+	await _le_rendu_du_play_test(ed)
+	await _la_meteo(ed)
+	_fluides_finis = true
+
+
+## LA BARRE DE RENDU DU PLAY TEST (Jordan, 1er octobre 2026). Attendus : les valeurs DÉCIDÉES de la vue (constantes),
+## pas la liste éprouvée ; et en quittant le Play test, l'éclairage du travail, quoi qu'on ait essayé.
+func _le_rendu_du_play_test(ed: Control) -> void:
+	var vue = ed._vue
+	_vrai(not ed._droite_jeu.visible, "hors du Play test, pas de barre de rendu")
+	vue._cible = Vector3(62.5, 2.0, 62.5)
+	ed._aller_a("jeu")
+	await process_frame
+	_vrai(ed._droite_jeu.visible and not ed._droite.visible, "au Play test, la barre de droite est celle du rendu")
+	var env: Environment = vue._env
+	_vrai(env.ssao_enabled and env.ssil_enabled and not env.sdfgi_enabled and env.glow_enabled,
+		"au départ : SSAO, SSIL, halo, pas de SDFGI")
+	(ed._controles_rendu["ssao"] as CheckButton).button_pressed = false
+	(ed._controles_rendu["sdfgi"] as CheckButton).button_pressed = true
+	(ed._controles_rendu["soleil_hauteur"] as HSlider).value = 20.0
+	(ed._controles_rendu["tonemap"] as OptionButton).select(3)
+	(ed._controles_rendu["tonemap"] as OptionButton).item_selected.emit(3)
+	(ed._controles_rendu["brouillard"] as CheckButton).button_pressed = true
+	_vrai(not env.ssao_enabled and env.sdfgi_enabled, "décocher SSAO l'éteint, cocher SDFGI l'allume")
+	_vrai(is_equal_approx(vue._soleil.rotation_degrees.x, -20.0), "le curseur de hauteur couche le soleil à 20°")
+	_vrai(env.tonemap_mode == Environment.TONE_MAPPER_ACES and env.fog_enabled, "ACES choisi, brouillard allumé")
+	ed._remettre_le_rendu()
+	_vrai(env.ssao_enabled and not env.sdfgi_enabled and not env.fog_enabled
+		and is_equal_approx(vue._soleil.rotation_degrees.x, vue.SOLEIL_ROTATION.x)
+		and env.tonemap_mode == Environment.TONE_MAPPER_LINEAR, "Reset rend les valeurs décidées")
+	_vrai(not (ed._controles_rendu["ssao"] as CheckButton).button_pressed == false
+		and is_equal_approx((ed._controles_rendu["soleil_hauteur"] as HSlider).value, -vue.SOLEIL_ROTATION.x),
+		"… et les contrôles les montrent")
+	# Quitter le Play test avec des réglages changés : le travail retrouve SON éclairage.
+	(ed._controles_rendu["ssao"] as CheckButton).button_pressed = false
+	(ed._controles_rendu["sdfgi"] as CheckButton).button_pressed = true
+	(ed._controles_rendu["soleil_energie"] as HSlider).value = 3.0
+	ed._aller_a("monde")
+	_vrai(env.ssao_enabled and not env.sdfgi_enabled and not env.glow_enabled
+		and is_equal_approx(vue._soleil.light_energy, vue.SOLEIL_ENERGIE), "de retour dans World : l'éclairage du travail")
+	ed._remettre_le_rendu()
+
+
+## LA MÉTÉO DU PLAY TEST (Jordan, 2 octobre 2026), menée par la liste déroulante. Attendus écrits à la main (les
+## nombres de particules et les brouillards choisis, recopiés ici, pas lus dans la vue).
+func _la_meteo(ed: Control) -> void:
+	var vue = ed._vue
+	var env: Environment = vue._env
+	vue._cible = Vector3(62.5, 2.0, 62.5)
+	ed._aller_a("jeu")
+	await process_frame
+	var choix: OptionButton = ed._choix_meteo
+	var noms: Array = []
+	for i in choix.item_count:
+		noms.append(choix.get_item_text(i))
+	_egal(noms, ["None", "Rain", "Blizzard", "Hurricane", "Slow snow", "Hanging particles", "Heat", "Fog"],
+		"la météo propose les huit temps demandés")
+	_vrai(choix.get_parent().get_children().any(func(n): return n is Label and n.text.contains("not exported")),
+		"l'écran dit que la météo n'est pas exportée")
+	_vrai(vue._meteo_noeud == null and not env.fog_enabled, "None : ni particules ni brouillard")
+	choix.select(1)
+	choix.item_selected.emit(1)
+	var gouttes: Array = vue._meteo_noeud.get_children() if vue._meteo_noeud != null else []
+	_vrai(gouttes.size() == 1 and gouttes[0] is GPUParticles3D and (gouttes[0] as GPUParticles3D).amount == 9000,
+		"Rain : 9 000 gouttes autour de l'œil")
+	_vrai(env.fog_enabled and is_equal_approx(env.fog_density, 0.02), "Rain : un brouillard léger (0,02)")
+	_vrai(is_equal_approx(vue._soleil.light_energy, 1.15 * 0.45), "Rain : le soleil réglé (1,15) à 45 %")
+	# L'ŒIL BOUGE (le personnage déplacé de 6 cases) : la boîte d'émission le suit.
+	var depart_oeil: Vector3 = vue._camera.global_position
+	vue.personnage.global_position += Vector3(6, 0, 0)
+	for i in 30:
+		await physics_frame
+		await process_frame
+	_vrai(vue._camera.global_position.distance_to(depart_oeil) > 3.0 and vue._meteo_noeud != null
+		and vue._meteo_noeud.global_position.distance_to(vue._camera.global_position) < 0.01,
+		"l'œil a bougé, les gouttes le suivent")
+	choix.select(6)
+	choix.item_selected.emit(6)
+	_vrai(vue._meteo_noeud != null and vue._meteo_noeud.get_child_count() == 1 and is_equal_approx(env.fog_density, 0.018)
+		and is_equal_approx(vue._soleil.light_energy, 1.15 * 1.2), "Heat : des poussières qui montent, une brume chaude, un soleil plus fort")
+	# UN SEUL ENDROIT DÉCIDE DU BROUILLARD : la météo l'emporte sur celui de la barre de rendu (0,01) — la brume de
+	# Heat (0,018), puis Fog (0,07) — et None rend celui de la barre.
+	(ed._controles_rendu["brouillard"] as CheckButton).button_pressed = true
+	_vrai(env.fog_enabled and is_equal_approx(env.fog_density, 0.018), "cocher le brouillard de la barre sous Heat : la brume de Heat reste")
+	choix.select(7)
+	choix.item_selected.emit(7)
+	_vrai(is_equal_approx(env.fog_density, 0.07), "Fog l'emporte sur le brouillard de la barre (0,07)")
+	choix.select(0)
+	choix.item_selected.emit(0)
+	_vrai(env.fog_enabled and is_equal_approx(env.fog_density, 0.01) and vue._meteo_noeud == null,
+		"None rend le brouillard de la barre, et retire les particules")
+	(ed._controles_rendu["brouillard"] as CheckButton).button_pressed = false
+	# Retenue le temps de la session : quitter, revenir.
+	choix.select(2)
+	choix.item_selected.emit(2)
+	ed._aller_a("monde")
+	_vrai(vue._meteo_noeud == null and not env.fog_enabled and is_equal_approx(vue._soleil.light_energy, 1.15),
+		"hors du Play test : ni météo ni brouillard, le soleil du travail")
+	ed._aller_a("jeu")
+	_vrai(vue._meteo_noeud != null and is_equal_approx(env.fog_density, 0.08), "de retour au Play test : le blizzard revient")
+	ed._remettre_le_rendu()
+	_vrai(vue._meteo_noeud == null and choix.selected == 0, "Reset : plus de météo")
+	ed._aller_a("monde")
+
+
+## LA NAGE AU PLAY TEST (Jordan, 1er octobre 2026), dans la cuvette d'au-dessus : nappe à 2,7 (rangée 2 + 0,7),
+## donc flottaison les pieds à 2,7 − 0,55 = 2,15 ; le fond se voit à 0,75. Attendus écrits à la main.
+func _la_nage(ed: Control) -> void:
+	# ⚠ LE LAC EST DE LA LAVE pour cette plongée : le voile vu de dedans est celui du liquide (2 octobre 2026).
+	var preset_avant: String = ed._eaux[0]["preset"]
+	ed._eaux[0]["preset"] = "lave"
+	ed._vue._cible = Vector3(62.5, 2.0, 62.5)
+	ed._aller_a("jeu")
+	var p: CharacterBody3D = ed._vue.personnage
+	_vrai(p != null and not ed._vue.eau_du_jeu.is_empty(), "Play test : l'eau du monde est donnée au jeu")
+	if p == null:
+		return
+	p.global_position = Vector3(62.5, 1.6, 62.5)
+	for i in 120:
+		await physics_frame
+	_vrai(p.nage and absf(p.global_position.y - 2.15) < 0.15,
+		"tombé dans le lac, il NAGE et flotte la tête hors de l'eau (pieds à %.2f, attendu 2,15)" % p.global_position.y)
+	_vrai(not p.is_on_floor(), "… sans toucher le fond")
+	# PLONGER : la touche de descente du vol (A en AZERTY, Q en QWERTY) ; sous la nappe, la caméra se voile.
+	# La caméra à hauteur de tête et tout près (la cuvette n'a que 3 cases de large : à 4 cases, elle serait
+	# au-dessus du mur), comme d'un glissé et d'un coup de molette.
+	ed._vue._elevation = 0.0
+	ed._vue._distance = 1.0
+	_touche_physique(KEY_Q, true)
+	var fond := p.global_position.y
+	var voile := false
+	var couleur_du_voile := Color.BLACK
+	for i in 60:
+		await physics_frame
+		await process_frame
+		fond = minf(fond, p.global_position.y)
+		voile = voile or ed._vue._env.fog_enabled
+		if ed._vue._env.fog_enabled:
+			couleur_du_voile = ed._vue._env.fog_light_color
+	_touche_physique(KEY_Q, false)
+	_vrai(couleur_du_voile.is_equal_approx(Color("#ff5a10")),
+		"sous une nappe de LAVE, le voile est orange (%s)" % couleur_du_voile)
+	_vrai(fond < 1.4, "A (Q en QWERTY) le fait plonger (pieds à %.2f)" % fond)
+	_vrai(voile, "sous la nappe, la caméra voit à travers le voile de l'eau")
+	_vrai(p.nage, "au fond, il nage encore (il ne marche pas sur le fond du lac)")
+	ed._vue._elevation = ed._vue.CAMERA_ELEVATION
+	ed._vue._distance = ed._vue.CAMERA_DISTANCE
+	for i in 90:
+		await physics_frame
+		await process_frame
+	_vrai(absf(p.global_position.y - 2.15) < 0.15, "relâché, il remonte à la surface (%.2f)" % p.global_position.y)
+	_vrai(not ed._vue._env.fog_enabled, "la tête hors de l'eau, plus de voile")
+	# NAGER plus lentement qu'on ne marche.
+	ed._vue._azimut = PI / 2   # « en avant » = −X : vers le mur ouest, à deux cases
+	_touche_physique(KEY_W, true)
+	for i in 20:
+		await physics_frame
+	var v := Vector2(p.velocity.x, p.velocity.z).length()
+	_vrai(v > 1.0 and v <= p.VITESSE_NAGE + 0.01, "il nage, moins vite qu'il ne marche (%.2f)" % v)
+	# SE HISSER : il nage contre le mur ouest (x = 60, dessus à 2,75) et en sort.
+	for i in 150:
+		await physics_frame
+	_touche_physique(KEY_W, false)
+	# ⚠ « x < 61 » NE PROUVAIT RIEN (mutation muette) : la face amincie du mur est en 60,75, et en nageant contre
+	# elle il arrive en 60,94 sans s'être hissé. Il faut qu'il ait FRANCHI le mur.
+	_vrai(p.global_position.x < 60.3,
+		"contre la berge, il se hisse et franchit le mur (x = %.2f, le mur est en x = 60..61)" % p.global_position.x)
+	ed._aller_a("monde")
+	_vrai(not ed._vue._env.fog_enabled, "hors du jeu, jamais de voile")
+	ed._eaux[0]["preset"] = preset_avant
+
+
+## LA SALLE (Jordan, 2 octobre 2026), menée par un VRAI glissé de souris sur la grille de l'étage 0, dans un coin vide
+## (x 100..104, z 100..103). Attendus écrits à la main : 2 étages vers le haut → y 0..3, une boîte 5 × 4 × 4 = 80
+## cases dont le dedans 3 × 2 × 2 = 12 reste vide : 68 cases posées ; vers le bas, le rectangle est le plafond (y −3..0).
+var _salle_finie := false
+
+
+func _glisser(vue: Control, de: Vector2, a: Vector2) -> void:
+	var appui := InputEventMouseButton.new()
+	appui.button_index = MOUSE_BUTTON_LEFT
+	appui.position = de
+	appui.pressed = true
+	vue._gui_input(appui)
+	var mouvement := InputEventMouseMotion.new()
+	mouvement.position = a
+	mouvement.button_mask = MOUSE_BUTTON_MASK_LEFT
+	vue._gui_input(mouvement)
+	var lache := InputEventMouseButton.new()
+	lache.button_index = MOUSE_BUTTON_LEFT
+	lache.position = a
+	lache.pressed = false
+	vue._gui_input(lache)
+
+
+func _la_salle(ed: Control) -> void:
+	var vue = ed._vue
+	var g: GridMap = vue.cases()
+	ed._aller_a("monde")
+	ed._choisir_forme_speciale("salle")
+	_vrai(vue.outil == "forme" and ed._ligne_salle.visible and not ed._ligne_taille_forme.visible
+		and not ed._ligne_bouts.visible and not ed._ligne_profil.visible and not ed._garde_corps.visible
+		and not ed._ligne_longueur.visible, "Room : ses étages et son sens, rien d'autre")
+	vue.regler_etage(0)
+	ed._etages_forme.value = 2
+	var avant := g.get_used_cells().size()
+	_viser_d_en_haut(vue, Vector3(102.5, 0.0, 101.5))
+	var coin_a: Vector2 = vue._camera.unproject_position(Vector3(100.5, 0.0, 100.5))
+	var coin_b: Vector2 = vue._camera.unproject_position(Vector3(104.5, 0.0, 103.5))
+	_glisser(vue, coin_a, coin_b)
+	_egal(g.get_used_cells().size(), avant + 68, "un glissé de (100,100) à (104,103), 2 étages : 68 cases de coque")
+	_vrai(g.get_cell_item(Vector3i(102, 1, 101)) == -1 and g.get_cell_item(Vector3i(102, 2, 102)) == -1
+		and g.get_cell_item(Vector3i(100, 0, 100)) != -1 and g.get_cell_item(Vector3i(102, 3, 101)) != -1
+		and g.get_cell_item(Vector3i(104, 2, 101)) != -1, "… creuse dedans, avec son sol, son plafond et ses murs")
+	_vrai(ed._rapport.text.contains("Room"), "… et l'écran le dit")
+	ed._histoire.undo()
+	_egal(g.get_used_cells().size(), avant, "UN Ctrl+Z l'enlève")
+	(ed._boutons_sens_salle["bas"] as Button).pressed.emit()
+	_vrai(not bool(vue.forme_speciale["vers_le_haut"]) and ed._aide_forme.text.contains("sinks"), "Down : elle descendra")
+	_glisser(vue, coin_a, coin_b)
+	_vrai(g.get_cell_item(Vector3i(100, -3, 100)) != -1 and g.get_cell_item(Vector3i(102, -1, 101)) == -1
+		and g.get_cell_item(Vector3i(102, 0, 101)) != -1, "vers le bas : de y = −3 à 0, le rectangle est le plafond")
+	ed._histoire.undo()
+	(ed._boutons_sens_salle["haut"] as Button).pressed.emit()
+	# Trop petite : 2 cases de large, rien ne change, l'écran dit pourquoi.
+	_glisser(vue, coin_a, vue._camera.unproject_position(Vector3(101.5, 0.0, 103.5)))
+	_vrai(g.get_used_cells().size() == avant and ed._rapport.text.contains("3 × 3"),
+		"une salle de 2 cases de large est refusée, et l'écran dit pourquoi")
+	ed._unhandled_key_input(_cle(KEY_BRACKETRIGHT))
+	_egal(int(vue.forme_speciale["etages"]), 3, "] ajoute un étage à la salle")
+	ed._choisir_outil("ajouter")
+	_vrai(not ed._reglages_forme.visible, "revenir à Add cache les réglages de la salle")
+	_salle_finie = true
+
+
+## LE LASSO ET LE CERCLE DU MODELEUR (Jordan, 2 octobre 2026), menés par de VRAIS événements de souris dans la vue.
+## ⚠ L'ATTENDU NE PASSE PAS PAR LE MODELEUR : en X-ray (rien de caché), on projette soi-même chaque sommet par la
+## caméra et on le juge dans le triangle ou le disque tracés. Sans X-ray, on garde seulement « moins que tout ».
+var _lasso_fini := false
+
+
+## ── LES COUCHES EXCLUSIVES (Jordan, 2 octobre 2026 : « cases exclusives avec priorité par l'ordre ») ──────────────
+## Une case n'appartient qu'à une couche ; le choix des tuiles lit l'union des couches VISIBLES ; un sommet est posé
+## par la couche de plus petit rang parmi ses huit cases.
+## ⚠ L'ATTENDU NE PASSE NI PAR `MB.couche_du_sommet` NI PAR L'UNION DE L'ÉCRAN : on relit les GRILLES des couches,
+## on bâtit sa propre union, et un sommet à surface est celui dont les huit cases ne sont ni toutes vides ni toutes
+## pleines.
+var _exclusives_finies := false
+
+
+## {couche: {sommet: true}} attendu, et {couche: {sommet: true}} posé (décisions non vides de chaque massif).
+func _proprietaires(ed: Control, couches: Array) -> Array:
+	var union := {}
+	for i in range(ed._vue.nombre_de_couches() - 1, -1, -1):
+		var m := ed._vue.couche(i) as Node3D
+		if m.visible:
+			for c in (m.get_node("Cases") as GridMap).get_used_cells():
+				union[c] = i
+	var attendu := {}
+	var pose := {}
+	for k in couches:
+		attendu[k] = {}
+		pose[k] = {}
+		for s in ed._vue.couche(k)._etat:
+			if not (ed._vue.couche(k)._etat[s] as Dictionary).is_empty():
+				pose[k][s] = true
+	var vus := {}
+	for c in union:
+		for dx in 2:
+			for dy in 2:
+				for dz in 2:
+					var s: Vector3i = c - Vector3i(dx, dy, dz)
+					if vus.has(s):
+						continue
+					vus[s] = true
+					var pleines := 0
+					var rang := 1 << 30
+					for ex in 2:
+						for ey in 2:
+							for ez in 2:
+								var q := s + Vector3i(ex, ey, ez)
+								if union.has(q):
+									pleines += 1
+									rang = mini(rang, union[q])
+					if pleines > 0 and pleines < 8 and attendu.has(rang):
+						attendu[rang][s] = true
+	return [attendu, pose]
+
+
+func _memes_proprietaires(ed: Control, couches: Array, quoi: String) -> void:
+	var r := _proprietaires(ed, couches)
+	for k in couches:
+		_egal(r[1][k].size(), r[0][k].size(), "%s : la couche %d pose %d sommets à surface" % [quoi, k, r[0][k].size()])
+		var memes := true
+		for s in r[0][k]:
+			memes = memes and r[1][k].has(s)
+		_vrai(memes, "%s : … exactement ceux dont elle est la propriétaire" % quoi)
+
+
+func _les_couches_exclusives(ed: Control) -> void:
+	ed._aller_a("monde")
+	ed._nouvelle_couche()
+	var ia: int = ed._active
+	ed._nouvelle_couche()
+	var ib: int = ed._active
+	var ga := ed._vue.couche(ia).get_node("Cases") as GridMap
+	var gb := ed._vue.couche(ib).get_node("Cases") as GridMap
+	var bloc_a := {}
+	var bloc_b := {}
+	for x in range(200, 204):
+		for y in 2:
+			for z in 4:
+				bloc_a[Vector3i(x, y, z)] = true
+	for x in range(202, 206):
+		for y in 2:
+			for z in 4:
+				bloc_b[Vector3i(x, y, z)] = true
+	ed._activer(ia)
+	ed._appliquer({"poser": bloc_a, "effacer": {}}, "Add")
+	ed._activer(ib)
+	ed._appliquer({"poser": bloc_b, "effacer": {}}, "Add")
+	_egal(ga.get_used_cells().size(), 16, "peindre B sur la moitié de A : A perd les 16 cases que B a prises")
+	_egal(gb.get_used_cells().size(), 32, "… et B les a toutes")
+	var doublees := 0
+	for c in gb.get_used_cells():
+		if ga.get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+			doublees += 1
+	_egal(doublees, 0, "aucune case dans deux couches")
+	# SANS FENTE : la frontière A|B ne porte aucune paroi (les huit cases d'un sommet de frontière sont pleines).
+	_memes_proprietaires(ed, [ia, ib], "après le vol")
+	# LA LISTE RECOMPTE : la couche volée dit ce qu'il lui reste.
+	await process_frame
+	var textes: Array = []
+	for ligne in ed._liste_couches.get_children():
+		if not ligne.is_queued_for_deletion():
+			textes.append((ligne.get_child(2) as Button).text)
+	_vrai(textes.size() > ib and textes[ia].contains("16 cells") and textes[ib].contains("32 cells"),
+		"la liste des couches recompte, couche volée comprise — %s" % [textes.slice(ia, ib + 1) if textes.size() > ib else textes])
+	ed._histoire.undo()
+	_egal(ga.get_used_cells().size(), 32, "UN Ctrl+Z rend à A les cases que B lui avait prises")
+	_egal(gb.get_used_cells().size(), 0, "… et retire celles de B")
+	_memes_proprietaires(ed, [ia, ib], "après Ctrl+Z")
+	ed._histoire.redo()
+	_egal(ga.get_used_cells().size(), 16, "Ctrl+Y reprend")
+	_memes_proprietaires(ed, [ia, ib], "après Ctrl+Y")
+
+	# UN COUP DE PINCEAU vole aussi, dans le même Ctrl+Z.
+	ed._activer(ia)
+	ed._coup_commence()
+	ed._touche({"poser": {Vector3i(204, 0, 0): true, Vector3i(205, 0, 0): true}, "effacer": {}}, "Add")
+	ed._touche({"poser": {Vector3i(205, 1, 0): true}, "effacer": {}}, "Add")
+	ed._coup_fini()
+	_egal(gb.get_used_cells().size(), 29, "un coup dans A prend trois cases à B")
+	_egal(ga.get_used_cells().size(), 19, "… et A les a")
+	_memes_proprietaires(ed, [ia, ib], "après le coup")
+	ed._histoire.undo()
+	_vrai(gb.get_used_cells().size() == 32 and ga.get_used_cells().size() == 16, "UN Ctrl+Z défait le coup dans les deux couches")
+	_memes_proprietaires(ed, [ia, ib], "après Ctrl+Z du coup")
+
+	# LA RECONSTRUCTION LOCALE = LA COMPLÈTE, pour chaque couche (une case de B change les sommets de frontière de A).
+	var avant := {}
+	for k in [ia, ib]:
+		avant[k] = (ed._vue.couche(k)._etat as Dictionary).duplicate(true)
+		ed._vue.couche(k).reconstruire()
+	for k in [ia, ib]:
+		_vrai(ed._vue.couche(k)._etat == avant[k], "la couche %d tenue par morceaux = reconstruite en entier" % k)
+
+	# UNE COUCHE CACHÉE sort de l'union : le monde se referme sans elle.
+	ed._montrer_couche(ib, false)
+	_memes_proprietaires(ed, [ia, ib], "B cachée")
+	ed._montrer_couche(ib, true)
+	_memes_proprietaires(ed, [ia, ib], "B remontrée")
+	# ↑ ↓ : B passe AU-DESSUS de A par le vrai bouton — la frontière change de propriétaire, un Ctrl+Z le rend.
+	var nom_a: String = ed._couches[ia]["nom"]
+	var nom_b: String = ed._couches[ib]["nom"]
+	ed._activer(ib)
+	_vrai(not ed._bouton_monter_couche.disabled and ed._bouton_descendre_couche.disabled,
+		"la dernière couche : Up actif, Down grisé")
+	var etat_a_avant := (ed._vue.couche(ia)._etat as Dictionary).size()
+	ed._bouton_monter_couche.pressed.emit()
+	_vrai(ed._active == ia and ed._couches[ia]["nom"] == nom_b and ed._couches[ib]["nom"] == nom_a
+		and ed._vue.couche(ia).get_node("Cases") == gb, "Up : B prend la place de A, et reste active")
+	_memes_proprietaires(ed, [ia, ib], "B montée")
+	var r_monte := _proprietaires(ed, [ia, ib])
+	_vrai((r_monte[1][ia] as Dictionary).size() > 0 and ed._vue.couche(ib)._etat.size() != etat_a_avant,
+		"… et la frontière a changé de propriétaire")
+	ed._histoire.undo()
+	_vrai(ed._couches[ia]["nom"] == nom_a and ed._vue.couche(ia).get_node("Cases") == ga, "Ctrl+Z remet les couches dans leur ordre")
+	_memes_proprietaires(ed, [ia, ib], "ordre rendu")
+	ed._activer(ia)
+	ed._bouton_descendre_couche.pressed.emit()
+	_vrai(ed._couches[ib]["nom"] == nom_a and ed._active == ib, "Down : A descend sous B")
+	_memes_proprietaires(ed, [ia, ib], "A descendue")
+	ed._histoire.undo()
+	_vrai(ed._couches[ia]["nom"] == nom_a, "Ctrl+Z la remonte")
+	# LA PRIORITÉ SUIT L'ORDRE : supprimer A fait monter B d'un rang, et B pose désormais tout son bord.
+	ed._activer(ia)
+	ed._supprimer_couche()
+	var ib2: int = ib - 1
+	_memes_proprietaires(ed, [ib2], "A supprimée")
+	ed._histoire.undo()
+	_memes_proprietaires(ed, [ia, ib], "A rendue")
+
+	# UN PROJET D'AVANT : une case dans deux couches — la plus haute la garde, et l'écran le dit.
+	var vieux := "user://fumee/chevauche.mbproj"
+	var haut := Projet.couche("Top")
+	haut["cases"] = {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true}
+	var bas := Projet.couche("Under")
+	bas["cases"] = {Vector3i(1, 0, 0): true, Vector3i(2, 0, 0): true, Vector3i(0, 0, 0): true}
+	var f := FileAccess.open(vieux, FileAccess.WRITE)
+	f.store_string(Projet.vers_texte([haut, bas], 0))
+	f.close()
+	await ed._ouvrir(vieux)
+	_egal((ed._vue.couche(0).get_node("Cases") as GridMap).get_used_cells().size(), 2, "ouverture : la couche du haut garde ses cases")
+	_egal((ed._vue.couche(1).get_node("Cases") as GridMap).get_used_cells(), [Vector3i(2, 0, 0)],
+		"… celle du dessous perd les deux qu'elle partageait")
+	_vrai(ed._rapport.text.contains("2 cell(s) belonged to several layers"), "et l'écran le dit")
+	_memes_proprietaires(ed, [0, 1], "à l'ouverture")
+	_exclusives_finies = true
+
+
+## L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : la VRAIE archive (`res://exemple/exemple.zip`, prise du projet de
+## Jordan), ouverte par le bouton. ⚠ L'attendu vient de l'ARCHIVE, relue ici sans l'installeur : chaque couche y
+## retrouve ses cases, et ses tuiles — aucune faute, aucun « missing » (un .glb absent donnerait des cubes rouges).
+func _l_exemple(ed: Control) -> void:
+	const Exemple := preload("res://app/exemple.gd")
+	if not Exemple.disponible():
+		print("  (pas d'exemple dans ce checkout : DEV_TOOLS/prendre_l_exemple.gd ne l'a pas encore pris)")
+		return
+	var z := ZIPReader.new()
+	z.open(Exemple.ARCHIVE)
+	var attendu = JSON.parse_string(z.read_file("example.mbproj").get_string_from_utf8())
+	z.close()
+	var bouton: Button = null
+	for b in ed.find_children("*", "Button", true, false):
+		if (b as Button).text == "Open the example":
+			bouton = b
+	_vrai(bouton != null, "Project porte le bouton « Open the example »")
+	if bouton == null:
+		return
+	bouton.pressed.emit()
+	for i in 600:
+		await process_frame
+		if ed._projet.contains("/example/") and not ed._ouverture:
+			break
+	_vrai(ed._projet.ends_with("example.mbproj") and ed._projet.contains("/example/"),
+		"l'exemple s'ouvre depuis son dossier d'installation — %s" % ed._projet)
+	_egal(ed._couches.size(), (attendu["couches"] as Array).size(), "toutes ses couches")
+	for i in mini(ed._couches.size(), (attendu["couches"] as Array).size()):
+		var c: Dictionary = attendu["couches"][i]
+		var m: Node = ed._vue.couche(i)
+		_egal((m.get_node("Cases") as GridMap).get_used_cells().size(), (c["cases"] as Array).size() / 3,
+			"« %s » : ses cases" % c["nom"])
+		var poses := (m.get_node("Rendu") as GridMap).get_used_cells().size()
+		var fautes := (m.get_node("Fautes") as GridMap).get_used_cells().size()
+		_vrai(poses > 0 and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
+			% [c["nom"], poses, fautes])
+	_vrai(not ed._rapport.text.contains("missing"), "rien ne manque à l'ouverture")
+
+
+func _souris(vue: Control, ou: Vector2, bouton: int, appuye: bool, ctrl := false, maj := false) -> void:
+	var e := InputEventMouseButton.new()
+	e.button_index = bouton
+	e.position = ou
+	e.pressed = appuye
+	e.ctrl_pressed = ctrl
+	e.shift_pressed = maj
+	vue._gui_input(e)
+
+
+func _bouge(vue: Control, ou: Vector2) -> void:
+	var m := InputEventMouseMotion.new()
+	m.position = ou
+	vue._gui_input(m)
+
+
+func _lasso_et_cercle(ed: Control) -> void:
+	var vue = ed._vue
+	ed._aller_a("witness")
+	if not vue.edition:
+		ed._input(_cle(KEY_TAB))
+	var mo: Node3D = ed._modeleur
+	if mo.maillage == null:
+		_vrai(false, "lasso : le modeleur n'a pas de maillage")
+		return
+	# ⚠ DE TROIS QUARTS, EN PERSPECTIVE, TOUT PRÈS DE LA TUILE EN ÉDITION : vue de face depuis le bloc entier, une tuile
+	# de paroi ne faisait que 3 pixels de large, et les points du lasso tombaient à moins de 4 pixels l'un de l'autre.
+	if vue._camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		vue.basculer_ortho()
+	vue._azimut = 0.6
+	vue._elevation = 0.5
+	vue._distance = 3.0
+	vue.cadrer(mo.pose.origin)
+	for i in 3:
+		await process_frame
+	ed._input(_cle(KEY_1))
+	var cam: Camera3D = vue._camera
+	# ⚠ LE TRACÉ SE POSE SUR LA TUILE EN ÉDITION, à une taille qui n'en couvre qu'une PARTIE : posé au centre de l'écran,
+	# il ne couvrait aucun sommet, et « exactement ceux du triangle » passait sur 0 = 0.
+	var ecran := PackedVector2Array()
+	for q in mo.maillage.sommets:
+		ecran.append(cam.unproject_position(mo.pose * q))
+	var boite := Rect2(ecran[0], Vector2.ZERO)
+	for s in ecran:
+		boite = boite.expand(s)
+	var c: Vector2 = boite.get_center()
+	var demi: Vector2 = boite.size * 0.5
+	var tri := PackedVector2Array([c + Vector2(-demi.x, -demi.y) * 0.9, c + Vector2(demi.x * 0.2, -demi.y * 0.9),
+		c + Vector2(-demi.x * 0.3, demi.y * 0.9)])
+	mo.rayon_cercle = maxf(8.0, minf(demi.x, demi.y) * 0.5)
+	var attendu_tri := {}
+	var dans_le_disque := {}
+	var rayon: float = mo.rayon_cercle
+	for i in mo.maillage.sommets.size():
+		var s: Vector2 = cam.unproject_position(mo.pose * mo.maillage.sommets[i])
+		if Geometry2D.is_point_in_polygon(s, tri):
+			attendu_tri[i] = true
+		if s.distance_to(c) <= rayon:
+			dans_le_disque[i] = true
+	_vrai(attendu_tri.size() > 0 and attendu_tri.size() < mo.maillage.sommets.size(),
+		"le triangle tracé couvre une partie des sommets (%d sur %d)" % [attendu_tri.size(), mo.maillage.sommets.size()])
+
+	# LE LASSO : Ctrl + clic droit glissé, en X-ray.
+	mo.rayons_x = true
+	mo.tout_choisir(false)
+	_souris(vue, tri[0], MOUSE_BUTTON_RIGHT, true, true)
+	_vrai(mo.modal == "lasso", "Ctrl + clic droit lance le lasso")
+	_bouge(vue, tri[1])
+	_bouge(vue, tri[2])
+	_souris(vue, tri[2], MOUSE_BUTTON_RIGHT, false, true)
+	_egal(mo.sel_s.keys().size(), attendu_tri.size(), "lasso en X-ray : autant de sommets que dans le triangle")
+	var memes := true
+	for i in attendu_tri:
+		memes = memes and mo.sel_s.has(i)
+	_vrai(memes and mo.modal == "", "… exactement eux, et le lasso est fini")
+	# Maj + Ctrl : retire.
+	mo.tout_choisir(true)
+	var tous: int = mo.sel_s.size()
+	_souris(vue, tri[0], MOUSE_BUTTON_RIGHT, true, true, true)
+	_bouge(vue, tri[1])
+	_bouge(vue, tri[2])
+	_souris(vue, tri[2], MOUSE_BUTTON_RIGHT, false, true, true)
+	_egal(mo.sel_s.size(), tous - attendu_tri.size(), "Maj + Ctrl + lasso retire exactement le triangle")
+	# Sans X-ray, par le bouton et le clic gauche, un lasso autour de toute la tuile : il prend des sommets, et seulement
+	# des sommets de son tracé. ⚠ L'OCCLUSION ELLE-MÊME est gardée par le test de la boîte B (même règle commune,
+	# `_choisir_si`) : vue de trois quarts, cette tuile — un morceau de surface ouvert — n'a aucun sommet caché.
+	var autour := boite.grow(12.0)
+	mo.rayons_x = false
+	mo.tout_choisir(false)
+	ed._geste_modeleur("lasso")
+	_souris(vue, autour.position, MOUSE_BUTTON_LEFT, true)
+	_bouge(vue, autour.position + Vector2(autour.size.x, 0))
+	_bouge(vue, autour.end)
+	_bouge(vue, autour.position + Vector2(0, autour.size.y))
+	_souris(vue, autour.position + Vector2(0, autour.size.y), MOUSE_BUTTON_LEFT, false)
+	var hors := 0
+	for i in mo.sel_s:
+		if not autour.has_point(cam.unproject_position(mo.pose * mo.maillage.sommets[i])):
+			hors += 1
+	_vrai(mo.sel_s.size() > 0 and hors == 0 and mo.modal == "",
+		"le bouton Lasso au clic gauche, sans X-ray : %d sommets, tous dans le tracé" % mo.sel_s.size())
+
+	# LE CERCLE : C, un clic gauche au centre (X-ray), la molette, Maj retire, Échap finit.
+	mo.rayons_x = true
+	mo.tout_choisir(false)
+	ed._input(_cle(KEY_C))
+	_vrai(mo.modal == "cercle", "C lance le cercle")
+	_bouge(vue, c)
+	_souris(vue, c, MOUSE_BUTTON_LEFT, true)
+	_souris(vue, c, MOUSE_BUTTON_LEFT, false)
+	_vrai(dans_le_disque.size() > 0 and dans_le_disque.size() < mo.maillage.sommets.size(),
+		"le disque couvre une partie des sommets (%d)" % dans_le_disque.size())
+	_egal(mo.sel_s.size(), dans_le_disque.size(), "un clic du cercle prend les %d sommets du disque" % dans_le_disque.size())
+	_souris(vue, c, MOUSE_BUTTON_WHEEL_UP, true)
+	_vrai(is_equal_approx(mo.rayon_cercle, rayon * 1.15), "la molette agrandit le cercle")
+	mo.rayon_cercle = rayon
+	_souris(vue, c, MOUSE_BUTTON_LEFT, true, false, true)
+	_souris(vue, c, MOUSE_BUTTON_LEFT, false, false, true)
+	_egal(mo.sel_s.size(), 0, "Maj + clic du cercle les retire")
+	# Peindre en glissant : un trait de gauche à droite prend plus qu'un seul clic.
+	_bouge(vue, c - Vector2(demi.x, 0))
+	_souris(vue, c - Vector2(demi.x, 0), MOUSE_BUTTON_LEFT, true)
+	for k in 11:
+		_bouge(vue, c + Vector2(-demi.x + demi.x * 0.2 * k, 0))
+	_souris(vue, c + Vector2(demi.x, 0), MOUSE_BUTTON_LEFT, false)
+	_vrai(mo.sel_s.size() > dans_le_disque.size(), "un trait du cercle peint la sélection le long du geste (%d)" % mo.sel_s.size())
+	# LES ARÊTES DU CERCLE SE PRENNENT PAR LEUR MILIEU (on promène le cercle comme un pinceau ; ses deux bouts tombent
+	# rarement ensemble dedans). Attendu : le milieu projeté par la caméra, dans le disque.
+	# (Le cercle avale les touches, comme dans Blender : on en sort pour changer de mode, puis on y revient.)
+	ed._input(_cle(KEY_ESCAPE))
+	ed._input(_cle(KEY_2))
+	mo.tout_choisir(false)
+	ed._input(_cle(KEY_C))
+	_vrai(mo.mode_sel == "arete" and mo.modal == "cercle", "mode arête, le cercle repris")
+	var aretes_au_milieu := 0
+	var aretes_aux_deux_bouts := 0
+	for e in mo._aretes():
+		var pa: Vector3 = mo.maillage.sommets[e.x]
+		var pb: Vector3 = mo.maillage.sommets[e.y]
+		if cam.unproject_position(mo.pose * ((pa + pb) * 0.5)).distance_to(c) <= rayon:
+			aretes_au_milieu += 1
+		if cam.unproject_position(mo.pose * pa).distance_to(c) <= rayon and cam.unproject_position(mo.pose * pb).distance_to(c) <= rayon:
+			aretes_aux_deux_bouts += 1
+	_vrai(aretes_au_milieu > aretes_aux_deux_bouts, "le disque distingue les deux règles (%d par le milieu, %d par les deux bouts)"
+		% [aretes_au_milieu, aretes_aux_deux_bouts])
+	_souris(vue, c, MOUSE_BUTTON_LEFT, true)
+	_souris(vue, c, MOUSE_BUTTON_LEFT, false)
+	_egal(mo.sel_a.size(), aretes_au_milieu, "en mode arête, le cercle prend les arêtes dont le MILIEU est dans le disque")
+	ed._input(_cle(KEY_ESCAPE))
+	_vrai(mo.modal == "", "Échap finit le cercle")
+	# Les faces : par leur centre.
+	ed._input(_cle(KEY_3))
+	mo.tout_choisir(false)
+	var faces_tri := 0
+	for f in mo.maillage.faces.size():
+		if Geometry2D.is_point_in_polygon(cam.unproject_position(mo.pose * mo.maillage.centre(f)), tri) \
+				and cam.is_position_in_frustum(mo.pose * mo.maillage.centre(f)):
+			faces_tri += 1
+	_souris(vue, tri[0], MOUSE_BUTTON_RIGHT, true, true)
+	_bouge(vue, tri[1])
+	_bouge(vue, tri[2])
+	_souris(vue, tri[2], MOUSE_BUTTON_RIGHT, false, true)
+	_egal(mo.sel_f.size(), faces_tri, "lasso en mode face (X-ray) : les faces dont le centre est dans le triangle")
+	mo.rayons_x = false
+	mo.tout_choisir(false)
+	_lasso_fini = true
 
 
 func _cle(k: Key, ctrl := false) -> InputEventKey:

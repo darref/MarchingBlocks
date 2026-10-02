@@ -43,6 +43,7 @@ var _profile_bar: HBoxContainer
 var _profile_buttons := {}
 var _shape_size: SpinBox
 var _shape_length: SpinBox
+var _stairs_step: SpinBox
 var _rail: Button
 var _brush: HBoxContainer
 var _selection_bar: HBoxContainer
@@ -84,7 +85,9 @@ func _build() -> void:
 			+ "deep); Connect joins a floor and a ceiling."],
 			["bridge", "Bridge", "Builds a deck out of a WALL across the air to the first wall in front; Connect "
 			+ "joins two walls, and the deck bends."],
-			["balcony", "Balcony", "A slab sticking out of a WALL at the height you click, with its rail."]]:
+			["balcony", "Balcony", "A slab sticking out of a WALL at the height you click, with its rail."],
+			["stairs", "Stairs", "Builds stairs against a WALL: click where they should arrive, they come down to "
+			+ "the ground, Step cells per step; Connect climbs from one floor to another, higher up."]]:
 		_special_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_special(m[0]))
 	# Their settings: only while a shape is the tool, and only what that shape reads.
 	_shape_bar = HBoxContainer.new()
@@ -106,10 +109,13 @@ func _build() -> void:
 	_shape_size = _spin(_shape_bar, 1, 7, "Size ( [ and ] ): 1 is one cell across, 2 is three, 3 is five…",
 		func(v: int) -> void: editor.shape_size = v)
 	_shape_length = _spin(_shape_bar, 1, Shapes.LENGTH_MAX, "Length: how deep a straight tunnel or well goes when "
-		+ "it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out.",
+		+ "it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out, how far "
+		+ "stairs may run before they reach the ground.",
 		func(v: int) -> void: editor.shape_length = v)
-	_rail = _toggle(_shape_bar, "rail", "Rail", "A one-cell rim along the open sides (bridge, balcony). Needs a size "
-		+ "of 2 or more.", func() -> void: editor.rail = _rail.button_pressed)
+	_stairs_step = _spin(_shape_bar, 1, Shapes.STEP_MAX, "Step: how deep each stair is, in cells (1 is steep).",
+		func(v: int) -> void: editor.stairs_step = v)
+	_rail = _toggle(_shape_bar, "rail", "Rail", "A one-cell rim along the open sides (bridge, balcony, stairs). "
+		+ "Needs a size of 2 or more.", func() -> void: editor.rail = _rail.button_pressed)
 	# The brush: only for Add, Dig and Select — Rect and Box have none.
 	_brush = HBoxContainer.new()
 	_brush.add_theme_constant_override("separation", 2)
@@ -332,7 +338,9 @@ func refresh() -> void:
 	_shape_size.set_value_no_signal(editor.shape_size)
 	_shape_length.set_value_no_signal(editor.shape_length)
 	_shape_length.visible = editor.special == "balcony" or not editor.connect_ends
-	_rail.visible = editor.special in ["bridge", "balcony"]
+	_stairs_step.set_value_no_signal(editor.stairs_step)
+	_stairs_step.visible = editor.special == "stairs" and not editor.connect_ends
+	_rail.visible = editor.special in ["bridge", "balcony", "stairs"]
 	_rail.set_pressed_no_signal(editor.rail)
 	_brush.visible = editor.mode in ["add", "dig", "select"]
 	_size.set_value_no_signal(editor.brush_size)

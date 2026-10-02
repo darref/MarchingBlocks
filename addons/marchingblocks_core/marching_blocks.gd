@@ -878,23 +878,67 @@ static func poses(pleines: Dictionary, cles: Dictionary) -> Array:
 	var plafond: int = plafond_de(pleines)
 	var sortie: Array = []
 	for k in sommets:
-		var sommet: Vector3i = k
-		var b: int = bits(pleines, sommet)
-		var r: Dictionary = classer(b)
-		if not r["surface"]:
-			continue
-		var cle := ""
-		var dehors := false
-		if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond):
-			var variante: String = nom_en_contexte(r["nom"], true)
-			if cles.has(variante):
-				cle = variante
-				dehors = true
-		if cle == "" and cles.has(r["nom"]):
-			cle = r["nom"]
-		sortie.append({"sommet": sommet, "nom": r["nom"], "cle": cle,
-			"orientation": r["orientation"], "dehors": dehors})
+		var d: Dictionary = pose_du_sommet(pleines, k, cles, plafond)
+		if not d.is_empty():
+			sortie.append(d)
 	return sortie
+
+
+## LES COUCHES EXCLUSIVES (DÉCIDÉ, Jordan, 2 octobre 2026 : « cases exclusives avec priorité par l'ordre »). Une case
+## n'appartient qu'à UNE couche ; `union` = {case: rang de sa couche}, le rang étant sa place dans la liste (0 = la
+## plus haute, prioritaire). ⚠ LE CHOIX DES TUILES LIT L'UNION : chaque couche ne regardant que ses cases, la frontière
+## entre roche et glace était, des deux côtés, un « vide » — deux parois face à face, et, l'aminci rentrant chacune
+## d'un quart de case, une fente d'une demi-case. Un sommet est POSÉ par la couche de plus petit rang parmi ses huit
+## cases. Rend −1 si aucune n'est pleine.
+static func couche_du_sommet(union: Dictionary, sommet: Vector3i) -> int:
+	var r := -1
+	for t in 8:
+		var c: Vector3i = sommet + COINS[t]
+		if union.has(c):
+			var v := int(union[c])
+			if r < 0 or v < r:
+				r = v
+	return r
+
+
+## LES POSES D'UN MONDE EN COUCHES — la référence : celles de `poses(union)`, chacune avec la clé du jeu de SA couche
+## (`cles_par_couche[rang]`) et son rang dans `"couche"`.
+static func poses_en_couches(union: Dictionary, cles_par_couche: Array) -> Array:
+	var sommets := {}
+	for c in union:
+		for s in sommets_de(c):
+			sommets[s] = true
+	var plafond: int = plafond_de(union)
+	var sortie: Array = []
+	for k in sommets:
+		var rang: int = couche_du_sommet(union, k)
+		var d: Dictionary = pose_du_sommet(union, k, cles_par_couche[rang], plafond)
+		if not d.is_empty():
+			d["couche"] = rang
+			sortie.append(d)
+	return sortie
+
+
+## LA DÉCISION POUR UN SEUL SOMMET — {} s'il ne porte pas de surface. `poses()` l'appelle pour chaque sommet ;
+## le peintre l'appelle seule pour ne refaire que les sommets qu'un geste peut changer (`MassifPeint.
+## reconstruire_autour`). ⚠ UNE RÈGLE, UN ENDROIT : c'est la même fonction des deux côtés.
+## ⚠ Elle ne lit que les cases des colonnes x..x+1, z..z+1, à partir de l'étage du sommet (ses huit cases, puis
+## le ciel au-dessus). `plafond` n'est qu'une borne : tout plafond ≥ la plus haute case rend la même réponse.
+static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictionary, plafond: int) -> Dictionary:
+	var b: int = bits(pleines, sommet)
+	var r: Dictionary = classer(b)
+	if not r["surface"]:
+		return {}
+	var cle := ""
+	var dehors := false
+	if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond):
+		var variante: String = nom_en_contexte(r["nom"], true)
+		if cles.has(variante):
+			cle = variante
+			dehors = true
+	if cle == "" and cles.has(r["nom"]):
+		cle = r["nom"]
+	return {"sommet": sommet, "nom": r["nom"], "cle": cle, "orientation": r["orientation"], "dehors": dehors}
 
 
 ## Le nom de CLASSE d'une tuile, le suffixe d'air libre retiré. ⚠ C'est par là que les contrôles existants

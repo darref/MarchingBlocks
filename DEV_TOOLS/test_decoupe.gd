@@ -55,6 +55,7 @@ func _initialize() -> void:
 	_fusionner_conserve_les_couleurs()
 	_l_aire_se_conserve()
 	_aucun_triangle_plat()
+	_la_memoire_des_relectures()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -79,6 +80,33 @@ func _dire(condition: bool, quoi: String) -> void:
 ## Un carré de 2 × 2 dans le plan XY, en deux triangles, chaque coin d'une couleur FRANCHE.
 ## ⚠ BÂTI ICI, à la main, sans passer par `repli_procedural` : trancher la géométrie d'un module pour
 ## la comparer à elle-même serait une tautologie.
+## LA MÉMOIRE DES RELECTURES (1er octobre 2026) : pendant un tranchage, un maillage n'est relu qu'une fois.
+## ⚠ `poser` REMPLACE des tableaux dans le conteneur qu'il relit : si la mémoire le lui prêtait au lieu d'une copie,
+## poser deux fois le même maillage rendrait la seconde fois des sommets DÉJÀ déplacés. Le tranchage d'aujourd'hui ne
+## relit pas un maillage déjà posé — la garde de `test_blocs_maitres` restait muette — d'où ce cas construit.
+## Attendu à la main : le carré (0..2, 0..2) décalé de +5 en x va de 5 à 7, les deux fois.
+func _la_memoire_des_relectures() -> void:
+	var carre := _carre_colore(true)
+	Decoupe.memoriser(true)
+	var une := Decoupe.poser(carre, Transform3D(Basis(), Vector3(5, 0, 0)))
+	var deux := Decoupe.poser(carre, Transform3D(Basis(), Vector3(5, 0, 0)))
+	var evitees := Decoupe.relectures_evitees
+	Decoupe.memoriser(false)
+	var xs := []
+	for m in [une, deux]:
+		var v: PackedVector3Array = m.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		var lo := INF
+		var hi := -INF
+		for p in v:
+			lo = minf(lo, p.x)
+			hi = maxf(hi, p.x)
+		xs.append([lo, hi])
+	_dire(xs == [[5.0, 7.0], [5.0, 7.0]], "poser deux fois le même maillage, mémoire active : 5..7 les deux fois (obtenu %s)" % [xs])
+	_dire(evitees > 0, "la seconde lecture vient bien de la mémoire")
+	Decoupe.memoriser(false)
+	_dire(Decoupe.tableaux(carre, 0) == carre.surface_get_arrays(0), "hors d'un tranchage, la mémoire est éteinte")
+
+
 func _carre_colore(avec_couleurs: bool) -> ArrayMesh:
 	var coins := [Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(2, 2, 0), Vector3(0, 2, 0)]
 	var teintes := [Color(1, 0, 0), Color(0, 1, 0), Color(0, 0, 1), Color(1, 1, 0)]

@@ -143,6 +143,99 @@ namespace MBPaint
 			return Body;
 		}
 
+		// A stairs column: its top and every empty cell below it down to the ground; with no ground within
+		// LengthMax cells, the top and the cell under it. A full top adds nothing. An edge carries the rail.
+		void ShpColumn(const FCellSet& Cells, FCellSet& Body, const FCell& Top, bool bEdge)
+		{
+			if (ShpHas(Cells, Top)) return;
+			Body.insert(Top);
+			std::vector<FCell> Below;
+			bool bGround = false;
+			for (int K = 1; K <= Shapes::LengthMax; ++K)
+			{
+				const FCell Q(Top.X, Top.Y - K, Top.Z);
+				if (ShpHas(Cells, Q)) { bGround = true; break; }
+				Below.push_back(Q);
+			}
+			if (bGround) Body.insert(Below.begin(), Below.end());
+			else Body.insert(FCell(Top.X, Top.Y - 1, Top.Z));
+			if (bEdge) Body.insert(FCell(Top.X, Top.Y + 1, Top.Z));
+		}
+
+		// One-click stairs against a wall: they ARRIVE level with the clicked cell. Row J (the smallest
+		// J >= 1 with (d.n)^2 <= J^2 |n|^2) has its top at A.Y - (J - 1) / Step; they end at the first row
+		// whose top cells are all full already (the ground), or after Length rows.
+		FCellSet ShpStairs(const FCellSet& Cells, const FCell& A, const FCell& N, int Length, int Step, int H, bool bRail)
+		{
+			const long long NN = ShpDot(N, N);
+			const FCell M(-N.Z, 0, N.X);
+			const int Reach = Length + H + 1;
+			std::vector<std::vector<FCell>> Rows(static_cast<size_t>(Length) + 1);
+			for (int X = -Reach; X <= Reach; ++X)
+				for (int Z = -Reach; Z <= Reach; ++Z)
+				{
+					const FCell D(X, 0, Z);
+					const long long Along = ShpDot(D, N);
+					const long long Side = ShpDot(D, M);
+					if (Along <= 0 || Side * Side > static_cast<long long>(H) * H * NN) continue;
+					int J = 1;
+					while (Along * Along > static_cast<long long>(J) * J * NN) ++J;
+					if (J > Length) continue;
+					Rows[static_cast<size_t>(J)].push_back(D);
+				}
+			FCellSet Body;
+			for (int J = 1; J <= Length; ++J)
+			{
+				const std::vector<FCell>& Row = Rows[static_cast<size_t>(J)];
+				if (Row.empty()) continue;
+				const int Top = A.Y - (J - 1) / Step;
+				bool bGrounded = true;
+				for (const FCell& D : Row)
+					if (!ShpHas(Cells, FCell(A.X + D.X, Top, A.Z + D.Z))) { bGrounded = false; break; }
+				if (bGrounded) break;
+				for (const FCell& D : Row)
+				{
+					const long long Side = ShpDot(D, M);
+					const bool bEdge = bRail && H >= 1 && Side * Side > static_cast<long long>(H - 1) * (H - 1) * NN;
+					ShpColumn(Cells, Body, FCell(A.X + D.X, Top, A.Z + D.Z), bEdge);
+				}
+			}
+			return Body;
+		}
+
+		// Connected stairs, floor to floor, straight across from the lower end L to the higher H. False when
+		// steeper than one cell up per cell across (too_steep).
+		bool ShpStairsBetween(const FCellSet& Cells, const FCell& A, const FCell& B, int H, bool bRail, FCellSet& Body)
+		{
+			const FCell Lo = A.Y <= B.Y ? A : B;
+			const FCell Hi = A.Y <= B.Y ? B : A;
+			const FCell LoFlat(Lo.X, 0, Lo.Z);
+			const FCell DV(Hi.X - Lo.X, 0, Hi.Z - Lo.Z);
+			const long long DDV = ShpDot(DV, DV);
+			const long long Rise = static_cast<long long>(Hi.Y) - Lo.Y;
+			if (Rise * Rise > DDV) return false;
+			const FCell U(-DV.Z, 0, DV.X);
+			FCellSet Columns;
+			for (int X = std::min(Lo.X, Hi.X) - H - 1; X <= std::max(Lo.X, Hi.X) + H + 1; ++X)
+				for (int Z = std::min(Lo.Z, Hi.Z) - H - 1; Z <= std::max(Lo.Z, Hi.Z) + H + 1; ++Z)
+				{
+					const FCell D(X - Lo.X, 0, Z - Lo.Z);
+					const long long T = ShpDot(D, DV);
+					const long long Side = ShpDot(D, U);
+					if (T >= 0 && T <= DDV && Side * Side <= static_cast<long long>(H) * H * DDV) Columns.insert(FCell(X, 0, Z));
+				}
+			for (const FCell& Q : Shapes::AxisWalk(LoFlat, FCell(Hi.X, 0, Hi.Z))) Columns.insert(Q);
+			for (const FCell& C : Columns)
+			{
+				const FCell D = C - LoFlat;
+				const long long T = std::max(0LL, std::min(DDV, ShpDot(D, DV)));
+				const long long Side = ShpDot(D, U);
+				const bool bEdge = bRail && H >= 1 && Side * Side > static_cast<long long>(H - 1) * (H - 1) * DDV;
+				ShpColumn(Cells, Body, FCell(C.X, static_cast<int>(Lo.Y + T * Rise / DDV), C.Z), bEdge);
+			}
+			return true;
+		}
+
 		// No two cells may touch by an edge only. By rounds, order-free: every 2×2 checkerboard around a
 		// cell changed in the previous round; dig clears its full pair, add sets its empty pair.
 		int ShpRepair(const FCellSet& Cells, FCellSet& Set, FCellSet& Clear, bool bDig)
@@ -209,12 +302,21 @@ namespace MBPaint
 			return ShpDot(N, Face) <= 0 ? Face : N;
 		}
 
-		FCell NormalFor(ESpecialShape Shape, const FCellSet& Cells, const FCell& C, const FCell& Face)
+		FCell NormalFor(ESpecialShape Shape, const FCellSet& Cells, const FCell& C, const FCell& Face, bool bConnect)
 		{
 			if (Shape == ESpecialShape::Well)
 				return Face.X == 0 && Face.Z == 0 && Face.Y != 0 ? Face : FCell();
+			if (Shape == ESpecialShape::Stairs && bConnect)
+				return Face.X == 0 && Face.Y == 1 && Face.Z == 0 ? Face : FCell();
 			if (Face.Y != 0 || (Face.X == 0 && Face.Z == 0)) return FCell();
 			return WallNormal(Cells, C, Face);
+		}
+
+		const char* EndError(ESpecialShape Shape, bool bConnect)
+		{
+			if (Shape == ESpecialShape::Well) return "needs_floor_or_ceiling";
+			if (Shape == ESpecialShape::Stairs && bConnect) return "needs_a_floor";
+			return "needs_a_wall";
 		}
 
 		std::vector<FCell> AxisWalk(const FCell& P0, const FCell& P1)
@@ -249,19 +351,34 @@ namespace MBPaint
 			const int H = std::max(1, std::min(7, R.Size)) - 1;
 			const int Length = std::max(1, std::min(LengthMax, R.Length));
 			const bool bDig = Digs(R.Shape);
-			const char* NeedsFace = R.Shape == ESpecialShape::Well ? "needs_floor_or_ceiling" : "needs_a_wall";
-			const FCell NA = NormalFor(R.Shape, Cells, R.A, R.FaceA);
-			if (ShpIsZero(NA)) { Res.Error = NeedsFace; return Res; }
+			const bool bConnect = R.bConnect && R.Shape != ESpecialShape::Balcony;
+			const FCell NA = NormalFor(R.Shape, Cells, R.A, R.FaceA, bConnect);
+			if (ShpIsZero(NA)) { Res.Error = EndError(R.Shape, bConnect); return Res; }
 			FCellSet Chosen;
 			if (R.Shape == ESpecialShape::Balcony)
 				Chosen = ShpBalcony(R.A, NA, Length, H, R.bRail);
+			else if (R.Shape == ESpecialShape::Stairs)
+			{
+				if (bConnect)
+				{
+					if (ShpIsZero(NormalFor(R.Shape, Cells, R.B, R.FaceB, true))) { Res.Error = "needs_a_floor"; return Res; }
+					if (R.B == R.A) { Res.Error = "same_cell"; return Res; }
+					if (ShpDot(R.B - R.A, R.B - R.A) > static_cast<long long>(SpanMax) * SpanMax) { Res.Error = "too_far"; return Res; }
+					if (!ShpStairsBetween(Cells, R.A, R.B, H, R.bRail, Chosen)) { Res.Error = "too_steep"; return Res; }
+				}
+				else
+				{
+					const int Step = std::max(1, std::min(StepMax, R.Step));
+					Chosen = ShpStairs(Cells, R.A, NA, Length, Step, H, R.bRail);
+				}
+			}
 			else
 			{
 				std::vector<FCell> Points;
-				if (R.bConnect)
+				if (bConnect)
 				{
 					const FCell NB = NormalFor(R.Shape, Cells, R.B, R.FaceB);
-					if (ShpIsZero(NB)) { Res.Error = NeedsFace; return Res; }
+					if (ShpIsZero(NB)) { Res.Error = EndError(R.Shape, false); return Res; }
 					if (R.B == R.A) { Res.Error = "same_cell"; return Res; }
 					if (ShpDot(R.B - R.A, R.B - R.A) > static_cast<long long>(SpanMax) * SpanMax) { Res.Error = "too_far"; return Res; }
 					const FCell DA = bDig ? ShpNeg(NA) : NA;

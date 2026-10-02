@@ -346,7 +346,7 @@ func _les_cas_d_outils() -> void:
 	# biais, une réparation. Sans ça, un greffon qui ignore l'un d'eux passerait.
 	_egal(sortes.size(), 11, "les cas d'outils couvrent les onze sortes de fonctions")
 	_vrai(biais, "aucun cas de normale ne rend une diagonale : les parois en biais ne sont pas éprouvées")
-	for f in ["tunnel", "tunnel+connect", "well", "bridge", "bridge+connect", "balcony"]:
+	for f in ["tunnel", "tunnel+connect", "well", "bridge", "bridge+connect", "balcony", "stairs", "stairs+connect"]:
 		_vrai(formes.has(f), "aucun cas de forme « %s »" % f)
 	_egal(profils.size(), 3, "les trois profils ont leurs cas")
 	_egal(erreurs.size(), EO.ERREURS_EN.size() - 1, "chaque refus a son cas (sauf « trop grand », qu'aucun petit monde n'atteint), et un cas sans refus")
@@ -430,7 +430,8 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 			return "" if n == _vi(e["normal"]) else "attendu %s, rendu %s" % [_vi(e["normal"]), n]
 		"special_shape":
 			var p := {"shape": i["shape"], "a": _vi(i["a"]), "face_a": _vi(i["face_a"]), "connect": i["connect"],
-				"profile": i["profile"], "size": i["size"], "length": i["length"], "rail": i["rail"]}
+				"profile": i["profile"], "size": i["size"], "length": i["length"], "rail": i["rail"],
+				"step": i.get("step", 2)}
 			if i["connect"]:
 				p["b"] = _vi(i["b"])
 				p["face_b"] = _vi(i["face_b"])

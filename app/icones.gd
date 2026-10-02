@@ -78,10 +78,13 @@ const TRACES := {
 	"aide": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.6 2.6 0 1 1 3.6 2.4c-.7.3-1.1.9-1.1 1.6v.6M12 17.2h.01"/>',
 	# Les formes spéciales : une arche percée dans un mur, un trou dans un sol, un tablier entre deux
 	# falaises, une dalle à rebord contre une paroi.
+	"eau": '<path d="M12 2.5s-5.5 6.2-5.5 10a5.5 5.5 0 0 0 11 0c0-3.8-5.5-10-5.5-10z"/><path d="M2.5 21c1.6-1 3.2-1 4.8 0s3.2 1 4.8 0 3.2-1 4.8 0 3.2 1 4.8 0"/>',
 	"tunnel": '<path d="M3 20.5h18M3 20.5V4.5h18v16"/><path d="M8.5 20.5v-6a3.5 3.5 0 0 1 7 0v6"/>',
 	"puits": '<path d="M2.5 9 12 4.5 21.5 9 12 13.5z"/><ellipse cx="12" cy="9" rx="3.4" ry="1.6"/><path d="M12 13.5v7M9 17.5l3 3 3-3"/>',
 	"pont": '<path d="M2.5 21V10.5h4V21M17.5 21V10.5h4V21"/><path d="M6.5 10.5h11v2.5h-11"/><path d="M6.5 6.5h11M9.5 6.5v4M14.5 6.5v4"/>',
 	"balcon": '<path d="M4 3.5v17"/><path d="M4 14h15.5v2.5H4"/><path d="M4 9h15.5v5M11.5 9v5"/>',
+	"salle": '<path d="M3 9.5 12 4.5l9 5v10H3z"/><path d="M6.5 19.5v-7h11v7" stroke-dasharray="2.6 2"/>',
+	"escalier": '<path d="M2.5 20.5h19V3.5"/><path d="M2.5 20.5v-4h4.75v-4H12v-4h4.75v-4h4.75"/>',
 	# Un clic, tout droit — ou relier deux ancres.
 	"droit": '<path d="M3.5 12h12M11.5 7.5l4.5 4.5-4.5 4.5"/><path d="M20 4v16"/>',
 	"relier": '<circle cx="5" cy="18.5" r="2.2"/><circle cx="19" cy="5.5" r="2.2"/><path d="M7.2 18.5H11a3 3 0 0 0 3-3v-7a3 3 0 0 1 3-3"/>',

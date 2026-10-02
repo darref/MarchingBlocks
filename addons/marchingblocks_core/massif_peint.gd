@@ -61,6 +61,15 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 @export var suivre_en_temps_reel := true
 
 var _empreinte: int = -1
+## LES COUCHES EXCLUSIVES (Jordan, 2 octobre 2026) — `union` : {case: rang de sa couche}, PARTAGÉE par l'écran entre
+## toutes les couches et tenue à jour par lui ; `rang` : la place de celle-ci (0 = prioritaire). Le choix des tuiles
+## lit l'union, et cette couche ne pose que les sommets dont elle est la propriétaire (`MB.couche_du_sommet`).
+## ⚠ `rang` < 0 : la couche est SEULE — l'ancienne règle, mot pour mot (ses cases seules).
+var union := {}
+var rang := -1
+var _miennes := {}
+## Combien de reconstructions COMPLÈTES ont eu lieu : le contrôle qui dit que la route locale est bien prise.
+var reconstructions_completes := 0
 var _dernier_bilan := {"pieces": 0, "fautes": 0, "muets": 0}
 
 
@@ -149,8 +158,18 @@ func _fautes() -> GridMap:
 ## Le lot réellement employé : celui qu'on a donné, sinon le REPLI PROCÉDURAL.
 ## ⚠ C'est ce repli qui rend l'invariant vrai dès le premier jour : il contient les 68 classes de
 ## surface, donc aucune pièce ne peut manquer.
+## ⚠ LE REPLI EST BÂTI UNE FOIS PAR PEINTRE, pas à chaque appel : `RP.librairie()` refait ses 68 maillages, et
+## chaque reconstruction d'une couche sans lot les refaisait (et la route locale, qui compare le lot posé à
+## celui-ci, ne se reconnaissait jamais).
 func lot_courant() -> MeshLibrary:
-	return lot if lot != null else RP.librairie()
+	if lot != null:
+		return lot
+	if _repli == null:
+		_repli = RP.librairie()
+	return _repli
+
+
+var _repli: MeshLibrary
 
 
 ## LA PALETTE DE CE QU'ON PEINT — deux tuiles, et deux seulement.
@@ -230,9 +249,11 @@ func reconstruire() -> Dictionary:
 	if fautes.mesh_library == null:
 		fautes.mesh_library = lot_des_cases if lot_des_cases != null else palette()
 
-	var pleines := {}
+	var miennes := {}
 	for c in cases.get_used_cells():
-		pleines[c] = true
+		miennes[c] = true
+	var pleines: Dictionary = union if rang >= 0 else miennes
+	_miennes = miennes
 
 	var id_faute: int = -1
 	if fautes.mesh_library != null:
@@ -248,42 +269,168 @@ func reconstruire() -> Dictionary:
 	# ⚠ **LA RÈGLE N'EST PLUS ÉCRITE ICI** : elle vit dans `MB.poses()`, qui est aussi la référence des
 	# cas d'épreuve du format neutre. Le peintre ne fait plus que POSER ce qu'elle décide — une seconde
 	# description de la règle, ici, serait celle qui divergerait des greffons (charte §6).
-	var poses := 0
-	var manquantes := 0
-	var dehors_poses := 0
-	var decisions: Array = MB.poses(pleines, index)
-	for d in decisions:
-		var sommet: Vector3i = d["sommet"]
-		if d["cle"] == "":
-			# ⚠ UNE PIÈCE QUE LES RÈGLES DEMANDENT ET QUE LE LOT N'A PAS : c'est une FAUTE DE LOT, jamais
-			# une faute de peinture.
-			manquantes += 1
-			if id_faute >= 0:
-				fautes.set_cell_item(sommet, id_faute)
-			continue
-		var id: int = index[d["cle"]]
-		if d["dehors"]:
-			dehors_poses += 1
-		rendu.set_cell_item(sommet, id, d["orientation"])
-		poses += 1
-	var muets: int = _sommets_touches(pleines) - decisions.size()
+	_pleines = pleines
+	_index = index
+	_id_faute = id_faute
+	_lot_pose = rendu.mesh_library
+	_etat.clear()
+	_compte = {"pieces": 0, "fautes": 0, "dehors": 0, "touches": 0, "decisions": 0}
+	_plafond = MB.plafond_de(pleines)
+	_y_bas = 2147483647
+	for c in pleines:
+		_y_bas = mini(_y_bas, (c as Vector3i).y)
+	if rang < 0:
+		for d in MB.poses(pleines, index):
+			_etat[d["sommet"]] = d
+			_poser(d, 1)
+		# Les sommets touchés sans surface (MUETS) : présents dans l'état, vides — c'est ce qui les compte.
+		for c in pleines:
+			for s in MB.sommets_de(c):
+				if not _etat.has(s):
+					_etat[s] = {}
+	else:
+		# EN COUCHES : les sommets de SES cases dont elle est la propriétaire ; les autres appartiennent à une couche
+		# de plus petit rang, qui les pose.
+		var vus := {}
+		for c in miennes:
+			for s in MB.sommets_de(c):
+				if vus.has(s):
+					continue
+				vus[s] = true
+				var d = _decision(s)
+				if d == null:
+					continue
+				_etat[s] = d
+				if not (d as Dictionary).is_empty():
+					_poser(d, 1)
+	_compte["touches"] = _etat.size()
+	reconstructions_completes += 1
+	_pret = true
 
 	_empreinte = _empreinte_des_cases()
-	# ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
-	# variantes il vaut 0 alors que le monde est plein de ciel — et c'est exactement ce qu'il doit dire :
-	# « ce lot n'a rien de spécifique au dehors ». Compter les sommets ferait croire l'inverse.
-	_dernier_bilan = {"pieces": poses, "fautes": manquantes, "muets": muets, "dehors": dehors_poses}
-	return _dernier_bilan
+	return _bilan()
 
 
-## Combien de sommets les cases touchent — pour compter les MUETS (sommets sans surface), que `MB.poses`
-## ne rend pas.
-static func _sommets_touches(pleines: Dictionary) -> int:
+## ── LA RECONSTRUCTION LOCALE — Jordan, 1er octobre 2026 : « une toute petite opération fait lagger » ─────────
+## ⚠ MESURÉ (`DEV_TOOLS/sonde_lags_monde.gd`, avec fenêtre, 12 474 cases) : poser UNE case coûtait ~295 ms, dont
+## **~278 ms de `reconstruire()`** — tout le monde recalculé et reposé pour une case — et ~18 ms d'enregistrement.
+## Le pinceau l'appelait à CHAQUE mouvement de souris.
+##
+## Une case ne change que les sommets qui la LISENT (`MB.pose_du_sommet`) : ses huit cases sont dans les colonnes
+## x..x+1, z..z+1 du sommet, à son étage et au suivant ; le ciel, dans les mêmes colonnes, au-dessus. Une case c
+## ne touche donc que les sommets des colonnes x−1..x, z−1..z, d'étage ≤ c.y (la règle écrite dans le format
+## neutre pour la reconstruction incrémentale, charte §4). On ne refait qu'eux, avec la même fonction.
+## ⚠ `changees` : les cases dont l'état a pu changer, DÉJÀ posées dans `Cases`. Tout autre changement de la
+## grille doit passer par `reconstruire()` — l'état gardé ne le verrait pas.
+## ⚠ Au-delà de `SEUIL_LOCAL` cases, ou si le lot a changé, c'est la reconstruction complète.
+const SEUIL_LOCAL := 4096
+
+var _pret := false
+var _pleines := {}           # les cases au dernier passage
+var _etat := {}              # sommet touché → sa décision ({} : muet)
+var _index := {}
+var _id_faute := -1
+var _lot_pose: MeshLibrary
+var _plafond := 0            # ≥ la plus haute case : une borne, jamais une valeur exacte (voir `pose_du_sommet`)
+var _y_bas := 0              # ≤ la plus basse case, même raison
+var _compte := {}
+
+
+func reconstruire_autour(changees) -> Dictionary:
+	var cases := _cases()
+	var rendu := _rendu()
+	if not _pret or cases == null or rendu == null or rendu.mesh_library != lot_courant() \
+			or rendu.mesh_library != _lot_pose or changees.size() > SEUIL_LOCAL:
+		return reconstruire()
+	# ⚠ UNE COUCHE BÂTIE AVANT D'AVOIR REÇU SON RANG (ou une autre union) lit encore ses seules cases : son état
+	# gardé ne décrit pas le monde en couches. Vu en fumée — une couche neuve ne posait plus rien.
+	if (rang >= 0) != is_same(_pleines, union):
+		return reconstruire()
+	# ⚠ EN COUCHES, `_pleines` EST L'UNION, tenue par l'écran : on n'y touche pas ; on tient SES cases à part. Un
+	# changement d'une AUTRE couche passe aussi par ici (ses sommets de frontière peuvent changer de propriétaire).
+	for c in changees:
+		var p: Vector3i = c
+		if cases.get_cell_item(p) != GridMap.INVALID_CELL_ITEM:
+			_miennes[p] = true
+			if rang < 0:
+				_pleines[p] = true
+		else:
+			_miennes.erase(p)
+			if rang < 0:
+				_pleines.erase(p)
+		if _pleines.has(p):
+			_plafond = maxi(_plafond, p.y)
+			_y_bas = mini(_y_bas, p.y)
+	# ⚠ UNE GRILLE CHANGÉE PAR UNE AUTRE ROUTE (cases posées sans reconstruction) : l'état gardé ne la décrit
+	# plus. Un compte suffit à le voir dans presque tous les cas, et coûte peu ; sinon, tout est refait.
+	if cases.get_used_cells().size() != _miennes.size():
+		return reconstruire()
 	var sommets := {}
-	for c in pleines:
-		for s in MB.sommets_de(c):
-			sommets[s] = true
-	return sommets.size()
+	for c in changees:
+		var p: Vector3i = c
+		for sx in [p.x - 1, p.x]:
+			for sz in [p.z - 1, p.z]:
+				for y in range(_y_bas - 1, p.y + 1):
+					sommets[Vector3i(sx, y, sz)] = true
+	for k in sommets:
+		var s: Vector3i = k
+		var avant = _etat.get(s, null)
+		var apres = _decision(s)
+		if avant == apres:
+			continue
+		if avant != null:
+			_compte["touches"] -= 1
+			if not avant.is_empty():
+				_poser(avant, -1)
+		if apres == null:
+			_etat.erase(s)
+		else:
+			_etat[s] = apres
+			_compte["touches"] += 1
+			if not apres.is_empty():
+				_poser(apres, 1)
+	_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
+	return _bilan()
+
+
+## La décision d'un sommet pour CETTE couche : null s'il n'est pas à elle (aucune case, ou, en couches, une couche
+## prioritaire le pose) ; {} s'il est à elle sans surface ; sinon sa pose. ⚠ UNE RÈGLE : `MB.pose_du_sommet`.
+func _decision(s: Vector3i) -> Variant:
+	if rang >= 0:
+		if MB.couche_du_sommet(_pleines, s) != rang:
+			return null
+	elif MB.bits(_pleines, s) == 0:
+		return null
+	return MB.pose_du_sommet(_pleines, s, _index, _plafond)
+
+
+## Pose (sens = 1) ou retire (sens = −1) une décision dans les grilles, et tient les comptes.
+func _poser(d: Dictionary, sens: int) -> void:
+	var sommet: Vector3i = d["sommet"]
+	_compte["decisions"] += sens
+	if d["cle"] == "":
+		# ⚠ UNE PIÈCE QUE LES RÈGLES DEMANDENT ET QUE LE LOT N'A PAS : c'est une FAUTE DE LOT, jamais
+		# une faute de peinture.
+		_compte["fautes"] += sens
+		if _id_faute >= 0:
+			_fautes().set_cell_item(sommet, _id_faute if sens > 0 else GridMap.INVALID_CELL_ITEM)
+		return
+	_compte["pieces"] += sens
+	if d["dehors"]:
+		_compte["dehors"] += sens
+	if sens > 0:
+		_rendu().set_cell_item(sommet, _index[d["cle"]], d["orientation"])
+	else:
+		_rendu().set_cell_item(sommet, GridMap.INVALID_CELL_ITEM)
+
+
+## ⚠ `dehors` COMPTE LES VARIANTES RÉELLEMENT POSÉES, pas les sommets à l'air libre. Sur un lot sans
+## variantes il vaut 0 alors que le monde est plein de ciel — et c'est exactement ce qu'il doit dire :
+## « ce lot n'a rien de spécifique au dehors ». Compter les sommets ferait croire l'inverse.
+func _bilan() -> Dictionary:
+	_dernier_bilan = {"pieces": _compte["pieces"], "fautes": _compte["fautes"],
+		"muets": _compte["touches"] - _compte["decisions"], "dehors": _compte["dehors"]}
+	return _dernier_bilan
 
 
 ## Le bilan de la dernière reconstruction, SANS en déclencher une.

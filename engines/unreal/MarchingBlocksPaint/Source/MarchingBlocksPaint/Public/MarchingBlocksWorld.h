@@ -43,7 +43,7 @@ enum class EMarchingBlocksTool : uint8
 	Rect,
 	/** A 3D box: the whole volume, empty cells included. */
 	Box,
-	/** A special shape — tunnel, well, bridge or balcony (Special Shape below). Always aimed at the matter. */
+	/** A special shape — tunnel, well, bridge, balcony or stairs (Special Shape below). Always aimed at the matter. */
 	Shape,
 };
 
@@ -58,6 +58,9 @@ enum class EMarchingBlocksSpecialShape : uint8
 	Bridge,
 	/** A slab sticking out of a WALL at the height you click, with its rail. */
 	Balcony,
+	/** Stairs against a WALL: click where they should arrive, they come down to the ground (Stairs Step cells per
+	 *  step). Connect: from one FLOOR to another, higher up. */
+	Stairs,
 };
 
 UENUM(BlueprintType)
@@ -124,7 +127,7 @@ public:
 	EMarchingBlocksSpecialShape SpecialShape = EMarchingBlocksSpecialShape::Tunnel;
 
 	/** Off: one click, straight out of the face. On: two clicks on two faces anywhere — slanted walls included —
-	 *  joined with both ends open (Esc forgets the first). Not for the balcony. */
+	 *  joined with both ends open (Esc forgets the first); two floors for stairs. Not for the balcony. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Connect two faces"))
 	bool bConnectEnds = false;
 
@@ -137,11 +140,15 @@ public:
 	int32 ShapeSize = 2;
 
 	/** One click: how deep a tunnel or well goes when it finds no cave, how far a bridge looks for a wall, how
-	 *  far a balcony sticks out. */
+	 *  far a balcony sticks out, how far stairs may run before they reach the ground. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (ClampMin = "1", ClampMax = "64"))
 	int32 ShapeLength = 8;
 
-	/** Bridge and balcony: a one-cell rim along the open sides. Needs a Shape Size of 2 or more. */
+	/** One-click stairs: how deep each step is, in cells (1 is steep). */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (ClampMin = "1", ClampMax = "4"))
+	int32 StairsStep = 2;
+
+	/** Bridge, balcony and stairs: a one-cell rim along the open sides. Needs a Shape Size of 2 or more. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Rail"))
 	bool bShapeRail = true;
 

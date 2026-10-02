@@ -33,11 +33,18 @@ signal forme_dite(code: String, info: Dictionary)
 ## LA TUILE SOUS LA SOURIS, dans World (le sens inverse de la légende des formes) :
 ## {"sommet", "nom" (l'item posé, "" s'il n'y en a pas), "faute" (un cube rouge), "lot"} ; {} = aucune.
 signal tuile_survolee(info: Dictionary)
+## L'outil Water (charte §5, « le mode Fluids ») : la case où une source se poserait, sous la souris (ou null).
+signal eau_survolee(source: Variant)
+signal eau_cliquee(source: Variant, bouton: int)
+## Ctrl+clic en World : la case de matière touchée (couches visibles), ou `null` si le rayon ne touche rien.
+signal etage_sur_la_matiere(case: Variant)
 
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+const EauMaillage := preload("res://addons/marchingblocks_core/eau_maillage.gd")
+const EauPresets := preload("res://addons/marchingblocks_core/eau_presets.gd")
 const Personnage := preload("res://app/personnage.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 
@@ -49,6 +56,7 @@ const TEINTE_SELECTIONNER := Color(0.42, 0.62, 0.98, 0.3)
 const TEINTE_SELECTION := Color(0.42, 0.62, 0.98, 0.22)
 const TEINTE_BOITE := Color(0.42, 0.62, 0.98, 0.1)
 const TEINTE_ANCRE := Color(1.0, 0.82, 0.25, 0.6)
+const TEINTE_EAU := Color(0.3, 0.68, 1.0, 0.34)
 
 var _vue: SubViewport
 
@@ -82,6 +90,16 @@ var _plans_voulus := false
 ## Un `MassifPeint` par COUCHE du monde (`projet.gd`). On peint sur la couche ACTIVE ; les autres restent
 ## visibles, chacune rendue avec SON lot et selon SES cases seulement.
 var _couches: Node3D
+## Les nappes d'eau, une par couche d'eau (`poser_eaux`) : à côté des couches de tuiles, jamais dedans — `couche(i)`
+## compte les enfants de `_couches`.
+var _eaux: Node3D
+var _soleil: DirectionalLight3D
+## L'EAU DU PLAY TEST, posée par l'écran avant de jouer : {"cases" (l'eau dormante des couches d'eau VISIBLES),
+## "oceans" (leurs niveaux), "boite" (`FL.boite` du monde)}. Vide : on ne nage nulle part.
+var eau_du_jeu := {}
+## Le voile sous l'eau : la couleur de l'eau vue de dedans, et sa densité.
+const VOILE_COULEUR := Color("#1d5a6e")
+const VOILE_DENSITE := 0.18
 var _active := -1
 var _grille: MeshInstance3D
 ## La grille LOCALE : un morceau de grille qui suit le curseur quand il sort de la grille centrale —
@@ -119,7 +137,10 @@ var creux := false
 ## LES FORMES SPÉCIALES (outil « forme ») — la règle vit dans `formes_speciales.gd`, la vue ne fait que
 ## viser, montrer et émettre. `ancre_forme` : la première ancre d'un « Connect » ({case, face}), vide sinon.
 var forme_speciale := {"quoi": "tunnel", "relier": false, "profil": "rond", "taille": 2, "longueur": 8,
-	"garde_corps": true}
+	"garde_corps": true, "pas": 2, "etages": 3, "vers_le_haut": true}
+## La salle se TRACE (un rectangle sur la grille de l'étage), elle ne s'ancre pas : son aperçu, gardé par sa clé.
+var _cle_salle := ""
+var _salle_vue := {}
 var ancre_forme := {}
 var _cle_forme := ""
 var _forme_vue := {}
@@ -231,6 +252,8 @@ func _ready() -> void:
 	soleil.light_energy = SOLEIL_ENERGIE
 	soleil.shadow_enabled = true
 	_vue.add_child(soleil)
+	_soleil = soleil
+	rendu_par_defaut()
 
 	_temoin = MeshInstance3D.new()
 	_vue.add_child(_temoin)
@@ -243,6 +266,9 @@ func _ready() -> void:
 	_couches = Node3D.new()
 	_couches.name = "MondeDeTest"
 	_vue.add_child(_couches)
+	_eaux = Node3D.new()
+	_eaux.name = "Eaux"
+	_vue.add_child(_eaux)
 
 	_grille = MeshInstance3D.new()
 	_grille.mesh = _maillage_grille()
@@ -312,6 +338,7 @@ func montrer(quoi: String) -> void:
 		modeleur.visible = quoi == "temoin" and edition
 	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
 	_couches.visible = quoi == "monde" or quoi == "jeu"
+	_eaux.visible = quoi == "monde" or quoi == "jeu"
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
 	_grille_locale.visible = false
@@ -417,6 +444,11 @@ func ajouter_couche() -> Node:
 func detacher_couche(m: Node) -> void:
 	_couches.remove_child(m)
 	_active = mini(_active, _couches.get_child_count() - 1)
+
+
+## Change la place d'une couche dans la pile (l'ordre des couches EST leur priorité).
+func deplacer_couche(de: int, vers: int) -> void:
+	_couches.move_child(_couches.get_child(de), vers)
 
 
 func inserer_couche(m: Node, i: int) -> void:
@@ -652,13 +684,24 @@ func _gui_input(event: InputEvent) -> void:
 			_caler()
 			accept_event()
 			return
+		# ⚠ CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE, quel que soit l'outil : ce n'est pas un coup, rien
+		# n'est peint, et la visée n'y change rien — le rayon cherche toujours la matière visible.
+		if mode == "monde" and b.button_index == MOUSE_BUTTON_LEFT and b.ctrl_pressed and b.pressed \
+				and _coup < 0:
+			var r: Dictionary = Outils.rayon(_occupe_visible, _camera.project_ray_origin(b.position),
+				_camera.project_ray_normal(b.position), PORTEE, {})
+			etage_sur_la_matiere.emit(r["case"] if r["touche"] else null)
+			accept_event()
+			return
 		if mode == "monde" and (b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT):
 			if b.pressed and _coup < 0:
 				_commencer_coup(b.button_index, b.position, b.shift_pressed)
 			elif not b.pressed and b.button_index == _coup:
 				_coup = -1
 				_pose_du_coup = {}
-				if _coin_boite != null:
+				if _coin_boite != null and _est_salle():
+					_finir_salle()
+				elif _coin_boite != null:
 					_finir_boite(b.button_index)
 				else:
 					coup_fini.emit()
@@ -796,7 +839,13 @@ func _survoler(position: Vector2) -> void:
 		_survoler_boite(position)
 		return
 	if outil == "forme":
-		_survoler_forme(position)
+		if _est_salle():
+			_survoler_salle(position)
+		else:
+			_survoler_forme(position)
+		return
+	if outil == "eau":
+		eau_survolee.emit(source_visee(position))
 		return
 	if point.is_empty() or cases() == null:
 		_apercu.visible = false
@@ -820,7 +869,10 @@ func _survoler(position: Vector2) -> void:
 ## rejouer la même ancre à chaque pixel.
 func _toucher(position: Vector2) -> void:
 	if _coin_boite != null:
-		_survoler_boite(position)
+		if _est_salle():
+			_survoler_salle(position)
+		else:
+			_survoler_boite(position)
 		return
 	var g := geste(_coup)
 	var point := point_vise(position, g)
@@ -859,8 +911,21 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 				colle.emit(Outils.ancre("ajouter", point))
 		annuler_collage()
 		return
+	if outil == "forme" and _est_salle():
+		# LA SALLE SE TRACE : un coin au clic, l'autre au relâché, à plat sur la grille de l'étage (comme Rect).
+		var depart = case_sous(position)
+		if depart == null or bouton != MOUSE_BUTTON_LEFT:
+			return
+		_coup = bouton
+		_coin_boite = depart
+		_coin_fin = depart
+		_survoler_salle(position)
+		return
 	if outil == "forme":
 		_cliquer_forme(bouton, position)
+		return
+	if outil == "eau":
+		eau_cliquee.emit(source_visee(position), bouton)
 		return
 	if outil == "boite" or outil == "rect":
 		var depart := _coin_vise(position)
@@ -1024,9 +1089,10 @@ func _cliquer_forme(bouton: int, position: Vector2) -> void:
 	if point.is_empty():
 		return
 	if _attend_la_premiere_ancre():
-		var n: Vector3i = FS.normale_de(forme_speciale["quoi"], _occupees_actives(), point["case"], point["normale"])
+		var n: Vector3i = FS.normale_de(forme_speciale["quoi"], _occupees_actives(), point["case"], point["normale"],
+			true)
 		if n == Vector3i.ZERO:
-			forme_dite.emit("pas_un_sol" if forme_speciale["quoi"] == "puits" else "pas_de_paroi", {})
+			forme_dite.emit(FS.erreur_d_ancre(forme_speciale["quoi"], true), {})
 			return
 		ancre_forme = {"case": point["case"], "face": point["normale"]}
 		_montrer_ancre()
@@ -1041,6 +1107,100 @@ func _cliquer_forme(bouton: int, position: Vector2) -> void:
 	_cle_forme = ""
 	_montrer_ancre()
 	forme_posee.emit({"poser": r["poser"], "effacer": r["effacer"]}, forme_speciale["quoi"], r)
+
+
+# ── l'eau ────────────────────────────────────────────────────────────────────────────────────────────
+
+## LA CASE OÙ POSER UNE SOURCE : devant la face de matière visée — toutes les couches VISIBLES, l'eau
+## appartient au monde entier —, sinon sur le plan de l'étage (cliquer dans le vide pose un océan à cette
+## hauteur). Null si le rayon ne trouve rien.
+func source_visee(position: Vector2) -> Variant:
+	var r: Dictionary = Outils.rayon(_occupe_visible, _camera.project_ray_origin(position),
+		_camera.project_ray_normal(position), PORTEE)
+	if r["touche"] and r["normale"] != Vector3i.ZERO:
+		return r["case"] + r["normale"]
+	return case_sous(position)
+
+
+func montrer_apercu(cases_: Array, teinte: Color) -> void:
+	_remplir(_apercu, cases_, teinte)
+
+
+## Les nappes : [[maillage ou null, matériau, visible], …], une par couche d'eau, dans l'ordre.
+func poser_eaux(nappes: Array) -> void:
+	while _eaux.get_child_count() > nappes.size():
+		var n := _eaux.get_child(_eaux.get_child_count() - 1)
+		_eaux.remove_child(n)
+		n.free()
+	while _eaux.get_child_count() < nappes.size():
+		var mi := MeshInstance3D.new()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_eaux.add_child(mi)
+	for i in nappes.size():
+		var mi := _eaux.get_child(i) as MeshInstance3D
+		mi.mesh = nappes[i][0]
+		mi.material_override = nappes[i][1]
+		mi.visible = nappes[i][2]
+
+
+func nappes() -> Array:
+	return _eaux.get_children()
+
+
+## LA SALLE (Jordan, 2 octobre 2026) — la règle vit dans le cœur (`FS.salle`).
+func _est_salle() -> bool:
+	return outil == "forme" and forme_speciale["quoi"] == "salle"
+
+
+## ⚠ LE CŒUR N'EST RAPPELÉ QUE QUAND UN COIN, LES ÉTAGES OU LE SENS CHANGENT : une grande salle compte des milliers
+## de cases, et la refaire à chaque pixel ferait ramer la souris.
+func _salle_entre(a: Vector3i, b: Vector3i) -> Dictionary:
+	var cle := "%s|%s|%s|%s|%s" % [a, b, forme_speciale["etages"], forme_speciale["vers_le_haut"],
+		cases().get_instance_id() if cases() != null else 0]
+	if cle != _cle_salle:
+		_cle_salle = cle
+		_salle_vue = FS.salle(_occupees_actives(), a, b, int(forme_speciale["etages"]),
+			bool(forme_speciale["vers_le_haut"]))
+	return _salle_vue
+
+
+## L'aperçu : la coque à poser en vert, la roche à creuser en rouge, et la boîte de la salle.
+func _survoler_salle(position: Vector2) -> void:
+	var c = case_sous(position)
+	if _coin_boite == null:
+		_boite_vue.visible = false
+		_remplir(_ancre_vue, [], TEINTE_CREUSER)
+		_remplir(_apercu, [c] if c != null else [], TEINTE_AJOUTER)
+		return
+	if c != null:
+		_coin_fin = c
+	var r := _salle_entre(_coin_boite, _coin_fin)
+	if r["erreur"] != "":
+		_boite_vue.visible = false
+		_remplir(_ancre_vue, [], TEINTE_CREUSER)
+		_remplir(_apercu, [_coin_boite, _coin_fin], TEINTE_CREUSER)
+		return
+	_remplir(_apercu, r["poser"].keys(), TEINTE_AJOUTER)
+	_remplir(_ancre_vue, r["effacer"].keys(), TEINTE_CREUSER)
+	var bas: Vector3i = r["boite"][0]
+	var haut: Vector3i = r["boite"][1]
+	var taille_boite := Vector3(haut - bas + Vector3i.ONE)
+	_boite_vue.scale = taille_boite
+	_boite_vue.position = Vector3(bas) + taille_boite * 0.5
+	_boite_vue.visible = true
+
+
+func _finir_salle() -> void:
+	var r := _salle_entre(_coin_boite, _coin_fin)
+	_coin_boite = null
+	_coin_fin = null
+	_cle_salle = ""
+	_boite_vue.visible = false
+	_remplir(_ancre_vue, [], TEINTE_CREUSER)
+	if r["erreur"] != "":
+		forme_dite.emit(r["erreur"], r)
+		return
+	forme_posee.emit({"poser": r["poser"], "effacer": r["effacer"]}, "salle", r)
 
 
 func oublier_ancre() -> void:
@@ -1282,6 +1442,7 @@ func commencer_partie() -> String:
 	personnage = Personnage.new()
 	_vue.add_child(personnage)
 	personnage.global_position = _depart
+	personnage.surface_eau = surface_eau_au_point
 	_orbite_d_avant = [_cible, _azimut, _elevation, _distance]
 	_elevation = CAMERA_ELEVATION
 	_distance = CAMERA_DISTANCE
@@ -1293,19 +1454,27 @@ func commencer_partie() -> String:
 	_env.glow_hdr_threshold = 1.0
 	_env.background_mode = Environment.BG_SKY
 	_env.sky.sky_material = _ciel_du_jeu
+	_sous_l_eau = false
+	_appliquer_tout_le_rendu()
+	_appliquer_meteo()
 	_suivre(0.0)
 	return ""
 
 
 func finir_partie() -> void:
+	_rendre_la_souris()
 	if personnage != null:
 		personnage.queue_free()
 		personnage = null
 	if _decor != null:
 		_decor.queue_free()
 		_decor = null
+	if _meteo_noeud != null:
+		_meteo_noeud.queue_free()
+		_meteo_noeud = null
 	if _env != null:
-		_env.glow_enabled = false
+		_sous_l_eau = false
+		_rendre_le_travail()
 		_env.background_mode = Environment.BG_COLOR
 		_env.sky.sky_material = _ciel_neutre
 	if not _orbite_d_avant.is_empty():
@@ -1315,6 +1484,14 @@ func finir_partie() -> void:
 		_distance = _orbite_d_avant[3]
 		_orbite_d_avant = []
 		_caler()
+
+
+## Le mode vol du personnage (F). Rend vrai s'il vole désormais.
+func basculer_vol() -> bool:
+	if personnage == null:
+		return false
+	personnage.basculer_vol()
+	return personnage.vol
 
 
 func reapparaitre() -> void:
@@ -1350,8 +1527,12 @@ static func _triangles_poses(g: GridMap) -> PackedVector3Array:
 func _mener_le_jeu() -> void:
 	if personnage == null:
 		return
+	# ⚠ UN RELÂCHÉ PERDU (fenêtre qui perd la main, Alt+Tab) laisserait la souris capturée pour de bon.
+	if _souris_avant_capture != Vector2.INF and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
+			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+		_rendre_la_souris()
 	var focus := get_viewport().gui_get_focus_owner()
-	var libre := not (focus is LineEdit or focus is TextEdit) and is_visible_in_tree()
+	var libre :=not (focus is LineEdit or focus is TextEdit) and is_visible_in_tree()
 	var e := Vector2.ZERO
 	if libre:
 		if Input.is_physical_key_pressed(KEY_W):
@@ -1363,12 +1544,344 @@ func _mener_le_jeu() -> void:
 		if Input.is_physical_key_pressed(KEY_A):
 			e.x -= 1.0
 	personnage.entree = e
+	# EN VOL : Espace ou E montent, A descend (Q / E sur un QWERTY) — les touches de Navigate.
+	var monter := 0.0
+	if libre:
+		if Input.is_physical_key_pressed(KEY_SPACE) or Input.is_physical_key_pressed(KEY_E):
+			monter += 1.0
+		if Input.is_physical_key_pressed(KEY_Q):
+			monter -= 1.0
+	personnage.monter = monter
 	personnage.saut = libre and Input.is_physical_key_pressed(KEY_SPACE)
 	personnage.course = libre and Input.is_physical_key_pressed(KEY_SHIFT)
 	personnage.cap_camera = _azimut
 	if personnage.global_position.y < _plus_bas - CHUTE:
 		reapparaitre()
 	_suivre(get_process_delta_time())
+	# SOUS L'EAU, LA CAMÉRA VOIT À TRAVERS UN VOILE : sans lui, l'œil sous la nappe voit le monde aussi net qu'à
+	# l'air libre, et l'on ne sait plus qu'on a plongé.
+	var sous := surface_eau_au_point(_camera.global_position) > _camera.global_position.y
+	var liquide := liquide_au_point(_camera.global_position) if sous else ""
+	if sous != _sous_l_eau or liquide != _liquide_traverse:
+		_sous_l_eau = sous
+		_liquide_traverse = liquide
+		_appliquer_brouillard()
+	if _meteo_noeud != null:
+		_meteo_noeud.global_position = _camera.global_position
+
+
+# ── LE RENDU DU PLAY TEST ────────────────────────────────────────────────────────────────────────────
+
+## LES RÉGLAGES QU'ON ESSAIE AU PLAY TEST (Jordan, 1er octobre 2026 : « une barre de droite au mode Play test pour
+## activer ou décocher les effets de rendu »). ⚠ LEURS DÉFAUTS SONT LES VALEURS DÉCIDÉES plus haut (soleil, ambiante,
+## SSAO, ciel du jeu) : « Reset » rend exactement le rendu de la charte, et une seule source les porte. ⚠ ILS NE
+## VALENT QU'AU PLAY TEST : en le quittant, `_rendre_le_travail` rend l'éclairage du travail, quels qu'ils soient —
+## World et Witness s'éclairent comme le dit la page 6 du manuel. ⚠ Le SDFGI, écarté du travail (il ne voit pas une
+## géométrie qui change), est proposé ici : au Play test, rien ne change pendant qu'on joue.
+const REGLAGES_RENDU := [
+	{"cle": "soleil_azimut", "groupe": "Light", "nom": "Sun direction", "genre": "curseur", "min": -180.0, "max": 180.0, "pas": 1.0, "defaut": SOLEIL_ROTATION.y},
+	{"cle": "soleil_hauteur", "groupe": "Light", "nom": "Sun height", "genre": "curseur", "min": 2.0, "max": 90.0, "pas": 1.0, "defaut": -SOLEIL_ROTATION.x},
+	{"cle": "soleil_energie", "groupe": "Light", "nom": "Sun strength", "genre": "curseur", "min": 0.0, "max": 4.0, "pas": 0.05, "defaut": SOLEIL_ENERGIE},
+	{"cle": "soleil_couleur", "groupe": "Light", "nom": "Sun colour", "genre": "couleur", "defaut": Color(1, 1, 1)},
+	{"cle": "ombres", "groupe": "Light", "nom": "Shadows", "genre": "case", "defaut": true},
+	{"cle": "ambiante_couleur", "groupe": "Light", "nom": "Ambient colour", "genre": "couleur", "defaut": AMBIANTE_COULEUR},
+	{"cle": "ambiante_energie", "groupe": "Light", "nom": "Ambient strength", "genre": "curseur", "min": 0.0, "max": 3.0, "pas": 0.05, "defaut": AMBIANTE_ENERGIE},
+	{"cle": "ciel_haut", "groupe": "Sky", "nom": "Sky, top", "genre": "couleur", "defaut": CIEL_HAUT},
+	{"cle": "ciel_horizon", "groupe": "Sky", "nom": "Sky, horizon", "genre": "couleur", "defaut": CIEL_HORIZON},
+	{"cle": "ciel_sol", "groupe": "Sky", "nom": "Sky, below", "genre": "couleur", "defaut": CIEL_SOL},
+	{"cle": "ssao", "groupe": "Effects", "nom": "SSAO — shade in the hollows", "genre": "case", "defaut": true},
+	{"cle": "ssao_intensite", "groupe": "Effects", "nom": "SSAO strength", "genre": "curseur", "min": 0.0, "max": 6.0, "pas": 0.1, "defaut": SSAO_INTENSITE},
+	{"cle": "ssil", "groupe": "Effects", "nom": "SSIL — light bouncing nearby", "genre": "case", "defaut": true},
+	{"cle": "sdfgi", "groupe": "Effects", "nom": "SDFGI — global illumination", "genre": "case", "defaut": false},
+	{"cle": "ssr", "groupe": "Effects", "nom": "SSR — screen reflections", "genre": "case", "defaut": false},
+	{"cle": "glow", "groupe": "Effects", "nom": "Glow", "genre": "case", "defaut": true},
+	{"cle": "glow_intensite", "groupe": "Effects", "nom": "Glow strength", "genre": "curseur", "min": 0.0, "max": 3.0, "pas": 0.05, "defaut": 0.9},
+	{"cle": "brouillard", "groupe": "Effects", "nom": "Fog", "genre": "case", "defaut": false},
+	{"cle": "brouillard_densite", "groupe": "Effects", "nom": "Fog density", "genre": "curseur", "min": 0.0, "max": 0.1, "pas": 0.001, "defaut": 0.01},
+	{"cle": "brouillard_couleur", "groupe": "Effects", "nom": "Fog colour", "genre": "couleur", "defaut": CIEL_HORIZON},
+	{"cle": "brouillard_volumique", "groupe": "Effects", "nom": "Volumetric fog", "genre": "case", "defaut": false},
+	{"cle": "volumique_densite", "groupe": "Effects", "nom": "Volumetric density", "genre": "curseur", "min": 0.0, "max": 0.1, "pas": 0.001, "defaut": 0.02},
+	{"cle": "tonemap", "groupe": "Camera", "nom": "Tone mapping", "genre": "choix", "choix": ["Linear", "Reinhard", "Filmic", "ACES", "AgX"], "defaut": 0},
+	{"cle": "exposition", "groupe": "Camera", "nom": "Exposure", "genre": "curseur", "min": 0.2, "max": 3.0, "pas": 0.05, "defaut": 1.0},
+	{"cle": "luminosite", "groupe": "Camera", "nom": "Brightness", "genre": "curseur", "min": 0.5, "max": 2.0, "pas": 0.05, "defaut": 1.0},
+	{"cle": "contraste", "groupe": "Camera", "nom": "Contrast", "genre": "curseur", "min": 0.5, "max": 2.0, "pas": 0.05, "defaut": 1.0},
+	{"cle": "saturation", "groupe": "Camera", "nom": "Saturation", "genre": "curseur", "min": 0.0, "max": 2.0, "pas": 0.05, "defaut": 1.0},
+]
+## Les valeurs courantes, clé → valeur.
+var rendu := {}
+var _sous_l_eau := false
+var _liquide_traverse := ""
+
+
+## Le liquide (le preset de sa couche d'eau) qui contient `p`, ou "" : le voile sous la surface en dépend.
+func liquide_au_point(p: Vector3) -> String:
+	if eau_du_jeu.is_empty():
+		return ""
+	var k: Variant = EauMaillage.case_d_eau_au_point(eau_du_jeu["cases"], p)
+	if k != null:
+		return str(eau_du_jeu["cases"][k])
+	return str(eau_du_jeu.get("preset_ocean", "")) if surface_eau_au_point(p) > -INF else ""
+
+
+# ── LA MÉTÉO DU PLAY TEST ────────────────────────────────────────────────────────────────────────────
+
+## LA MÉTÉO (Jordan, 2 octobre 2026) : juger un monde peint sous différents temps. ⚠ ELLE NE VAUT QU'AU PLAY TEST :
+## ni enregistrée dans le projet, ni exportée dans le `.mbworld`, ni dans les greffons — l'écran le dit.
+## PROPOSÉ (points ouverts de la charte) : un seul temps à la fois, intensité fixe, sur l'IMAGE seulement (le
+## personnage n'est ni poussé ni ralenti), retenu le temps de la session (rendu en rentrant au Play test), « None »
+## par Reset.
+const METEOS := [["aucune", "None"], ["pluie", "Rain"], ["blizzard", "Blizzard"], ["ouragan", "Hurricane"],
+	["neige", "Slow snow"], ["particules", "Hanging particles"], ["chaleur", "Heat"], ["brouillard", "Fog"]]
+## Le brouillard qu'un temps impose : [couleur, densité].
+const METEO_BROUILLARD := {
+	"brouillard": [Color("#9aa3ad"), 0.07],
+	"blizzard": [Color("#dfe6ee"), 0.08],
+	"ouragan": [Color("#5f6670"), 0.05],
+	"pluie": [Color("#7d8794"), 0.02],
+	# ⚠ LA CHALEUR N'EST PAS UNE ONDULATION DE L'IMAGE : un quad plein écran relit l'image AVANT que les objets
+	# transparents soient dessinés, et il effaçait la lave et la mer (vu à l'image). Une brume chaude à la place.
+	"chaleur": [Color("#e3b98a"), 0.018],
+}
+## Ce que la météo fait au soleil : un FACTEUR sur sa force réglée (le réglage de la barre reste celui de l'artiste).
+const METEO_SOLEIL := {"pluie": 0.45, "ouragan": 0.3, "blizzard": 0.5, "brouillard": 0.6, "neige": 0.75,
+	"chaleur": 1.2}
+## Les particules d'un temps : nombre, durée de vie, demi-boîte d'émission autour de l'œil, vitesse, dispersion
+## (degrés), gravité, genre de goutte (« trait », « flocon », « poussiere »), couleur.
+## ⚠ DENSES PRÈS DE L'ŒIL : une boîte de 28 cases de côté pour 2 500 gouttes ne montrait qu'une douzaine de traits
+## à l'image ; la boîte est resserrée et le nombre monté.
+const METEO_PARTICULES := {
+	"pluie": [9000, 0.9, Vector3(9, 7, 9), Vector3(0.6, -16, 0.3), 3.0, Vector3(0, -4, 0), "trait", Color(0.78, 0.84, 0.95, 0.5)],
+	"ouragan": [12000, 0.6, Vector3(10, 7, 10), Vector3(18, -10, 4), 8.0, Vector3(0, -6, 0), "trait", Color(0.72, 0.76, 0.84, 0.55)],
+	"blizzard": [9000, 1.4, Vector3(9, 7, 9), Vector3(8, -2, 3), 25.0, Vector3(0, -0.5, 0), "flocon", Color(1, 1, 1, 0.95)],
+	"neige": [5000, 9.0, Vector3(10, 7, 10), Vector3(0.2, -0.9, 0.1), 30.0, Vector3.ZERO, "flocon", Color(1, 1, 1, 0.95)],
+	"particules": [2500, 12.0, Vector3(8, 5, 8), Vector3(0.05, 0.03, 0.04), 180.0, Vector3.ZERO, "poussiere", Color(1.0, 0.85, 0.55, 0.85)],
+	"chaleur": [1200, 4.0, Vector3(8, 2, 8), Vector3(0, 0.5, 0), 20.0, Vector3.ZERO, "poussiere", Color(1.0, 0.72, 0.42, 0.5)],
+}
+var meteo := "aucune"
+var _meteo_noeud: Node3D
+
+
+func regler_meteo(m: String) -> void:
+	meteo = m
+	if personnage != null:
+		_appliquer_meteo()
+
+
+func _appliquer_meteo() -> void:
+	if _meteo_noeud != null:
+		_meteo_noeud.queue_free()
+		_meteo_noeud = null
+	# ⚠ « EN JEU » = UN PERSONNAGE, PAS `mode` : `commencer_partie` pose la météo AVANT que l'écran passe la vue en
+	# mode « jeu ».
+	if personnage != null and meteo != "aucune":
+		_meteo_noeud = Node3D.new()
+		_meteo_noeud.name = "Meteo"
+		_vue.add_child(_meteo_noeud)
+		_meteo_noeud.global_position = _camera.global_position
+		if METEO_PARTICULES.has(meteo):
+			_meteo_noeud.add_child(_particules(METEO_PARTICULES[meteo]))
+	_appliquer_brouillard()
+	if personnage != null:
+		_appliquer_rendu("soleil_energie")
+
+
+## Des particules qui SUIVENT L'ŒIL : la boîte d'émission bouge avec la caméra, les gouttes déjà lâchées restent
+## dans le monde (`local_coords` faux) — on marche sous la pluie, elle ne nous colle pas au visage.
+static func _particules(r: Array) -> GPUParticles3D:
+	var g := GPUParticles3D.new()
+	g.amount = r[0]
+	g.lifetime = r[1]
+	g.preprocess = r[1]
+	g.local_coords = false
+	var boite: Vector3 = r[2]
+	g.visibility_aabb = AABB(-boite * 2.0, boite * 4.0)
+	var m := ParticleProcessMaterial.new()
+	m.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	m.emission_box_extents = boite
+	var v: Vector3 = r[3]
+	m.direction = v.normalized()
+	m.spread = r[4]
+	m.initial_velocity_min = v.length() * 0.85
+	m.initial_velocity_max = v.length() * 1.15
+	m.gravity = r[5]
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = r[7]
+	var maillage: Mesh
+	match r[6]:
+		"trait":
+			# Une goutte étirée, alignée sur sa vitesse : la pluie oblique de l'ouragan reste oblique.
+			m.particle_flag_align_y = true
+			var b := BoxMesh.new()
+			b.size = Vector3(0.012, 0.45, 0.012)
+			maillage = b
+		"flocon":
+			mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+			mat.albedo_texture = _disque_doux()
+			var q := QuadMesh.new()
+			q.size = Vector2(0.09, 0.09)
+			maillage = q
+		_:
+			mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+			mat.albedo_texture = _disque_doux()
+			mat.emission_enabled = true
+			mat.emission = Color(r[7]).lightened(0.2)
+			mat.emission_energy_multiplier = 1.5
+			var q := QuadMesh.new()
+			q.size = Vector2(0.04, 0.04)
+			maillage = q
+	maillage.surface_set_material(0, mat)
+	g.process_material = m
+	g.draw_pass_1 = maillage
+	return g
+
+
+## UN FLOCON, UNE POUSSIÈRE : un disque blanc qui s'efface vers son bord (vu à l'image : des carrés, sans lui).
+static var _disque: Texture2D
+
+
+static func _disque_doux() -> Texture2D:
+	if _disque == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(1, 1, 1, 1))
+		g.set_color(1, Color(1, 1, 1, 0))
+		var tex := GradientTexture2D.new()
+		tex.gradient = g
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.0, 0.5)
+		tex.width = 32
+		tex.height = 32
+		_disque = tex
+	return _disque
+
+
+func regler_rendu(cle: String, valeur: Variant) -> void:
+	rendu[cle] = valeur
+	if personnage != null:
+		_appliquer_rendu(cle)
+
+
+## Tout revient aux valeurs décidées (et s'applique si l'on joue).
+func rendu_par_defaut() -> void:
+	for r in REGLAGES_RENDU:
+		rendu[r["cle"]] = r["defaut"]
+	if personnage != null:
+		_appliquer_tout_le_rendu()
+
+
+func _appliquer_tout_le_rendu() -> void:
+	for cle in rendu:
+		_appliquer_rendu(cle)
+
+
+func _appliquer_rendu(cle: String) -> void:
+	var v: Variant = rendu[cle]
+	match cle:
+		"soleil_azimut":
+			_soleil.rotation_degrees.y = v
+		"soleil_hauteur":
+			_soleil.rotation_degrees.x = -v
+		"soleil_energie":
+			# La météo assombrit (ou force) le soleil RÉGLÉ, sans toucher au réglage.
+			_soleil.light_energy = float(v) * (float(METEO_SOLEIL.get(meteo, 1.0)) if personnage != null else 1.0)
+		"soleil_couleur":
+			_soleil.light_color = v
+		"ombres":
+			_soleil.shadow_enabled = v
+		"ambiante_couleur":
+			_env.ambient_light_color = v
+		"ambiante_energie":
+			_env.ambient_light_energy = v
+		"ciel_haut":
+			_ciel_du_jeu.sky_top_color = v
+		"ciel_horizon":
+			_ciel_du_jeu.sky_horizon_color = v
+			_ciel_du_jeu.ground_horizon_color = v
+		"ciel_sol":
+			_ciel_du_jeu.ground_bottom_color = v
+		"ssao":
+			_env.ssao_enabled = v
+		"ssao_intensite":
+			_env.ssao_intensity = v
+		"ssil":
+			_env.ssil_enabled = v
+		"sdfgi":
+			_env.sdfgi_enabled = v
+		"ssr":
+			_env.ssr_enabled = v
+		"glow":
+			_env.glow_enabled = v
+		"glow_intensite":
+			_env.glow_intensity = v
+		"brouillard", "brouillard_densite", "brouillard_couleur":
+			_appliquer_brouillard()
+		"brouillard_volumique":
+			_env.volumetric_fog_enabled = v
+		"volumique_densite":
+			_env.volumetric_fog_density = v
+		"tonemap":
+			_env.tonemap_mode = int(v)
+		"exposition":
+			_env.tonemap_exposure = v
+		"luminosite", "contraste", "saturation":
+			_env.adjustment_enabled = true
+			_env.adjustment_brightness = rendu.get("luminosite", 1.0)
+			_env.adjustment_contrast = rendu.get("contraste", 1.0)
+			_env.adjustment_saturation = rendu.get("saturation", 1.0)
+
+
+## ⚠ LE VOILE SOUS L'EAU L'EMPORTE SUR LE BROUILLARD CHOISI, et le rend en remontant : un seul endroit décide du
+## brouillard, sinon le voile éteignait celui de l'artiste en sortant de l'eau.
+## ⚠ UN SEUL ENDROIT DÉCIDE DU BROUILLARD, DANS CET ORDRE : sous une nappe, le voile de SON liquide ; sinon le
+## brouillard de la MÉTÉO (Fog, Blizzard, Hurricane, Rain) ; sinon celui de la barre de rendu.
+func _appliquer_brouillard() -> void:
+	if _sous_l_eau:
+		var v: Array = EauPresets.VOILES.get(_liquide_traverse, [VOILE_COULEUR, VOILE_DENSITE])
+		_env.fog_enabled = true
+		_env.fog_light_color = v[0]
+		_env.fog_density = v[1]
+		_env.fog_sky_affect = 1.0
+	elif personnage != null and METEO_BROUILLARD.has(meteo):
+		var b: Array = METEO_BROUILLARD[meteo]
+		_env.fog_enabled = true
+		_env.fog_light_color = b[0]
+		_env.fog_density = b[1]
+		_env.fog_sky_affect = 0.8
+	else:
+		_env.fog_enabled = personnage != null and bool(rendu.get("brouillard", false))
+		_env.fog_light_color = rendu.get("brouillard_couleur", CIEL_HORIZON)
+		_env.fog_density = rendu.get("brouillard_densite", 0.01)
+		_env.fog_sky_affect = 0.5
+
+
+## L'ÉCLAIRAGE DU TRAVAIL (World, Witness) : celui de la charte, quoi qu'on ait essayé au Play test.
+func _rendre_le_travail() -> void:
+	_soleil.rotation_degrees = SOLEIL_ROTATION
+	_soleil.light_energy = SOLEIL_ENERGIE
+	_soleil.light_color = Color(1, 1, 1)
+	_soleil.shadow_enabled = true
+	_env.ambient_light_color = AMBIANTE_COULEUR
+	_env.ambient_light_energy = AMBIANTE_ENERGIE
+	_env.ssao_enabled = true
+	_env.ssao_intensity = SSAO_INTENSITE
+	_env.ssil_enabled = true
+	_env.sdfgi_enabled = false
+	_env.ssr_enabled = false
+	_env.glow_enabled = false
+	_env.fog_enabled = false
+	_env.volumetric_fog_enabled = false
+	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	_env.tonemap_exposure = 1.0
+	_env.adjustment_enabled = false
+
+
+## La surface de l'eau au-dessus de `p`, −INF hors de l'eau (la règle vit dans le cœur, `EauMaillage`).
+func surface_eau_au_point(p: Vector3) -> float:
+	if eau_du_jeu.is_empty():
+		return -INF
+	return EauMaillage.niveau_au_point(eau_du_jeu["cases"], eau_du_jeu["oceans"], eau_du_jeu["boite"], p)
 
 
 ## LA CAMÉRA À LA TROISIÈME PERSONNE, TENUE PAR UN BRAS-RESSORT — DEMANDÉ PAR JORDAN (29 septembre 2026) :
@@ -1420,6 +1933,30 @@ static func _course_libre(espace: PhysicsDirectSpaceState3D, depuis: Vector3, de
 	return 1.0 if r.is_empty() else r[0]
 
 
+## Où était le curseur quand le glissé a commencé (coordonnées de la fenêtre) ; INF hors d'un glissé.
+var _souris_avant_capture := Vector2.INF
+
+
+## DEMANDÉ PAR JORDAN (1er octobre 2026) : en Play test, la souris ne sort pas de la fenêtre quand on
+## tient le clic pour s'orienter. Pendant le glissé elle est CAPTURÉE (cachée, les mouvements relatifs
+## continuent sans bord) ; au relâché elle reparaît là où le glissé a commencé.
+## ⚠ PAS « CONFINED » : coincé au bord de la fenêtre, le curseur ne rend plus de mouvement, la caméra s'arrête.
+func _capturer_la_souris() -> void:
+	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		return
+	_souris_avant_capture = get_viewport().get_mouse_position()
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _rendre_la_souris() -> void:
+	if _souris_avant_capture == Vector2.INF:
+		return
+	var ou := _souris_avant_capture
+	_souris_avant_capture = Vector2.INF
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Input.warp_mouse(ou)
+
+
 ## Clic droit glissé : la caméra tourne autour du personnage, en LACET seulement (Jordan). Clic GAUCHE
 ## glissé (Jordan, 29 septembre 2026) : en lacet ET en hauteur. Molette : plus près, plus loin. Aucun clic
 ## ne peint.
@@ -1433,6 +1970,11 @@ func _souris_du_jeu(event: InputEvent) -> void:
 		elif b.pressed:
 			# ⚠ Le clic rend la main clavier à la vue : sinon Espace « clique » le dernier bouton touché.
 			grab_focus()
+			if b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT:
+				_capturer_la_souris()
+		elif b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT:
+			if (b.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)) == 0:
+				_rendre_la_souris()
 	elif event is InputEventMouseMotion:
 		var m := event as InputEventMouseMotion
 		if (m.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:

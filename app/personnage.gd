@@ -35,10 +35,33 @@ const HAUTEUR_DE_SAUT := 1.45
 const MARCHE := 0.3
 ## Le temps de grâce : on peut encore sauter juste après avoir quitté le bord.
 const GRACE := 0.12
+## LE VOL (Jordan, 1er octobre 2026 : « un mode fly au stickman en play test »). Ni gravité ni pas : on
+## monte et descend à volonté, mais ⚠ **IL HEURTE TOUJOURS LE DÉCOR** — le Play test sert à juger le
+## monde, et traverser la roche n'en dirait rien. Maj vole plus vite, comme elle court.
+const VITESSE_VOL := 5.0
+const VITESSE_VOL_RAPIDE := 11.0
+
+## LA NAGE (Jordan, 1er octobre 2026 : « go pour la nage au Play test »). Immergé de plus de `IMMERSION`, il nage :
+## il flotte les pieds `FLOTTE` sous la nappe (la tête dehors), nage plus lentement, plonge avec la touche de
+## descente du vol, remonte avec Espace, et se hisse sur une berge d'au plus `SORTIE` en nageant contre elle — la
+## berge d'un lac à ras bord est à 0,6 au-dessus de ses pieds, une marche de 0,3 ne l'en sortirait jamais.
+const VITESSE_NAGE := 2.2
+const VITESSE_NAGE_RAPIDE := 3.4
+const IMMERSION := 0.35
+const FLOTTE := 0.55
+const PLONGEE := 3.0
+const SORTIE := 1.0
 
 var entree := Vector2.ZERO
 var saut := false
+## La surface de l'eau au-dessus d'un point (−INF hors de l'eau), fournie par la vue ; vide : pas d'eau.
+var surface_eau := Callable()
+## Vrai : il nage (lu par l'animation, la vue et les tests).
+var nage := false
 var course := false
+## Vrai : il vole. `monter` (−1..1) est la commande verticale, lue seulement en vol.
+var vol := false
+var monter := 0.0
 ## Le cap de la caméra (radians autour de +Y) : « en avant » est l'avant de la CAMÉRA, aplati.
 var cap_camera := 0.0
 
@@ -186,6 +209,18 @@ func _physics_process(dt: float) -> void:
 	var voulu := droite * entree.x + avant * entree.y
 	if voulu.length_squared() > 1.0:
 		voulu = voulu.normalized()
+	if vol:
+		nage = false
+		_voler(voulu, dt)
+		return
+	# ⚠ ON SONDE LE TORSE (+0,5), ni les pieds ni le bas du corps : au fond d'un lac, les pieds sont sur le dessus VU
+	# du plancher (0,75 dans sa case), et un point à +0,2 tombe encore dans la case PLEINE du plancher — hors de
+	# l'eau pour la règle ; il marchait au fond (vu rougir dans la fumée).
+	var s: float = surface_eau.call(global_position + Vector3.UP * 0.5) if surface_eau.is_valid() else -INF
+	nage = s > global_position.y + IMMERSION
+	if nage:
+		_nager(voulu, s, dt)
+		return
 	var vitesse := VITESSE_COURSE if course else VITESSE_MARCHE
 	# Une inertie courte : on démarre et on s'arrête vite, mais pas au pixel près.
 	var reactivite := 14.0 if is_on_floor() else 4.0
@@ -219,12 +254,63 @@ func _physics_process(dt: float) -> void:
 	_animer(dt)
 
 
-## LE PAS : buté contre une paroi plus basse que `MARCHE`, on monte dessus au lieu de s'arrêter.
+## En vol : la vitesse rejoint la commande dans les trois axes, avec une inertie un peu plus longue qu'au
+## sol — on plane. ⚠ `move_and_slide` quand même : il glisse le long des parois, il ne les traverse pas.
+func _voler(voulu: Vector3, dt: float) -> void:
+	var vitesse := VITESSE_VOL_RAPIDE if course else VITESSE_VOL
+	var cible := (voulu + Vector3.UP * clampf(monter, -1.0, 1.0)).limit_length(1.0) * vitesse
+	# ⚠ L'inertie verticale est plus courte : lâcher Espace laissait monter 0,7 case de plus (mesuré).
+	var plan := Vector3(velocity.x, 0.0, velocity.z).lerp(Vector3(cible.x, 0.0, cible.z), minf(1.0, 7.0 * dt))
+	velocity = Vector3(plan.x, lerpf(velocity.y, cible.y, minf(1.0, 14.0 * dt)), plan.z)
+	floor_snap_length = 0.0
+	move_and_slide()
+	_en_l_air = 0.0
+	_depuis_le_sol = GRACE + 1.0
+	_saut_tenu = saut
+	_orienter(voulu, dt)
+	_animer(dt)
+
+
+## Bascule le vol. En le quittant, la gravité reprend d'où l'on est : on retombe.
+func basculer_vol() -> void:
+	vol = not vol
+	monter = 0.0
+	if not vol:
+		floor_snap_length = 0.25
+		velocity.y = minf(velocity.y, 0.0)
+
+
+## LA NAGE : la vitesse horizontale rejoint la commande avec une inertie longue (l'eau freine) ; la verticale
+## rejoint la hauteur de flottaison — plus bas tant qu'on plonge, un peu plus haut tant qu'on tient Espace. Pas de
+## gravité : c'est la flottaison qui tient le corps. Contre une berge, il s'y hisse (`SORTIE`).
+func _nager(voulu: Vector3, s: float, dt: float) -> void:
+	var vitesse := VITESSE_NAGE_RAPIDE if course else VITESSE_NAGE
+	var plan := Vector3(velocity.x, 0.0, velocity.z).lerp(voulu * vitesse, minf(1.0, 4.0 * dt))
+	var cible_y := s - FLOTTE
+	if monter < 0.0:
+		cible_y -= PLONGEE
+	elif saut:
+		cible_y += 0.25
+	var vy := clampf((cible_y - global_position.y) * 4.0, -3.0, 3.0)
+	velocity = Vector3(plan.x, lerpf(velocity.y, vy, minf(1.0, 5.0 * dt)), plan.z)
+	floor_snap_length = 0.0
+	var avant := global_position
+	move_and_slide()
+	if is_on_wall() and voulu.length_squared() > 0.01:
+		_gravir(voulu * vitesse * dt, avant, SORTIE)
+	_en_l_air = 0.0
+	_depuis_le_sol = 0.0
+	_saut_tenu = saut
+	_orienter(voulu, dt)
+	_animer(dt)
+
+
+## LE PAS : buté contre une paroi plus basse que `hauteur` (`MARCHE` à pied), on monte dessus au lieu de s'arrêter.
 ## Trois essais de mouvement, jamais un déplacement à l'aveugle : monter, avancer là-haut, redescendre.
-func _gravir(pas: Vector3, depart: Vector3) -> void:
+func _gravir(pas: Vector3, depart: Vector3, hauteur := MARCHE) -> void:
 	var t := global_transform
 	t.origin = depart
-	var haut := Vector3.UP * MARCHE
+	var haut := Vector3.UP * hauteur
 	if test_move(t, haut):
 		return
 	t.origin += haut
@@ -264,7 +350,30 @@ func _animer(dt: float) -> void:
 	var penche := 0.18 * allure
 	var rebond := absf(cos(_phase)) * 0.05 * allure
 	var souffle := sin(temps * 2.2) * 0.012 * (1.0 - allure)
-	if not au_sol:
+	if nage:
+		# À LA NAGE : une brasse — les bras s'écartent et reviennent ensemble, les jambes battent à contretemps ; à
+		# l'arrêt, il fait du surplace, debout, les bras qui godillent.
+		var elan := clampf(v / VITESSE_NAGE_RAPIDE, 0.0, 1.0)
+		var brasse := sin(temps * 4.0)
+		jambe = sin(temps * 5.0) * (0.25 + 0.2 * elan)
+		bras = -0.6 * elan + brasse * 0.25
+		bras_ecart = 0.7 + 0.5 * brasse
+		penche = 0.1
+		rebond = sin(temps * 2.0) * 0.02
+		souffle = 0.0
+	elif vol:
+		# EN VOL : couché dans le sens de la marche selon la vitesse, bras écartés vers l'avant, jambes
+		# qui traînent derrière et battent lentement ; à l'arrêt, il flotte droit et ondule.
+		var elan := clampf(v / VITESSE_VOL_RAPIDE, 0.0, 1.0)
+		var monte := clampf(velocity.y / VITESSE_VOL, -1.0, 1.0)
+		# ⚠ Les épaules sont en OPPOSITION (la droite prend −bras) : les bras s'ouvrent en ailes par l'écart.
+		jambe = -0.35 * elan + sin(temps * 3.0) * 0.12
+		bras = sin(temps * 2.0) * 0.08
+		bras_ecart = 1.25 - 0.25 * elan + 0.25 * monte
+		penche = 0.1 - 0.2 * monte * (1.0 - elan)
+		rebond = sin(temps * 2.4) * 0.03
+		souffle = 0.0
+	elif not au_sol:
 		var monte := clampf(velocity.y / 6.0, -1.0, 1.0)
 		jambe = 0.6
 		bras = -0.4
@@ -273,8 +382,16 @@ func _animer(dt: float) -> void:
 		rebond = 0.0
 
 	var k := minf(1.0, 16.0 * dt)
+	# En vol, c'est TOUT le corps qui se couche vers l'avant avec la vitesse, pas le seul torse.
+	var couche := -0.85 * clampf(v / VITESSE_VOL_RAPIDE, 0.0, 1.0) if vol else 0.0
+	if nage:
+		couche = -1.25 * clampf(v / VITESSE_NAGE, 0.0, 1.0)   # à plat sur l'eau quand il avance
+	_modele.rotation.x = lerpf(_modele.rotation.x, couche, minf(1.0, 6.0 * dt))
 	_hanche_g.rotation.x = lerpf(_hanche_g.rotation.x, jambe, k)
-	_hanche_d.rotation.x = lerpf(_hanche_d.rotation.x, -jambe if au_sol else -0.25, k)
+	# En vol, les deux jambes traînent ensemble, la droite à contretemps.
+	var jambe_d := (jambe - sin(temps * 3.0) * 0.24) if vol \
+		else (-jambe if au_sol or nage else -0.25)
+	_hanche_d.rotation.x = lerpf(_hanche_d.rotation.x, jambe_d, k)
 	_epaule_g.rotation.x = lerpf(_epaule_g.rotation.x, bras, k)
 	_epaule_d.rotation.x = lerpf(_epaule_d.rotation.x, -bras, k)
 	_epaule_g.rotation.z = lerpf(_epaule_g.rotation.z, -bras_ecart, k)

@@ -8,6 +8,7 @@ extends RefCounted
 ##   <nom>.mbworld/
 ##     world.json          les couches, dans l'ordre : nom, visibilité, jeu de tuiles, CASES
 ##     <jeu>.mbset/        un dossier de tuiles (format neutre, §4) par SOURCE distincte
+##     water/<nom>.glb     la nappe CUITE d'une couche d'eau (charte §5, « le mode Fluids »), une par couche
 ##     README.txt
 ##
 ## ⚠ **LE MONDE SE SUFFIT À LUI-MÊME** : ses jeux de tuiles voyagent DANS son dossier, et `world.json`
@@ -22,6 +23,11 @@ extends RefCounted
 ## cases qu'on y peint.
 
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+
+## ⚠ L'EAU VOYAGE DANS LE MONDE, PAS DANS UN JEU DE TUILES : un `.mbset` appartient à une couche de tuiles, l'eau au
+## monde entier (DÉCIDÉ, Jordan, 1er octobre 2026). Ses noms d'aspect, en anglais pour les greffons.
+const ASPECTS := {"stylise": "stylized", "transparent": "clear", "reflechissant": "reflective",
+	"lave": "lava", "marais": "swamp", "acide": "acid"}
 
 const FORMAT := "marchingblocks-world"
 const FORMAT_EPREUVE := "marchingblocks-world-conformance"
@@ -45,9 +51,32 @@ static func regle() -> PackedStringArray:
 	])
 
 
+## LA RÈGLE DE L'EAU — écrite dans le README. ⚠ PAS ENCORE DANS `regle()` NI DANS LES CAS D'ÉPREUVE des greffons
+## (étape 5 du mode Fluids) : la clé `water` est en plus, et les lecteurs actuels ne lisent que `layers`.
+static func regle_eau() -> PackedStringArray:
+	return PackedStringArray([
+		"water    (optional) an array of water layers, in order. Each water layer:",
+		"  name      a string",
+		"  visible   true or false",
+		"  look      a string: \"stylized\", \"clear\", \"reflective\", \"lava\", \"swamp\" or \"acid\" — a",
+		"            SUGGESTION only (lava, swamp and acid flow and fill hollows exactly like water). The looks shipped",
+		"            with the plugins are examples: assign any water shader you like, it gets the data below.",
+		"  mesh      the path of a .glb RELATIVE to world.json, or null (nothing to draw). Its vertices are in",
+		"            FORMAT space, like the cells. Every vertex carries the water data:",
+		"              COLOR_0 r, g   the flow along x and z, mapped from [-1, 1] to [0, 1]; 0.5 0.5 is still water",
+		"              COLOR_0 b      the kind of water: 0 still (lake, sea), 0.5 river, 1 waterfall",
+		"              COLOR_0 a      the depth below, in cells / 8, capped at 1 (1 too for a bottomless sea)",
+		"              TEXCOORD_0     x, z on still water and rivers; across, height on a waterfall",
+		"            Colours are quantized to 1/255.",
+		"  sources   a flat array of integers, x y z per source cell: where the water was placed. The mesh",
+		"            is deduced from them and from the cells of EVERY layer; a plugin may deduce it again.",
+	])
+
+
 ## Écrit le monde. `couches` : [{nom, visible, source, lot (MeshLibrary ou null), cases (Array de
 ## Vector3i)}], dans l'ordre. Rend {"dossier", "couches", "jeux", "sans_tuiles": [noms]} ou {"erreur"}.
-static func exporter(couches: Array, dossier: String, nom: String, generateur: String) -> Dictionary:
+## `eaux` : [{nom, visible, preset, sources (Array de Vector3i), maillage (ArrayMesh ou null)}], dans l'ordre.
+static func exporter(couches: Array, dossier: String, nom: String, generateur: String, eaux: Array = []) -> Dictionary:
 	if couches.is_empty():
 		return {"erreur": "this world has no layer"}
 	var cible := dossier.path_join(_propre(nom, "world") + ".mbworld")
@@ -79,8 +108,29 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 			sans_tuiles.append(str(c["nom"]))
 		sorties.append({"name": str(c["nom"]), "visible": bool(c.get("visible", true)), "tileset": jeu,
 			"cells": cases_a_plat(c.get("cases", []))})
+	var sorties_eau: Array = []
+	var noms_eau := {}
+	for e in eaux:
+		var maillage: Variant = null
+		if e.get("maillage") is ArrayMesh:
+			var base := _propre(str(e["nom"]), "water")
+			var n := base
+			var i := 2
+			while noms_eau.has(n):
+				n = "%s_%d" % [base, i]
+				i += 1
+			noms_eau[n] = true
+			DirAccess.make_dir_recursive_absolute(cible.path_join("water"))
+			var aspect: String = ASPECTS.get(str(e.get("preset", "")), "stylized")
+			var raison := _ecrire_la_nappe(e["maillage"], cible.path_join("water").path_join(n + ".glb"), n, aspect)
+			if raison != "":
+				return {"erreur": "water « %s »: %s" % [e["nom"], raison]}
+			maillage = "water/%s.glb" % n
+		sorties_eau.append({"name": str(e["nom"]), "visible": bool(e.get("visible", true)),
+			"look": ASPECTS.get(str(e.get("preset", "")), "stylized"), "mesh": maillage,
+			"sources": _sources_a_plat(e.get("sources", []))})
 	var monde := {"format": FORMAT, "version": VERSION, "generator": generateur, "name": _propre(nom, "world"),
-		"layers": sorties}
+		"layers": sorties, "water": sorties_eau}
 	var f := FileAccess.open(cible.path_join("world.json"), FileAccess.WRITE)
 	if f == null:
 		return {"erreur": "world.json could not be written (error %d)" % FileAccess.get_open_error()}
@@ -88,10 +138,48 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	f.close()
 	var r2 := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r2 != null:
-		r2.store_string("\n".join(regle()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
+		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
 			% generateur + "plugin for Godot, Unity or Unreal: Import MarchingBlocks world.\n")
 		r2.close()
-	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles}
+	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles,
+		"eaux": sorties_eau.size(), "nappes": noms_eau.size()}
+
+
+## Les sources d'une couche d'eau, à plat, DANS L'ORDRE (une source n'est pas une case : l'ordre est celui où
+## elles ont été posées, et il dit quelle rivière est laquelle).
+static func _sources_a_plat(sources: Array) -> Array:
+	var plat: Array = []
+	for s in sources:
+		var v: Vector3i = s
+		plat.append_array([v.x, v.y, v.z])
+	return plat
+
+
+## Écrit une nappe en .glb : UN nœud, UN maillage nommés `nom` (⚠ l'importeur d'Unreal fait un StaticMesh par
+## MAILLAGE : sans nom, il arriverait anonyme — charte §4), un matériau nommé `mb_water_<aspect>` que le greffon
+## remplace. ⚠ On écrit une COPIE du maillage : celui de la vue garde son shader.
+static func _ecrire_la_nappe(maillage: ArrayMesh, chemin: String, nom: String, aspect: String) -> String:
+	var copie := maillage.duplicate() as ArrayMesh
+	var mat := StandardMaterial3D.new()
+	mat.resource_name = "mb_water_" + aspect
+	mat.albedo_color = Color(0.2, 0.5, 0.75, 0.8)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	copie.surface_set_material(0, mat)
+	var racine := Node3D.new()
+	racine.name = "world_water"
+	var mi := MeshInstance3D.new()
+	mi.name = nom
+	mi.mesh = copie
+	racine.add_child(mi)
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	var e := doc.append_from_scene(racine, etat)
+	if e == OK:
+		for m in etat.get_meshes():
+			(m as GLTFMesh).resource_name = nom
+		e = doc.write_to_filesystem(etat, chemin)
+	racine.free()
+	return "" if e == OK else "the water mesh could not be written (error %d)" % e
 
 
 ## Les cases, triées (y, puis z, puis x), à plat par triplets.
@@ -164,6 +252,35 @@ static func lire(monde: Variant) -> Dictionary:
 			cases.append([cle.x, cle.y, cle.z])
 		sortie.append({"name": c["name"], "visible": c["visible"], "tileset": jeu, "cells": cases})
 	return {"layers": sortie}
+
+
+## LA LECTURE DE L'EAU, selon `regle_eau()`. Rend {"water": [{name, visible, look, mesh, sources: [[x,y,z]…]}]}
+## ou {"error"}. Un monde sans clé `water` n'a pas d'eau. ⚠ Un aspect inconnu est ACCEPTÉ : c'est une suggestion.
+static func lire_eau(monde: Variant) -> Dictionary:
+	if not monde is Dictionary:
+		return {"error": "not a MarchingBlocks world"}
+	var liste = (monde as Dictionary).get("water", [])
+	if not liste is Array:
+		return {"error": "water is not an array"}
+	var sortie: Array = []
+	for e in liste:
+		if not e is Dictionary or not e.get("name") is String or not e.get("visible") is bool \
+				or not e.get("look") is String:
+			return {"error": "a water layer has no name, visibility or look"}
+		var m = e.get("mesh")
+		if m != null and not m is String:
+			return {"error": "water « %s »: mesh is neither a path nor null" % e["name"]}
+		var plat = e.get("sources")
+		if not plat is Array or (plat as Array).size() % 3 != 0:
+			return {"error": "water « %s »: sources is not a list of x y z triples" % e["name"]}
+		var sources: Array = []
+		for i in range(0, plat.size(), 3):
+			for n in [plat[i], plat[i + 1], plat[i + 2]]:
+				if not (n is float or n is int) or int(n) != n:
+					return {"error": "water « %s »: a source coordinate is not an integer" % e["name"]}
+			sources.append([int(plat[i]), int(plat[i + 1]), int(plat[i + 2])])
+		sortie.append({"name": e["name"], "visible": e["visible"], "look": e["look"], "mesh": m, "sources": sources})
+	return {"water": sortie}
 
 
 static func cas_d_epreuve() -> Dictionary:

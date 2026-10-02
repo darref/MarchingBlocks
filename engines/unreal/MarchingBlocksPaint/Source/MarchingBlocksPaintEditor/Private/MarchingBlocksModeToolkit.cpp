@@ -256,6 +256,7 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("well", LOCTEXT("Well", "Well — digs into a FLOOR or a CEILING, straight: one click stops in the cave below (or Shape Length deep); Connect joins a floor and a ceiling."), EMarchingBlocksSpecialShape::Well)]
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("bridge", LOCTEXT("Bridge", "Bridge — a deck out of a WALL across the air to the first wall in front; Connect joins two walls, and the deck bends."), EMarchingBlocksSpecialShape::Bridge)]
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("balcony", LOCTEXT("Balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."), EMarchingBlocksSpecialShape::Balcony)]
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("stairs", LOCTEXT("Stairs", "Stairs — click a WALL where they should arrive: they come down to the ground, Step cells per step; Connect climbs from one floor to another, higher up."), EMarchingBlocksSpecialShape::Stairs)]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
@@ -290,7 +291,8 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 						.Visibility_Lambda([World, Shown]()
 						{
 							AMarchingBlocksWorld* W = World();
-							return Shown(W && (W->SpecialShape == EMarchingBlocksSpecialShape::Bridge || W->SpecialShape == EMarchingBlocksSpecialShape::Balcony));
+							return Shown(W && (W->SpecialShape == EMarchingBlocksSpecialShape::Bridge || W->SpecialShape == EMarchingBlocksSpecialShape::Balcony
+								|| W->SpecialShape == EMarchingBlocksSpecialShape::Stairs));
 						})
 						[
 							Toggle("rail", LOCTEXT("Rail", "Rail — a one-cell rim along the open sides. Needs a size of 2 or more."),
@@ -334,9 +336,33 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 							SNew(SBox).WidthOverride(64.f)
 							[
 								SNew(SSpinBox<int32>).MinValue(1).MaxValue(64).MinSliderValue(1).MaxSliderValue(64)
-								.ToolTipText(LOCTEXT("ShapeLengthTip", "How deep a straight tunnel or well goes when it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out."))
+								.ToolTipText(LOCTEXT("ShapeLengthTip", "How deep a straight tunnel or well goes when it finds no cave, how far a straight bridge looks for a wall, how far a balcony sticks out, how far stairs may run before they reach the ground."))
 								.Value_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W ? W->ShapeLength : 8; })
 								.OnValueChanged_Lambda([World](int32 V) { if (AMarchingBlocksWorld* W = World()) W->ShapeLength = FMath::Clamp(V, 1, 64); })
+							]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth()[Gap()]
+					+ SHorizontalBox::Slot().AutoWidth()
+					[
+						SNew(SHorizontalBox)
+						.Visibility_Lambda([World, Shown]()
+						{
+							AMarchingBlocksWorld* W = World();
+							return Shown(W && W->SpecialShape == EMarchingBlocksSpecialShape::Stairs && !W->bConnectEnds);
+						})
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+						[
+							SNew(STextBlock).Text(LOCTEXT("StairsStep", "Step")).Font(FAppStyle::GetFontStyle("SmallFont"))
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SBox).WidthOverride(48.f)
+							[
+								SNew(SSpinBox<int32>).MinValue(1).MaxValue(4).MinSliderValue(1).MaxSliderValue(4)
+								.ToolTipText(LOCTEXT("StairsStepTip", "How deep each stair is, in cells (1 is steep)."))
+								.Value_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W ? W->StairsStep : 2; })
+								.OnValueChanged_Lambda([World](int32 V) { if (AMarchingBlocksWorld* W = World()) W->StairsStep = FMath::Clamp(V, 1, 4); })
 							]
 						]
 					]

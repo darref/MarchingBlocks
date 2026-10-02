@@ -39,7 +39,14 @@ static func couche(nom: String, id := "") -> Dictionary:
 	return {"nom": nom, "source": "", "visible": true, "cases": {}, "temoin": "", "id": id}
 
 
-static func vers_texte(couches: Array, active: int) -> String:
+## UNE COUCHE D'EAU (Jordan, 1er octobre 2026) : l'eau appartient au monde entier, rangée dans ses PROPRES
+## couches, indépendantes des couches de tuiles. ⚠ ON N'ENREGISTRE QUE LES SOURCES : lacs, rivières et océans
+## s'en redéduisent (`fluides.gd`), comme le lot tranché se redéduit de sa source.
+static func couche_d_eau(nom: String, id := "") -> Dictionary:
+	return {"nom": nom, "visible": true, "preset": "stylise", "sources": [], "id": id}
+
+
+static func vers_texte(couches: Array, active: int, eaux: Array = []) -> String:
 	var sorties: Array = []
 	for c in couches:
 		var plat: Array = []
@@ -49,8 +56,16 @@ static func vers_texte(couches: Array, active: int) -> String:
 		sorties.append({"nom": c["nom"], "source": c["source"],
 			"visible": c["visible"], "cases": plat, "temoin": str(c.get("temoin", "")),
 			"id": str(c.get("id", ""))})
-	return JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties},
-		"\t")
+	var sorties_eau: Array = []
+	for e in eaux:
+		var plat: Array = []
+		for s in e["sources"]:
+			var v: Vector3i = s
+			plat.append_array([v.x, v.y, v.z])
+		sorties_eau.append({"nom": e["nom"], "visible": e["visible"], "preset": e["preset"], "id": str(e["id"]),
+			"sources": plat})
+	return JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties,
+		"eaux": sorties_eau}, "\t")
 
 
 ## Rend {"couches": [...], "active": int}, ou {} en ajoutant la raison à `erreurs`.
@@ -93,7 +108,27 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 			"visible": bool(c.get("visible", true)), "cases": cases, "temoin": str(c.get("temoin", "")),
 			"id": str(c.get("id", ""))})
 	var active: int = clampi(int(brut.get("active", 0)), 0, couches.size() - 1)
-	return {"couches": couches, "active": active}
+	# Les couches d'eau : un projet d'avant le 1er octobre 2026 n'en a pas.
+	var eaux: Array = []
+	var liste_eau = brut.get("eaux", [])
+	if not liste_eau is Array:
+		erreurs.append("water layers are not a list")
+		return {}
+	for i in (liste_eau as Array).size():
+		var e = liste_eau[i]
+		if not e is Dictionary:
+			erreurs.append("water layer %d is not an object" % i)
+			return {}
+		var plat = e.get("sources", [])
+		if not plat is Array or (plat as Array).size() % 3 != 0:
+			erreurs.append("water layer %d: sources are not x, y, z triples" % i)
+			return {}
+		var sources: Array = []
+		for k in range(0, (plat as Array).size(), 3):
+			sources.append(Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2])))
+		eaux.append({"nom": str(e.get("nom", "Water %d" % (i + 1))), "visible": bool(e.get("visible", true)),
+			"preset": str(e.get("preset", "stylise")), "sources": sources, "id": str(e.get("id", ""))})
+	return {"couches": couches, "active": active, "eaux": eaux}
 
 
 ## CE QUI DIT QUE LA SOURCE A CHANGÉ. Vide si elle n'existe pas (ou pas encore).

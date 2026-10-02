@@ -23,6 +23,15 @@ if [ ! -f "$CLE" ]; then
 	exit 1
 fi
 mkdir -p /d/MarchingBlocks/build
+# L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : repris du projet de Jordan à chaque export, tant que
+# `exemple/FIGE` n'existe pas (le script le dit et garde l'archive en place).
+"$GODOT" --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/prendre_l_exemple.gd > /tmp/exemple_mb.log 2>&1
+code_exemple=$?
+grep -E "EXEMPLE|⚠" /tmp/exemple_mb.log
+if [ $code_exemple -ne 0 ] || [ ! -f /d/MarchingBlocks/exemple/exemple.zip ]; then
+	echo "⚠ l'exemple n'a pas pu être pris — export arrêté (voir /tmp/exemple_mb.log)."
+	exit 1
+fi
 export GODOT_SCRIPT_ENCRYPTION_KEY=$(tr -d '\r\n' < "$CLE")
 "$GODOT" --headless --path D:/MarchingBlocks --export-release "Windows Desktop" "$SORTIE" > /tmp/export_mb.log 2>&1
 code=$?

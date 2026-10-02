@@ -39,12 +39,46 @@ const EPS := 0.000001
 ## ⚠ **CE QUE ÇA COÛTAIT N'EST PAS ESTHÉTIQUE.** Ce codage est le seul contrôle visuel capable de
 ## montrer un plafond posé là où il faut un sol, ou une pièce retournée. Sans lui, la planche ne pouvait
 ## plus rougir sur une faute d'orientation : **un contrôle incapable d'échouer ne garde rien** (charte §6).
+## LA MÉMOIRE DES RELECTURES (1er octobre 2026). ⚠ AVEC UNE CARTE GRAPHIQUE, RELIRE UN ArrayMesh LE REDESCEND DU
+## GPU (charte, « les lags d'une seconde ») — et le tranchage relisait le bloc ENTIER une fois par clé, puis chaque
+## pièce une fois par face pour la couture. MESURÉ : trancher le témoin, 1,8 s sans fenêtre, 16,9 s avec. Chaque
+## maillage n'est désormais relu qu'UNE fois pendant un tranchage.
+## ⚠ ON MÉMORISE CE QUE LA RELECTURE REND, PAS CE QU'ON A ENVOYÉ : la carte rend les couleurs sur 8 bits et les
+## normales compressées ; garder l'envoi changerait la sortie. Ici, elle est identique au bit près.
+## ⚠ ACTIVE LE TEMPS D'UN TRANCHAGE SEULEMENT (`memoriser`) : un maillage modifié ailleurs entre deux appels serait
+## relu périmé. ⚠ Le conteneur rendu est une COPIE : `poser` y remplace des tableaux, la mémoire n'en sait rien.
+static var _memoire_active := false
+static var _lus := {}
+static var relectures_evitees := 0
+
+
+static func memoriser(oui: bool) -> void:
+	_memoire_active = oui
+	_lus.clear()
+
+
+static func tableaux(mesh: Mesh, s: int) -> Array:
+	if not _memoire_active:
+		return mesh.surface_get_arrays(s)
+	var id := mesh.get_instance_id()
+	var e = _lus.get(id)
+	if e == null or (e[0] as WeakRef).get_ref() != mesh:
+		e = [weakref(mesh), {}]
+		_lus[id] = e
+	var par_surface: Dictionary = e[1]
+	if par_surface.has(s):
+		relectures_evitees += 1
+	else:
+		par_surface[s] = mesh.surface_get_arrays(s)
+	return (par_surface[s] as Array).duplicate()
+
+
 static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 	var sortie := ArrayMesh.new()
 	if mesh == null:
 		return sortie
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+		var arrays: Array = tableaux(mesh, s)
 		if arrays.is_empty():
 			continue
 		var sommets: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -194,7 +228,7 @@ static func aire(mesh: Mesh) -> float:
 	if mesh == null:
 		return totale
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+		var arrays: Array = tableaux(mesh, s)
 		if arrays.is_empty():
 			continue
 		var sommets: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -215,7 +249,7 @@ static func tient_dans(mesh: Mesh, boite: AABB, marge: float = 0.0001) -> bool:
 		return true
 	var large := boite.grow(marge)
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+		var arrays: Array = tableaux(mesh, s)
 		if arrays.is_empty():
 			continue
 		for p in (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array):
@@ -231,7 +265,7 @@ static func poser(mesh: Mesh, transformation: Transform3D) -> ArrayMesh:
 	if mesh == null:
 		return sortie
 	for s in mesh.get_surface_count():
-		var arrays: Array = mesh.surface_get_arrays(s)
+		var arrays: Array = tableaux(mesh, s)
 		if arrays.is_empty():
 			continue
 		var sommets: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -269,7 +303,7 @@ static func fusionner(morceaux: Array) -> ArrayMesh:
 		if mesh == null:
 			continue
 		for s in mesh.get_surface_count():
-			var arrays: Array = mesh.surface_get_arrays(s)
+			var arrays: Array = tableaux(mesh, s)
 			if arrays.is_empty():
 				continue
 			var sommets: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]

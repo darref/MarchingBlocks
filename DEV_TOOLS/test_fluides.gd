@@ -1,0 +1,646 @@
+extends SceneTree
+##
+## TEST — les fluides (`addons/marchingblocks_core/fluides.gd`) : lac, rivière, océan, déduits des cases.
+##
+## LANCEMENT
+##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_fluides.gd
+##
+## ⚠ **LES ATTENDUS NE VIENNENT PAS DE LA FONCTION ÉPROUVÉE** (charte §6) : chaque monde est petit, et ses
+## lacs, ses cours et ses océans sont déroulés À LA MAIN dans le commentaire du cas — case par case pour les
+## cours, par dénombrement pour les volumes.
+
+const FL := preload("res://addons/marchingblocks_core/fluides.gd")
+const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
+const EP := preload("res://addons/marchingblocks_core/eau_presets.gd")
+const FMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
+
+var _ok := 0
+var _echecs := 0
+
+
+func _initialize() -> void:
+	print("=== TEST — les fluides ===\n")
+	_cuvette()
+	_cuvette_echancree()
+	_cuvette_a_poche()
+	_departage()
+	_eau_voisine()
+	_du_haut_du_mur()
+	_escalier()
+	_riviere_par_un_lac()
+	_ocean()
+	_riviere_vers_l_ocean()
+	_cavite_close()
+	_refus()
+	_maillage()
+	_surface_pour_nager()
+	_presets()
+	_export_du_monde()
+	_cout()
+	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
+	quit(1 if _echecs > 0 else 0)
+
+
+# ── les mondes ───────────────────────────────────────────────────────────────────────────────────────
+
+static func _boite(d: Dictionary, a: Vector3i, b: Vector3i, plein := true) -> void:
+	for x in range(a.x, b.x + 1):
+		for y in range(a.y, b.y + 1):
+			for z in range(a.z, b.z + 1):
+				if plein:
+					d[Vector3i(x, y, z)] = true
+				else:
+					d.erase(Vector3i(x, y, z))
+
+
+static func _ens(cases_: Array) -> Dictionary:
+	var d := {}
+	for c in cases_:
+		d[c] = true
+	return d
+
+
+## Une cuvette : un plancher 5×5 en y = 0, un anneau de murs (x ou z ∈ {0, 4}) en y = 1..2.
+## L'intérieur (x, z ∈ 1..3) est vide aux rangées 1 et 2.
+func _monde_cuvette() -> Dictionary:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(4, 2, 4))
+	_boite(m, Vector3i(1, 1, 1), Vector3i(3, 2, 3), false)
+	return m
+
+
+static func _cours(r: Dictionary) -> Array:
+	var a: Array = []
+	for e in r["cours"]:
+		a.append([e["case"], e["genre"]])
+	return a
+
+
+# ── les cas ──────────────────────────────────────────────────────────────────────────────────────────
+
+## La cuvette se remplit jusqu'à ras bord : le bord est en y = 2, donc la première case qui déborde est en
+## y = 3 et le lac est au niveau 2 — les 3 × 3 × 2 = 18 cases de l'intérieur. Pas de rivière.
+func _cuvette() -> void:
+	var m := _monde_cuvette()
+	var attendu := {}
+	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 2, 3))
+	for depart in [Vector3i(2, 1, 2), Vector3i(2, 2, 2), Vector3i(1, 9, 3)]:
+		var r := FL.source(m, depart)
+		_egal(r["genre"], "lac", "cuvette depuis %s : un lac" % depart)
+		_egal(r["niveau"], 2, "cuvette depuis %s : à ras bord (niveau 2)" % depart)
+		_egal_ens(r["eau"], attendu, "cuvette depuis %s : les 18 cases de l'intérieur" % depart)
+		_egal(r["cours"].size(), 0, "cuvette depuis %s : un lac ne coule pas" % depart)
+	var r := FL.source(m, Vector3i(2, 1, 2))
+	# Surface : la rangée du haut, 9 cases ; profondeur sous (2, 2, 2) : 2 cases puis le plancher.
+	var attendue := {}
+	_boite(attendue, Vector3i(1, 2, 1), Vector3i(3, 2, 3))
+	_egal_ens(_ens(FL.surface(r["eau"], m)), attendue, "la surface de la cuvette : sa rangée du haut")
+	_egal(FL.profondeur(r["eau"], m, Vector3i(2, 2, 2)), 2, "profondeur sous la surface : 2 cases")
+
+
+## Une échancrure en (2, 2, 0) dans le mur : le bord tombe à y = 1, le lac au niveau 1 — 9 cases.
+func _cuvette_echancree() -> void:
+	var m := _monde_cuvette()
+	m.erase(Vector3i(2, 2, 0))
+	var attendu := {}
+	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 1, 3))
+	var r := FL.source(m, Vector3i(2, 1, 2))
+	_egal(r["genre"], "lac", "échancrée : toujours un lac (rien ne tombe à l'étage 1)")
+	_egal(r["niveau"], 1, "échancrée : le seuil descend à 1")
+	_egal_ens(r["eau"], attendu, "échancrée : la rangée du bas seule")
+
+
+## DÉCIDÉ (vases communicants) : une poche ouverte SOUS l'eau se remplit. Le plancher s'étend jusqu'à
+## x = 6 ; le mur (4, 1, 2) est ouvert sous son linteau (4, 2, 2) vers la poche (5, 1, 2), close par
+## (6, 1, 2), (5, 1, 1), (5, 1, 3) et le toit (5, 2, 2). Lac : 18 + 2 = 20 cases ; la surface ne compte
+## ni l'ouverture ni la poche, qui sont sous la roche.
+func _cuvette_a_poche() -> void:
+	var m := _monde_cuvette()
+	_boite(m, Vector3i(5, 0, 0), Vector3i(6, 0, 4))
+	for c in [Vector3i(6, 1, 2), Vector3i(5, 1, 1), Vector3i(5, 1, 3), Vector3i(5, 2, 2)]:
+		m[c] = true
+	m.erase(Vector3i(4, 1, 2))
+	var attendu := {}
+	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 2, 3))
+	attendu[Vector3i(4, 1, 2)] = true
+	attendu[Vector3i(5, 1, 2)] = true
+	var r := FL.source(m, Vector3i(2, 1, 2))
+	_egal(r["niveau"], 2, "poche : le niveau ne change pas")
+	_egal_ens(r["eau"], attendu, "poche : ouverte sous l'eau, elle est noyée")
+	_egal(FL.surface(r["eau"], m).size(), 9, "poche : sous la roche, pas de surface")
+
+
+## LE DÉPARTAGE : une fosse (2..4, 1, 0) entre deux barrages ÉGAUX (1, 1, 0) et (5, 1, 0), dans un chenal
+## (murs z = ±1, y = 1..3, x = 0..6) sur une dalle y = 0 ; les deux bouts sont ouverts. Deux seuils de même
+## hauteur : c'est l'ordre d'insertion qui choisit. Déroulé à la main depuis (2, 1, 0), voisins +X −X +Z −Z
+## bas haut : (3,1,0) s1, (2,2,0) s2 ; (4,1,0) s3, (3,2,0) s4 ; (4,2,0) s5. À l'altitude 2, dans l'ordre
+## d'insertion : (2,2,0) pousse (1,2,0) s6 ; (4,2,0) pousse (5,2,0) s9 ; (1,2,0) pousse (0,2,0) s11 ;
+## (5,2,0) pousse (6,2,0) s13 ; (0,2,0) pousse (−1,2,0) s15, l'horizon, tiré avant (7,2,0) s18 : l'issue est
+## du côté −X, et le seuil — la première case du chemin à l'altitude 2 — est (2, 2, 0).
+## ⚠ Départager à l'envers (le dernier inséré d'abord) file en profondeur vers +X et rend (4, 2, 0). Depuis
+## le milieu (3, 1, 0), les deux ordres tombaient d'accord : le cas ne gardait rien.
+func _departage() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(6, 0, 0))
+	_boite(m, Vector3i(0, 1, -1), Vector3i(6, 3, -1))
+	_boite(m, Vector3i(0, 1, 1), Vector3i(6, 3, 1))
+	m[Vector3i(1, 1, 0)] = true
+	m[Vector3i(5, 1, 0)] = true
+	var r: Dictionary = FL._creux(m, FL.boite(m), func(_c: Vector3i) -> bool: return false, Vector3i(2, 1, 0), 1,
+		FL.VOLUME_MAXI)
+	_egal([r["niveau"], r["issue"], r["seuil"]], [1, "sort", Vector3i(2, 2, 0)],
+		"deux seuils égaux : le premier inséré l'emporte, côté −X")
+	_egal(r["cases"].size(), 3, "deux seuils égaux : la fosse jusqu'aux barrages")
+
+
+## Une eau déjà là, AU MÊME ÉTAGE que la coulée (une `eau_fixe` passée par l'appelant) : on s'y arrête, on ne
+## la traverse pas. Dalle y = 0 (x = 0..4), murs z = ±1 ; source (0, 1, 0), eau en (2, 1, 0). (1, 1, 0) est
+## tirée avant (−1, 1, 0) — d'où l'on tomberait — et touche l'eau : la rivière la rejoint là.
+## (Par `monde()`, ce cas n'arrive pas : une case de rivière voisine d'un océan à son étage EST de l'océan.)
+func _eau_voisine() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(4, 0, 0))
+	_boite(m, Vector3i(0, 1, -1), Vector3i(4, 2, -1))
+	_boite(m, Vector3i(0, 1, 1), Vector3i(4, 2, 1))
+	var r := FL.source(m, Vector3i(0, 1, 0), _ens([Vector3i(2, 1, 0)]))
+	_egal([_cours(r), r["fin"]], [[[Vector3i(0, 1, 0), "coule"], [Vector3i(1, 1, 0), "coule"]], "rejoint"],
+		"une eau au même étage : la rivière s'y arrête")
+
+
+## Du haut du mur de la cuvette, en (0, 3, 0) : la case (1, 3, 0) est poussée la première (+X) mais repose
+## sur le mur ; la seconde, (−1, 3, 0), est au-dessus du vide : l'eau y va, et tombe jusqu'au bas du monde
+## (y = −1, l'horizon). Une rivière d'une case à plat et quatre de chute.
+func _du_haut_du_mur() -> void:
+	var r := FL.source(_monde_cuvette(), Vector3i(0, 3, 0))
+	_egal(r["genre"], "riviere", "du haut du mur : une rivière")
+	_egal(_cours(r), [[Vector3i(0, 3, 0), "coule"], [Vector3i(-1, 3, 0), "coule"],
+		[Vector3i(-1, 2, 0), "chute"], [Vector3i(-1, 1, 0), "chute"], [Vector3i(-1, 0, 0), "chute"],
+		[Vector3i(-1, -1, 0), "chute"]], "du haut du mur : le cours, case par case")
+	_egal(r["fin"], "sort", "du haut du mur : elle quitte le monde")
+
+
+## Un escalier dans un chenal : marches de hauteur 3, 3, 2, 2, 1, 1 en x = 0..5 (z = 0), murs de hauteur 5
+## en z = ±1 et en x = −1. L'eau posée sur la marche du haut coule, tombe d'une case, coule, tombe…
+##   y = 3 : (0,3,0) (1,3,0) (2,3,0) — sous (2,3,0), (2,2,0) est vide : chute en (2,2,0) ;
+##   y = 2 : (3,2,0) (4,2,0) — chute en (4,1,0) ;
+##   y = 1 : (5,1,0) (6,1,0) — au bout du chenal, chute en (6,0,0) puis (6,−1,0), l'horizon.
+func _escalier() -> void:
+	var m := {}
+	var h := [3, 3, 2, 2, 1, 1]
+	for x in 6:
+		_boite(m, Vector3i(x, 0, 0), Vector3i(x, h[x] - 1, 0))
+	_boite(m, Vector3i(-1, 0, -1), Vector3i(5, 4, -1))
+	_boite(m, Vector3i(-1, 0, 1), Vector3i(5, 4, 1))
+	_boite(m, Vector3i(-1, 0, 0), Vector3i(-1, 4, 0))
+	var r := FL.source(m, Vector3i(0, 3, 0))
+	_egal(r["genre"], "riviere", "escalier : une rivière")
+	_egal(_cours(r), [[Vector3i(0, 3, 0), "coule"], [Vector3i(1, 3, 0), "coule"], [Vector3i(2, 3, 0), "coule"],
+		[Vector3i(2, 2, 0), "chute"], [Vector3i(3, 2, 0), "coule"], [Vector3i(4, 2, 0), "coule"],
+		[Vector3i(4, 1, 0), "chute"], [Vector3i(5, 1, 0), "coule"], [Vector3i(6, 1, 0), "coule"],
+		[Vector3i(6, 0, 0), "chute"], [Vector3i(6, -1, 0), "chute"]], "escalier : le cours, case par case")
+	_egal(r["fin"], "sort", "escalier : elle quitte le monde")
+	_egal(r["eau"].size(), 0, "escalier : aucun lac en route")
+
+
+## La rivière remplit un creux en route, puis en déborde. Une dalle y = 0 (x = 0..10, z = −1..1), des murs
+## de chenal en z = ±1 et un fond en x = 0 (y = 1..4), une plate-forme x = 1..3 (y = 1..2), un barrage
+## (7, 1, 0). Entre plate-forme et barrage, la fosse x = 4..6.
+##   y = 3 : (1,3,0) … (4,3,0) — chute en (4,2,0), (4,1,0) : le fond de la fosse ;
+##   à l'étage 1 rien ne tombe : la fosse est un creux. Son bord est le barrage (y = 1), donc elle déborde
+##   à y = 2 : lac au niveau 1 = (4,1,0) (5,1,0) (6,1,0). Le seuil est (6, 2, 0), au-dessus du lac ;
+##   y = 2 : (6,2,0) (7,2,0) (8,2,0) — chute en (8,1,0) ;
+##   y = 1 : (9,1,0) (10,1,0) (11,1,0) — au bout de la dalle, chute en (11,0,0), (11,−1,0).
+func _riviere_par_un_lac() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, -1), Vector3i(10, 0, 1))
+	_boite(m, Vector3i(0, 1, -1), Vector3i(10, 4, -1))
+	_boite(m, Vector3i(0, 1, 1), Vector3i(10, 4, 1))
+	_boite(m, Vector3i(0, 1, 0), Vector3i(0, 4, 0))
+	_boite(m, Vector3i(1, 1, 0), Vector3i(3, 2, 0))
+	m[Vector3i(7, 1, 0)] = true
+	var r := FL.source(m, Vector3i(1, 3, 0))
+	_egal(r["genre"], "riviere", "par un lac : une rivière")
+	_egal(_cours(r), [[Vector3i(1, 3, 0), "coule"], [Vector3i(2, 3, 0), "coule"], [Vector3i(3, 3, 0), "coule"],
+		[Vector3i(4, 3, 0), "coule"], [Vector3i(4, 2, 0), "chute"], [Vector3i(4, 1, 0), "chute"],
+		[Vector3i(4, 1, 0), "lac"], [Vector3i(6, 2, 0), "coule"], [Vector3i(7, 2, 0), "coule"],
+		[Vector3i(8, 2, 0), "coule"], [Vector3i(8, 1, 0), "chute"], [Vector3i(9, 1, 0), "coule"],
+		[Vector3i(10, 1, 0), "coule"], [Vector3i(11, 1, 0), "coule"], [Vector3i(11, 0, 0), "chute"],
+		[Vector3i(11, -1, 0), "chute"]], "par un lac : le cours, case par case")
+	_egal(r["lacs"].size(), 1, "par un lac : un lac en route")
+	if r["lacs"].size() == 1:
+		_egal(r["lacs"][0]["niveau"], 1, "par un lac : au niveau du barrage")
+		_egal_ens(r["lacs"][0]["cases"], _ens([Vector3i(4, 1, 0), Vector3i(5, 1, 0), Vector3i(6, 1, 0)]),
+			"par un lac : la fosse jusqu'au barrage")
+	_egal(r["fin"], "sort", "par un lac : elle quitte le monde")
+
+
+## Une île pleine x, z = 0..6, y = 0..3, avec une cavité CLOSE (2, 1, 2), et une galerie (4..6, 1, 3) ouverte
+## sur le flanc x = 7, qui monte en (4, 2, 3) sous le toit (4, 3, 3).
+## Boîte : x, z ∈ −1..7, y ∈ −1..4. Océan au niveau 2 : les 9 × 4 × 9 = 324 cases de y = −1..2, moins la
+## roche à y = 0..2 (7 × 3 × 7 = 147, moins les 5 cases creusées = 142), moins la cavité close : 181.
+## Surface : l'anneau autour de l'île à y = 2, 81 − 49 = 32 ; la galerie est sous la roche.
+func _monde_ile() -> Dictionary:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(6, 3, 6))
+	for c in [Vector3i(2, 1, 2), Vector3i(4, 1, 3), Vector3i(5, 1, 3), Vector3i(6, 1, 3), Vector3i(4, 2, 3)]:
+		m.erase(c)
+	return m
+
+
+func _ocean() -> void:
+	var m := _monde_ile()
+	_vrai(FL.dans_le_vide(m, Vector3i(10, 2, 10)), "au large : dans le vide")
+	_vrai(not FL.dans_le_vide(m, Vector3i(3, 9, 3)), "au-dessus de l'île : pas dans le vide")
+	var r := FL.source(m, Vector3i(10, 2, 10))
+	_egal(r["genre"], "ocean", "au large : un océan")
+	_egal(r["niveau"], 2, "au large : au niveau du clic")
+	var eau: Dictionary = r["eau"]
+	_egal(eau.size(), 181, "niveau 2 : 181 cases")
+	_vrai(not eau.has(Vector3i(2, 1, 2)), "niveau 2 : la cavité close reste sèche")
+	_vrai(eau.has(Vector3i(4, 2, 3)), "niveau 2 : la galerie ouverte sous l'eau est noyée jusqu'au niveau")
+	_egal(FL.surface(eau, m).size(), 32, "niveau 2 : la surface cerne l'île")
+	_egal(FL.profondeur(eau, m, Vector3i(4, 2, 3)), 2, "profondeur dans la galerie : 2 puis la roche")
+	_egal(FL.profondeur(eau, m, Vector3i(-1, 2, -1)), -1, "profondeur au large : sans fond")
+	eau = FL.source(m, Vector3i(10, 1, 10))["eau"]
+	_vrai(eau.has(Vector3i(4, 1, 3)) and not eau.has(Vector3i(4, 2, 3)),
+		"niveau 1 : la galerie noyée, la chambre au-dessus du niveau sèche")
+	# Niveau 0 : y = −1..0, 162 cases, moins la roche de y = 0 (49) : 113 ; la galerie (y = 1) est sèche.
+	eau = FL.source(m, Vector3i(10, 0, 10))["eau"]
+	_egal(eau.size(), 113, "niveau 0 : 113 cases")
+	_egal(FL.source(m, Vector3i(10, -5, 10))["eau"].size(), 0, "sous le monde : aucune case, un plan seul")
+
+
+## L'île et un océan au niveau 1 ; une source sur le toit (3, 4, 3). Le bord le plus proche est à 4 cases
+## dans les quatre directions : 5 cases à plat, puis la chute — (x, 3), (x, 2) — et (x, 1) est l'océan.
+func _riviere_vers_l_ocean() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(6, 3, 6))
+	var w := FL.monde(m, [Vector3i(3, 4, 3), Vector3i(20, 1, 20)])
+	var r: Dictionary = w["corps"][0]
+	_egal(r["genre"], "riviere", "vers l'océan : une rivière")
+	_egal(r["fin"], "rejoint", "vers l'océan : elle le rejoint")
+	var coule := 0
+	var chute := 0
+	for e in r["cours"]:
+		if e["genre"] == "coule":
+			coule += 1
+		elif e["genre"] == "chute":
+			chute += 1
+	_egal([coule, chute], [5, 2], "vers l'océan : 5 cases à plat, 2 de chute")
+	if not r["cours"].is_empty():
+		_egal(r["cours"][0]["case"], Vector3i(3, 4, 3), "vers l'océan : elle part de la source")
+		var der: Vector3i = r["cours"][-1]["case"]
+		_vrai((w["ocean"] as Dictionary).has(der + Vector3i(0, -1, 0)), "vers l'océan : elle finit dessus")
+	_egal(w["corps"][1]["genre"], "ocean", "le second corps est l'océan")
+	var w2 := FL.monde(m, [Vector3i(20, 1, 20), Vector3i(3, 4, 3)])
+	_egal(_cours(w2["corps"][1]), _cours(r), "l'ordre des sources ne change rien")
+	# Une source dans l'eau d'un océan, sur un fond de roche : refusée, l'eau est déjà là.
+	var ile := _monde_ile()
+	var w3 := FL.monde(ile, [Vector3i(20, 2, 20), Vector3i(4, 1, 3)])
+	_egal(w3["corps"][1]["erreur"], "dans_l_eau", "dans la galerie noyée : déjà de l'eau")
+
+
+## Une cavité close (2, 1..2, 2) dans un bloc plein 0..4³ : aucune issue. Le lac monte jusqu'à la hauteur du
+## clic — 2 cases depuis (2, 2, 2), une seule depuis (2, 1, 2) —, et le dit (« ferme »).
+func _cavite_close() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(4, 4, 4))
+	m.erase(Vector3i(2, 1, 2))
+	m.erase(Vector3i(2, 2, 2))
+	var r := FL.source(m, Vector3i(2, 2, 2))
+	_egal([r["genre"], r["fin"], r["niveau"]], ["lac", "ferme", 2], "cavité close, clic en haut")
+	_egal_ens(r["eau"], _ens([Vector3i(2, 1, 2), Vector3i(2, 2, 2)]), "cavité close : pleine")
+	r = FL.source(m, Vector3i(2, 1, 2))
+	_egal([r["niveau"], r["eau"].size()], [1, 1], "cavité close, clic en bas : une case")
+
+
+func _refus() -> void:
+	var m := _monde_cuvette()
+	_egal(FL.source(m, Vector3i(0, 0, 0))["erreur"], "dans_la_matiere", "dans la roche : refusé")
+	_egal(FL.source(_monde_ile(), Vector3i(10, 2, 10), {}, 50)["erreur"], "trop_grand", "océan trop grand : refusé")
+	var r := FL.source(_monde_ile(), Vector3i(10, 2, 10), {}, 50)
+	_egal([r["genre"], r["eau"].size()], ["", 0], "un refus ne rend rien")
+	_egal(FL.source({}, Vector3i(0, 3, 0))["genre"], "ocean", "sans monde : un océan, un plan seul")
+
+
+## LE MAILLAGE (`eau_maillage.gd`). Attendus écrits à la main depuis les hauteurs de la charte : nappe en
+## rangée + 0,7, bande de rivière en rangée − 0,15, débord de 0,45 sous une voisine pleine de même rangée,
+## lame de cascade 0,1 en retrait du plan entre la lèvre et la case d'où l'eau vient, du haut de la bande jusqu'à
+## la dernière chute − 0,3 ; une bande sur chaque case du cours qui repose sur la matière (jamais sur une lèvre).
+func _maillage() -> void:
+	# La cuvette : 9 nappes à 2,7 ; le bord avance de 0,45 sous chaque mur → x, z ∈ [0,55 ; 4,45] ;
+	# profondeur 2 partout (2 cases d'eau, puis le plancher) → alpha 2 / 8.
+	var m := _monde_cuvette()
+	var q := _quads(EM.maillage([FL.source(m, Vector3i(2, 1, 2))], m))
+	_egal(q.size(), 9, "cuvette : 9 nappes")
+	_vrai(_meme_boite(_boite_de(q), [Vector3(0.55, 2.7, 0.55), Vector3(4.45, 2.7, 4.45)]), "cuvette : à 2,7, sous les murs")
+	_vrai(q.all(func(e): return _couleur_proche(e["c"], Color(0.5, 0.5, 0.0, 0.25))),
+		"cuvette : dormante, profondeur 2 cases")
+	_vrai(_bien_tournes(q), "cuvette : faces avant horaires, normales en haut")
+
+	# L'escalier : 6 bandes — (0,3) (1,3), la retombée (2,2) et (3,2), la retombée (4,1) et (5,1) ; ni les lèvres
+	# (2,3) (4,2) (6,1), au-dessus du vide, ni (6,0) (6,−1), qui tombent hors du monde — et 3 lames.
+	var esc := {}
+	var h := [3, 3, 2, 2, 1, 1]
+	for x in 6:
+		_boite(esc, Vector3i(x, 0, 0), Vector3i(x, h[x] - 1, 0))
+	_boite(esc, Vector3i(-1, 0, -1), Vector3i(5, 4, -1))
+	_boite(esc, Vector3i(-1, 0, 1), Vector3i(5, 4, 1))
+	_boite(esc, Vector3i(-1, 0, 0), Vector3i(-1, 4, 0))
+	q = _quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc))
+	_egal(q.size(), 9, "escalier : 6 bandes, 3 lames")
+	for c in [Vector3i(2, 2, 0), Vector3i(4, 1, 0)]:
+		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y - 0.15, -0.45),
+			Vector3(c.x + 1, c.y - 0.15, 1.45)])).size(), 1,
+			"escalier : la marche %s, où l'eau retombe, est mouillée (et s'avance sous la marche d'au-dessus)" % c)
+	for c in [Vector3i(2, 3, 0), Vector3i(4, 2, 0), Vector3i(6, 1, 0)]:
+		_vrai(q.all(func(e): return not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[0].x != c.x),
+			"escalier : aucune bande ne flotte sur la lèvre %s" % c)
+	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 2,85,
+	# courant vers +X.
+	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 2.85, -0.45), Vector3(1, 2.85, 1.45)]))
+	_egal(bande.size(), 1, "escalier : la bande de la première case, à sa place")
+	if bande.size() == 1:
+		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.05)), "… courant +X, genre rivière")
+	# Les lames, 0,1 en retrait du plan de la lèvre : x = 1,9 (2,85 → 1,7), 3,9 (1,85 → 0,7), 5,9 (0,85 → −1,3).
+	for l in [[1.9, 2.85, 1.7], [3.9, 1.85, 0.7], [5.9, 0.85, -1.3]]:
+		var lame := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0], l[2], 0), Vector3(l[0], l[1], 1)]))
+		_vrai(lame.size() == 1 and _couleur_proche(lame[0]["c"], Color(1.0, 0.5, 1.0, 0.05)), "escalier : la lame en x = %s, de %s à %s" % l)
+	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
+
+	# L'océan autour de l'île, niveau 2 : 32 nappes et 4 rectangles jusqu'à ±2000.
+	var ile := _monde_ile()
+	q = _quads(EM.maillage([FL.source(ile, Vector3i(10, 2, 10))], ile))
+	_egal(q.size(), 36, "océan : 32 nappes et 4 au large")
+	_vrai(_meme_boite(_boite_de(q), [Vector3(-2000, 2.7, -2000), Vector3(2000, 2.7, 2000)]),
+		"océan : jusqu'à l'horizon, à 2,7 — %s" % [_boite_de(q)])
+	_vrai(_bien_tournes(q), "océan : faces avant horaires")
+	_egal(EM.maillage([FL.source(_monde_cuvette(), Vector3i(0, 0, 0))], {}), null, "un refus : rien à dessiner")
+
+
+## LA SURFACE OÙ L'ON NAGE (`niveau_au_point`) : la hauteur DESSINÉE de la nappe (rangée du haut + 0,7).
+func _surface_pour_nager() -> void:
+	var m := _monde_cuvette()
+	var lac: Dictionary = FL.source(m, Vector3i(2, 1, 2))["eau"]
+	var b := FL.boite(m)
+	_vrai(is_equal_approx(EM.niveau_au_point(lac, [], b, Vector3(2.5, 1.2, 2.5)), 2.7),
+		"au fond de la cuvette : la nappe est à 2,7 (rangée 2 + 0,7)")
+	_vrai(is_equal_approx(EM.niveau_au_point(lac, [], b, Vector3(1.5, 2.9, 3.5)), 2.7),
+		"dans la case du haut, au-dessus de la nappe : 2,7 quand même (c'est l'appelant qui compare)")
+	_egal(EM.niveau_au_point(lac, [], b, Vector3(2.5, 3.5, 2.5)), -INF, "au-dessus du lac : pas d'eau")
+	_egal(EM.niveau_au_point(lac, [], b, Vector3(0.5, 1.5, 0.5)), -INF, "dans le mur : pas d'eau")
+	# Le mur ouest occupe x = 0..1, l'eau commence en x = 1 ; la nappe dessinée s'avance de 0,45 sous le mur.
+	_vrai(is_equal_approx(EM.niveau_au_point(lac, [], b, Vector3(0.7, 1.5, 2.5)), 2.7),
+		"dans la case du mur, à 0,3 de l'eau : DANS l'eau, comme la nappe dessinée qui s'y avance")
+	_egal(EM.niveau_au_point(lac, [], b, Vector3(0.4, 1.5, 2.5)), -INF, "à 0,6 de l'eau, au-delà du débord : dans le mur")
+	var ile := _monde_ile()
+	var mer: Dictionary = FL.source(ile, Vector3i(10, 2, 10))["eau"]
+	var bi := FL.boite(ile)
+	_vrai(is_equal_approx(EM.niveau_au_point(mer, [2], bi, Vector3(-30.0, -4.0, 55.0)), 2.7),
+		"au large, hors de la boîte du monde : la mer à 2,7")
+	_egal(EM.niveau_au_point(mer, [2], bi, Vector3(-30.0, 3.2, 55.0)), -INF, "au large mais au-dessus de la rangée 2 : pas d'eau")
+	_vrai(is_equal_approx(EM.niveau_au_point(mer, [2], bi, Vector3(4.5, 1.5, 3.5)), 2.7),
+		"dans la galerie noyée : la colonne d'eau monte jusqu'à la rangée 2")
+	_egal(EM.niveau_au_point(mer, [2], bi, Vector3(2.5, 1.5, 2.5)), -INF, "dans la cavité close : sèche")
+	_egal(EM.niveau_au_point({}, [], {}, Vector3.ZERO), -INF, "sans eau : nulle part")
+
+
+## Les quads d'un maillage : [{"p": 4 sommets, "c": couleur du premier, "n": normale}].
+func _quads(mesh: ArrayMesh) -> Array:
+	var q: Array = []
+	if mesh == null:
+		return q
+	var a := mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	for k in range(0, v.size(), 4):
+		q.append({"p": [v[k], v[k + 1], v[k + 2], v[k + 3]], "c": (a[Mesh.ARRAY_COLOR] as PackedColorArray)[k],
+			"n": (a[Mesh.ARRAY_NORMAL] as PackedVector3Array)[k], "i": a[Mesh.ARRAY_INDEX], "k": k,
+			"v": v})
+	return q
+
+
+## [min, max] des sommets. ⚠ PAS ARRONDIS : `snappedf(0,001)` sur un Vector3 (flottants 32 bits) écarte −2000 de
+## 1,2·10⁻⁴ — l'arrondi faussait la comparaison qu'il devait rendre sûre.
+func _boite_de(q: Array) -> Array:
+	var lo := Vector3(INF, INF, INF)
+	var hi := -lo
+	for e in q:
+		for p: Vector3 in e["p"]:
+			lo = lo.min(p)
+			hi = hi.max(p)
+	return [lo, hi]
+
+
+## ⚠ LES POSITIONS SONT EN FLOTTANTS 32 BITS (2,7 n'y est pas exact) : on compare au dix-millième.
+func _meme_boite(a: Array, b: Array) -> bool:
+	return (a[0] as Vector3).distance_to(b[0]) < 1e-4 and (a[1] as Vector3).distance_to(b[1]) < 1e-4
+
+
+## ⚠ LES COULEURS DE SOMMET SONT STOCKÉES SUR 8 BITS (0,25 y devient 64/255) : le contrat de données est
+## quantifié au 1/255, et on compare à un demi-pas près.
+func _couleur_proche(a: Color, b: Color) -> bool:
+	return absf(a.r - b.r) < 0.003 and absf(a.g - b.g) < 0.003 and absf(a.b - b.b) < 0.003 and absf(a.a - b.a) < 0.003
+
+
+## Chaque triangle : produit vectoriel de l'ordre stocké À L'OPPOSÉ de la normale (charte §4).
+func _bien_tournes(q: Array) -> bool:
+	if q.is_empty():
+		return false
+	var idx: PackedInt32Array = q[0]["i"]
+	var v: PackedVector3Array = q[0]["v"]
+	var nn: Dictionary = {}
+	for e in q:
+		for d in 4:
+			nn[e["k"] + d] = e["n"]
+	for t in range(0, idx.size(), 3):
+		var x := (v[idx[t + 1]] - v[idx[t]]).cross(v[idx[t + 2]] - v[idx[t]])
+		if x.dot(nn[idx[t]]) >= 0.0:
+			return false
+	return true
+
+
+## LES PRESETS. ⚠ LE COMPILATEUR DE SHADERS NE TOURNE PAS EN HEADLESS : un shader faux ne se voit qu'avec fenêtre
+## (`capture_fluides.gd`, qui doit sortir sans une ligne « SHADER ERROR »). Ce qui se garde ici, c'est ce qui se
+## lit dans le TEXTE — dont le piège payé deux fois en écrivant les presets : un paramètre de fonction qui porte
+## le nom d'un uniforme (« Redefinition of 'ampleur' », puis « 'ecume' »).
+func _presets() -> void:
+	var re_uniforme := RegEx.create_from_string("(?m)^\\s*(?:uniform|varying)\\s+\\w+\\s+(\\w+)")
+	var re_fonction := RegEx.create_from_string("(?m)^\\w+\\s+(\\w+)\\s*\\(([^)]*)\\)\\s*\\{")
+	var codes := {}
+	for preset in EP.PRESETS:
+		_vrai(EP.NOMS.has(preset), "le preset « %s » a un nom à l'écran" % preset)
+		var code: String = EP.code(preset)
+		codes[code] = true
+		_vrai(code.contains("shader_type spatial") and not code.contains("%COMMUN%") and not code.contains("%CAUSTIQUE%"),
+			"« %s » : un shader spatial, marqueurs remplacés" % preset)
+		var globaux := {}
+		for m in re_uniforme.search_all(code):
+			globaux[m.get_string(1)] = true
+		var masques: Array = []
+		for m in re_fonction.search_all(code):
+			for parametre in m.get_string(2).split(",", false):
+				var nom: String = parametre.strip_edges().split(" ")[-1]
+				if globaux.has(nom):
+					masques.append("%s(%s)" % [m.get_string(1), nom])
+		_egal(masques, [], "« %s » : aucun paramètre de fonction ne porte le nom d'un uniforme" % preset)
+		# Le contrat : chaque preset lit le courant, le genre et la profondeur du terrain.
+		_vrai(code.contains("COLOR.rg") and code.contains("COLOR.b") and code.contains("hint_depth_texture"),
+			"« %s » lit le contrat (courant, genre) et la profondeur du terrain" % preset)
+	_egal(codes.size(), EP.PRESETS.size(), "un shader différent par preset")
+	# Les trois liquides du 2 octobre 2026 : présents, exportés sous leur nom anglais, et un voile chacun.
+	_egal(EP.PRESETS, ["stylise", "transparent", "reflechissant", "lave", "marais", "acide"], "six liquides")
+	var aspects: Array = []
+	for preset in EP.PRESETS:
+		aspects.append(FMonde.ASPECTS.get(preset, "?"))
+	_egal(aspects, ["stylized", "clear", "reflective", "lava", "swamp", "acid"],
+		"chaque liquide part dans le .mbworld sous son nom anglais")
+	_vrai(EP.code("lave").contains("EMISSION") and EP.code("acide").contains("EMISSION")
+		and EP.code("lave").contains("bord_de_cellule"), "la lave et l'acide luisent ; la lave est fendue en cellules")
+	_egal(EP.VOILES.keys(), ["lave", "marais", "acide"], "un voile par liquide qui n'est pas de l'eau")
+	_vrai(EP.code("transparent").contains("hint_screen_texture") and EP.code("reflechissant").contains("reflet_ecran"),
+		"le transparent réfracte l'écran, le réfléchissant y cherche le relief")
+
+
+## L'EXPORT DU MONDE (étape 4) : l'eau part CUITE dans le `.mbworld` — `world.json` la décrit, un `.glb` par couche
+## d'eau porte la nappe et son contrat. Attendus : la nappe relue a les mêmes sommets que celle qu'on a écrite
+## (positions en espace du format, couleurs au 1/255 près) ; le lecteur du greffon Godot, qui ne connaît pas
+## encore l'eau, lit ce monde sans le refuser.
+func _export_du_monde() -> void:
+	var ile := _monde_ile()
+	var w := FL.monde(ile, [Vector3i(20, 2, 20), Vector3i(3, 4, 3)])
+	var nappe := EM.maillage(w["corps"], ile)
+	var dossier := "user://test_fluides"
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var cases: Array = ile.keys()
+	var r: Dictionary = FMonde.exporter([{"nom": "Rock", "visible": true, "source": "", "lot": null, "cases": cases}],
+		dossier, "ile", "test", [
+			{"nom": "Sea & river", "visible": true, "preset": "transparent",
+				"sources": [Vector3i(20, 2, 20), Vector3i(3, 4, 3)], "maillage": nappe},
+			{"nom": "Empty", "visible": false, "preset": "reflechissant", "sources": [], "maillage": null},
+		])
+	_vrai(not r.has("erreur") and r["eaux"] == 2 and r["nappes"] == 1, "export : deux couches d'eau, une nappe")
+	var texte := FileAccess.get_file_as_string(str(r.get("dossier", "")).path_join("world.json"))
+	var monde = JSON.parse_string(texte)
+	var lu: Dictionary = FMonde.lire_eau(monde)
+	_vrai(not lu.has("error") and lu["water"].size() == 2, "world.json : la clé water se relit")
+	if lu.has("water") and lu["water"].size() == 2:
+		var a: Dictionary = lu["water"][0]
+		_egal([a["name"], a["visible"], a["look"], a["mesh"]], ["Sea & river", true, "clear", "water/sea___river.glb"],
+			"la première : nom, visible, aspect en anglais, nappe en chemin RELATIF")
+		_egal(a["sources"], [[20, 2, 20], [3, 4, 3]], "ses sources, dans l'ordre où elles ont été posées")
+		_egal([lu["water"][1]["mesh"], lu["water"][1]["look"], lu["water"][1]["visible"]], [null, "reflective", false],
+			"une couche d'eau sans nappe voyage quand même, sans maillage")
+	_vrai(FileAccess.get_file_as_string(str(r.get("dossier", "")).path_join("README.txt")).contains("COLOR_0 b"),
+		"le README écrit le contrat de l'eau")
+	# Le greffon Godot (qui ne lit pas encore l'eau) ne refuse pas ce monde.
+	var lecteur = load("res://addons/marchingblocks_paint/mb_world_file.gd")
+	var par_le_greffon: Dictionary = lecteur.read(monde)
+	_vrai(not par_le_greffon.has("error") and par_le_greffon["layers"].size() == 1,
+		"le lecteur du greffon Godot lit ce monde sans le refuser")
+	# La nappe relue.
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	var e := doc.append_from_file(str(r.get("dossier", "")).path_join("water/sea___river.glb"), etat)
+	_egal(e, OK, "la nappe .glb se relit")
+	var relue: Array = []
+	for m in etat.get_meshes():
+		var im: ImporterMesh = (m as GLTFMesh).mesh
+		relue.append(im.get_surface_arrays(0))
+	_egal(relue.size(), 1, "un maillage dans la nappe")
+	# ⚠ LES NOMS SE LISENT DANS LE JSON DU FICHIER : l'importeur de Godot compose le sien (« nœud_maillage »).
+	var j: Dictionary = _json_du_glb(str(r.get("dossier", "")).path_join("water/sea___river.glb"))
+	_egal([j["meshes"][0].get("name"), j["materials"][0].get("name")], ["sea___river", "mb_water_clear"],
+		"dans le fichier : le maillage nommé (l'importeur d'Unreal en a besoin), le matériau nommé par l'aspect")
+	_vrai((j["meshes"][0]["primitives"][0]["attributes"] as Dictionary).has("COLOR_0"), "dans le fichier : COLOR_0")
+	if relue.size() == 1:
+		var avant := nappe.surface_get_arrays(0)
+		var pv: PackedVector3Array = avant[Mesh.ARRAY_VERTEX]
+		var pr: PackedVector3Array = relue[0][Mesh.ARRAY_VERTEX]
+		var cv: PackedColorArray = avant[Mesh.ARRAY_COLOR]
+		var cr = relue[0][Mesh.ARRAY_COLOR]
+		_egal(pr.size(), pv.size(), "autant de sommets relus qu'écrits")
+		_vrai(cr is PackedColorArray and (cr as PackedColorArray).size() == cv.size(), "les couleurs (le contrat) voyagent")
+		# Comparés en ENSEMBLE (l'exporteur peut réordonner) : chaque sommet écrit, avec sa couleur, se retrouve.
+		var ecrits := {}
+		for i in pv.size():
+			ecrits["%s|%s" % [pv[i].snappedf(0.001), _q(cv[i])]] = true
+		var manquants := 0
+		if cr is PackedColorArray and pr.size() == pv.size():
+			for i in pr.size():
+				if not ecrits.has("%s|%s" % [pr[i].snappedf(0.001), _q(cr[i])]):
+					manquants += 1
+		_egal(manquants, 0, "chaque sommet relu est un sommet écrit : même place (espace du format), même contrat")
+	# Les refus de la lecture de l'eau.
+	for cas in [
+		[{"water": 3}, "water n'est pas une liste"],
+		[{"water": [{"name": "a", "visible": true, "look": "clear", "mesh": 4, "sources": []}]}, "mesh ni chemin ni null"],
+		[{"water": [{"name": "a", "visible": true, "look": "clear", "mesh": null, "sources": [1, 2]}]}, "sources pas en triplets"],
+		[{"water": [{"name": "a", "visible": true, "look": "clear", "mesh": null, "sources": [1, 2, 0.5]}]}, "source fractionnaire"],
+		[{"water": [{"name": "a", "look": "clear", "mesh": null, "sources": []}]}, "sans visibilité"],
+	]:
+		_vrai(FMonde.lire_eau(cas[0]).has("error"), "refusé : " + cas[1])
+	_vrai(not FMonde.lire_eau({"water": [{"name": "a", "visible": true, "look": "lava", "mesh": null, "sources": []}]}).has("error"),
+		"un aspect inconnu est accepté : c'est une suggestion")
+	_egal(FMonde.lire_eau({}), {"water": []}, "un monde sans clé water n'a pas d'eau")
+
+
+## Le bloc JSON d'un .glb (en-tête de 12 octets, puis la longueur du bloc et son type).
+func _json_du_glb(chemin: String) -> Dictionary:
+	var b := FileAccess.get_file_as_bytes(chemin)
+	if b.size() < 20:
+		return {"meshes": [{}], "materials": [{}]}
+	var n := b.decode_u32(12)
+	var j = JSON.parse_string(b.slice(20, 20 + n).get_string_from_utf8())
+	return j if j is Dictionary else {"meshes": [{}], "materials": [{}]}
+
+
+## Une couleur au 1/255 (la précision du contrat).
+func _q(c: Color) -> String:
+	return "%d,%d,%d,%d" % [roundi(c.r * 255), roundi(c.g * 255), roundi(c.b * 255), roundi(c.a * 255)]
+
+
+## LE COÛT, mesuré et pas jugé : un monde de 48 × 8 × 48 cases plein, creusé d'un bassin, avec un océan.
+func _cout() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(47, 7, 47))
+	_boite(m, Vector3i(10, 4, 10), Vector3i(30, 7, 30), false)
+	var t := Time.get_ticks_usec()
+	var w := FL.monde(m, [Vector3i(60, 5, 60), Vector3i(20, 5, 20)])
+	var ms := (Time.get_ticks_usec() - t) / 1000.0
+	print("  coût : océan %d cases + lac %d cases en %.1f ms" % [w["ocean"].size(), w["corps"][1]["eau"].size(), ms])
+	_egal(w["corps"][1]["genre"], "lac", "le bassin : un lac")
+	_egal(w["corps"][1]["eau"].size(), 21 * 21 * 4, "le bassin : plein jusqu'au bord (21 × 21 × 4)")
+
+
+# ── outillage ────────────────────────────────────────────────────────────────────────────────────────
+
+func _vrai(v: bool, quoi: String) -> void:
+	if v:
+		_ok += 1
+	else:
+		_echecs += 1
+		print("  ✗ ", quoi)
+
+
+func _egal(a: Variant, b: Variant, quoi: String) -> void:
+	if a == b:
+		_ok += 1
+	else:
+		_echecs += 1
+		print("  ✗ %s — obtenu %s, attendu %s" % [quoi, a, b])
+
+
+func _egal_ens(a: Dictionary, b: Dictionary, quoi: String) -> void:
+	var manque: Array = []
+	var trop: Array = []
+	for c in b:
+		if not a.has(c):
+			manque.append(c)
+	for c in a:
+		if not b.has(c):
+			trop.append(c)
+	if manque.is_empty() and trop.is_empty():
+		_ok += 1
+	else:
+		_echecs += 1
+		print("  ✗ %s — manquent %s, en trop %s" % [quoi, manque.slice(0, 8), trop.slice(0, 8)])

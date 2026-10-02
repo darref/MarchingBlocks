@@ -1,11 +1,11 @@
 @tool
 extends RefCounted
-## THE SPECIAL SHAPES of MarchingBlocks — tunnel, well, bridge and balcony, from one or two clicks.
+## THE SPECIAL SHAPES of MarchingBlocks — tunnel, well, bridge, balcony and stairs, from one or two clicks.
 ##
 ## A tunnel digs into a wall and a well into a floor or a ceiling, square to it; in one click they go
 ## through to the next cave (or `length` cells deep), and Connect joins two faces anywhere — slanted walls
 ## included — with both ends open. A bridge builds a deck across the air from a wall; a balcony puts a
-## slab with its rail against a wall.
+## slab with its rail against a wall; stairs climb a wall to the clicked height, or join two floors.
 ##
 ## Like `mb_tools.gd`, this file uses nothing from the MarchingBlocks tool: `tools_conformance.json`
 ## proves it gives exactly the tool's cells, case by case, and its `rules_text` says every rule in full.
@@ -13,10 +13,11 @@ extends RefCounted
 ##
 ## Cell c covers [c, c+1] on each axis. Sets are Dictionaries {Vector3i: true}.
 
-const SHAPES := ["tunnel", "well", "bridge", "balcony"]
+const SHAPES := ["tunnel", "well", "bridge", "balcony", "stairs"]
 const PROFILES := ["round", "square", "arch"]
 const LENGTH_MAX := 64
 const SPAN_MAX := 128
+const STEP_MAX := 4
 const VOLUME_MAX := 262144
 
 const PLANES := [
@@ -60,22 +61,35 @@ static func wall_normal(cells: Dictionary, c: Vector3i, face: Vector3i) -> Vecto
 	return n
 
 
-## The normal a shape keeps for a clicked face, or ZERO when that face does not suit it.
-static func normal_for(shape: String, cells: Dictionary, c: Vector3i, face: Vector3i) -> Vector3i:
+## The normal a shape keeps for a clicked face, or ZERO when that face does not suit it. Connected
+## stairs want a floor (the top face), every other wall shape a horizontal face.
+static func normal_for(shape: String, cells: Dictionary, c: Vector3i, face: Vector3i, connect := false) -> Vector3i:
 	if shape == "well":
 		return face if face.x == 0 and face.z == 0 and face.y != 0 else Vector3i.ZERO
+	if shape == "stairs" and connect:
+		return face if face == Vector3i(0, 1, 0) else Vector3i.ZERO
 	if face.y != 0 or (face.x == 0 and face.z == 0):
 		return Vector3i.ZERO
 	return wall_normal(cells, c, face)
+
+
+## The error for an end that `normal_for` refuses.
+static func end_error(shape: String, connect: bool) -> String:
+	if shape == "well":
+		return "needs_floor_or_ceiling"
+	if shape == "stairs" and connect:
+		return "needs_a_floor"
+	return "needs_a_wall"
 
 
 static func digs(shape: String) -> bool:
 	return shape == "tunnel" or shape == "well"
 
 
-## THE SHAPE. `p` holds: shape, a, face_a, connect, b, face_b, profile, size, length, rail.
+## THE SHAPE. `p` holds: shape, a, face_a, connect, b, face_b, profile, size, length, rail, step.
 ## Returns {"set", "clear", "error", "opened", "repaired"}; error is "" or one of needs_a_wall,
-## needs_floor_or_ceiling, same_cell, too_far, nothing_in_front, too_large, unknown_shape.
+## needs_floor_or_ceiling, needs_a_floor, same_cell, too_far, too_steep, nothing_in_front, too_large,
+## unknown_shape.
 static func shape(cells: Dictionary, p: Dictionary) -> Dictionary:
 	var what: String = p.get("shape", "")
 	var out := {"set": {}, "clear": {}, "error": "", "opened": false, "repaired": 0}
@@ -89,22 +103,39 @@ static func shape(cells: Dictionary, p: Dictionary) -> Dictionary:
 	var h: int = clampi(int(p.get("size", 1)), 1, 7) - 1
 	var length: int = clampi(int(p.get("length", 8)), 1, LENGTH_MAX)
 	var rail: bool = bool(p.get("rail", false))
+	var connect: bool = bool(p.get("connect", false)) and what != "balcony"
 	var a: Vector3i = p["a"]
-	var na := normal_for(what, cells, a, p["face_a"])
+	var na := normal_for(what, cells, a, p["face_a"], connect)
 	if na == Vector3i.ZERO:
-		out["error"] = "needs_floor_or_ceiling" if what == "well" else "needs_a_wall"
+		out["error"] = end_error(what, connect)
 		return out
 	var dig := digs(what)
 	var chosen := {}
 	if what == "balcony":
 		chosen = _balcony(a, na, length, h, rail)
+	elif what == "stairs":
+		if connect:
+			var b: Vector3i = p["b"]
+			if normal_for(what, cells, b, p["face_b"], true) == Vector3i.ZERO:
+				out["error"] = "needs_a_floor"
+				return out
+			if b == a:
+				out["error"] = "same_cell"
+				return out
+			if _dot(b - a, b - a) > SPAN_MAX * SPAN_MAX:
+				out["error"] = "too_far"
+				return out
+			chosen = _stairs_between(cells, a, b, h, rail)
+		else:
+			var step: int = clampi(int(p.get("step", 2)), 1, STEP_MAX)
+			chosen = _stairs(cells, a, na, length, step, h, rail)
 	else:
 		var points: Array[Vector3i] = []
-		if bool(p.get("connect", false)):
+		if connect:
 			var b: Vector3i = p["b"]
 			var nb := normal_for(what, cells, b, p["face_b"])
 			if nb == Vector3i.ZERO:
-				out["error"] = "needs_floor_or_ceiling" if what == "well" else "needs_a_wall"
+				out["error"] = end_error(what, false)
 				return out
 			if b == a:
 				out["error"] = "same_cell"
@@ -283,6 +314,106 @@ static func _balcony(a: Vector3i, n: Vector3i, depth: int, h: int, rail: bool) -
 				if not inner:
 					body[a + d + Vector3i.UP] = true
 	return body
+
+
+## One-click stairs against a wall: they ARRIVE level with the clicked cell. Row j (the smallest j >= 1
+## with (d.n)^2 <= j^2 |n|^2, slanted walls included) has its top at a.y - (j - 1) / step. They end at the
+## first row whose top cells are all full already (the ground), or after `length` rows.
+static func _stairs(cells: Dictionary, a: Vector3i, n: Vector3i, length: int, step: int, h: int,
+		rail: bool) -> Dictionary:
+	var nn: int = _dot(n, n)
+	var m := Vector3i(-n.z, 0, n.x)
+	var reach: int = length + h + 1
+	var rows := {}
+	for x in range(-reach, reach + 1):
+		for z in range(-reach, reach + 1):
+			var d := Vector3i(x, 0, z)
+			var along: int = _dot(d, n)
+			var side: int = _dot(d, m)
+			if along <= 0 or side * side > h * h * nn:
+				continue
+			var j := 1
+			while along * along > j * j * nn:
+				j += 1
+			if j > length:
+				continue
+			if not rows.has(j):
+				rows[j] = []
+			rows[j].append(d)
+	var body := {}
+	for j in range(1, length + 1):
+		if not rows.has(j):
+			continue
+		var top: int = a.y - (j - 1) / step
+		var grounded := true
+		for d in rows[j]:
+			if not cells.has(Vector3i(a.x + d.x, top, a.z + d.z)):
+				grounded = false
+				break
+		if grounded:
+			break
+		for d in rows[j]:
+			var side: int = _dot(d, m)
+			var edge: bool = rail and h >= 1 and side * side > (h - 1) * (h - 1) * nn
+			_column(cells, body, Vector3i(a.x + d.x, top, a.z + d.z), edge)
+	return body
+
+
+## Connected stairs, floor to floor, straight across from the lower end L to the higher H. A column takes
+## part when t = d.D is in [0, D.D] and (d.u)^2 <= h^2 D.D, plus the flat axis walk from L to H; its top is
+## L.y + t R / D.D. Steeper than one cell up per cell across (R^2 > D.D) is refused: too_steep.
+static func _stairs_between(cells: Dictionary, a: Vector3i, b: Vector3i, h: int, rail: bool) -> Dictionary:
+	var lo: Vector3i = a if a.y <= b.y else b
+	var hi: Vector3i = b if a.y <= b.y else a
+	var lo_flat := Vector3i(lo.x, 0, lo.z)
+	var dv := Vector3i(hi.x - lo.x, 0, hi.z - lo.z)
+	var ddv: int = _dot(dv, dv)
+	var rise: int = hi.y - lo.y
+	if rise * rise > ddv:
+		return {"error": "too_steep"}
+	var u := Vector3i(-dv.z, 0, dv.x)
+	var columns := {}
+	for x in range(mini(lo.x, hi.x) - h - 1, maxi(lo.x, hi.x) + h + 2):
+		for z in range(mini(lo.z, hi.z) - h - 1, maxi(lo.z, hi.z) + h + 2):
+			var d := Vector3i(x - lo.x, 0, z - lo.z)
+			var t: int = _dot(d, dv)
+			var side: int = _dot(d, u)
+			if t >= 0 and t <= ddv and side * side <= h * h * ddv:
+				columns[Vector3i(x, 0, z)] = true
+	for q in axis_walk(lo_flat, Vector3i(hi.x, 0, hi.z)):
+		columns[q] = true
+	var body := {}
+	for c in columns:
+		var d: Vector3i = c - lo_flat
+		var t: int = clampi(_dot(d, dv), 0, ddv)
+		var side: int = _dot(d, u)
+		var edge: bool = rail and h >= 1 and side * side > (h - 1) * (h - 1) * ddv
+		_column(cells, body, Vector3i(c.x, lo.y + t * rise / ddv, c.z), edge)
+	return body
+
+
+## A stairs column: its top and every empty cell below it down to the ground; with no ground within
+## LENGTH_MAX cells, the top and the cell under it. A full top adds nothing. An edge column carries the
+## rail, the cell above its top.
+static func _column(cells: Dictionary, body: Dictionary, top: Vector3i, edge: bool) -> void:
+	if cells.has(top):
+		return
+	body[top] = true
+	var below: Array[Vector3i] = []
+	var ground := false
+	for k in range(1, LENGTH_MAX + 1):
+		var q: Vector3i = top - Vector3i(0, k, 0)
+		if cells.has(q):
+			ground = true
+			break
+		below.append(q)
+	if ground:
+		for q in below:
+			body[q] = true
+	else:
+		body[top - Vector3i(0, 1, 0)] = true
+	if edge:
+		body[top + Vector3i.UP] = true
 
 
 ## No two cells may touch by an edge only. By rounds, order-free: every 2×2 checkerboard around a cell

@@ -168,7 +168,10 @@ func _demarrer() -> String:
 		+ "paint with your own tiles. The painted world stays: only its tiles change.")
 	l.append("Then open [b]Play test[/b] and walk it: " + _touche("Z Q S D") + " to move, "
 		+ _touche("Space") + " to jump, " + _touche("Shift") + " to run, left drag to orbit the camera (right drag turns it level), "
-		+ "the wheel to come closer. You walk on the tiles you see — a step too high or a tunnel too "
+		+ "the wheel to come closer, " + _touche("F") + " to fly over it (you still bump into the rock). The right-hand bar sets the "
+		+ "lighting and the [b]weather[/b] (rain, blizzard, hurricane, snow, floating particles, heat, fog) — only "
+		+ "to judge your world: the weather is never saved nor exported. In water you swim: " + _touche("Space") + " to rise, " + _touche("A") + " to dive ("
+		+ _touche("Q") + " on QWERTY); swim into a bank to climb out. You walk on the tiles you see — a step too high or a tunnel too "
 		+ "low shows here first. " + _touche("Esc") + " brings you back.")
 	l.append(_note("A red cube is a tile your library does not have. Nothing is ever filled in for you: "
 		+ "a hole must be seen where it happens."))
@@ -187,7 +190,8 @@ func _outils() -> String:
 		+ "decides what happens there.[/i]")
 	l.append(_titre("Aim — Grid or Sculpt  " + _touche("Tab")))
 	l.append("[b]Grid[/b] aims at the floor plane, at height [b]floor y[/b] "
-		+ "(" + _touche("PgUp") + " " + _touche("PgDn") + "). Good for laying out a map.")
+		+ "(" + _touche("PgUp") + " " + _touche("PgDn") + ", or " + _touche("Ctrl") + "+click on some "
+		+ "matter to put the grid at its height). Good for laying out a map.")
 	l.append("[b]Sculpt[/b] aims at the matter already there. [b]Add[/b] builds on the face you point "
 		+ "at; [b]Dig[/b] and [b]Select[/b] act on the cell you point at. Where the ray meets nothing, "
 		+ "it falls back on the floor plane — that is how the first cell of an empty world is placed.")
@@ -231,8 +235,19 @@ func _outils() -> String:
 		+ "click again to keep going. Select a wall to thicken it, a cave ceiling to lower it.")
 	l.append(_titre("Special shapes"))
 	l.append("[b]Tunnel[/b] digs into a wall, [b]Well[/b] into a floor or a ceiling, [b]Bridge[/b] builds a "
-		+ "deck across the air from a wall, [b]Balcony[/b] puts a slab with its rail against a wall. Pick one, "
-		+ "then click on the matter: the preview shows the exact cells, red to dig, green to add.")
+		+ "deck across the air from a wall, [b]Balcony[/b] puts a slab with its rail against a wall, "
+		+ "[b]Stairs[/b] climb a wall. Pick one, then click on the matter: the preview shows the exact cells, "
+		+ "red to dig, green to add.")
+	l.append("[b]Stairs[/b] — click a wall where the stairs should arrive: the top step is level with the "
+		+ "cell you click, and they come down towards you, [b]Step[/b] cells deep per step, until they meet "
+		+ "the ground (or [b]Length[/b] cells out). Each step is solid down to the ground; over the void, the "
+		+ "flight is two cells thick. [b]Connect[/b]: click a floor, then another floor higher up — the stairs "
+		+ "share the climb evenly between them, one cell up per cell across at most. Stairs only add matter: "
+		+ "dig the headroom with a tunnel if they run into rock.")
+	l.append("[b]Room[/b] — drag a rectangle on the floor grid (at least 3 × 3 cells): a room rises from it, "
+		+ "[b]Floors[/b] cells high inside, with its walls, floor and ceiling, hollow within ([b]Down[/b]: the "
+		+ "rectangle is the ceiling and the room sinks below it). Inside rock, the inside is dug. "
+		+ _touche("[") + " " + _touche("]") + " set the floors. It has no door: open one with a tunnel.")
 	l.append("[b]Straight[/b] — one click: the shape leaves the face square to it. A tunnel or a well goes "
 		+ "through to the next cave (or [b]Depth[/b] cells deep, a dead end); a bridge runs to the first wall "
 		+ "in front, within [b]Reach[/b].")
@@ -244,6 +259,25 @@ func _outils() -> String:
 	l.append(_note("Slanted walls work: a staircase wall at 45° is read as one slanted face, and the shape "
 		+ "leaves it at 45°. Where a slanted shape would make two cells touch by an edge only — which the "
 		+ "tiles forbid — it adds the missing cells itself, and says how many."))
+	l.append(_titre("Fluids"))
+	l.append("Pick [b]Water[/b] and click once: the world decides what the water becomes. In a hollow, of any "
+		+ "size, a [b]lake[/b] fills it to its brim. On a slope or a ledge, a [b]river[/b] runs down the "
+		+ "shortest way, falls as a waterfall, fills the hollows it meets and overflows them. In the open air, "
+		+ "over nothing, a [b]sea[/b] at that height surrounds the matter as far as you can see. A cave fills "
+		+ "only if a passage leads to it under the water.")
+	l.append("Water follows the world: dig a channel, raise a dam, and it flows again — "
+		+ _touche("Ctrl") + _touche("Z") + " included. It sees the cells of every layer, hidden ones too. "
+		+ "A right click on water removes it. Water layers are its own: show, hide or pick each one.")
+	l.append("[b]Look[/b] sets how a water layer is drawn: [b]Stylized[/b] (flat toon colours that darken with "
+		+ "depth, a white line on the shore), [b]Clear[/b] (you see the bottom through it, bent by the waves; its "
+		+ "colour deepens with depth), [b]Reflective[/b] (dark and smooth, a mirror at grazing angles: the sky, "
+		+ "and the relief that is on screen), [b]Lava[/b] (a dark crust split by glowing cracks), [b]Swamp water[/b] "
+		+ "(murky, with drifting duckweed), [b]Glowing acid[/b] (luminous green, bubbling). Lava, swamp and acid "
+		+ "flow and fill hollows exactly like water; in the Play test you swim in them too, and the colour you "
+		+ "see from under the surface is theirs.")
+	l.append(_note("The looks are examples, not a requirement. In your engine you can assign your own water "
+		+ "shader from the plugin: it receives the same data — the flow, the kind of water (still, river, "
+		+ "waterfall) and the depth."))
 	return "\n".join(l)
 
 
@@ -251,8 +285,13 @@ func _couches() -> String:
 	var l := PackedStringArray()
 	l.append(_titre("Layers"))
 	l.append("A layer is [b]a witness and a painted world[/b]: its own witness — the tiles you sculpt in "
-		+ "[b]Witness[/b] — and its own cells, painted in [b]World[/b]. Its tiles only look at its own cells: "
-		+ "a rock layer and an ice layer never bend each other.")
+		+ "[b]Witness[/b] — and its own cells, painted in [b]World[/b].")
+	l.append("[b]A cell belongs to one layer only[/b]: painting it in the active layer takes it from the others "
+		+ "(one " + _touche("Ctrl") + _touche("Z") + " gives it back). Where two layers meet, the tiles are chosen "
+		+ "as if the world were one piece — no wall, no groove at the border — and each corner is drawn with the "
+		+ "tiles of the [b]highest layer in the list[/b] among its eight cells: the top layer "
+		+ "wins. [b]Up[/b] and [b]Down[/b] move the active layer in the list. A hidden layer leaves the world, which "
+		+ "closes without it.")
 	l.append("The layer list is in both workshops. Pick a layer and [b]both follow[/b]: Witness edits its "
 		+ "witness, World paints its cells. Each row shows a thumbnail of its witness, where the witness "
 		+ "comes from (computed, modelled, from Blender, or an unlinked work) and whether its tiles are up to "
@@ -275,6 +314,8 @@ func _couches() -> String:
 		+ ".mbset / .mbworld folders it exports) and a [b]double-click on a .mbproj opens it[/b] — for your "
 		+ "Windows account only. Untick [b]File icons & double-click[/b] (Project) to remove it. "
 		+ "[b]Save as…[/b] puts it where you want; it keeps saving itself there.")
+	l.append("[b]Open the example[/b] (Project) opens a finished world made with MarchingBlocks: walk it in "
+		+ "Play test, open its witnesses, change anything. It lives in its own folder and keeps your changes.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "
 		+ "again on opening; if the .glb is gone, you see the last tiles sliced from it, and the report "
 		+ "says so.")
@@ -315,7 +356,10 @@ func _modeleur() -> String:
 		+ _touche("3") + " select vertices, edges or faces. A click selects what you [b]see[/b]; "
 		+ _touche("Shift") + "-click adds or removes; " + _touche("Alt") + "-click selects a loop (a ring of "
 		+ "faces in face mode). " + _touche("A") + " all, " + _touche("Alt+A") + " none, " + _touche("B")
-		+ " a box — only what you see, unless X-ray is on (" + _touche("Alt+Z") + ").")
+		+ " a box — only what you see, unless X-ray is on (" + _touche("Alt+Z") + "). " + _touche("Ctrl")
+		+ " + right drag draws a [b]lasso[/b] (" + _touche("Shift+Ctrl") + " removes). " + _touche("C") + " is the "
+		+ "[b]circle[/b]: paint the selection with the left button, " + _touche("Shift") + " or the middle button "
+		+ "removes, the wheel sizes it, right click or " + _touche("Esc") + " ends.")
 	l.append(_titre("Transform"))
 	l.append(_touche("G") + " move, " + _touche("R") + " rotate, " + _touche("S") + " scale. Move the "
 		+ "mouse, then click or " + _touche("Enter") + " to confirm, " + _touche("Esc") + " or right click to "
@@ -453,7 +497,8 @@ func _raccourcis() -> String:
 	l.append(_titre("Witness (modeller)"))
 	l.append(_table([
 		["Tab", "Edit mode on / off"], ["1 · 2 · 3", "Vertex · edge · face"], ["Click · Shift · Alt", "Select · add · loop"],
-		["A · Alt+A · B", "All · none · box"], ["Alt+Z", "X-ray (the box takes what is hidden)"],
+		["A · Alt+A · B", "All · none · box"], ["Ctrl+right drag · C", "Lasso · circle"],
+		["Alt+Z", "X-ray (box, lasso and circle take what is hidden)"],
 		["G · R · S", "Move · rotate · scale"], ["X Y Z · numbers", "Lock an axis · exact value"],
 		["E · I", "Extrude · inset"], ["Ctrl+B · Ctrl+R · K", "Bevel · loop cut · knife"],
 		["X · M · F", "Delete · merge · fill"], ["O", "Proportional editing"],
@@ -462,6 +507,7 @@ func _raccourcis() -> String:
 	l.append(_titre("Play test"))
 	l.append(_table([
 		["Z Q S D", "Move (W A S D on QWERTY)"], ["Space · Shift", "Jump · run"],
+		["F", "Fly on · off"], ["Space or E · A", "Fly up · down (E · Q on QWERTY)"],
 		["Left drag · right drag", "Orbit the camera · turn it level"], ["Wheel", "Closer · farther"],
 		["Backspace · Esc", "Back to start · back to World"],
 	]))
@@ -482,6 +528,7 @@ func _raccourcis_monde() -> Array:
 		["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["A Z E Q S D", "Fly (Navigate)"],
 		["Right drag", "Look around (Navigate)"], ["A · D · S · R · B", "Add · Dig · Select · Rect · Box"],
 		["[  ]", "Brush size"], ["PgUp · PgDn", "Floor y"],
+		["Ctrl+click", "Put the grid at the height of the matter clicked"],
 		["Arrows", "Move the selection (follows the camera)"], ["Shift + ↑ ↓", "Lift / lower the selection"],
 		["Del", "Delete the selection"], ["Esc", "Clear the selection · cancel a paste"],
 		["Ctrl+C · X · V", "Copy · cut · paste"], ["Ctrl+Z · Ctrl+Y", "Undo · redo"],

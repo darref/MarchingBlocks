@@ -115,6 +115,7 @@ namespace
 		else if (S == "well") Out = ESpecialShape::Well;
 		else if (S == "bridge") Out = ESpecialShape::Bridge;
 		else if (S == "balcony") Out = ESpecialShape::Balcony;
+		else if (S == "stairs") Out = ESpecialShape::Stairs;
 		else return false;
 		return true;
 	}
@@ -211,6 +212,7 @@ namespace
 				Q.Size = static_cast<int>(I["size"].AsInt());
 				Q.Length = static_cast<int>(I["length"].AsInt());
 				Q.bRail = I["rail"].Bool;
+				Q.Step = static_cast<int>(I["step"].AsInt());
 				R = Shapes::Build(Here, Q);
 			}
 			const std::string Got = R.Error + "/" + (R.bOpened ? "true" : "false") + "/" + std::to_string(R.Repaired);

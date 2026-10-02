@@ -109,6 +109,7 @@ namespace MarchingBlocks.Paint.Tests
                             Shape = shape.Value, A = Vec(i["a"]), FaceA = Vec(i["face_a"]), Connect = (bool)i["connect"],
                             Profile = ProfileOf((string)i["profile"]), Size = (int)MBJson.AsLong(i["size"]),
                             Length = (int)MBJson.AsLong(i["length"]), Rail = (bool)i["rail"],
+                            Step = i.ContainsKey("step") ? (int)MBJson.AsLong(i["step"]) : 2,
                         };
                         if (req.Connect) { req.B = Vec(i["b"]); req.FaceB = Vec(i["face_b"]); }
                         r = MBShapes.Build(CellsOf("cells"), req);
@@ -138,7 +139,8 @@ namespace MarchingBlocks.Paint.Tests
         }
 
         static SpecialShape? SpecialShapeOf(string s) => s == "tunnel" ? SpecialShape.Tunnel : s == "well" ? SpecialShape.Well
-            : s == "bridge" ? SpecialShape.Bridge : s == "balcony" ? SpecialShape.Balcony : (SpecialShape?)null;
+            : s == "bridge" ? SpecialShape.Bridge : s == "balcony" ? SpecialShape.Balcony
+            : s == "stairs" ? SpecialShape.Stairs : (SpecialShape?)null;
 
         static ShapeProfile ProfileOf(string s) => s == "round" ? ShapeProfile.Round : s == "square" ? ShapeProfile.Square
             : s == "arch" ? ShapeProfile.Arch : throw new ArgumentException("profile " + s);

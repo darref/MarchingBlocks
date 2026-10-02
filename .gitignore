@@ -29,3 +29,7 @@ ART/pbr_monde/
 
 # Les exécutables exportés : ils se refont par l'export, et ils sont lourds.
 build/
+
+# L'exemple livré (`DEV_TOOLS/prendre_l_exemple.gd`) est repris du projet de Jordan à chaque export tant que le
+# développement n'est pas clos : il n'entre au dépôt qu'une fois FIGÉ (`exemple/FIGE`), avec son archive.
+exemple/exemple.zip

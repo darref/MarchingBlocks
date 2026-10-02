@@ -59,6 +59,15 @@ var _normale_extrusion := Vector3.ZERO
 var _faces_inset: Array = []
 var _base_inset: RefCounted
 var _coin_boite := Vector2.ZERO
+## LE LASSO ET LE CERCLE (Jordan, 2 octobre 2026). Le tracé du lasso à l'écran, le bouton qui le trace, et s'il retire.
+var _lasso := PackedVector2Array()
+var _lasso_bouton := -1
+var _lasso_retire := false
+## Le rayon du cercle, en pixels (la molette le change) ; ce que le bouton tenu fait : 1 ajoute, −1 retire, 0 rien.
+var rayon_cercle := 40.0
+var _cercle_peint := 0
+## Le calque 2D où le contour du lasso et le cercle se dessinent, par-dessus la vue.
+var _trace: Control
 var _anneau_vise: Array = []
 var _aretes_biseau: Array = []
 ## Pour I et Ctrl+B : les faces que l'opération touche (indices du maillage de départ), et leur nombre.
@@ -126,6 +135,13 @@ var _rang_dans_mm := {}   # occurrence → rang dans la MultiMesh de sa tuile
 
 
 func _init() -> void:
+	var calque := CanvasLayer.new()
+	add_child(calque)
+	_trace = Control.new()
+	_trace.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_trace.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_trace.draw.connect(_dessiner_le_trace)
+	calque.add_child(_trace)
 	name = "Modeleur"
 	_edition = Node3D.new()
 	_edition.name = "Edition"
@@ -707,27 +723,103 @@ func _arete_proche(face: PackedInt32Array, p: Vector2) -> Vector2i:
 ## CACHÉ**, comme Blender en mode « X-ray » : c'est connu, et dit dans l'aide.
 func choisir_dans(r: Rect2) -> void:
 	r = r.abs()
+	_choisir_si(func(p: Vector2) -> bool: return r.has_point(p), false)
+
+
+## LA RÈGLE COMMUNE DE LA BOÎTE, DU LASSO ET DU CERCLE : prend (ou retire, `retirer`) tout ce dont la projection tombe
+## DEDANS, si on le voit (ou en X-ray). Un sommet par son point, une face par son centre ; une arête par ses DEUX bouts
+## (boîte, lasso) ou par son MILIEU (`arete_par_milieu` : le cercle, qu'on promène comme un pinceau, et dont les deux
+## bouts d'une arête tombent rarement ensemble).
+func _choisir_si(dedans: Callable, retirer: bool, arete_par_milieu := false) -> void:
 	match mode_sel:
 		"sommet":
 			for i in maillage.sommets.size():
 				var p: Vector3 = maillage.sommets[i]
-				if r.has_point(_ecran(p)) and _vu(p):
-					sel_s[i] = true
+				if dedans.call(_ecran(p)) and _vu(p):
+					if retirer:
+						sel_s.erase(i)
+					else:
+						sel_s[i] = true
 		"arete":
 			for e in _aretes():
 				var a: Vector3 = maillage.sommets[e.x]
 				var b: Vector3 = maillage.sommets[e.y]
-				if r.has_point(_ecran(a)) and r.has_point(_ecran(b)) \
-						and _vu((a + b) * 0.5):
-					sel_a[e] = true
+				var dans: bool = dedans.call(_ecran((a + b) * 0.5)) if arete_par_milieu \
+					else (dedans.call(_ecran(a)) and dedans.call(_ecran(b)))
+				if dans and _vu((a + b) * 0.5):
+					if retirer:
+						sel_a.erase(e)
+					else:
+						sel_a[e] = true
 		"face":
 			for f in maillage.faces.size():
 				var c: Vector3 = maillage.centre(f)
 				# ⚠ EN X-RAY, LES FACES DE DOS AUSSI (comme Blender) : l'écart de dos n'est qu'une part de « ce qu'on voit ».
-				if r.has_point(_ecran(c)) and camera.is_position_in_frustum(pose * c) \
+				if dedans.call(_ecran(c)) and camera.is_position_in_frustum(pose * c) \
 						and (rayons_x or (maillage.normale(f).dot(_vers_l_oeil(c)) > 0.0 and _vu(c))):
-					sel_f[f] = true
+					if retirer:
+						sel_f.erase(f)
+					else:
+						sel_f[f] = true
 	_dessiner_selection()
+
+
+## LE LASSO : Ctrl + clic droit glissé (Maj + Ctrl : retire), comme Blender ; ou le bouton « Lasso », puis un glissé
+## du clic gauche (Ctrl ou Maj : retire).
+func commencer_lasso() -> void:
+	modal = "lasso"
+	_lasso = PackedVector2Array()
+	_lasso_bouton = -1
+	_trace.queue_redraw()
+	dit.emit("[b]Lasso select[/b] — drag around what you want (Ctrl or Shift: remove). It only takes what you see "
+		+ "(Alt+Z: X-ray). Esc cancels.")
+
+
+func _finir_le_lasso() -> void:
+	var poly := _lasso
+	modal = ""
+	_lasso_bouton = -1
+	_lasso = PackedVector2Array()
+	_trace.queue_redraw()
+	if poly.size() < 3:
+		return
+	_choisir_si(func(p: Vector2) -> bool: return Geometry2D.is_point_in_polygon(p, poly), _lasso_retire)
+	dit.emit("[i]Lasso %s.[/i]" % ("removed from the selection" if _lasso_retire else "selection"))
+
+
+## LE CERCLE (C, comme Blender) : on PEINT la sélection au clic gauche ; Maj + clic gauche ou le clic du milieu retire ;
+## la molette change le rayon ; clic droit, Échap ou Entrée pour finir.
+func commencer_cercle() -> void:
+	modal = "cercle"
+	_cercle_peint = 0
+	_trace.queue_redraw()
+	dit.emit("[b]Circle select[/b] — paint with the left button; Shift or the middle button removes; the wheel sizes "
+		+ "the circle; right click, Esc or Enter ends.")
+
+
+func _peindre_le_cercle() -> void:
+	if _cercle_peint == 0:
+		return
+	var centre := souris
+	var r2 := rayon_cercle * rayon_cercle
+	_choisir_si(func(p: Vector2) -> bool: return p.distance_squared_to(centre) <= r2, _cercle_peint < 0, true)
+
+
+func _finir_le_cercle() -> void:
+	modal = ""
+	_cercle_peint = 0
+	_trace.queue_redraw()
+	dit.emit("[i]Circle select done.[/i]")
+
+
+func _dessiner_le_trace() -> void:
+	if modal == "lasso" and _lasso.size() > 1:
+		var pts := _lasso.duplicate()
+		pts.append(_lasso[0])
+		_trace.draw_polyline(pts, Color(0.95, 0.4, 0.3) if _lasso_retire else ORANGE, 1.5, true)
+	elif modal == "cercle":
+		_trace.draw_arc(souris, rayon_cercle, 0.0, TAU, 64, Color(0.95, 0.4, 0.3) if _cercle_peint < 0 else ORANGE,
+			1.5, true)
 
 
 ## La direction du point vers l'œil (en orthographique, l'œil est à l'infini derrière l'écran).
@@ -1330,6 +1422,15 @@ func souris_entree(event: InputEvent) -> bool:
 		return true
 	if event is InputEventMouseMotion:
 		souris = (event as InputEventMouseMotion).position
+		if modal == "lasso":
+			if _lasso_bouton >= 0 and (_lasso.is_empty() or _lasso[-1].distance_to(souris) >= 4.0):
+				_lasso.append(souris)
+				_trace.queue_redraw()
+			return true
+		if modal == "cercle":
+			_peindre_le_cercle()
+			_trace.queue_redraw()
+			return true
 		if modal in ["G", "R", "S", "I", "bevel"]:
 			_mettre_a_jour()
 			return true
@@ -1344,6 +1445,34 @@ func souris_entree(event: InputEvent) -> bool:
 		return false
 	var b := event as InputEventMouseButton
 	souris = b.position
+	# LE LASSO — Ctrl + clic droit glissé le lance, comme Blender ; le bouton « Lasso » attend le clic gauche.
+	if modal == "" and b.pressed and b.button_index == MOUSE_BUTTON_RIGHT and b.ctrl_pressed:
+		commencer_lasso()
+	if modal == "lasso":
+		if b.pressed and _lasso_bouton < 0 and b.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+			_lasso_bouton = b.button_index
+			_lasso_retire = b.shift_pressed or (b.ctrl_pressed and b.button_index == MOUSE_BUTTON_LEFT)
+			_lasso = PackedVector2Array([b.position])
+		elif not b.pressed and b.button_index == _lasso_bouton:
+			_finir_le_lasso()
+		return b.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]
+	if modal == "cercle":
+		match b.button_index:
+			MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN:
+				if b.pressed:
+					rayon_cercle = clampf(rayon_cercle * (1.15 if b.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15),
+						6.0, 400.0)
+			MOUSE_BUTTON_LEFT:
+				_cercle_peint = (-1 if b.shift_pressed else 1) if b.pressed else 0
+				_peindre_le_cercle()
+			MOUSE_BUTTON_MIDDLE:
+				_cercle_peint = -1 if b.pressed else 0
+				_peindre_le_cercle()
+			MOUSE_BUTTON_RIGHT:
+				if b.pressed:
+					_finir_le_cercle()
+		_trace.queue_redraw()
+		return true
 	if modal in ["G", "R", "S"] and proportionnel and b.pressed and \
 			b.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
 		rayon_prop = maxf(0.05, rayon_prop * (1.15 if b.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / 1.15))
@@ -1423,6 +1552,17 @@ func touche(k: InputEventKey) -> bool:
 				_saisie += chiffre
 		_mettre_a_jour()
 		return true
+	if modal in ["lasso", "cercle"]:
+		if k.keycode in [KEY_ESCAPE, KEY_ENTER, KEY_KP_ENTER]:
+			if modal == "cercle":
+				_finir_le_cercle()
+			else:
+				modal = ""
+				_lasso = PackedVector2Array()
+				_lasso_bouton = -1
+				_trace.queue_redraw()
+				dit.emit("[i]Cancelled.[/i]")
+		return true
 	if modal in ["loop", "B"]:
 		if k.keycode == KEY_ESCAPE:
 			modal = ""
@@ -1459,6 +1599,8 @@ func touche(k: InputEventKey) -> bool:
 			commencer(OS.get_keycode_string(k.keycode))
 		KEY_K:
 			commencer_couteau()
+		KEY_C:
+			commencer_cercle()
 		KEY_B:
 			modal = "B"
 			dit.emit("[b]Box select[/b] — drag a rectangle (it also takes what is hidden). Esc cancels.")

@@ -45,6 +45,8 @@ func _initialize() -> void:
 	_l_empreinte_suit_les_cases()
 	_le_contexte_choisit_la_variante()
 	_le_peintre_pose_le_nom_nu()
+	_la_reconstruction_locale_rend_la_complete()
+	_les_couches_exclusives()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -161,6 +163,111 @@ func _le_contexte_choisit_la_variante() -> void:
 	m.free()
 	print("   → %d sol(s) à l'air libre et %d sous roche, chacun avec le bon nom"
 		% [vus_dehors, vus_dedans])
+
+
+## LES COUCHES EXCLUSIVES (Jordan, 2 octobre 2026). Deux couches côte à côte : A (rang 0) en x 0..2, B (rang 1) en
+## x 3..5, y 0..1, z 0..2. ⚠ L'ATTENDU NE PASSE PAS PAR LA RÈGLE ÉPROUVÉE : c'est l'ANCIENNE règle (`MB.poses`), sur
+## l'union, et le propriétaire de chaque sommet est recalculé ICI (le plus petit rang de ses huit cases).
+func _les_couches_exclusives() -> void:
+	print("13. les couches exclusives : le choix lit l'union, la couche prioritaire pose")
+	var a := _massif()
+	var b := _massif()
+	var cases_a := _pave(0, 2, 0, 1, 0, 2)
+	var cases_b := _pave(3, 5, 0, 1, 0, 2)
+	_peindre(a, cases_a)
+	_peindre(b, cases_b)
+	# Le contraste : chaque couche SEULE (l'ancienne règle) ferme sa surface à la frontière.
+	var seules: int = (a.get_node("Rendu") as GridMap).get_used_cells().size()
+	a.reconstruire()
+	b.reconstruire()
+	seules = (a.get_node("Rendu") as GridMap).get_used_cells().size() + (b.get_node("Rendu") as GridMap).get_used_cells().size()
+	var union := {}
+	for c in cases_a:
+		union[c] = 0
+	for c in cases_b:
+		union[c] = 1
+	a.union = union
+	a.rang = 0
+	b.union = union
+	b.rang = 1
+	a.reconstruire()
+	b.reconstruire()
+	var ra: GridMap = a.get_node("Rendu")
+	var rb: GridMap = b.get_node("Rendu")
+	var lot: MeshLibrary = ra.mesh_library
+	var index := {}
+	for id in lot.get_item_list():
+		index[lot.get_item_name(id)] = id
+	var attendu: Array = MB.poses(union, index)
+	var justes := 0
+	var mal := []
+	for d in attendu:
+		var s: Vector3i = d["sommet"]
+		var proprio := 99
+		for k in 8:
+			var c: Vector3i = s + MB.COINS[k]
+			if union.has(c):
+				proprio = mini(proprio, int(union[c]))
+		var bonne: GridMap = ra if proprio == 0 else rb
+		var autre: GridMap = rb if proprio == 0 else ra
+		if bonne.get_cell_item(s) == index[d["cle"]] and bonne.get_cell_item_orientation(s) == d["orientation"] 				and autre.get_cell_item(s) == GridMap.INVALID_CELL_ITEM:
+			justes += 1
+		elif mal.size() < 4:
+			mal.append(s)
+	_dire(justes == attendu.size(), "chaque pose de l'union est faite UNE fois, par la couche prioritaire, avec la tuile de la règle (%d / %d, mal : %s)" % [justes, attendu.size(), mal])
+	_dire(ra.get_used_cells().size() + rb.get_used_cells().size() == attendu.size(), "… et rien d'autre (%d + %d = %d)"
+		% [ra.get_used_cells().size(), rb.get_used_cells().size(), attendu.size()])
+	_dire(seules > attendu.size(), "seules, les deux couches posaient %d tuiles, %d de trop : les parois face à face de la frontière"
+		% [seules, seules - attendu.size()])
+	# La référence des greffons rend la même chose.
+	var ref: Array = MB.poses_en_couches(union, [index, index])
+	_dire(ref.size() == attendu.size() and ref.all(func(d): return d.has("couche")), "MB.poses_en_couches rend les mêmes poses, attribuées")
+	# LA RECONSTRUCTION LOCALE, EN COUCHES : une case de B posée au contact de A change aussi des sommets de A.
+	var neuve := Vector3i(3, 2, 1)
+	_peindre(b, [neuve])
+	union[neuve] = 1
+	a.reconstruire_autour([neuve])
+	b.reconstruire_autour([neuve])
+	var local_a := {}
+	var local_b := {}
+	for s in ra.get_used_cells():
+		local_a[s] = [ra.get_cell_item(s), ra.get_cell_item_orientation(s)]
+	for s in rb.get_used_cells():
+		local_b[s] = [rb.get_cell_item(s), rb.get_cell_item_orientation(s)]
+	a.reconstruire()
+	b.reconstruire()
+	var pareil := local_a.size() == ra.get_used_cells().size() and local_b.size() == rb.get_used_cells().size()
+	for s in ra.get_used_cells():
+		pareil = pareil and local_a.get(s, []) == [ra.get_cell_item(s), ra.get_cell_item_orientation(s)]
+	for s in rb.get_used_cells():
+		pareil = pareil and local_b.get(s, []) == [rb.get_cell_item(s), rb.get_cell_item_orientation(s)]
+	_dire(pareil, "en couches, la reconstruction locale des DEUX couches rend la complète")
+	# ⚠ UNE COUCHE BÂTIE SEULE, PUIS RANGÉE dans l'union sans reconstruction complète (une couche neuve de l'écran) :
+	# sa reconstruction locale doit lire l'UNION, pas ses cases d'avant. Vu en fumée : elle ne posait plus rien.
+	var c3 := _massif()
+	var cases_c := _pave(0, 2, 5, 5, 0, 2)
+	_peindre(c3, cases_c)
+	c3.reconstruire()
+	for c in cases_c:
+		union[c] = 2
+	c3.union = union
+	c3.rang = 2
+	var neuve_c := Vector3i(0, 6, 0)
+	_peindre(c3, [neuve_c])
+	union[neuve_c] = 2
+	c3.reconstruire_autour([neuve_c])
+	var rc: GridMap = c3.get_node("Rendu")
+	var local_c := {}
+	for s in rc.get_used_cells():
+		local_c[s] = [rc.get_cell_item(s), rc.get_cell_item_orientation(s)]
+	c3.reconstruire()
+	var pareil_c := local_c.size() == rc.get_used_cells().size() and rc.get_used_cells().size() > 0
+	for s in rc.get_used_cells():
+		pareil_c = pareil_c and local_c.get(s, []) == [rc.get_cell_item(s), rc.get_cell_item_orientation(s)]
+	_dire(pareil_c, "une couche rangée APRÈS sa construction : la reconstruction locale lit l'union (%d tuiles)" % rc.get_used_cells().size())
+	a.queue_free()
+	b.queue_free()
+	c3.queue_free()
 
 
 ## Un massif prêt à peindre, hors éditeur.
@@ -520,3 +627,133 @@ func _le_peintre_pose_le_nom_nu() -> void:
 	_dire(restes == 0, "%d case(s) portent un reste d'exemplaire « ~k » au lieu du nom nu" % restes)
 	m.free()
 	print("   → %d pièces, toutes de nom nu" % poses_nu)
+
+
+# ── 11. LA RECONSTRUCTION LOCALE REND CE QUE REND LA COMPLÈTE ──────────────────────────────────────────
+#
+# ⚠ **Jordan, 1er octobre 2026 : « une toute petite opération fait lagger ».** Mesuré : poser UNE case
+# reconstruisait les 12 474 cases du monde (~278 ms). `reconstruire_autour` ne refait que les sommets qu'une case
+# peut changer. Ce contrôle exige qu'elle rende EXACTEMENT la grille `Rendu`, la grille `Fautes` et le bilan de
+# la reconstruction complète, après chaque geste d'une suite tirée au hasard (graine fixe).
+# ⚠ L'ATTENDU NE VIENT PAS DE LA FONCTION ÉPROUVÉE : un second massif, peint des mêmes cases, reconstruit EN
+# ENTIER. Et un contrôle d'instrument : la route locale doit avoir été prise (sinon on comparerait la complète
+# à elle-même).
+# ⚠ LE LOT EST CONSTRUIT pour exercer chaque branche : des variantes d'air libre (le ciel compte, donc des cases
+# posées LOIN au-dessus d'un sommet le changent) et des clés retirées (des fautes, donc la grille rouge).
+
+func _lot_variantes_et_trous() -> MeshLibrary:
+	var source: MeshLibrary = RP.librairie()
+	var lot := MeshLibrary.new()
+	var id := 0
+	var n := 0
+	for vieux in source.get_item_list():
+		var nom: String = source.get_item_name(vieux)
+		n += 1
+		if n % 7 == 0:
+			continue   # une clé sur sept manque : des fautes
+		for nom_pose in [nom, MB.nom_en_contexte(nom, true)]:
+			lot.create_item(id)
+			lot.set_item_name(id, nom_pose)
+			lot.set_item_mesh(id, source.get_item_mesh(vieux))
+			id += 1
+	return lot
+
+
+func _grilles_identiques(a: Node3D, b: Node3D) -> String:
+	for nom in ["Rendu", "Fautes"]:
+		var ga: GridMap = a.get_node(nom)
+		var gb: GridMap = b.get_node(nom)
+		var ca := ga.get_used_cells()
+		if ca.size() != gb.get_used_cells().size():
+			return "%s : %d cases contre %d" % [nom, ca.size(), gb.get_used_cells().size()]
+		for c in ca:
+			if ga.get_cell_item(c) != gb.get_cell_item(c):
+				return "%s %s : item %d contre %d" % [nom, c, ga.get_cell_item(c), gb.get_cell_item(c)]
+			if ga.get_cell_item_orientation(c) != gb.get_cell_item_orientation(c):
+				return "%s %s : orientation %d contre %d" % [nom, c, ga.get_cell_item_orientation(c),
+					gb.get_cell_item_orientation(c)]
+	var ba: Dictionary = a.dernier_bilan()
+	var bb: Dictionary = b.dernier_bilan()
+	if ba != bb:
+		return "bilan %s contre %s" % [ba, bb]
+	return ""
+
+
+func _la_reconstruction_locale_rend_la_complete() -> void:
+	print("\n11. la reconstruction locale rend exactement la complète")
+	_comparer_local_et_complet(_lot_variantes_et_trous(), "lot construit")
+	# ⚠ ET SANS LOT (le repli procédural, une couche sans source) : la route locale compare le lot posé au lot
+	# courant, et le repli était rebâti à chaque appel — elle n'était jamais prise. Vu en mesurant l'appli.
+	_comparer_local_et_complet(null, "repli procédural")
+
+
+func _comparer_local_et_complet(lot: MeshLibrary, quoi: String) -> void:
+	var local := _massif()
+	var complet := _massif()
+	local.lot = lot
+	complet.lot = lot
+	# Un relief : un sol de 10×10, des buttes, un surplomb.
+	var depart: Array = _pave(0, 9, 0, 0, 0, 9) + _pave(2, 4, 1, 3, 2, 4) + _pave(6, 8, 1, 1, 5, 8) \
+		+ _pave(5, 8, 4, 4, 1, 3)
+	_peindre(local, depart)
+	_peindre(complet, depart)
+	local.reconstruire()
+	complet.reconstruire()
+	var completes_avant: int = local.reconstructions_completes
+
+	# ⚠ LE CAS QUI EXIGE LE CIEL : un couvercle posé SIX étages au-dessus du sol change les sols dessous
+	# (variante → nom nu) sans toucher leurs huit cases. Puis on l'enlève.
+	var ecarts := 0
+	var premier := ""
+	var gestes: Array = [[Vector3i(1, 6, 7), true], [Vector3i(1, 6, 7), false]]
+	# Puis une suite au hasard : ajouts et retraits isolés, colonnes hautes, creusements SOUS le plus bas.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261001
+	for k in 160:
+		var p := Vector3i(rng.randi_range(-1, 10), rng.randi_range(-2, 8), rng.randi_range(-1, 10))
+		gestes.append([p, rng.randf() < 0.55])
+	var cases_l: GridMap = local.get_node("Cases")
+	var cases_c: GridMap = complet.get_node("Cases")
+	var id: int = cases_l.mesh_library.find_item_by_name("case")
+	var lots := 0
+	var i := 0
+	while i < gestes.size():
+		# Un geste sur quatre en porte plusieurs à la fois (un coup de pinceau, une opération).
+		var n: int = 1 if i < 2 or rng.randf() < 0.75 else mini(5, gestes.size() - i)
+		var changees: Array = []
+		for j in n:
+			var g: Array = gestes[i + j]
+			var item: int = id if g[1] else GridMap.INVALID_CELL_ITEM
+			cases_l.set_cell_item(g[0], item)
+			cases_c.set_cell_item(g[0], item)
+			changees.append(g[0])
+		i += n
+		lots += 1
+		local.reconstruire_autour(changees)
+		complet.reconstruire()
+		var ecart := _grilles_identiques(local, complet)
+		if ecart != "":
+			ecarts += 1
+			if premier == "":
+				premier = "geste %d (%s) : %s" % [lots, changees, ecart]
+	_dire(ecarts == 0, "%d geste(s) sur %d où la reconstruction locale diffère de la complète — %s"
+		% [ecarts, lots, premier])
+	_dire(local.reconstructions_completes == completes_avant,
+		"la route locale n'a pas été prise : %d reconstruction(s) complète(s) pendant les gestes"
+		% (local.reconstructions_completes - completes_avant))
+	var bilan: Dictionary = complet.dernier_bilan()
+	_dire(lot == null or (int(bilan["fautes"]) > 0 and int(bilan["dehors"]) > 0),
+		"le lot doit exercer les fautes ET les variantes : %s" % bilan)
+
+	# ⚠ UNE GRILLE CHANGÉE PAR UNE AUTRE ROUTE (sans reconstruction) est rattrapée par la complète.
+	cases_l.set_cell_item(Vector3i(20, 0, 20), id)
+	cases_c.set_cell_item(Vector3i(20, 0, 20), id)
+	cases_l.set_cell_item(Vector3i(0, 9, 0), id)
+	cases_c.set_cell_item(Vector3i(0, 9, 0), id)
+	local.reconstruire_autour([Vector3i(0, 9, 0)])
+	complet.reconstruire()
+	var e2 := _grilles_identiques(local, complet)
+	_dire(e2 == "", "une case posée sans reconstruction n'est pas rattrapée : %s" % e2)
+	local.free()
+	complet.free()
+	print("   → %s : %d gestes, identiques à la reconstruction complète" % [quoi, lots])

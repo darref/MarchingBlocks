@@ -44,11 +44,15 @@ const Projet := preload("res://app/projet.gd")
 const Icones := preload("res://app/icones.gd")
 const Manuel := preload("res://app/manuel.gd")
 const Associations := preload("res://app/associations.gd")
+const Exemple := preload("res://app/exemple.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+const FL := preload("res://addons/marchingblocks_core/fluides.gd")
+const EauMaillage := preload("res://addons/marchingblocks_core/eau_maillage.gd")
+const EauPresets := preload("res://addons/marchingblocks_core/eau_presets.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
@@ -94,6 +98,8 @@ var _boutons_selmode := {}
 var _bouton_prop: Button
 ## L'enregistrement du témoin modélisé attend une seconde de calme : un geste = un fichier réécrit, pas dix.
 var _minuterie_temoin: Timer
+## L'enregistrement du PROJET attend lui aussi une seconde de calme (`_enregistrer_plus_tard`).
+var _minuterie_projet: Timer
 ## LES MATÉRIAUX DU MODELEUR : la liste, et l'éditeur du matériau courant.
 var _liste_materiaux: VBoxContainer
 var _edition_materiau: VBoxContainer
@@ -113,6 +119,13 @@ var _minuterie_materiau: Timer
 var _attente: PanelContainer
 var _attente_titre: Label
 var _attente_note: Label
+var _attente_barre: ProgressBar
+## LA PILE DES ATTENTES : [titre, note, étapes (0 = barre défilante), étapes faites]. Une attente peut en contenir
+## une autre (un tranchage pendant l'ouverture d'un projet) : la plus récente se montre, la précédente revient.
+var _pile_attente: Array = []
+## Ce qu'a duré la dernière fois chaque opération variable, pour ne montrer la barre que si elle dépasse le seuil.
+const SEUIL_ATTENTE := 0.4
+var _durees := {}
 var _bandeau: Button
 var _manuel: Control
 var _conseil := 0
@@ -139,6 +152,8 @@ var _zone_reference: Control
 var _bouton_revoir_temoin: Button
 var _bouton_trancher_travail: Button
 var _bouton_supprimer_couche: Button
+var _bouton_monter_couche: Button
+var _bouton_descendre_couche: Button
 var _bouton_naviguer: Button
 var _titre_pinceau: Control
 var _ligne_taille: Control
@@ -204,14 +219,43 @@ var _ligne_profil: Control
 var _ligne_longueur: Control
 var _etiquette_longueur: Label
 var _longueur_forme: SpinBox
+var _ligne_pas: Control
+var _pas_forme: SpinBox
 var _taille_forme: HSlider
 var _valeur_taille_forme: Label
 var _garde_corps: CheckButton
+var _ligne_taille_forme: Control
+var _ligne_salle: VBoxContainer
+var _etages_forme: SpinBox
+var _boutons_sens_salle := {}
 var _reglages_forme: Control
 var _aide_forme: Label
 ## Le PRESSE-PAPIERS : des décalages relatifs (`Outils.copier`). Il n'appartient à aucune couche — on
 ## copie dans la roche et on colle dans la glace.
 var _presse_papiers: Array = []
+
+## LES FLUIDES : les couches d'eau (`Projet.couche_d_eau` : nom, visible, preset, SOURCES) et ce qui s'en déduit.
+var _eaux: Array = []
+var _eau_active := 0
+var _corps_eau: Array = []      # par couche d'eau, un résultat de `FL.source` par source
+var _ocean_eau := {}
+var _occ_eau := {}               # les cases du monde entier au dernier calcul
+var _eau_a_refaire := false
+var _eau_vide := false            # aucune source au dernier calcul : les nappes sont vidées
+var _index_eau := {}              # case de lac ou de rivière → [couche, source]
+var _eau_apres_le_coup := false   # l'eau attend la fin du coup de pinceau (monde lent)
+var _materiaux_eau := {}
+var _cle_apercu_eau := ""
+var _bouton_eau: Button
+var _aide_eau: Label
+var _liste_eaux: VBoxContainer
+var _bouton_supprimer_eau: Button
+var _preset_eau: OptionButton
+
+## La barre de droite du Play test : les réglages de rendu (`Vue.REGLAGES_RENDU`), un contrôle par clé.
+var _droite_jeu: Panneau
+var _controles_rendu := {}
+var _choix_meteo: OptionButton
 
 
 ## ⚠ `UndoRedo` N'EST PAS COMPTÉ PAR RÉFÉRENCE : il fuit si on ne le libère pas, avec les couches
@@ -235,7 +279,7 @@ func _ready() -> void:
 	_aller_a("witness")
 	_dire("[i]Look at the witness, open Project to exchange it with your artist, or open the World "
 		+ "and paint.[/i]")
-	_histoire.version_changed.connect(_enregistrer)
+	_histoire.version_changed.connect(_enregistrer_plus_tard)
 	await get_tree().process_frame
 	_regler_fenetre()
 	await _ouvrir_au_lancement()
@@ -308,6 +352,9 @@ func _batir() -> void:
 	_vue.colle.connect(_colle)
 	_vue.forme_posee.connect(_forme_posee)
 	_vue.forme_dite.connect(_forme_dite)
+	_vue.eau_survolee.connect(_eau_survolee)
+	_vue.eau_cliquee.connect(_eau_cliquee)
+	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
 	_vue.boite_trop_grande.connect(func() -> void:
 		_dire("[color=#e0603c]Box too large[/color] — more than %d cells. Draw a smaller one." \
 			% Outils.VOLUME_MAXI))
@@ -330,6 +377,8 @@ func _batir() -> void:
 	_batir_droite_temoin(_droite_temoin.get_meta("pile"))
 	_droite_texture = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite_texture(_droite_texture.get_meta("pile"))
+	_droite_jeu = _panneau(corps, false, LARGEUR_DROITE)
+	_batir_droite_jeu(_droite_jeu.get_meta("pile"))
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -351,6 +400,11 @@ func _batir() -> void:
 	_minuterie_temoin.wait_time = 1.0
 	_minuterie_temoin.timeout.connect(_enregistrer_le_temoin_modele)
 	add_child(_minuterie_temoin)
+	_minuterie_projet = Timer.new()
+	_minuterie_projet.one_shot = true
+	_minuterie_projet.wait_time = 1.0
+	_minuterie_projet.timeout.connect(_enregistrer)
+	add_child(_minuterie_projet)
 	_minuterie_materiau = Timer.new()
 	_minuterie_materiau.one_shot = true
 	_minuterie_materiau.wait_time = 0.8
@@ -685,7 +739,7 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		b.custom_minimum_size = Vector2(0, 40)
 		b.add_theme_font_override("font", Palette.gras())
 		b.add_theme_constant_override("icon_max_width", 20)
-		b.pressed.connect(_aller_a.bind(a[0]))
+		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
 	# ⚠ CINQ ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing, Jordan) : en grille de deux,
@@ -702,15 +756,18 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	commandes.add_theme_constant_override("h_separation", 10)
 	commandes.add_theme_constant_override("v_separation", 4)
 	for r in [["ZQSD", "Move (WASD on QWERTY)"], ["Space", "Jump"], ["Shift", "Run"],
+			["F", "Fly on · off"], ["Space · E / A", "Fly up / down (E / Q on QWERTY)"],
 			["Left drag", "Orbit the camera"], ["Right drag", "Turn (level)"], ["Wheel", "Closer · farther"], ["Backspace", "Back to start"],
 			["Esc", "Back to World"]]:
 		commandes.add_child(_touche_clavier(r[0]))
 		commandes.add_child(_texte(r[1], 11, Palette.GRIS))
 	_section_jeu.contenu.add_child(commandes)
 	_section_jeu.contenu.add_child(_rangee([
+		_bouton("Fly", "Fly on or off (F). In flight you still bump into the world.",
+			_basculer_vol, "visee_naviguer"),
 		_bouton("Back to start", "Puts the character back where it started (Backspace).",
 			func() -> void: _vue.reapparaitre(), "haut"),
-		_bouton("Leave", "Back to World (Esc).", _aller_a.bind("monde"), "croix"),
+		_bouton("Leave", "Back to World (Esc).", _changer_d_atelier.bind("monde"), "croix"),
 	], 4))
 
 	_titre_projet = _grand_titre("PROJECT")
@@ -735,6 +792,10 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		_bouton("Save as", "Writes the project where you want it. It keeps saving itself there.",
 			func() -> void: _demander("enregistrer"), "enregistrer"),
 	], 4))
+	# L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : un monde fini, à ouvrir, parcourir et modifier.
+	if Exemple.disponible():
+		projet.contenu.add_child(_bouton("Open the example", "Opens the example world that comes with "
+			+ "MarchingBlocks, in its own folder. Your changes to it are kept there.", _ouvrir_l_exemple, "livre"))
 	# LES FICHIERS DANS WINDOWS (Jordan, 30 septembre 2026) : inscrits au premier lancement ; la case les retire
 	# — et le refus tient d'un lancement à l'autre.
 	_case_associations = CheckButton.new()
@@ -793,6 +854,13 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 			+ "sculpt it into a variant — ice from rock — without touching the original.", _copier_le_temoin,
 			"copier"),
 	]))
+	# L'ORDRE EST LA PRIORITÉ (couches exclusives) : là où deux couches se touchent, chaque coin prend les tuiles de
+	# la plus haute. Ces deux boutons la choisissent.
+	_bouton_monter_couche = _bouton("Up", "Moves the active layer up: where layers meet, the upper one's tiles "
+		+ "draw the corners (Ctrl+Z puts it back).", _deplacer_couche.bind(-1), "haut")
+	_bouton_descendre_couche = _bouton("Down", "Moves the active layer down: where layers meet, the upper one's "
+		+ "tiles draw the corners (Ctrl+Z puts it back).", _deplacer_couche.bind(1), "bas")
+	couches.contenu.add_child(_rangee([_bouton_monter_couche, _bouton_descendre_couche]))
 	_bouton_supprimer_couche = _bouton("Delete layer", "Deletes the active layer (Ctrl+Z brings it back).",
 		_supprimer_couche, "poubelle", Palette.DANGER)
 	couches.contenu.add_child(_bouton_supprimer_couche)
@@ -882,7 +950,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	raccourcis.add_theme_constant_override("v_separation", 4)
 	for r in [["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["AZEQSD", "Fly (Navigate)"],
 			["Right drag", "Look (Navigate)"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
-			["PgUp PgDn", "Floor y"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
+			["PgUp PgDn", "Floor y"], ["Ctrl+click", "Floor y to matter"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
 			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
 			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
 		raccourcis.add_child(_touche_clavier(r[0]))
@@ -1065,7 +1133,7 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	_compteur_etage = SpinBox.new()
 	_compteur_etage.min_value = -64
 	_compteur_etage.max_value = 64
-	_compteur_etage.tooltip_text = "PgUp / PgDn. The Grid aims at this plane; Sculpt falls back on it."
+	_compteur_etage.tooltip_text = "PgUp / PgDn, or Ctrl+click some matter to jump to its height. The Grid aims at this plane; Sculpt falls back on it."
 	_compteur_etage.value_changed.connect(func(v: float) -> void:
 		_vue.regler_etage(int(v))
 		_dire_l_etage())
@@ -1142,6 +1210,7 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
+	_batir_fluides(pile)
 
 
 ## ── 4. LES FORMES SPÉCIALES (Jordan, 1er octobre 2026) — la règle vit dans `formes_speciales.gd`.
@@ -1160,7 +1229,12 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 		["pont", "Bridge", "pont", "Builds a deck out of a WALL, across the air, to the first wall in front.\n"
 			+ "Connect: two walls, even not facing each other — the deck bends."],
 		["balcon", "Balcony", "balcon", "A slab sticking out of a WALL at the height you click, with its rail."],
-	], _choisir_forme_speciale, Palette.OUTIL)
+		["escalier", "Stairs", "escalier", "Builds stairs against a WALL: click the wall where they should "
+			+ "arrive; they come down towards you, Step cells per step, to the ground.\nConnect: click a floor, "
+			+ "then another floor higher up — the stairs climb from one to the other."],
+		["salle", "Room", "salle", "Drag a rectangle on the floor grid: a room rises from it (or sinks below it) "
+			+ "Floors cells high inside — walls, floor and ceiling, hollow within. Inside rock, the inside is dug."],
+	], _choisir_forme_speciale, Palette.OUTIL, 3)
 	sec.contenu.add_child(choix)
 	for b in _boutons_forme_speciale.values():
 		(b as Button).set_pressed_no_signal(false)
@@ -1202,6 +1276,35 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 	taille.add_child(_taille_forme)
 	taille.add_child(_valeur_taille_forme)
 	_reglages_forme.add_child(taille)
+	_ligne_taille_forme = taille
+	# LA SALLE : sa hauteur libre, et le sens où elle s'étend depuis le rectangle tracé.
+	# ⚠ DEUX LIGNES : les étages et Up / Down sur une seule débordaient à droite de la barre (vu à l'image).
+	_ligne_salle = VBoxContainer.new()
+	_ligne_salle.add_theme_constant_override("separation", 6)
+	var ligne_etages := HBoxContainer.new()
+	ligne_etages.add_theme_constant_override("separation", 8)
+	ligne_etages.add_child(_texte("Floors", 12))
+	_ligne_salle.add_child(ligne_etages)
+	_etages_forme = SpinBox.new()
+	_etages_forme.min_value = 1
+	_etages_forme.max_value = FS.ETAGES_MAXI
+	_etages_forme.value = int(_vue.forme_speciale["etages"])
+	_etages_forme.tooltip_text = "[ and ] — how high the room is inside, in cells. Walls, floor and ceiling add one each."
+	_etages_forme.value_changed.connect(func(v: float) -> void:
+		_vue.forme_speciale["etages"] = int(v)
+		_vue.rafraichir())
+	_etages_forme.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	ligne_etages.add_child(_etages_forme)
+	_ligne_salle.add_child(_rangee_de_choix(_boutons_sens_salle, [
+		["haut", "Up", "extruder_haut", "The rectangle is the floor: the room rises from it."],
+		["bas", "Down", "extruder_bas", "The rectangle is the ceiling: the room sinks below it."],
+	], func(v: String) -> void:
+		_vue.forme_speciale["vers_le_haut"] = v == "haut"
+		(_boutons_sens_salle[v] as Button).button_pressed = true
+		_contexte_des_outils()   # l'aide dit « rises » ou « sinks »
+		_vue.rafraichir()))
+	(_boutons_sens_salle["haut"] as Button).set_pressed_no_signal(true)
+	_reglages_forme.add_child(_ligne_salle)
 	var longueur := HBoxContainer.new()
 	_ligne_longueur = longueur
 	longueur.add_theme_constant_override("separation", 8)
@@ -1217,6 +1320,21 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 		_vue.rafraichir())
 	longueur.add_child(_longueur_forme)
 	_reglages_forme.add_child(longueur)
+	var pas := HBoxContainer.new()
+	_ligne_pas = pas
+	pas.add_theme_constant_override("separation", 8)
+	pas.add_child(_texte("Step", 12))
+	_pas_forme = SpinBox.new()
+	_pas_forme.min_value = 1
+	_pas_forme.max_value = FS.PAS_MAXI
+	_pas_forme.value = 2
+	_pas_forme.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pas_forme.tooltip_text = "How deep each step is, in cells: 1 is steep, %d is gentle." % FS.PAS_MAXI
+	_pas_forme.value_changed.connect(func(v: float) -> void:
+		_vue.forme_speciale["pas"] = int(v)
+		_vue.rafraichir())
+	pas.add_child(_pas_forme)
+	_reglages_forme.add_child(pas)
 	_garde_corps = CheckButton.new()
 	_garde_corps.text = "Rail"
 	_garde_corps.button_pressed = true
@@ -1228,6 +1346,543 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 	_aide_forme = _texte("", 11, Palette.GRIS)
 	_aide_forme.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sec.contenu.add_child(_aide_forme)
+
+
+## ── 5. LES FLUIDES (Jordan, 1er octobre 2026 ; charte §5, « le mode Fluids ») — la règle vit dans `fluides.gd`.
+##
+## ⚠ **ON N'ENREGISTRE QUE LES SOURCES** : un clic en pose une dans la couche d'eau ACTIVE ; lacs, rivières et
+## océans s'en REDÉDUISENT à chaque changement de cases (`_eau_perimee`) — c'est ce qui fait suivre la coulée en
+## temps réel quand on modifie le monde.
+## ⚠ **L'EAU APPARTIENT AU MONDE ENTIER** (DÉCIDÉ) : ses couches sont les siennes, indépendantes des couches de
+## tuiles, et elle se calcule contre les cases de TOUTES les couches de tuiles, cachées comprises (PROPOSÉ) —
+## cacher une couche pour travailler ne doit pas inonder le monde.
+func _batir_fluides(pile: VBoxContainer) -> void:
+	var sec := Section.new("Fluids", true, Icones.icone("eau"))
+	pile.add_child(sec)
+	_bouton_eau = _bouton("Water", "One click places water, and the world decides what it becomes:\n"
+		+ "· in a hollow, a LAKE filled to its brim;\n· on a slope or a ledge, a RIVER that runs down, falls, "
+		+ "and fills the hollows on its way;\n· in the open air, over nothing, a SEA at that height, as far as "
+		+ "you can see.\nRight click on water removes it.", _choisir_eau, "eau", Palette.OUTIL)
+	_bouton_eau.toggle_mode = true
+	sec.contenu.add_child(_bouton_eau)
+	_aide_eau = _texte("", 11, Palette.GRIS)
+	_aide_eau.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_aide_eau.text = ("Lakes, rivers and seas follow the world: dig a channel, raise a dam — the water "
+		+ "flows again.")
+	sec.contenu.add_child(_aide_eau)
+	sec.contenu.add_child(_petit_titre("WATER LAYERS"))
+	_liste_eaux = VBoxContainer.new()
+	_liste_eaux.add_theme_constant_override("separation", 4)
+	sec.contenu.add_child(_liste_eaux)
+	_bouton_supprimer_eau = _bouton("Delete", "Deletes the active water layer and its water (Ctrl+Z brings it back).",
+		_supprimer_eau, "poubelle", Palette.DANGER)
+	sec.contenu.add_child(_rangee([
+		_bouton("New", "A new water layer: its own lakes, rivers and seas, shown or hidden together.",
+			_nouvelle_eau, "plus"),
+		_bouton_supprimer_eau,
+	], 4))
+	var ligne := HBoxContainer.new()
+	ligne.add_theme_constant_override("separation", 8)
+	ligne.add_child(_texte("Look", 12))
+	_preset_eau = OptionButton.new()
+	_preset_eau.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for p in EauPresets.PRESETS:
+		_preset_eau.add_item(EauPresets.NOMS[p])
+	_preset_eau.item_selected.connect(func(i: int) -> void:
+		if not _eaux.is_empty():
+			_eaux[_eau_active]["preset"] = EauPresets.PRESETS[i]
+			_eau_perimee()
+			_enregistrer())
+	ligne.add_child(_preset_eau)
+	sec.contenu.add_child(ligne)
+	var note := _texte("These looks are examples, not a requirement: in your engine you can assign your own "
+		+ "water shader from the plugin. It receives the same data — flow, kind of water, depth.", 11, Palette.GRIS)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(note)
+	_rafraichir_eaux()
+
+
+func _choisir_eau() -> void:
+	_vue.outil = "eau"
+	for b in _boutons_outil.values():
+		(b as Button).set_pressed_no_signal(false)
+	for b in _boutons_forme_speciale.values():
+		(b as Button).set_pressed_no_signal(false)
+	_bouton_eau.set_pressed_no_signal(true)
+	_vue.oublier_ancre()
+	_basculer_navigation(false)
+	# Il faut une couche d'eau où poser la source.
+	if _eaux.is_empty():
+		_ajouter_eau(Projet.couche_d_eau("Water 1"))
+	_contexte_des_outils()
+	_vue.rafraichir()
+	_dire("[b]Water[/b] — click in a hollow (lake), on a slope or a ledge (river), or in the open air over "
+		+ "nothing (sea at that height). [i]Right click on water removes it.[/i]")
+
+
+## L'EAU OÙ L'ON NAGE (Play test) : l'eau DORMANTE des couches d'eau VISIBLES — lacs, lacs des rivières, océans —
+## et les niveaux des océans pour le large. Une rivière n'en est pas : sa bande est une lame, on y marche.
+func _eau_pour_le_jeu() -> Dictionary:
+	if _eau_a_refaire or _corps_eau.size() != _eaux.size():
+		_recalculer_eau(false)
+	# Chaque case porte le PRESET de sa couche d'eau : le voile sous la surface dépend du liquide (lave, marais…).
+	var cases := {}
+	var oceans: Array = []
+	var preset_ocean := ""
+	var plus_haut := -2147483647
+	for i in mini(_eaux.size(), _corps_eau.size()):
+		if not bool(_eaux[i]["visible"]):
+			continue
+		var preset: String = _eaux[i]["preset"]
+		for r in _corps_eau[i]:
+			if r["erreur"] != "":
+				continue
+			var a_poser: Array = []
+			if r["genre"] == "ocean":
+				oceans.append(int(r["niveau"]))
+				if int(r["niveau"]) > plus_haut:
+					plus_haut = int(r["niveau"])
+					preset_ocean = preset
+			if r["genre"] in ["ocean", "lac"]:
+				a_poser.append(r["eau"])
+			else:
+				for lac in r["lacs"]:
+					a_poser.append(lac["cases"])
+			for d in a_poser:
+				for c in d:
+					cases[c] = preset
+	if cases.is_empty() and oceans.is_empty():
+		return {}
+	return {"cases": cases, "oceans": oceans, "preset_ocean": preset_ocean, "boite": FL.boite(_occ_eau)}
+
+
+## Les cases de toutes les couches de tuiles : l'eau appartient au monde entier.
+func _occupees_du_monde() -> Dictionary:
+	var occ := {}
+	for i in _vue.nombre_de_couches():
+		for c in (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
+			occ[c] = true
+	return occ
+
+
+## L'eau est à redéduire. ⚠ UNE FOIS PAR IMAGE au plus : un coup de pinceau touche des dizaines de cases.
+func _eau_perimee() -> void:
+	if _eau_a_refaire:
+		return
+	_eau_a_refaire = true
+	_recalculer_eau.call_deferred()
+
+
+## `avec_barre` : sur un grand monde (la dernière fois plus de `SEUIL_ATTENTE`), hors d'un coup de pinceau, le panneau
+## d'attente le dit. ⚠ FAUX pour qui lit le résultat juste après (le Play test, l'export) : il doit rester synchrone.
+func _recalculer_eau(avec_barre := true) -> void:
+	_eau_a_refaire = false
+	if _vue == null:
+		return
+	var toutes: Array = []
+	for e in _eaux:
+		toutes.append_array(e["sources"])
+	# ⚠ SANS SOURCE, RIEN À DÉDUIRE (audit, 1er octobre 2026) : chaque coup de pinceau relisait le monde entier et
+	# reposait des nappes vides. Une fois vidées, on ne refait rien tant qu'aucune source n'apparaît.
+	if toutes.is_empty() and _eau_vide and _corps_eau.size() == _eaux.size():
+		return
+	var montrer := avec_barre and _ecran_vivant() and _coup.is_empty() \
+		and float(_durees.get("eau", 0.0)) >= SEUIL_ATTENTE
+	if montrer:
+		await _attendre("Water", "lakes, rivers and seas follow the world")
+	var debut := Time.get_ticks_msec()
+	_occ_eau = _occupees_du_monde() if not toutes.is_empty() else {}
+	var w: Dictionary = FL.monde(_occ_eau, toutes)
+	_ocean_eau = w["ocean"]
+	_corps_eau.clear()
+	_index_eau.clear()
+	var nappes: Array = []
+	var k := 0
+	for i in _eaux.size():
+		var e: Dictionary = _eaux[i]
+		var n: int = (e["sources"] as Array).size()
+		var corps: Array = (w["corps"] as Array).slice(k, k + n)
+		k += n
+		_corps_eau.append(corps)
+		# L'INDEX DE `_eau_sous` : chaque case de lac et de rivière → [couche, source] (l'océan, immense, se
+		# consulte à part).
+		for j in corps.size():
+			var r: Dictionary = corps[j]
+			if r["erreur"] != "" or r["genre"] == "ocean":
+				continue
+			for c in r["eau"]:
+				_index_eau[c] = [i, j]
+			for ec in r["cours"]:
+				_index_eau[ec["case"]] = [i, j]
+		var preset: String = e["preset"]
+		if not _materiaux_eau.has(preset):
+			_materiaux_eau[preset] = EauPresets.materiau(preset)
+		nappes.append([EauMaillage.maillage(corps, _occ_eau), _materiaux_eau[preset], bool(e["visible"])])
+	_vue.poser_eaux(nappes)
+	_eau_vide = toutes.is_empty()
+	_durees["eau"] = (Time.get_ticks_msec() - debut) / 1000.0
+	_cle_apercu_eau = ""
+	_rafraichir_eaux()
+	if montrer:
+		_fin_attente()
+
+
+## Le corps d'eau qui contient la case `s`, ou une case sous elle jusqu'au sol : [couche, source], ou [].
+func _eau_sous(s: Vector3i) -> Array:
+	var c := s
+	for _pas in 64:
+		# ⚠ PAR L'INDEX (bâti à chaque recalcul) : parcourir chaque corps, chaque cours, à chaque case de la descente
+		# et à chaque mouvement de souris coûtait ce que coûtent tous les cours réunis (audit).
+		if _index_eau.has(c):
+			return _index_eau[c]
+		for i in _corps_eau.size():
+			for j in (_corps_eau[i] as Array).size():
+				var r: Dictionary = _corps_eau[i][j]
+				if r["erreur"] == "" and r["genre"] == "ocean" and (r["eau"] as Dictionary).has(c):
+					return [i, j]
+		if _occ_eau.has(c + Vector3i.DOWN):
+			break
+		c += Vector3i.DOWN
+	return []
+
+
+## L'APERÇU : ce qu'un clic poserait — ou, sur de l'eau, l'eau qu'un clic droit retirerait.
+func _eau_survolee(s: Variant) -> void:
+	if s == null:
+		_vue.montrer_apercu([], Vue.TEINTE_EAU)
+		return
+	var cle := str(s)
+	if cle == _cle_apercu_eau:
+		return
+	_cle_apercu_eau = cle
+	if _occ_eau.is_empty():
+		_occ_eau = _occupees_du_monde()
+	var deja := _eau_sous(s)
+	if not deja.is_empty():
+		_vue.montrer_apercu(_cases_d_un_corps(_corps_eau[deja[0]][deja[1]]), Vue.TEINTE_CREUSER)
+		return
+	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau)
+	if r["erreur"] != "":
+		_vue.montrer_apercu([s], Vue.TEINTE_CREUSER)
+		return
+	_vue.montrer_apercu(_cases_d_un_corps(r), Vue.TEINTE_EAU)
+
+
+## Ce qu'on montre d'un corps : sa surface (un océan n'a pas à montrer tout son volume) et son cours.
+func _cases_d_un_corps(r: Dictionary) -> Array:
+	var montrees: Array = FL.surface(r["eau"], _occ_eau)
+	for e in r["cours"]:
+		if e["genre"] != "lac":
+			montrees.append(e["case"])
+	return montrees
+
+
+func _eau_cliquee(s: Variant, bouton: int) -> void:
+	if s == null:
+		return
+	if _occ_eau.is_empty():
+		_occ_eau = _occupees_du_monde()
+	if bouton == MOUSE_BUTTON_RIGHT:
+		var deja := _eau_sous(s)
+		if deja.is_empty():
+			_dire("[i]No water here to remove.[/i]")
+			return
+		var e: Dictionary = _eaux[deja[0]]
+		var source: Vector3i = e["sources"][deja[1]]
+		_histoire.create_action("Water: remove")
+		_histoire.add_do_method(_oter_source.bind(e, deja[1]))
+		_histoire.add_undo_method(_remettre_source.bind(e, deja[1], source))
+		_histoire.commit_action()
+		_dire("[b]Water removed[/b] from « %s ». [i]Ctrl+Z brings it back.[/i]" % e["nom"])
+		return
+	if not _eau_sous(s).is_empty():
+		_dire("[i]There is water here already.[/i] Right click removes it.")
+		return
+	if _eaux.is_empty():
+		_ajouter_eau(Projet.couche_d_eau("Water 1"))
+	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau)
+	if r["erreur"] != "":
+		_dire("[color=#e0603c]Water[/color] — %s" % {
+			"dans_la_matiere": "this cell is inside the matter.",
+			"dans_l_eau": "there is sea here already. Right click removes it.",
+			"trop_grand": "too large to fill (more than %d cells)." % FL.VOLUME_MAXI,
+			"trop_long": "this river is too long to follow.",
+		}.get(r["erreur"], r["erreur"]))
+		return
+	var e: Dictionary = _eaux[_eau_active]
+	_histoire.create_action("Water: " + {"ocean": "sea", "lac": "lake", "riviere": "river"}[r["genre"]])
+	_histoire.add_do_method(_poser_source.bind(e, s))
+	_histoire.add_undo_method(_oter_source.bind(e, (e["sources"] as Array).size()))
+	_histoire.commit_action()
+	_dire(_dire_un_corps(r) + " [i]Ctrl+Z undoes it.[/i]")
+
+
+func _dire_un_corps(r: Dictionary) -> String:
+	match r["genre"]:
+		"ocean":
+			return "[b]Sea[/b] at height %d — it surrounds the matter as far as you can see." % r["niveau"]
+		"lac":
+			return "[b]Lake[/b] — %d cell(s), filled to its brim (height %d).%s" % [(r["eau"] as Dictionary).size(),
+				r["niveau"], " A closed cave: it fills up to where you clicked." if r["fin"] == "ferme" else ""]
+	var coule := 0
+	var chutes := 0
+	for i in (r["cours"] as Array).size():
+		var e: Dictionary = r["cours"][i]
+		if e["genre"] == "coule":
+			coule += 1
+		elif e["genre"] == "chute" and (i == 0 or r["cours"][i - 1]["genre"] != "chute"):
+			chutes += 1
+	var lacs: int = (r["lacs"] as Array).size()
+	return "[b]River[/b] — runs %d cell(s), %d waterfall(s)%s, then %s." % [coule, chutes,
+		", fills %d lake(s) on its way" % lacs if lacs > 0 else "",
+		{"sort": "leaves the world", "rejoint": "joins the water below",
+			"ferme": "ends in a closed hollow"}.get(r["fin"], "stops")]
+
+
+func _poser_source(e: Dictionary, s: Vector3i) -> void:
+	(e["sources"] as Array).append(s)
+	_eau_perimee()
+
+
+func _oter_source(e: Dictionary, i: int) -> void:
+	(e["sources"] as Array).remove_at(i)
+	_eau_perimee()
+
+
+func _remettre_source(e: Dictionary, i: int, s: Vector3i) -> void:
+	(e["sources"] as Array).insert(i, s)
+	_eau_perimee()
+
+
+func _ajouter_eau(etat: Dictionary) -> int:
+	var n := 0
+	for e in _eaux:
+		n = maxi(n, int(str(e.get("id", "0"))))
+	etat["id"] = str(etat["id"]) if str(etat.get("id", "")) != "" else str(n + 1)
+	_eaux.append(etat)
+	_eau_active = _eaux.size() - 1
+	_eau_perimee()
+	return _eau_active
+
+
+func _nouvelle_eau() -> void:
+	var etat := Projet.couche_d_eau("Water %d" % (_eaux.size() + 1))
+	_histoire.create_action("New water layer")
+	_histoire.add_do_method(_inserer_eau.bind(etat, _eaux.size()))
+	_histoire.add_undo_method(_retirer_eau.bind(etat))
+	_histoire.commit_action()
+	_dire("[b]New water layer[/b] — the water you place now goes into it.")
+
+
+func _supprimer_eau() -> void:
+	if _eaux.is_empty():
+		return
+	var etat: Dictionary = _eaux[_eau_active]
+	_histoire.create_action("Delete water layer « %s »" % etat["nom"])
+	_histoire.add_do_method(_retirer_eau.bind(etat))
+	_histoire.add_undo_method(_inserer_eau.bind(etat, _eau_active))
+	_histoire.commit_action()
+
+
+func _inserer_eau(etat: Dictionary, i: int) -> void:
+	if str(etat.get("id", "")) == "":
+		var n := 0
+		for e in _eaux:
+			n = maxi(n, int(str(e.get("id", "0"))))
+		etat["id"] = str(n + 1)
+	_eaux.insert(clampi(i, 0, _eaux.size()), etat)
+	_eau_active = _eaux.find(etat)
+	_eau_perimee()
+
+
+func _retirer_eau(etat: Dictionary) -> void:
+	_eaux.erase(etat)
+	_eau_active = clampi(_eau_active, 0, maxi(_eaux.size() - 1, 0))
+	_eau_perimee()
+
+
+func _activer_eau(i: int) -> void:
+	_eau_active = i
+	_rafraichir_eaux()
+	_enregistrer()
+
+
+func _montrer_eau(i: int, oui: bool) -> void:
+	_eaux[i]["visible"] = oui
+	var nappes: Array = _vue.nappes()
+	if i < nappes.size():
+		(nappes[i] as Node3D).visible = oui
+	_enregistrer()
+
+
+## Une ligne par couche d'eau : l'œil, puis la couche (nom et ce qu'elle porte), qu'on choisit d'un clic.
+func _rafraichir_eaux() -> void:
+	if _liste_eaux == null:
+		return
+	for enfant in _liste_eaux.get_children():
+		_liste_eaux.remove_child(enfant)
+		enfant.queue_free()
+	_bouton_supprimer_eau.disabled = _eaux.is_empty()
+	if _eaux.is_empty():
+		_liste_eaux.add_child(_texte("No water yet — pick Water and click in the world.", 11, Palette.GRIS))
+	var groupe := ButtonGroup.new()
+	for i in _eaux.size():
+		var e: Dictionary = _eaux[i]
+		var ligne := HBoxContainer.new()
+		ligne.add_theme_constant_override("separation", 4)
+		var oeil := Button.new()
+		oeil.theme_type_variation = Palette.DISCRET
+		oeil.toggle_mode = true
+		oeil.button_pressed = e["visible"]
+		oeil.icon = Icones.icone("oeil" if e["visible"] else "oeil_ferme")
+		oeil.tooltip_text = "Show or hide this water layer"
+		oeil.focus_mode = Control.FOCUS_NONE
+		oeil.toggled.connect(func(v: bool) -> void:
+			oeil.icon = Icones.icone("oeil" if v else "oeil_ferme")
+			_montrer_eau(i, v))
+		ligne.add_child(oeil)
+		var choix := Button.new()
+		choix.toggle_mode = true
+		choix.button_group = groupe
+		choix.button_pressed = i == _eau_active
+		choix.focus_mode = Control.FOCUS_NONE
+		choix.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		choix.clip_text = true
+		choix.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choix.add_theme_font_size_override("font_size", 11)
+		choix.text = "%s\n%s" % [e["nom"], _bilan_d_eau(i)]
+		choix.tooltip_text = "Make this water layer active: the water you place goes into it."
+		choix.pressed.connect(_activer_eau.bind(i))
+		ligne.add_child(choix)
+		_liste_eaux.add_child(ligne)
+	if _preset_eau != null and not _eaux.is_empty():
+		_preset_eau.select(maxi(EauPresets.PRESETS.find(_eaux[_eau_active]["preset"]), 0))
+
+
+func _bilan_d_eau(i: int) -> String:
+	if i >= _corps_eau.size():
+		return "%d source(s)" % (_eaux[i]["sources"] as Array).size()
+	var n := {"ocean": 0, "lac": 0, "riviere": 0, "": 0}
+	for r in _corps_eau[i]:
+		n[r["genre"]] += 1
+	var morceaux: Array = []
+	for g in [["ocean", "sea"], ["lac", "lake"], ["riviere", "river"]]:
+		if n[g[0]] > 0:
+			morceaux.append("%d %s%s" % [n[g[0]], g[1], "s" if n[g[0]] > 1 else ""])
+	if n[""] > 0:
+		morceaux.append("%d without water" % n[""])
+	return ", ".join(PackedStringArray(morceaux)) if not morceaux.is_empty() else "empty"
+
+
+## ── LA BARRE DE DROITE DU PLAY TEST (Jordan, 1er octobre 2026) : les effets de rendu, à essayer en marchant.
+## Bâtie depuis `Vue.REGLAGES_RENDU` : la liste décide, l'écran ne fait que la montrer.
+func _batir_droite_jeu(pile: VBoxContainer) -> void:
+	var note := _texte("Try looks while you walk. These settings only change the Play test; Reset brings back "
+		+ "the app's own lighting.", 11, Palette.GRIS)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pile.add_child(note)
+	pile.add_child(_bouton("Reset", "Back to the app's own lighting, and no weather.", _remettre_le_rendu, "croix"))
+	# LA MÉTÉO (Jordan, 2 octobre 2026) — ⚠ elle n'est pas exportable, et l'écran le dit.
+	var meteo := Section.new("Weather", true, Icones.icone("monde"))
+	pile.add_child(meteo)
+	_choix_meteo = OptionButton.new()
+	for m in Vue.METEOS:
+		_choix_meteo.add_item(m[1])
+	_choix_meteo.focus_mode = Control.FOCUS_NONE
+	_choix_meteo.item_selected.connect(func(i: int) -> void: _vue.regler_meteo(Vue.METEOS[i][0]))
+	meteo.contenu.add_child(_choix_meteo)
+	var pas_exportee := _texte("Only for the Play test, to judge your world in other weathers: it is not saved "
+		+ "with the project, not exported to the .mbworld, and the engine plugins do not have it.", 11, Palette.GRIS)
+	pas_exportee.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	meteo.contenu.add_child(pas_exportee)
+	var sections := {}
+	for r in Vue.REGLAGES_RENDU:
+		var groupe: String = r["groupe"]
+		if not sections.has(groupe):
+			var sec := Section.new(groupe, true, Icones.icone({"Light": "ampoule", "Sky": "monde", "Effects": "texture",
+				"Camera": "oeil"}.get(groupe, "outils")))
+			pile.add_child(sec)
+			sections[groupe] = sec
+		(sections[groupe] as Section).contenu.add_child(_ligne_de_rendu(r))
+
+
+func _ligne_de_rendu(r: Dictionary) -> Control:
+	var cle: String = r["cle"]
+	var valeur: Variant = _vue.rendu.get(cle, r["defaut"])
+	if r["genre"] == "case":
+		var c := CheckButton.new()
+		c.text = r["nom"]
+		c.button_pressed = valeur
+		c.focus_mode = Control.FOCUS_NONE
+		c.toggled.connect(func(v: bool) -> void: _vue.regler_rendu(cle, v))
+		_controles_rendu[cle] = c
+		return c
+	var ligne := HBoxContainer.new()
+	ligne.add_theme_constant_override("separation", 8)
+	var nom := _texte(r["nom"], 12)
+	nom.custom_minimum_size = Vector2(110, 0)
+	nom.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	ligne.add_child(nom)
+	match r["genre"]:
+		"curseur":
+			var s := HSlider.new()
+			s.min_value = r["min"]
+			s.max_value = r["max"]
+			s.step = r["pas"]
+			s.value = valeur
+			s.focus_mode = Control.FOCUS_NONE
+			s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			var lu := _texte(str(snappedf(valeur, r["pas"])), 11, Palette.OLIVE)
+			lu.custom_minimum_size = Vector2(40, 0)
+			s.value_changed.connect(func(v: float) -> void:
+				lu.text = str(snappedf(v, r["pas"]))
+				_vue.regler_rendu(cle, v))
+			s.set_meta("lu", lu)
+			ligne.add_child(s)
+			ligne.add_child(lu)
+			_controles_rendu[cle] = s
+		"couleur":
+			var b := ColorPickerButton.new()
+			b.color = valeur
+			b.edit_alpha = false
+			b.focus_mode = Control.FOCUS_NONE
+			b.custom_minimum_size = Vector2(0, 26)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.color_changed.connect(func(v: Color) -> void: _vue.regler_rendu(cle, v))
+			ligne.add_child(b)
+			_controles_rendu[cle] = b
+		"choix":
+			var o := OptionButton.new()
+			for nom_choix in r["choix"]:
+				o.add_item(nom_choix)
+			o.select(int(valeur))
+			o.focus_mode = Control.FOCUS_NONE
+			o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			o.item_selected.connect(func(i: int) -> void: _vue.regler_rendu(cle, i))
+			ligne.add_child(o)
+			_controles_rendu[cle] = o
+	return ligne
+
+
+## « Reset » : les valeurs décidées, et chaque contrôle les montre (sans renvoyer de signal).
+func _remettre_le_rendu() -> void:
+	_vue.rendu_par_defaut()
+	_vue.regler_meteo("aucune")
+	_choix_meteo.select(0)
+	for cle in _controles_rendu:
+		var c: Control = _controles_rendu[cle]
+		var v: Variant = _vue.rendu[cle]
+		if c is CheckButton:
+			(c as CheckButton).set_pressed_no_signal(v)
+		elif c is HSlider:
+			(c as HSlider).set_value_no_signal(v)
+			((c as HSlider).get_meta("lu") as Label).text = str(v)
+		elif c is ColorPickerButton:
+			(c as ColorPickerButton).color = v
+		elif c is OptionButton:
+			(c as OptionButton).select(int(v))
+	_dire("[i]Play test lighting back to the app's own.[/i]")
 
 
 func _batir_attente(parent: Control) -> void:
@@ -1250,9 +1905,20 @@ func _batir_attente(parent: Control) -> void:
 	_attente_titre.add_theme_font_override("font", Palette.gras())
 	pile.add_child(_attente_titre)
 	var barre := ProgressBar.new()
-	barre.value = 100
 	barre.show_percentage = false
+	# ⚠ UNE PISTE ET UN REMPLISSAGE FRANCS : avec le thème seul, la barre défilante n'était qu'un trait de quelques
+	# pixels, invisible à l'image.
+	barre.custom_minimum_size = Vector2(0, 10)
+	var piste := StyleBoxFlat.new()
+	piste.bg_color = Palette.FILET
+	piste.set_corner_radius_all(5)
+	var plein := StyleBoxFlat.new()
+	plein.bg_color = Palette.OLIVE
+	plein.set_corner_radius_all(5)
+	barre.add_theme_stylebox_override("background", piste)
+	barre.add_theme_stylebox_override("fill", plein)
 	pile.add_child(barre)
+	_attente_barre = barre
 	_attente_note = _texte("", 11, Palette.GRIS)
 	pile.add_child(_attente_note)
 	parent.add_child(_attente)
@@ -1261,16 +1927,116 @@ func _batir_attente(parent: Control) -> void:
 ## ⚠ IL FAUT RENDRE LA MAIN À L'ÉCRAN POUR QU'IL PEIGNE, ET `process_frame` NE SUFFIT PAS (leçon de
 ## SoluTiles) : on reprend la main AVANT le dessin de l'image. Seul `frame_post_draw` prouve que le
 ## panneau est réellement à l'écran avant qu'un travail long ne bloque le fil.
-func _attendre(titre: String, note: String) -> void:
-	_attente_titre.text = titre
-	_attente_note.text = note
-	_attente.visible = true
-	await get_tree().process_frame
-	await RenderingServer.frame_post_draw
+## LA BARRE DE PROGRESSION (Jordan, 1er octobre 2026 : « dans tout processus qui dépasse 0,4 s »).
+##   - `etapes` > 0 : une barre qui avance d'une étape à chaque `_avancer` — l'écran est repeint entre deux ;
+##   - `etapes` = 0 : une barre qui DÉFILE, pour un travail d'un seul tenant fait sur un autre fil (`_en_fond`).
+## ⚠ UN TRAVAIL D'UN SEUL TENANT SUR LE FIL PRINCIPAL GÈLE TOUT, BARRE COMPRISE : le panneau dit alors ce qui se
+## passe, mais ne bouge plus jusqu'à la fin. D'où `_en_fond` pour ce qui est long et pur (le tranchage).
+func _attendre(titre: String, note: String, etapes := 0) -> void:
+	_pile_attente.push_back([titre, note, etapes, 0])
+	_montrer_attente()
+	await _laisser_peindre()
+
+
+## L'étape suivante d'une attente à étapes ; `note` dit ce qu'on fait maintenant.
+func _avancer(note := "") -> void:
+	if _pile_attente.is_empty():
+		return
+	var e: Array = _pile_attente[-1]
+	e[3] = int(e[3]) + 1
+	if note != "":
+		e[1] = note
+	_montrer_attente()
+	await _laisser_peindre()
 
 
 func _fin_attente() -> void:
-	_attente.visible = false
+	if not _pile_attente.is_empty():
+		_pile_attente.pop_back()
+	if _pile_attente.is_empty():
+		_attente.visible = false
+	else:
+		_montrer_attente()
+
+
+func _montrer_attente() -> void:
+	var e: Array = _pile_attente[-1]
+	_attente_titre.text = e[0]
+	_attente_note.text = e[1]
+	_attente_barre.indeterminate = int(e[2]) <= 0
+	_attente_barre.max_value = maxi(int(e[2]), 1)
+	_attente_barre.value = int(e[3])
+	_attente.visible = true
+
+
+## ⚠ SANS FENÊTRE, `frame_post_draw` NE VIENT JAMAIS (la fumée pendait sur tout ce qui attendait) : on n'attend
+## alors que l'image suivante.
+func _laisser_peindre() -> void:
+	await get_tree().process_frame
+	if _ecran_vivant():
+		await RenderingServer.frame_post_draw
+
+
+func _ecran_vivant() -> bool:
+	return DisplayServer.get_name() != "headless"
+
+
+## LE TRAVAIL LONG SUR UN AUTRE FIL : l'écran reste vivant et la barre défile. ⚠ `travail` ne touche à AUCUN nœud
+## de la scène (le cœur est pur : fichiers, tableaux, ressources). Sans fenêtre, il tourne sur place.
+func _en_fond(travail: Callable) -> Variant:
+	if not _ecran_vivant():
+		return travail.call()
+	var boite: Array = [null]
+	var id := WorkerThreadPool.add_task(func() -> void: boite[0] = travail.call())
+	while not WorkerThreadPool.is_task_completed(id):
+		await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(id)
+	return boite[0]
+
+
+## LES GESTES QUI CHANGENT D'ATELIER (boutons, « Leave ») passent par ici : avant World ou le Play test, le monde
+## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
+## l'appelle d'endroits qui enchaînent juste après.
+func _changer_d_atelier(atelier: String) -> void:
+	if atelier in ["monde", "jeu"]:
+		await _rhabiller_avec_attente(atelier == "jeu")
+	var debut := Time.get_ticks_msec()
+	if atelier == "jeu" and _atelier != "jeu" and _ecran_vivant() and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
+		await _attendre("Starting the Play test", "the ground you walk on, from the tiles", 0)
+		_aller_a(atelier)
+		_fin_attente()
+	else:
+		_aller_a(atelier)
+	if atelier == "jeu":
+		_durees["jeu"] = (Time.get_ticks_msec() - debut) / 1000.0
+
+
+## Le monde suit son témoin, une couche périmée à la fois, la barre avançant de l'une à l'autre.
+func _rhabiller_avec_attente(pour_jouer := false) -> void:
+	if _minuterie_temoin != null and not _minuterie_temoin.is_stopped():
+		_minuterie_temoin.stop()
+		_enregistrer_le_temoin_modele()
+	var perimees: Array = _couches.filter(func(c): return c.get("_glb_perime", false))
+	if perimees.is_empty() or not _ecran_vivant():
+		_rhabiller_les_mondes()
+		return
+	await _attendre("Starting the Play test" if pour_jouer else "Updating the painted world",
+		"layer « %s »" % perimees[0]["nom"], perimees.size())
+	for c in perimees:
+		_rhabiller(c)
+		await _avancer("layer « %s »" % c["nom"])
+	_rafraichir_couches()
+	_fin_attente()
+
+
+## Entrer en édition par un geste (Tab, le bouton) : charger le témoin d'une couche coûte ~2 s la première fois.
+func _basculer_edition(oui: bool) -> void:
+	if oui and not _vue.edition and _ecran_vivant() and _modeleur.temoin != _couches[_active].get("_temoin", null):
+		await _attendre("Opening the witness editor", "%s — its tiles and their linked copies" % _couches[_active]["nom"])
+		_regler_edition(true)
+		_fin_attente()
+		return
+	_regler_edition(oui)
 
 
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
@@ -1279,6 +2045,7 @@ func _aller_a(atelier: String) -> void:
 	if atelier in ["monde", "jeu"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier == "jeu" and _atelier != "jeu":
+		_vue.eau_du_jeu = _eau_pour_le_jeu()
 		var refus: String = _vue.commencer_partie()
 		if refus != "":
 			_dire("[color=#e0603c]%s[/color]" % refus)
@@ -1296,7 +2063,8 @@ func _aller_a(atelier: String) -> void:
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
 		_vue.grab_focus()
-		_dire("[b]Play test[/b] — Z Q S D to move, Space to jump, Shift to run, right drag to turn. "
+		_dire("[b]Play test[/b] — Z Q S D to move, Space to jump, Shift to run, right drag to turn, "
+			+ "F to fly. In water you swim: Space to rise, A to dive (Q on QWERTY), swim into a bank to climb out. "
 			+ "Esc to go back.")
 	_selection_changee()
 	_dire_l_etage()
@@ -1348,6 +2116,7 @@ func _contexte() -> void:
 	_droite.visible = monde
 	_droite_temoin.visible = geometrie
 	_droite_texture.visible = texturing
+	_droite_jeu.visible = jeu
 	_modeleur.geometrie = not texturing
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -1370,6 +2139,18 @@ func _temoin_pour_la_planche() -> RefCounted:
 
 ## Un clic sur une tuile de la planche : la vue cadre sa copie la plus LISIBLE (la plus pure, celle dont les
 ## voisins ont laissé le moins de traces), une boîte blanche la montre, et en édition elle passe en édition.
+## LE VOL DU PLAY TEST (Jordan, 1er octobre 2026). Le bouton rend le clavier à la vue : sinon Espace, qui
+## fait monter, re-cliquerait le bouton.
+func _basculer_vol() -> void:
+	if _atelier != "jeu":
+		return
+	var vole := _vue.basculer_vol()
+	get_viewport().gui_release_focus()
+	_vue.grab_focus()
+	_dire("[b]Flying[/b] — Space or E to go up, A to go down (Q on QWERTY), Shift to go faster. F to land."
+		if vole else "[i]Walking again — gravity is back.[/i]")
+
+
 func _aller_a_la_tuile(cle: String) -> void:
 	var t: RefCounted = _temoin_pour_la_planche()
 	var liste: Array = t.occurrences_de(cle)
@@ -1423,24 +2204,35 @@ func _contexte_des_outils() -> void:
 	var f: Dictionary = _vue.forme_speciale
 	var quoi: String = f["quoi"]
 	var active: bool = _vue.outil == "forme"
-	var relier: bool = bool(f["relier"]) and quoi != "balcon"
+	var salle: bool = quoi == "salle"
+	var relier: bool = bool(f["relier"]) and quoi != "balcon" and not salle
 	_reglages_forme.visible = active
-	_ligne_bouts.visible = quoi != "balcon"
+	# LA SALLE NE LIT QUE SES ÉTAGES ET SON SENS : le reste des réglages disparaît.
+	_ligne_salle.visible = salle
+	_ligne_taille_forme.visible = not salle
+	_ligne_bouts.visible = quoi != "balcon" and not salle
 	_ligne_profil.visible = quoi in ["tunnel", "puits"]
-	_ligne_longueur.visible = not relier
-	_etiquette_longueur.text = "Reach" if quoi == "pont" else "Depth"
+	_ligne_longueur.visible = not relier and not salle
+	_etiquette_longueur.text = {"pont": "Reach", "escalier": "Length"}.get(quoi, "Depth")
 	_longueur_forme.tooltip_text = {
 		"tunnel": "How deep a straight tunnel goes when it finds no cave behind the wall.",
 		"puits": "How deep a straight well goes when it finds no cave below.",
 		"pont": "How far a straight bridge looks for a wall in front.",
 		"balcon": "How far the balcony sticks out of the wall.",
-	}[quoi]
-	_garde_corps.visible = quoi in ["pont", "balcon"]
-	var surface: String = "floor or ceiling" if quoi == "puits" else "wall"
+		"escalier": "How far the stairs may run from the wall when they do not reach the ground first.",
+	}.get(quoi, "")
+	_ligne_pas.visible = quoi == "escalier" and not relier
+	_garde_corps.visible = quoi in ["pont", "balcon", "escalier"]
+	var surface: String = {"puits": "floor or ceiling", "escalier": "floor"}.get(quoi, "wall")
 	if not active:
 		_aide_forme.text = "Pick a shape, then click in the world."
+	elif salle:
+		_aide_forme.text = ("Drag a rectangle on the floor grid (PgUp / PgDn for the floor). The room %s from it: "
+			+ "walls, floor and ceiling, hollow within.") % ("rises" if bool(f["vers_le_haut"]) else "sinks")
 	elif quoi == "balcon":
 		_aide_forme.text = "Click a wall where the balcony floor goes."
+	elif quoi == "escalier" and not relier:
+		_aide_forme.text = "Click a wall where the stairs should arrive: they come down from there to the ground."
 	elif relier:
 		_aide_forme.text = "Click the first %s, then the second. Right click or Esc forgets the first." % surface
 	else:
@@ -1541,7 +2333,7 @@ func _sections_d_edition(pile: VBoxContainer, titre: String, selmode: Dictionary
 	edition.custom_minimum_size = Vector2(0, 34)
 	edition.tooltip_text = ("Tab — edit the witness mesh, the way you would in Blender.\nTab again "
 		+ "looks at it without editing.")
-	edition.toggled.connect(func(v: bool) -> void: _regler_edition(v))
+	edition.toggled.connect(func(v: bool) -> void: _basculer_edition(v))
 	_boutons_edition.append(edition)
 	mode.contenu.add_child(edition)
 	mode.contenu.add_child(_petit_titre("SELECT  ·  1 2 3"))
@@ -1558,12 +2350,18 @@ func _sections_d_edition(pile: VBoxContainer, titre: String, selmode: Dictionary
 	var sel := Section.new("Select", true, Icones.icone("selectionner"))
 	pile.add_child(sel)
 	sel.contenu.add_child(_texte("Click selects what you SEE · Shift+click adds or removes · Alt+click "
-		+ "selects a loop (a ring of faces in Face mode).", 11, Palette.GRIS))
+		+ "selects a loop (a ring of faces in Face mode) · Ctrl + right drag: lasso · C: circle.", 11, Palette.GRIS))
 	sel.contenu.add_child(_grille([
 		_bouton("All  ·  A", "A — select everything.", func() -> void: _geste_modeleur("tout"), "grandir"),
 		_bouton("None  ·  Alt+A", "Alt+A — select nothing.", func() -> void: _geste_modeleur("rien"), "croix"),
 		_bouton("Box  ·  B", "B, then drag a rectangle. It also takes what is hidden behind.",
 			func() -> void: _geste_modeleur("B"), "boite"),
+		_bouton("Lasso", "Ctrl + right drag (Shift + Ctrl removes), as in Blender — or click here, then drag with "
+			+ "the left button (Ctrl or Shift removes). It takes what you see; Alt+Z for X-ray.",
+			func() -> void: _geste_modeleur("lasso"), "relier"),
+		_bouton("Circle  ·  C", "C — paint the selection with a circle: left button adds, Shift or the middle button "
+			+ "removes, the wheel sizes it; right click, Esc or Enter ends.",
+			func() -> void: _geste_modeleur("cercle"), "sphere"),
 	], 2))
 	return edition
 
@@ -1790,6 +2588,10 @@ func _geste_modeleur(nom: String) -> void:
 		"B":
 			_modeleur.modal = "B"
 			_dire("[b]Box select[/b] — drag a rectangle. Esc cancels.")
+		"lasso":
+			_modeleur.commencer_lasso()
+		"cercle":
+			_modeleur.commencer_cercle()
 		"loop":
 			_modeleur.commencer_boucle()
 		"G", "R", "S", "E", "I", "bevel":
@@ -2560,12 +3362,14 @@ func _trancher_travail() -> void:
 ## d'un projet dont la source a changé : deux routes finiraient par trancher différemment.
 func _trancher_source(source: String) -> Dictionary:
 	var bilan: Dictionary
+	# ⚠ SUR UN AUTRE FIL (`_en_fond`) : 2 s pour le témoin, ~17 s pour un travail non lié — la barre défile et
+	# l'écran reste vivant au lieu de geler. Le cœur ne touche à aucun nœud de la scène.
 	if source == Projet.TEMOIN:
-		await _attendre("Slicing the witness", "52 tiles, every sculpted copy kept")
-		bilan = BM.librairie()
+		await _attendre("Slicing the witness", "52 tiles, one per key")
+		bilan = await _en_fond(func() -> Dictionary: return BM.librairie())
 	else:
 		await _attendre("Slicing your work", source.get_file())
-		bilan = BM.librairie_depuis_glb(source)
+		bilan = await _en_fond(func() -> Dictionary: return BM.librairie_depuis_glb(source))
 	_fin_attente()
 	var lot: MeshLibrary = bilan.get("lot", null)
 	if lot != null and BM.anomalies().is_empty():
@@ -2626,6 +3430,7 @@ func _id_case() -> int:
 
 func _coup_commence() -> void:
 	_coup = {}
+	_coup_autres = {}
 	_coup_nom = ""
 
 
@@ -2637,14 +3442,36 @@ func _touche(modif: Dictionary, nom: String) -> void:
 		return
 	_coup_nom = nom if _coup_nom == "" or _coup_nom == nom else "Stroke"
 	var changements := _changements(modif, cases, id)
+	var posees: Array = []
 	for c in changements:
 		if not _coup.has(c):
 			_coup[c] = changements[c].duplicate()
 		else:
 			_coup[c][1] = changements[c][1]
 		cases.set_cell_item(c, changements[c][1])
-	_vue.monde().reconstruire()
+		if changements[c][1] != GridMap.INVALID_CELL_ITEM:
+			posees.append(c)
+	# LES CASES SONT EXCLUSIVES : ce que le coup pose, les autres couches le perdent — dans le même Ctrl+Z.
+	var changees: Array = changements.keys()
+	var vols := _vols(posees)
+	for g in vols:
+		if not _coup_autres.has(g):
+			_coup_autres[g] = {}
+		for c in vols[g]:
+			if not _coup_autres[g].has(c):
+				_coup_autres[g][c] = (vols[g][c] as Array).duplicate()
+			else:
+				_coup_autres[g][c][1] = vols[g][c][1]
+			(g as GridMap).set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+			changees.append(c)
+	_suivre_les_cases(changees)
 	_vue.rafraichir()
+	# ⚠ L'EAU SUIT EN DIRECT TANT QU'ELLE EST RAPIDE ; sur un monde où elle coûte (audit : un recalcul complet par
+	# image pendant tout le coup), elle attend la fin du coup — une fois.
+	if float(_durees.get("eau", 0.0)) < 0.05:
+		_eau_perimee()
+	else:
+		_eau_apres_le_coup = true
 
 
 ## ⚠ UN COUP ENTIER S'ANNULE D'UN SEUL Ctrl+Z — c'est ce qu'on attend d'un pinceau. Les cases sont déjà
@@ -2654,9 +3481,21 @@ func _coup_fini() -> void:
 	for c in _coup:
 		if _coup[c][0] != _coup[c][1]:
 			fait[c] = _coup[c]
+	var fait_autres := {}
+	for g in _coup_autres:
+		for c in _coup_autres[g]:
+			if _coup_autres[g][c][0] != _coup_autres[g][c][1]:
+				if not fait_autres.has(g):
+					fait_autres[g] = {}
+				fait_autres[g][c] = _coup_autres[g][c]
 	_coup = {}
+	_coup_autres = {}
 	if not fait.is_empty():
-		_enregistrer_action(fait, _coup_nom if _coup_nom != "" else "Stroke", true)
+		_enregistrer_action(fait, _coup_nom if _coup_nom != "" else "Stroke", true, fait_autres)
+		_compter_les_cases_plus_tard()
+	if _eau_apres_le_coup:
+		_eau_apres_le_coup = false
+		_eau_perimee()
 	_dire_l_etage()
 
 
@@ -2686,28 +3525,133 @@ func _appliquer(modif: Dictionary, nom: String) -> int:
 		return 0
 	var ch := _changements(modif, cases, id)
 	if not ch.is_empty():
-		_enregistrer_action(ch, nom, false)
+		var posees: Array = []
+		for c in ch:
+			if ch[c][1] != GridMap.INVALID_CELL_ITEM:
+				posees.append(c)
+		_enregistrer_action(ch, nom, false, _vols(posees))
 	return ch.size()
 
 
 ## ⚠ L'ACTION NOMME SA GRILLE ET SON MASSIF, jamais « la couche active » : un Ctrl+Z après avoir changé
 ## de couche doit reconstruire la couche qu'il touche, pas celle qu'on regarde.
-func _enregistrer_action(ch: Dictionary, nom: String, deja_fait: bool) -> void:
+## `autres` : {grille d'une autre couche: {case: [avant, après]}} — ce que l'exclusivité leur retire, dans la même action.
+func _enregistrer_action(ch: Dictionary, nom: String, deja_fait: bool, autres: Dictionary = {}) -> void:
 	var cases: GridMap = _vue.cases()
 	var massif: Node = _vue.monde()
 	_histoire.create_action(nom)
 	for c in ch:
 		_histoire.add_do_method(cases.set_cell_item.bind(c, ch[c][1]))
 		_histoire.add_undo_method(cases.set_cell_item.bind(c, ch[c][0]))
-	_histoire.add_do_method(_reconstruire.bind(massif))
-	_histoire.add_undo_method(_reconstruire.bind(massif))
+	for g in autres:
+		for c in autres[g]:
+			_histoire.add_do_method((g as GridMap).set_cell_item.bind(c, autres[g][c][1]))
+			_histoire.add_undo_method((g as GridMap).set_cell_item.bind(c, autres[g][c][0]))
+	# ⚠ SEULES LES CASES DE L'ACTION sont reconstruites (`reconstruire_autour`), dans les deux sens.
+	var touchees: Array = ch.keys()
+	for g in autres:
+		touchees.append_array((autres[g] as Dictionary).keys())
+	_histoire.add_do_method(_reconstruire.bind(massif, touchees))
+	_histoire.add_undo_method(_reconstruire.bind(massif, touchees))
 	_histoire.commit_action(not deja_fait)
 
 
-func _reconstruire(massif: Node) -> void:
-	massif.reconstruire()
+## ── LES COUCHES EXCLUSIVES (DÉCIDÉ, Jordan, 2 octobre 2026 : « cases exclusives avec priorité par l'ordre ») ──────
+## Une case n'appartient qu'à UNE couche : la poser dans la couche active la retire des autres (`_vols`). `_union`
+## ({case: rang}) est PARTAGÉE avec chaque couche (`MassifPeint.union`) : le choix des tuiles la lit, et un sommet
+## est posé par la couche de plus petit rang parmi ses huit cases (`MB.couche_du_sommet`). Seules les couches VISIBLES
+## y entrent : cacher une couche rend au monde une surface fermée sans elle.
+var _union := {}
+var _coup_autres := {}
+
+
+## Ce que poser `posees` dans la couche active retire aux autres : {grille: {case: [avant, vide]}}.
+func _vols(posees: Array) -> Dictionary:
+	var active: GridMap = _vue.cases()
+	var vols := {}
+	if posees.is_empty():
+		return vols
+	for i in _vue.nombre_de_couches():
+		var g := _vue.couche(i).get_node("Cases") as GridMap
+		if g == active:
+			continue
+		for c in posees:
+			var avant: int = g.get_cell_item(c)
+			if avant != GridMap.INVALID_CELL_ITEM:
+				if not vols.has(g):
+					vols[g] = {}
+				vols[g][c] = [avant, GridMap.INVALID_CELL_ITEM]
+	return vols
+
+
+## ⚠ LA LISTE DES COUCHES NE RECOMPTAIT JAMAIS SES CASES après un geste (« 0 cells » sur une couche peinte, vu à
+## l'image le 2 octobre 2026) — et depuis l'exclusivité, un geste change le compte d'une AUTRE couche. Une fois par
+## image au plus : un geste en rafale ne rebâtit pas la liste à chaque action.
+var _comptage_prevu := false
+
+
+func _compter_les_cases_plus_tard() -> void:
+	if _comptage_prevu:
+		return
+	_comptage_prevu = true
+	(func() -> void:
+		_comptage_prevu = false
+		_rafraichir_couches()).call_deferred()
+
+
+## L'union, relue pour ces cases (la couche visible qui la porte — une seule, puisqu'elles sont exclusives), puis
+## chaque couche autour d'elles.
+func _suivre_les_cases(cases_: Array) -> void:
+	for c in cases_:
+		_union.erase(c)
+		for i in _vue.nombre_de_couches():
+			var m := _vue.couche(i) as Node3D
+			if m.visible and (m.get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+				_union[c] = i
+				break
+	for i in _vue.nombre_de_couches():
+		_vue.couche(i).reconstruire_autour(cases_)
+
+
+## L'union entière et le rang de chaque couche — quand une couche apparaît, disparaît, se cache, se montre, ou à
+## l'ouverture. ⚠ LE DICTIONNAIRE EST VIDÉ ET REMPLI, JAMAIS REMPLACÉ : chaque couche en garde la référence.
+func _refaire_l_union() -> void:
+	_union.clear()
+	for i in range(_vue.nombre_de_couches() - 1, -1, -1):
+		var m := _vue.couche(i)
+		m.union = _union
+		m.rang = i
+		if (m as Node3D).visible:
+			for c in (m.get_node("Cases") as GridMap).get_used_cells():
+				_union[c] = i
+	for i in _vue.nombre_de_couches():
+		_vue.couche(i).reconstruire()
+
+
+## UN PROJET D'AVANT (2 octobre 2026) peut porter une case dans plusieurs couches : la plus haute la garde. Rend
+## combien de cases ont été retirées.
+func _rendre_exclusives() -> int:
+	var prises := {}
+	var retirees := 0
+	for i in _vue.nombre_de_couches():
+		var g := _vue.couche(i).get_node("Cases") as GridMap
+		for c in g.get_used_cells():
+			if prises.has(c):
+				g.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+				retirees += 1
+			else:
+				prises[c] = i
+	return retirees
+
+
+func _reconstruire(_massif: Node, touchees: Array) -> void:
+	# EN COUCHES : l'union suit ces cases, et CHAQUE couche se refait autour d'elles — une case de la roche change
+	# aussi les sommets de frontière de la glace.
+	_suivre_les_cases(touchees)
+	_compter_les_cases_plus_tard()
 	_vue.rafraichir()
 	_dire_l_etage()
+	_eau_perimee()   # la coulée suit le monde, dans les deux sens de l'historique
 
 
 func _occupees() -> Dictionary:
@@ -2818,7 +3762,7 @@ static func _axe_horizontal(v: Vector3) -> Vector3i:
 ## ⚠ UNE COUCHE SANS TUILES EST REFUSÉE, et on le dit : exporter le repli procédural livrerait des
 ## tuiles que personne n'a sculptées, sous le nom de l'artiste.
 func _exporter_le_jeu(dossier: String) -> void:
-	_rhabiller_les_mondes()
+	await _rhabiller_avec_attente()
 	var massif: Node = _vue.monde()
 	if massif == null or _couches[_active]["source"] == "" or massif.lot == null:
 		_dire("[color=#e0603c]Nothing to export.[/color] This layer has no tiles yet — slice the witness "
@@ -2844,7 +3788,7 @@ func _exporter_le_jeu(dossier: String) -> void:
 
 ## LE MONDE ENTIER, toutes couches, vers les greffons (`format_monde.gd`).
 func _exporter_le_monde(dossier: String) -> void:
-	_rhabiller_les_mondes()
+	await _rhabiller_avec_attente()
 	var couches: Array = []
 	for i in _couches.size():
 		var massif: Node = _vue.couche(i)
@@ -2854,7 +3798,14 @@ func _exporter_le_monde(dossier: String) -> void:
 	await _attendre("Exporting the world", "%d layer(s)" % couches.size())
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
 	var nom: String = _projet.get_file().get_basename() if _projet != "" else "world"
-	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version)
+	# L'EAU PART CUITE : la nappe de chaque couche d'eau, telle que la vue la montre, avec ses sources.
+	_recalculer_eau(false)
+	var eaux: Array = []
+	var nappes: Array = _vue.nappes()
+	for i in _eaux.size():
+		eaux.append({"nom": _eaux[i]["nom"], "visible": _eaux[i]["visible"], "preset": _eaux[i]["preset"],
+			"sources": _eaux[i]["sources"], "maillage": (nappes[i] as MeshInstance3D).mesh if i < nappes.size() else null})
+	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux)
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 		for sous in DirAccess.get_directories_at(str(r["dossier"])):
@@ -2865,6 +3816,10 @@ func _exporter_le_monde(dossier: String) -> void:
 		return
 	var texte := ("[color=#b4bd85][b]World written[/b][/color] → %s\n%d layer(s), %d tileset(s). In your "
 		+ "engine: [b]Import MarchingBlocks world[/b].") % [r["dossier"], r["couches"], r["jeux"]]
+	if int(r.get("eaux", 0)) > 0:
+		texte += ("
+%d water layer(s), baked with their flow, kind and depth (%d mesh(es)). The plugins do not "
+			+ "show water yet.") % [r["eaux"], r["nappes"]]
 	if not (r["sans_tuiles"] as Array).is_empty():
 		texte += ("\n\n[color=#f2ca79]%d layer(s) have no tiles yet[/color] — their cells travel, the engine "
 			+ "shows them without tiles: %s") % [(r["sans_tuiles"] as Array).size(),
@@ -2913,9 +3868,20 @@ func _colle(ancre: Vector3i) -> void:
 
 ## Une rangée de boutons exclusifs. `choix` : [clé, libellé, icône, infobulle]. Avec la variante OUTIL,
 ## l'icône est AU-DESSUS du nom : de grands boutons carrés qu'on trouve sans lire.
-func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable, variante := "") -> Control:
-	var ligne := HBoxContainer.new()
-	ligne.add_theme_constant_override("separation", 5)
+## `colonnes` > 0 : en GRILLE de tant de colonnes — six formes spéciales en une rangée élargissaient toute la barre
+## de droite, qui débordait de l'écran (vu à l'image).
+func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable, variante := "", colonnes := 0) -> Control:
+	var ligne: Container
+	if colonnes > 0:
+		var grille := GridContainer.new()
+		grille.columns = colonnes
+		grille.add_theme_constant_override("h_separation", 5)
+		grille.add_theme_constant_override("v_separation", 5)
+		ligne = grille
+	else:
+		var rangee := HBoxContainer.new()
+		rangee.add_theme_constant_override("separation", 5)
+		ligne = rangee
 	var groupe := ButtonGroup.new()
 	for c in choix:
 		var b := Button.new()
@@ -2957,6 +3923,8 @@ func _choisir_visee(v: String) -> void:
 func _choisir_outil(o: String) -> void:
 	_vue.outil = o
 	(_boutons_outil[o] as Button).button_pressed = true
+	if _bouton_eau != null:
+		_bouton_eau.set_pressed_no_signal(false)
 	for b in _boutons_forme_speciale.values():
 		(b as Button).set_pressed_no_signal(false)
 	_vue.oublier_ancre()
@@ -2970,6 +3938,8 @@ func _choisir_forme_speciale(quoi: String) -> void:
 	_vue.oublier_ancre()
 	for b in _boutons_outil.values():
 		(b as Button).set_pressed_no_signal(false)
+	if _bouton_eau != null:
+		_bouton_eau.set_pressed_no_signal(false)
 	(_boutons_forme_speciale[quoi] as Button).button_pressed = true
 	_basculer_navigation(false)
 	_contexte_des_outils()
@@ -2990,7 +3960,8 @@ func _choisir_le_profil(v: String) -> void:
 	_vue.rafraichir()
 
 
-const NOMS_DE_FORME := {"tunnel": "Tunnel", "puits": "Well", "pont": "Bridge", "balcon": "Balcony"}
+const NOMS_DE_FORME := {"tunnel": "Tunnel", "puits": "Well", "pont": "Bridge", "balcon": "Balcony",
+	"escalier": "Stairs", "salle": "Room"}
 
 
 ## Une forme posée : UNE action, donc UN Ctrl+Z, par la seule entrée de tout ce qui change des cases.
@@ -3013,7 +3984,7 @@ func _forme_posee(modif: Dictionary, quoi: String, info: Dictionary) -> void:
 func _forme_dite(code: String, info: Dictionary) -> void:
 	var quoi: String = _vue.forme_speciale["quoi"]
 	var nom: String = NOMS_DE_FORME.get(quoi, "")
-	var surface: String = "floor or ceiling" if quoi == "puits" else "wall"
+	var surface: String = {"puits": "floor or ceiling", "escalier": "floor"}.get(quoi, "wall")
 	match code:
 		"ancre":
 			var n: Vector3i = info["normale"]
@@ -3025,6 +3996,11 @@ func _forme_dite(code: String, info: Dictionary) -> void:
 			_dire("[color=#e0603c]%s[/color] — click a WALL, a side face of the matter." % nom)
 		"pas_un_sol":
 			_dire("[color=#e0603c]Well[/color] — click a FLOOR or a CEILING, a top or bottom face.")
+		"pas_un_dessus":
+			_dire("[color=#e0603c]Stairs[/color] — in Connect, click two FLOORS, the top face of the matter.")
+		"trop_raide":
+			_dire("[color=#e0603c]Stairs[/color] — too steep: one cell up for each cell across at most. "
+				+ "Pick two floors further apart.")
 		"meme_case":
 			_dire("[color=#e0603c]%s[/color] — the second end must be another cell." % nom)
 		"trop_long":
@@ -3034,6 +4010,8 @@ func _forme_dite(code: String, info: Dictionary) -> void:
 				% int(_vue.forme_speciale["longueur"]))
 		"trop_grand":
 			_dire("[color=#e0603c]%s[/color] — too large. Make it smaller or shorter." % nom)
+		"trop_petit":
+			_dire("[color=#e0603c]Room[/color] — draw at least 3 × 3 cells: the walls need an inside between them.")
 		_:
 			_dire("[color=#e0603c]%s[/color] — %s" % [nom, code])
 
@@ -3058,6 +4036,21 @@ func _selection_changee() -> void:
 	_bouton_coller.disabled = _presse_papiers.is_empty()
 	_etiquette_portee.text = ("acts on the selection (%d cells)" % n) if n > 0 \
 		else "acts on floor y = %d" % _vue.etage
+
+
+## CTRL+CLIC : la grille passe à l'étage de la case de matière touchée, et on le DIT — l'étage change
+## hors de la vue de celui qui regarde la barre.
+func _etage_sur_la_matiere(c: Variant) -> void:
+	if c == null:
+		_dire("[i]Ctrl+click: no matter under the cursor — floor unchanged (y = %d).[/i]" % _vue.etage)
+		return
+	var y: int = (c as Vector3i).y
+	if y < int(_compteur_etage.min_value) or y > int(_compteur_etage.max_value):
+		_dire("[color=#e0603c]Floor y = %d is out of range[/color] (%d to %d) — floor unchanged." \
+			% [y, int(_compteur_etage.min_value), int(_compteur_etage.max_value)])
+		return
+	_compteur_etage.value = y
+	_dire("[b]Grid moved to floor y = %d[/b] — the height of the matter you Ctrl+clicked." % y)
 
 
 func _dire_l_etage() -> void:
@@ -3089,6 +4082,9 @@ func _ajouter_couche(etat: Dictionary) -> int:
 			id = ""
 	_couches.append({"nom": etat["nom"], "source": etat["source"], "visible": etat["visible"],
 		"temoin": str(etat.get("temoin", "")), "id": id if id != "" else _nouvel_id()})
+	# La dernière de la liste : la moins prioritaire. Vide, elle ne change rien à l'union.
+	massif.union = _union
+	massif.rang = _couches.size() - 1
 	return _couches.size() - 1
 
 
@@ -3153,14 +4149,40 @@ func _detacher_couche(massif: Node) -> void:
 	_vue.detacher_couche(massif)
 	_couches.remove_at(i)
 	_detachees.append(massif)
+	_refaire_l_union()   # les rangs ont glissé
 	_activer(mini(i, _couches.size() - 1))
+	_eau_perimee()
 
 
 func _rattacher_couche(massif: Node, etat: Dictionary, i: int) -> void:
 	_detachees.erase(massif)
 	_vue.inserer_couche(massif, i)
 	_couches.insert(i, etat)
+	_refaire_l_union()
 	_activer(i)
+	_eau_perimee()
+
+
+## ↑ ↓ (Jordan, 2 octobre 2026) : la couche active change de place d'un cran — UNE action, un Ctrl+Z. Ses cases
+## et son témoin ne bougent pas ; seule la priorité change, donc les coins des frontières.
+func _deplacer_couche(sens: int) -> void:
+	var de := _active
+	var vers := de + sens
+	if vers < 0 or vers >= _couches.size():
+		return
+	_histoire.create_action("Move layer « %s » %s" % [_couches[de]["nom"], "up" if sens < 0 else "down"])
+	_histoire.add_do_method(_echanger_couches.bind(de, vers))
+	_histoire.add_undo_method(_echanger_couches.bind(vers, de))
+	_histoire.commit_action()
+
+
+func _echanger_couches(de: int, vers: int) -> void:
+	_vue.deplacer_couche(de, vers)
+	var etat: Dictionary = _couches[de]
+	_couches.remove_at(de)
+	_couches.insert(vers, etat)
+	_refaire_l_union()   # les rangs ont changé : les sommets des frontières changent de propriétaire
+	_activer(vers)
 
 
 func _renommer_couche() -> void:
@@ -3175,6 +4197,7 @@ func _renommer_couche() -> void:
 func _montrer_couche(i: int, oui: bool) -> void:
 	_couches[i]["visible"] = oui
 	_vue.couche(i).visible = oui
+	_refaire_l_union()   # une couche cachée sort de l'union : le monde se referme sans elle
 	_enregistrer()
 
 
@@ -3185,6 +4208,9 @@ func _rafraichir_couches() -> void:
 		return
 	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
 	_bouton_supprimer_couche.disabled = _couches.size() <= 1
+	if _bouton_monter_couche != null:
+		_bouton_monter_couche.disabled = _active <= 0
+		_bouton_descendre_couche.disabled = _active >= _couches.size() - 1
 	for enfant in _liste_couches.get_children():
 		_liste_couches.remove_child(enfant)
 		enfant.queue_free()
@@ -3255,6 +4281,12 @@ func _dire_la_source(c: Dictionary) -> String:
 func _ouvrir_au_lancement() -> void:
 	# ⚠ UN DOUBLE-CLIC SUR UN .mbproj LANCE L'APPLI AVEC SON CHEMIN (`Associations`) : il l'emporte sur le dernier
 	# projet ouvert.
+	# `--open-example` : l'exemple livré, directement (une démo, et l'épreuve de l'exe sans clic).
+	if OS.get_cmdline_args().has("--open-example") or OS.get_cmdline_user_args().has("--open-example"):
+		var erreurs: Array = []
+		var exemple := Exemple.installer(Exemple.ARCHIVE, Exemple.RACINE, erreurs)
+		if exemple != "" and await _ouvrir(exemple):
+			return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
 	if passe != "" and await _ouvrir(passe):
 		return
@@ -3264,6 +4296,17 @@ func _ouvrir_au_lancement() -> void:
 	if dernier != "" and FileAccess.file_exists(dernier) and await _ouvrir(dernier):
 		return
 	_nouveau_projet()
+
+
+## L'exemple, installé une fois par version dans les données de l'appli (`Exemple.installer`), puis ouvert comme
+## n'importe quel projet.
+func _ouvrir_l_exemple() -> void:
+	var erreurs: Array = []
+	var chemin := Exemple.installer(Exemple.ARCHIVE, Exemple.RACINE, erreurs)
+	if chemin == "":
+		_dire("[color=#e0603c]Cannot open the example[/color] — %s" % ", ".join(PackedStringArray(erreurs)))
+		return
+	await _ouvrir(chemin)
 
 
 func _nouveau_projet() -> void:
@@ -3287,6 +4330,9 @@ func _chemin_libre() -> String:
 
 
 func _vider_le_projet() -> void:
+	# ⚠ Le projet qu'on quitte garde son dernier geste, même s'il attendait encore sa seconde.
+	if _attend(_minuterie_projet):
+		_enregistrer()
 	_histoire.clear_history()
 	_temoins_sales.clear()
 	_modeleur.temoin = null
@@ -3296,7 +4342,17 @@ func _vider_le_projet() -> void:
 	_detachees.clear()
 	_vue.vider_couches()
 	_couches.clear()
+	_union.clear()
 	_active = 0
+	_eaux.clear()
+	_eau_active = 0
+	_corps_eau.clear()
+	_ocean_eau = {}
+	_occ_eau = {}
+	_index_eau.clear()
+	_eau_vide = false
+	if _vue != null:
+		_vue.poser_eaux([])
 
 
 ## Rend vrai si le projet est ouvert. ⚠ Chaque couche est habillée de son lot EN CACHE s'il est à jour,
@@ -3314,6 +4370,10 @@ func _ouvrir(chemin: String) -> bool:
 	_vider_le_projet()
 	_projet = chemin
 	var notes: Array = []
+	# LA BARRE AVANCE D'UNE COUCHE À L'AUTRE (chaque couche : ses cases, son lot, parfois un tranchage).
+	var avec_barre := _ecran_vivant()
+	if avec_barre:
+		await _attendre("Opening the project", chemin.get_file(), (etat["couches"] as Array).size())
 	for c in etat["couches"]:
 		var i := _ajouter_couche(c)
 		_vue.activer(i)
@@ -3324,6 +4384,10 @@ func _ouvrir(chemin: String) -> bool:
 		var note: String = await _habiller_couche(i)
 		if note != "":
 			notes.append(note)
+		if avec_barre:
+			await _avancer("layer « %s »" % c["nom"])
+	if avec_barre:
+		_fin_attente()
 	# ⚠ UN PROJET D'AVANT LE 30 SEPTEMBRE 2026 a UN témoin modélisé (`<projet>_witness.mbtiles`) : il est confié à
 	# la couche qui le tranchait (sa source est `<projet>_witness.glb`), sinon à la couche active. Rien n'est
 	# copié ni écrasé : la couche le désigne.
@@ -3335,6 +4399,14 @@ func _ouvrir(chemin: String) -> bool:
 				cible = k
 		_couches[cible]["temoin"] = ancien
 		notes.append("The modelled witness of this project now belongs to layer « %s »." % _couches[cible]["nom"])
+	var retirees := _rendre_exclusives()
+	if retirees > 0:
+		notes.append(("%d cell(s) belonged to several layers: each now belongs to the upper one (layers are exclusive "
+			+ "since 0.9.0).") % retirees)
+	_refaire_l_union()
+	for e in etat.get("eaux", []):
+		_ajouter_eau(e)
+	_eau_active = 0
 	_ouverture = false
 	_activer(etat["active"])
 	_retenir_le_projet()
@@ -3352,6 +4424,9 @@ func _habiller_couche(i: int) -> String:
 	var c: Dictionary = _couches[i]
 	var massif: Node = _vue.couche(i)
 	if c["source"] == "":
+		# ⚠ Ses cases viennent d'être posées : sans lot à donner, rien d'autre ne la reconstruirait (le prochain
+		# geste ne reconstruit plus que ses alentours).
+		massif.reconstruire()
 		return ""
 	var cache: Dictionary = Projet.lire_cache(c["source"])
 	if cache["a_jour"]:
@@ -3378,6 +4453,8 @@ func _habiller_couche(i: int) -> String:
 func _enregistrer() -> void:
 	if _ouverture or _projet == "" or _couches.is_empty():
 		return
+	if _minuterie_projet != null:
+		_minuterie_projet.stop()   # ce qui attendait est écrit maintenant
 	_dire_le_projet()
 	var sorties: Array = []
 	for i in _couches.size():
@@ -3394,7 +4471,7 @@ func _enregistrer() -> void:
 			% [_projet, FileAccess.get_open_error()])
 		_dire_enregistre("echec")
 		return
-	f.store_string(Projet.vers_texte(sorties, _active))
+	f.store_string(Projet.vers_texte(sorties, _active, _eaux))
 	f.close()
 	var e: int = DirAccess.rename_absolute(provisoire, _projet)
 	if e != OK:
@@ -3403,7 +4480,23 @@ func _enregistrer() -> void:
 		_dire_enregistre("echec")
 		return
 	# Un témoin modifié attend encore sa seconde : l'état reste « Saving… » jusqu'à ce qu'il soit écrit.
-	_dire_enregistre("en_cours" if _minuterie_temoin != null and not _minuterie_temoin.is_stopped() else "enregistre")
+	_dire_enregistre("enregistre")
+
+
+## ⚠ L'HISTORIQUE N'ÉCRIT PLUS À CHAQUE GESTE (Jordan, 1er octobre 2026 : « une toute petite opération fait
+## lagger »). Chaque coup, chaque opération, chaque Ctrl+Z relançait l'écriture du projet ENTIER (~18 ms sur 12 474
+## cases, mesuré) : une rafale de vingt Ctrl+Z en écrivait vingt. Il attend désormais une seconde de calme, comme
+## le témoin ; la fermeture, Ctrl+S, le changement de projet et chaque passage par `_toujours_ecrire` l'écrivent
+## tout de suite. La barre de titre dit « ● Saving… » pendant la seconde.
+func _enregistrer_plus_tard() -> void:
+	if _ouverture or _projet == "" or _couches.is_empty():
+		return
+	_minuterie_projet.start()
+	_dire_enregistre("en_cours")
+
+
+static func _attend(minuterie: Timer) -> bool:
+	return minuterie != null and not minuterie.is_stopped()
 
 
 ## LES FICHIERS DANS WINDOWS : au premier lancement (et quand l'exécutable a changé de place ou de version),
@@ -3471,6 +4564,9 @@ func _enregistrer_tout() -> void:
 func _dire_enregistre(etat: String) -> void:
 	if _etat_enregistre == null:
 		return
+	# Tant qu'une écriture attend sa seconde (le projet ou un témoin), rien n'est encore « Saved ».
+	if etat == "enregistre" and (_attend(_minuterie_projet) or _attend(_minuterie_temoin)):
+		etat = "en_cours"
 	match etat:
 		"en_cours":
 			_etat_enregistre.text = "● Saving…"
@@ -3550,6 +4646,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_aller_a("monde")
 			KEY_BACKSPACE:
 				_vue.reapparaitre()
+			KEY_F:
+				_basculer_vol()
 			_:
 				return
 		get_viewport().set_input_as_handled()
@@ -3574,12 +4672,16 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		KEY_R:
 			_choisir_outil("rect")
 		KEY_BRACKETLEFT:
-			if _vue.outil == "forme":
+			if _vue.outil == "forme" and _vue.forme_speciale["quoi"] == "salle":
+				_etages_forme.value -= 1
+			elif _vue.outil == "forme":
 				_taille_forme.value -= 1
 			else:
 				_taille.value -= 1
 		KEY_BRACKETRIGHT:
-			if _vue.outil == "forme":
+			if _vue.outil == "forme" and _vue.forme_speciale["quoi"] == "salle":
+				_etages_forme.value += 1
+			elif _vue.outil == "forme":
 				_taille_forme.value += 1
 			else:
 				_taille.value += 1
@@ -3651,7 +4753,7 @@ func _touche_du_temoin(k: InputEventKey) -> bool:
 	if focus is LineEdit or focus is TextEdit:
 		return false
 	if k.keycode == KEY_TAB and not k.echo and _modeleur.modal == "":
-		_regler_edition(not _vue.edition)
+		_basculer_edition(not _vue.edition)
 		return true
 	# Les vues du pavé numérique, en édition comme hors édition (sauf pendant un geste : on tape un nombre).
 	if _modeleur.modal == "":

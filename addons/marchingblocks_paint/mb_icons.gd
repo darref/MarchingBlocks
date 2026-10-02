@@ -43,6 +43,7 @@ const STROKES := {
 	"shrink": '<path d="M9 3.5V9H3.5M20.5 9H15V3.5M15 20.5V15h5.5M3.5 15H9v5.5"/>',
 	"sphere": '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12a8.5 3.2 0 0 0 17 0"/>',
 	"square": '<rect x="4.5" y="4.5" width="15" height="15" rx="1"/>',
+	"stairs": '<path d="M2.5 20.5h19V3.5"/><path d="M2.5 20.5v-4h4.75v-4H12v-4h4.75v-4h4.75"/>',
 	"straight": '<path d="M3.5 12h12M11.5 7.5l4.5 4.5-4.5 4.5"/><path d="M20 4v16"/>',
 	"tunnel": '<path d="M3 20.5h18M3 20.5V4.5h18v16"/><path d="M8.5 20.5v-6a3.5 3.5 0 0 1 7 0v6"/>',
 	"up": '<path d="M12 19.5v-15M5.5 11 12 4.5 18.5 11"/>',

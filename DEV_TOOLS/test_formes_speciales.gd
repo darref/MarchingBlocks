@@ -1,7 +1,7 @@
 extends SceneTree
 ##
 ## TEST — les formes spéciales (`addons/marchingblocks_core/formes_speciales.gd`) : tunnel, puits, pont,
-## balcon, d'un clic ou en reliant deux ancres, parois diagonales comprises.
+## balcon et escalier, d'un clic ou en reliant deux ancres, parois diagonales comprises.
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_formes_speciales.gd
@@ -29,10 +29,47 @@ func _initialize() -> void:
 	_paroi_diagonale()
 	_coude()
 	_balcon()
+	_escalier()
+	_escalier_relie()
 	_erreurs()
 	_reparation()
+	_salle()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	quit(1 if _echecs > 0 else 0)
+
+
+## LA SALLE (2 octobre 2026). Attendus déroulés à la main :
+##   rectangle (0,0,0)–(2,0,2), 1 étage, vers le haut, monde vide : un cube 3 × 3 × 3 (y = 0..2), coque de 26 cases,
+##   le dedans (1,1,1) vide ; vers le bas : y = −2..0, le rectangle est le plafond ;
+##   dans la roche pleine, rectangle (0,0,0)–(4,0,3), 2 étages : rien à poser, le dedans creusé — x 1..3, z 1..2,
+##   y 1..2 = 12 cases ;
+##   une case du monde en (3,3,2) touche le coin (2,2,2) de la coque par une arête : la forme comble la paire vide
+##   (3,2,2) et (2,3,2), et le monde n'a aucun contact par une arête (`MB.contacts_par_arete`, l'autorité à part).
+func _salle() -> void:
+	var r := FS.salle({}, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 1, true)
+	_egal([r["erreur"], r["poser"].size(), r["effacer"].size()], ["", 26, 0], "salle 3 × 3, 1 étage : une coque de 26 cases")
+	_vrai(not r["poser"].has(Vector3i(1, 1, 1)) and r["poser"].has(Vector3i(1, 2, 1)) and r["poser"].has(Vector3i(1, 0, 1)),
+		"… creuse dedans, avec son sol et son plafond")
+	_egal(r["boite"], [Vector3i(0, 0, 0), Vector3i(2, 2, 2)], "… de y = 0 à 2 : le rectangle tracé est le sol")
+	r = FS.salle({}, Vector3i(2, 0, 2), Vector3i(0, 0, 0), 1, false)
+	_egal(r["boite"], [Vector3i(0, -2, 0), Vector3i(2, 0, 2)], "vers le bas : de y = −2 à 0, le rectangle est le plafond")
+	_vrai(r["poser"].has(Vector3i(0, -2, 0)) and not r["poser"].has(Vector3i(1, -1, 1)), "… creuse elle aussi")
+	var roche := {}
+	_boite(roche, Vector3i(-5, -5, -5), Vector3i(9, 9, 9))
+	r = FS.salle(roche, Vector3i(0, 0, 0), Vector3i(4, 0, 3), 2, true)
+	var dedans := {}
+	_boite(dedans, Vector3i(1, 1, 1), Vector3i(3, 2, 2))
+	_egal(r["poser"].size(), 0, "dans la roche pleine : rien à poser")
+	_egal_ens(r["effacer"], dedans, "… le dedans est creusé : x 1..3, z 1..2, y 1..2")
+	var m := {Vector3i(3, 3, 2): true}
+	r = FS.salle(m, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 1, true)
+	_vrai(r["reparees"] == 2 and r["poser"].has(Vector3i(3, 2, 2)) and r["poser"].has(Vector3i(2, 3, 2)),
+		"une case qui touche un coin par une arête : la paire vide est comblée (%d)" % r["reparees"])
+	_egal(MB.contacts_par_arete(_apres(m, r)), 0, "… et le monde n'a plus aucun contact par une arête")
+	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(1, 0, 5), 2, true)["erreur"], "trop_petit", "2 cases de large : refusée")
+	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(99, 0, 99), 30, true)["erreur"], "trop_grand", "100 × 100 × 32 : refusée")
+	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 999, true)["boite"][1].y, FS.ETAGES_MAXI + 1,
+		"les étages sont bornés à %d" % FS.ETAGES_MAXI)
 
 
 # ── les mondes ───────────────────────────────────────────────────────────────────────────────────────
@@ -429,6 +466,207 @@ func _balcon() -> void:
 	_vrai(MB.contacts_par_arete(_apres(escalier, r)) <= MB.contacts_par_arete(escalier), "… sans damier de plus")
 
 
+# ── 8 bis. l'escalier d'un clic ──────────────────────────────────────────────────────────────────────
+#
+# Une falaise (x = −3..0, y = 0..6) sur un sol (y = 0, x = 1..10). On clique sa paroi +X en A = (0,4,0) :
+# l'escalier ARRIVE au niveau de A. Taille 1 (une case de large, z = 0), pas 1 : la rangée j (x = j) a son
+# dessus à 4 − (j − 1) = 5 − j, et sa colonne descend jusqu'au sol (y = 1).
+#   x = 1 : y 1..4 · x = 2 : y 1..3 · x = 3 : y 1..2 · x = 4 : y 1 · x = 5 : dessus y = 0, le sol → fin.
+# Pas 2 : dessus 4, 4, 3, 3, 2, 2, 1, 1 (x = 1..8) puis 0 → fin ; avec Depth 5, x = 1..5.
+
+func _falaise() -> Dictionary:
+	var d := {}
+	_boite(d, Vector3i(-3, 0, -4), Vector3i(0, 6, 4))
+	_boite(d, Vector3i(1, 0, -4), Vector3i(10, 0, 4))
+	return d
+
+
+static func _colonnes(hauteurs: Dictionary, z0: int, z1: int, bas: int) -> Dictionary:
+	var d := {}
+	for x in hauteurs:
+		for z in range(z0, z1 + 1):
+			for y in range(bas, int(hauteurs[x]) + 1):
+				d[Vector3i(x, y, z)] = true
+	return d
+
+
+func _escalier() -> void:
+	print("── l'escalier d'un clic")
+	var falaise := _falaise()
+	var base := {"quoi": "escalier", "a": Vector3i(0, 4, 0), "face_a": Vector3i(1, 0, 0), "taille": 1,
+		"longueur": 8, "pas": 1}
+	var r: Dictionary = FS.forme(falaise, base)
+	_egal(r["erreur"], "", "un escalier contre une falaise est accepté")
+	_egal_ens(r["poser"], _colonnes({1: 4, 2: 3, 3: 2, 4: 1}, 0, 0, 1),
+		"pas 1 : il arrive au niveau cliqué et descend d'une case par rangée jusqu'au sol, déroulé à la main")
+	_vrai(r["effacer"].is_empty(), "… et il ne creuse rien")
+	r = FS.forme(falaise, base.merged({"pas": 2}, true))
+	_egal_ens(r["poser"], _colonnes({1: 4, 2: 4, 3: 3, 4: 3, 5: 2, 6: 2, 7: 1, 8: 1}, 0, 0, 1),
+		"pas 2 : des marches de deux rangées")
+	r = FS.forme(falaise, base.merged({"pas": 2, "longueur": 5}, true))
+	_egal_ens(r["poser"], _colonnes({1: 4, 2: 4, 3: 3, 4: 3, 5: 2}, 0, 0, 1),
+		"Depth borne le nombre de rangées")
+	# Taille 2 (trois de large, z = −1..1) et garde-corps : une case au-dessus du dessus, sur les deux bords.
+	r = FS.forme(falaise, base.merged({"taille": 2, "garde_corps": true}, true))
+	var attendu := _colonnes({1: 4, 2: 3, 3: 2, 4: 1}, -1, 1, 1)
+	for x in [1, 2, 3, 4]:
+		for z in [-1, 1]:
+			attendu[Vector3i(x, 6 - x, z)] = true
+	_egal_ens(r["poser"], attendu, "trois de large, le garde-corps sur les deux bords")
+	_egal(r["reparees"], 0, "… sans rien à réparer")
+	# Au-dessus du vide (la paroi sans sol) : une volée de DEUX cases d'épaisseur.
+	var plat := {}
+	_boite(plat, Vector3i(-3, 0, -4), Vector3i(0, 6, 4))
+	r = FS.forme(plat, base.merged({"a": Vector3i(0, 3, 0), "longueur": 3}, true))
+	_egal_ens(r["poser"], _liste([Vector3i(1, 3, 0), Vector3i(1, 2, 0), Vector3i(2, 2, 0), Vector3i(2, 1, 0),
+		Vector3i(3, 1, 0), Vector3i(3, 0, 0)]), "au-dessus du vide : une volée de deux cases d'épaisseur")
+	_egal(MB.contacts_par_arete(_apres(plat, r)), MB.contacts_par_arete(plat), "… sans aucune arête de contact")
+	# Déjà au sol : la première rangée est pleine, rien à poser.
+	r = FS.forme(falaise, base.merged({"a": Vector3i(0, 0, 0)}, true))
+	_vrai(r["erreur"] == "" and r["poser"].is_empty(), "cliqué au pied de la paroi : rien à poser")
+	# Sur la paroi diagonale (x + z ≤ 0) posée sur un sol : dans l'air, devant elle, jamais plus haut que A,
+	# sans damier de plus ; et chaque colonne voisine diffère d'au plus une case.
+	var biais := {}
+	for x in range(-8, 13):
+		for z in range(-8, 13):
+			_boite(biais, Vector3i(x, 0, z), Vector3i(x, 6 if x + z <= 0 else 0, z))
+	r = FS.forme(biais, base.merged({"taille": 2}, true))
+	var mal := 0
+	for c in r["poser"]:
+		var q: Vector3i = c
+		if biais.has(q) or q.y > 5 or q.x + q.z <= 0:
+			mal += 1
+	_egal(mal, 0, "sur une paroi diagonale : dans l'air, devant elle, au plus au niveau cliqué")
+	_vrai(r["poser"].size() >= 12, "… et il en pose (%d cases)" % r["poser"].size())
+	var apres := _apres(biais, r)
+	_egal(MB.contacts_par_arete(apres), MB.contacts_par_arete(biais), "… sans damier de plus")
+	_egal(_pire_marche(apres, r["poser"], 6), 1, "… et jamais plus d'une case entre deux colonnes voisines")
+	# La même, déroulée à la main : n = (1,0,1), |n|² = 2, m = (−1,0,1) ; taille 2 → (z − x)² ≤ 2, pas 1,
+	# Length 3. La rangée j est le plus petit j tel que (x + z)² ≤ 2 j² :
+	#   x + z = 1 → j = 1 : (1,0) et (0,1), dessus 4 · x + z = 2 → j = 2 : (1,1), dessus 3 ·
+	#   x + z = 3 → j = 3 : (2,1) et (1,2) · x + z = 4 → j = 3 aussi (16 ≤ 18) : (2,2) ; dessus 2.
+	# Chaque colonne descend jusqu'au sol (y = 1).
+	r = FS.forme(biais, base.merged({"taille": 2, "longueur": 3}, true))
+	var diag := {}
+	for c in [[1, 0, 4], [0, 1, 4], [1, 1, 3], [2, 1, 2], [1, 2, 2], [2, 2, 2]]:
+		for y in range(1, int(c[2]) + 1):
+			diag[Vector3i(c[0], y, c[1])] = true
+	_egal_ens(r["poser"], diag, "sur la paroi diagonale, les rangées déroulées à la main (distance arrondie au-dessus)")
+
+
+## La plus grande différence de dessus entre deux colonnes VOISINES (par une face) qui portent l'escalier,
+## en ne comptant que la matière sous `plafond` (le garde-corps est au-dessus de son dessus : on le retire).
+static func _pire_marche(occ: Dictionary, poses: Dictionary, plafond: int) -> int:
+	var dessus := {}
+	for c in poses:
+		var q: Vector3i = c
+		var k := Vector3i(q.x, 0, q.z)
+		if dessus.has(k):
+			continue
+		var y := plafond
+		while y > -70 and not occ.has(Vector3i(q.x, y, q.z)):
+			y -= 1
+		dessus[k] = y
+	var pire := 0
+	for k in dessus:
+		for f in [Vector3i(1, 0, 0), Vector3i(0, 0, 1)]:
+			if dessus.has(k + f):
+				pire = maxi(pire, absi(int(dessus[k]) - int(dessus[k + f])))
+	return pire
+
+
+# ── 8 ter. l'escalier relié, de sol à sol ────────────────────────────────────────────────────────────
+#
+# Un sol (y = 0, x = −2..10) et un plateau (x = 7..10, y = 1..3). A = (1,0,0) et B = (7,3,0), cliqués par leur
+# DESSUS. D = (6,0,0), D·D = 36, R = 3, taille 1 : les colonnes x = 1..7, z = 0, dessus = 6·dx·3 / 36 = dx / 2.
+#   dx 0 (A) et dx 1 : dessus 0, déjà le sol · dx 2, 3 (x = 3, 4) : y 1 · dx 4, 5 (x = 5, 6) : y 1..2 ·
+#   dx 6 : B. On monte de A (dessus 1) à x = 3 (2), x = 5 (3), puis B (4) : une case à la fois.
+
+func _escalier_relie() -> void:
+	print("── l'escalier relié")
+	var m := {}
+	_boite(m, Vector3i(-2, 0, -3), Vector3i(10, 0, 3))
+	_boite(m, Vector3i(7, 1, -3), Vector3i(10, 3, 3))
+	var base := {"quoi": "escalier", "relier": true, "a": Vector3i(1, 0, 0), "face_a": Vector3i(0, 1, 0),
+		"b": Vector3i(7, 3, 0), "face_b": Vector3i(0, 1, 0), "taille": 1}
+	var r: Dictionary = FS.forme(m, base)
+	var attendu := _liste([Vector3i(3, 1, 0), Vector3i(4, 1, 0), Vector3i(5, 1, 0), Vector3i(5, 2, 0),
+		Vector3i(6, 1, 0), Vector3i(6, 2, 0)])
+	_egal_ens(r["poser"], attendu, "de sol à sol, les marches se partagent la longueur, déroulé à la main")
+	r = FS.forme(m, base.merged({"a": Vector3i(7, 3, 0), "b": Vector3i(1, 0, 0)}, true))
+	_egal_ens(r["poser"], attendu, "… et le même cliqué du haut vers le bas")
+	r = FS.forme(m, base.merged({"a": Vector3i(5, 0, 0)}, true))
+	_egal(r["erreur"], "trop_raide", "trois cases à monter sur deux : trop raide, refusé")
+	_vrai(r["poser"].is_empty(), "… sans rien poser")
+	r = FS.forme(m, base.merged({"face_a": Vector3i(1, 0, 0)}, true))
+	_egal(r["erreur"], "pas_un_dessus", "une paroi comme première ancre est refusée")
+	r = FS.forme(m, base.merged({"face_b": Vector3i(0, -1, 0)}, true))
+	_egal(r["erreur"], "pas_un_dessus", "un plafond comme seconde ancre est refusé")
+	r = FS.forme(m, base.merged({"b": Vector3i(1, 0, 0)}, true))
+	_egal(r["erreur"], "meme_case", "relier un sol à lui-même est refusé")
+	_egal(FS.normale_de("escalier", m, Vector3i(1, 0, 0), Vector3i(0, 1, 0), true), Vector3i(0, 1, 0),
+		"relié, l'escalier prend le dessus d'une case")
+	_egal(FS.normale_de("escalier", m, Vector3i(1, 0, 0), Vector3i(0, 1, 0)), Vector3i.ZERO,
+		"… d'un clic, il veut une paroi")
+	# En biais, fin : A = (0,0,0) → B = (9,4,5) sur un sol, une butte sous B. La surface monte de A à B par les
+	# faces, jamais plus d'une case à la fois, sans damier de plus.
+	var biais := {}
+	_boite(biais, Vector3i(-2, 0, -2), Vector3i(12, 0, 8))
+	_boite(biais, Vector3i(9, 1, 5), Vector3i(9, 4, 5))
+	r = FS.forme(biais, base.merged({"a": Vector3i(0, 0, 0), "b": Vector3i(9, 4, 5)}, true))
+	_egal(r["erreur"], "", "un escalier fin en biais est accepté")
+	var apres := _apres(biais, r)
+	_egal(MB.contacts_par_arete(apres), MB.contacts_par_arete(biais), "… sans damier de plus")
+	var pose: Dictionary = r["poser"].duplicate()
+	pose[Vector3i(0, 0, 0)] = true
+	pose[Vector3i(9, 4, 5)] = true
+	_vrai(_pire_marche(apres, pose, 4) <= 1, "… jamais plus d'une case entre deux colonnes voisines")
+	_vrai(not _a_pied(biais, Vector3i(0, 0, 0), Vector3i(9, 0, 5), Vector3i(-2, 0, -2), Vector3i(12, 0, 8)),
+		"contrôle : sans l'escalier, la butte ne se gravit pas à pied")
+	_vrai(_a_pied(apres, Vector3i(0, 0, 0), Vector3i(9, 0, 5), Vector3i(-2, 0, -2), Vector3i(12, 0, 8)),
+		"… avec lui, on va de A à B à pied, une case de montée au plus par pas")
+	# Large, avec garde-corps : le rebord est au-dessus du dessus de ses colonnes, sur les bords seulement.
+	r = FS.forme(m, base.merged({"taille": 2, "garde_corps": true}, true))
+	var rebords := 0
+	for c in r["poser"]:
+		var q: Vector3i = c
+		if absi(q.z) == 1 and not r["poser"].has(q - Vector3i(0, 1, 0)) and not m.has(q - Vector3i(0, 1, 0)):
+			rebords += 1
+	_vrai(rebords == 0, "trois de large : le garde-corps repose toujours sur une marche")
+	var au_milieu := 0
+	for c in r["poser"]:
+		var q: Vector3i = c
+		if q.z == 0 and q.y > 2:
+			au_milieu += 1
+	_egal(au_milieu, 0, "… et jamais au milieu, où l'on marche")
+
+
+## Peut-on aller à pied de la colonne `de` à la colonne `vers` (x, 0, z) dans la boîte à plat [bas, haut] ?
+## Le dessus d'une colonne est sa plus haute case pleine (sous y = 20) ; un pas va d'une colonne à sa voisine
+## par une face, et monte ou descend d'une case au plus.
+static func _a_pied(occ: Dictionary, de: Vector3i, vers: Vector3i, bas: Vector3i, haut: Vector3i) -> bool:
+	var dessus := func(c: Vector3i) -> int:
+		var y := 20
+		while y > -5 and not occ.has(Vector3i(c.x, y, c.z)):
+			y -= 1
+		return y
+	var vus := {de: true}
+	var file: Array = [de]
+	while not file.is_empty():
+		var c: Vector3i = file.pop_back()
+		if c == vers:
+			return true
+		for f in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+			var v: Vector3i = c + f
+			if vus.has(v) or v.x < bas.x or v.z < bas.z or v.x > haut.x or v.z > haut.z:
+				continue
+			if absi(int(dessus.call(v)) - int(dessus.call(c))) > 1:
+				continue
+			vus[v] = true
+			file.append(v)
+	return false
+
+
 # ── 9. les refus ─────────────────────────────────────────────────────────────────────────────────────
 
 func _erreurs() -> void:
@@ -445,7 +683,7 @@ func _erreurs() -> void:
 	r = FS.forme(mur, base.merged({"quoi": "tunnel", "relier": true, "b": Vector3i(200, 3, 0),
 		"face_b": Vector3i(1, 0, 0)}, true))
 	_egal(r["erreur"], "trop_long", "relier deux ancres trop éloignées est refusé")
-	r = FS.forme(mur, base.merged({"quoi": "escalier"}))
+	r = FS.forme(mur, base.merged({"quoi": "toboggan"}))
 	_egal(r["erreur"], "forme_inconnue", "une forme inconnue est refusée")
 	_vrai(r["poser"].is_empty() and r["effacer"].is_empty(), "un refus ne change rien")
 

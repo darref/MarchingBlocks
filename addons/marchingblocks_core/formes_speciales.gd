@@ -1,6 +1,6 @@
 @tool
 extends RefCounted
-## LES FORMES SPÉCIALES — tunnel, puits, pont et balcon, posés d'un ou deux clics.
+## LES FORMES SPÉCIALES — tunnel, puits, pont, balcon et escalier, posés d'un ou deux clics.
 ##
 ## **DEMANDÉ PAR JORDAN (1er octobre 2026)** : un onglet « Special shapes » à côté des opérations de forme.
 ## Un tunnel dans une paroi et un puits dans un sol, PERPENDICULAIRES à leur surface, capables de rejoindre
@@ -28,13 +28,15 @@ extends RefCounted
 
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 
-const QUOI := ["tunnel", "puits", "pont", "balcon"]
+const QUOI := ["tunnel", "puits", "pont", "balcon", "escalier"]
 const PROFILS := ["rond", "carre", "arche"]
 
 ## La marche droite (un clic) et la profondeur d'un balcon : au plus tant de cases.
 const LONGUEUR_MAXI := 64
 ## Deux ancres plus éloignées que ça (en cases, entre leurs centres) ne se relient pas.
 const ECART_MAXI := 128
+## L'escalier d'un clic : chaque marche fait de 1 à tant de rangées de profondeur.
+const PAS_MAXI := 4
 
 const PLANS := [
 	[Vector3i(1, 0, 0), Vector3i(0, 1, 0)],
@@ -92,13 +94,25 @@ static func normale_estimee(occupees: Dictionary, c: Vector3i, face: Vector3i) -
 
 ## La normale qu'une forme retient pour une ancre, ou ZERO si la face ne lui convient pas.
 ##   puits — la face doit être un sol ou un plafond, et la normale EST cette face ;
+##   escalier relié — la face doit être un SOL (le dessus d'une case), et la normale EST cette face ;
 ##   les autres — la face doit être une paroi (horizontale), et la normale est ESTIMÉE.
-static func normale_de(quoi: String, occupees: Dictionary, c: Vector3i, face: Vector3i) -> Vector3i:
+static func normale_de(quoi: String, occupees: Dictionary, c: Vector3i, face: Vector3i, relier := false) -> Vector3i:
 	if quoi == "puits":
 		return face if face.x == 0 and face.z == 0 and face.y != 0 else Vector3i.ZERO
+	if quoi == "escalier" and relier:
+		return face if face == Vector3i(0, 1, 0) else Vector3i.ZERO
 	if face.y != 0 or (face.x == 0 and face.z == 0):
 		return Vector3i.ZERO
 	return normale_estimee(occupees, c, face)
+
+
+## Le refus d'une ancre que `normale_de` rejette.
+static func erreur_d_ancre(quoi: String, relier: bool) -> String:
+	if quoi == "puits":
+		return "pas_un_sol"
+	if quoi == "escalier" and relier:
+		return "pas_un_dessus"
+	return "pas_de_paroi"
 
 
 static func _creuse(quoi: String) -> bool:
@@ -106,16 +120,18 @@ static func _creuse(quoi: String) -> bool:
 
 
 ## LA FORME. `r` porte :
-##   quoi        — "tunnel", "puits", "pont" ou "balcon" ;
+##   quoi        — "tunnel", "puits", "pont", "balcon" ou "escalier" ;
 ##   a, face_a   — la case cliquée et la face par laquelle on l'a visée ;
 ##   relier      — vrai : relier à la seconde ancre (b, face_b) ; faux : un clic, tout droit ;
 ##   profil      — "rond", "carre" ou "arche" (tunnel et puits ; le pont a son TABLIER) ;
 ##   taille      — 1 à 7, comme le pinceau : le demi-côté du profil est `taille - 1` ;
 ##   longueur    — un clic : la profondeur maximale (tunnel, puits), la portée (pont), la profondeur du
 ##                 balcon ;
-##   garde_corps — pont et balcon : un rebord d'une case sur leurs côtés (sans objet si taille = 1).
+##   garde_corps — pont, balcon et escalier : un rebord d'une case sur leurs côtés (sans objet si taille = 1) ;
+##   pas         — l'escalier d'un clic : la profondeur d'une marche, de 1 à `PAS_MAXI` rangées.
 ## Rend {"poser", "effacer", "erreur", "ouvert", "reparees"} ; `erreur` vide si tout va bien, sinon l'un
-## de : pas_de_paroi, pas_un_sol, meme_case, trop_long, rien_en_face, trop_grand, forme_inconnue.
+## de : pas_de_paroi, pas_un_sol, pas_un_dessus, meme_case, trop_long, trop_raide, rien_en_face, trop_grand,
+## forme_inconnue.
 ## `ouvert` (un clic, tunnel et puits) : la marche a débouché dans un vide ; sinon le conduit est aveugle.
 static func forme(occupees: Dictionary, r: Dictionary) -> Dictionary:
 	var quoi: String = r.get("quoi", "")
@@ -130,23 +146,40 @@ static func forme(occupees: Dictionary, r: Dictionary) -> Dictionary:
 	var demi: int = clampi(int(r.get("taille", 1)), 1, 7) - 1
 	var longueur: int = clampi(int(r.get("longueur", 8)), 1, LONGUEUR_MAXI)
 	var garde: bool = bool(r.get("garde_corps", false))
+	var relier: bool = bool(r.get("relier", false)) and quoi != "balcon"
 	var a: Vector3i = r["a"]
-	var na := normale_de(quoi, occupees, a, r["face_a"])
+	var na := normale_de(quoi, occupees, a, r["face_a"], relier)
 	if na == Vector3i.ZERO:
-		sortie["erreur"] = "pas_un_sol" if quoi == "puits" else "pas_de_paroi"
+		sortie["erreur"] = erreur_d_ancre(quoi, relier)
 		return sortie
 	var creuse := _creuse(quoi)
 
 	var choisies := {}
 	if quoi == "balcon":
 		choisies = _balcon(a, na, longueur, demi, garde)
+	elif quoi == "escalier":
+		if relier:
+			var b: Vector3i = r["b"]
+			if normale_de(quoi, occupees, b, r["face_b"], true) == Vector3i.ZERO:
+				sortie["erreur"] = "pas_un_dessus"
+				return sortie
+			if b == a:
+				sortie["erreur"] = "meme_case"
+				return sortie
+			if _p(b - a, b - a) > ECART_MAXI * ECART_MAXI:
+				sortie["erreur"] = "trop_long"
+				return sortie
+			choisies = _escalier_relie(occupees, a, b, demi, garde)
+		else:
+			var pas: int = clampi(int(r.get("pas", 2)), 1, PAS_MAXI)
+			choisies = _escalier(occupees, a, na, longueur, pas, demi, garde)
 	else:
 		var points: Array[Vector3i] = []
-		if bool(r.get("relier", false)):
+		if relier:
 			var b: Vector3i = r["b"]
 			var nb := normale_de(quoi, occupees, b, r["face_b"])
 			if nb == Vector3i.ZERO:
-				sortie["erreur"] = "pas_un_sol" if quoi == "puits" else "pas_de_paroi"
+				sortie["erreur"] = erreur_d_ancre(quoi, false)
 				return sortie
 			if b == a:
 				sortie["erreur"] = "meme_case"
@@ -371,8 +404,164 @@ static func _balcon(a: Vector3i, n: Vector3i, profondeur: int, demi: int, garde:
 	return corps
 
 
+## L'ESCALIER D'UN CLIC — contre une paroi, il ARRIVE au niveau de la case cliquée.
+##
+## On clique la paroi là où l'escalier doit déboucher : le palier est la rangée devant la case cliquée, son
+## dessus au niveau de celle-ci, et chaque rangée plus loin de la paroi descend. La rangée j (j ≥ 1 : le plus
+## petit j tel que (d·n)² ≤ j²·|n|², la distance à la paroi arrondie au-dessus — la règle du balcon, parois
+## diagonales comprises) a son dessus à a.y − (j − 1) / pas : une marche fait `pas` rangées.
+## L'escalier finit à la première rangée dont TOUTES les cases du dessus sont déjà pleines — il a rejoint le
+## sol —, sinon au bout de `longueur` rangées. Chaque colonne est pleine jusqu'au sol (`_colonne`).
+static func _escalier(occupees: Dictionary, a: Vector3i, n: Vector3i, longueur: int, pas: int, demi: int,
+		garde: bool) -> Dictionary:
+	var nn: int = _p(n, n)
+	var m := Vector3i(-n.z, 0, n.x)
+	var portee: int = longueur + demi + 1
+	var rangees := {}
+	for x in range(-portee, portee + 1):
+		for z in range(-portee, portee + 1):
+			var d := Vector3i(x, 0, z)
+			var av: int = _p(d, n)
+			var lat: int = _p(d, m)
+			if av <= 0 or lat * lat > demi * demi * nn:
+				continue
+			var j := 1
+			while av * av > j * j * nn:
+				j += 1
+			if j > longueur:
+				continue
+			if not rangees.has(j):
+				rangees[j] = []
+			rangees[j].append(d)
+	var corps := {}
+	for j in range(1, longueur + 1):
+		if not rangees.has(j):
+			continue
+		var dessus: int = a.y - (j - 1) / pas
+		var au_sol := true
+		for d in rangees[j]:
+			if not occupees.has(Vector3i(a.x + d.x, dessus, a.z + d.z)):
+				au_sol = false
+				break
+		if au_sol:
+			break
+		for d in rangees[j]:
+			var lat: int = _p(d, m)
+			var bord: bool = garde and demi >= 1 and lat * lat > (demi - 1) * (demi - 1) * nn
+			_colonne(occupees, corps, Vector3i(a.x + d.x, dessus, a.z + d.z), bord)
+	return corps
+
+
+## L'ESCALIER RELIÉ — de SOL à SOL : deux cases cliquées par leur dessus, l'escalier monte de la plus basse
+## (L) à la plus haute (H), en ligne droite à plat.
+##
+## D = (H − L) à plat, R = H.y − L.y. Une colonne c est dans la bande quand, d = c − L à plat, t = d·D est dans
+## [0, D·D] et (d·u)² ≤ demi²·D·D (u = (−D.z, 0, D.x)) ; plus la traversée à plat de L à H, pour qu'un
+## escalier fin reste relié par les faces. Son dessus : L.y + t·R / D·D (division entière, t ramené dans
+## [0, D·D]) — les marches se partagent la longueur, et deux colonnes voisines ne diffèrent jamais de plus
+## d'une case. ⚠ **PLUS RAIDE QU'UNE CASE PAR CASE, C'EST REFUSÉ** (R² > D·D : trop_raide) : il faudrait
+## sauter. Le `pas` ne sert pas ici : c'est l'écart des deux sols qui le fixe.
+static func _escalier_relie(occupees: Dictionary, a: Vector3i, b: Vector3i, demi: int, garde: bool) -> Dictionary:
+	var bas: Vector3i = a if a.y <= b.y else b
+	var haut: Vector3i = b if a.y <= b.y else a
+	var bas_plat := Vector3i(bas.x, 0, bas.z)
+	var dv := Vector3i(haut.x - bas.x, 0, haut.z - bas.z)
+	var ddv: int = _p(dv, dv)
+	var montee: int = haut.y - bas.y
+	if montee * montee > ddv:
+		return {"erreur": "trop_raide"}
+	var u := Vector3i(-dv.z, 0, dv.x)
+	var colonnes := {}
+	for x in range(mini(bas.x, haut.x) - demi - 1, maxi(bas.x, haut.x) + demi + 2):
+		for z in range(mini(bas.z, haut.z) - demi - 1, maxi(bas.z, haut.z) + demi + 2):
+			var d := Vector3i(x - bas.x, 0, z - bas.z)
+			var t: int = _p(d, dv)
+			var lat: int = _p(d, u)
+			if t >= 0 and t <= ddv and lat * lat <= demi * demi * ddv:
+				colonnes[Vector3i(x, 0, z)] = true
+	for q in traverser(bas_plat, Vector3i(haut.x, 0, haut.z)):
+		colonnes[q] = true
+	var corps := {}
+	for c in colonnes:
+		var d: Vector3i = c - bas_plat
+		var t: int = clampi(_p(d, dv), 0, ddv)
+		var lat: int = _p(d, u)
+		var bord: bool = garde and demi >= 1 and lat * lat > (demi - 1) * (demi - 1) * ddv
+		_colonne(occupees, corps, Vector3i(c.x, bas.y + t * montee / ddv, c.z), bord)
+	return corps
+
+
+## Une colonne d'escalier : son dessus et tout ce qui est vide dessous, jusqu'au sol. ⚠ Sans sol à moins de
+## `LONGUEUR_MAXI` cases (un escalier au-dessus du vide), une volée de DEUX cases d'épaisseur : une seule
+## laisserait deux marches voisines se toucher par une arête. Un dessus déjà plein : rien. Le bord porte le
+## garde-corps, la case au-dessus de son dessus.
+static func _colonne(occupees: Dictionary, corps: Dictionary, dessus: Vector3i, bord: bool) -> void:
+	if occupees.has(dessus):
+		return
+	corps[dessus] = true
+	var dessous: Array[Vector3i] = []
+	var sol := false
+	for k in range(1, LONGUEUR_MAXI + 1):
+		var q: Vector3i = dessus - Vector3i(0, k, 0)
+		if occupees.has(q):
+			sol = true
+			break
+		dessous.append(q)
+	if sol:
+		for q in dessous:
+			corps[q] = true
+	else:
+		corps[dessus - Vector3i(0, 1, 0)] = true
+	if bord:
+		corps[dessus + Vector3i.UP] = true
+
+
 ## LA RÉPARATION DES CONTACTS DIAGONAUX que la forme a créés. Rend le nombre de cases ajoutées au geste.
 ##
+## LA SALLE (Jordan, 2 octobre 2026 : « une special shape Room, qui permet de tracer une sélection en surface à plat
+## sur la grille, et d'extruder vers le haut ou le bas de tant d'étages, tout en conservant le creux dans le volume »).
+## `a`, `b` : deux coins du rectangle tracé sur le plan de l'étage (même `y`). Vers le haut, ce rectangle est le SOL
+## et la salle monte ; vers le bas, il est le PLAFOND et elle descend. `etages` = la hauteur LIBRE à l'intérieur.
+## Murs, sol et plafond font une case ; tout ce qui est dedans est creux — la roche qui s'y trouvait est creusée.
+## ⚠ HORS DE `QUOI` ET DE `forme()` : elle ne s'ancre pas sur une face, elle se trace ; et elle n'est pas encore dans
+## les cas d'épreuve des greffons (charte §0, « les greffons attendent la fin du logiciel »).
+## Rend {"poser", "effacer", "erreur" (trop_petit | trop_grand), "reparees", "boite": [bas, haut]}.
+const ETAGES_MAXI := 32
+
+
+static func salle(occupees: Dictionary, a: Vector3i, b: Vector3i, etages: int, vers_le_haut: bool) -> Dictionary:
+	var r := {"poser": {}, "effacer": {}, "erreur": "", "reparees": 0, "boite": []}
+	var x0: int = mini(a.x, b.x)
+	var x1: int = maxi(a.x, b.x)
+	var z0: int = mini(a.z, b.z)
+	var z1: int = maxi(a.z, b.z)
+	# ⚠ AU MOINS 3 × 3 : deux murs face à face, et une case de dedans entre eux.
+	if x1 - x0 < 2 or z1 - z0 < 2:
+		r["erreur"] = "trop_petit"
+		return r
+	var e: int = clampi(etages, 1, ETAGES_MAXI)
+	var y0: int = a.y if vers_le_haut else a.y - e - 1
+	var y1: int = y0 + e + 1
+	if (x1 - x0 + 1) * (z1 - z0 + 1) * (e + 2) > Outils.VOLUME_MAXI:
+		r["erreur"] = "trop_grand"
+		return r
+	var poser: Dictionary = r["poser"]
+	var effacer: Dictionary = r["effacer"]
+	for x in range(x0, x1 + 1):
+		for z in range(z0, z1 + 1):
+			for y in range(y0, y1 + 1):
+				var c := Vector3i(x, y, z)
+				if x == x0 or x == x1 or z == z0 or z == z1 or y == y0 or y == y1:
+					if not occupees.has(c):
+						poser[c] = true
+				elif occupees.has(c):
+					effacer[c] = true
+	# Une coque posée contre le monde peut le toucher par une arête seulement : la forme répare ce qu'elle crée.
+	r["reparees"] = _reparer(occupees, poser, effacer, false)
+	r["boite"] = [Vector3i(x0, y0, z0), Vector3i(x1, y1, z1)]
+	return r
+
+
 ## Par TOURS, comme `MB.completer_les_carres` : on relève tous les carrés 2×2 en damier qui contiennent une
 ## case changée au tour d'avant, puis on applique tout d'un coup — l'ordre de parcours ne peut donc rien
 ## changer, ce qui compte pour trois implémentations. Creuser vide la paire PLEINE, remplir comble la paire
