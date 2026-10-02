@@ -47,9 +47,16 @@ const EPS := 0.000001
 ## normales compressées ; garder l'envoi changerait la sortie. Ici, elle est identique au bit près.
 ## ⚠ ACTIVE LE TEMPS D'UN TRANCHAGE SEULEMENT (`memoriser`) : un maillage modifié ailleurs entre deux appels serait
 ## relu périmé. ⚠ Le conteneur rendu est une COPIE : `poser` y remplace des tableaux, la mémoire n'en sait rien.
+## ⚠ **ET CE QU'ELLE FABRIQUE, ELLE LE RETIENT TEL QU'ENVOYÉ (2 octobre 2026)** (`_retenir`) : un morceau découpé est
+## relu par la pose, une pièce posée par chaque contrôle ; sous un rendu qui occupe la carte (l'appli qui tranche
+## en dessinant), chaque relecture attendait la carte. MESURÉ avec fenêtre, l'exemple affiché par l'exe à côté : 7,7
+## et 7,9 s → 1,6 s, en alternance. Et l'EMPREINTE du lot (positions, normales, UV, couleurs, indices) est la même
+## au bit près (`ba0f50c8…`) — la crainte écrite plus haut ne s'est pas vérifiée ici : seul le maillage d'ENTRÉE
+## est relu de la carte. `relectures_gpu` compte les vraies relectures (la garde de `test_decoupe`).
 static var _memoire_active := false
 static var _lus := {}
 static var relectures_evitees := 0
+static var relectures_gpu := 0
 
 
 static func memoriser(oui: bool) -> void:
@@ -59,6 +66,7 @@ static func memoriser(oui: bool) -> void:
 
 static func tableaux(mesh: Mesh, s: int) -> Array:
 	if not _memoire_active:
+		relectures_gpu += 1
 		return mesh.surface_get_arrays(s)
 	var id := mesh.get_instance_id()
 	var e = _lus.get(id)
@@ -69,8 +77,22 @@ static func tableaux(mesh: Mesh, s: int) -> Array:
 	if par_surface.has(s):
 		relectures_evitees += 1
 	else:
+		relectures_gpu += 1
 		par_surface[s] = mesh.surface_get_arrays(s)
 	return (par_surface[s] as Array).duplicate()
+
+
+## Pendant un tranchage, un maillage que la découpe FABRIQUE est retenu tel qu'envoyé : les étapes suivantes le
+## relisent en mémoire au lieu de le redescendre du GPU.
+static func _retenir(mesh: Mesh, s: int, arrays: Array) -> void:
+	if not _memoire_active:
+		return
+	var id := mesh.get_instance_id()
+	var e = _lus.get(id)
+	if e == null or (e[0] as WeakRef).get_ref() != mesh:
+		e = [weakref(mesh), {}]
+		_lus[id] = e
+	(e[1] as Dictionary)[s] = arrays
 
 
 static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
@@ -141,6 +163,7 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 		if not couleurs.is_empty():
 			res[Mesh.ARRAY_COLOR] = c_out
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, res)
+		_retenir(sortie, sortie.get_surface_count() - 1, res)
 		var matiere: Material = mesh.surface_get_material(s)
 		if matiere != null:
 			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)
@@ -280,6 +303,7 @@ static func poser(mesh: Mesh, transformation: Transform3D) -> ArrayMesh:
 				tournees.append((transformation.basis * n).normalized())
 			arrays[Mesh.ARRAY_NORMAL] = tournees
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		_retenir(sortie, sortie.get_surface_count() - 1, arrays)
 		var matiere: Material = mesh.surface_get_material(s)
 		if matiere != null:
 			sortie.surface_set_material(sortie.get_surface_count() - 1, matiere)

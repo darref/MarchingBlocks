@@ -799,10 +799,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		_bouton("Save as", "Writes the project where you want it. It keeps saving itself there.",
 			func() -> void: _demander("enregistrer"), "enregistrer"),
 	], 4))
-	# L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : un monde fini, à ouvrir, parcourir et modifier.
-	if Exemple.disponible():
-		projet.contenu.add_child(_bouton("Open the example", "Opens the example world that comes with "
-			+ "MarchingBlocks, in its own folder. Your changes to it are kept there.", _ouvrir_l_exemple, "livre"))
+	# L'EXEMPLE LIVRÉ s'ouvre dans World (« Which world » : My world / The example) — plus de bouton à part ici
+	# (Jordan, 2 octobre 2026 : « on a l'exemple dans exemple, plus besoin de l'exemple en projet séparé »).
 	# LES FICHIERS DANS WINDOWS (Jordan, 30 septembre 2026) : inscrits au premier lancement ; la case les retire
 	# — et le refus tient d'un lancement à l'autre.
 	_case_associations = CheckButton.new()

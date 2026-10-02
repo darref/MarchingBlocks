@@ -51,7 +51,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - ⚠ **LE .glb DE CHAQUE TÉMOIN EST REFAIT DEPUIS SON .mbtiles** : chez Jordan `test_witness.glb` n'existe pas
     (la couche tient de son CACHE, que l'acheteur n'a pas) — sans lui, l'exemple s'ouvrait en cubes rouges
     (mesuré par mutation : Hills, 0 tuile, 75 153 fautes).
-  - **L'appli** (`app/exemple.gd`, bouton « Open the example » dans Project, et le manuel) l'installe dans
+  - **L'appli** (`app/exemple.gd` ; « The example » dans World — le bouton à part dans Project a été RETIRÉ, Jordan, 2
+    octobre 2026 : « on a l'exemple dans exemple, plus besoin de l'exemple en projet séparé » ; et le manuel) l'installe dans
     `user://example/<STAMP>/`, chemins réécrits, et l'ouvre comme un projet ordinaire. ⚠ **JAMAIS ÉCRASÉE** :
     l'exemple s'enregistre tout seul ; un exemple plus récent (autre STAMP) s'installe à côté.
   - **L'EXEMPLE NE S'IMPOSE PAS — DÉCIDÉ (Jordan, 2 octobre 2026 : « un bouton exemple et un bouton world dans
@@ -2486,6 +2487,25 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
   ; `test_decoupe` construit le cas (poser deux fois : 10..12 au lieu de 5..7 sans la copie, vu rougir).
 - **l'eau** : sans source, plus aucun recalcul ; pendant un coup de pinceau, en direct si le calcul est rapide
   (< 50 ms), à la fin du coup sinon ; `_eau_sous` par un index ; le Play test ne recalcule l'eau que périmée.
+- **LES RELECTURES GPU SOUS UN RENDU QUI OCCUPE LA CARTE — MESURÉ ET CORRIGÉ (2 octobre 2026)** (Jordan : « opti »).
+  - ⚠ **UNE MESURE A MENTI, ET C'EST LA LEÇON** : trancher le témoin prenait 7,8 s avec fenêtre ; une réorganisation
+    (toutes les découpes, puis toutes les poses) l'a fait tomber à 1,7 s… puis l'ANCIEN code aussi, à 1,6 s. La
+    différence n'était pas le code mais la CHARGE de la carte : l'appli de Jordan tournait pendant la première mesure
+    (il testait). Reproduite exprès — l'exe ouvert sur l'exemple à côté —, les deux versions font 7,8 s :
+    l'ordre n'y était pour rien, il a été retiré. **Ce que l'appli vit vraiment, c'est ce cas-là** : elle tranche
+    pendant qu'elle dessine.
+  - **LA CAUSE** : sous charge, chaque RELECTURE d'un maillage (le redescendre du GPU) attend la carte. **LE
+    REMÈDE** (`Decoupe._retenir`) : pendant un tranchage, ce que la découpe FABRIQUE est retenu tel qu'envoyé ; la
+    pose, les contrôles le relisent en mémoire. Seul le maillage d'entrée est relu de la carte. **Sous charge, en
+    alternance : 7,7 et 7,9 s → 1,6 s. Empreinte du lot (positions, normales, UV, couleurs, indices) identique au
+    bit près** (`ba0f50c8…`) — la crainte de la mémoire du 1er octobre (« garder l'envoi changerait la sortie ») ne
+    s'est pas vérifiée ici. Gardé par `test_decoupe` (22 : découper, poser, mesurer ne coûte qu'UNE relecture réelle,
+    `relectures_gpu`) ; mutation rouge (3 relectures).
+  - **LA RELECTURE D'UN TÉMOIN LIÉ** (à chaque passage dans World, à chaque Ctrl+S) : 2,2 s sous charge, dont 2,0 s
+    dans `verifier_couture_texture` — `get_image()` redescendait l'image de la carte pour CHAQUE surface de chaque
+    tuile. Une image par texture, et les tableaux que la relecture liée a déjà (`tableaux_de`) : **0,3 à 0,46 s,
+    remarques et lot identiques**. ⚠ Pas de garde dédiée (le compte d'images lues n'est pas exposé) : les suites
+    vertes et la comparaison de sortie.
 - **RESTE DE L'AUDIT, À MESURER AVANT D'Y TOUCHER** (impact estimé, rien de mesuré) : la découpe entière sur des
   tableaux (le reste des 7,8 s : un envoi + une relecture par pièce et par face de couture) ; la règle de pose
   (`sous_le_ciel` qui rebalaye chaque colonne, un dictionnaire alloué par sommet dans `classer`) ; « Slice this

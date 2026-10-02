@@ -2929,9 +2929,13 @@ func _l_exemple(ed: Control) -> void:
 	z.close()
 	var bouton: Button = null
 	for b in ed.find_children("*", "Button", true, false):
-		if (b as Button).text == "Open the example":
+		if (b as Button).text in ["The example", "Example"]:
 			bouton = b
-	_vrai(bouton != null, "Project porte le bouton « Open the example »")
+	_vrai(bouton != null, "World porte le choix « The example » (le seul : plus de bouton à part dans Project)")
+	var double := false
+	for b in ed.find_children("*", "Button", true, false):
+		double = double or (b as Button).text == "Open the example"
+	_vrai(not double, "plus de bouton « Open the example » dans Project")
 	if bouton == null:
 		return
 	bouton.pressed.emit()

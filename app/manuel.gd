@@ -315,10 +315,9 @@ func _couches() -> String:
 		+ ".mbset / .mbworld folders it exports) and a [b]double-click on a .mbproj opens it[/b] — for your "
 		+ "Windows account only. Untick [b]File icons & double-click[/b] (Project) to remove it. "
 		+ "[b]Save as…[/b] puts it where you want; it keeps saving itself there.")
-	l.append("[b]Open the example[/b] (Project) opens a finished world made with MarchingBlocks: walk it in "
-		+ "Play test, open its witnesses, change anything. It lives in its own folder and keeps your changes. "
-		+ "In World, [b]Example[/b] and [b]My world[/b] switch between it and your own world. MarchingBlocks "
-		+ "always starts on your world, never on the example.")
+	l.append("[b]The example[/b], in World, opens a finished world made with MarchingBlocks: walk it in Play test, "
+		+ "open its witnesses, change anything. It lives in its own folder and keeps your changes. [b]My world[/b] "
+		+ "takes you back to yours. MarchingBlocks always starts on your world, never on the example.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "
 		+ "again on opening; if the .glb is gone, you see the last tiles sliced from it, and the report "
 		+ "says so.")

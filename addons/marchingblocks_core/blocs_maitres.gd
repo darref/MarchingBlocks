@@ -2018,7 +2018,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		for c in MB.classes():
 			bits_par_nom[c["nom"]] = c["bits"]
 		Tranchage.verifier_sections(lie["pieces"], bits_par_nom, remarques_liees, lie.get("tableaux", {}))
-		Tranchage.verifier_couture_texture(lie["pieces"], remarques_liees)
+		Tranchage.verifier_couture_texture(lie["pieces"], remarques_liees, lie.get("tableaux", {}))
 		var assemble: Dictionary = _assembler(lie["pieces"], lie["sources"])
 		assemble["erreurs"] = erreurs
 		assemble["remarques"] = remarques_liees

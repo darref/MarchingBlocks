@@ -321,24 +321,34 @@ const ECART_DE_TEXTURE := 0.08
 ## (x, z) ne compte qu'à permutation et signe près ; sur un plan vertical, seul le haut garde son signe.
 ## ⚠ Une tuile sans texture lisible (pas d'`albedo_texture`, pas d'UV) n'est pas jugée : le témoin
 ## calculé n'en porte pas, et le contrôle ne doit rien dire de lui.
-static func verifier_couture_texture(pieces: Dictionary, remarques: Array) -> void:
+## ⚠ **UNE IMAGE PAR TEXTURE, ET LES TABLEAUX QU'ON A DÉJÀ (2 octobre 2026)** : `get_image()` redescend l'image de
+## la carte graphique, et il était appelé pour chaque surface de chacune des 52 tuiles — qui partagent quelques
+## textures. MESURÉ avec fenêtre, l'exemple affiché à côté : 2,0 s des 2,3 s de la relecture d'un témoin lié (à
+## chaque passage dans World, à chaque Ctrl+S). `tableaux_de` ({clé: [tableaux par surface]}) évite aussi la
+## relecture des tuiles qu'on vient de fabriquer. Résultat inchangé.
+static func verifier_couture_texture(pieces: Dictionary, remarques: Array, tableaux_de: Dictionary = {}) -> void:
 	var releves := {}   # point replié → [couleur, nom de la première tuile]
 	var ecarts := 0
 	var pire := 0.0
 	var pire_de := ""
+	var images := {}   # texture → son image, lue UNE fois
 	for nom in pieces:
 		var mesh: Mesh = pieces[nom]
 		for s in mesh.get_surface_count():
 			var m := mesh.surface_get_material(s) as StandardMaterial3D
 			if m == null or m.albedo_texture == null:
 				continue
-			var image: Image = m.albedo_texture.get_image()
+			if not images.has(m.albedo_texture):
+				var lue: Image = m.albedo_texture.get_image()
+				if lue != null and not lue.is_empty() and lue.is_compressed():
+					lue = lue.duplicate()
+					lue.decompress()
+				images[m.albedo_texture] = lue
+			var image: Image = images[m.albedo_texture]
 			if image == null or image.is_empty():
 				continue
-			if image.is_compressed():
-				image = image.duplicate()
-				image.decompress()
-			var arrays: Array = Decoupe.tableaux(mesh, s)
+			var connus: Array = tableaux_de.get(nom, [])
+			var arrays: Array = connus[s] if s < connus.size() else Decoupe.tableaux(mesh, s)
 			if arrays[Mesh.ARRAY_TEX_UV] == null:
 				continue
 			var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]

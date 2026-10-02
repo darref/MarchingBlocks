@@ -56,6 +56,7 @@ func _initialize() -> void:
 	_l_aire_se_conserve()
 	_aucun_triangle_plat()
 	_la_memoire_des_relectures()
+	_ce_qu_elle_fabrique_n_est_pas_relu()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -80,6 +81,27 @@ func _dire(condition: bool, quoi: String) -> void:
 ## Un carré de 2 × 2 dans le plan XY, en deux triangles, chaque coin d'une couleur FRANCHE.
 ## ⚠ BÂTI ICI, à la main, sans passer par `repli_procedural` : trancher la géométrie d'un module pour
 ## la comparer à elle-même serait une tautologie.
+## CE QUE LA DÉCOUPE FABRIQUE N'EST PAS RELU DE LA CARTE (2 octobre 2026) : pendant un tranchage, un morceau découpé
+## puis posé ne coûte qu'UNE relecture réelle — celle du maillage d'entrée. Sans `_retenir`, il en coûtait trois
+## (l'entrée, le morceau, la pièce posée), et sous un rendu qui occupe la carte chacune attendait (7,7 s → 1,6 s).
+## ⚠ Le résultat doit rester celui d'avant : le morceau posé porte les sommets attendus à la main (+5 en x).
+func _ce_qu_elle_fabrique_n_est_pas_relu() -> void:
+	var carre := _carre_colore(true)
+	Decoupe.memoriser(true)
+	var avant := Decoupe.relectures_gpu
+	var morceau := Decoupe.trancher(carre, AABB(Vector3(-1, -1, -1), Vector3(4, 4, 2)))
+	var pose := Decoupe.poser(morceau, Transform3D(Basis(), Vector3(5, 0, 0)))
+	var aire := Decoupe.aire(pose)
+	var faites := Decoupe.relectures_gpu - avant
+	Decoupe.memoriser(false)
+	_dire(faites == 1, "découper, poser, mesurer : une seule relecture réelle, celle de l'entrée (%d)" % faites)
+	var xs := {}
+	for v in pose.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]:
+		xs[snappedf(v.x, 0.001)] = true
+	_dire(xs.has(5.0) and xs.has(7.0) and absf(aire - 4.0) < 0.0001,
+		"… et le morceau posé est celui d'avant : le carré de 2 × 2 décalé à x = 5..7, aire 4 (%s, %.4f)" % [xs.keys(), aire])
+
+
 ## LA MÉMOIRE DES RELECTURES (1er octobre 2026) : pendant un tranchage, un maillage n'est relu qu'une fois.
 ## ⚠ `poser` REMPLACE des tableaux dans le conteneur qu'il relit : si la mémoire le lui prêtait au lieu d'une copie,
 ## poser deux fois le même maillage rendrait la seconde fois des sommets DÉJÀ déplacés. Le tranchage d'aujourd'hui ne
