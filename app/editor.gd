@@ -138,6 +138,7 @@ var _atelier := "witness"
 var _section_jeu: Control
 var _titre_projet: Control
 var _section_projet: Control
+var _choix_monde: HBoxContainer
 var _section_couches: Control
 var _etat_enregistre: Label
 var _case_associations: CheckButton
@@ -831,6 +832,20 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	temoin.contenu.add_child(_bouton_revoir_temoin)
 
 	# ── LES COUCHES — où tout atterrit, donc AVANT les étapes qui y déposent.
+	# L'EXEMPLE OU TON MONDE (Jordan, 2 octobre 2026 : « un bouton exemple et un bouton world dans World, le soft ne
+	# doit pas forcer l'exemple à l'arrivée ») : deux boutons, celui du projet ouvert enfoncé.
+	_choix_monde = HBoxContainer.new()
+	var groupe_monde := ButtonGroup.new()
+	for b in [["My world", "monde", "Back to your own world: the last project you opened that is not the example.",
+				_ouvrir_mon_monde],
+			["Example", "livre", "The example world that comes with MarchingBlocks, in its own folder. Your changes "
+				+ "to it are kept there.", _ouvrir_l_exemple]]:
+		var bouton := _bouton(b[0], b[2], b[3], b[1])
+		bouton.toggle_mode = true
+		bouton.button_group = groupe_monde
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		_choix_monde.add_child(bouton)
+	pile.add_child(_choix_monde)
 	var couches := Section.new("Layers", true, Icones.icone("couches"))
 	pile.add_child(couches)
 	_section_couches = couches
@@ -2105,6 +2120,7 @@ func _contexte() -> void:
 	_section_projet.visible = projet
 	_section_couches.visible = monde or temoin
 	_section_monde_peint.visible = monde
+	_choix_monde.visible = monde and Exemple.disponible()
 	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
 		e.visible = projet
@@ -4483,11 +4499,40 @@ func _ouvrir_au_lancement() -> void:
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
 	if passe != "" and await _ouvrir(passe):
 		return
+	# ⚠ L'EXEMPLE N'EST JAMAIS ROUVERT AU LANCEMENT (Jordan, 2 octobre 2026) : on rouvre TON monde, le dernier projet
+	# qui n'est pas l'exemple (`monde`). Un réglage d'avant n'a que `dernier`, qui peut être l'exemple : écarté.
+	var mien := _mon_dernier_monde()
+	if mien != "" and await _ouvrir(mien):
+		return
+	_nouveau_projet()
+
+
+## Le dernier projet ouvert qui n'est PAS l'exemple, s'il existe encore ; "" sinon.
+func _mon_dernier_monde() -> String:
 	var reglages := ConfigFile.new()
 	reglages.load(REGLAGES)
-	var dernier: String = reglages.get_value("projet", "dernier", "")
-	if dernier != "" and FileAccess.file_exists(dernier) and await _ouvrir(dernier):
+	for cle in ["monde", "dernier"]:
+		var chemin: String = reglages.get_value("projet", cle, "")
+		if chemin != "" and FileAccess.file_exists(chemin) and not est_l_exemple(chemin):
+			return chemin
+	return ""
+
+
+## Ce projet est-il l'exemple installé (dans `Exemple.RACINE`) ?
+static func est_l_exemple(chemin: String) -> bool:
+	return chemin != "" and ProjectSettings.globalize_path(chemin).simplify_path().begins_with(
+		ProjectSettings.globalize_path(Exemple.RACINE).simplify_path())
+
+
+## « My world » : ton dernier monde (pas l'exemple), ou un projet neuf s'il n'y en a pas.
+func _ouvrir_mon_monde() -> void:
+	if not est_l_exemple(_projet):
+		_dire_le_projet()
 		return
+	var mien := _mon_dernier_monde()
+	if mien != "" and await _ouvrir(mien):
+		return
+	_toujours_ecrire()
 	_nouveau_projet()
 
 
@@ -4786,11 +4831,15 @@ func _retenir_le_projet() -> void:
 	var reglages := ConfigFile.new()
 	reglages.load(REGLAGES)
 	reglages.set_value("projet", "dernier", _projet)
+	if not est_l_exemple(_projet):
+		reglages.set_value("projet", "monde", _projet)
 	reglages.save(REGLAGES)
 	_dire_le_projet()
 
 
 func _dire_le_projet() -> void:
+	if _choix_monde != null:
+		(_choix_monde.get_child(1 if est_l_exemple(_projet) else 0) as Button).set_pressed_no_signal(true)
 	if _etiquette_projet == null:
 		return
 	_etiquette_projet.text = _projet.get_file().get_basename()

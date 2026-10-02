@@ -392,6 +392,7 @@ func _mener() -> void:
 	_vrai(_fluides_finis, "les fluides sont allés JUSQU'AU BOUT")
 	await _les_couches_exclusives(ed)
 	_vrai(_exclusives_finies, "les couches exclusives sont allées JUSQU'AU BOUT")
+	_l_exemple_ne_s_impose_pas(ed)
 	await _l_exemple(ed)
 
 	ed.queue_free()
@@ -2826,6 +2827,47 @@ func _les_couches_exclusives(ed: Control) -> void:
 	_vrai(ed._rapport.text.contains("2 cell(s) belonged to several layers"), "et l'écran le dit")
 	_memes_proprietaires(ed, [0, 1], "à l'ouverture")
 	_exclusives_finies = true
+
+
+## L'EXEMPLE NE S'IMPOSE PAS (Jordan, 2 octobre 2026 : « le soft ne doit pas forcer l'exemple à l'arrivée ») — sans
+## l'archive : au lancement, on rouvre le dernier projet qui N'EST PAS l'exemple ; ouvrir l'exemple ne l'efface pas de
+## la mémoire ; les boutons My world / Example ne se montrent que dans World, et seulement s'il y a un exemple.
+func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
+	const Exemple := preload("res://app/exemple.gd")
+	var mien: String = ed._projet
+	var faux_exemple := Exemple.RACINE.path_join("v0/example.mbproj")
+	DirAccess.make_dir_recursive_absolute(faux_exemple.get_base_dir())
+	FileAccess.open(faux_exemple, FileAccess.WRITE).store_string("{}")
+	_vrai(ed.est_l_exemple(faux_exemple) and ed.est_l_exemple(ProjectSettings.globalize_path(faux_exemple))
+		and not ed.est_l_exemple(mien), "est_l_exemple : l'exemple installé l'est, le projet jetable non")
+	var avant := FileAccess.get_file_as_string(REGLAGES)
+	var r := ConfigFile.new()
+	r.set_value("projet", "dernier", faux_exemple)
+	r.save(REGLAGES)
+	_vrai(ed._mon_dernier_monde() == "", "un réglage d'avant qui ne retient QUE l'exemple : on n'y retourne pas")
+	r.set_value("projet", "monde", mien)
+	r.save(REGLAGES)
+	_vrai(ed._mon_dernier_monde() == mien, "« monde » retenu : c'est lui qu'on rouvre, pas l'exemple")
+	# Ouvrir l'exemple le retient comme « dernier », pas comme « monde ».
+	ed._projet = faux_exemple
+	ed._retenir_le_projet()
+	r.load(REGLAGES)
+	_vrai(r.get_value("projet", "dernier", "") == faux_exemple and r.get_value("projet", "monde", "") == mien
+		and (ed._choix_monde.get_child(1) as Button).button_pressed, "l'exemple ouvert : retenu comme dernier, PAS comme ton monde ; Example enfoncé")
+	ed._projet = mien
+	ed._retenir_le_projet()
+	r.load(REGLAGES)
+	_vrai(r.get_value("projet", "monde", "") == mien and (ed._choix_monde.get_child(0) as Button).button_pressed,
+		"ton monde rouvert : retenu, My world enfoncé")
+	ed._aller_a("monde")
+	_vrai(ed._choix_monde.visible == Exemple.disponible(), "dans World, les deux boutons s'il y a un exemple (%s)" % Exemple.disponible())
+	ed._aller_a("projet")
+	_vrai(not ed._choix_monde.visible, "hors de World, pas de boutons")
+	var f := FileAccess.open(REGLAGES, FileAccess.WRITE)
+	f.store_string(avant)
+	f.close()
+	DirAccess.remove_absolute(faux_exemple)
+	DirAccess.remove_absolute(faux_exemple.get_base_dir())
 
 
 ## L'EXEMPLE LIVRÉ (Jordan, 2 octobre 2026) : la VRAIE archive (`res://exemple/exemple.zip`, prise du projet de

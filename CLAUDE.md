@@ -60,6 +60,16 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **L'appli** (`app/exemple.gd`, bouton « Open the example » dans Project, et le manuel) l'installe dans
     `user://example/<STAMP>/`, chemins réécrits, et l'ouvre comme un projet ordinaire. ⚠ **JAMAIS ÉCRASÉE** :
     l'exemple s'enregistre tout seul ; un exemple plus récent (autre STAMP) s'installe à côté.
+  - **L'EXEMPLE NE S'IMPOSE PAS — DÉCIDÉ (Jordan, 2 octobre 2026 : « un bouton exemple et un bouton world dans
+    World, le soft ne doit pas forcer l'exemple à l'arrivée »), ÉCRIT LE MÊME JOUR.** Le défaut : ouvrir l'exemple
+    le retenait comme « dernier projet », et chaque lancement suivant le rouvrait. `reglages.cfg` retient désormais
+    À PART ton monde (`projet/monde`, jamais l'exemple — `est_l_exemple` : sous `Exemple.RACINE`), et c'est lui qu'on
+    rouvre au lancement ; un réglage d'avant qui ne retient que l'exemple est écarté (projet neuf). Dans World, deux
+    boutons, **My world** et **Example** (le projet ouvert enfoncé), seulement si l'exe porte un exemple.
+    `--open-example` reste (la démo). Gardé par `fumee_appli` (547, +7, sans l'archive : un faux exemple dans
+    `user://example`, les réglages réécrits puis rendus) ; trois mutations rouges (l'exemple retenu comme ton monde,
+    le lancement qui ne l'écarte pas, les boutons partout). ⚠ Pas tenu en main, ni
+    éprouvé dans l'exe (l'archive n'existe que sur le PC).
   - **`MarchingBlocks.exe --open-example`** l'ouvre au lancement (une démo, et l'épreuve de l'exe sans clic).
     **ÉPROUVÉ DANS L'EXE CHIFFRÉ** : l'archive est lue depuis le PCK chiffré, installée (7 fichiers), le monde
     s'ouvre texturé, 2 couches, aucun cube rouge (capture d'écran) ; `test.mbproj` intact (MD5).
