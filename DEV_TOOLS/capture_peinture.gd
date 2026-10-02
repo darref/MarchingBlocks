@@ -119,6 +119,34 @@ func _derouler() -> void:
 	await _images(5)
 	print("empreinte : %d points" % mo.empreinte_montree.size())
 	_photo("3_curseur_et_bandes")
+	# LES CALQUES ET LA GOMME : un calque neuf, un large trait bleu dessus, puis la gomme au milieu du trait — le
+	# dessous revient là où l'on a gommé.
+	var Peinture2 := load("res://addons/marchingblocks_core/peinture.gd")
+	Peinture2.nouveau_calque(chemin, "Blue")
+	mo.pinceau_couleur = Color(0.15, 0.3, 0.95)
+	mo.pinceau_taille = 30.0
+	mo.pinceau_durete = 0.8
+	var bleu: Array = []
+	for i in 40:
+		bleu.append(Vector2(lerpf(0.25, 0.75, i / 39.0) * taille.x, 0.5 * taille.y))
+	_souris(bleu[0], true)
+	for q in bleu:
+		var mb := InputEventMouseMotion.new()
+		mb.position = q
+		mb.button_mask = MOUSE_BUTTON_MASK_LEFT
+		mo.souris_entree(mb)
+	_souris(bleu[-1], false)
+	mo.regler_gomme(true)
+	_souris(taille * 0.5 + Vector2(-60, 0), true)
+	for j in 20:
+		var mg := InputEventMouseMotion.new()
+		mg.position = taille * 0.5 + Vector2(lerpf(-60, 60, j / 19.0), 0)
+		mg.button_mask = MOUSE_BUTTON_MASK_LEFT
+		mo.souris_entree(mg)
+	_souris(taille * 0.5 + Vector2(60, 0), false)
+	mo.regler_gomme(false)
+	await _images(10)
+	_photo("4_calques_et_gomme")
 	print("rapport : ", _ecran._rapport.text.substr(0, 160))
 	if _reglages_avant != "":
 		var f := FileAccess.open(REGLAGES, FileAccess.WRITE)

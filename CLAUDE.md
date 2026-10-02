@@ -1694,7 +1694,36 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
       (`capture_peinture.gd`, `3_curseur_et_bandes`) : les bandes aux joints des tuiles, dessus et parois,
       l'ellipse et l'anneau de dureté sous la souris. Le manuel (F1) le dit.
     - ⚠ **PAS TENU EN MAIN** ; ni vu en Vulkan sur le PC. La largeur des bandes et leur rose se jugent à l'œil.
-    **OUVERT** : la gomme et les calques ; le panneau 2D du patron.
+  - **LA GOMME ET LES CALQUES — DÉCIDÉS ET ÉCRITS (Jordan, 2 octobre 2026 : « go pour 1 et 2 »).**
+    - **UNE TOILE EST UNE PILE** (`peinture.gd`) : le FOND (la toile d'avant toute peinture : unie de la couleur du
+      matériau, ou l'image lue), puis les calques du bas vers le haut ({nom, image, opacite, visible}). Le pinceau
+      et la gomme n'écrivent que dans l'ACTIF ; « image » est la COMPOSITION (`composer`, par région pendant un
+      trait), la seule que le rendu lit et que le `.glb` emporte : **le format et les greffons ne voient jamais de
+      calques** — rien à porter dans la liste des greffons.
+    - ⚠ **PEINDRE EST UN VRAI « PAR-DESSUS » EN ALPHA DROIT** : l'ancien `lerp` posait, sur un pixel transparent, une
+      couleur ASSOMBRIE par son noir. Sur un pixel opaque le résultat est le même qu'avant (les 29 vérifications
+      d'avant restent vertes).
+    - **LA GOMME** (E tant que le pinceau est allumé, et un bouton) baisse l'alpha de l'actif : sur le calque du bas,
+      le FOND revient. **Les calques** : New (transparent, au-dessus de l'actif), Up, Down, Delete (jamais le
+      dernier), l'œil, le nom, l'opacité (appliquée au LÂCHER du curseur : recomposer 1024² à chaque cran coûterait
+      trop). Chaque geste est UNE annulation : l'ÉTAT de la pile (ordre, noms, opacités, visibilités, actif), les
+      images par RÉFÉRENCE — un calque supprimé puis rendu est le même objet ; un trait s'annule par région DANS SON
+      calque (désigné par son image, pas par son rang).
+    - **L'ÉCRITURE** : la composition à son chemin, la pile à côté (`<image>.layers/` : fond, `layer_<i>.png`,
+      `layers.json` avec le MD5 de la composition écrite). ⚠ **UNE IMAGE RETOUCHÉE AILLEURS** (MD5 différent) : la
+      pile est MISE DE CÔTÉ, l'image devient l'unique calque, et l'écran le dit — on ne recompose jamais par-dessus
+      le travail d'un autre logiciel. Une image d'avant les calques se lit en un calque « Base ».
+    - **MESURÉ** : `test_peinture` (48, +19 ; attendus à la main : couleur pure sur du transparent, mi-opacité,
+      lerp(bleu, rouge, ½) pour un calque à 50 %, caché, la gomme du haut et celle du bas, l'ordre, l'insertion,
+      l'état rendu, l'écriture relue, l'image retouchée ailleurs, l'image sans pile) ; `fumee_appli` (540, +13 : par
+      les VRAIS boutons et la touche E, un trait dans le calque actif, la gomme, Ctrl+Z, l'œil, Delete et son
+      annulation, la pile écrite). **Huit mutations rouges** : fond oublié, opacité ignorée, l'ancien mélange,
+      pile non écrite, empreinte non vérifiée, trait écrit dans la composition, E ignorée, geste sans annulation.
+      ⚠ **« PILE NON ÉCRITE » ÉTAIT D'ABORD MUETTE** : le dossier de test survit d'un lancement à l'autre, et la
+      pile du lancement d'avant était relue. ⚠ **ET LA FUMÉE A ATTRAPÉ UN VRAI DÉFAUT EN L'ÉCRIVANT** : la copie
+      « avant » d'un trait était prise APRÈS son premier tampon — Ctrl+Z ne défaisait pas le premier point.
+    - ⚠ **PAS TENU EN MAIN.**
+    **OUVERT** : le panneau 2D du patron ; fusionner un calque sur celui du dessous.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 

@@ -2483,6 +2483,21 @@ func _batir_peinture(pile: VBoxContainer) -> void:
 			_regler_edition(true)
 		_modeleur.regler_pinceau(v))
 	sec.contenu.add_child(_bouton_pinceau)
+	# LA GOMME (Jordan, 2 octobre 2026) : E, tant que le pinceau est allumé.
+	_bouton_gomme = Button.new()
+	_bouton_gomme.text = "Eraser  ·  E"
+	_bouton_gomme.icon = Icones.icone("gomme")
+	_bouton_gomme.toggle_mode = true
+	_bouton_gomme.focus_mode = Control.FOCUS_NONE
+	_bouton_gomme.tooltip_text = ("E — the brush makes the ACTIVE layer transparent. On the bottom layer, the canvas "
+		+ "comes back as it was before any paint.")
+	_bouton_gomme.toggled.connect(func(v: bool) -> void:
+		if v and not _modeleur.pinceau:
+			_bouton_pinceau.button_pressed = true
+		if v != _modeleur.gomme:
+			_modeleur.regler_gomme(v))
+	_modeleur.gomme_changee.connect(func(v: bool) -> void: _bouton_gomme.set_pressed_no_signal(v))
+	sec.contenu.add_child(_bouton_gomme)
 	_couleur_pinceau = ColorPickerButton.new()
 	_couleur_pinceau.text = "Colour"
 	_couleur_pinceau.color = _modeleur.pinceau_couleur
@@ -2519,8 +2534,183 @@ func _batir_peinture(pile: VBoxContainer) -> void:
 		_modeleur.bandes_de_couture = v
 		_modeleur.regler_les_bandes())
 	sec.contenu.add_child(_case_bandes)
+	_batir_calques(sec.contenu)
 
 
+# ── LES CALQUES (Jordan, 2 octobre 2026) ───────────────────────────────────────────────────────────────
+#
+# La pile de la toile du MATÉRIAU COURANT (`Peinture`, « LES CALQUES ») : du haut vers le bas comme partout ; un clic
+# rend un calque actif (le pinceau et la gomme y écrivent), l'œil le montre ou le cache. New, Up, Down, Delete, le
+# nom et l'opacité de l'actif. Chaque geste est UNE annulation (l'état de la pile avant et après).
+
+func _batir_calques(contenu: Control) -> void:
+	var titre := HBoxContainer.new()
+	var ic := TextureRect.new()
+	ic.texture = Icones.icone("couches")
+	ic.stretch_mode = TextureRect.STRETCH_KEEP_CENTERED
+	titre.add_child(ic)
+	titre.add_child(_texte("Paint layers", 12, Palette.TEXTE))
+	contenu.add_child(titre)
+	_etat_calques = _texte("", 11, Palette.GRIS)
+	contenu.add_child(_etat_calques)
+	_liste_calques = VBoxContainer.new()
+	contenu.add_child(_liste_calques)
+	_reglages_calque = VBoxContainer.new()
+	contenu.add_child(_reglages_calque)
+	_nom_calque = LineEdit.new()
+	_nom_calque.placeholder_text = "Layer name"
+	_nom_calque.text_submitted.connect(func(t: String) -> void:
+		var r: int = _toile_courante().get("actif", -1)
+		_geste_calques("Paint: rename layer", func(c: String) -> void: Peinture.regler_calque(c, r, "nom", t)))
+	_reglages_calque.add_child(_nom_calque)
+	var ligne := HBoxContainer.new()
+	var t := _texte("Opacity", 11, Palette.GRIS)
+	t.custom_minimum_size = Vector2(76, 0)
+	ligne.add_child(t)
+	_opacite_calque = HSlider.new()
+	_opacite_calque.min_value = 0.0
+	_opacite_calque.max_value = 1.0
+	_opacite_calque.step = 0.01
+	_opacite_calque.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_opacite_calque.focus_mode = Control.FOCUS_NONE
+	# ⚠ Recomposer une toile de 1024² à chaque cran du glissé coûterait trop : l'opacité s'applique au lâcher (ou
+	# tout de suite quand on clique sans glisser).
+	_opacite_calque.drag_started.connect(func() -> void: _opacite_glisse = true)
+	_opacite_calque.drag_ended.connect(func(_change: bool) -> void:
+		_opacite_glisse = false
+		_regler_l_opacite_du_calque(_opacite_calque.value))
+	_opacite_calque.value_changed.connect(func(v: float) -> void:
+		if not _opacite_glisse and not _remplit_calques:
+			_regler_l_opacite_du_calque(v))
+	ligne.add_child(_opacite_calque)
+	_reglages_calque.add_child(ligne)
+	var boutons := HBoxContainer.new()
+	for b in [["New", "plus", "A new transparent layer above the active one.", func(c: String) -> void:
+				Peinture.nouveau_calque(c)],
+			["Up", "haut", "Move the active layer up.", func(c: String) -> void:
+				Peinture.deplacer_calque(c, int(Peinture.toile(c)["actif"]), 1)],
+			["Down", "bas", "Move the active layer down.", func(c: String) -> void:
+				Peinture.deplacer_calque(c, int(Peinture.toile(c)["actif"]), -1)],
+			["Delete", "poubelle", "Delete the active layer (the last one stays).", func(c: String) -> void:
+				Peinture.supprimer_calque(c, int(Peinture.toile(c)["actif"]))]]:
+		var nom: String = b[0]
+		var action: Callable = b[3]
+		var bouton := _bouton(nom, b[2], func() -> void: _geste_calques("Paint: %s layer" % nom.to_lower(), action), b[1])
+		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		boutons.add_child(bouton)
+		_boutons_calques[nom] = bouton
+	_reglages_calque.add_child(boutons)
+	_redire_les_calques()
+
+
+var _etat_calques: Label
+var _liste_calques: VBoxContainer
+var _reglages_calque: VBoxContainer
+var _nom_calque: LineEdit
+var _opacite_calque: HSlider
+var _opacite_glisse := false
+var _remplit_calques := false
+var _boutons_calques := {}
+
+
+## Le chemin de la toile du matériau courant ("" s'il n'en a pas encore).
+func _chemin_toile_courante() -> String:
+	var k: int = _modeleur.materiau_courant
+	if _modeleur.maillage == null or k < 0 or k >= _modeleur.maillage.materiaux.size():
+		return ""
+	return str(_modeleur.maillage.materiaux[k].get("texture", ""))
+
+
+func _toile_courante() -> Dictionary:
+	var c := _chemin_toile_courante()
+	return Peinture.toile(c) if c != "" else {}
+
+
+## UN geste sur la pile de la toile courante : `action(chemin)`, entre deux états, une annulation.
+func _geste_calques(nom: String, action: Callable) -> void:
+	var c := _chemin_toile_courante()
+	if c == "" or Peinture.toile(c).is_empty():
+		return
+	var avant: Dictionary = Peinture.etat(c)
+	action.call(c)
+	var apres: Dictionary = Peinture.etat(c)
+	_histoire.create_action(nom)
+	_histoire.add_do_method(func() -> void:
+		Peinture.poser_etat(c, apres)
+		_redire_les_calques())
+	_histoire.add_undo_method(func() -> void:
+		Peinture.poser_etat(c, avant)
+		_redire_les_calques())
+	_histoire.commit_action(false)
+	_temoin_modifie(_modeleur.temoin)
+	_redire_les_calques()
+
+
+func _regler_l_opacite_du_calque(v: float) -> void:
+	var r: int = _toile_courante().get("actif", -1)
+	if r < 0 or is_equal_approx(float(_toile_courante()["calques"][r]["opacite"]), v):
+		return
+	_geste_calques("Paint: layer opacity", func(c: String) -> void: Peinture.regler_calque(c, r, "opacite", v))
+
+
+## Redessine la liste (du HAUT vers le bas) et les réglages de l'actif.
+func _redire_les_calques() -> void:
+	if _liste_calques == null:
+		return
+	for enfant in _liste_calques.get_children():
+		_liste_calques.remove_child(enfant)
+		enfant.queue_free()
+	var c := _chemin_toile_courante()
+	var t := _toile_courante()
+	_reglages_calque.visible = not t.is_empty()
+	if _modeleur.materiau_courant < 0:
+		_etat_calques.text = "Pick a material: its canvas's layers show here."
+		return
+	if t.is_empty():
+		_etat_calques.text = "This material has no canvas yet: paint on one of its faces to make it."
+		return
+	_etat_calques.text = "Layers of « %s »%s" % [c.get_file(), "" if not t["calques_ecartes"] else
+		"\nThe image was changed outside MarchingBlocks: its old layers were set aside, it is now one layer."]
+	var groupe := ButtonGroup.new()
+	var cal: Array = t["calques"]
+	for i in range(cal.size() - 1, -1, -1):
+		var d: Dictionary = cal[i]
+		var ligne := HBoxContainer.new()
+		var oeil := Button.new()
+		oeil.icon = Icones.icone("oeil" if d["visible"] else "oeil_ferme")
+		oeil.flat = true
+		oeil.focus_mode = Control.FOCUS_NONE
+		oeil.tooltip_text = "Show or hide this layer."
+		var rang := i
+		oeil.pressed.connect(func() -> void:
+			_geste_calques("Paint: layer visibility", func(ch: String) -> void:
+				Peinture.regler_calque(ch, rang, "visible", not bool(Peinture.toile(ch)["calques"][rang]["visible"]))))
+		ligne.add_child(oeil)
+		var b := Button.new()
+		b.text = str(d["nom"]) + ("" if float(d["opacite"]) >= 1.0 else "  (%d%%)" % roundi(float(d["opacite"]) * 100))
+		b.toggle_mode = true
+		b.button_group = groupe
+		b.focus_mode = Control.FOCUS_NONE
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.clip_text = true
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.button_pressed = i == int(t["actif"])
+		b.pressed.connect(func() -> void:
+			Peinture.choisir_calque(c, rang)
+			_redire_les_calques())
+		ligne.add_child(b)
+		_liste_calques.add_child(ligne)
+	var actif: Dictionary = cal[int(t["actif"])]
+	_remplit_calques = true
+	_nom_calque.text = str(actif["nom"])
+	_opacite_calque.value = float(actif["opacite"])
+	_remplit_calques = false
+	_boutons_calques["Delete"].disabled = cal.size() <= 1
+	_boutons_calques["Up"].disabled = int(t["actif"]) >= cal.size() - 1
+	_boutons_calques["Down"].disabled = int(t["actif"]) <= 0
+
+
+var _bouton_gomme: Button
 var _case_bandes: CheckBox
 var _bouton_pinceau: Button
 var _couleur_pinceau: ColorPickerButton
@@ -2528,12 +2718,14 @@ var _curseurs_pinceau := {}
 
 
 ## Un trait fini : UNE annulation, qui remet la région de la toile d'avant (ou d'après).
-func _trait_peint(chemin: String, avant: Image, apres: Image, position: Vector2i) -> void:
+func _trait_peint(chemin: String, avant: Image, apres: Image, position: Vector2i, calque: Image) -> void:
 	_histoire.create_action("Witness: Paint")
-	_histoire.add_do_method(Peinture.poser_region.bind(chemin, apres, position))
-	_histoire.add_undo_method(Peinture.poser_region.bind(chemin, avant, position))
+	_histoire.add_do_method(Peinture.poser_region.bind(chemin, apres, position, calque))
+	_histoire.add_undo_method(Peinture.poser_region.bind(chemin, avant, position, calque))
 	_histoire.commit_action(false)
 	_temoin_modifie(_modeleur.temoin)
+	# Le premier trait crée la toile : la liste des calques apparaît.
+	_redire_les_calques()
 
 
 ## Entre ou sort de l'édition. La première fois, le maillage se charge : le témoin modélisé enregistré
@@ -2727,6 +2919,7 @@ func _redire_les_materiaux() -> void:
 		var tex: String = str(d.get("texture", ""))
 		_texture_materiau.text = tex.get_file() if tex != "" else "no image"
 		_remplit_materiau = false
+	_redire_les_calques()
 
 
 ## LE PATRON DES UV — à peindre dans un logiciel de dessin, puis à rendre comme image d'un matériau « UV ».

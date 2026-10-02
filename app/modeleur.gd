@@ -16,7 +16,7 @@ extends Node3D
 signal change(avant: RefCounted, apres: RefCounted, nom: String)
 signal dit(texte: String)
 ## Un trait de pinceau fini : la région touchée de la toile, avant et après (l'annulation).
-signal peint(chemin: String, avant: Image, apres: Image, position: Vector2i)
+signal peint(chemin: String, avant: Image, apres: Image, position: Vector2i, calque: Image)
 ## La pipette a lu une couleur.
 signal couleur_lue(couleur: Color)
 
@@ -1581,6 +1581,9 @@ func touche(k: InputEventKey) -> bool:
 	# numérique sont les VUES, et restent à l'écran.
 	# ⚠ DANS WITNESS TEXTURING, ON NE MODÈLE PAS (Jordan, 1er octobre 2026) : choisir les faces, B, A, U — les gestes
 	# de géométrie vivent dans Witness geometry, et on le DIT plutôt que de les laisser faire en silence.
+	if pinceau and not geometrie and k.keycode == KEY_E:
+		regler_gomme(not gomme)
+		return true
 	if not geometrie and k.keycode in [KEY_G, KEY_R, KEY_S, KEY_E, KEY_I, KEY_K, KEY_X, KEY_DELETE, KEY_M, KEY_F, KEY_O]:
 		dit.emit("[i]%s is a geometry tool — open [b]Witness geometry[/b] to change the shape.[/i]"
 			% OS.get_keycode_string(k.keycode))
@@ -1651,6 +1654,10 @@ var geometrie := true
 # suivent. Une face sans matériau (la teinte de la légende) ne se peint pas : on le dit.
 
 var pinceau := false
+## La GOMME (Jordan, 2 octobre 2026) : le pinceau rend le calque actif transparent au lieu d'y poser la couleur.
+## Sur le calque du bas, le fond revient (la toile d'avant la peinture). E la bascule, tant que le pinceau est allumé.
+var gomme := false
+signal gomme_changee(oui: bool)
 var pinceau_couleur := Color("#b4603c")
 ## En pixels de la toile.
 var pinceau_taille := 24.0
@@ -1662,11 +1669,18 @@ var dossier_toiles := ""
 var _trait := {}
 
 
+func regler_gomme(oui: bool) -> void:
+	gomme = oui
+	gomme_changee.emit(oui)
+	dit.emit("[b]Eraser[/b] — left drag makes the ACTIVE layer transparent; on the bottom layer the canvas comes back "
+		+ "as it was before any paint. E goes back to the brush." if oui else "[b]Brush[/b] — E switches to the eraser.")
+
+
 func regler_pinceau(oui: bool) -> void:
 	pinceau = oui
 	if oui:
 		dit.emit("[b]Paint[/b] — left drag paints the material of the face you point at (every copy of the tile "
-			+ "follows) · Alt+click picks a colour · P stops painting. [i]Box projection repeats the image: what you "
+			+ "follows) · Alt+click picks a colour · E toggles the eraser · P stops painting. [i]Box projection repeats the image: what you "
 			+ "paint repeats too. For unique paint, Unwrap (U) and set the projection to UV.[/i] "
 			+ "[color=#e070d0]Striped bands[/color] mark the cut planes: paint them the same on every tile, or the "
 			+ "world shows a seam there.")
@@ -1806,7 +1820,7 @@ func _montrer_le_curseur(i: Dictionary) -> void:
 		anneaux.append([empreinte_montree, Color.WHITE])
 		if pinceau_durete > 0.02 and pinceau_durete < 0.98:
 			anneaux.append([Peinture.empreinte(tuile, f, i["point"], pinceau_taille * pinceau_durete, taille),
-				Color(pinceau_couleur, 1.0)])
+				Color(0.55, 0.55, 0.55) if gomme else Color(pinceau_couleur, 1.0)])
 	for anneau in anneaux:
 		var pts: PackedVector3Array = anneau[0]
 		if pts.is_empty():
@@ -1927,12 +1941,16 @@ func _commencer_le_trait(p: Vector2, en_route := false) -> void:
 	var chemin := _toile_de(i)
 	if chemin == "":
 		return
-	var img: Image = Peinture.toile(chemin)["image"]
+	# ⚠ LE TRAIT ÉCRIT DANS LE CALQUE ACTIF, et la composition suit (`Peinture.composer`) : écrire dans l'image
+	# composée serait effacé à la prochaine composition.
+	var img: Image = Peinture.calque_actif(chemin)
 	var px := _pixel(i, chemin)
-	_trait = {"chemin": chemin, "avant": img.duplicate(), "cle": i["cle"], "face": i["face"], "dernier": px,
-		"ecran": p,
-		"zone": Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite)}
-	Peinture.montrer(chemin)
+	# ⚠ « avant » est pris AVANT le premier tampon, sinon Ctrl+Z ne défait pas le premier point du trait.
+	var avant := img.duplicate()
+	var zone := Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite, gomme)
+	_trait = {"chemin": chemin, "calque": img, "avant": avant, "cle": i["cle"], "face": i["face"],
+		"dernier": px, "ecran": p, "zone": zone}
+	Peinture.composer(chemin, zone)
 
 
 ## ⚠ UN TRAIT CONTINU, MÊME D'UNE FACE À L'AUTRE (vu à l'image, 1er octobre 2026 : des pointillés). Entre deux
@@ -1973,19 +1991,19 @@ func _tamponner_en(p: Vector2) -> void:
 	if m < 0 or m >= tuile.materiaux.size() or str(tuile.materiaux[m].get("texture", "")) != _trait["chemin"]:
 		return
 	var chemin: String = _trait["chemin"]
-	var img: Image = Peinture.toile(chemin)["image"]
+	var img: Image = _trait["calque"]
 	var px := _pixel(i, chemin)
 	var zone: Rect2i
 	if i["cle"] == _trait["cle"] and int(i["face"]) == int(_trait["face"]):
 		zone = Peinture.trait_(img, _trait["dernier"], px, pinceau_taille, pinceau_couleur, pinceau_durete,
-			pinceau_opacite)
+			pinceau_opacite, gomme)
 	else:
-		zone = Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite)
+		zone = Peinture.tamponner(img, px, pinceau_taille, pinceau_couleur, pinceau_durete, pinceau_opacite, gomme)
 	_trait["zone"] = zone if (_trait["zone"] as Rect2i).size == Vector2i.ZERO else (_trait["zone"] as Rect2i).merge(zone)
 	_trait["dernier"] = px
 	_trait["cle"] = i["cle"]
 	_trait["face"] = i["face"]
-	Peinture.montrer(chemin)
+	Peinture.composer(chemin, zone)
 
 
 func _finir_le_trait() -> void:
@@ -1996,8 +2014,8 @@ func _finir_le_trait() -> void:
 	var zone: Rect2i = t["zone"]
 	if zone.size == Vector2i.ZERO:
 		return
-	var img: Image = Peinture.toile(t["chemin"])["image"]
-	peint.emit(t["chemin"], (t["avant"] as Image).get_region(zone), img.get_region(zone), zone.position)
+	var img: Image = t["calque"]
+	peint.emit(t["chemin"], (t["avant"] as Image).get_region(zone), img.get_region(zone), zone.position, img)
 
 
 func _pipette(p: Vector2) -> void:

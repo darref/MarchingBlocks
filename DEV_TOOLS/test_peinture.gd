@@ -31,6 +31,8 @@ func _initialize() -> void:
 	_l_annulation_et_l_ecriture()
 	_l_atlas_du_temoin()
 	_l_empreinte_est_le_bord_du_tampon()
+	_la_gomme_et_les_calques()
+	_les_calques_s_ecrivent()
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -177,12 +179,15 @@ func _l_annulation_et_l_ecriture() -> void:
 	var chemin := _dossier.path_join("annule.png")
 	var t: Dictionary = Peinture.nouvelle_toile(chemin, Color.BLACK, 64)
 	var img: Image = t["image"]
+	var calque: Image = Peinture.calque_actif(chemin)
 	var avant := img.duplicate()
-	var zone: Rect2i = Peinture.trait_(img, Vector2(10, 10), Vector2(40, 20), 3.0, Color.GREEN, 0.5, 1.0)
-	var apres_region := img.get_region(zone)
-	Peinture.poser_region(chemin, (avant as Image).get_region(zone), zone.position)
+	var avant_calque := calque.duplicate()
+	var zone: Rect2i = Peinture.trait_(calque, Vector2(10, 10), Vector2(40, 20), 3.0, Color.GREEN, 0.5, 1.0)
+	Peinture.composer(chemin, zone)
+	var apres_region := calque.get_region(zone)
+	Peinture.poser_region(chemin, (avant_calque as Image).get_region(zone), zone.position, calque)
 	_dire(img.get_data() == (avant as Image).get_data(), "remettre la région d'avant défait le trait, au bit près")
-	Peinture.poser_region(chemin, apres_region, zone.position)
+	Peinture.poser_region(chemin, apres_region, zone.position, calque)
 	_dire(img.get_pixel(25, 15).g > 0.9, "remettre celle d'après le refait")
 	_dire(Peinture.a_ecrire(), "la toile peinte est à écrire")
 	var ecrits: Array = Peinture.enregistrer()
@@ -313,6 +318,122 @@ func _l_empreinte_est_le_bord_du_tampon() -> void:
 		"Boîte, répétition 0,5 : un CERCLE de 20 / 512 case (lu %.4f … %.4f)" % [rmin, rmax])
 	var nue: RefCounted = _cube()
 	_dire(Peinture.empreinte(nue, 3, p, 20.0, taille).is_empty(), "une face de la légende n'a pas d'empreinte")
+
+
+## LA GOMME ET LES CALQUES (Jordan, 2 octobre 2026). Attendus calculés À LA MAIN : un tampon DUR et PLEIN pose la
+## couleur pure ; la composition d'un calque à opacité o par-dessus un fond opaque est lerp(fond, couleur, o).
+func _la_gomme_et_les_calques() -> void:
+	var chemin := _dossier.path_join("calques.png")
+	var bleu := Color(0.0, 0.0, 1.0)
+	Peinture.nouvelle_toile(chemin, bleu, 32)
+	var compo: Image = Peinture.toile(chemin)["image"]
+	var p := Vector2(16, 16)
+	var px := func() -> Color: return compo.get_pixel(16, 16)
+	# Un calque neuf est TRANSPARENT, posé au-dessus, et devient l'actif.
+	var r: int = Peinture.nouveau_calque(chemin, "Red")
+	var haut: Image = Peinture.calque_actif(chemin)
+	_dire(r == 1 and int(Peinture.toile(chemin)["actif"]) == 1 and haut.get_pixel(16, 16).a == 0.0
+		and _egal(px.call(), bleu), "un calque neuf est transparent, au-dessus, actif — la toile ne change pas")
+	# Peindre sur un calque transparent pose la couleur PURE (pas assombrie par le noir transparent).
+	Peinture.composer(chemin, Peinture.tamponner(haut, p, 3.0, Color.RED, 1.0, 1.0))
+	_dire(_egal(haut.get_pixel(16, 16), Color.RED) and _egal(px.call(), Color.RED),
+		"peint sur le calque du haut : le pixel est rouge pur, la toile aussi")
+	var mi := Image.create(4, 4, false, Image.FORMAT_RGBA8)
+	mi.fill(Color(0, 0, 0, 0))
+	Peinture.tamponner(mi, Vector2(2, 2), 3.0, Color.RED, 1.0, 0.5)
+	_dire(_egal(mi.get_pixel(2, 2), Color(1, 0, 0, 0.5)), "à mi-opacité sur du transparent : rouge pur, alpha 0,5 (%s)" % mi.get_pixel(2, 2))
+	# L'opacité du calque : lerp(bleu, rouge, 0,5).
+	Peinture.regler_calque(chemin, 1, "opacite", 0.5)
+	_dire(_egal(px.call(), Color(0.5, 0.0, 0.5)), "calque à 50 %% : la toile est le mélange (%s)" % px.call())
+	Peinture.regler_calque(chemin, 1, "opacite", 1.0)
+	Peinture.regler_calque(chemin, 1, "visible", false)
+	_dire(_egal(px.call(), bleu), "calque caché : la toile redevient bleue")
+	Peinture.regler_calque(chemin, 1, "visible", true)
+	# La gomme sur le calque du haut : il redevient transparent, le bleu revient.
+	Peinture.composer(chemin, Peinture.tamponner(haut, p, 3.0, Color.WHITE, 1.0, 1.0, true))
+	_dire(haut.get_pixel(16, 16).a == 0.0 and _egal(px.call(), bleu), "la gomme sur le calque du haut fait revenir le bleu")
+	# Sur le calque du BAS, la gomme fait revenir le FOND (la toile d'avant la peinture), pas du transparent.
+	Peinture.choisir_calque(chemin, 0)
+	var bas: Image = Peinture.calque_actif(chemin)
+	Peinture.composer(chemin, Peinture.tamponner(bas, p, 3.0, Color.GREEN, 1.0, 1.0))
+	_dire(_egal(px.call(), Color.GREEN), "peint en vert sur le calque du bas")
+	Peinture.composer(chemin, Peinture.tamponner(bas, p, 3.0, Color.WHITE, 1.0, 1.0, true))
+	_dire(_egal(px.call(), bleu) and compo.get_pixel(16, 16).a == 1.0,
+		"la gomme sur le calque du bas rend le fond bleu, opaque (%s)" % px.call())
+	# L'ordre : vert sur un calque, rouge sur l'autre — le plus HAUT l'emporte, et déplacer l'inverse.
+	Peinture.composer(chemin, Peinture.tamponner(haut, p, 3.0, Color.RED, 1.0, 1.0))
+	var vert: int = Peinture.nouveau_calque(chemin, "Green")
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), p, 3.0, Color.GREEN, 1.0, 1.0))
+	_dire(vert == 1 and _egal(px.call(), Color.RED), "le calque neuf s'insère au-dessus de l'actif (le bas), donc SOUS Red : %d" % vert)
+	var noms := func() -> Array:
+		var n: Array = []
+		for c in Peinture.toile(chemin)["calques"]:
+			n.append(c["nom"])
+		return n
+	_dire(noms.call() == ["Base", "Green", "Red"] and _egal(px.call(), Color.RED), "Base, Green, Red : le rouge, en haut, l'emporte")
+	Peinture.deplacer_calque(chemin, 1, 1)
+	_dire(noms.call() == ["Base", "Red", "Green"] and _egal(px.call(), Color.GREEN)
+		and int(Peinture.toile(chemin)["actif"]) == 2, "Green monté : il l'emporte, et reste l'actif")
+	# L'état de la pile, pour l'annulation : supprimer puis rendre — le MÊME calque revient.
+	var avant: Dictionary = Peinture.etat(chemin)
+	var green: Image = Peinture.calque_actif(chemin)
+	_dire(Peinture.supprimer_calque(chemin, 2) and noms.call() == ["Base", "Red"] and _egal(px.call(), Color.RED),
+		"supprimer Green : le rouge revient")
+	Peinture.poser_etat(chemin, avant)
+	_dire(noms.call() == ["Base", "Red", "Green"] and is_same(Peinture.calque_actif(chemin), green)
+		and _egal(px.call(), Color.GREEN), "l'état d'avant rend le même calque, au même rang, actif")
+	Peinture.supprimer_calque(chemin, 2)
+	Peinture.supprimer_calque(chemin, 1)
+	_dire(not Peinture.supprimer_calque(chemin, 0) and noms.call() == ["Base"], "le dernier calque ne se supprime pas")
+
+
+## La pile s'écrit à côté de l'image et se relit telle quelle ; une image retouchée AILLEURS met la pile de côté.
+func _les_calques_s_ecrivent() -> void:
+	var chemin := _dossier.path_join("pile.png")
+	# ⚠ Le dossier de test SURVIT d'un lancement à l'autre : une pile écrite la fois d'avant serait relue, et
+	# « la pile n'est pas écrite » passerait pour juste (mutation d'abord muette).
+	var vieux := Peinture.dossier_des_calques(chemin)
+	for nom in DirAccess.get_files_at(vieux):
+		DirAccess.remove_absolute(vieux.path_join(nom))
+	DirAccess.remove_absolute(vieux)
+	Peinture.nouvelle_toile(chemin, Color.BLUE, 16)
+	Peinture.nouveau_calque(chemin, "Red")
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(8, 8), 2.0, Color.RED, 1.0, 1.0))
+	Peinture.regler_calque(chemin, 1, "opacite", 0.5)
+	Peinture.choisir_calque(chemin, 0)
+	var ecrits: Array = Peinture.enregistrer()
+	var relue := Image.load_from_file(chemin)
+	relue.convert(Image.FORMAT_RGBA8)
+	_dire(ecrits.has(chemin) and _egal(relue.get_pixel(8, 8), Color(0.5, 0, 0.5)),
+		"l'image écrite est la COMPOSITION (%s)" % relue.get_pixel(8, 8))
+	Peinture.oublier()
+	var t: Dictionary = Peinture.toile(chemin)
+	var cal: Array = t.get("calques", [])
+	_dire(cal.size() == 2 and cal[1]["nom"] == "Red" and absf(float(cal[1]["opacite"]) - 0.5) < 1e-6 and int(t["actif"]) == 0
+		and _egal((cal[1]["image"] as Image).get_pixel(8, 8), Color.RED) and not t["calques_ecartes"],
+		"relue : deux calques, Red à 50 %, le bas actif, ses pixels")
+	# Le fond survit : la gomme sur le bas, après relecture, rend le bleu.
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(2, 2), 1.5, Color.WHITE, 1.0, 1.0, true))
+	_dire(_egal((t["image"] as Image).get_pixel(2, 2), Color.BLUE), "le fond est relu : la gomme du bas rend le bleu")
+	Peinture.enregistrer()
+	# Une retouche AILLEURS (un autre logiciel réécrit l'image) : la pile ne correspond plus.
+	var autre := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	autre.fill(Color.YELLOW)
+	autre.save_png(chemin)
+	Peinture.oublier()
+	t = Peinture.toile(chemin)
+	_dire(t["calques_ecartes"] and (t["calques"] as Array).size() == 1 and _egal((t["image"] as Image).get_pixel(8, 8), Color.YELLOW),
+		"image retouchée ailleurs : ses calques sont mis de côté, elle devient l'unique calque, et c'est dit")
+	# Une image sans pile (d'avant les calques) : un seul calque, « Base ».
+	var nue := _dossier.path_join("nue.png")
+	autre.save_png(nue)
+	t = Peinture.toile(nue)
+	_dire((t["calques"] as Array).size() == 1 and t["calques"][0]["nom"] == "Base" and not t["calques_ecartes"],
+		"une image sans pile : un calque « Base », rien de mis de côté")
+
+
+func _egal(a: Color, b: Color) -> bool:
+	return absf(a.r - b.r) < 0.01 and absf(a.g - b.g) < 0.01 and absf(a.b - b.b) < 0.01 and absf(a.a - b.a) < 0.01
 
 
 func _cube() -> RefCounted:

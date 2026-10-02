@@ -1422,6 +1422,51 @@ func _peindre_le_temoin(ed: Control) -> void:
 	clic.call(vise["ecran"], true, true)
 	clic.call(vise["ecran"], false, true)
 	_vrai(_proche(ed._couleur_pinceau.color, Color(0.9, 0.1, 0.1)), "Alt+clic : la pipette lit la couleur peinte")
+	# LES CALQUES ET LA GOMME (Jordan, 2 octobre 2026) — par les vrais boutons et la vraie touche. Attendus : la couleur
+	# de la toile (celle du matériau à la création), le rouge peint ; jamais lus dans la fonction éprouvée.
+	mo.materiau_courant = k
+	ed._redire_les_materiaux()
+	var module_peinture: GDScript = Peinture   # une fonction anonyme ne voit pas une constante locale
+	var pile := func() -> Array: return module_peinture.toile(chemin)["calques"]
+	_vrai((pile.call() as Array).size() == 1 and ed._liste_calques.get_child_count() == 1 and ed._reglages_calque.visible,
+		"la section Paint montre la pile de la toile du matériau : un calque")
+	ed._boutons_calques["New"].pressed.emit()
+	_vrai((pile.call() as Array).size() == 2 and int(Peinture.toile(chemin)["actif"]) == 1
+		and ed._liste_calques.get_child_count() == 2, "New : un second calque, actif, dans la liste")
+	ed._couleur_pinceau.color = Color(0.1, 0.2, 0.9)
+	ed._couleur_pinceau.color_changed.emit(Color(0.1, 0.2, 0.9))
+	clic.call(vise["ecran"], true)
+	clic.call(vise["ecran"], false)
+	var haut: Image = (pile.call() as Array)[1]["image"]
+	var hpx := haut.get_pixel(int(px.x), int(px.y))
+	_vrai(_proche(lu.call(), Color(0.1, 0.2, 0.9)) and hpx.a > 0.99,
+		"le trait va dans le calque ACTIF (le haut) et la toile le montre (%s)" % lu.call())
+	_vrai(_proche((pile.call() as Array)[0]["image"].get_pixel(int(px.x), int(px.y)), Color(0.9, 0.1, 0.1)),
+		"le calque du bas garde le rouge d'avant")
+	mo.touche(_cle(KEY_E))
+	_vrai(mo.gomme and ed._bouton_gomme.button_pressed, "E bascule la gomme, et le bouton le montre")
+	clic.call(vise["ecran"], true)
+	clic.call(vise["ecran"], false)
+	_vrai(haut.get_pixel(int(px.x), int(px.y)).a < 0.01 and _proche(lu.call(), Color(0.9, 0.1, 0.1)),
+		"la gomme rend le haut transparent : le rouge du bas revient (%s)" % lu.call())
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(_proche(lu.call(), Color(0.1, 0.2, 0.9)), "UN Ctrl+Z défait le coup de gomme")
+	mo.touche(_cle(KEY_E))
+	_vrai(not mo.gomme and not ed._bouton_gomme.button_pressed, "E revient au pinceau")
+	ed._liste_calques.get_child(1).get_child(0).pressed.emit()
+	_vrai(not bool((pile.call() as Array)[0]["visible"]) and _proche(lu.call(), Color(0.1, 0.2, 0.9)),
+		"l'œil du bas (dernier de la liste, qui va du haut vers le bas) le cache")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(bool((pile.call() as Array)[0]["visible"]) and ed._liste_calques.get_child_count() == 2,
+		"Ctrl+Z le remontre, et la liste suit")
+	ed._boutons_calques["Delete"].pressed.emit()
+	_vrai((pile.call() as Array).size() == 1 and _proche(lu.call(), Color(0.9, 0.1, 0.1)), "Delete : le haut s'en va, le rouge revient")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai((pile.call() as Array).size() == 2 and is_same((pile.call() as Array)[1]["image"], haut)
+		and _proche(lu.call(), Color(0.1, 0.2, 0.9)), "Ctrl+Z rend le MÊME calque, et son bleu")
+	ed._enregistrer_le_temoin_modele(true)
+	_vrai(FileAccess.file_exists(Peinture.dossier_des_calques(chemin).path_join("layers.json")),
+		"la pile s'écrit à côté de la toile, avec le témoin")
 	# LE CURSEUR (Jordan, 1er octobre 2026) : survoler la paroi montre l'empreinte du tampon, dans le plan de la face.
 	# Attendu d'ailleurs : en Boîte l'UV est la position divisée par la répétition, donc un CERCLE de
 	# taille / largeur de la toile × répétition.
