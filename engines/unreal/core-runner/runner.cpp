@@ -197,6 +197,16 @@ namespace
 			const FCell Got = Shapes::WallNormal(Here, Vec(I["cell"]), Vec(I["face"]));
 			return Got == Vec(E["normal"]) ? "" : "expected " + Show(Vec(E["normal"])) + ", got " + Show(Got);
 		}
+		if (Kind == "room")
+		{
+			const FShapeResult R = Shapes::Room(Here, Vec(I["a"]), Vec(I["b"]), static_cast<int>(I["floors"].AsInt()), I["up"].Bool);
+			const std::string Got = R.Error + "/" + std::to_string(R.Repaired);
+			const std::string Want = E["error"].String + "/" + std::to_string(E["repaired"].AsInt());
+			if (Got != Want) return "error/repaired: expected " + Want + ", got " + Got;
+			std::string Why = Same("set", Tools::Sorted(R.Set), E["set"], false);
+			if (Why.empty()) Why = Same("clear", Tools::Sorted(R.Clear), E["clear"], false);
+			return Why;
+		}
 		if (Kind == "special_shape")
 		{
 			FShapeResult R;

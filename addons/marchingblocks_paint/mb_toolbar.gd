@@ -44,6 +44,9 @@ var _profile_buttons := {}
 var _shape_size: SpinBox
 var _shape_length: SpinBox
 var _stairs_step: SpinBox
+var _room_bar: HBoxContainer
+var _room_floors: SpinBox
+var _room_sense := {}
 var _rail: Button
 var _brush: HBoxContainer
 var _selection_bar: HBoxContainer
@@ -87,7 +90,9 @@ func _build() -> void:
 			+ "joins two walls, and the deck bends."],
 			["balcony", "Balcony", "A slab sticking out of a WALL at the height you click, with its rail."],
 			["stairs", "Stairs", "Builds stairs against a WALL: click where they should arrive, they come down to "
-			+ "the ground, Step cells per step; Connect climbs from one floor to another, higher up."]]:
+			+ "the ground, Step cells per step; Connect climbs from one floor to another, higher up."],
+			["room", "Room", "Draw a rectangle flat on the floor grid: a hollow room rises from it (Up) or sinks "
+			+ "under it (Down), Floors high, its walls one cell thick. At least 3 x 3."]]:
 		_special_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_special(m[0]))
 	# Their settings: only while a shape is the tool, and only what that shape reads.
 	_shape_bar = HBoxContainer.new()
@@ -116,6 +121,19 @@ func _build() -> void:
 		func(v: int) -> void: editor.stairs_step = v)
 	_rail = _toggle(_shape_bar, "rail", "Rail", "A one-cell rim along the open sides (bridge, balcony, stairs). "
 		+ "Needs a size of 2 or more.", func() -> void: editor.rail = _rail.button_pressed)
+	# The room's own settings: its free height, and whether it rises from the rectangle or sinks under it.
+	_room_bar = HBoxContainer.new()
+	_room_bar.add_theme_constant_override("separation", 2)
+	bar.add_child(_room_bar)
+	_gap(_room_bar)
+	_room_floors = _spin(_room_bar, 1, Shapes.ROOM_FLOORS_MAX, "Floors ( [ and ] ): the room's free height, in cells.",
+		func(v: int) -> void: editor.room_floors = v)
+	for s in [["up", "Up", "The rectangle is the room's FLOOR: it rises from the grid.", true],
+			["down", "Down", "The rectangle is the room's CEILING: it sinks under the grid.", false]]:
+		var on: bool = s[3]
+		_room_sense[s[0]] = _toggle(_room_bar, s[0], s[1], s[2], func() -> void:
+			editor.room_up = on
+			refresh())
 	# The brush: only for Add, Dig and Select — Rect and Box have none.
 	_brush = HBoxContainer.new()
 	_brush.add_theme_constant_override("separation", 2)
@@ -327,7 +345,12 @@ func refresh() -> void:
 	var shaping: bool = editor.mode == "shape"
 	for sp in _special_buttons:
 		(_special_buttons[sp] as Button).set_pressed_no_signal(shaping and sp == editor.special)
-	_shape_bar.visible = shaping
+	var room: bool = shaping and editor.special == "room"
+	_shape_bar.visible = shaping and not room
+	_room_bar.visible = room
+	_room_floors.set_value_no_signal(editor.room_floors)
+	(_room_sense["up"] as Button).set_pressed_no_signal(editor.room_up)
+	(_room_sense["down"] as Button).set_pressed_no_signal(not editor.room_up)
 	_ends_buttons["straight"].visible = editor.special != "balcony"
 	_ends_buttons["connect"].visible = editor.special != "balcony"
 	(_ends_buttons["straight"] as Button).set_pressed_no_signal(not editor.connect_ends)

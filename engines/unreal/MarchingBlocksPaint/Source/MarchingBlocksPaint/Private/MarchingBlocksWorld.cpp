@@ -154,7 +154,8 @@ MBPaint::FShapeRequest AMarchingBlocksWorld::ShapeSettings() const
 	R.Shape = SpecialShape == EMarchingBlocksSpecialShape::Well ? MBPaint::ESpecialShape::Well
 		: SpecialShape == EMarchingBlocksSpecialShape::Bridge ? MBPaint::ESpecialShape::Bridge
 		: SpecialShape == EMarchingBlocksSpecialShape::Balcony ? MBPaint::ESpecialShape::Balcony
-		: SpecialShape == EMarchingBlocksSpecialShape::Stairs ? MBPaint::ESpecialShape::Stairs : MBPaint::ESpecialShape::Tunnel;
+		: SpecialShape == EMarchingBlocksSpecialShape::Stairs ? MBPaint::ESpecialShape::Stairs
+		: SpecialShape == EMarchingBlocksSpecialShape::Room ? MBPaint::ESpecialShape::Room : MBPaint::ESpecialShape::Tunnel;
 	R.Profile = ShapeProfile == EMarchingBlocksShapeProfile::Square ? MBPaint::EShapeProfile::Square
 		: ShapeProfile == EMarchingBlocksShapeProfile::Arch ? MBPaint::EShapeProfile::Arch : MBPaint::EShapeProfile::Round;
 	R.Size = ShapeSize;

@@ -23,7 +23,9 @@
 
 namespace MBPaint
 {
-	enum class ESpecialShape { Tunnel, Well, Bridge, Balcony, Stairs };
+	// Room is LAST, so nothing a level saved is renumbered. It is DRAWN (a rectangle on the floor): Shapes::Room,
+	// never Build (which refuses it as unknown_shape).
+	enum class ESpecialShape { Tunnel, Well, Bridge, Balcony, Stairs, Room };
 	enum class EShapeProfile { Round, Square, Arch };
 
 	/// What a special shape asks for.
@@ -60,6 +62,12 @@ namespace MBPaint
 		constexpr int SpanMax = 128;
 		constexpr int StepMax = 4;
 		constexpr long long VolumeMax = 262144;
+		constexpr int RoomFloorsMax = 32;
+
+		/// A ROOM: a rectangle drawn flat on a floor (A and B its corners, A.Y the floor's y), raised UP — the
+		/// rectangle is the room's floor — or DOWN — it is its ceiling — by Floors free floors. A shell one cell
+		/// thick, its inside dug out. At least 3 × 3 (too_small). Nothing changes on an error.
+		MARCHINGBLOCKSPAINT_API FShapeResult Room(const FCellSet& Cells, const FCell& A, const FCell& B, int Floors, bool bUp);
 
 		MARCHINGBLOCKSPAINT_API bool Digs(ESpecialShape Shape);
 

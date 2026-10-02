@@ -24,6 +24,7 @@ const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const CAS := "res://addons/marchingblocks_paint/conformance.json"
 const GENERATEUR := preload("res://DEV_TOOLS/generer_cas_d_epreuve.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
+const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
 const GENERATEUR_ICONES := preload("res://DEV_TOOLS/generer_icones_greffons.gd")
@@ -435,6 +436,7 @@ func _les_cas_d_outils() -> void:
 	var erreurs := {}
 	var ouverts := {}
 	var repares := false
+	var salles := {}
 	for c in frais["cases"]:
 		sortes[c["kind"]] = true
 		match c["kind"]:
@@ -458,6 +460,12 @@ func _les_cas_d_outils() -> void:
 			"wall_normal":
 				var n: Array = c["expected"]["normal"]
 				biais = biais or (int(n[0]) != 0 and int(n[2]) != 0)
+			"room":
+				var er: Dictionary = c["expected"]
+				salles[er["error"] if er["error"] != "" else ("up" if c["input"]["up"] else "down")] = true
+				salles["dug"] = salles.get("dug", false) or (er["clear"] as Array).size() > 0
+				salles["repaired"] = salles.get("repaired", false) or int(er["repaired"]) > 0
+				salles["clamped"] = salles.get("clamped", false) or int(c["input"]["floors"]) > int(frais["limits"]["room_floors_max"])
 			"special_shape":
 				var e: Dictionary = c["expected"]
 				formes[c["input"]["shape"] + ("+connect" if c["input"]["connect"] else "")] = true
@@ -468,12 +476,15 @@ func _les_cas_d_outils() -> void:
 	# ⚠ LES FORMES SPÉCIALES (1er octobre 2026) : les cas doivent exercer ce qu'ils nomment — chaque forme,
 	# droite et reliée, chaque profil, chaque refus, une marche qui débouche et une aveugle, une paroi en
 	# biais, une réparation. Sans ça, un greffon qui ignore l'un d'eux passerait.
-	_egal(sortes.size(), 11, "les cas d'outils couvrent les onze sortes de fonctions")
+	_egal(sortes.size(), 12, "les cas d'outils couvrent les douze sortes de fonctions")
+	# LA SALLE (2 octobre 2026) : montée et descendue, creusée dans la roche, réparée, bornée, et ses deux refus.
+	for s in ["up", "down", "dug", "repaired", "clamped", "too_small", "too_large"]:
+		_vrai(salles.get(s, false), "aucun cas de salle « %s »" % s)
 	_vrai(biais, "aucun cas de normale ne rend une diagonale : les parois en biais ne sont pas éprouvées")
 	for f in ["tunnel", "tunnel+connect", "well", "bridge", "bridge+connect", "balcony", "stairs", "stairs+connect"]:
 		_vrai(formes.has(f), "aucun cas de forme « %s »" % f)
 	_egal(profils.size(), 3, "les trois profils ont leurs cas")
-	_egal(erreurs.size(), EO.ERREURS_EN.size() - 1, "chaque refus a son cas (sauf « trop grand », qu'aucun petit monde n'atteint), et un cas sans refus")
+	_egal(erreurs.size(), EO.ERREURS_EN.size() - 2, "chaque refus de forme a son cas (sauf « trop grand », qu'aucun petit monde n'atteint, et « trop petit », qui est à la salle), et un cas sans refus")
 	_vrai(ouverts.has(true) and ouverts.has(false), "une marche qui débouche ET une aveugle")
 	_vrai(repares, "aucun cas ne répare un damier : la réparation n'est pas éprouvée")
 	_vrai(touches >= 3 and manques >= 2, "les rayons doivent toucher ET manquer (%d / %d)" % [touches, manques])
@@ -552,6 +563,12 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 		"wall_normal":
 			var n := Shapes.wall_normal(ici, _vi(i["cell"]), _vi(i["face"]))
 			return "" if n == _vi(e["normal"]) else "attendu %s, rendu %s" % [_vi(e["normal"]), n]
+		"room":
+			var rr: Dictionary = Shapes.room(ici, _vi(i["a"]), _vi(i["b"]), int(i["floors"]), bool(i["up"]))
+			var ec := _meme_ensemble("set", rr["set"], e["set"]) + _meme_ensemble("clear", rr["clear"], e["clear"])
+			if rr["error"] != e["error"] or int(rr["repaired"]) != int(e["repaired"]):
+				ec += "erreur/réparées %s/%s au lieu de %s/%s" % [rr["error"], rr["repaired"], e["error"], e["repaired"]]
+			return ec
 		"special_shape":
 			var p := {"shape": i["shape"], "a": _vi(i["a"]), "face_a": _vi(i["face_a"]), "connect": i["connect"],
 				"profile": i["profile"], "size": i["size"], "length": i["length"], "rail": i["rail"],
@@ -783,6 +800,57 @@ func _les_outils_dans_la_vue() -> void:
 	_vrai(ed.shape_anchor.is_empty() and ed.status.contains("FLOOR"),
 		"Connect : une paroi n'est pas une première ancre de puits, et le greffon le dit")
 	ed.set_connect(false)
+	# LA SALLE (2 octobre 2026) : un rectangle tracé à plat sur la grille, par un vrai glissé — l'attendu vient du
+	# CŒUR (`FS.salle`), jamais du greffon. Un Ctrl+Z la reprend ; trop étroite, elle est refusée et dite.
+	var avant_salle: Dictionary = monde.cells()
+	var y_sol: int = monde.floor_y
+	# ⚠ EN VISÉE SCULPT : la salle se trace À PLAT sur la grille quelle que soit la visée — en Grid, viser la
+	# matière tomberait aussi sur le sol, et l'oubli resterait muet.
+	ed.set_aim("sculpt")
+	ed.set_special("room")
+	ed.room_floors = 2
+	ed.room_up = true
+	var coin_a := Vector3i(0, y_sol, 0)
+	var coin_b := Vector3i(4, y_sol, 3)
+	_vrai(clic.call(ecran.call(coin_a), true), "salle : le clic est PRIS")
+	bouge.call(ecran.call(coin_b))
+	clic.call(ecran.call(coin_b), false)
+	var voulu: Dictionary = FS.salle(avant_salle, coin_a, coin_b, 2, true)
+	var apres_salle: Dictionary = avant_salle.duplicate()
+	apres_salle.merge(voulu["poser"])
+	for c in voulu["effacer"]:
+		apres_salle.erase(c)
+	_vrai(not (voulu["poser"] as Dictionary).is_empty() and monde.cells() == apres_salle,
+		"un glissé sur la grille pose la salle que pose MarchingBlocks (%d cases de coque)" % (voulu["poser"] as Dictionary).size())
+	annul.undo()
+	_egal(monde.cells(), avant_salle, "UN Ctrl+Z reprend la salle")
+	# Down, DANS LA ROCHE : un bloc sous la grille, que la salle doit creuser (sans lui, oublier le creux resterait muet).
+	var roche := {}
+	for x in range(0, 5):
+		for y in range(y_sol - 5, y_sol):
+			for z in range(0, 4):
+				if not avant_salle.has(Vector3i(x, y, z)):
+					roche[Vector3i(x, y, z)] = true
+	monde.apply_cells(roche.keys(), [])
+	var avant_bas: Dictionary = monde.cells()
+	ed.room_up = false
+	clic.call(ecran.call(coin_a), true)
+	bouge.call(ecran.call(coin_b))
+	clic.call(ecran.call(coin_b), false)
+	voulu = FS.salle(avant_bas, coin_a, coin_b, 2, false)
+	apres_salle = avant_bas.duplicate()
+	apres_salle.merge(voulu["poser"])
+	for c in voulu["effacer"]:
+		apres_salle.erase(c)
+	_vrai(not (voulu["effacer"] as Dictionary).is_empty() and monde.cells() == apres_salle,
+		"Down : la salle descend sous la grille et CREUSE la roche, comme dans MarchingBlocks (%d cases creusées)"
+		% (voulu["effacer"] as Dictionary).size())
+	annul.undo()
+	monde.apply_cells([], roche.keys())
+	clic.call(ecran.call(coin_a), true)
+	bouge.call(ecran.call(Vector3i(1, y_sol, 3)))
+	clic.call(ecran.call(Vector3i(1, y_sol, 3)), false)
+	_vrai(monde.cells() == avant_salle and ed.status.contains("3 x 3"), "une salle trop étroite est refusée, et le greffon le dit")
 	ed.set_mode("add")
 
 	ed.world = null

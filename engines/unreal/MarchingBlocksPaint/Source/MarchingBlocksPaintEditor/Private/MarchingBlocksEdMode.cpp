@@ -88,10 +88,21 @@ bool UMarchingBlocksEdMode::Aimed(AMarchingBlocksWorld* World, const FVector& Or
 	return true;
 }
 
-// The Rect ignores the aim: it always lies flat on the floor — the gesture that draws a room's floor.
+namespace MarchingBlocksEdModeDetail
+{
+	// The room is DRAWN like the Rect — flat on the floor whatever the aim — not clicked like the other shapes.
+	bool DrawingRoom(const AMarchingBlocksWorld* World)
+	{
+		return World->Tool == EMarchingBlocksTool::Shape && World->SpecialShape == EMarchingBlocksSpecialShape::Room;
+	}
+}
+
+// The Rect ignores the aim: it always lies flat on the floor — the gesture that draws a room's floor. So does
+// the room itself.
 bool UMarchingBlocksEdMode::BoxCorner(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction, MBPaint::FCell& Corner)
 {
-	if (World->Tool == EMarchingBlocksTool::Rect) return World->CellUnderRay(Origin, Direction, Corner);
+	if (World->Tool == EMarchingBlocksTool::Rect || MarchingBlocksEdModeDetail::DrawingRoom(World))
+		return World->CellUnderRay(Origin, Direction, Corner);
 	MBPaint::FHit Hit;
 	if (!Aimed(World, Origin, Direction, false, Hit)) return false;
 	Corner = Hit.Cell;
@@ -149,6 +160,21 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 		const MBPaint::FCell Anchor = MBPaint::Tools::Anchor(MBPaint::EBrushTool::Add, Hit);
 		for (const MBPaint::FCell& D : World->Clipboard) Preview.push_back(Anchor + D);
 		PreviewColour = AddColour;
+		return;
+	}
+	if (MarchingBlocksEdModeDetail::DrawingRoom(World))
+	{
+		MBPaint::FCell Corner;
+		const bool bHas = BoxCorner(World, Origin, Direction, Corner);
+		PreviewColour = AddColour;
+		if (!bBoxing)
+		{
+			if (bHas) Preview.push_back(Corner);
+			return;
+		}
+		if (bHas) BoxEnd = Corner;
+		const MBPaint::FShapeResult R = MBPaint::Shapes::Room(World->GetCells(), BoxStart, BoxEnd, World->RoomFloors, World->bRoomUp);
+		Preview = MBPaint::Tools::Sorted(R.Set);
 		return;
 	}
 	if (World->Tool == EMarchingBlocksTool::Shape)
@@ -238,6 +264,14 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				}
 				return true;
 			}
+			if (MarchingBlocksEdModeDetail::DrawingRoom(World))
+			{
+				MBPaint::FCell Corner;
+				if (!BoxCorner(World, Origin, Direction, Corner)) return true;
+				bBoxing = true;
+				BoxStart = BoxEnd = Corner;
+				return true;
+			}
 			if (World->Tool == EMarchingBlocksTool::Shape)
 			{
 				ClickShape(World, Origin, Direction);
@@ -265,6 +299,13 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 		}
 		if (Event == IE_Released)
 		{
+			if (MarchingBlocksEdModeDetail::DrawingRoom(World))
+			{
+				if (!bBoxing) return true;
+				bBoxing = false;
+				ApplyRoom(World, BoxStart, BoxEnd);
+				return true;
+			}
 			if (World->Tool == EMarchingBlocksTool::Shape) return true;
 			if (bBoxing)
 			{
@@ -339,6 +380,10 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else if (Key == EKeys::B) World->Tool = EMarchingBlocksTool::Box;
 	else if (Key == EKeys::Tab) SetAimState(World, MBPaint::Tools::Tab(World->GetAimState()));
 	else if (Key == EKeys::SpaceBar) SetAimState(World, MBPaint::Tools::ToggleNavigate(World->GetAimState()));
+	else if (Key == EKeys::LeftBracket && MarchingBlocksEdModeDetail::DrawingRoom(World))
+		World->RoomFloors = FMath::Max(1, World->RoomFloors - 1);
+	else if (Key == EKeys::RightBracket && MarchingBlocksEdModeDetail::DrawingRoom(World))
+		World->RoomFloors = FMath::Min(MBPaint::Shapes::RoomFloorsMax, World->RoomFloors + 1);
 	else if (Key == EKeys::LeftBracket)
 	{
 		if (bShaping) World->ShapeSize = FMath::Max(1, World->ShapeSize - 1);
@@ -364,6 +409,26 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else return false;
 	Preview.clear();
 	return true;
+}
+
+// The room between two corners of the floor: refused and said, or applied as ONE transaction.
+void UMarchingBlocksEdMode::ApplyRoom(AMarchingBlocksWorld* World, const MBPaint::FCell& A, const MBPaint::FCell& B)
+{
+	const MBPaint::FShapeResult R = MBPaint::Shapes::Room(World->GetCells(), A, B, World->RoomFloors, World->bRoomUp);
+	if (!R.Error.empty())
+	{
+		World->Status = R.Error == "too_small" ? FString(TEXT("Room — at least 3 x 3 cells: draw a bigger rectangle."))
+			: FString::Printf(TEXT("Room — too large: more than %lld cells."), MBPaint::Shapes::VolumeMax);
+		return;
+	}
+	MBPaint::FChange Change;
+	Change.Set = R.Set;
+	Change.Clear = R.Clear;
+	const FScopedTransaction Transaction(LOCTEXT("Room", "MarchingBlocks room"));
+	World->Modify();
+	World->Apply(Change);
+	World->Status = FString::Printf(TEXT("Room — %d cell(s) of shell, %d dug out."), static_cast<int32>(R.Set.size()),
+		static_cast<int32>(R.Clear.size()));
 }
 
 // ── Special shapes ───────────────────────────────────────────────────────────────────────────────────

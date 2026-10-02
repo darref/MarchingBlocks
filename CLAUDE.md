@@ -35,8 +35,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     lisent le contrat (COLOR_0 : courant, genre, profondeur) ; un emplacement de matériau par genre d'eau ; plus
     tard, recalculer l'eau quand on peint (`fluides.gd` réécrit en C# et C++, avec ses cas d'épreuve) ; prévenir
     l'artiste que les presets ne sont pas obligatoires.
-  - **la salle** (§5, « les formes spéciales ») : `FS.salle` réécrite en C# et en C++, ses cas dans
-    `tools_conformance.json`, et le geste « tracer un rectangle sur la grille » dans les trois éditeurs.
+  - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
 
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
@@ -1416,6 +1415,30 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   - ⚠ **PAS ÉPROUVÉ** : l'acteur et le mode Unreal dans l'éditeur (ni import, ni geste, ni Ctrl+Z) — seule la règle
     l'est, par le banc C++ ; dans Unity, le pinceau de la Scene view n'est pas mené (le test reproduit ce qu'il fait :
     `RecordObjects` puis `Apply`). Rien de tout cela n'a été tenu en main.
+- **LA SALLE DANS LES GREFFONS — FAITE (2 octobre 2026)**, rattrapage de la forme « Room » (§5) :
+  - **la règle et ses cas** : `epreuve_outils.gd` écrit la règle `room(cells, a, b, floors, up)` (en anglais, dans
+    `rules_text`), la borne `room_floors_max` et SIX cas de la sorte `room` (montée, descendue dans la roche — 18 cases
+    creusées —, réparée contre une case touchée par une arête, étages bornés, `too_small`, `too_large`), calculés par
+    `FS.salle`. Le contrôle exige que les cas EXERCENT chacun de ces six points ; douze sortes de fonctions.
+  - **la règle** : `Shapes.room` (Godot), `MBShapes.Room` (C#), `Shapes::Room` (C++) — la coque posée, le dedans
+    creusé, la réparation des contacts diagonaux comme une forme qui AJOUTE.
+  - **le geste**, tracé comme le Rect, à plat sur la grille QUELLE QUE SOIT LA VISÉE (appuyer, glisser, relâcher —
+    UNE annulation) ; réglages Floors (`[` `]`) et Up / Down ; l'aperçu montre la coque. Godot : `special == "room"`
+    (barre : bouton Room, Floors, Up / Down) ; Unity : `SpecialShape.Room` (AJOUTÉ EN DERNIER), `SceneRoom` et
+    `ApplyRoom` ; Unreal : `EMarchingBlocksSpecialShape::Room` (dernier), `RoomFloors` / `bRoomUp` sur l'acteur,
+    `ApplyRoom` en une transaction, le panneau Slate. `Build` refuse `Room` (`unknown_shape`) : elle se trace.
+    L'icône `room` (celle de la salle de l'appli) part dans les trois.
+  - **MESURÉ** : `test_greffon_peinture` 255 (les six cas ; et le VRAI glissé, en visée Sculpt : la salle montée,
+    puis descendue dans un bloc de roche — attendus de `FS.salle` —, un Ctrl+Z, trop étroite refusée et dite) ; banc
+    .NET et banc C++ (drapeaux d'Unreal) : 121 cas d'outils, 0 échec ; **Unity 6.6 : 31 tests sur 31** (trois de la
+    salle, attendus à la main : 82 cases de coque, 6 creusées, un Undo) ; **Unreal 5.8.3 : BuildPlugin, BUILD
+    SUCCESSFUL, aucun avertissement**, 44 icônes.
+  - **MUTATIONS, TOUTES ROUGES À LA FIN** : la règle × 3 dans chaque greffon (descente décalée d'un étage, pas de
+    réparation, pas de borne d'étages) ; l'éditeur Godot × 3 et Unity × 3 (visée au lieu du sol, sens ignoré, creux
+    oublié, pas d'annulation). ⚠ **DEUX D'ABORD MUETTES, ET C'ÉTAIT LE TEST** : en visée Grid, viser la matière tombe
+    aussi sur le sol (il fallait Sculpt) ; et sous la grille il n'y avait rien à creuser (il fallait un bloc de roche).
+  - ⚠ **PAS ÉPROUVÉ** : le mode Unreal (seul compile) ; la Scene view d'Unity au vrai glissé (le test appelle
+    `ApplyRoom`) ; rien tenu en main.
 - **OUVERT** : la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — l'APPLI la fait depuis le 1er octobre 2026 (§5, « Le geste d'une
   case »), les greffons ne la font pas encore (le Unity pose

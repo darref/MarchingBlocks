@@ -28,7 +28,7 @@ public sealed class ShapeEditorTests
     MarchingBlocksWorld world;
     Editor editor;
     readonly Dictionary<string, object> saved = new Dictionary<string, object>();
-    static readonly string[] Fields = { "mode", "special", "connectEnds", "profile", "shapeSize", "shapeLength", "rail", "shapeAnchor", "editing" };
+    static readonly string[] Fields = { "mode", "special", "connectEnds", "profile", "shapeSize", "shapeLength", "rail", "shapeAnchor", "editing", "roomFloors", "roomUp" };
 
     [SetUp]
     public void SetUp()
@@ -66,6 +66,53 @@ public sealed class ShapeEditorTests
     void Click(Int3 cell, Int3 normal) =>
         T.GetMethod("ClickShape", BindingFlags.Instance | BindingFlags.NonPublic)
             .Invoke(editor, new object[] { new Hit { Touched = true, Cell = cell, Normal = normal } });
+
+    void Room(Int3 a, Int3 b) =>
+        T.GetMethod("ApplyRoom", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(editor, new object[] { a, b });
+
+    // THE ROOM (2 October 2026), drawn on the floor. Worked out by hand: a 5 × 5 rectangle in the air, two free
+    // floors up, is a 5 × 4 × 5 box (100 cells) minus its 3 × 2 × 3 inside (18): 82 cells of shell.
+    [Test]
+    public void ARoomRisesFromTheRectangleAndOneUndoTakesItBack()
+    {
+        int full = world.CellCount;
+        Set("special", SpecialShape.Room);
+        Set("roomFloors", 2);
+        Set("roomUp", true);
+        Room(new Int3(4, 0, -2), new Int3(8, 0, 2));
+        Assert.AreEqual(full + 82, world.CellCount, "a 5 × 5 room two floors high: 82 cells of shell");
+        Assert.IsTrue(world.Cells.Contains(new Int3(4, 3, -2)), "its ceiling, three cells up");
+        Assert.IsFalse(world.Cells.Contains(new Int3(6, 1, 0)), "its inside stays empty");
+        Undo.PerformUndo();
+        Assert.AreEqual(full, world.CellCount, "ONE Undo takes the room back");
+    }
+
+    // Down, into the wall (x 0..2, y 0..6): a 3 × 5 rectangle on its top, two floors down, digs its inside — one
+    // cell across, two high, three deep: 6 cells. The shell is already rock.
+    [Test]
+    public void ARoomSunkIntoTheMatterDigsItsInside()
+    {
+        int full = world.CellCount;
+        Set("special", SpecialShape.Room);
+        Set("roomFloors", 2);
+        Set("roomUp", false);
+        Room(new Int3(0, 6, -4), new Int3(2, 6, 0));
+        Assert.AreEqual(full - 6, world.CellCount, "the inside is dug: 1 × 2 × 3");
+        Assert.IsFalse(world.Cells.Contains(new Int3(1, 4, -2)), "dug");
+        Assert.IsTrue(world.Cells.Contains(new Int3(1, 3, -2)), "its floor stays");
+        Undo.PerformUndo();
+        Assert.AreEqual(full, world.CellCount, "ONE Undo fills it again");
+    }
+
+    [Test]
+    public void ARoomTwoCellsWideIsRefusedAndSaid()
+    {
+        int full = world.CellCount;
+        Set("special", SpecialShape.Room);
+        Room(new Int3(4, 0, -2), new Int3(5, 0, 2));
+        Assert.AreEqual(full, world.CellCount, "nothing changes");
+        StringAssert.Contains("3 × 3", (string)T.GetField("status", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(editor), "and the editor says why");
+    }
 
     static readonly Int3 West = new Int3(-1, 0, 0);
     static readonly Int3 East = new Int3(1, 0, 0);

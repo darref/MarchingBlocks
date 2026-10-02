@@ -19,6 +19,7 @@ const LENGTH_MAX := 64
 const SPAN_MAX := 128
 const STEP_MAX := 4
 const VOLUME_MAX := 262144
+const ROOM_FLOORS_MAX := 32
 
 const PLANES := [
 	[Vector3i(1, 0, 0), Vector3i(0, 1, 0)],
@@ -418,6 +419,37 @@ static func _column(cells: Dictionary, body: Dictionary, top: Vector3i, edge: bo
 
 ## No two cells may touch by an edge only. By rounds, order-free: every 2×2 checkerboard around a cell
 ## changed in the previous round; dig clears its full pair, add sets its empty pair.
+## A ROOM: a rectangle drawn flat on a floor (a and b its corners, a.y the floor's y), raised UP — the rectangle is
+## the room's floor — or DOWN — it is its ceiling — by `floors` free floors. A shell one cell thick, its inside dug
+## out. At least 3 x 3 (too_small). Returns {set, clear, error, repaired}, nothing changed on an error.
+static func room(cells: Dictionary, a: Vector3i, b: Vector3i, floors: int, up: bool) -> Dictionary:
+	var r := {"set": {}, "clear": {}, "error": "", "repaired": 0}
+	var x0 := mini(a.x, b.x)
+	var x1 := maxi(a.x, b.x)
+	var z0 := mini(a.z, b.z)
+	var z1 := maxi(a.z, b.z)
+	if x1 - x0 < 2 or z1 - z0 < 2:
+		r["error"] = "too_small"
+		return r
+	var e := clampi(floors, 1, ROOM_FLOORS_MAX)
+	var y0 := a.y if up else a.y - e - 1
+	var y1 := y0 + e + 1
+	if (x1 - x0 + 1) * (z1 - z0 + 1) * (e + 2) > VOLUME_MAX:
+		r["error"] = "too_large"
+		return r
+	for x in range(x0, x1 + 1):
+		for z in range(z0, z1 + 1):
+			for y in range(y0, y1 + 1):
+				var c := Vector3i(x, y, z)
+				if x == x0 or x == x1 or z == z0 or z == z1 or y == y0 or y == y1:
+					if not cells.has(c):
+						r["set"][c] = true
+				elif cells.has(c):
+					r["clear"][c] = true
+	r["repaired"] = _repair(cells, r["set"], r["clear"], false)
+	return r
+
+
 static func _repair(cells: Dictionary, to_set: Dictionary, to_clear: Dictionary, dig: bool) -> int:
 	var full := func(c: Vector3i) -> bool:
 		return to_set.has(c) or (cells.has(c) and not to_clear.has(c))

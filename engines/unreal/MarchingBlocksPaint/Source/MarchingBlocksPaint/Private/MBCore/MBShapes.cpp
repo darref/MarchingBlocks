@@ -281,6 +281,30 @@ namespace MBPaint
 
 	namespace Shapes
 	{
+		FShapeResult Room(const FCellSet& Cells, const FCell& A, const FCell& B, int Floors, bool bUp)
+		{
+			FShapeResult Res;
+			const int X0 = std::min(A.X, B.X), X1 = std::max(A.X, B.X), Z0 = std::min(A.Z, B.Z), Z1 = std::max(A.Z, B.Z);
+			if (X1 - X0 < 2 || Z1 - Z0 < 2) { Res.Error = "too_small"; return Res; }
+			const int E = std::max(1, std::min(Floors, RoomFloorsMax));
+			const int Y0 = bUp ? A.Y : A.Y - E - 1;
+			const int Y1 = Y0 + E + 1;
+			if (static_cast<long long>(X1 - X0 + 1) * (Z1 - Z0 + 1) * (E + 2) > VolumeMax) { Res.Error = "too_large"; return Res; }
+			for (int X = X0; X <= X1; ++X)
+				for (int Z = Z0; Z <= Z1; ++Z)
+					for (int Y = Y0; Y <= Y1; ++Y)
+					{
+						const FCell C(X, Y, Z);
+						if (X == X0 || X == X1 || Z == Z0 || Z == Z1 || Y == Y0 || Y == Y1)
+						{
+							if (!Cells.count(C)) Res.Set.insert(C);
+						}
+						else if (Cells.count(C)) Res.Clear.insert(C);
+					}
+			Res.Repaired = ShpRepair(Cells, Res.Set, Res.Clear, false);
+			return Res;
+		}
+
 		bool Digs(ESpecialShape Shape) { return Shape == ESpecialShape::Tunnel || Shape == ESpecialShape::Well; }
 
 		FCell WallNormal(const FCellSet& Cells, const FCell& C, const FCell& Face)
@@ -348,6 +372,7 @@ namespace MBPaint
 		FShapeResult Build(const FCellSet& Cells, const FShapeRequest& R)
 		{
 			FShapeResult Res;
+			if (R.Shape == ESpecialShape::Room) { Res.Error = "unknown_shape"; return Res; }
 			const int H = std::max(1, std::min(7, R.Size)) - 1;
 			const int Length = std::max(1, std::min(LengthMax, R.Length));
 			const bool bDig = Digs(R.Shape);

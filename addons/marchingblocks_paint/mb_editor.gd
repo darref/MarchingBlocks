@@ -60,6 +60,9 @@ var shape_length := 8
 var rail := true
 ## One-click stairs: how deep each step is, 1 to Shapes.STEP_MAX cells.
 var stairs_step := 2
+## The room: drawn flat on the floor grid, then raised (up) or sunk (down) by this many free floors.
+var room_floors := 3
+var room_up := true
 ## The first end of a Connect: {"cell", "face"}, empty otherwise.
 var shape_anchor := {}
 var selection := {}
@@ -136,6 +139,10 @@ func set_mode(value: String) -> void:
 	changed.emit()
 
 
+func _drawing_room() -> bool:
+	return mode == "shape" and special == "room"
+
+
 ## Picks a special shape: the mode becomes "shape".
 func set_special(value: String) -> void:
 	special = value
@@ -170,9 +177,10 @@ func aimed(camera: Camera3D, position: Vector2, for_add: bool) -> Dictionary:
 	return {"hit": false, "cell": c, "normal": Vector3i.ZERO}
 
 
-## The rect ignores the aim: it always lies flat on the floor — the gesture that draws a room's floor.
+## The rect ignores the aim: it always lies flat on the floor — the gesture that draws a room's floor. So does
+## the room itself.
 func _corner(camera: Camera3D, position: Vector2) -> Variant:
-	if mode == "rect":
+	if mode == "rect" or _drawing_room():
 		return world.cell_under_ray(camera.project_ray_origin(position), camera.project_ray_normal(position))
 	var p := aimed(camera, position, false)
 	return null if p.is_empty() else p["cell"]
@@ -190,6 +198,17 @@ func _gesture(inverse: bool) -> String:
 # ── Hover and strokes ───────────────────────────────────────────────────────────────────────────────
 
 func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
+	if _drawing_room():
+		var corner = _corner(camera, position)
+		if _box_start == null:
+			_show_preview([] if corner == null else [corner], ADD_COLOUR)
+			return
+		if corner != null:
+			_box_end = corner
+		var r: Dictionary = Shapes.room(world.cells(), _box_start, _box_end, room_floors, room_up)
+		status = "" if r["error"] == "" else "Room — " + SHAPE_ERRORS.get(r["error"], r["error"])
+		_show_preview(r["set"].keys(), ADD_COLOUR)
+		return
 	if mode == "shape":
 		_hover_shape(camera, position)
 		return
@@ -259,6 +278,25 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 	if b.alt_pressed:
 		return false
+	if _drawing_room():
+		# The room is DRAWN like the rect: press a corner, drag, release — then it rises (or sinks), one Ctrl+Z.
+		if b.pressed:
+			var corner = _corner(camera, b.position)
+			if corner != null:
+				_box_start = corner
+				_box_end = corner
+		elif _box_start != null:
+			var r: Dictionary = Shapes.room(world.cells(), _box_start, _box_end, room_floors, room_up)
+			_box_start = null
+			if r["error"] != "":
+				status = "Room — " + SHAPE_ERRORS.get(r["error"], r["error"])
+			else:
+				_commit("MarchingBlocks room", r["set"], r["clear"])
+				status = "Room — %d cell(s) of shell, %d dug out%s." % [r["set"].size(), r["clear"].size(),
+					"" if int(r["repaired"]) == 0 else ", %d added where it touched the world by an edge" % int(r["repaired"])]
+			_show_preview([], ADD_COLOUR)
+			changed.emit()
+		return true
 	if mode == "shape":
 		if b.pressed:
 			click_shape(camera, b.position)
@@ -324,8 +362,9 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 # A shape starts from a FACE, so it always aims at the matter, whatever the aim (the grid has no face).
 
 const SHAPE_NAMES := {"tunnel": "Tunnel", "well": "Well", "bridge": "Bridge", "balcony": "Balcony",
-	"stairs": "Stairs"}
+	"stairs": "Stairs", "room": "Room"}
 const SHAPE_ERRORS := {
+	"too_small": "a room is at least 3 x 3 cells: draw a bigger rectangle.",
 	"needs_a_wall": "click a WALL, a side face of the matter.",
 	"needs_floor_or_ceiling": "click a FLOOR or a CEILING, a top or bottom face.",
 	"needs_a_floor": "click two FLOORS, the top face of the matter.",
@@ -569,13 +608,17 @@ func _key(camera: Camera3D, k: InputEventKey) -> bool:
 		KEY_SPACE:
 			set_navigating(true)
 		KEY_BRACKETLEFT:
-			if mode == "shape":
+			if _drawing_room():
+				room_floors = maxi(1, room_floors - 1)
+			elif mode == "shape":
 				shape_size = maxi(1, shape_size - 1)
 			else:
 				brush_size = maxi(1, brush_size - 1)
 			changed.emit()
 		KEY_BRACKETRIGHT:
-			if mode == "shape":
+			if _drawing_room():
+				room_floors = mini(Shapes.ROOM_FLOORS_MAX, room_floors + 1)
+			elif mode == "shape":
 				shape_size = mini(7, shape_size + 1)
 			else:
 				brush_size = mini(7, brush_size + 1)

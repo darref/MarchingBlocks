@@ -16,7 +16,9 @@ using System.Collections.Generic;
 
 namespace MarchingBlocks.Paint
 {
-    public enum SpecialShape { Tunnel, Well, Bridge, Balcony, Stairs }
+    // Room is LAST, so nothing a scene saved is renumbered. It is DRAWN (a rectangle on the floor), not clicked:
+    // MBShapes.Room, never Build.
+    public enum SpecialShape { Tunnel, Well, Bridge, Balcony, Stairs, Room }
     public enum ShapeProfile { Round, Square, Arch }
 
     /// <summary>What a special shape asks for.</summary>
@@ -51,6 +53,31 @@ namespace MarchingBlocks.Paint
         public const int SpanMax = 128;
         public const int StepMax = 4;
         public const long VolumeMax = 262144;
+        public const int RoomFloorsMax = 32;
+
+        /// <summary>A ROOM: a rectangle drawn flat on a floor (a and b its corners, a.y the floor's y), raised UP — the
+        /// rectangle is the room's floor — or DOWN — it is its ceiling — by `floors` free floors. A shell one cell
+        /// thick, its inside dug out. At least 3 × 3 (too_small). Nothing changes on an error.</summary>
+        public static ShapeResult Room(ICollection<Int3> cells, Int3 a, Int3 b, int floors, bool up)
+        {
+            var r = new ShapeResult();
+            int x0 = Math.Min(a.x, b.x), x1 = Math.Max(a.x, b.x), z0 = Math.Min(a.z, b.z), z1 = Math.Max(a.z, b.z);
+            if (x1 - x0 < 2 || z1 - z0 < 2) { r.Error = "too_small"; return r; }
+            int e = Math.Max(1, Math.Min(floors, RoomFloorsMax));
+            int y0 = up ? a.y : a.y - e - 1, y1 = y0 + e + 1;
+            if ((long)(x1 - x0 + 1) * (z1 - z0 + 1) * (e + 2) > VolumeMax) { r.Error = "too_large"; return r; }
+            for (int x = x0; x <= x1; x++)
+                for (int z = z0; z <= z1; z++)
+                    for (int y = y0; y <= y1; y++)
+                    {
+                        var c = new Int3(x, y, z);
+                        if (x == x0 || x == x1 || z == z0 || z == z1 || y == y0 || y == y1)
+                        { if (!cells.Contains(c)) r.Set.Add(c); }
+                        else if (cells.Contains(c)) r.Clear.Add(c);
+                    }
+            r.Repaired = Repair(cells, r.Set, r.Clear, false);
+            return r;
+        }
 
         static readonly Int3[] Horizontal = { new Int3(1, 0, 0), new Int3(-1, 0, 0), new Int3(0, 0, 1), new Int3(0, 0, -1) };
         static readonly Int3[][] Planes =

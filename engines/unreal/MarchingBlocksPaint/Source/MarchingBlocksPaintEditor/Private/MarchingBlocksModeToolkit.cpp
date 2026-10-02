@@ -257,11 +257,47 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("bridge", LOCTEXT("Bridge", "Bridge — a deck out of a WALL across the air to the first wall in front; Connect joins two walls, and the deck bends."), EMarchingBlocksSpecialShape::Bridge)]
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("balcony", LOCTEXT("Balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."), EMarchingBlocksSpecialShape::Balcony)]
 				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("stairs", LOCTEXT("Stairs", "Stairs — click a WALL where they should arrive: they come down to the ground, Step cells per step; Connect climbs from one floor to another, higher up."), EMarchingBlocksSpecialShape::Stairs)]
+				+ SHorizontalBox::Slot().AutoWidth()[SpecialToggle("room", LOCTEXT("Room", "Room — draw a rectangle flat on the floor: a hollow room rises from it (Up) or sinks under it (Down), Floors high, its walls one cell thick. At least 3 x 3."), EMarchingBlocksSpecialShape::Room)]
+			]
+			// The room's own settings: its free height, and whether it rises from the rectangle or sinks under it.
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
+			[
+				SNew(SHorizontalBox)
+				.Visibility_Lambda([World, Shown]()
+				{
+					AMarchingBlocksWorld* W = World();
+					return Shown(W && W->Tool == EMarchingBlocksTool::Shape && W->SpecialShape == EMarchingBlocksSpecialShape::Room);
+				})
+				+ SHorizontalBox::Slot().AutoWidth()[Toggle("up", LOCTEXT("RoomUp", "Up — the rectangle is the room's FLOOR: it rises from the grid."),
+					[World]() { AMarchingBlocksWorld* W = World(); return W && W->bRoomUp; },
+					[World]() { if (AMarchingBlocksWorld* W = World()) W->bRoomUp = true; })]
+				+ SHorizontalBox::Slot().AutoWidth()[Toggle("down", LOCTEXT("RoomDown", "Down — the rectangle is the room's CEILING: it sinks under the grid."),
+					[World]() { AMarchingBlocksWorld* W = World(); return W && !W->bRoomUp; },
+					[World]() { if (AMarchingBlocksWorld* W = World()) W->bRoomUp = false; })]
+				+ SHorizontalBox::Slot().AutoWidth()[Gap()]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(FMargin(0.f, 0.f, 6.f, 0.f))
+				[
+					SNew(STextBlock).Text(LOCTEXT("RoomFloors", "Floors")).Font(FAppStyle::GetFontStyle("SmallFont"))
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(48.f)
+					[
+						SNew(SSpinBox<int32>).MinValue(1).MaxValue(32).MinSliderValue(1).MaxSliderValue(32)
+						.ToolTipText(LOCTEXT("RoomFloorsTip", "[ and ] — the room's free height, in cells."))
+						.Value_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W ? W->RoomFloors : 3; })
+						.OnValueChanged_Lambda([World](int32 V) { if (AMarchingBlocksWorld* W = World()) W->RoomFloors = FMath::Clamp(V, 1, 32); })
+					]
+				]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SVerticalBox)
-				.Visibility_Lambda([Shaping, Shown]() { return Shown(Shaping()); })
+				.Visibility_Lambda([Shaping, Shown, World]()
+				{
+					AMarchingBlocksWorld* W = World();
+					return Shown(Shaping() && !(W && W->SpecialShape == EMarchingBlocksSpecialShape::Room));
+				})
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
 				[
 					SNew(SHorizontalBox)

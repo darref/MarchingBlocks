@@ -65,6 +65,9 @@ enum class EMarchingBlocksSpecialShape : uint8
 	/** Stairs against a WALL: click where they should arrive, they come down to the ground (Stairs Step cells per
 	 *  step). Connect: from one FLOOR to another, higher up. */
 	Stairs,
+	/** A ROOM: draw a rectangle flat on the floor — a hollow room rises from it (Room Up) or sinks under it, Room
+	 *  Floors high, its walls one cell thick. At least 3 x 3. (Last, so nothing a level saved is renumbered.) */
+	Room,
 };
 
 UENUM(BlueprintType)
@@ -164,6 +167,14 @@ public:
 	/** Bridge, balcony and stairs: a one-cell rim along the open sides. Needs a Shape Size of 2 or more. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Rail"))
 	bool bShapeRail = true;
+
+	/** The room's free height, in cells ( [ and ] in the MarchingBlocks mode). */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (ClampMin = "1", ClampMax = "32"))
+	int32 RoomFloors = 3;
+
+	/** Up: the rectangle is the room's FLOOR, it rises from the grid. Off: it is its CEILING, the room sinks. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Special shapes", meta = (DisplayName = "Room Up"))
+	bool bRoomUp = true;
 
 	// ── The selection operations: buttons in the Details panel. Each one is one undo step. ──
 

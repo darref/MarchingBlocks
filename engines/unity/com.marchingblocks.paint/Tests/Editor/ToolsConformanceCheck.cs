@@ -97,6 +97,14 @@ namespace MarchingBlocks.Paint.Tests
                     var got = MBShapes.WallNormal(CellsOf("cells"), Vec(i["cell"]), Vec(i["face"]));
                     return got.Equals(Vec(e["normal"])) ? null : $"expected {Vec(e["normal"])}, got {got}";
                 }
+                case "room":
+                {
+                    var r = MBShapes.Room(CellsOf("cells"), Vec(i["a"]), Vec(i["b"]), (int)MBJson.AsLong(i["floors"]), (bool)i["up"]);
+                    string got = $"{r.Error}/{r.Repaired}";
+                    string want = $"{(string)e["error"]}/{MBJson.AsLong(e["repaired"])}";
+                    if (got != want) return $"error/repaired: expected {want}, got {got}";
+                    return Same("set", r.Set, e["set"]) ?? Same("clear", r.Clear, e["clear"]);
+                }
                 case "special_shape":
                 {
                     ShapeResult r;

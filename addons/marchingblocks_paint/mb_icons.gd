@@ -37,6 +37,7 @@ const STROKES := {
 	"rail": '<path d="M3 19.5h18M3 8.5h18M6 8.5v11M12 8.5v11M18 8.5v11"/>',
 	"rect": '<path d="M2.5 13.5 12 8.5l9.5 5-9.5 5z" stroke-dasharray="3.5 2.6"/>',
 	"right": '<path d="M4.5 12h15M13 5.5l6.5 6.5-6.5 6.5"/>',
+	"room": '<path d="M3 9.5 12 4.5l9 5v10H3z"/><path d="M6.5 19.5v-7h11v7" stroke-dasharray="2.6 2"/>',
 	"round": '<circle cx="12" cy="12" r="8"/>',
 	"sculpt": '<path d="M15 9.5l5.5 3.2v6.1L15 22l-5.5-3.2v-6.1z"/><path d="M9.5 12.7 15 15.9l5.5-3.2M15 15.9V22"/><path d="M3 3l6 6M9 4v5H4"/>',
 	"select": '<path d="M5 3.5 19 10.5l-6.2 2.2-2.3 6.3z"/>',

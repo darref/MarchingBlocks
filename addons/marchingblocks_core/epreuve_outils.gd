@@ -260,7 +260,8 @@ static func cas_d_epreuve() -> Dictionary:
 
 	return {"format": FORMAT, "version": VERSION, "rules_text": REGLES + REGLES_FORMES,
 		"limits": {"box_volume_max": Outils.VOLUME_MAXI, "shape_length_max": FS.LONGUEUR_MAXI,
-			"shape_span_max": FS.ECART_MAXI, "shape_step_max": FS.PAS_MAXI}, "world": _cases(m), "shape_worlds": mondes_formes, "cases": cas}
+			"shape_span_max": FS.ECART_MAXI, "shape_step_max": FS.PAS_MAXI, "room_floors_max": FS.ETAGES_MAXI},
+		"world": _cases(m), "shape_worlds": mondes_formes, "cases": cas}
 
 
 # ── LES FORMES SPÉCIALES (1er octobre 2026) — `formes_speciales.gd`, mêmes parades ────────────────────
@@ -272,7 +273,8 @@ const FORMES_SPECIALES_EN := {"tunnel": "tunnel", "puits": "well", "pont": "brid
 const PROFILS_EN := {"rond": "round", "carre": "square", "arche": "arch"}
 const ERREURS_EN := {"": "", "pas_de_paroi": "needs_a_wall", "pas_un_sol": "needs_floor_or_ceiling",
 	"meme_case": "same_cell", "trop_long": "too_far", "rien_en_face": "nothing_in_front", "trop_grand": "too_large",
-	"forme_inconnue": "unknown_shape", "pas_un_dessus": "needs_a_floor", "trop_raide": "too_steep"}
+	"forme_inconnue": "unknown_shape", "pas_un_dessus": "needs_a_floor", "trop_raide": "too_steep",
+	"trop_petit": "too_small"}
 
 const REGLES_FORMES := [
 	"SPECIAL SHAPES — their cases name their world in input.world, a key of shape_worlds. Tunnel and well DIG (clear full cells), bridge, balcony and stairs ADD (set empty cells). Everything is integer: cell centres are the points, every test compares squared integers (64-bit), never a square root.",
@@ -288,6 +290,7 @@ const REGLES_FORMES := [
 	"sweep: for each segment P0 -> P1 (D = P1 - P0) the cells of its axis walk (below) belong to the shape; then every cell q in the box of P0 and P1 grown by h + 2 + max(e0, e1) (more than box_volume_max cells: error too_large), with d = q - P0 and t = d.D, inside when (t >= 0 or (e0 > 0 and t^2 <= e0^2 D.D)) and (t <= D.D or (e1 > 0 and (t - D.D)^2 <= e1^2 D.D)), where e0 = h unless P0 is the first point (then 0) and e1 = h unless P1 is the last (then 0). Frame: u = (-D.z, 0, D.x), v = (-D.x D.y, D.x^2 + D.z^2, -D.y D.z); if D.x = D.z = 0, u = (1,0,0), v = (0,0,1). A = d.u, B = d.v, UU = u.u, VV = v.v, H = h^2.",
 	"profiles: round A^2 VV + B^2 UU <= H UU VV; square A^2 <= H UU and B^2 <= H VV; arch: round when B >= 0, else square. Deck: A^2 <= H UU and 4 B^2 <= VV; with rail and h >= 1, a cell that is not deck with B > 0, 4 B^2 <= 9 VV and A^2 <= H UU is a rail when A^2 > (h-1)^2 UU, else a walkway; rails of every segment minus walkways of every segment join the shape.",
 	"axis walk from P0 to P1: one axis per step; after k_i steps on axis i the next crossing is at (2 k_i + 1) / (2 |D_i|); take the smallest, compared as (2 k_i + 1) |D_j| < (2 k_j + 1) |D_i|; on a tie the lowest axis (x, then y, then z).",
+	"room(cells, a, b, floors, up): a rectangle drawn flat on a floor, a and b its corners (a.y is the floor's y). x0 = min(a.x, b.x), x1 = max, z0, z1 the same; x1 - x0 < 2 or z1 - z0 < 2: error too_small. e = clamp(floors, 1, room_floors_max). Up: the rectangle is the room's FLOOR, y0 = a.y; down: it is its CEILING, y0 = a.y - e - 1. y1 = y0 + e + 1. (x1-x0+1)(z1-z0+1)(e+2) > box_volume_max: error too_large. Every cell of the box [x0..x1] x [y0..y1] x [z0..z1] on its border (x = x0 or x1, z = z0 or z1, y = y0 or y1) is SET if empty; every inside cell is CLEARED if full. Then REPAIR as an ADD shape (below), from the set cells.",
 	"then: dig clears the shape's full cells, add sets its empty cells. REPAIR, by rounds: the front is every changed cell; for each front cell c and each plane (xy, xz, yz), the four 2x2 squares containing c; in the world AFTER the change, a square whose diagonal cells are equal and the other diagonal opposite is a checkerboard: dig clears its FULL pair, add sets its EMPTY pair. Collect all of a round, apply them at once, they are the next front; repaired counts them.",
 ]
 
@@ -363,6 +366,21 @@ static func _cas_des_formes() -> Array:
 		cas.append({"name": "special_shape: " + e[0], "kind": "special_shape", "input": entree,
 			"expected": {"set": _cases(res["poser"]), "clear": _cases(res["effacer"]),
 				"error": ERREURS_EN[res["erreur"]], "opened": res["ouvert"], "repaired": res["reparees"]}})
+	# ── room (2 octobre 2026) : un rectangle sur la grille, monté ou descendu, creux.
+	var salles := [
+		["room up, 5 x 4, two floors", "plat", Vector3i(2, 0, -6), Vector3i(6, 0, -3), 2, true],
+		["room down into a block: its inside is dug", "massif", Vector3i(0, 7, 0), Vector3i(4, 7, 3), 3, false],
+		["room against a lone cell by an edge: repaired", "seule", Vector3i(-4, 0, -4), Vector3i(-1, 0, -1), 1, true],
+		["room floors are clamped to the maximum", "plat", Vector3i(10, 0, 10), Vector3i(12, 0, 12), 99, true],
+		["error: a room two cells wide", "plat", Vector3i(0, 0, -6), Vector3i(1, 0, -2), 2, true],
+		["error: a room too large", "plat", Vector3i(-60, 0, -60), Vector3i(60, 0, 60), 32, true],
+	]
+	for s in salles:
+		var res2: Dictionary = FS.salle(mondes[s[1]], s[2], s[3], s[4], s[5])
+		cas.append({"name": "room: " + s[0], "kind": "room",
+			"input": {"world": s[1], "a": _v(s[2]), "b": _v(s[3]), "floors": s[4], "up": s[5]},
+			"expected": {"set": _cases(res2["poser"]), "clear": _cases(res2["effacer"]),
+				"error": ERREURS_EN[res2["erreur"]], "repaired": res2["reparees"]}})
 	return cas
 
 

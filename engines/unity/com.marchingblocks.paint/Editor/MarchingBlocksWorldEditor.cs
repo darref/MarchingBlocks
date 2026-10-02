@@ -48,6 +48,9 @@ namespace MarchingBlocks.Paint.EditorTools
         static int shapeLength = 8;
         static bool rail = true;
         static int stairsStep = 2;
+        // The room: drawn flat on the floor, then raised (up) or sunk (down) by this many free floors.
+        static int roomFloors = 3;
+        static bool roomUp = true;
         // The first end of a Connect, or null.
         static Hit? shapeAnchor;
 
@@ -200,11 +203,26 @@ namespace MarchingBlocks.Paint.EditorTools
                         "joins two walls, and the deck bends."),
                     Icon("balcony", "Balcony — a slab sticking out of a WALL at the height you click, with its rail."),
                     Icon("stairs", "Stairs — click a WALL where they should arrive: they come down to the ground, Step " +
-                        "cells per step; Connect climbs from one floor to another, higher up."));
+                        "cells per step; Connect climbs from one floor to another, higher up."),
+                    Icon("room", "Room — draw a rectangle flat on the floor: a hollow room rises from it (Up) or sinks " +
+                        "under it (Down), Floors high, its walls one cell thick. At least 3 × 3."));
                 if (picked != shown && picked >= 0) { special = (SpecialShape)picked; mode = Mode.Shape; CancelAll(); }
                 GUILayout.FlexibleSpace();
             }
-            if (mode == Mode.Shape)
+            if (mode == Mode.Shape && special == SpecialShape.Room)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    int sense = Segmented(roomUp ? 0 : 1,
+                        Icon("up", "Up — the rectangle is the room's FLOOR: it rises from the grid."),
+                        Icon("down", "Down — the rectangle is the room's CEILING: it sinks under the grid."));
+                    roomUp = sense == 0;
+                    GUILayout.FlexibleSpace();
+                }
+                roomFloors = EditorGUILayout.IntSlider(new GUIContent("Floors", "[ and ] — the room's free height, in cells."),
+                    roomFloors, 1, MBShapes.RoomFloorsMax);
+            }
+            else if (mode == Mode.Shape)
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
@@ -390,6 +408,7 @@ namespace MarchingBlocks.Paint.EditorTools
 
             var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             if (pasting) { ScenePaste(e, ray); return; }
+            if (mode == Mode.Shape && special == SpecialShape.Room) { SceneRoom(e, ray, id); return; }
             if (mode == Mode.Shape) { SceneShape(e, ray, id); return; }
             if (mode == Mode.Rect || mode == Mode.Box) { SceneBox(e, ray, id); return; }
             SceneBrush(e, ray, id);
@@ -589,6 +608,61 @@ namespace MarchingBlocks.Paint.EditorTools
             return true;
         }
 
+        // The room is DRAWN like the rect, always flat on the floor whatever the aim: press a corner, drag,
+        // release — then it rises (or sinks), ONE undo step.
+        void SceneRoom(Event e, Ray ray, int id)
+        {
+            bool has = World.CellUnderRay(ray, out var c);
+            var corner = new Int3(c.x, c.y, c.z);
+            if (boxStart == null)
+            {
+                if (has) DrawCells(new[] { corner }, AddColour, 0.04f);
+                if (e.type == EventType.MouseDown && e.button == 0 && !e.alt && has)
+                {
+                    boxStart = corner;
+                    boxEnd = corner;
+                    GUIUtility.hotControl = id;
+                    e.Use();
+                }
+            }
+            else
+            {
+                if (has) boxEnd = corner;
+                var r = MBShapes.Room(World.Cells, boxStart.Value, boxEnd, roomFloors, roomUp);
+                DrawCells(r.Set, AddColour, 0.04f);
+                if (r.Clear.Count > 0) DrawCells(r.Clear, DigColour, 0.04f);
+                if (e.type == EventType.MouseDrag) e.Use();
+                if (e.type == EventType.MouseUp && e.button == 0)
+                {
+                    ApplyRoom(boxStart.Value, boxEnd);
+                    boxStart = null;
+                    GUIUtility.hotControl = 0;
+                    e.Use();
+                    Repaint();
+                }
+            }
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag) SceneView.RepaintAll();
+        }
+
+        // The room between two corners of the floor: refused and said, or applied as ONE undo step.
+        void ApplyRoom(Int3 a, Int3 b)
+        {
+            var r = MBShapes.Room(World.Cells, a, b, roomFloors, roomUp);
+            if (r.Error != "")
+            {
+                status = r.Error == "too_small" ? "Room — at least 3 × 3 cells: draw a bigger rectangle."
+                    : $"Room — too large: more than {MBShapes.VolumeMax} cells.";
+                return;
+            }
+            var change = new Change();
+            foreach (var c in r.Set) change.Set.Add(c);
+            foreach (var c in r.Clear) change.Clear.Add(c);
+            Undo.RecordObjects(World.LayerObjects(), "Room");
+            World.Apply(change);
+            status = $"Room — {r.Set.Count} cell(s) of shell, {r.Clear.Count} dug out" +
+                (r.Repaired > 0 ? $", {r.Repaired} added where it touched the world by an edge." : ".");
+        }
+
         void SceneBox(Event e, Ray ray, int id)
         {
             bool has = BoxCorner(ray, out var corner);
@@ -699,10 +773,12 @@ namespace MarchingBlocks.Paint.EditorTools
                 case KeyCode.G: SetMode(Mode.Rect); break;
                 case KeyCode.B: SetMode(Mode.Box); break;
                 case KeyCode.LeftBracket:
-                    if (mode == Mode.Shape) shapeSize = Mathf.Max(1, shapeSize - 1); else brushSize = Mathf.Max(1, brushSize - 1);
+                    if (mode == Mode.Shape && special == SpecialShape.Room) roomFloors = Mathf.Max(1, roomFloors - 1);
+                    else if (mode == Mode.Shape) shapeSize = Mathf.Max(1, shapeSize - 1); else brushSize = Mathf.Max(1, brushSize - 1);
                     break;
                 case KeyCode.RightBracket:
-                    if (mode == Mode.Shape) shapeSize = Mathf.Min(7, shapeSize + 1); else brushSize = Mathf.Min(7, brushSize + 1);
+                    if (mode == Mode.Shape && special == SpecialShape.Room) roomFloors = Mathf.Min(MBShapes.RoomFloorsMax, roomFloors + 1);
+                    else if (mode == Mode.Shape) shapeSize = Mathf.Min(7, shapeSize + 1); else brushSize = Mathf.Min(7, brushSize + 1);
                     break;
                 case KeyCode.PageUp: ChangeFloor(1); break;
                 case KeyCode.PageDown: ChangeFloor(-1); break;

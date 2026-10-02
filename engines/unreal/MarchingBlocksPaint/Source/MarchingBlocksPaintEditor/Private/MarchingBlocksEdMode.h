@@ -72,6 +72,7 @@ private:
 	bool WaitingForFirstEnd(const AMarchingBlocksWorld* World) const;
 	MBPaint::FShapeRequest ShapeRequest(const AMarchingBlocksWorld* World, const MBPaint::FHit& Hit) const;
 	void HoverShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
+	void ApplyRoom(AMarchingBlocksWorld* World, const MBPaint::FCell& A, const MBPaint::FCell& B);
 	void ClickShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
 
 	// The current stroke.
