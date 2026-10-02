@@ -44,7 +44,10 @@ are in the inspector. Extruding moves the floor with the selection, so *Rect, Fi
 raises a room.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you.
-One component is one layer: stack several GameObjects for several tilesets.
+One component is one layer, with its own tileset. **Sibling GameObjects** (children of one parent) are the
+layers of one world, and their order is their priority: where two layers meet there is no wall, and each
+corner takes the tiles of the higher layer. A cell belongs to one layer — painting it in one layer removes it
+from the others, in the same undo step. An inactive layer leaves the world.
 
 ## Import a painted world
 

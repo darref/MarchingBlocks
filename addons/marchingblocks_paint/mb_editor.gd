@@ -75,6 +75,8 @@ var _last_key := ""
 var _placed := {}
 var _stroke_set := {}
 var _stroke_clear := {}
+## What the stroke took from the other layers of the world: {layer: {cell: true}}.
+var _stroke_taken := {}
 var _box_start: Variant = null
 var _box_end := Vector3i.ZERO
 var _preview: MultiMeshInstance3D
@@ -246,7 +248,12 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 	_placed.merge(change["set"])
 	_stroke_set.merge(change["set"])
 	_stroke_clear.merge(change["clear"])
-	world.apply_cells(change["set"].keys(), change["clear"].keys())
+	var taken: Dictionary = world.apply_cells(change["set"].keys(), change["clear"].keys())
+	for l in taken:
+		if not _stroke_taken.has(l):
+			_stroke_taken[l] = {}
+		for c in taken[l]:
+			_stroke_taken[l][c] = true
 
 
 func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
@@ -280,6 +287,7 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 		_placed = {}
 		_stroke_set = {}
 		_stroke_clear = {}
+		_stroke_taken = {}
 		if mode == "select" and not b.shift_pressed and not b.ctrl_pressed:
 			selection = {}
 		hover(camera, b.position, b.shift_pressed)
@@ -305,7 +313,7 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 		_stroking = false
 		# The stroke is already on screen: the action is recorded WITHOUT running it again.
 		if not _stroke_set.is_empty() or not _stroke_clear.is_empty():
-			_record("MarchingBlocks stroke", _stroke_set, _stroke_clear, false)
+			_record("MarchingBlocks stroke", _stroke_set, _stroke_clear, false, 0, _stroke_taken)
 		changed.emit()
 		return true
 	return false
@@ -470,7 +478,10 @@ func _commit(name: String, set_cells: Dictionary, clear_cells: Dictionary, floor
 	_record(name, set_cells, clear_cells, true, floor_step)
 
 
-func _record(name: String, set_cells: Dictionary, clear_cells: Dictionary, execute: bool, floor_step := 0) -> void:
+## `taken`: for a stroke already applied, what it took from the other layers ({layer: {cell: true}}); for an
+## action still to run, it is read here, before running.
+func _record(name: String, set_cells: Dictionary, clear_cells: Dictionary, execute: bool, floor_step := 0,
+		taken: Dictionary = {}) -> void:
 	var s: Array = set_cells.keys()
 	var c: Array = clear_cells.keys()
 	if s.is_empty() and c.is_empty() and floor_step == 0:
@@ -480,10 +491,20 @@ func _record(name: String, set_cells: Dictionary, clear_cells: Dictionary, execu
 			world.apply_cells(s, c)
 			world.floor_y += floor_step
 		return
+	if execute:
+		var others: Dictionary = world.taken_from_others(s)
+		for l in others:
+			taken[l] = {}
+			for cell in others[l]:
+				taken[l][cell] = true
 	undo.create_action(name)
 	# Undoing apply(set, clear) is apply(clear, set): the set cells were empty, the cleared ones full.
 	_call_in_undo(true, s, c)
 	_call_in_undo(false, c, s)
+	# A CELL BELONGS TO ONE LAYER: what this step took from the other layers goes back to them on undo (and
+	# redo takes it again, inside apply_cells).
+	for l in taken:
+		_call_in_undo(false, (taken[l] as Dictionary).keys(), [], l)
 	if floor_step != 0:
 		undo.add_do_property(world, "floor_y", world.floor_y + floor_step)
 		undo.add_undo_property(world, "floor_y", world.floor_y)
@@ -492,17 +513,18 @@ func _record(name: String, set_cells: Dictionary, clear_cells: Dictionary, execu
 
 ## ⚠ THE TWO UNDO SYSTEMS DO NOT SPEAK ALIKE: a plain UndoRedo takes a Callable, the editor's
 ## EditorUndoRedoManager takes (object, method, arguments…) — so that it can tell which scene it belongs to.
-func _call_in_undo(doing: bool, set_cells: Array, clear_cells: Array) -> void:
+func _call_in_undo(doing: bool, set_cells: Array, clear_cells: Array, layer: Node = null) -> void:
+	var target: Node = world if layer == null else layer
 	if undo is UndoRedo:
-		var call: Callable = Callable(world, "apply_cells").bind(set_cells, clear_cells)
+		var call: Callable = Callable(target, "apply_cells").bind(set_cells, clear_cells)
 		if doing:
 			undo.add_do_method(call)
 		else:
 			undo.add_undo_method(call)
 	elif doing:
-		undo.add_do_method(world, "apply_cells", set_cells, clear_cells)
+		undo.add_do_method(target, "apply_cells", set_cells, clear_cells)
 	else:
-		undo.add_undo_method(world, "apply_cells", set_cells, clear_cells)
+		undo.add_undo_method(target, "apply_cells", set_cells, clear_cells)
 
 
 # ── Keys ────────────────────────────────────────────────────────────────────────────────────────────

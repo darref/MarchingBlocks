@@ -48,6 +48,15 @@ namespace MarchingBlocks.Paint.Tests
         }
 
         [Test]
+        public void EveryLayeredCaseIsReproduced()
+        {
+            var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(ConformancePath()));
+            var failures = LayeredConformanceCheck.Run(conf, out int cases, out int placements);
+            Assert.IsEmpty(failures, string.Join("\n", failures));
+            Assert.GreaterOrEqual(cases, 5, "layered cases");
+        }
+
+        [Test]
         public void AListOfCopiesIsRefused()
         {
             var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(ConformancePath()));

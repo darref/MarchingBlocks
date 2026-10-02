@@ -73,13 +73,22 @@ public sealed class WorldImportTests
                 var e = (Dictionary<string, object>)expected[i];
                 var w = r.Layers[i];
                 string name = (string)e["name"];
-                // A hidden layer is built when it is shown; build it here to compare it too.
+                // The layers make ONE world: a hidden layer is out of it and places nothing (MarchingBlocks
+                // expects nothing there either), even when asked to rebuild.
                 if (!w.gameObject.activeSelf) w.Rebuild();
                 var container = w.transform.Find(ContainerName);
                 if (e["expected"] == null)
                 {
                     Assert.AreEqual(0, w.LastPlaced, $"{name}: a layer without tiles placed some");
                     Assert.IsTrue(container == null || container.childCount == 0, $"{name}: something was placed");
+                    continue;
+                }
+                if (!(bool)e["visible"])
+                {
+                    CollectionAssert.IsEmpty((List<object>)e["expected"], $"{name}: MarchingBlocks places nothing for a hidden layer");
+                    Assert.AreEqual(0, w.LastPlaced, $"{name}: a hidden layer placed tiles");
+                    Assert.IsTrue(container == null || container.childCount == 0, $"{name}: something was placed");
+                    checkedLayers++;
                     continue;
                 }
                 checkedLayers++;

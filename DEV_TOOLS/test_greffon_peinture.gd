@@ -41,6 +41,7 @@ func _initialize() -> void:
 	var cas: Dictionary = _les_cas_livres_sont_a_jour()
 	if not cas.is_empty():
 		_le_greffon_passe_les_cas(cas)
+		_le_greffon_passe_les_cas_en_couches(cas)
 	_un_format_plus_recent_est_refuse()
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
@@ -225,6 +226,129 @@ func _la_barre_ne_montre_que_l_utile() -> void:
 	barre.free()
 	ed.free()
 	_barre_finie = true
+
+
+## Ce qu'une grille Tiles pose : {sommet: [nom, quarts]}.
+func _poses_de(monde: Node3D) -> Dictionary:
+	var tuiles := monde.get_node("Tiles") as GridMap
+	var lib: MeshLibrary = tuiles.mesh_library
+	var d := {}
+	for v in tuiles.get_used_cells():
+		var q := -1
+		for k in 4:
+			if tuiles.get_orthogonal_index_from_basis(Basis(Vector3.UP, k * PI / 2.0)) == tuiles.get_cell_item_orientation(v):
+				q = k
+		d[v] = [lib.get_item_name(tuiles.get_cell_item(v)), q]
+	return d
+
+
+func _attendues(liste: Array) -> Dictionary:
+	var d := {}
+	for e in liste:
+		if e[3] != null:
+			d[Vector3i(e[0], e[1], e[2])] = [e[3], e[4]]
+	return d
+
+
+## DEUX MarchingBlocksWorld FRÈRES = DEUX COUCHES D'UN MONDE (couches exclusives, 2 octobre 2026). L'attendu vient du
+## CŒUR (`FormatNeutre.attendu_en_couches`, sur `MB.poses_en_couches`), jamais du greffon.
+func _deux_couches(jeu: String, comptes: Dictionary) -> void:
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var a: Node3D = World.new()
+	var b: Node3D = World.new()
+	tenant.add_child(a)
+	tenant.add_child(b)
+	var cases_a := {}
+	var cases_b := {}
+	for x in range(0, 6):
+		for y in 2:
+			for z in 6:
+				cases_a[Vector3i(x, y, z)] = true
+	for x in range(6, 10):
+		for y in 3:
+			for z in 6:
+				cases_b[Vector3i(x, y, z)] = true
+	a.apply_cells(cases_a.keys(), [])
+	b.apply_cells(cases_b.keys(), [])
+	a.tileset = jeu
+	b.tileset = jeu
+	var attendu: Array = FN.attendu_en_couches([{"cells": cases_a.keys(), "cles": comptes, "visible": true},
+		{"cells": cases_b.keys(), "cles": comptes, "visible": true}])
+	_egal(_poses_de(a), _attendues(attendu[0]), "deux couches : la première pose ce que pose MarchingBlocks")
+	_egal(_poses_de(b), _attendues(attendu[1]), "… et la seconde aussi")
+	var seule: Array = FN.attendu(cases_a, comptes)
+	_vrai(_attendues(seule) != _attendues(attendu[0]), "contrôle : seule, la première poserait autre chose (sa paroi à la frontière)")
+	# UNE CASE N'APPARTIENT QU'À UNE COUCHE : un geste de l'éditeur dans B prend la case à A ; Ctrl+Z la rend.
+	var ed: Node = Editeur.new()
+	root.add_child(ed)
+	var annul := UndoRedo.new()
+	ed.undo = annul
+	ed.world = b
+	var prise := Vector3i(5, 0, 0)
+	ed._commit("prise", {prise: true}, {})
+	_vrai(not a.cells().has(prise) and b.cells().has(prise), "peindre dans B une case de A la prend à A")
+	attendu = FN.attendu_en_couches([{"cells": a.cells().keys(), "cles": comptes, "visible": true},
+		{"cells": b.cells().keys(), "cles": comptes, "visible": true}])
+	_egal(_poses_de(a), _attendues(attendu[0]), "… et A se refait avec (la frontière a bougé)")
+	annul.undo()
+	_vrai(a.cells().has(prise) and not b.cells().has(prise), "Ctrl+Z rend la case à A")
+	_egal(_poses_de(a), _attendues(FN.attendu_en_couches([{"cells": cases_a.keys(), "cles": comptes, "visible": true},
+		{"cells": cases_b.keys(), "cles": comptes, "visible": true}])[0]), "… et A se refait comme avant")
+	annul.redo()
+	_vrai(not a.cells().has(prise), "Ctrl+Y la reprend")
+	annul.undo()
+	# Le COUP de pinceau : déjà appliqué, enregistré sans être rejoué — ce qu'il a pris doit revenir aussi.
+	var pris: Dictionary = b.apply_cells([prise], [])
+	_vrai(pris.has(a) and (pris[a] as Array) == [prise], "apply_cells rend ce qu'il a pris, couche par couche")
+	ed._record("coup", {prise: true}, {}, false, 0, {a: {prise: true}})
+	annul.undo()
+	_vrai(a.cells().has(prise) and not b.cells().has(prise), "Ctrl+Z d'un coup rend aussi la case prise")
+	# UNE COUCHE CACHÉE sort du monde : B se referme sans elle, et A ne pose plus rien.
+	a.visible = false
+	a.rebuild()
+	b.rebuild()
+	_egal(_poses_de(b), _attendues(FN.attendu(cases_b, comptes)), "A cachée : B pose ce qu'elle poserait seule")
+	_egal((a.get_node("Tiles") as GridMap).get_used_cells().size(), 0, "A cachée ne pose rien")
+	ed.queue_free()
+	tenant.queue_free()
+
+
+# ── 4 bis. Les mondes de PLUSIEURS COUCHES (couches exclusives, 2 octobre 2026) ──────────────────────────
+## ⚠ L'attendu vient de `MB.poses_en_couches` (le cœur) ; le greffon le réimplémente depuis le texte du format.
+## Les cas doivent EXERCER ce qu'ils nomment : chaque couche seule (l'ancienne règle) rendrait autre chose, une couche
+## cachée ne pose rien, et inverser la priorité change les poses.
+func _le_greffon_passe_les_cas_en_couches(cas: Dictionary) -> void:
+	var lc: Array = cas.get("layered_cases", [])
+	_vrai(lc.size() >= 5, "conformance.json porte les cas multicouches (%d)" % lc.size())
+	var differe_seule := 0
+	var cachee_vide := false
+	var poses_par_cas := []
+	for c in lc:
+		var couches: Array = []
+		for l in c["layers"]:
+			var cells := {}
+			for p in l["cells"]:
+				cells[Vector3i(int(p[0]), int(p[1]), int(p[2]))] = true
+			couches.append({"cells": cells, "tiles": cas["tilesets"][l["tileset"]], "visible": l["visible"]})
+		var obtenu: Array = Rule.placements_layered(couches, cas)
+		var attendu: Array = []
+		for e in c["expected"]:
+			var une: Array = []
+			for q in e:
+				une.append([int(q[0]), int(q[1]), int(q[2]), q[3], int(q[4])])
+			attendu.append(une)
+		_vrai(obtenu == attendu, "« %s » : le greffon pose, couche par couche, ce que pose MarchingBlocks" % c["name"])
+		poses_par_cas.append(attendu)
+		for i in couches.size():
+			if not couches[i]["visible"]:
+				cachee_vide = cachee_vide or (attendu[i] as Array).is_empty()
+			elif Rule.placements(couches[i]["cells"], cas, couches[i]["tiles"]) != attendu[i]:
+				differe_seule += 1
+	_vrai(differe_seule >= 4, "les cas exercent l'union : %d couche(s) posent autre chose que seules" % differe_seule)
+	_vrai(cachee_vide, "un cas a une couche cachée, et elle ne pose rien")
+	_vrai(poses_par_cas.size() >= 2 and poses_par_cas[0] != [poses_par_cas[1][1], poses_par_cas[1][0]],
+		"inverser la priorité change les poses (la frontière change de couche)")
 
 
 # ── 4. Le greffon reproduit chaque cas, à 100 % ─────────────────────────────────────────────────────
@@ -498,8 +622,12 @@ func _les_outils_dans_la_vue() -> void:
 		tous_charges = tous_charges and charge
 	if not tous_charges:
 		return
+	# ⚠ CHAQUE MONDE D'ESSAI A SON PROPRE PARENT : des MarchingBlocksWorld frères sont les couches d'UN monde
+	# (couches exclusives, 2 octobre 2026) — deux essais posés sous la racine se mêleraient.
+	var tenant_gestes := Node3D.new()
+	root.add_child(tenant_gestes)
 	var monde: Node3D = World.new()
-	root.add_child(monde)
+	tenant_gestes.add_child(monde)
 	var cam := Camera3D.new()
 	root.add_child(cam)
 	cam.current = true
@@ -714,8 +842,10 @@ func _de_bout_en_bout() -> void:
 		_egal(lus, {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true, Vector3i(0, 2, 0): true,
 			Vector3i(0, 0, 3): true}, "les quatre points du repère témoin, relus dans Godot")
 
+	var tenant_temoin := Node3D.new()
+	root.add_child(tenant_temoin)
 	var monde: Node3D = World.new()
-	root.add_child(monde)
+	tenant_temoin.add_child(monde)
 	var cells := monde.get_node("Cells") as GridMap
 	var pleines: Dictionary = BM.cases(0)
 	for c in pleines:
@@ -753,6 +883,7 @@ func _de_bout_en_bout() -> void:
 		% [v0, centre])
 	print("  de bout en bout : %d tuiles exportées, %d posées par le greffon, %d écart(s)"
 		% [sortie["tuiles"], tuiles.get_used_cells().size(), ecarts])
+	_deux_couches(dossier.path_join("witness_rock.mbset/tileset.json"), comptes)
 	monde.queue_free()
 	_le_monde_de_bout_en_bout(lot, pleines, attendu)
 	_fin()

@@ -95,6 +95,9 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		Actor->SetActorLabel(LayerName.IsEmpty() ? FString(TEXT("Layer")) : LayerName);
 		Actor->SetFolderPath(FName(*(FString(TEXT("MarchingBlocks/")) + WorldName)));
 		Actor->CellSize = CellSize;
+		// The layers are ONE world, in the order MarchingBlocks gave (the first is the highest priority).
+		Actor->WorldName = FName(*WorldName);
+		Actor->Priority = Imported.Num();
 
 		FString TilesetFile, TilesFolder;
 		if (Layer.bHasTileset)
@@ -124,6 +127,8 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		Imported.Add(Actor);
 	}
 
+	// Each layer was rebuilt alone as it arrived: now that every layer holds its cells, the world is rebuilt.
+	if (Imported.Num() > 0 && IsValid(Imported[0])) Imported[0]->RebuildWorld();
 	Status = FString::Printf(TEXT("%d layer(s), %d cell(s) imported from %s."), Imported.Num(), CellCount, *FPaths::GetCleanFilename(BaseDir));
 	UE_LOG(LogMarchingBlocksWorldImport, Log, TEXT("%s"), *Status);
 	if (WithoutTiles.Num() > 0)

@@ -50,6 +50,11 @@ static class Program
         if (Rule.Check(conf) != "") { failed++; Console.WriteLine("  FAIL one tile per key is refused"); }
         Console.WriteLine($"{cases} cases, {placements} placements, {failed} failure(s)");
 
+        var layeredFailures = LayeredConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(path)), out int layeredCases, out int layeredPlacements);
+        foreach (var f in layeredFailures) Console.WriteLine("  FAIL layers: " + f);
+        Console.WriteLine($"{layeredCases} layered cases, {layeredPlacements} placements, {layeredFailures.Count} failure(s)");
+        failed += layeredFailures.Count;
+
         string toolsPath = args.Length > 1 ? args[1] : "../com.marchingblocks.paint/Tests/tools_conformance.json";
         var toolsFailures = ToolsConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(toolsPath)), out int toolCases);
         foreach (var f in toolsFailures) Console.WriteLine("  FAIL tools: " + f);

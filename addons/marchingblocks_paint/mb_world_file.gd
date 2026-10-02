@@ -91,11 +91,16 @@ static func build(world_json_path: String, parent: Node) -> Dictionary:
 			without.append(layer["name"])
 		else:
 			node.tileset = base.path_join(str(layer["tileset"])).simplify_path()
-		var cells: Array = []
+		# The cells exactly as the file gives them — NOT apply_cells, which would take them from the layers
+		# already imported: a cell found in two layers belongs to the first (the tileset rule, step 7).
+		node._build_children()
+		var grid := node.get_node("Cells") as GridMap
 		for c in layer["cells"]:
-			cells.append(Vector3i(int(c[0]), int(c[1]), int(c[2])))
-		node.apply_cells(cells, [])
+			grid.set_cell_item(Vector3i(int(c[0]), int(c[1]), int(c[2])), 0)
 		nodes.append(node)
+	# The layers are ONE world: each is rebuilt once every layer holds its cells.
+	for node in nodes:
+		node.rebuild()
 	return {"nodes": nodes, "without_tiles": without}
 
 

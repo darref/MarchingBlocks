@@ -85,16 +85,20 @@ func _monde(lot: MeshLibrary, pleines: Dictionary, comptes: Dictionary) -> bool:
 	if r.has("erreur"):
 		print("✗ monde : " + r["erreur"])
 		return false
-	var attendu: Array = []
+	# ⚠ LES COUCHES FONT UN MONDE (couches exclusives, 2 octobre 2026) : l'attendu vient de la référence
+	# multicouche — une couche cachée ne pose rien, une couche sans tuiles compte dans l'union.
+	var entrees: Array = []
 	for c in couches:
-		var cases := {}
-		for v in c["cases"]:
-			cases[v] = true
+		entrees.append({"cells": c["cases"], "cles": comptes if c["lot"] != null else {}, "visible": c["visible"]})
+	var par_couche: Array = FN.attendu_en_couches(entrees)
+	var attendu: Array = []
+	for i in couches.size():
+		var c: Dictionary = couches[i]
 		var plat: Array = []
 		for v in c["cases"]:
 			plat.append([v.x, v.y, v.z])
 		attendu.append({"name": c["nom"], "visible": c["visible"], "cells": plat,
-			"expected": FN.attendu(cases, comptes) if c["lot"] != null else null})
+			"expected": par_couche[i] if c["lot"] != null else null})
 	_ecrire(CIBLE.path_join("witness_world_expected.json"), attendu)
 	print("%s — %d couches, %d jeu(x) de tuiles, sans tuiles : %s" % [r["dossier"], r["couches"], r["jeux"],
 		str(r["sans_tuiles"])])

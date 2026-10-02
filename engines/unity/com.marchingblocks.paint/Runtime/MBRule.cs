@@ -14,7 +14,10 @@
 //   4. an outdoor-capable class is OUTDOOR when no empty cell among the 8 has a full cell above it,
 //      from v.y + 2 up to the highest full cell of the layer; outdoor tries "<id>_outdoor" first;
 //   5. each key has exactly one tile, tiles[key];
-//   6. a missing key gives a null tile — show an error marker, never fill in.
+//   6. a missing key gives a null tile — show an error marker, never fill in;
+//   7. layers: steps 1-4 read the UNION of every visible layer of a world (a cell in two layers belongs
+//      to the first); a vertex is placed by the first layer, in priority order, owning one of its 8 cells,
+//      with that layer's tiles.
 
 using System;
 using System.Collections.Generic;
@@ -125,51 +128,76 @@ namespace MarchingBlocks.Paint
 
         static Int3 ToInt3(List<object> a) => new Int3((int)MBJson.AsLong(a[0]), (int)MBJson.AsLong(a[1]), (int)MBJson.AsLong(a[2]));
 
-        /// <summary>Every placement for one layer, sorted by vertex (x, then y, then z).
-        /// A layer only ever reads its own cells.</summary>
+        /// <summary>Every placement for one layer alone, sorted by vertex (x, then y, then z).</summary>
         public List<Placement> Placements(HashSet<Int3> cells)
         {
-            int top = int.MinValue;
-            foreach (var c in cells) top = Math.Max(top, c.y);
-            var vertices = new HashSet<Int3>();
-            foreach (var c in cells)
-                for (int t = 0; t < 8; t++) vertices.Add(c - Corners[t]);
+            return PlacementsLayered(new[] { cells }, new[] { true }, new[] { this })[0];
+        }
 
-            var result = new List<Placement>();
+        /// <summary>Every placement of a world of LAYERS (step 7), one sorted list per layer, in the same order.
+        /// The layers are given in PRIORITY order (the first is the highest). rules[i] holds layer i's tiles;
+        /// it may be null for a layer whose placements are not wanted (a layer without tiles, or another
+        /// component's layer): its cells still count in the union, its list stays empty.</summary>
+        public static List<Placement>[] PlacementsLayered(IList<HashSet<Int3>> cells, IList<bool> visible, IList<Rule> rules)
+        {
+            var result = new List<Placement>[cells.Count];
+            for (int i = 0; i < cells.Count; i++) result[i] = new List<Placement>();
+            Rule format = null;
+            foreach (var r in rules) if (r != null) { format = r; break; }
+            if (format == null) return result;
+
+            var union = new Dictionary<Int3, int>();   // cell -> index of the layer that owns it
+            for (int i = 0; i < cells.Count; i++)
+                if (visible[i])
+                    foreach (var c in cells[i])
+                        if (!union.ContainsKey(c)) union[c] = i;
+            int top = int.MinValue;
+            foreach (var c in union.Keys) top = Math.Max(top, c.y);
+            var vertices = new HashSet<Int3>();
+            foreach (var c in union.Keys)
+                for (int t = 0; t < 8; t++) vertices.Add(c - format.Corners[t]);
+
             foreach (var v in vertices)
             {
-                int bits = 0;
+                int bits = 0, owner = -1;
                 for (int t = 0; t < 8; t++)
-                    if (cells.Contains(v + Corners[t])) bits |= 1 << t;
-                int cls = tableClass[bits];
+                    if (union.TryGetValue(v + format.Corners[t], out int l))
+                    {
+                        bits |= 1 << t;
+                        if (owner < 0 || l < owner) owner = l;
+                    }
+                var rule = rules[owner];
+                if (rule == null) continue;
+                int cls = rule.tableClass[bits];
                 if (cls < 0) continue;
-                string id = classIds[cls];
+                string id = rule.classIds[cls];
                 string chosen = null;
-                if (outdoorPossible[cls] && IsOutdoor(cells, v, top) && Has(id + outdoorSuffix))
-                    chosen = id + outdoorSuffix;
-                if (chosen == null && Has(id))
+                if (rule.outdoorPossible[cls] && rule.IsOutdoor(union, v, top) && rule.Has(id + rule.outdoorSuffix))
+                    chosen = id + rule.outdoorSuffix;
+                if (chosen == null && rule.Has(id))
                     chosen = id;
-                string tile = chosen != null ? Tiles[chosen] : null;
-                result.Add(new Placement { Vertex = v, Tile = tile, QuarterTurns = tableTurns[bits] });
+                string tile = chosen != null ? rule.Tiles[chosen] : null;
+                result[owner].Add(new Placement { Vertex = v, Tile = tile, QuarterTurns = rule.tableTurns[bits] });
             }
-            result.Sort((a, b) =>
-                a.Vertex.x != b.Vertex.x ? a.Vertex.x.CompareTo(b.Vertex.x) :
-                a.Vertex.y != b.Vertex.y ? a.Vertex.y.CompareTo(b.Vertex.y) :
-                a.Vertex.z.CompareTo(b.Vertex.z));
+            foreach (var list in result)
+                list.Sort((a, b) =>
+                    a.Vertex.x != b.Vertex.x ? a.Vertex.x.CompareTo(b.Vertex.x) :
+                    a.Vertex.y != b.Vertex.y ? a.Vertex.y.CompareTo(b.Vertex.y) :
+                    a.Vertex.z.CompareTo(b.Vertex.z));
             return result;
         }
 
         bool Has(string key) => Tiles.TryGetValue(key, out var t) && !string.IsNullOrEmpty(t);
 
         // Outdoor: every EMPTY cell among the 8 has nothing full above the vertex's two-cell band.
-        bool IsOutdoor(HashSet<Int3> cells, Int3 v, int top)
+        bool IsOutdoor(Dictionary<Int3, int> cells, Int3 v, int top)
         {
             for (int t = 0; t < 8; t++)
             {
                 var e = v + Corners[t];
-                if (cells.Contains(e)) continue;
+                if (cells.ContainsKey(e)) continue;
                 for (int y = v.y + band; y <= top; y++)
-                    if (cells.Contains(new Int3(e.x, y, e.z))) return false;
+                    if (cells.ContainsKey(new Int3(e.x, y, e.z))) return false;
             }
             return true;
         }

@@ -7,8 +7,11 @@ extends Node3D
 ##   Errors  red cubes where the tileset lacks the tile the rule asks for. Nothing is ever filled in:
 ##           a hole must be seen where it happens.
 ##
-## One node is one layer: its tiles only ever look at its own cells. Stack several nodes for several
-## layers (rock, ice…), each with its own tileset.
+## One node is one LAYER, with its own tileset. Sibling MarchingBlocksWorld nodes under the same parent are
+## the layers of ONE world (rock, ice…), and their order among the children is their PRIORITY (the first is
+## the highest). The rule reads every visible layer together — no wall where two layers meet — and a vertex
+## is placed by the highest layer among its 8 cells, with that layer's tiles. A cell belongs to one layer:
+## painting it in one layer removes it from the others. Hide a layer and the world closes without it.
 
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
@@ -43,8 +46,21 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if Engine.is_editor_hint() and live_update and _cells_fingerprint() != _fingerprint:
+	if Engine.is_editor_hint() and live_update and _world_fingerprint() != _fingerprint:
 		rebuild()
+
+
+## The layers of this node's world, in priority order: the MarchingBlocksWorld siblings (this node
+## included) under the same parent; just this node when it has no parent.
+func layers() -> Array:
+	var parent := get_parent()
+	if parent == null:
+		return [self]
+	var out: Array = []
+	for n in parent.get_children():
+		if n.get_script() == get_script():
+			out.append(n)
+	return out
 
 
 ## What the last rebuild did: {"tiles", "missing", "error"}.
@@ -60,7 +76,7 @@ func rebuild() -> Dictionary:
 	var errors := get_node("Errors") as GridMap
 	tiles_grid.clear()
 	errors.clear()
-	_fingerprint = _cells_fingerprint()
+	_fingerprint = _world_fingerprint()
 	if tileset == "":
 		_last = {"tiles": 0, "missing": 0, "error": "no tileset chosen"}
 		return _last
@@ -75,15 +91,19 @@ func rebuild() -> Dictionary:
 	var ids := {}
 	for id in library.get_item_list():
 		ids[library.get_item_name(id)] = id
-	var cells := {}
-	for c in (get_node("Cells") as GridMap).get_used_cells():
-		cells[c] = true
+	# Step 7: the rule reads EVERY layer of the world; this node keeps the vertices it owns.
+	var all_layers := layers()
+	var mine := all_layers.find(self)
+	var described: Array = []
+	for l in all_layers:
+		described.append({"cells": l.cells(), "visible": l.visible,
+			"tiles": _loaded["manifest"].get("tiles", {}) if l == self else {}})
 	var orientation := []
 	for q in 4:
 		orientation.append(tiles_grid.get_orthogonal_index_from_basis(Basis(Vector3.UP, q * PI / 2.0)))
 	var placed := 0
 	var missing := 0
-	for p in Rule.placements(cells, _loaded["manifest"], _loaded["manifest"].get("tiles", {})):
+	for p in Rule.placements_layered(described, _loaded["manifest"])[mine]:
 		var v := Vector3i(p[0], p[1], p[2])
 		if p[3] == null or not ids.has(p[3]):
 			errors.set_cell_item(v, 0)
@@ -105,16 +125,40 @@ func cells() -> Dictionary:
 	return d
 
 
-## Applies what a tool returned: clears, then sets, then rebuilds once. Arrays or Dictionaries of
+## Applies what a tool returned: clears, then sets, then rebuilds the world once. Arrays or Dictionaries of
 ## Vector3i. The editor calls it from its undo actions — undoing is apply_cells(clear, set).
-func apply_cells(set_cells: Variant, clear_cells: Variant) -> void:
+## A cell belongs to ONE layer: the cells it sets are removed from the other layers of the world. Returns
+## what was taken, {layer node: [cells]}, so that the same undo step can give it back.
+func apply_cells(set_cells: Variant, clear_cells: Variant) -> Dictionary:
 	_build_children()
 	var grid := get_node("Cells") as GridMap
 	for c in clear_cells:
 		grid.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
 	for c in set_cells:
 		grid.set_cell_item(c, 0)
-	rebuild()
+	var taken := taken_from_others(set_cells)
+	for l in taken:
+		var g := l.get_node("Cells") as GridMap
+		for c in taken[l]:
+			g.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+	for l in layers():
+		l.rebuild()
+	return taken
+
+
+## The cells among `set_cells` that OTHER layers of the world hold: {layer node: [cells]}.
+func taken_from_others(set_cells: Variant) -> Dictionary:
+	var taken := {}
+	for l in layers():
+		if l == self or l.get_node_or_null("Cells") == null:
+			continue
+		var g := l.get_node("Cells") as GridMap
+		for c in set_cells:
+			if g.get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+				if not taken.has(l):
+					taken[l] = []
+				taken[l].append(c)
+	return taken
 
 
 ## A world-space point or direction in CELL space (cell c covers [c, c+1]).
@@ -183,6 +227,14 @@ static func _palette(item_name: String, colour: Color) -> MeshLibrary:
 	lib.set_item_name(0, item_name)
 	lib.set_item_mesh(0, box)
 	return lib
+
+
+## Every layer's cells and visibility, and their order: any of them changes what this layer places.
+func _world_fingerprint() -> int:
+	var h := 0
+	for l in layers():
+		h = (h * 131 + l._cells_fingerprint() * 2 + (1 if l.visible else 0)) & 0x7FFFFFFF
+	return h
 
 
 func _cells_fingerprint() -> int:

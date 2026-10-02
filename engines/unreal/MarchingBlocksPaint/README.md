@@ -47,7 +47,10 @@ are in the mode's panel once something is selected (and still on the actor's Det
 Fill…* raises a room. Every change is one Ctrl+Z.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you. One actor is one
-layer: place several for several tilesets.
+layer, with its own tileset. Actors with the same **World Name** (Details, *Layers*) are the layers of one
+world, ordered by **Priority** (lowest first): where two layers meet there is no wall, and each corner takes
+the tiles of the higher layer. A cell belongs to one layer — painting it in one layer removes it from the
+others, in the same Ctrl+Z. A hidden layer leaves the world. An empty World Name keeps an actor alone.
 
 ## Import a painted world
 

@@ -473,7 +473,7 @@ namespace MarchingBlocks.Paint.EditorTools
             // The stroke lock: what this stroke placed is transparent to its own ray, or dragging would
             // build a tower towards the camera instead of a skin on the surface.
             foreach (var c in change.Set) placedThisStroke.Add(c);
-            Undo.RecordObject(World, gesture == BrushTool.Add ? "Add matter" : "Dig matter");
+            Undo.RecordObjects(World.LayerObjects(), gesture == BrushTool.Add ? "Add matter" : "Dig matter");
             World.Apply(change);
         }
 
@@ -566,7 +566,7 @@ namespace MarchingBlocks.Paint.EditorTools
             var change = new Change();
             foreach (var c in r.Set) change.Set.Add(c);
             foreach (var c in r.Clear) change.Clear.Add(c);
-            Undo.RecordObject(World, name);
+            Undo.RecordObjects(World.LayerObjects(), name);
             int n = World.Apply(change);
             status = $"{name} — {n} cell(s) changed" + (r.Repaired > 0 ? $", {r.Repaired} more so that no two cells touch by an edge only" : "") +
                 ". Ctrl+Z undoes it.";
@@ -639,7 +639,7 @@ namespace MarchingBlocks.Paint.EditorTools
             if (e.type == EventType.MouseDown && e.button == 0 && !e.alt)
             {
                 var change = MBTools.Paste(World.Cells, clipboard, anchor);
-                Undo.RecordObject(World, "Paste");
+                Undo.RecordObjects(World.LayerObjects(), "Paste");
                 int n = World.Apply(change);
                 SetSelection(change.Selection);
                 pasting = false;
@@ -757,7 +757,7 @@ namespace MarchingBlocks.Paint.EditorTools
         {
             if (selection.Count == 0) { status = "Nothing selected. Drag a Rect (G) on the floor, a Box (B), or paint with Select (S)."; return; }
             var change = MBTools.Operate(World.Cells, selection, op);
-            Undo.RecordObject(World, op.ToString());
+            Undo.RecordObjects(World.LayerObjects(), op.ToString());
             int n = World.Apply(change);
             SetSelection(change.Selection);
             // The floor FOLLOWS the extrusion, so fill, extrude, fill… keeps going without Page Up.
@@ -771,7 +771,7 @@ namespace MarchingBlocks.Paint.EditorTools
         {
             if (selection.Count == 0) return;
             var change = MBTools.Move(World.Cells, selection, offset);
-            Undo.RecordObject(World, "Move");
+            Undo.RecordObjects(World.LayerObjects(), "Move");
             World.Apply(change);
             SetSelection(change.Selection);
             SceneView.RepaintAll();

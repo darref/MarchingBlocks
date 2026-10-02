@@ -279,6 +279,73 @@ namespace
 		return Failed;
 	}
 
+	// The LAYERED cases of conformance.json: worlds of several layers (the tileset rule, step 7). The cases must
+	// exercise what they name: layers that place something else than alone, a hidden layer that places nothing.
+	int RunLayered(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!Load(Path, Conf)) return 1;
+		int Cases = 0, Failed = 0, DifferAlone = 0;
+		size_t Placements = 0;
+		bool bHiddenEmpty = false;
+		const FJsonValue& All = Conf["layered_cases"];
+		for (const FJsonValue& C : All.Array)
+		{
+			++Cases;
+			const FJsonValue& Layers = C["layers"];
+			std::vector<FCellSet> Sets;
+			std::vector<FRule> Rules;
+			Sets.reserve(Layers.Size());
+			Rules.reserve(Layers.Size());
+			for (const FJsonValue& L : Layers.Array)
+			{
+				Sets.push_back(Cells(L["cells"]));
+				Rules.emplace_back(Conf, &Conf["tilesets"][L["tileset"].String]);
+			}
+			std::vector<FLayerInput> In(Layers.Size());
+			for (size_t I = 0; I < In.size(); ++I)
+			{
+				In[I].Cells = &Sets[I];
+				In[I].bVisible = Layers[I]["visible"].Bool;
+				In[I].Rule = &Rules[I];
+			}
+			const std::vector<std::vector<FPlacement>> Got = FRule::PlacementsLayered(In);
+			for (size_t I = 0; I < In.size(); ++I)
+			{
+				const FJsonValue& Expected = C["expected"][I];
+				Placements += Expected.Size();
+				std::string First;
+				for (size_t K = 0; K < std::max(Got[I].size(), Expected.Size()) && First.empty(); ++K)
+				{
+					std::string W = "nothing", G = "nothing";
+					if (K < Expected.Size())
+					{
+						const FJsonValue& E = Expected[K];
+						W = Show(Vec(E)) + " " + (E[3].IsNull() ? std::string("null") : E[3].String) + " " + std::to_string(E[4].AsInt());
+					}
+					if (K < Got[I].size())
+						G = Show(Got[I][K].Vertex) + " " + (Got[I][K].Tile.empty() ? std::string("null") : Got[I][K].Tile) + " " + std::to_string(Got[I][K].QuarterTurns);
+					if (W != G) First = "layer " + std::to_string(I) + " at " + std::to_string(K) + ": expected " + W + ", got " + G;
+				}
+				if (!First.empty()) { ++Failed; std::printf("  FAIL layers %s — %s\n", C["name"].String.c_str(), First.c_str()); }
+				if (!In[I].bVisible) { if (Expected.Size() == 0) bHiddenEmpty = true; }
+				else
+				{
+					const std::vector<FPlacement> Alone = Rules[I].Placements(Sets[I]);
+					bool bSame = Alone.size() == Got[I].size();
+					for (size_t K = 0; bSame && K < Alone.size(); ++K)
+						bSame = Alone[K].Vertex == Got[I][K].Vertex && Alone[K].Tile == Got[I][K].Tile && Alone[K].QuarterTurns == Got[I][K].QuarterTurns;
+					if (!bSame) ++DifferAlone;
+				}
+			}
+		}
+		if (Cases < 5) { ++Failed; std::printf("  FAIL conformance.json has %d layered case(s)\n", Cases); }
+		if (DifferAlone < 4) { ++Failed; std::printf("  FAIL the layered cases do not exercise the union\n"); }
+		if (!bHiddenEmpty) { ++Failed; std::printf("  FAIL no hidden layer that places nothing\n"); }
+		std::printf("%d layered cases, %zu placements, %d failure(s)\n", Cases, Placements, Failed);
+		return Failed;
+	}
+
 	int RunTools(const std::string& Path)
 	{
 		FJsonValue Conf;
@@ -459,6 +526,7 @@ int main(int Argc, char** Argv)
 {
 	const std::string Dir = Argc > 1 ? Argv[1] : "../MarchingBlocksPaint/Tests";
 	int Failed = RunRule(Dir + "/conformance.json");
+	Failed += RunLayered(Dir + "/conformance.json");
 	Failed += RunTools(Dir + "/tools_conformance.json");
 	Failed += RunWorld(Dir + "/world_conformance.json");
 	Failed += RunFrame();

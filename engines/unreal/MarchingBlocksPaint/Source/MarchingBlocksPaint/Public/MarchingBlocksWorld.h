@@ -4,8 +4,12 @@
 // converted through the FRAME measured on the tileset's marker, so cells and tiles always agree, whatever
 // your glTF importer did (Unreal is left-handed, +Z up, in centimetres).
 //
-// One actor is one layer: its tiles only ever look at its own cells. The generated tile components are
-// transient: a level only stores the cells, the manifest and the measured frame, and rebuilds the rest.
+// One actor is one LAYER, with its own tileset. Actors with the same World Name are the layers of ONE
+// world (rock, ice…), in Priority order (the lowest first, the highest priority). The rule reads every
+// visible layer together — no wall where two layers meet — and a vertex is placed by the highest layer among
+// its 8 cells, with that layer's tiles. A cell belongs to one layer: Apply removes the cells it sets from the
+// other layers. A hidden layer leaves the world. An empty World Name keeps the actor alone. The generated
+// tile components are transient: a level only stores the cells, the manifest and the measured frame.
 //
 // The editing tools live in the "MarchingBlocks" editor mode (the MarchingBlocksPaintEditor module);
 // their settings and the selection operations are here, in the Details panel.
@@ -96,6 +100,15 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks", meta = (ClampMin = "1.0"))
 	float CellSize = 100.f;
 
+	/** The world this layer belongs to: actors with the same name are layers of ONE world. Empty: alone. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Layers")
+	FName WorldName;
+
+	/** Where layers meet, the layer with the LOWEST priority places the tiles (the world import numbers them
+	 *  in the order MarchingBlocks gave: 0 is the top of its list). */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Layers")
+	int32 Priority = 0;
+
 	/** The floor the Grid aim paints on, in cells. Page Up / Page Down in the MarchingBlocks mode. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	int32 Floor = 0;
@@ -176,7 +189,14 @@ public:
 	void SetAimState(const MBPaint::FAimState& State);
 
 	const MBPaint::FCellSet& GetCells();
-	/** Applies what a tool returned: clears, then sets, then rebuilds once. Call Modify() first to undo. */
+	/** The layers of this actor's world, in priority order (itself included; just itself without a World Name). */
+	TArray<AMarchingBlocksWorld*> GetLayers() const;
+	/** Rebuilds every layer of the world: a change of cells moves the borders of the others. */
+	void RebuildWorld();
+	/** Is this layer in its world's union? (Not when hidden — in the editor viewport, or in game.) */
+	bool IsLayerVisible() const;
+	/** Applies what a tool returned: clears, then sets, then rebuilds the world once. Call Modify() first to
+	 *  undo; the other layers it takes cells from are Modify()'d here, in the same transaction. */
 	int32 Apply(const MBPaint::FChange& Change);
 	/** Runs a selection operation as one undo step; the floor follows an extrusion. */
 	int32 Operate(MBPaint::ESelectionOp Op, const TCHAR* UndoName);

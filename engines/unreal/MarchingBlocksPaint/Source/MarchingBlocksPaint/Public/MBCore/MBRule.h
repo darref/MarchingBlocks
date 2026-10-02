@@ -68,6 +68,18 @@ namespace MBPaint
 		int QuarterTurns = 0;
 	};
 
+	class FRule;
+
+	/// One layer of a world, for FRule::PlacementsLayered (the tileset rule, step 7).
+	struct FLayerInput
+	{
+		const FCellSet* Cells = nullptr;
+		bool bVisible = true;
+		/// This layer's tiles — nullptr when its placements are not wanted (a layer without tiles, or another
+		/// actor's layer): its cells still count in the union, its list stays empty.
+		const FRule* Rule = nullptr;
+	};
+
 	class FRule
 	{
 	public:
@@ -85,8 +97,14 @@ namespace MBPaint
 		/// Call CheckManifest first: a manifest it refuses gives an empty rule.
 		explicit FRule(const FJsonValue& Manifest, const FJsonValue* Tiles = nullptr);
 
-		/// Every placement for one layer, sorted by vertex. A layer only ever reads its own cells.
+		/// Every placement for one layer alone, sorted by vertex.
 		std::vector<FPlacement> Placements(const FCellSet& Cells) const;
+
+		/// Every placement of a world of LAYERS (step 7), one sorted list per layer, in the same order. The
+		/// layers are in PRIORITY order (the first is the highest): steps 1-4 read the union of the visible
+		/// layers (a cell in two layers belongs to the first), and a vertex is placed by the first layer owning
+		/// one of its 8 cells, with that layer's tiles.
+		static std::vector<std::vector<FPlacement>> PlacementsLayered(const std::vector<FLayerInput>& Layers);
 
 		std::array<FCell, 8> Corners;
 		FCell PieceOffset = FCell(1, 1, 1);

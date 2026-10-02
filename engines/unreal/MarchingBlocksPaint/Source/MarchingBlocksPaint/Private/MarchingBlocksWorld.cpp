@@ -3,6 +3,7 @@
 #include "MarchingBlocksWorld.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/FileHelper.h"
@@ -57,12 +58,64 @@ int32 AMarchingBlocksWorld::Apply(const MBPaint::FChange& Change)
 	int32 N = 0;
 	for (const MBPaint::FCell& C : Change.Clear) N += static_cast<int32>(Index.erase(C));
 	for (const MBPaint::FCell& C : Change.Set) N += Index.insert(C).second ? 1 : 0;
+	// A CELL BELONGS TO ONE LAYER: what this change sets leaves the other layers of the world (recorded in the
+	// same transaction, so one undo gives it back).
+	for (AMarchingBlocksWorld* Other : GetLayers())
+	{
+		if (Other == this) continue;
+		Other->GetCells();
+		bool bTouched = false;
+		for (const MBPaint::FCell& C : Change.Set)
+			if (Other->Index.count(C))
+			{
+				if (!bTouched) { Other->Modify(); bTouched = true; }
+				Other->Index.erase(C);
+				++N;
+			}
+		if (bTouched)
+		{
+			Other->Cells.Reset(static_cast<int32>(Other->Index.size()));
+			for (const MBPaint::FCell& C : Other->Index) Other->Cells.Add(FIntVector(C.X, C.Y, C.Z));
+		}
+	}
 	if (N == 0) return 0;
 	// Rewritten in ONE pass from the index: removing cell by cell from a TArray is quadratic.
 	Cells.Reset(static_cast<int32>(Index.size()));
 	for (const MBPaint::FCell& C : Index) Cells.Add(FIntVector(C.X, C.Y, C.Z));
-	Rebuild();
+	RebuildWorld();
 	return N;
+}
+
+TArray<AMarchingBlocksWorld*> AMarchingBlocksWorld::GetLayers() const
+{
+	TArray<AMarchingBlocksWorld*> Out;
+	UWorld* W = GetWorld();
+	if (WorldName.IsNone() || W == nullptr)
+	{
+		Out.Add(const_cast<AMarchingBlocksWorld*>(this));
+		return Out;
+	}
+	for (TActorIterator<AMarchingBlocksWorld> It(W); It; ++It)
+		if (IsValid(*It) && It->WorldName == WorldName) Out.Add(*It);
+	Out.Sort([](const AMarchingBlocksWorld& A, const AMarchingBlocksWorld& B)
+	{
+		return A.Priority != B.Priority ? A.Priority < B.Priority : A.GetName() < B.GetName();
+	});
+	return Out;
+}
+
+void AMarchingBlocksWorld::RebuildWorld()
+{
+	for (AMarchingBlocksWorld* L : GetLayers()) L->Rebuild();
+}
+
+bool AMarchingBlocksWorld::IsLayerVisible() const
+{
+#if WITH_EDITOR
+	const UWorld* W = GetWorld();
+	if (W != nullptr && !W->IsGameWorld()) return !IsHiddenEd();
+#endif
+	return !IsHidden();
 }
 
 void AMarchingBlocksWorld::RunTransacted(const TCHAR* Name, TFunctionRef<void()> Body)
@@ -355,7 +408,19 @@ void AMarchingBlocksWorld::Rebuild()
 
 	int32 Placed = 0, Missing = 0;
 	const MBPaint::FCell Offset = Rule->PieceOffset;
-	for (const MBPaint::FPlacement& P : Rule->Placements(GetCells()))
+	// Step 7: the rule reads EVERY layer of the world; this layer keeps the vertices it owns.
+	const TArray<AMarchingBlocksWorld*> WorldLayers = GetLayers();
+	std::vector<MBPaint::FLayerInput> In(static_cast<size_t>(WorldLayers.Num()));
+	size_t Mine = 0;
+	for (int32 I = 0; I < WorldLayers.Num(); ++I)
+	{
+		MBPaint::FLayerInput& L = In[static_cast<size_t>(I)];
+		L.Cells = &WorldLayers[I]->GetCells();
+		L.bVisible = WorldLayers[I]->IsLayerVisible();
+		L.Rule = WorldLayers[I] == this ? Rule.Get() : nullptr;
+		if (WorldLayers[I] == this) Mine = static_cast<size_t>(I);
+	}
+	for (const MBPaint::FPlacement& P : MBPaint::FRule::PlacementsLayered(In)[Mine])
 	{
 		const FVector Centre = FormatToLocal(FVector(P.Vertex.X + Offset.X, P.Vertex.Y + Offset.Y, P.Vertex.Z + Offset.Z));
 		const TObjectPtr<UStaticMesh>* Found = P.Tile.empty() ? nullptr
@@ -423,6 +488,12 @@ void AMarchingBlocksWorld::PostEditChangeProperty(FPropertyChangedEvent& Event)
 		Status.Reset();
 		Rebuild();
 	}
+	// Joining, leaving or reordering a world moves the borders of every layer involved.
+	if (Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWorld, WorldName) || Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWorld, Priority))
+	{
+		for (TActorIterator<AMarchingBlocksWorld> It(GetWorld()); It; ++It)
+			if (IsValid(*It)) It->Rebuild();
+	}
 	// Choosing an aim in the Details panel leaves navigation, as Tab does. (The hidden legacy value, if code
 	// sets it, still means "navigating".)
 	if (Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWorld, Aim))
@@ -436,6 +507,8 @@ void AMarchingBlocksWorld::PostEditUndo()
 {
 	Super::PostEditUndo();
 	bIndexValid = false;
-	Rebuild();
+	// The undone change may have given cells back to another layer: the whole world is rebuilt.
+	for (AMarchingBlocksWorld* L : GetLayers()) L->bIndexValid = false;
+	RebuildWorld();
 }
 #endif

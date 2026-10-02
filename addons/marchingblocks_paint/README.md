@@ -13,7 +13,10 @@ MarchingBlocks tool): you paint cells, the non-cubic 3D tiles follow.
 
 **A whole painted world** (every layer, its cells and its tiles) comes as a `.mbworld` folder: copy it into
 your project, then **Project → Tools → Import MarchingBlocks world...** and pick its `world.json`. One
-MarchingBlocksWorld node per layer is built, in order, under a new node — one Ctrl+Z. A layer exported
+MarchingBlocksWorld node per layer is built, in order, under a new node — one Ctrl+Z. Sibling
+MarchingBlocksWorld nodes are the layers of ONE world, and their order is their priority: where two layers meet
+there is no wall, and each corner takes the tiles of the higher layer. A cell belongs to one layer — painting it
+in one layer removes it from the others, in the same Ctrl+Z. A hidden layer leaves the world. A layer exported
 without tiles arrives with its cells and no tiles, and the Output panel says so. `world_conformance.json`
 holds the reading rule's reference cases.
 

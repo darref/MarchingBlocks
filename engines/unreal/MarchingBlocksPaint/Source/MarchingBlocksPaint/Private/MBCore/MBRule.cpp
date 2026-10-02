@@ -91,34 +91,62 @@ namespace MBPaint
 
 	std::vector<FPlacement> FRule::Placements(const FCellSet& Cells) const
 	{
-		std::vector<FPlacement> Result;
-		if (ClassIds.empty()) return Result;
+		std::vector<FLayerInput> One(1);
+		One[0].Cells = &Cells;
+		One[0].Rule = this;
+		return PlacementsLayered(One)[0];
+	}
+
+	std::vector<std::vector<FPlacement>> FRule::PlacementsLayered(const std::vector<FLayerInput>& Layers)
+	{
+		std::vector<std::vector<FPlacement>> Result(Layers.size());
+		const FRule* Reference = nullptr;
+		for (const FLayerInput& L : Layers)
+			if (L.Rule != nullptr && !L.Rule->ClassIds.empty()) { Reference = L.Rule; break; }
+		if (Reference == nullptr) return Result;
+
+		// The union of the visible layers: cell -> the first layer that holds it.
+		std::unordered_map<FCell, size_t, FCellHash> Owner;
+		FCellSet Union;
+		for (size_t I = 0; I < Layers.size(); ++I)
+			if (Layers[I].bVisible && Layers[I].Cells != nullptr)
+				for (const FCell& C : *Layers[I].Cells)
+					if (Union.insert(C).second) Owner[C] = I;
 		int Top = INT_MIN;
-		for (const FCell& C : Cells) Top = std::max(Top, C.Y);
+		for (const FCell& C : Union) Top = std::max(Top, C.Y);
 		FCellSet Vertices;
-		for (const FCell& C : Cells)
-			for (const FCell& Corner : Corners) Vertices.insert(C - Corner);
+		for (const FCell& C : Union)
+			for (const FCell& Corner : Reference->Corners) Vertices.insert(C - Corner);
 
 		for (const FCell& V : Vertices)
 		{
 			int Bits = 0;
+			size_t Own = Layers.size();
 			for (int T = 0; T < 8; ++T)
-				if (Cells.count(V + Corners[static_cast<size_t>(T)])) Bits |= 1 << T;
-			const int Class = TableClass[static_cast<size_t>(Bits)];
+			{
+				const auto Found = Owner.find(V + Reference->Corners[static_cast<size_t>(T)]);
+				if (Found == Owner.end()) continue;
+				Bits |= 1 << T;
+				if (Found->second < Own) Own = Found->second;
+			}
+			const FRule* Rule = Layers[Own].Rule;
+			if (Rule == nullptr || Rule->ClassIds.empty()) continue;
+			const int Class = Rule->TableClass[static_cast<size_t>(Bits)];
 			if (Class < 0) continue;
-			const std::string& Id = ClassIds[static_cast<size_t>(Class)];
+			const std::string& Id = Rule->ClassIds[static_cast<size_t>(Class)];
 			std::string Chosen;
-			if (OutdoorPossible[static_cast<size_t>(Class)] && IsOutdoor(Cells, V, Top) && HasTile(Id + OutdoorSuffix))
-				Chosen = Id + OutdoorSuffix;
-			if (Chosen.empty() && HasTile(Id)) Chosen = Id;
+			if (Rule->OutdoorPossible[static_cast<size_t>(Class)] && Rule->IsOutdoor(Union, V, Top) && Rule->HasTile(Id + Rule->OutdoorSuffix))
+				Chosen = Id + Rule->OutdoorSuffix;
+			if (Chosen.empty() && Rule->HasTile(Id)) Chosen = Id;
 
 			FPlacement P;
 			P.Vertex = V;
-			P.QuarterTurns = TableTurns[static_cast<size_t>(Bits)];
-			if (!Chosen.empty()) P.Tile = Tiles.at(Chosen);
-			Result.push_back(std::move(P));
+			P.QuarterTurns = Rule->TableTurns[static_cast<size_t>(Bits)];
+			if (!Chosen.empty()) P.Tile = Rule->Tiles.at(Chosen);
+			Result[Own].push_back(std::move(P));
 		}
-		std::sort(Result.begin(), Result.end(), [](const FPlacement& A, const FPlacement& B) { return A.Vertex < B.Vertex; });
+		for (std::vector<FPlacement>& List : Result)
+			std::sort(List.begin(), List.end(), [](const FPlacement& A, const FPlacement& B) { return A.Vertex < B.Vertex; });
 		return Result;
 	}
 }

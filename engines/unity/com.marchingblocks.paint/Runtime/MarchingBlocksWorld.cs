@@ -2,8 +2,12 @@
 //
 // Cells are stored in FORMAT space (the tileset's own grid). What you see is converted through the
 // tileset's measured frame, so the cells and the tiles always agree, whatever your glTF importer did.
-// One component is one layer: its tiles only ever look at its own cells. Stack several GameObjects for
-// several layers (rock, ice…), each with its own tileset.
+// One component is one LAYER, with its own tileset. MarchingBlocksWorld components on SIBLING GameObjects (the
+// children of one parent) are the layers of ONE world (rock, ice…), and their order among the children is
+// their PRIORITY (the first is the highest). The rule reads every active layer together — no wall where two
+// layers meet — and a vertex is placed by the highest layer among its 8 cells, with that layer's tiles. A
+// cell belongs to one layer: Apply removes the cells it sets from the other layers. An inactive layer is
+// hidden: the world closes without it.
 //
 // The generated tiles are NOT saved with the scene: they are rebuilt from the cells whenever the
 // component is enabled, so a scene only stores what you painted.
@@ -41,7 +45,40 @@ namespace MarchingBlocks.Paint
         public int LastMissing { get; private set; }
         public int CellCount => cells.Count;
 
-        void OnEnable() => Rebuild();
+        void OnEnable() => RebuildWorld();
+
+        void OnDisable()
+        {
+            // A hidden layer leaves the world: the others close without it. Not while the scene closes —
+            // its layers are going too.
+            if (!gameObject.scene.isLoaded) return;
+            foreach (var l in Layers()) if (l != this && l != null && l.isActiveAndEnabled) l.Rebuild();
+        }
+
+        /// <summary>The layers of this component's world, in priority order: the MarchingBlocksWorld
+        /// components on this GameObject's siblings (itself included); just itself without a parent.</summary>
+        public List<MarchingBlocksWorld> Layers()
+        {
+            var result = new List<MarchingBlocksWorld>();
+            var parent = transform.parent;
+            if (parent == null) { result.Add(this); return result; }
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                var w = parent.GetChild(i).GetComponent<MarchingBlocksWorld>();
+                if (w != null) result.Add(w);
+            }
+            return result;
+        }
+
+        /// <summary>Every layer of the world, as Unity objects — record them ALL before Apply
+        /// (Undo.RecordObjects): Apply takes cells from the other layers.</summary>
+        public Object[] LayerObjects() => Layers().ToArray();
+
+        /// <summary>Rebuilds every layer of the world (a change of cells moves the borders of the others).</summary>
+        public void RebuildWorld()
+        {
+            foreach (var l in Layers()) l.Rebuild();
+        }
 
         void OnValidate()
         {
@@ -86,16 +123,31 @@ namespace MarchingBlocks.Paint
             var set = Cells;
             foreach (var c in change.Clear) if (set.Remove(c)) n++;
             foreach (var c in change.Set) if (set.Add(c)) n++;
+            // A CELL BELONGS TO ONE LAYER: what this change sets leaves the other layers of the world.
+            foreach (var l in Layers())
+                if (l != this && l.Take(change.Set) > 0) n++;
             if (n == 0) return 0;
             // The list is rewritten in ONE pass: removing cell by cell from a List is quadratic, and a
             // box of a few thousand cells would freeze the editor.
             cells.Clear();
             foreach (var c in set) cells.Add(new Vector3Int(c.x, c.y, c.z));
-            Rebuild();
+            RebuildWorld();
             return n;
         }
 
         public void ClearCells() { cells.Clear(); index = null; }
+
+        /// <summary>Removes these cells from this layer, without rebuilding. Returns how many it held.</summary>
+        public int Take(IEnumerable<Int3> taken)
+        {
+            int n = 0;
+            var set = Cells;
+            foreach (var c in taken) if (set.Remove(c)) n++;
+            if (n == 0) return 0;
+            cells.Clear();
+            foreach (var c in set) cells.Add(new Vector3Int(c.x, c.y, c.z));
+            return n;
+        }
 
         /// <summary>Replaces ALL the cells (format space), in one pass — a duplicate is kept once. Record the
         /// undo before calling this; call Rebuild() afterwards.</summary>
@@ -196,9 +248,21 @@ namespace MarchingBlocks.Paint
             container.localRotation = Quaternion.identity;
             container.localScale = Vector3.one * (cellSize / set.Unit);
 
-            var formatCells = Cells;
+            // Step 7: the rule reads EVERY layer of the world; this layer keeps the vertices it owns.
+            var layers = Layers();
+            var allCells = new List<HashSet<Int3>>();
+            var visible = new List<bool>();
+            var rules = new List<Rule>();
+            foreach (var l in layers)
+            {
+                allCells.Add(l.Cells);
+                visible.Add(l.isActiveAndEnabled);
+                rules.Add(l == this ? set.Rule : null);
+            }
+            int mine = layers.IndexOf(this);
+            if (!isActiveAndEnabled) return;   // a hidden layer places nothing
             var offset = set.Rule.PieceOffset;
-            foreach (var p in set.Rule.Placements(formatCells))
+            foreach (var p in Rule.PlacementsLayered(allCells, visible, rules)[mine])
             {
                 // The piece of vertex v is centred at F(v + piece_offset), in container space.
                 Vector3 centre = set.Frame.MultiplyVector(new Vector3(

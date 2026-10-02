@@ -18,5 +18,6 @@
     <Compile Include="../com.marchingblocks.paint/Runtime/MBWorldFile.cs" Link="MBWorldFile.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WorldConformanceCheck.cs" Link="WorldConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/AimCheck.cs" Link="AimCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/LayeredConformanceCheck.cs" Link="LayeredConformanceCheck.cs" />
   </ItemGroup>
 </Project>

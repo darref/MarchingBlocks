@@ -116,7 +116,8 @@ static func regle() -> PackedStringArray:
 	return PackedStringArray([
 		"MarchingBlocks tileset, format %d. The tiles are placed by the rule below; nothing else." % VERSION,
 		"Frame: right-handed, +Y up (glTF). 1 unit = 1 cell. Cell c covers [c, c+1] on each axis.",
-		"A layer is a set of full cells. Layers are independent: a layer only ever reads its own cells.",
+		"A layer is a set of full cells, with its own tiles. A world may stack several layers, in PRIORITY",
+		"   order (the first is the highest); see 7. One layer alone is the same rule.",
 		"1. Vertices. A full cell c touches the 8 vertices c - corners[t], t = 0..7.",
 		"2. Bits. At vertex v, bit t is 1 when cell v + corners[t] is full (t = x + 2y + 4z).",
 		"3. Class. table[bits] = [class, quarter_turns]. class = -1: nothing is placed at v.",
@@ -128,8 +129,13 @@ static func regle() -> PackedStringArray:
 		"   error marker instead. Never fill in.",
 		"6. Pose. The tile mesh is centred on the origin. Place it at (v + piece_offset) * cell_size,",
 		"   rotated by quarter_turns * 90 degrees about +Y, right-hand rule (+Z turns towards +X).",
+		"7. Layers. Steps 1-4 read the UNION of the cells of every VISIBLE layer (a cell found in two layers",
+		"   belongs to the first), and top is the highest y of that union. Vertex v is placed by ONE layer:",
+		"   among the layers owning its 8 cells, the first in priority order, with ITS tiles (step 5). A",
+		"   hidden layer is not in the union and places nothing. Painting a cell in one layer removes it from",
+		"   the others of the same world.",
 		"Rebuilding after cell (x, y, z) changes: only the vertices of columns x-1..x, z-1..z at heights",
-		"   up to y can change (their bits, or their context).",
+		"   up to y can change (their bits, their context, or the layer that places them) — in every layer.",
 		"Engines with another frame must convert the cell grid with the SAME mapping their glTF importer",
 		"   applies to meshes. A mirroring conversion reverses the direction of the quarter turns.",
 		"Frame: tiles.glb carries a marker node, frame_marker.node, whose mesh has exactly the vertices",
@@ -386,9 +392,80 @@ static func cas_d_epreuve() -> Dictionary:
 		for nom_jeu in jeux:
 			cas.append({"name": "%s — %s tileset" % [monde["name"], nom_jeu], "tileset": nom_jeu,
 				"cells": cellules, "expected": attendu(pleines, jeux[nom_jeu])})
+	var en_couches: Array = []
+	for monde in mondes_en_couches():
+		var couches: Array = []
+		var ecrites: Array = []
+		for l in monde["layers"]:
+			couches.append({"cells": l["cells"], "cles": jeux[l["tileset"]], "visible": l["visible"]})
+			var cellules: Array = []
+			for c in l["cells"]:
+				cellules.append([c.x, c.y, c.z])
+			ecrites.append({"tileset": l["tileset"], "visible": l["visible"], "cells": cellules})
+		en_couches.append({"name": monde["name"], "layers": ecrites, "expected": attendu_en_couches(couches)})
 	var sortie := regle_du_format()
-	sortie.merge({"format": FORMAT_EPREUVE, "version": VERSION, "tilesets": tiles_json, "cases": cas}, true)
+	sortie.merge({"format": FORMAT_EPREUVE, "version": VERSION, "tilesets": tiles_json, "cases": cas,
+		"layered_cases": en_couches}, true)
 	return sortie
+
+
+## LES CAS MULTICOUCHES (couches exclusives, Jordan, 2 octobre 2026) : des mondes de plusieurs couches, chacune avec
+## son jeu, dans l'ordre de PRIORITÉ ; l'attendu, par couche, vient de `MB.poses_en_couches` (la référence).
+static func mondes_en_couches() -> Array:
+	var bloc := func(x0: int, x1: int, y0: int, y1: int, z0: int, z1: int) -> Array:
+		var a: Array = []
+		for x in range(x0, x1 + 1):
+			for y in range(y0, y1 + 1):
+				for z in range(z0, z1 + 1):
+					a.append(Vector3i(x, y, z))
+		return a
+	var roche: Array = bloc.call(0, 3, 0, 1, 0, 3)
+	var glace: Array = bloc.call(4, 6, 0, 2, 0, 3)
+	var dalle: Array = bloc.call(0, 3, 2, 2, 0, 1)
+	var a_cheval: Array = bloc.call(2, 5, 0, 1, 0, 3)   # chevauche la roche sur x = 2..3
+	return [
+		{"name": "two layers side by side, different tilesets",
+			"layers": [{"tileset": "rich", "visible": true, "cells": roche}, {"tileset": "bare", "visible": true, "cells": glace}]},
+		{"name": "the same two, priority reversed",
+			"layers": [{"tileset": "bare", "visible": true, "cells": glace}, {"tileset": "rich", "visible": true, "cells": roche}]},
+		{"name": "a slab of another layer on top (the floor below is no longer under the sky)",
+			"layers": [{"tileset": "rich", "visible": true, "cells": roche}, {"tileset": "rich", "visible": true, "cells": dalle}]},
+		{"name": "a hidden layer is not in the union",
+			"layers": [{"tileset": "rich", "visible": true, "cells": roche}, {"tileset": "rich", "visible": false, "cells": glace}]},
+		{"name": "a cell in two layers belongs to the first",
+			"layers": [{"tileset": "bare", "visible": true, "cells": a_cheval}, {"tileset": "rich", "visible": true, "cells": roche}]},
+	]
+
+
+## Par couche, la liste attendue : [x, y, z, tuile ou null, quarts], triée par sommet. `couches` : [{cells, cles,
+## visible}] dans l'ordre de priorité.
+static func attendu_en_couches(couches: Array) -> Array:
+	var union := {}
+	var cles_par_couche: Array = []
+	for i in couches.size():
+		cles_par_couche.append(couches[i]["cles"])
+		if couches[i]["visible"]:
+			for c in couches[i]["cells"]:
+				if not union.has(c):
+					union[c] = i
+	var sorties: Array = []
+	for i in couches.size():
+		sorties.append([])
+	var quarts := {}
+	for d in MB.poses_en_couches(union, cles_par_couche):
+		var s: Vector3i = d["sommet"]
+		var o: int = d["orientation"]
+		if not quarts.has(o):
+			quarts[o] = quarts_de_tour(o)
+		sorties[int(d["couche"])].append([s.x, s.y, s.z, nom_de_tuile(d["cle"]) if d["cle"] != "" else null, quarts[o]])
+	for l in sorties:
+		(l as Array).sort_custom(func(a: Array, b: Array) -> bool:
+			if a[0] != b[0]:
+				return a[0] < b[0]
+			if a[1] != b[1]:
+				return a[1] < b[1]
+			return a[2] < b[2])
+	return sorties
 
 
 ## La liste attendue pour un monde et un jeu : [x, y, z, tuile ou null, quarts], triée par sommet.

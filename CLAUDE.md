@@ -37,12 +37,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     l'artiste que les presets ne sont pas obligatoires.
   - **la salle** (§5, « les formes spéciales ») : `FS.salle` réécrite en C# et en C++, ses cas dans
     `tools_conformance.json`, et le geste « tracer un rectangle sur la grille » dans les trois éditeurs.
-  - **la règle multicouche** (§5, « les couches exclusives ») : un monde de plusieurs couches lu par un greffon
-    pose aujourd'hui chaque couche SEULE — une rainure à chaque frontière, là où l'appli n'en montre aucune.
-    Il faut : la règle dans `FormatNeutre.regle()` / `FormatMonde.regle()` (l'ordre des couches de `world.json`
-    EST la priorité ; une couche cachée sort de l'union), `MB.poses_en_couches` (la référence, déjà écrite) réécrite
-    dans les trois, des cas multicouches dans `world_conformance.json`, et l'exclusivité dans les pinceaux des trois
-    éditeurs (peindre une case la retire des autres couches du même monde, dans la même annulation).
+  - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
 
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
@@ -1386,6 +1381,41 @@ Ce que l'appli livre aux moteurs (« Export to engines », la couche ACTIVE) : u
   - ⚠ **L'EMPREINTE DE GÉOMÉTRIE DU §4 EST PÉRIMÉE** : le témoin rend aujourd'hui **31 120 triangles,
     `819204827d6121ec7e13d41aefdd4dcc`** (mesuré dans Godot ET Unity, qui s'accordent), et non 90 651 /
     `c3876f4f…`. Probablement la découpe sans triangles plats (`cb59fab`) — NON vérifié.
+- **LA RÈGLE MULTICOUCHE DANS LES GREFFONS — FAITE (2 octobre 2026)**, rattrapage des couches exclusives (§5) :
+  - **la règle écrite** : l'étape 7 de `FormatNeutre.regle()` (les étapes 1-4 lisent l'UNION des couches visibles,
+    une case dans deux couches est à la première, un sommet est posé par la première couche, dans l'ordre de priorité,
+    qui possède une de ses huit cases, avec SES tuiles ; une couche cachée ne pose rien) ; `FormatMonde.regle()` dit
+    que l'ordre de `world.json` est la priorité. ⚠ Rien d'autre ne change dans les formats : un monde d'une couche
+    suit la même règle, et un monde déjà exporté se lit tel quel.
+  - **les cas** : `conformance.json` porte `layered_cases` (5 mondes : côte à côte avec deux jeux, la priorité
+    inversée, une dalle d'une autre couche par-dessus, une couche cachée, une case dans deux couches — 466 poses),
+    calculés par `FN.attendu_en_couches` sur `MB.poses_en_couches`. Les trois contrôles exigent qu'ils EXERCENT
+    l'union (au moins quatre couches posent autre chose que seules, une couche cachée ne pose rien).
+  - **Godot** : `MBRule.placements_layered` (`placements` en est le cas à une couche) ; les `MarchingBlocksWorld`
+    FRÈRES d'un même parent sont les couches d'un monde, l'ordre des enfants est la priorité ; `apply_cells` retire
+    aux autres couches ce qu'il pose et le REND, l'éditeur le remet à l'annulation (action ET coup de pinceau) ;
+    l'import d'un `.mbworld` écrit les cases telles quelles (sans vol) puis rebâtit le monde. ⚠ **LE TEST A DÛ
+    CHANGER** : deux essais posés sous la même racine devenaient un seul monde — chacun a son parent.
+  - **Unity** : `Rule.PlacementsLayered` ; les composants des GameObjects FRÈRES sont les couches, un GameObject
+    inactif est caché ; `Apply` retire aux autres (`Take`) et rebâtit le monde ; le pinceau enregistre TOUTES les
+    couches (`Undo.RecordObjects(World.LayerObjects())`). `preparer_essai_unity.gd` calcule l'attendu du monde
+    importé par la référence multicouche (la couche cachée Ice : rien).
+  - **Unreal** : `FRule::PlacementsLayered` (MBCore) ; les acteurs de même **World Name** sont un monde, ordonné par
+    **Priority** (l'import les remplit ; un nom vide garde l'acteur seul) ; `Apply` `Modify()` et vide les autres
+    couches dans la même transaction ; `PostEditUndo` rebâtit le monde. ⚠ Deux masquages évités : un local
+    `Format` (membre statique de `FRule`, vu rougir par `-Wshadow`) et un local `Layers` (`AActor::Layers`).
+  - **MESURÉ** : `test_greffon_peinture` 242 (les 5 cas, et deux nœuds frères sur le VRAI jeu exporté : poses = la
+    référence du cœur, le contrôle « seule elle poserait autre chose », le vol par `_commit`, Ctrl+Z / Ctrl+Y, le
+    coup déjà appliqué rendu par `_record`, la couche cachée) ; banc .NET et banc C++ (clang de Unity, drapeaux
+    d'Unreal) : 18 + 5 cas, 0 échec ; **Unity 6.6 : 28 tests sur 28** (dont `SiblingLayersAreOneWorld` sur le vrai
+    témoin, Undo compris) ; **Unreal 5.8.3 : BuildPlugin, BUILD SUCCESSFUL, aucun avertissement**.
+  - **MUTATIONS, TOUTES ROUGES** : Godot 7 (propriétaire au plus grand rang, cachée comptée, union réduite à soi,
+    pas de vol, pas d'annulation du vol, import par `apply_cells`, dernier au lieu du premier) ; .NET 3 et C++ 3
+    (plus grand rang, cachée comptée, dernier au lieu du premier) ; Unity 3 (pas de vol, union réduite à soi,
+    cachée comptée).
+  - ⚠ **PAS ÉPROUVÉ** : l'acteur et le mode Unreal dans l'éditeur (ni import, ni geste, ni Ctrl+Z) — seule la règle
+    l'est, par le banc C++ ; dans Unity, le pinceau de la Scene view n'est pas mené (le test reproduit ce qu'il fait :
+    `RecordObjects` puis `Apply`). Rien de tout cela n'a été tenu en main.
 - **OUVERT** : la reconstruction INCRÉMENTALE (écrite dans la règle : seules les colonnes x−1..x, z−1..z
   jusqu'à la hauteur de la case changent) — l'APPLI la fait depuis le 1er octobre 2026 (§5, « Le geste d'une
   case »), les greffons ne la font pas encore (le Unity pose
