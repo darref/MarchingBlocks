@@ -30,11 +30,23 @@ func _initialize() -> void:
 	_le_monde_s_eclaire_comme_le_modeleur(t)
 	_le_rayon_trouve_l_occurrence(t)
 	_sculpter_une_tuile_les_change_toutes(t)
+	_l_ecriture_ne_fuit_pas(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
 	quit(1 if _echecs > 0 else 0)
+
+
+## ÉCRIRE LE .glb LIÉ NE LAISSE AUCUN NŒUD ORPHELIN (2 octobre 2026 : 52 `Node3D` fuyaient à chaque écriture, un par
+## clé, vus à la fermeture de l'appli). Attendu : le compteur de nœuds orphelins du moteur, inchangé.
+func _l_ecriture_ne_fuit_pas(t: RefCounted) -> void:
+	var chemin := ProjectSettings.globalize_path("user://test_temoin_lie_fuite.glb")
+	var avant := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+	var err: String = t.vers_glb(chemin)
+	var apres := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
+	_dire(err == "" and apres == avant, "écrire le .glb lié ne laisse aucun nœud orphelin (%d → %d)" % [avant, apres])
+	DirAccess.remove_absolute(chemin)
 
 
 func _dire(condition: bool, quoi: String) -> void:

@@ -777,6 +777,18 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
   saved » ; sa bulle explique qu'il ne faut pas de Ctrl+S. ⚠ **CTRL+S RÉPOND** : muet, il faisait croire au
   client qu'il n'avait rien enregistré ; il écrit ce qui attendait et le DIT. Le rapport d'ouverture le
   rappelle. Gardé par `fumee_appli` (deux mutations rouges).
+- **LA FERMETURE PROPRE — DEUX DÉFAUTS MESURÉS ET CORRIGÉS (2 octobre 2026)**, trouvés par une sonde qui ferme
+  l'appli juste après un geste (`WM_CLOSE_REQUEST` propagé, avec fenêtre sous Xvfb) :
+  - **« Unable to start the timer because it's not inside the scene tree » À CHAQUE FERMETURE** : libérer
+    l'historique (`NOTIFICATION_PREDELETE`, l'écran déjà hors de l'arbre) émet `version_changed`, et
+    `_enregistrer_plus_tard` relançait la minuterie du projet. Il ne relance plus rien hors de l'arbre (la fermeture
+    a déjà tout écrit). Gardé par `fumee_appli` (548 : l'écran retiré de l'arbre, un changement d'historique — la
+    barre reste à « ✓ Saved ») ; mutation rouge. ⚠ **D'ABORD MUETTE** : la garde lisait « la minuterie reste
+    arrêtée », or hors de l'arbre `Timer.start()` ÉCHOUE sans démarrer — l'erreur sort, la minuterie reste arrêtée.
+  - **52 `Node3D` ORPHELINS À CHAQUE ÉCRITURE DU TÉMOIN LIÉ** (`BlocsMaitres.ecrire_le_temoin_lie`) : un nœud créé
+    puis REMPLACÉ par un `MeshInstance3D` pour la première copie de chaque clé — jamais libéré. Gardé par
+    `test_temoin_lie` (32, +1 : le compteur d'orphelins du moteur inchangé par une écriture) ; mutation rouge
+    (4 225 → 5 281).
 - **LES FICHIERS DANS WINDOWS** (« au premier lancement, double-clic oui, dossiers aussi ») — `app/associations.gd` :
   icônes de `.mbproj` (et le double-clic qui l'ouvre), `.mbtiles`, et des DOSSIERS `.mbset/` / `.mbworld/`
   (un `desktop.ini` posé à l'export). Dessinées depuis l'emblème par `MARQUE/generer_icones_fichiers.py`

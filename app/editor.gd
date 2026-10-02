@@ -4727,7 +4727,10 @@ func _enregistrer() -> void:
 ## le témoin ; la fermeture, Ctrl+S, le changement de projet et chaque passage par `_toujours_ecrire` l'écrivent
 ## tout de suite. La barre de titre dit « ● Saving… » pendant la seconde.
 func _enregistrer_plus_tard() -> void:
-	if _ouverture or _projet == "" or _couches.is_empty():
+	# ⚠ À LA FERMETURE, L'ÉCRAN EST DÉJÀ HORS DE L'ARBRE quand on libère l'historique, qui émet `version_changed`
+	# (mesuré, 2 octobre 2026) : la minuterie relancée là donnait « Unable to start the timer because it's not
+	# inside the scene tree » à CHAQUE fermeture. La fermeture a déjà tout écrit (`_toujours_ecrire`).
+	if not is_inside_tree() or _ouverture or _projet == "" or _couches.is_empty():
 		return
 	_minuterie_projet.start()
 	_dire_enregistre("en_cours")

@@ -1403,11 +1403,15 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> Strin
 	for o in occurrences_du_temoin(0):
 		if not maillages.has(o["cle"]):
 			continue   # une clé que le témoin calculé ne livre pas : `librairie()` l'a déjà signalée
-		var mi: Node3D = Node3D.new()
+		# ⚠ UN NŒUD CRÉÉ PUIS REMPLACÉ FUYAIT (mesuré le 2 octobre 2026 : 52 `Node3D` orphelins à chaque écriture, un
+		# par clé, vus à la fermeture de l'appli) : on crée le bon nœud tout de suite.
+		var mi: Node3D
 		if not deja.has(o["cle"]):
 			deja[o["cle"]] = true
 			mi = MeshInstance3D.new()
 			(mi as MeshInstance3D).mesh = maillages[o["cle"]]
+		else:
+			mi = Node3D.new()
 		mi.name = "%s_%d" % [maillages[o["cle"]].resource_name, n]
 		mi.transform = Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
 			Vector3(o["sommet"]) + Vector3.ONE)

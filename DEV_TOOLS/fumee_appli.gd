@@ -395,6 +395,19 @@ func _mener() -> void:
 	_l_exemple_ne_s_impose_pas(ed)
 	await _l_exemple(ed)
 
+	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
+	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
+	# ⚠ « LA MINUTERIE RESTE ARRÊTÉE » NE SUFFIT PAS (mutation d'abord MUETTE) : hors de l'arbre, `Timer.start()`
+	# échoue sans démarrer — l'erreur sort, la minuterie reste arrêtée. Ce qu'on lit : la barre ne passe pas à
+	# « Saving… » (une écriture qui n'aura jamais lieu).
+	ed._minuterie_projet.stop()
+	ed._dire_enregistre("enregistre")
+	root.remove_child(ed)
+	ed._histoire.create_action("fermeture")
+	ed._histoire.commit_action(false)
+	_vrai(ed._minuterie_projet.is_stopped() and ed._etat_enregistre.text == "✓ Saved",
+		"hors de l'arbre, un changement d'historique ne relance rien (barre : %s)" % ed._etat_enregistre.text)
+	root.add_child(ed)
 	ed.queue_free()
 	await process_frame
 	_rendre_les_reglages()
