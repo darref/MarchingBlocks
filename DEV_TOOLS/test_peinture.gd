@@ -33,6 +33,7 @@ func _initialize() -> void:
 	_l_empreinte_est_le_bord_du_tampon()
 	_la_gomme_et_les_calques()
 	_les_calques_s_ecrivent()
+	_le_fond_se_voit()
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -430,6 +431,46 @@ func _les_calques_s_ecrivent() -> void:
 	t = Peinture.toile(nue)
 	_dire((t["calques"] as Array).size() == 1 and t["calques"][0]["nom"] == "Base" and not t["calques_ecartes"],
 		"une image sans pile : un calque « Base », rien de mis de côté")
+
+
+## LE FOND SE VOIT (3 octobre 2026 : « bake color base ne fait rien ») — la cuisson réécrit le FOND ; il doit
+## apparaître là où rien n'est peint, et rester sous la peinture. Attendus à la main (couleurs pures, tampon dur).
+## Et une pile écrite AVANT (Base opaque, sans « version ») : migrée sans changer l'image, puis le fond s'y voit.
+func _le_fond_se_voit() -> void:
+	var chemin := _dossier.path_join("fond.png")
+	Peinture.nouvelle_toile(chemin, Color.BLUE, 16)
+	var compo: Image = Peinture.toile(chemin)["image"]
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(8, 8), 2.0, Color.RED, 1.0, 1.0))
+	var vert := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	vert.fill(Color.GREEN)
+	Peinture.poser_region(chemin, vert, Vector2i.ZERO, Peinture.fond(chemin))
+	_dire(_egal(compo.get_pixel(2, 2), Color.GREEN) and _egal(compo.get_pixel(8, 8), Color.RED),
+		"un fond recuit se VOIT là où rien n'est peint (%s), la peinture reste dessus (%s)" % [compo.get_pixel(2, 2), compo.get_pixel(8, 8)])
+	# Une pile à l'ancienne, écrite à la main : fond bleu, Base = le bleu opaque avec un point rouge, pas de version.
+	var vieux := _dossier.path_join("vieille_pile.png")
+	var dossier := Peinture.dossier_des_calques(vieux)
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var bleu := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	bleu.fill(Color.BLUE)
+	var base := bleu.duplicate() as Image
+	base.set_pixel(8, 8, Color.RED)
+	base.save_png(vieux)
+	bleu.save_png(dossier.path_join("fond.png"))
+	base.save_png(dossier.path_join("layer_0.png"))
+	var f := FileAccess.open(dossier.path_join("layers.json"), FileAccess.WRITE)
+	f.store_string(JSON.stringify({"md5": FileAccess.get_md5(vieux), "actif": 0,
+		"calques": [{"nom": "Base", "opacite": 1.0, "visible": true, "fichier": "layer_0.png"}]}))
+	f.close()
+	Peinture.oublier()
+	var t: Dictionary = Peinture.toile(vieux)
+	var b: Image = t["calques"][0]["image"]
+	_dire(not t["calques_ecartes"] and b.get_pixel(2, 2).a == 0.0 and _egal(b.get_pixel(8, 8), Color.RED),
+		"pile d'avant : le Base est vidé là où il égale le fond, le rouge reste")
+	Peinture.composer(vieux)
+	_dire((t["image"] as Image).get_data() == base.get_data(), "… et l'image composée est la même, octet pour octet")
+	Peinture.poser_region(vieux, vert, Vector2i.ZERO, Peinture.fond(vieux))
+	_dire(_egal((t["image"] as Image).get_pixel(2, 2), Color.GREEN) and _egal((t["image"] as Image).get_pixel(8, 8), Color.RED),
+		"… puis un fond recuit s'y voit, sous le rouge")
 
 
 func _egal(a: Color, b: Color) -> bool:

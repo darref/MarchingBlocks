@@ -58,10 +58,38 @@ static func _inscrire(chemin: String, img: Image, date: int) -> Dictionary:
 	img.convert(Image.FORMAT_RGBA8)
 	var t := {"image": img, "texture": ImageTexture.create_from_image(img), "date": date, "sale": false, "version": 0,
 		"touchee": 0,
-		"fond": img.duplicate(), "calques": [_calque("Base", img.duplicate())], "actif": 0, "calques_ecartes": false}
+		"fond": img.duplicate(), "calques": [_calque("Base", _transparente(img.get_size()))], "actif": 0,
+		"calques_ecartes": false}
 	_toiles[chemin] = t
 	_lire_les_calques(chemin, t)
 	return t
+
+
+## ⚠ **LE CALQUE DU BAS NAÎT TRANSPARENT (3 octobre 2026)** : il était une copie OPAQUE de la toile, posée sur le fond —
+## et « Bake base colour », qui réécrit le FOND, ne changeait RIEN à l'image (Jordan : « bake color base ne fait
+## rien »). Le fond porte la toile d'origine ; ce qu'on peint sur Base reste par-dessus ; partout ailleurs, on voit le
+## fond. La gomme sur Base fait revenir le fond, comme avant.
+static func _transparente(taille: Vector2i) -> Image:
+	var img := Image.create(taille.x, taille.y, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	return img
+
+
+## Les piles écrites avant (`layers.json` sans « version » 2) ont un Base OPAQUE, copie du fond là où l'on n'a rien
+## peint : on le rend TRANSPARENT partout où il est identique au fond, octet pour octet. La composition ne change pas
+## d'un pixel (du transparent sur le fond, c'est le fond) ; un fond recuit apparaît là où rien n'est peint.
+static func _evider(calque: Image, fond: Image) -> void:
+	var c := calque.get_data()
+	var f := fond.get_data()
+	if c.size() != f.size():
+		return
+	for i in range(0, c.size(), 4):
+		if c[i] == f[i] and c[i + 1] == f[i + 1] and c[i + 2] == f[i + 2] and c[i + 3] == f[i + 3]:
+			c[i] = 0
+			c[i + 1] = 0
+			c[i + 2] = 0
+			c[i + 3] = 0
+	calque.set_data(calque.get_width(), calque.get_height(), false, Image.FORMAT_RGBA8, c)
 
 
 static func _calque(nom: String, img: Image, opacite := 1.0, visible := true) -> Dictionary:
@@ -96,6 +124,8 @@ static func _lire_les_calques(chemin: String, t: Dictionary) -> void:
 	if fond == null or calques.is_empty():
 		t["calques_ecartes"] = true
 		return
+	if int((lu as Dictionary).get("version", 1)) < 2:
+		_evider(calques[0]["image"], fond)
 	t["fond"] = fond
 	t["calques"] = calques
 	t["actif"] = clampi(int((lu as Dictionary).get("actif", 0)), 0, calques.size() - 1)
@@ -435,7 +465,8 @@ static func _ecrire_les_calques(chemin: String, t: Dictionary) -> int:
 	var f := FileAccess.open(dossier.path_join("layers.json"), FileAccess.WRITE)
 	if f == null:
 		return FileAccess.get_open_error()
-	f.store_string(JSON.stringify({"md5": FileAccess.get_md5(chemin), "actif": t["actif"], "calques": desc}, "\t"))
+	f.store_string(JSON.stringify({"version": 2, "md5": FileAccess.get_md5(chemin), "actif": t["actif"],
+		"calques": desc}, "\t"))
 	f.close()
 	return OK
 

@@ -1895,6 +1895,16 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
       SUR un plan de coupe n'a pas de voisine dans la tuile, elle n'est rien. Il remplace le FOND de la toile (sous
       les calques peints), UNE annulation. **Refusé en boîte ou en plan** (l'image s'y répète), et l'écran le dit.
       ⚠ C'est un autre algorithme que Materialize (qui part d'une image) : il lit la GÉOMÉTRIE.
+      ⚠ **IL NE FAISAIT RIEN À L'ÉCRAN — MESURÉ ET CORRIGÉ (Jordan, 3 octobre 2026 : « bake color base ne fait
+      rien »)** : il réécrivait le FOND, mais le calque du bas (« Base ») était une copie OPAQUE de la toile, posée
+      dessus — le fond changeait sous lui, l'image composée restait la même. Et la garde ne lisait QUE le fond : le
+      compteur vert du §6. **Le calque du bas naît désormais TRANSPARENT** (le fond porte la toile d'origine ; la
+      peinture reste dessus ; la gomme sur Base fait toujours revenir le fond) ; une pile écrite avant (`layers.json`
+      sans « version » 2) voit son Base VIDÉ là où il égale le fond octet pour octet — l'image composée ne change pas
+      d'un octet, un fond recuit s'y voit là où rien n'est peint. Gardé par `test_peinture` (52, +4 : un fond recuit
+      se voit hors de la peinture et pas dessous ; une pile à l'ancienne écrite à la main, migrée sans changer
+      l'image) et `fumee_appli` (la cuisson change l'IMAGE AFFICHÉE, un Ctrl+Z la rend octet pour octet). Mutations
+      rouges : Base opaque (le défaut), migration absente.
     - **LE TRAJET ENTIER, MESURÉ** : témoin lié → .glb → relecture liée → lot du monde → `.mbset` → greffon Godot
       gratuit : normale, occlusion, métal-rugosité et TANGENT à chaque étape (`test_cartes_pbr`). **Unity 6.6 /
       glTFast** : `TheDerivedPbrMapsArriveInUnity`, les 52 tuiles portent normale, occlusion, métal-rugosité et

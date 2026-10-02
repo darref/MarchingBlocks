@@ -1732,12 +1732,21 @@ func _les_cartes_pbr(ed: Node, mo: Node, t: RefCounted, k: int, chemin: String) 
 	_vrai(ed._rapport.text.contains("needs the UV projection") and Peinture.fond(chemin).get_data() == fond_avant,
 		"en boîte, la cuisson refuse et le dit — le fond est intact")
 	mo.deplier_en_atlas()
+	var compo_avant: PackedByteArray = (Peinture.toile(chemin)["image"] as Image).get_data().duplicate()
 	ed._bouton_cuire.pressed.emit()
 	var fond_apres: PackedByteArray = Peinture.fond(chemin).get_data()
 	_vrai(ed._rapport.text.contains("Base colour baked") and fond_apres != fond_avant,
 		"l'atlas fait, « Bake base colour » remplace le fond de la toile")
+	# ⚠ CE QU'ON VOIT, PAS SEULEMENT LE FOND (3 octobre 2026 : « bake color base ne fait rien ») : le fond changeait
+	# sous un calque Base opaque, et l'image affichée restait la même — la garde ne lisait que le fond.
+	var compo_apres: PackedByteArray = (Peinture.toile(chemin)["image"] as Image).get_data()
+	var changes := 0
+	for i in range(0, compo_apres.size(), 4096):
+		changes += int(compo_apres[i] != compo_avant[i])
+	_vrai(changes > 0, "… et l'IMAGE AFFICHÉE change (%d échantillons sur %d)" % [changes, compo_apres.size() / 4096])
 	ed._unhandled_key_input(_cle(KEY_Z, true))
-	_vrai(Peinture.fond(chemin).get_data() == fond_avant, "UN Ctrl+Z rend le fond d'avant, octet pour octet")
+	_vrai(Peinture.fond(chemin).get_data() == fond_avant
+		and (Peinture.toile(chemin)["image"] as Image).get_data() == compo_avant, "UN Ctrl+Z rend le fond et l'image d'avant, octet pour octet")
 	ed._unhandled_key_input(_cle(KEY_Y, true))
 	_vrai(Peinture.fond(chemin).get_data() == fond_apres, "Ctrl+Y le recuit")
 	# Écrites avec le témoin, et dans son .glb.
