@@ -586,7 +586,8 @@ paroi ouvre une fente à chaque joint). Il faut que la section d'une face — se
   - **Mutations rouges** : orbite oubliée (seuls les points canoniques), carte au lieu de son inverse, le
     modeleur qui ne complète pas, les tuiles coupées non sauvées, et l'instrument lui-même (absences toujours
     nulles : les contrôles rougissent).
-  - ⚠ **PAS COUVERTS** : E, I, Ctrl+B et la subdivision SUR un bord (ils posent des sommets de bord neufs sans
+  - ⚠ **[RÉGLÉ LE 1er OCTOBRE 2026 : tout geste topologique passe par `_completer_apres` — voir « LES GESTES
+    TOPOLOGIQUES ROMPAIENT LES SECTIONS PARTAGÉES »]** **PAS COUVERTS** : E, I, Ctrl+B et la subdivision SUR un bord (ils posent des sommets de bord neufs sans
     les reporter) — `verifier_sections` le dira au tranchage. Un sommet inséré dans une face à plus de quatre
     côtés la laisse pentagone, sans la fendre.
   - **Vu à l'image** (`capture_modeleur_lie.gd`) : paroi tirée, loop cut à travers un bord, boucle tirée — pas
