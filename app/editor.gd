@@ -247,7 +247,9 @@ var _index_eau := {}              # case de lac ou de rivière → [couche, sour
 var _eau_apres_le_coup := false   # l'eau attend la fin du coup de pinceau (monde lent)
 var _materiaux_eau := {}
 var _cle_apercu_eau := ""
-var _bouton_eau: Button
+var _droite_fluides: Panneau
+## L'outil de World qu'on avait en entrant dans Fluids (`_vue.outil`, et la forme si c'en était une) : rendu en sortant.
+var _outil_avant_fluides := "ajouter"
 var _aide_eau: Label
 var _liste_eaux: VBoxContainer
 var _bouton_supprimer_eau: Button
@@ -380,6 +382,8 @@ func _batir() -> void:
 	_batir_droite_texture(_droite_texture.get_meta("pile"))
 	_droite_jeu = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite_jeu(_droite_jeu.get_meta("pile"))
+	_droite_fluides = _panneau(corps, false, LARGEUR_DROITE)
+	_batir_fluides(_droite_fluides.get_meta("pile"))
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -725,11 +729,12 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	for a in [
 		["projet", "Project", "enregistrer", "Save, open, and the round trip with your artist: export, "
 			+ "import, slice, export to engines."],
+		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
 		["monde", "World", "monde", "Paint worlds with the sliced tiles."],
+		["fluides", "Fluids", "eau", "Place water in the painted world: lakes, rivers, seas. Esc goes back to World."],
 		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
 		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
 			+ "of the witness tiles."],
-		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -743,8 +748,9 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		ateliers.append(b)
-	# ⚠ CINQ ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing, Jordan) : en grille de deux,
-	# une rangée ne tient pas dans 300 px. Les deux du témoin sont côte à côte, sur la même rangée.
+	# ⚠ SIX ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing ; 2 octobre : Fluids sorti de World,
+	# Jordan) : en grille de deux, une rangée ne tient pas dans 300 px. Les paires vont ensemble : Project · Play test,
+	# World · Fluids (le même monde), Geometry · Texturing (le même témoin).
 	tete.add_child(_grille(ateliers, 2))
 
 	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
@@ -1225,7 +1231,6 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
-	_batir_fluides(pile)
 
 
 ## ── 4. LES FORMES SPÉCIALES (Jordan, 1er octobre 2026) — la règle vit dans `formes_speciales.gd`.
@@ -1371,20 +1376,23 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 ## ⚠ **L'EAU APPARTIENT AU MONDE ENTIER** (DÉCIDÉ) : ses couches sont les siennes, indépendantes des couches de
 ## tuiles, et elle se calcule contre les cases de TOUTES les couches de tuiles, cachées comprises (PROPOSÉ) —
 ## cacher une couche pour travailler ne doit pas inonder le monde.
+##
+## ⚠ **UN ATELIER, PLUS UNE SECTION DE WORLD (Jordan, 2 octobre 2026 : « le mode Fluids aurait dû être un mode
+## plutôt qu'une section, et devrait se désactiver proprement quand on le demande »)**. Le bouton Water, enfoncé,
+## ne se relâchait plus (son clic le ré-enfonçait) : on restait à poser de l'eau. Désormais entrer dans Fluids
+## prend l'outil Water ; en sortir (Échap, « Leave », un autre atelier) rend l'outil de World d'avant.
 func _batir_fluides(pile: VBoxContainer) -> void:
 	var sec := Section.new("Fluids", true, Icones.icone("eau"))
 	pile.add_child(sec)
-	_bouton_eau = _bouton("Water", "One click places water, and the world decides what it becomes:\n"
-		+ "· in a hollow, a LAKE filled to its brim;\n· on a slope or a ledge, a RIVER that runs down, falls, "
-		+ "and fills the hollows on its way;\n· in the open air, over nothing, a SEA at that height, as far as "
-		+ "you can see.\nRight click on water removes it.", _choisir_eau, "eau", Palette.OUTIL)
-	_bouton_eau.toggle_mode = true
-	sec.contenu.add_child(_bouton_eau)
 	_aide_eau = _texte("", 11, Palette.GRIS)
 	_aide_eau.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_aide_eau.text = ("Lakes, rivers and seas follow the world: dig a channel, raise a dam — the water "
-		+ "flows again.")
+	_aide_eau.text = ("One click places water, and the world decides what it becomes: in a hollow, a LAKE filled "
+		+ "to its brim; on a slope or a ledge, a RIVER that runs down, falls, and fills the hollows on its way; in "
+		+ "the open air, over nothing, a SEA at that height. Right click on water removes it.\n"
+		+ "Lakes, rivers and seas follow the world: dig a channel, raise a dam — the water flows again.")
 	sec.contenu.add_child(_aide_eau)
+	sec.contenu.add_child(_bouton("Leave", "Back to World and its painting tools (Esc).",
+		_changer_d_atelier.bind("monde"), "croix"))
 	sec.contenu.add_child(_petit_titre("WATER LAYERS"))
 	_liste_eaux = VBoxContainer.new()
 	_liste_eaux.add_theme_constant_override("separation", 4)
@@ -1417,22 +1425,37 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 	_rafraichir_eaux()
 
 
-func _choisir_eau() -> void:
+## En entrant dans Fluids : l'outil devient l'eau, l'outil de World est retenu.
+func _entrer_dans_les_fluides() -> void:
+	if _vue.outil != "eau":
+		_outil_avant_fluides = _vue.outil
 	_vue.outil = "eau"
-	for b in _boutons_outil.values():
-		(b as Button).set_pressed_no_signal(false)
-	for b in _boutons_forme_speciale.values():
-		(b as Button).set_pressed_no_signal(false)
-	_bouton_eau.set_pressed_no_signal(true)
 	_vue.oublier_ancre()
+	if not _vue.collage.is_empty():
+		_vue.annuler_collage()
 	_basculer_navigation(false)
 	# Il faut une couche d'eau où poser la source.
 	if _eaux.is_empty():
 		_ajouter_eau(Projet.couche_d_eau("Water 1"))
+	_vue.rafraichir()
+	_dire("[b]Fluids[/b] — click in a hollow (lake), on a slope or a ledge (river), or in the open air over "
+		+ "nothing (sea at that height). [i]Right click on water removes it. Esc to go back to World.[/i]")
+
+
+## En sortant de Fluids : l'outil de World d'avant revient, et plus rien ne pose d'eau.
+func _sortir_des_fluides() -> void:
+	if _vue.outil != "eau":
+		return
+	_vue.outil = _outil_avant_fluides if _outil_avant_fluides != "eau" else "ajouter"
+	_vue.oublier_ancre()
+	_cle_apercu_eau = ""
+	_eau_survolee(null)
+	if _vue.outil == "forme":
+		(_boutons_forme_speciale[_vue.forme_speciale["quoi"]] as Button).set_pressed_no_signal(true)
+	elif _boutons_outil.has(_vue.outil):
+		(_boutons_outil[_vue.outil] as Button).set_pressed_no_signal(true)
 	_contexte_des_outils()
 	_vue.rafraichir()
-	_dire("[b]Water[/b] — click in a hollow (lake), on a slope or a ledge (river), or in the open air over "
-		+ "nothing (sea at that height). [i]Right click on water removes it.[/i]")
 
 
 ## L'EAU OÙ L'ON NAGE (Play test) : l'eau DORMANTE des couches d'eau VISIBLES — lacs, lacs des rivières, océans —
@@ -2013,7 +2036,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu"]:
+	if atelier in ["monde", "jeu", "fluides"]:
 		await _rhabiller_avec_attente(atelier == "jeu")
 	var debut := Time.get_ticks_msec()
 	if atelier == "jeu" and _atelier != "jeu" and _ecran_vivant() and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
@@ -2057,7 +2080,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu"]:
+	if atelier in ["monde", "jeu", "fluides"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier == "jeu" and _atelier != "jeu":
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -2069,11 +2092,16 @@ func _aller_a(atelier: String) -> void:
 		_vue.finir_partie()
 		# Le rapport disait encore les touches du jeu : on dit où l'on revient.
 		_dire("[i]Back from the Play test.[/i]")
+	# FLUIDS SE DÉSACTIVE EN SORTANT : l'outil Water ne survit pas à l'atelier (Jordan, 2 octobre 2026).
+	if atelier != "fluides":
+		_sortir_des_fluides()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
-	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde).
-	_vue.montrer({"monde": "monde", "jeu": "jeu"}.get(atelier, "temoin"))
+	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde"}.get(atelier, "temoin"))
+	if atelier == "fluides":
+		_entrer_dans_les_fluides()
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
@@ -2114,6 +2142,7 @@ func _contexte() -> void:
 	var texturing := _atelier == "texture"
 	var temoin := geometrie or texturing
 	var monde := _atelier == "monde"
+	var fluides := _atelier == "fluides"
 	var jeu := _atelier == "jeu"
 	_section_jeu.visible = jeu
 	_titre_projet.visible = projet
@@ -2133,6 +2162,7 @@ func _contexte() -> void:
 	_droite_temoin.visible = geometrie
 	_droite_texture.visible = texturing
 	_droite_jeu.visible = jeu
+	_droite_fluides.visible = fluides
 	_modeleur.geometrie = not texturing
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -4132,8 +4162,6 @@ func _choisir_visee(v: String) -> void:
 func _choisir_outil(o: String) -> void:
 	_vue.outil = o
 	(_boutons_outil[o] as Button).button_pressed = true
-	if _bouton_eau != null:
-		_bouton_eau.set_pressed_no_signal(false)
 	for b in _boutons_forme_speciale.values():
 		(b as Button).set_pressed_no_signal(false)
 	_vue.oublier_ancre()
@@ -4147,8 +4175,6 @@ func _choisir_forme_speciale(quoi: String) -> void:
 	_vue.oublier_ancre()
 	for b in _boutons_outil.values():
 		(b as Button).set_pressed_no_signal(false)
-	if _bouton_eau != null:
-		_bouton_eau.set_pressed_no_signal(false)
 	(_boutons_forme_speciale[quoi] as Button).button_pressed = true
 	_basculer_navigation(false)
 	_contexte_des_outils()
@@ -4543,8 +4569,10 @@ func _ouvrir_l_exemple() -> void:
 	var chemin := Exemple.installer(Exemple.ARCHIVE, Exemple.RACINE, erreurs)
 	if chemin == "":
 		_dire("[color=#e0603c]Cannot open the example[/color] — %s" % ", ".join(PackedStringArray(erreurs)))
+		_dire_le_projet()
 		return
-	await _ouvrir(chemin)
+	if not await _ouvrir(chemin):
+		_dire_le_projet()
 
 
 func _nouveau_projet() -> void:
@@ -4841,8 +4869,12 @@ func _retenir_le_projet() -> void:
 
 
 func _dire_le_projet() -> void:
+	# ⚠ LES DEUX, EXPLICITEMENT : `set_pressed_no_signal` ignore le ButtonGroup — n'enfoncer que l'un laissait
+	# l'autre enfoncé aussi (vu par Jordan, 2 octobre 2026).
 	if _choix_monde != null:
-		(_choix_monde.get_child(1 if est_l_exemple(_projet) else 0) as Button).set_pressed_no_signal(true)
+		var exemple := est_l_exemple(_projet)
+		(_choix_monde.get_child(0) as Button).set_pressed_no_signal(not exemple)
+		(_choix_monde.get_child(1) as Button).set_pressed_no_signal(exemple)
 	if _etiquette_projet == null:
 		return
 	_etiquette_projet.text = _projet.get_file().get_basename()
@@ -4893,6 +4925,18 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_vue.reapparaitre()
 			KEY_F:
 				_basculer_vol()
+			_:
+				return
+		get_viewport().set_input_as_handled()
+		return
+	if _atelier == "fluides":
+		match k.keycode:
+			KEY_ESCAPE:
+				_changer_d_atelier("monde")
+			KEY_PAGEUP:
+				_compteur_etage.value += 1
+			KEY_PAGEDOWN:
+				_compteur_etage.value -= 1
 			_:
 				return
 		get_viewport().set_input_as_handled()
@@ -4966,10 +5010,13 @@ func _input(event: InputEvent) -> void:
 	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or _atelier != "monde" or k.ctrl_pressed or k.alt_pressed:
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides"] or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
+		return
+	# DANS FLUIDS, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
+	if _atelier == "fluides" and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

@@ -260,11 +260,12 @@ func _outils() -> String:
 		+ "leaves it at 45°. Where a slanted shape would make two cells touch by an edge only — which the "
 		+ "tiles forbid — it adds the missing cells itself, and says how many."))
 	l.append(_titre("Fluids"))
-	l.append("Pick [b]Water[/b] and click once: the world decides what the water becomes. In a hollow, of any "
+	l.append("Fluids is a workshop of its own, next to World. Open it and click once: the world decides what the water becomes. In a hollow, of any "
 		+ "size, a [b]lake[/b] fills it to its brim. On a slope or a ledge, a [b]river[/b] runs down the "
 		+ "shortest way, falls as a waterfall, fills the hollows it meets and overflows them. In the open air, "
 		+ "over nothing, a [b]sea[/b] at that height surrounds the matter as far as you can see. A cave fills "
-		+ "only if a passage leads to it under the water.")
+		+ "only if a passage leads to it under the water. " + _touche("Esc") + " or [b]Leave[/b] takes you back "
+		+ "to World, with the painting tool you had: clicks paint cells again, never water.")
 	l.append("Water follows the world: dig a channel, raise a dam, and it flows again — "
 		+ _touche("Ctrl") + _touche("Z") + " included. It sees the cells of every layer, hidden ones too. "
 		+ "A right click on water removes it. Water layers are its own: show, hide or pick each one.")

@@ -2290,12 +2290,15 @@ func _les_fluides(ed: Control) -> void:
 				cuvette[Vector3i(x, 2, z)] = true
 	ed._appliquer({"poser": cuvette, "effacer": {}}, "Add")
 
-	ed._choisir_eau()
-	_vrai(vue.outil == "eau" and ed._bouton_eau.button_pressed
-		and not ed._boutons_outil.values().any(func(b): return (b as Button).button_pressed),
-		"Water : l'outil devient l'eau, aucun outil de pinceau ne reste enfoncé")
-	_egal(ed._eaux.size(), 1, "Water : une couche d'eau est créée pour recevoir la source")
-	_vrai(not ed._ligne_taille.visible and not ed._reglages_forme.visible, "Water : ni pinceau ni réglages de forme")
+	# FLUIDS EST UN ATELIER (Jordan, 2 octobre 2026) : par son VRAI bouton ; l'outil de World d'avant est Dig.
+	ed._choisir_outil("creuser")
+	(ed._boutons_atelier["fluides"] as Button).pressed.emit()
+	await process_frame
+	_vrai(ed._atelier == "fluides" and vue.outil == "eau" and vue.mode == "monde",
+		"Fluids : un atelier, sur le monde, l'outil devient l'eau")
+	_egal(ed._eaux.size(), 1, "Fluids : une couche d'eau est créée pour recevoir la source")
+	_vrai(ed._droite_fluides.visible and not ed._droite.visible,
+		"Fluids : sa barre de droite, pas celle des outils de peinture")
 
 	# LE LAC : un clic sur le plancher (61..63 libres) — la cuvette se remplit à ras bord, 3 × 3 × 2 = 18 cases.
 	var plancher: Vector2 = _viser_d_en_haut(vue, Vector3(62.5, 1.0, 62.5))
@@ -2328,6 +2331,8 @@ func _les_fluides(ed: Control) -> void:
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "supprimer la couche qui bouchait : le lac retombe")
 	ed._activer(rock)
+	# « New layer » mène à World (les couches de tuiles ne sont pas dans Fluids) : on y revient.
+	ed._aller_a("fluides")
 	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "le mur refermé : le lac remonte")
@@ -2418,8 +2423,26 @@ func _les_fluides(ed: Control) -> void:
 		and ed._corps_eau[0][0]["genre"] == "lac" and ed._corps_eau[0][0]["eau"].size() == 18,
 		"rouvert : les deux couches d'eau, leurs sources, et le lac redéduit")
 
+	# FLUIDS SE DÉSACTIVE PROPREMENT : Échap rend World ET l'outil d'avant (Dig) ; un clic ne pose plus d'eau.
+	if ed._atelier != "fluides":
+		ed._aller_a("fluides")
+	_vrai(vue.outil == "eau", "rouvert dans Fluids : toujours l'eau")
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	Input.parse_input_event(esc)
+	await process_frame
+	await process_frame
+	_vrai(ed._atelier == "monde" and vue.outil == "creuser" and (ed._boutons_outil["creuser"] as Button).button_pressed
+		and not ed._droite_fluides.visible, "Échap dans Fluids : retour à World, l'outil d'avant (Dig) rendu")
+	var sources_avant: int = ed._eaux[0]["sources"].size()
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(90.5, 0.0, 90.5)))
+	_egal(ed._eaux[0]["sources"].size(), sources_avant, "… et un clic dans World ne pose plus d'eau")
+	ed._aller_a("fluides")
+	ed._aller_a("witness")
+	_vrai(vue.outil == "creuser", "quitter Fluids pour un autre atelier rend aussi l'outil")
+	ed._aller_a("monde")
 	ed._choisir_outil("ajouter")
-	_vrai(not ed._bouton_eau.button_pressed, "revenir à Add relâche Water")
 	await _la_nage(ed)
 	await _le_rendu_du_play_test(ed)
 	await _la_meteo(ed)
@@ -2872,6 +2895,15 @@ func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
 	r.load(REGLAGES)
 	_vrai(r.get_value("projet", "monde", "") == mien and (ed._choix_monde.get_child(0) as Button).button_pressed,
 		"ton monde rouvert : retenu, My world enfoncé")
+	# ⚠ ILS S'EXCLUENT (Jordan, 2 octobre 2026 : « restent tous les deux cochés ») : `set_pressed_no_signal` ignore le
+	# ButtonGroup. Un seul enfoncé, dans les deux sens.
+	_vrai(not (ed._choix_monde.get_child(1) as Button).button_pressed, "… et Example relâché")
+	ed._projet = faux_exemple
+	ed._dire_le_projet()
+	_vrai(not (ed._choix_monde.get_child(0) as Button).button_pressed
+		and (ed._choix_monde.get_child(1) as Button).button_pressed, "l'exemple : My world relâché, Example enfoncé")
+	ed._projet = mien
+	ed._dire_le_projet()
 	ed._aller_a("monde")
 	_vrai(ed._choix_monde.visible == Exemple.disponible(), "dans World, les deux boutons s'il y a un exemple (%s)" % Exemple.disponible())
 	ed._aller_a("projet")

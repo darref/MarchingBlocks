@@ -77,7 +77,7 @@ func _derouler() -> void:
 	await _ecran._trancher_temoin()
 	_ecran._aller_a("monde")
 	await _images(5)
-	_ecran._choisir_eau()
+	_ecran._aller_a("fluides")
 	for s in [Vector3i(6, 6, 6), Vector3i(12, 8, 6), Vector3i(40, 1, 40)]:
 		_ecran._eau_cliquee(s, MOUSE_BUTTON_LEFT)
 		await _images(2)

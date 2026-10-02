@@ -15,7 +15,7 @@ func _derouler() -> void:
 	_ecran._appliquer({"poser": _paysage(), "effacer": {}}, "Landscape")
 	await _ecran._trancher_temoin()
 	_ecran._aller_a("monde")
-	_ecran._choisir_eau()
+	_ecran._aller_a("fluides")
 	var presets := ["lave", "acide", "marais"]
 	var sources := [Vector3i(6, 6, 6), Vector3i(12, 8, 6), Vector3i(40, 1, 40)]
 	for i in 3:

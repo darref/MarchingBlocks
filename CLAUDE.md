@@ -68,7 +68,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     boutons, **My world** et **Example** (le projet ouvert enfoncé), seulement si l'exe porte un exemple.
     `--open-example` reste (la démo). Gardé par `fumee_appli` (547, +7, sans l'archive : un faux exemple dans
     `user://example`, les réglages réécrits puis rendus) ; trois mutations rouges (l'exemple retenu comme ton monde,
-    le lancement qui ne l'écarte pas, les boutons partout). ⚠ Pas tenu en main, ni
+    le lancement qui ne l'écarte pas, les boutons partout). ⚠ **LES DEUX RESTAIENT ENFONCÉS (vu par Jordan, 2 octobre 2026)** :
+    `set_pressed_no_signal` IGNORE le ButtonGroup ; `_dire_le_projet` règle désormais les deux. Gardé par `fumee_appli`
+    (le code d'avant rejoué : deux rouges). ⚠ Pas tenu en main, ni
     éprouvé dans l'exe (l'archive n'existe que sur le PC).
   - **`MarchingBlocks.exe --open-example`** l'ouvre au lancement (une démo, et l'épreuve de l'exe sans clic).
     **ÉPROUVÉ DANS L'EXE CHIFFRÉ** : l'archive est lue depuis le PCK chiffré, installée (7 fichiers), le monde
@@ -2169,6 +2171,15 @@ La demande tenait en une ligne ; **TOUTE LA FORME EST PROPOSÉE**, à valider à
   Play test (une pente de pas 1 est à 45°, à la limite de ce que le personnage gravit).
 
 ### LE MODE FLUIDS — DÉCIDÉ EN PARTIE (Jordan, 1er octobre 2026), PAS ÉCRIT
+
+- **UN ATELIER, PLUS UNE SECTION DE WORLD — DÉCIDÉ (Jordan, 2 octobre 2026 : « le mode Fluids aurait dû être un mode
+  plutôt qu'une section, et devrait se désactiver proprement quand on le demande »), ÉCRIT LE MÊME JOUR.** Le bouton
+  Water, une fois enfoncé, ne se relâchait plus (son clic le ré-enfonçait). Six ateliers : Project · Play test,
+  World · Fluids, Geometry · Texturing. Fluids montre le monde et SA barre de droite (couches d'eau, Look, Leave) ;
+  y entrer prend l'outil Water (`_entrer_dans_les_fluides`), en sortir — Échap, Leave, n'importe quel autre atelier,
+  tout passe par `_aller_a` — rend l'outil de World d'avant (`_sortir_des_fluides`). Dans Fluids, seuls Espace
+  (Navigate), PgUp / PgDn et Échap. Gardé par `fumee_appli` (561) ; mutation rouge (ne pas en sortir : trois
+  rouges). ⚠ « New layer » mène à World, donc sort de Fluids. ⚠ Pas tenu en main.
 
 Jordan : un clic pose du liquide — un plan animé, légèrement déformé, sous shader — qui reconnaît s'il est
 dans un creux fermé (lac, flaque), dans un creux qui déborde (rivière, cascade) ou dans le vide (océan qui
