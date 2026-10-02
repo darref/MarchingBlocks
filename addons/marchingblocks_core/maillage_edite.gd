@@ -266,12 +266,27 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 			a[Mesh.ARRAY_COLOR] = col
 		if m >= 0:
 			a[Mesh.ARRAY_TEX_UV] = uv_sortie
+			# Une carte de normales a besoin de TANGENTES, dans la convention du moteur : celles de MikkTSpace
+			# (`SurfaceTool.generate_tangents`), que les importeurs glTF recalculent de la même façon.
+			if avec_normales and materiaux[m].get("pbr") is Dictionary:
+				a = avec_tangentes(a)
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 		# ⚠ **CHAQUE SURFACE PORTE SON MATÉRIAU, LA LÉGENDE COMPRISE.** Un `material_override` unique (la
 		# couleur de sommet) remplaçait ceux de TOUTES les surfaces — à l'écran comme dans le .glb : les
 		# matériaux se seraient effacés sans un mot.
 		mesh.surface_set_material(mesh.get_surface_count() - 1, materiau_godot(m) if m >= 0 else materiau_de_legende())
 	return mesh
+
+
+## Les tableaux d'une surface, TANGENTES calculées (MikkTSpace) — s'il y a des normales et des UV ; sinon tels quels.
+## ⚠ Les tangentes d'un tableau POSÉ (tourné, en miroir) ne se transportent pas : on les recalcule après la pose.
+static func avec_tangentes(a: Array) -> Array:
+	if a[Mesh.ARRAY_NORMAL] == null or a[Mesh.ARRAY_TEX_UV] == null or (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		return a
+	var st := SurfaceTool.new()
+	st.create_from_arrays(a)
+	st.generate_tangents()
+	return st.commit_to_arrays()
 
 
 static var _legende: StandardMaterial3D
@@ -358,7 +373,23 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 	if chemin != "":
 		# ⚠ LA TOILE PARTAGÉE (`peinture.gd`) : toutes les tuiles qui portent ce matériau lisent la MÊME texture,
 		# et un coup de pinceau la met à jour partout, sans rien redessiner.
-		sm.albedo_texture = load("res://addons/marchingblocks_core/peinture.gd").texture_de(chemin)
+		var Peinture: Script = load("res://addons/marchingblocks_core/peinture.gd")
+		sm.albedo_texture = Peinture.texture_de(chemin)
+		# LES CARTES PBR DÉDUITES de l'albedo (`cartes_pbr.gd`), si le matériau les demande : normale, et l'ORM
+		# (R occlusion, G rugosité, B métal BLANC — le facteur « metal » reste seul maître). Partagées comme la toile.
+		if d.get("pbr") is Dictionary and sm.albedo_texture != null:
+			var c: Dictionary = Peinture.cartes_de(chemin, d["pbr"], str(d.get("projection", "boite")) != "uv")
+			if not c.is_empty():
+				sm.normal_enabled = true
+				sm.normal_texture = c["normale"]
+				sm.roughness = 1.0
+				sm.roughness_texture = c["orm"]
+				sm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+				sm.metallic_texture = c["orm"]
+				sm.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+				sm.ao_enabled = true
+				sm.ao_texture = c["orm"]
+				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 	_cache_godot[cle] = sm
 	return sm
 
@@ -1525,6 +1556,77 @@ func couper(points: Array) -> Array:
 			_restaurer(sauve)
 			return []
 	return neufs
+
+
+## LE COUTEAU PAR POSITIONS (Jordan, 2 octobre 2026 : le couteau traversant) : chaque point est une POSITION posée
+## sur une arête (ou un sommet) de CE maillage, retrouvée au moment de couper — un tracé qui repasse plusieurs fois
+## dans la même tuile la coupe plusieurs fois, et les indices d'arêtes d'avant la première coupe ne valent plus.
+## Rend les sommets neufs (comme `couper`) ; [] et rien de changé si un point n'est sur aucune arête.
+## ⚠ CHAQUE POINT EST RETROUVÉ SUR LE MAILLAGE TEL QU'IL EST QUAND ON L'INSÈRE : deux points qui se suivent sur la
+## MÊME arête (un trait qui la longe) — `couper` cherchait le second sur l'arête que le premier venait de fendre, ne la
+## trouvait plus, et refusait toute la coupe. Un pas le long d'une arête existante ne fend rien ; deux points qui
+## tombent sur le même sommet n'en font qu'un.
+func couper_aux_positions(points: Array, tolerance := 1e-4) -> Array:
+	var sauve := copie()
+	var neufs: Array = []
+	var ids: Array = []
+	for p in points:
+		var q := point_de_coupe(p, tolerance)
+		if q.is_empty():
+			_restaurer(sauve)
+			return []
+		var e: Vector2i = q["arete"]
+		var t: float = q["t"]
+		var i: int
+		if t < 1e-4:
+			i = e.x
+		elif t > 1.0 - 1e-4:
+			i = e.y
+		else:
+			i = _inserer_sur_arete(e, q["point"])
+			if i < 0:
+				_restaurer(sauve)
+				return []
+			neufs.append(i)
+		if ids.is_empty() or ids[-1] != i:
+			ids.append(i)
+	if ids.size() < 2:
+		_restaurer(sauve)
+		return []
+	for k in range(ids.size() - 1):
+		if not _fendre(ids[k], ids[k + 1]):
+			_restaurer(sauve)
+			return []
+	return neufs
+
+
+## Le point de coupe à la position `p` : {"arete", "t", "point"} — un sommet à `tolerance` près (t = 0), sinon l'arête
+## la plus proche à `tolerance` près ; {} sinon.
+func point_de_coupe(p: Vector3, tolerance := 1e-4) -> Dictionary:
+	for i in sommets.size():
+		if sommets[i].distance_to(p) <= tolerance:
+			for face: PackedInt32Array in faces:
+				var k := Array(face).find(i)
+				if k >= 0:
+					var j := face[(k + 1) % face.size()]
+					var e := arete(i, j)
+					return {"arete": e, "t": 0.0 if e.x == i else 1.0, "point": sommets[i]}
+	var meilleur := {}
+	var d_min := tolerance
+	for face: PackedInt32Array in faces:
+		for k in face.size():
+			var a := face[k]
+			var b := face[(k + 1) % face.size()]
+			var e := arete(a, b)
+			var pa: Vector3 = sommets[e.x]
+			var pb: Vector3 = sommets[e.y]
+			var ab := pb - pa
+			var t := clampf((p - pa).dot(ab) / maxf(ab.length_squared(), 1e-12), 0.0, 1.0)
+			var d := (pa + ab * t).distance_to(p)
+			if d <= d_min:
+				d_min = d
+				meilleur = {"arete": e, "t": t, "point": pa + ab * t}
+	return meilleur
 
 
 func _restaurer(m: RefCounted) -> void:

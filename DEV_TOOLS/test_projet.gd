@@ -48,6 +48,18 @@ func _initialize() -> void:
 			_vrai(cases.has(p), "la case %s revient À SA PLACE (coordonnées négatives comprises)" % p)
 		_egal(couches[1]["cases"].size(), 0, "une couche vide revient vide")
 
+	# ── 1 ter. LES CASES D'UN BLOC (2 octobre 2026) : un tableau de cases (`get_used_cells`) s'écrit comme un
+	# dictionnaire, sur UNE ligne (l'ancien JSON posait un nombre par ligne : 4,8 Mo pour l'exemple), et se relit
+	# case pour case. Attendu écrit à la main.
+	var bloc := Projet.couche("Bloc")
+	bloc["cases"] = [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)]
+	var texte_bloc := Projet.vers_texte([bloc], 0)
+	_vrai(texte_bloc.contains("[1, 2, 3, -4, -5, -6]"), "un tableau de cases s'écrit d'un bloc, sur une ligne")
+	var relu_bloc: Dictionary = Projet.depuis_texte(texte_bloc, [])
+	_egal(relu_bloc.get("couches", [{}])[0].get("cases", {}).keys(), [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)],
+		"… et se relit case pour case")
+	_vrai(not texte_bloc.contains("@@"), "… sans marque oubliée dans le fichier")
+
 	# ── 1 bis. Une couche possède SON témoin (30 septembre 2026) : son chemin et son id reviennent ────────
 	var a := Projet.couche("A", "3")
 	a["temoin"] = "D:/projets/monde_3.mbtiles"

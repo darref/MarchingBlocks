@@ -37,6 +37,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     l'artiste que les presets ne sont pas obligatoires.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
+  - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
+    opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
+    faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
+    à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
 
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
@@ -65,7 +69,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     `user://example`, les réglages réécrits puis rendus) ; trois mutations rouges (l'exemple retenu comme ton monde,
     le lancement qui ne l'écarte pas, les boutons partout). ⚠ **LES DEUX RESTAIENT ENFONCÉS (vu par Jordan, 2 octobre 2026)** :
     `set_pressed_no_signal` IGNORE le ButtonGroup ; `_dire_le_projet` règle désormais les deux. Gardé par `fumee_appli`
-    (le code d'avant rejoué : deux rouges). ⚠ Pas tenu en main, ni
+    (le code d'avant rejoué : deux rouges).
+    **UN CHOIX SOUS SA SECTION, PLUS DEUX BOUTONS (Jordan, 2 octobre 2026 : « My world et Example devraient être un
+    choix sous une section plutôt que des boutons collés aux ateliers, c'est pas clair »)** : la section « Which
+    world » de World, deux cases rondes (My world · The example). ⚠ Pas tenu en main, ni
     éprouvé dans l'exe (l'archive n'existe que sur le PC).
   - **`MarchingBlocks.exe --open-example`** l'ouvre au lancement (une démo, et l'épreuve de l'exe sans clic).
     **ÉPROUVÉ DANS L'EXE CHIFFRÉ** : l'archive est lue depuis le PCK chiffré, installée (7 fichiers), le monde
@@ -189,6 +196,8 @@ pas suggéré par une carte de normales. ⚠ **LE PBR EST RETIRÉ, MODE SIMPLIFI
 29 septembre 2026) : « on n'en a plus besoin ».** Le PBR espace monde, son POM, sa case à cocher, son
 shader et ses outils sont partis (§9.8) ; `git show 72d1764 -- addons/marchingblocks_core/pbr_monde.gd`
 les rend.
+⚠ **DES CARTES PBR REVIENNENT LE 2 OCTOBRE 2026, AUTREMENT** (Jordan) : déduites de l'albedo, par matériau, dans le
+glTF standard — ni shader maison, ni POM (§5, « les cartes PBR déduites »).
 
 ---
 
@@ -1708,6 +1717,31 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     miroir, ménage qui efface tout, U ignoré — et « une échelle par îlot », d'abord MUETTE sur le cube
     (îlots tous égaux) : un pavé 2×1×1 la fait rougir.
     ⚠ `trait` est devenu un MOT RÉSERVÉ de GDScript 4.7 : `var trait :=` ne compilait plus.
+  - **LE COUTEAU TRAVERSANT — DEMANDÉ PAR JORDAN ET ÉCRIT (2-3 octobre 2026 : « le knife sur une edge de bord de tuile
+    répétée […] pour créer des motifs qui traversent les bords, afin que les bords soient masqués par des formes, et
+    que ça noie l'aspect quadrillé des massifs »).** ⚠ **AUCUN PLANTAGE REPRODUIT** (`DEV_TOOLS/sonde_couteau_bords.gd` :
+    toutes les coupes de bord sur les 52 tuiles ; `sonde_couteau_ecran.gd` : 48 couteaux menés à la souris, avec et sans
+    fenêtre). Ce qui empêchait les motifs : **un clic sur la copie voisine, au-delà d'un bord, était ignoré sans un
+    mot**, et un pas entre deux points sans face commune faisait refuser toute la coupe.
+    - **le clic vise la copie sous la souris** (`temoin.rayon`), posé sur l'arête la plus proche, dans le repère de SA tuile ;
+    - **le tracé** (`_trace_du_couteau`) : deux points d'une même copie qui partagent une face, directement ; sinon le
+      trait est suivi À L'ÉCRAN, comme Blender — chaque changement de (copie, face) trouvé par dichotomie : l'arête
+      commune dans une copie, l'arête de BORD des deux côtés d'une copie à sa voisine ;
+    - **chaque copie traversée coupe SA tuile** (`MaillageEdite.couper_aux_positions` : les points retrouvés sur le
+      maillage tel qu'il est au moment de les insérer), puis `Sections.completer` reporte les points de bord ; UN
+      Ctrl+Z (`TL.Lot`) pour toutes les tuiles ; un morceau qui échoue rend tout, et l'écran dit pourquoi ;
+    - ⚠ **UN DÉFAUT RÉEL, TROUVÉ EN ÉCRIVANT** : `couper` lisait toutes les arêtes AVANT la première insertion ; deux points
+      qui se suivent sur la même arête (un trait qui la longe) — le second ne retrouvait plus son arête, et toute la coupe
+      était refusée. Et un clic pile sur un bord, compté dans les deux copies, laissait à l'une un morceau d'un seul
+      point, qui faisait tout refuser : il est sauté.
+    - **MESURÉ** : sur les 48 couteaux de la sonde, 44 coupent (4 : les trois clics de la sonde tombent au même endroit),
+      0 sommet de joint sans partenaire, chaque Ctrl+Z complet. Gardé par `test_maillage_edite` (170 : la coupe par
+      positions sur le cube, attendus à la main) et `fumee_appli` (620 : K, un clic dans la paroi, un clic AU-DELÀ du
+      bord, Entrée — « across 2 copies », joints fermés, UN Ctrl+Z). Cinq mutations rouges (la copie voisine ignorée,
+      pas de passage d'une copie à l'autre, pas de report, l'annulation sans les autres tuiles, la coupe par arêtes
+      figées). Tests lancés dans une COPIE à dossier de données isolé (d'autres sessions travaillaient dans le dépôt).
+    - ⚠ **PAS TENU EN MAIN.** Le trait suit ce que la caméra VOIT : une copie cachée derrière une autre coupe le trait
+      (« crosses empty space », « hidden behind another »). Un point dans une face est collé à son arête la plus proche.
   - **LE LASSO ET LE CERCLE — DEMANDÉS PAR JORDAN ET ÉCRITS (2 octobre 2026)** : « la sélection en mode Geometry de
     Witness des vertices, edges ou faces au lasso, ou cercle ». Jordan : c'est la DERNIÈRE fonction du logiciel.
     - les gestes de Blender : **Ctrl + clic droit glissé** = lasso (Maj + Ctrl retire), ou le bouton « Lasso » puis
@@ -1821,6 +1855,78 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
       pile du lancement d'avant était relue. ⚠ **ET LA FUMÉE A ATTRAPÉ UN VRAI DÉFAUT EN L'ÉCRIVANT** : la copie
       « avant » d'un trait était prise APRÈS son premier tampon — Ctrl+Z ne défaisait pas le premier point.
     - ⚠ **PAS TENU EN MAIN.**
+  - **LES CARTES PBR DÉDUITES, ET L'ALBEDO CUIT DEPUIS LE RELIEF — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME
+    JOUR.** Jordan : « un PBR complet, mais éditer chaque png n'est pas propre à la main : l'équivalent d'un
+    Materialize, qui génère les autres cartes à partir de l'albedo ». Puis : « 1 go, 2 oui, 3 auto, 4 possibilité de
+    déduire aussi l'albedo du relief géométrique ». ⚠ **CE N'EST PAS LE PBR RETIRÉ LE 29 SEPTEMBRE** (§1) : celui-là
+    était un shader maison en espace monde, avec POM ; celui-ci, ce sont des cartes PAR MATÉRIAU dans le glTF
+    standard, que les trois moteurs lisent tels quels. Le relief reste dans la géométrie, les cartes l'habillent.
+    - **LES CARTES NE SE PEIGNENT PAS, ELLES SE DÉDUISENT** (`addons/marchingblocks_core/cartes_pbr.gd`, PUR) : de
+      l'albedo COMPOSÉ, la hauteur (passe-bande sur trois échelles ÷4, ÷16, ÷64, chacune pesée, contraste,
+      « Dark is high »), la normale (Sobel, convention glTF/Godot : +Y vers le HAUT de l'image), l'ORM — R occlusion
+      (cavité de la hauteur), G rugosité (base + variation : les creux plus rugueux), **B métal BLANC : le métal
+      n'est jamais deviné**, le curseur « Metallic » reste seul maître (le métal deviné a déjà mis des parois marron
+      au noir, §3). Seuls des RÉGLAGES s'enregistrent (`pbr` dans le matériau). Algorithmes écrits ici, rien repris
+      de Materialize (même règle que Blender, §5).
+    - **DEUX FAÇONS DE LIRE LES BORDS** : une image qui se RÉPÈTE (boîte, plan) se lit en boucle — sinon une arête à
+      chaque répétition, donc à chaque joint ; une image DÉPLIÉE (UV) a des îlots : on les DILATE d'abord
+      (« push-pull », `dilater`) sur un masque rasterisé depuis les triangles UV du témoin (`triangles_uv_de`,
+      élargi d'un texel), sinon le flou lit le fond et dessine un bourrelet sur les arêtes et les plans de coupe.
+    - **AUTOMATIQUE (point 3), PAS PENDANT LE GESTE** (`peinture.gd`, « LES CARTES PBR DÉDUITES ») : une toile
+      retouchée est périmée ; la génération part sur un AUTRE FIL quand la composition n'a plus bougé depuis 350 ms
+      (`CALME_MS`, PROPOSÉ), ~1,7 s sur 1024² (headless, mesuré). Les textures sont PARTAGÉES comme la toile et
+      remplacées EN PLACE (`set_image`) : le matériau ne change pas. Une génération dépassée (un curseur bougé
+      pendant qu'elle tournait) se MONTRE mais ne vaut pas « à jour ». L'écran dit « PBR maps: updating… ».
+    - **ÉCRITES À CÔTÉ DE L'IMAGE** (`<image>.pbr/`, `.pbr_uv/` pour une image dépliée : normal, orm, height, et
+      `pbr.json` — la SIGNATURE : MD5 de l'image écrite, réglages, bouclage) : relues sans calcul quand elle tient.
+      La hauteur n'est lue par aucun moteur (le glTF n'en porte pas) : elle est pour l'artiste. L'enregistrement
+      différé n'écrit que des cartes déjà à jour ; un enregistrement COMPLET (Ctrl+S, fermeture, tranchage) les finit
+      d'abord, et `TemoinLie.vers_glb` aussi — APRÈS avoir bâti les maillages, qui sont ce qui les DEMANDE (appelé
+      avant eux, rien n'était à refaire et le .glb partait neutre : vu rougir).
+    - ⚠ **LES TANGENTES** : une carte de normales les lit. `MaillageEdite.avec_tangentes` (MikkTSpace, via
+      `SurfaceTool.generate_tangents` — la convention que les importeurs recalculent) pour les matériaux à cartes ;
+      et `BlocsMaitres._tableaux_poses` les RECALCULE après la pose quand la source en portait. ⚠ **« GODOT LES
+      RECALCULE » ÉTAIT ÉCRIT LÀ, ET C'EST FAUX À L'AFFICHAGE** : seul l'export glTF les recalcule.
+    - **L'ALBEDO DU RELIEF (point 4)** — `TemoinLie.albedo_du_relief`, bouton **Bake base colour** : pour chaque
+      texel d'un îlot (projection UV : un texel = UN point d'une tuile), l'ORIENTATION de sa face (sols, parois,
+      plafonds, une couleur chacun), la CONVEXITÉ (usure près d'une arête saillante, selon l'angle et la distance),
+      la CONCAVITÉ (ombre près d'une arête rentrante). ⚠ **ÉTEINT LE LONG DES PLANS DE COUPE** (1/16 de case) : la
+      voisine du monde n'y est pas celle du témoin — la discipline des coupes (§3) par construction ; une arête posée
+      SUR un plan de coupe n'a pas de voisine dans la tuile, elle n'est rien. Il remplace le FOND de la toile (sous
+      les calques peints), UNE annulation. **Refusé en boîte ou en plan** (l'image s'y répète), et l'écran le dit.
+      ⚠ C'est un autre algorithme que Materialize (qui part d'une image) : il lit la GÉOMÉTRIE.
+    - **LE TRAJET ENTIER, MESURÉ** : témoin lié → .glb → relecture liée → lot du monde → `.mbset` → greffon Godot
+      gratuit : normale, occlusion, métal-rugosité et TANGENT à chaque étape (`test_cartes_pbr`). **Unity 6.6 /
+      glTFast** : `TheDerivedPbrMapsArriveInUnity`, les 52 tuiles portent normale, occlusion, métal-rugosité et
+      tangentes — 32 tests sur 32 ; vu rougir (0 / 52 avec un jeu préparé sans cartes). **Unreal 5.8.3**, import
+      standard (Interchange glTF) mené par `UnrealEditor-Cmd -ExecutePythonScript -nullrhi` sur un projet jetable :
+      le matériau importé porte `NormalTexture`, `OcclusionTexture` et `MetallicRoughnessTexture` (l'ORM). ⚠ Ni les
+      tangentes ni le SENS de la normale n'ont été regardés dans Unreal. **Les greffons n'ont RIEN à porter** : des
+      textures glTF standard, lues par chaque importeur — rien dans LA LISTE DES GREFFONS À FAIRE (§0).
+    - **VU À L'IMAGE** (`DEV_TOOLS/capture_cartes_pbr.gd`, avec fenêtre, RTX 2060 Vulkan) : la même toile à bosses
+      claires, sans et avec cartes, le soleil en haut à gauche — chaque bosse s'éclaire sur son flanc haut-gauche et
+      s'ombre en bas à droite : le sens de la normale et des tangentes est juste. Les bosses douces prennent un léger
+      LISERÉ (le passe-bande souligne les bords) : à juger par Jordan.
+    - **MESURÉ** : `test_cartes_pbr` 54 (attendus d'ailleurs : une rampe et sa normale calculée ici ; le SENS comparé
+      à `Image.bump_map_to_normal_map`, l'autorité du moteur ; l'invariance par translation d'une image en boucle,
+      au pas de la pyramide ; la couleur d'un texel recalculée depuis la géométrie lue dans le test, au CENTRE du texel
+      ramené sur la face) ; `fumee_appli` (+15, par les vrais contrôles : la case, le curseur, deux Ctrl+Z, Ctrl+Y, la
+      cuisson refusée en boîte et dite, puis faite sur l'atlas et annulée octet pour octet, les cartes écrites et dans
+      le .glb ; une SENTINELLE — une mutation laissait d'abord la section abandonner en silence sur une erreur
+      d'exécution). **23 MUTATIONS ROUGES** (cœur 17, écran 6). ⚠ **TROIS D'ABORD MUETTES, PAR DES TESTS TROP
+      ÉTROITS** : l'extinction aux coupes (aucun point près d'un plan n'était jugé), une génération dépassée dite à
+      jour, le masque non élargi (le compte d'aire passait) — chacune a reçu son cas. ⚠ **UNE ÉQUIVALENTE** : la
+      dilatation qui ne saute pas l'îlot (dans l'îlot le mélange rend la source au bit près).
+    - ⚠ **DEUX DÉFAUTS TROUVÉS EN ÉCRIVANT LES TESTS** : la remontée CUBIQUE de Godot depuis une image de 2 × 2
+      DÉPASSE (une image unie à 0,32 rendait des texels à 0,348) — remontée par doublements bilinéaires ; et un écart
+      de 3 ou 4 sur 255 entre une image et son décalage d'une demi-largeur n'était pas un défaut de bouclage mais la
+      grille de la pyramide (le test décale au pas de ÷64).
+    - ⚠ **UN PLANTAGE À LA SORTIE, CAUSE MESURÉE** : `Peinture.fournisseur_de_masque`, variable STATIQUE, gardait une
+      fonction anonyme du modeleur jusqu'au démontage du moteur — `fumee_appli` finissait « VERDICT : OK » puis code
+      139 (vu par une autre session ; reproduit, puis disparu une fois la variable effacée dans `_exit_tree`).
+    - ⚠ **CE QUI N'EST PAS FAIT** : un témoin relu de BLENDER perd ses réglages PBR (le glTF ne les porte pas : il
+      revient avec son albedo, sans cartes) ; pas de masque métal ni d'émission (palier 2) ; la génération coûte
+      ~1,7 s par toile de 1024² (2,7 s avec masque) — à mesurer sur 2048², avec fenêtre. **PAS TENU EN MAIN.**
     **OUVERT** : le panneau 2D du patron ; fusionner un calque sur celui du dessous.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
@@ -1884,6 +1990,24 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   une seconde après le dernier changement** (branché sur l'historique ; avant le 1er octobre 2026, à CHAQUE
   changement) et se rouvre au lancement. On écrit à côté puis
   on remplace. ⚠ Un projet qui ne s'ouvre pas n'est jamais écrasé : on en commence un autre.
+- **LES LAGS D'ÉDITION SUR UN GROS MONDE — MESURÉS ET CORRIGÉS (Jordan, 2 octobre 2026 : « même dans le soft en
+  global il y a encore trop d'algos lents pendant l'édition »).** `DEV_TOOLS/sonde_lags_edition.gd` (AVEC fenêtre,
+  l'exemple installé dans son propre dossier : 194 692 cases dans « Hills ») chronomètre chaque geste et les 30 images
+  qui suivent. AVANT → APRÈS (pire image) :
+  - **tout geste (poser, Ctrl+Z, pinceau) : ~0,9 s → ~0,4 s.** C'était l'ENREGISTREMENT DIFFÉRÉ : 584 076 nombres posés
+    UN PAR LIGNE par `JSON.stringify` indenté (4,8 Mo). Les cases s'écrivent d'un bloc (`Projet.vers_texte` :
+    un `PackedInt32Array` que le moteur écrit lui-même, même format relu) et l'écriture différée part sur un AUTRE FIL
+    (`_enregistrer(true)`, `WorkerThreadPool`) ; toute autre écriture reste synchrone et attend la précédente.
+    Activer, montrer, renommer une couche, régler l'eau attendent aussi la seconde de calme ;
+  - **une boîte de 256 cases : 8,1 s → 0,4 s** (l'eau, ci-dessus) ;
+  - **cacher / montrer une couche : 4,5 s → 0,6 s.** `_montrer_couche` ne refait plus TOUTES les couches en entier :
+    les autres se refont autour des cases de celle-ci ; la couche cachée garde son état et, en reparaissant, se
+    refait autour de ce qui a changé pendant qu'elle était cachée (`_a_refaire`), ou en entier si l'union a été
+    refaite entre-temps (`_tout_refaire`). Gardé par `fumee_appli` (refaite par morceaux = reconstruite en entier,
+    deux tours) ; deux mutations rouges ;
+  - ⚠ **CE QUI RESTE** : ~0,4 s après chaque geste sur ce monde (non découpé : le reste du recalcul de l'eau, l'index
+    des corps), ~27 images/s au repos, l'ouverture (8,7 s, dont le tranchage de deux témoins hors cache), et le
+    coup de pinceau (~190 ms pour 20 touches). ⚠ Pas tenu en main.
 - **LE GESTE D'UNE CASE — MESURÉ ET CORRIGÉ (Jordan, 1er octobre 2026 : « une stratégie de sauvegarde meilleure
   que tout le monde à chaque opération, qui fait lagger pour une toute petite opération »).**
   `DEV_TOOLS/sonde_lags_monde.gd` (AVEC fenêtre, les 12 474 cases de `test.mbproj`) : poser UNE case coûtait
@@ -1927,6 +2051,9 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   changeront. La sélection (un état d'écran, ni enregistré ni annulable) a ses opérations, et **les
   opérations d'étage portent sur elle quand elle existe**.
   - ⚠ **Add voit toutes les couches visibles, Dig et Select la seule active.**
+  - **LE DÉZOOM DU MONDE (Jordan, 2 octobre 2026 : « on doit pouvoir dézoomer beaucoup plus loin »)** : la molette
+    recule jusqu'à 1 000 cases dans World (`Vue.DISTANCE_MAXI_MONDE`, 120 avant ; le témoin garde 120), et la portée
+    des ombres suit (deux fois le recul, 100 au moins). Gardé par `fumee_appli`, mutation rouge.
   - **CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE (Jordan, 1er octobre 2026)** : l'étage devient le `y` de la case
     touchée (rayon contre les couches VISIBLES, quels que soient l'outil et la visée), rien n'est peint, et
     l'écran le dit (aussi quand le rayon ne touche rien, ou hors de −64..64). Gardé par `fumee_appli` (vrai
@@ -1950,6 +2077,27 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   de la sélection sans la déplacer, et **Extrude** fait monter l'étage avec elle : Fill, Extrude, Fill.
   ⚠ Le volume est BORNÉ (`VOLUME_MAXI`, 64³) : au-delà la boîte rend vide et l'écran le DIT — deux
   coins perdus à l'horizon gèleraient l'appli. ⚠ La sélection se DESSINE cases vides comprises.
+- **EXTRUDE, UNE SEULE FOIS — DÉCIDÉ (Jordan, 2 octobre 2026 : « Extend up / down et Extrude ↑ / ↓, on ne sait pas
+  lequel fait quoi », puis « Maj étend et Alt décale »), ÉCRIT LE MÊME JOUR.** C'était une REDONDANCE : mêmes cases
+  posées, mêmes icônes ; seul Extrude suivait (sélection et étage), et seulement sur une sélection. Il ne reste que
+  **Extrude up / down / facing**, dans Shape operations (`Etages.extruder`) : sur la sélection, sinon sur la matière
+  de l'étage ; clic = pose devant la MATIÈRE de la base, la sélection et l'étage suivent ; **Maj + clic = étend la
+  sélection d'un cran** (cases vides comprises), **Alt + clic = la décale**, sans rien poser. Les boutons Extrude de
+  la section Selection sont retirés. Gardé par `test_etages` (27, attendus à la main) et `fumee_appli` (le vrai bouton,
+  de vraies touches Maj / Alt — ⚠ `Input.parse_input_event` ne vaut qu'après `Input.flush_buffered_events()`, et un
+  événement ne s'envoie pas deux fois dans la même image). Six mutations rouges (étendre = poser, décaler qui ne
+  décale pas, poser devant une case vide, Maj ignorée, Alt ignorée, et Shrink qui exige tous les voisins). ⚠ **« ALT
+  IGNORÉE » D'ABORD MUETTE, PAR LE TEST** : Alt + Extrude down sous une sélection posée sur la matière ne posait rien
+  non plus en clic normal, qui décale aussi la sélection — rejoué vers le haut. ⚠ Et une mutation écrite `false and A
+  or B` n'éprouvait rien (`(false and A) or B`).
+- **SHRINK RETIRE LE BORD — CORRIGÉ (Jordan, 2 octobre 2026 : « shrink la sélection ne fonctionne pas, il la
+  supprime »).** Il ne gardait que les cases PLEINES dont les SIX voisines étaient sélectionnées : sur une sélection
+  mince (un Rect, une peau peinte), plus rien. `retrecir_bord` : une case est du bord quand, sur un axe, la sélection
+  continue d'un côté et s'arrête de l'autre — un rectangle perd son pourtour, une ligne ses bouts, un cube sa peau,
+  une case seule reste, les cases vides comptent. ⚠ L'ancien `retrecir` reste dans `outils.gd` pour les cas d'épreuve
+  des greffons (liste des greffons à faire). Gardé par `test_outils` (62, attendus à la main).
+- **« PAINT THE WITNESS SHAPE » RETIRÉ (Jordan, 2 octobre 2026 : « est nul, il faut le retirer »)** : le bouton et
+  sa ligne du manuel. La fonction reste pour les captures de `DEV_TOOLS/`.
 - **LES QUATRE ÉTAPES À GAUCHE (Jordan, 28 septembre 2026)** : Export · Import · Slice · Export to
   engines, numérotées, et les imports gardés en LISTE (réimporter un même fichier le remplace). La
   liste ne survit pas à la session : OUVERT.
@@ -2254,6 +2402,45 @@ La demande tenait en une ligne ; **TOUTE LA FORME EST PROPOSÉE**, à valider à
   tout passe par `_aller_a` — rend l'outil de World d'avant (`_sortir_des_fluides`). Dans Fluids, seuls Espace
   (Navigate), PgUp / PgDn et Échap. Gardé par `fumee_appli` (561) ; mutation rouge (ne pas en sortir : trois
   rouges). ⚠ « New layer » mène à World, donc sort de Fluids. ⚠ Pas tenu en main.
+- **LE LAC DÉBORDE SI UNE CHUTE EST PROCHE — DÉCIDÉ (Jordan, 2 octobre 2026 : « un lac qui a une digue qui donne sur une
+  falaise ne déborde pas vers le bas comme une coulée, ce qui empêche de faire simplement des lacs avec des chutes
+  d'eau là où la matière laisse une ouverture » ; choisi entre « tout lac déborde », « réglage par couche » et
+  celui-ci).** Rempli à son seuil, un lac regarde à plat depuis le seuil (la coulée de la rivière) : une chute, une
+  autre eau ou le bord du monde à au plus `PORTEE_DE_DEBORD` = 4 cases (**PROPOSÉ** : « quelques cases ») → il est le
+  premier lac d'une RIVIÈRE qui part du seuil ; sinon (un cratère dans une plaine) il reste calme. Renverse « un lac ne
+  déborde jamais ». ⚠ Une cuvette posée sur le vide déborde donc par-dessus son mur : les tests qui voulaient un lac
+  calme l'ont noyée dans un plateau. Gardé par `test_fluides` (déroulés à la main : l'échancrure sur le vide, la
+  portée à 4 et à 5 cases, la cuvette nue) ; deux mutations rouges (jamais de débordement, portée stricte).
+- **LA LENTEUR DE L'EAU — MESURÉE ET CORRIGÉE (Jordan, 2 octobre 2026 : « les algos d'eau sont beaucoup trop
+  lents »).** `DEV_TOOLS/sonde_cout_eau.gd` sur `test.mbproj` (1 723 cases, une mer de 41 306 cases) : ~180 ms par
+  recalcul (mer 90 ms, maillage 87 ms), refait à CHAQUE geste.
+  - **la mer par tronçons de colonne** (`FL.ocean`) : un intervalle vertical de vide par colonne ; le bas de chaque
+    colonne est l'horizon, les autres tronçons rejoignent la mer par un voisin dont l'intervalle chevauche. Même
+    ensemble (gardé contre un remplissage case par case écrit dans le test, 12 mondes troués au hasard) ; le maillage
+    lit surface et profondeur sur les tronçons (`EM.surface_des_colonnes`). 90 → 35 ms ;
+  - **le tri de la surface par clé entière** (`EM._triees`) : un `sort_custom` appelait une fonction GDScript par
+    comparaison. Maillage 87 → 30 ms ;
+  - **LA REPRISE** (`FL.monde(…, avant, changees)`) : chaque source rend son EMPRISE (la boîte de ce qu'elle a
+    regardé, + 1) ; un geste dont aucune case n'y tombe, sous la même boîte du monde (et les mers toutes reprises pour
+    un lac ou une rivière), la reprend telle quelle, et sa couche garde son maillage. Peindre au-dessus de la mer ne
+    recalcule plus rien. Gardé par `test_fluides` (60 gestes au hasard comparés à un calcul complet ; le fond du lac
+    creusé) et `fumee_appli` (une case loin du lac : même corps, même maillage). Mutations rouges : reprise aveugle aux
+    changements, mers reprises changées, emprise sans la chute, tronçons sans passage latéral, profondeur fausse, la
+    nappe toujours refaite ; ⚠ **« emprise sans + 1 » D'ABORD MUETTE** : le fond d'un lac est une case PLEINE, jamais
+    « vue » — aucun geste au hasard ne la creusait. Cas construit.
+  - **SUR L'EXEMPLE (196 415 cases, 6 sources)** : un calcul complet passait de 7,5 s à 2,3 s — la boîte du monde
+    calculée UNE fois par `monde()` (57 ms par appel, trois appels par source) ; l'eau lue dans deux dictionnaires au
+    lieu d'un `Callable` appelé à chaque case visitée ; le tas de priorité sur des clés entières (priorité, ordre
+    d'insertion) au lieu de tableaux comparés par une fonction — même ordre, mêmes cours case par case.
+  - **UNE FACE DE LA BOÎTE QUI BOUGE LOIN D'UNE SOURCE NE LA FAIT PLUS RECALCULER** (`_boite_compatible`) : peindre
+    au-dessus du point le plus haut montait le dessus de la boîte et refaisait toute l'eau (8 s sur l'exemple, mesuré
+    à la fenêtre). Gardé par `test_fluides` (150 gestes au hasard, dont des faces qui sortent et qui rentrent) ;
+    deux mutations rouges. ⚠ **DEUX MUETTES** : ne regarder que l'ANCIENNE place d'une face qui a bougé (côtés, puis
+    dessus). Elle ne compte que quand la boîte RÉTRÉCIT vers une source et que deux seuils de même hauteur existent —
+    pas construit. La condition prudente est gardée.
+  - **L'APPLI NE RELIT PLUS LE MONDE ENTIER** : chaque geste note ses cases (`_noter_pour_l_eau`), et l'eau tient
+    ses cases à jour au lieu de relire ~196 000 cases et de les comparer (~150 ms par geste). Deux mutations rouges
+    (le coup de pinceau, l'historique).
 
 Jordan : un clic pose du liquide — un plan animé, légèrement déformé, sous shader — qui reconnaît s'il est
 dans un creux fermé (lac, flaque), dans un creux qui déborde (rivière, cascade) ou dans le vide (océan qui
@@ -2671,6 +2858,9 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   vérifications, 0 échec** : `test_massif_peint` 96, `fumee_appli` 535 (après Up / Down et l'exemple), `test_projet` 72, `test_formes_speciales`
   122, `test_peinture` 29, `test_greffon_peinture` 221 ; les autres comme au relevé précédent. Bancs hors Godot
   non relancés (rien de ce qu'ils lisent n'a changé).
+  **Une vingtième suite, `test_cartes_pbr` (54), le 2 octobre 2026 au soir** (les cartes PBR déduites, §5) ; relancées
+  avec elle, 0 échec : `test_peinture` 48, `test_maillage_edite` 160, `test_temoin_lie` 32, `test_blocs_maitres` 1 468,
+  `test_greffon_peinture` 255, `test_massif_peint` 96, `fumee_appli` 594 ; Unity 6.6 32 tests sur 32.
   ⚠ **LE BANC C++ TOURNE AVEC LE clang DE UNITY** (`…/WebGLSupport/BuildTools/Emscripten/llvm/clang++.exe
   --target=x86_64-pc-windows-msvc`, mêmes drapeaux que `build.sh`) ; et **`RunUAT BuildPlugin` ÉCHOUE SOUS UN
   DOSSIER `-Package` PROFOND** (chemins de plus de 260 caractères, « OtherCompilationError » sans une ligne
@@ -2680,6 +2870,12 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   vérification au lieu de 86 en finissant en code 0, et `fumee_appli` pendait. Mesuré le 28 septembre
   2026, aussi sans les changements du jour. Remède : `godot --headless --editor --quit` une fois, puis
   rendre ce qu'il a réimporté (`git status`).
+  ⚠ **LA FUMÉE OUVRAIT LA COPIE INSTALLÉE DE L'EXEMPLE DE L'UTILISATEUR (vu le 2 octobre 2026)** : elle comparait
+  ses retouches à l'archive (« Hills » : 2 cases de moins) et l'appli la réenregistrait en fermant. Elle installe
+  désormais le sien dans `user://fumee/example` (`editor.gd`, `racine_exemple`, une variable statique).
+  ⚠ **UNE SONDE QUI RÉÉCRIT `reglages.cfg` LE COPIE SUR LE DISQUE D'ABORD** (`sonde_lags_edition.gd`) : interrompue,
+  une sonde qui ne le gardait qu'en mémoire a perdu les réglages de l'utilisateur (2 octobre 2026 ; la section
+  `associations` a été refaite d'après le registre, le dernier projet ouvert n'a pas pu l'être).
   ⚠ **`fumee_appli` CHARGE L'APPLI ENTIÈRE** et la mène sans souris. Elle pointe `reglages.cfg` sur un
   projet jetable et le rend à la fin : l'appli s'enregistre à chaque geste, et une fumée qui rouvrirait
   le vrai dernier projet l'écraserait. `capture_app.gd` fait de même, AVEC fenêtre.

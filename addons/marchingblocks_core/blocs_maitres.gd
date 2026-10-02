@@ -2478,8 +2478,11 @@ static func _tableaux_poses(source: Array, pose: Transform3D) -> Array:
 		for i in n.size():
 			n[i] = (normale * n[i]).normalized()
 		arrays[Mesh.ARRAY_NORMAL] = n
-	# Les tangentes suivraient la même règle ; on les retire plutôt que de les laisser fausses —
-	# Godot les recalcule, et le trancheur n'en lit aucune.
+	# Les tangentes suivraient la même règle ; on les retire plutôt que de les laisser fausses, et on les RECALCULE
+	# en fin de pose si la source en portait (une carte de normales les lit — `cartes_pbr.gd`). ⚠ « Godot les
+	# recalcule » était écrit ici : FAUX à l'affichage — un maillage sans tangentes rend une carte de normales de
+	# travers ; seul l'export glTF les recalcule.
+	var tangentes: bool = arrays[Mesh.ARRAY_TANGENT] != null
 	arrays[Mesh.ARRAY_TANGENT] = null
 	if miroir:
 		var idx = arrays[Mesh.ARRAY_INDEX]
@@ -2489,6 +2492,8 @@ static func _tableaux_poses(source: Array, pose: Transform3D) -> Array:
 			ordre[t + 1] = ordre[t + 2]
 			ordre[t + 2] = tmp
 		arrays[Mesh.ARRAY_INDEX] = ordre
+	if tangentes:
+		arrays = load("res://addons/marchingblocks_core/maillage_edite.gd").avec_tangentes(arrays)
 	return arrays
 
 

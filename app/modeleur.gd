@@ -212,6 +212,11 @@ func charger(m: RefCounted) -> void:
 ## CHARGE UN TÉMOIN LIÉ : une MultiMesh par tuile pour les occurrences, puis l'occurrence `active` en édition.
 func charger_temoin(t: RefCounted, active := 0) -> void:
 	temoin = t
+	# Les cartes PBR d'une image DÉPLIÉE dilatent ses îlots : ils sont ceux du témoin qu'on édite.
+	# ⚠ EFFACÉE EN SORTANT DE L'ARBRE (`_exit_tree`) — MESURÉ le 2 octobre 2026 : une variable STATIQUE qui garde
+	# une fonction anonyme jusqu'au démontage du moteur le fait PLANTER à la sortie (code 139 après « VERDICT : OK »
+	# de la fumée, reproduit ; effacée, plus rien). Une méthode liée plutôt qu'une lambda, par-dessus le marché.
+	Peinture.fournisseur_de_masque = _triangles_du_masque
 	for enfant in _occurrences.get_children():
 		enfant.queue_free()
 	_mm_de = {}
@@ -238,6 +243,15 @@ func charger_temoin(t: RefCounted, active := 0) -> void:
 	cle = ""
 	sections = Sections.new(t)
 	activer(clampi(active, 0, t.occurrences.size() - 1))
+
+
+func _triangles_du_masque(chemin: String) -> PackedVector2Array:
+	return temoin.triangles_uv_de(chemin) if temoin != null else PackedVector2Array()
+
+
+func _exit_tree() -> void:
+	if Peinture.fournisseur_de_masque.is_valid() and Peinture.fournisseur_de_masque.get_object() == self:
+		Peinture.fournisseur_de_masque = Callable()
 	regler_les_bandes()
 
 
@@ -1346,25 +1360,56 @@ func commencer_couteau() -> void:
 	modal = "knife"
 	_couteau = []
 	_dessiner_couteau()
-	dit.emit("[b]Knife[/b] — click points on edges; each step must stay on one face. Enter cuts, "
-		+ "Backspace removes the last point, Esc cancels.")
+	dit.emit("[b]Knife[/b] — click points on the surface: the cut follows it across faces, and across a tile "
+		+ "border onto the next copy. Enter cuts, Backspace removes the last point, Esc cancels.")
 
 
 func _point_vise_du_couteau() -> Dictionary:
-	var hit: Dictionary = maillage.lancer_rayon_rapide(_origine(souris), _direction(souris))
-	if hit.is_empty():
+	if temoin == null:
+		var hit: Dictionary = maillage.lancer_rayon_rapide(_origine(souris), _direction(souris))
+		if hit.is_empty():
+			return {}
+		var p := _sur_l_arete_proche(maillage, pose, maillage.faces[hit["face"]], hit["point"])
+		p["occ"] = -1
+		return p
+	# ⚠ LE COUTEAU TRAVERSANT (Jordan, 2 octobre 2026 : « des motifs qui traversent les bords ») : le clic vise la
+	# COPIE sous la souris, quelle qu'elle soit — jusqu'ici, un clic sur la copie voisine, au-delà d'un bord, était
+	# ignoré sans un mot. Le point est posé sur l'arête la plus proche de la face touchée, dans le repère de SA tuile.
+	var h: Dictionary = temoin.rayon(camera.project_ray_origin(souris), camera.project_ray_normal(souris))
+	if h.is_empty():
 		return {}
-	var e := _arete_proche(maillage.faces[hit["face"]], souris)
-	var a: Vector3 = maillage.sommets[e.x]
-	var b: Vector3 = maillage.sommets[e.y]
-	var ab := b - a
-	var t := clampf((hit["point"] - a).dot(ab) / maxf(ab.length_squared(), 1e-12), 0.0, 1.0)
-	# ⚠ Près d'un bout, on colle AU SOMMET : une coupe qui passe à 1 % d'un coin laisserait une arête minuscule.
+	var occ := int(h["occurrence"])
+	var po: Transform3D = temoin.occurrences[occ]["pose"]
+	var m: RefCounted = temoin.tuiles[h["cle"]]
+	var p := _sur_l_arete_proche(m, po, m.faces[h["face"]], po.affine_inverse() * (h["point"] as Vector3))
+	p["occ"] = occ
+	return p
+
+
+## Le point d'une face posé sur son arête la plus proche du clic, à l'écran ; près d'un bout, collé AU SOMMET (une
+## coupe qui passe à 1 % d'un coin laisserait une arête minuscule). {arete, t, point (repère de la tuile), monde}.
+func _sur_l_arete_proche(m: RefCounted, po: Transform3D, face: PackedInt32Array, local: Vector3) -> Dictionary:
+	var meilleure := Vector2i(face[0], face[1])
+	var d_min := INF
+	for k in face.size():
+		var a := face[k]
+		var b := face[(k + 1) % face.size()]
+		var pa := camera.unproject_position(po * (m.sommets[a] as Vector3))
+		var pb := camera.unproject_position(po * (m.sommets[b] as Vector3))
+		var d := souris.distance_to(Geometry2D.get_closest_point_to_segment(souris, pa, pb))
+		if d < d_min:
+			d_min = d
+			meilleure = ME.arete(a, b)
+	var sa: Vector3 = m.sommets[meilleure.x]
+	var sb: Vector3 = m.sommets[meilleure.y]
+	var ab := sb - sa
+	var t := clampf((local - sa).dot(ab) / maxf(ab.length_squared(), 1e-12), 0.0, 1.0)
 	if t < 0.08:
 		t = 0.0
 	elif t > 0.92:
 		t = 1.0
-	return {"arete": e, "t": t, "point": a.lerp(b, t)}
+	var point := sa.lerp(sb, t)
+	return {"arete": meilleure, "t": t, "point": point, "monde": po * point}
 
 
 func _poser_point_de_couteau() -> void:
@@ -1374,12 +1419,15 @@ func _poser_point_de_couteau() -> void:
 	_dessiner_couteau()
 
 
+## Le tracé, dessiné dans le repère de l'occurrence en édition (`_apercu_mi` y est posé) : les points peuvent être
+## sur d'autres copies, on passe donc par le monde.
 func _dessiner_couteau() -> void:
 	var lignes := PackedVector3Array()
-	var pts: Array = _couteau.map(func(p): return p["point"])
+	var inverse := pose.affine_inverse()
+	var pts: Array = _couteau.map(func(p): return inverse * _monde_du_point(p))
 	var vise := _point_vise_du_couteau()
 	if not vise.is_empty():
-		pts.append(vise["point"])
+		pts.append(inverse * (vise["monde"] as Vector3))
 	for i in range(pts.size() - 1):
 		lignes.append(pts[i])
 		lignes.append(pts[i + 1])
@@ -1391,6 +1439,15 @@ func _dessiner_couteau() -> void:
 	_apercu_mi.mesh = _mesh_de(lignes, Mesh.PRIMITIVE_LINES)
 
 
+## Un point du couteau dans le monde (un point posé à la main, sans « monde », est dans la tuile en édition).
+func _monde_du_point(p: Dictionary) -> Vector3:
+	return p["monde"] if p.has("monde") else pose * (p["point"] as Vector3)
+
+
+func _occ_du_point(p: Dictionary) -> int:
+	return int(p["occ"]) if int(p.get("occ", -1)) >= 0 else occurrence
+
+
 func _finir_le_couteau() -> void:
 	modal = ""
 	_apercu_mi.mesh = null
@@ -1398,17 +1455,232 @@ func _finir_le_couteau() -> void:
 		dit.emit("[i]The knife needs two points or more.[/i]")
 		_couteau = []
 		return
-	var avant: RefCounted = maillage.copie()
-	var neufs: Array = maillage.couper(_couteau)
-	_couteau = []
-	if neufs.is_empty() and maillage.faces.size() == avant.faces.size():
-		dit.emit("[color=#e0603c]Nothing cut[/color] — each step of the knife must stay on ONE face. "
-			+ "[i]Place the points again, face by face.[/i]")
+	if temoin == null:
+		var avant0: RefCounted = maillage.copie()
+		var neufs0: Array = maillage.couper(_couteau)
+		_couteau = []
+		if neufs0.is_empty() and maillage.faces.size() == avant0.faces.size():
+			dit.emit("[color=#e0603c]Nothing cut[/color] — each step of the knife must stay on ONE face. "
+				+ "[i]Place the points again, face by face.[/i]")
+			return
+		_emettre(avant0, "Knife")
+		redessiner()
+		dit.emit("[b]Knife[/b] done. [i]Ctrl+Z undoes it.[/i]")
 		return
-	if not _completer_apres(avant, "Knife"):
-		_emettre(avant, "Knife")
+	var points := _couteau
+	_couteau = []
+	var trace := _trace_du_couteau(points)
+	if trace.has("erreur"):
+		dit.emit("[color=#e0603c]Nothing cut[/color] — %s [i]Place the points again.[/i]" % trace["erreur"])
+		return
+	# LES MORCEAUX : les points qui se suivent dans une même copie forment un morceau, coupé dans SA tuile.
+	var morceaux: Array = []
+	for e in trace["points"]:
+		if morceaux.is_empty() or int(morceaux[-1]["occ"]) != int(e["occ"]):
+			morceaux.append({"occ": int(e["occ"]), "points": []})
+		(morceaux[-1]["points"] as Array).append(e["local"])
+	var avant := {}
+	for mc in morceaux:
+		var c: String = temoin.occurrences[int(mc["occ"])]["cle"]
+		if not avant.has(c):
+			avant[c] = temoin.tuiles[c].copie()
+	var coupes := 0
+	for mc in morceaux:
+		# ⚠ UN MORCEAU D'UN SEUL ENDROIT N'A RIEN À COUPER : un clic pile sur un bord est compté dans les DEUX copies,
+		# et l'une n'en reçoit que ce point — il faisait refuser toute la coupe.
+		var distincts: Array = []
+		for q in mc["points"]:
+			if distincts.is_empty() or (distincts[-1] as Vector3).distance_to(q) > 1e-4:
+				distincts.append(q)
+		if distincts.size() < 2:
+			continue
+		var c: String = temoin.occurrences[int(mc["occ"])]["cle"]
+		var m: RefCounted = temoin.tuiles[c]
+		var faces_avant: int = m.faces.size()
+		var neufs: Array = m.couper_aux_positions(mc["points"])
+		if neufs.is_empty() and m.faces.size() == faces_avant:
+			# ⚠ UNE COUPE À MOITIÉ FAITE SERAIT PIRE QUE PAS DE COUPE : tout est rendu.
+			for k in avant:
+				temoin.poser_tuile(k, avant[k])
+				_rafraichir_tuile(k)
+			maillage = temoin.tuiles[cle]
+			redessiner()
+			dit.emit(("[color=#e0603c]Nothing cut[/color] — the knife could not follow the surface of « %s ». "
+				+ "[i]Place the points again.[/i]") % c)
+			return
+		coupes += 1
+	if coupes == 0:
+		dit.emit("[color=#e0603c]Nothing cut[/color] — [i]place two points or more on the surface.[/i]")
+		return
+	# Les points posés sur un bord passent dans toutes les tuiles qui partagent ce bord (`Sections.completer`).
+	var echecs := 0
+	if sections != null:
+		var r: Dictionary = sections.completer(func(c: String) -> void:
+			if not avant.has(c):
+				avant[c] = temoin.tuiles[c].copie())
+		echecs = int(r["echecs"])
+	var lot_avant := TL.Lot.new()
+	var lot_apres := TL.Lot.new()
+	for c in avant:
+		lot_avant.tuiles[c] = avant[c]
+		lot_apres.tuiles[c] = temoin.tuiles[c].copie()
+		(temoin.tuiles[c] as RefCounted).preparer_rayons()
+		_rafraichir_tuile(c)
+	maillage = temoin.tuiles[cle]
 	redessiner()
-	dit.emit("[b]Knife[/b] done. [i]Ctrl+Z undoes it.[/i]")
+	change.emit(lot_avant, lot_apres, "Knife")
+	if echecs > 0:
+		dit.emit(("[color=#e0603c]Knife changed the shape of a tile border[/color] — %d point(s) that meet it in other "
+			+ "tiles cannot follow, so the world will show a gap there. [i]Ctrl+Z undoes it.[/i]") % echecs)
+	else:
+		dit.emit("[b]Knife[/b] done — %d tile(s) cut%s. [i]Ctrl+Z undoes it.[/i]"
+			% [avant.size(), "" if morceaux.size() <= 1 else ", across %d copies" % morceaux.size()])
+
+
+## LE TRACÉ DU COUTEAU, D'UNE COPIE À L'AUTRE : [{occ, local}] — chaque point cliqué, et entre deux points chaque
+## passage d'une face à une autre (sur leur arête commune) ou d'une copie à sa voisine (sur l'arête de bord, des deux
+## côtés). Deux points qui partagent une face d'une même copie : directement, comme avant. Sinon le trait est suivi À
+## L'ÉCRAN, comme le couteau de Blender : on échantillonne, et chaque changement de face est trouvé par dichotomie.
+## {"erreur": raison} si le trait quitte la matière ou saute entre deux faces qui ne se touchent pas.
+func _trace_du_couteau(points: Array) -> Dictionary:
+	var sortie: Array = []
+	for i in points.size():
+		var p: Dictionary = points[i]
+		var occ := _occ_du_point(p)
+		var w := _monde_du_point(p)
+		if i == 0:
+			sortie.append({"occ": occ, "local": _local(occ, w)})
+			continue
+		var q: Dictionary = points[i - 1]
+		var occ_q := _occ_du_point(q)
+		var wq := _monde_du_point(q)
+		var tuile: RefCounted = temoin.tuiles[temoin.occurrences[occ]["cle"]]
+		if occ_q == occ and _face_commune(tuile, _local(occ, wq), _local(occ, w)):
+			if int(sortie[-1]["occ"]) != occ:
+				sortie.append({"occ": occ, "local": _local(occ, wq)})
+			sortie.append({"occ": occ, "local": _local(occ, w)})
+			continue
+		var sa := camera.unproject_position(wq)
+		var sb := camera.unproject_position(w)
+		var ha := _toucher(sa)
+		var hb := _toucher(sb)
+		if ha.is_empty() or hb.is_empty():
+			return {"erreur": "a point of the knife is not on the surface any more (did the view move?)."}
+		# Le point de départ, dans la copie que le trait quitte vraiment (un point de bord est sur deux copies).
+		if int(sortie[-1]["occ"]) != int(ha["occ"]):
+			sortie.append({"occ": int(ha["occ"]), "local": _local(int(ha["occ"]), wq)})
+		var e := _traverser(sa, ha, sb, hb, sortie, 0)
+		if e != "":
+			return {"erreur": e}
+		if int(sortie[-1]["occ"]) != int(hb["occ"]):
+			sortie.append({"occ": int(hb["occ"]), "local": _local(int(hb["occ"]), wq)})
+		sortie.append({"occ": int(hb["occ"]), "local": _local(int(hb["occ"]), w)})
+	return {"points": sortie}
+
+
+func _local(occ: int, w: Vector3) -> Vector3:
+	return (temoin.occurrences[occ]["pose"] as Transform3D).affine_inverse() * w
+
+
+## La copie et la face sous un point de l'écran : {occ, face, point (monde)} ou {}.
+func _toucher(s: Vector2) -> Dictionary:
+	var h: Dictionary = temoin.rayon(camera.project_ray_origin(s), camera.project_ray_normal(s))
+	if h.is_empty():
+		return {}
+	return {"occ": int(h["occurrence"]), "face": int(h["face"]), "point": h["point"]}
+
+
+## Entre deux points de l'écran : chaque changement (copie, face), trouvé par dichotomie, ajoute son passage.
+func _traverser(sa: Vector2, ha: Dictionary, sb: Vector2, hb: Dictionary, sortie: Array, profondeur: int) -> String:
+	if int(ha["occ"]) == int(hb["occ"]) and int(ha["face"]) == int(hb["face"]):
+		return ""
+	if sa.distance_to(sb) < 0.02 or profondeur > 24:
+		return _passage(ha, hb, sortie)
+	var sm := sa.lerp(sb, 0.5)
+	var hm := _toucher(sm)
+	if hm.is_empty():
+		return "the knife crosses empty space between two points."
+	var e := _traverser(sa, ha, sm, hm, sortie, profondeur + 1)
+	if e != "":
+		return e
+	return _traverser(sm, hm, sb, hb, sortie, profondeur + 1)
+
+
+## Le passage d'une face `ha` à une face `hb` voisines à l'écran.
+##   même copie : leur arête commune (ou leur sommet commun), au plus près du point touché ;
+##   deux copies : l'arête de BORD de chacune (deux bouts sur un même plan de coupe), au même point du monde.
+func _passage(ha: Dictionary, hb: Dictionary, sortie: Array) -> String:
+	var oa := int(ha["occ"])
+	var ob := int(hb["occ"])
+	var ma: RefCounted = temoin.tuiles[temoin.occurrences[oa]["cle"]]
+	var la := _local(oa, ha["point"])
+	if oa == ob:
+		var fa: PackedInt32Array = ma.faces[int(ha["face"])]
+		var fb: PackedInt32Array = ma.faces[int(hb["face"])]
+		var communs: Array = Array(fa).filter(func(i): return Array(fb).has(i))
+		if communs.is_empty():
+			return "the knife jumps between two faces that do not touch (an edge hidden behind another?)."
+		var meilleur := Vector3.ZERO
+		if communs.size() == 1:
+			meilleur = ma.sommets[communs[0]]
+		else:
+			var d_min := INF
+			for k in fa.size():
+				var u := fa[k]
+				var v := fa[(k + 1) % fa.size()]
+				if communs.has(u) and communs.has(v):
+					var q := Geometry3D.get_closest_point_to_segment(la, ma.sommets[u], ma.sommets[v])
+					if q.distance_to(la) < d_min:
+						d_min = q.distance_to(la)
+						meilleur = q
+		sortie.append({"occ": oa, "local": meilleur})
+		return ""
+	var qa := _sur_un_bord(ma, ma.faces[int(ha["face"])], la)
+	if qa == Vector3.INF:
+		return "the knife leaves a tile without crossing its border (a copy hidden behind another?)."
+	var w: Vector3 = (temoin.occurrences[oa]["pose"] as Transform3D) * qa
+	var mb: RefCounted = temoin.tuiles[temoin.occurrences[ob]["cle"]]
+	var lb := _local(ob, w)
+	var qb := _sur_un_bord(mb, mb.faces[int(hb["face"])], lb)
+	if qb == Vector3.INF or qb.distance_to(lb) > 0.01:
+		return "the knife leaves a tile where its neighbour does not meet it."
+	sortie.append({"occ": oa, "local": qa})
+	sortie.append({"occ": ob, "local": qb})
+	return ""
+
+
+## Le point le plus proche de `p` sur une arête de la face posée sur un plan de coupe (deux bouts à ±0,5 sur un même
+## axe), ou Vector3.INF.
+func _sur_un_bord(m: RefCounted, face: PackedInt32Array, p: Vector3) -> Vector3:
+	var meilleur := Vector3.INF
+	var d_min := INF
+	for k in face.size():
+		var a: Vector3 = m.sommets[face[k]]
+		var b: Vector3 = m.sommets[face[(k + 1) % face.size()]]
+		for axe in 3:
+			if absf(absf(a[axe]) - 0.5) < 0.0005 and absf(a[axe] - b[axe]) < 0.0005:
+				var q := Geometry3D.get_closest_point_to_segment(p, a, b)
+				if q.distance_to(p) < d_min:
+					d_min = q.distance_to(p)
+					meilleur = q
+				break
+	return meilleur
+
+
+## Une face du maillage dont le bord porte les deux positions.
+func _face_commune(m: RefCounted, a: Vector3, b: Vector3) -> bool:
+	for face: PackedInt32Array in m.faces:
+		if _sur_le_bord_de(m, face, a) and _sur_le_bord_de(m, face, b):
+			return true
+	return false
+
+
+func _sur_le_bord_de(m: RefCounted, face: PackedInt32Array, p: Vector3) -> bool:
+	for k in face.size():
+		var q := Geometry3D.get_closest_point_to_segment(p, m.sommets[face[k]], m.sommets[face[(k + 1) % face.size()]])
+		if q.distance_to(p) < 1e-4:
+			return true
+	return false
 
 
 # ── L'ENTRÉE ────────────────────────────────────────────────────────────────────────────────────────
@@ -2090,6 +2362,42 @@ func _rafraichir_les_tuiles_qui_portent(k: int) -> void:
 				break
 		if porte:
 			(_mm_de[c] as MultiMeshInstance3D).multimesh.mesh = m.vers_array_mesh()
+
+
+## LA COULEUR DE BASE CUITE DEPUIS LE RELIEF (Jordan, 2 octobre 2026) : le FOND de la toile du matériau courant
+## (sous les calques peints, qui restent par-dessus) est remplacé par l'albedo que `TemoinLie.albedo_du_relief` lit
+## dans la géométrie. UN geste (Ctrl+Z rend le fond d'avant). Seulement en projection UV : ailleurs l'image se répète.
+func cuire_le_relief() -> void:
+	var k := materiau_courant
+	if temoin == null or maillage == null or k < 0 or k >= maillage.materiaux.size():
+		dit.emit("[i]Choose a material first: the base colour is baked into its image.[/i]")
+		return
+	var d: Dictionary = maillage.materiaux[k]
+	if str(d.get("projection", "boite")) != "uv":
+		dit.emit("[color=#f2ca79]Baking from the geometry needs the UV projection[/color] — with Box or a flat "
+			+ "projection the image repeats, so one texel is many places. Press [b]Unwrap all tiles (atlas)[/b] first.")
+		return
+	var chemin: String = str(d.get("texture", ""))
+	if chemin == "":
+		chemin = _preparer_la_toile(k)
+	var t := Peinture.toile(chemin)
+	if t.is_empty():
+		dit.emit("[color=#e0603c]The image of this material cannot be read[/color] (%s)." % chemin)
+		return
+	var debut := Time.get_ticks_msec()
+	var r: Dictionary = temoin.albedo_du_relief(chemin, d.get("relief"), (t["image"] as Image).get_size())
+	if int(r["texels"]) == 0:
+		dit.emit("[color=#f2ca79]No unwrapped face carries this material[/color] — nothing to bake. Press [b]Unwrap "
+			+ "all tiles (atlas)[/b].")
+		return
+	var fond: Image = Peinture.fond(chemin)
+	var avant := fond.duplicate() as Image
+	var apres: Image = r["image"]
+	Peinture.poser_region(chemin, apres, Vector2i.ZERO, fond)
+	peint.emit(chemin, avant, apres, Vector2i.ZERO, fond)
+	dit.emit(("[b]Base colour baked from the geometry[/b] — %d texel(s), %d ms: floors, walls and ceilings by their "
+		+ "colour, worn convex edges, shaded hollows; quiet along the cut planes. It is the BASE of the canvas: your "
+		+ "paint layers stay on top. [i]Ctrl+Z undoes it.[/i]") % [int(r["texels"]), Time.get_ticks_msec() - debut])
 
 
 ## U — DÉPLIER : les faces choisies (tout le témoin si rien n'est choisi).

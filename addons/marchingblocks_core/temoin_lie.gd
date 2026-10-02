@@ -199,6 +199,188 @@ func deplier_en_atlas(materiau := -2, angle := 66.0, marge := 0.004) -> Dictiona
 	return {"tuiles": touchees.keys(), "ilots": plats.size(), "faces": n_faces}
 
 
+## LES TRIANGLES UV DES ÎLOTS qui lisent l'image `chemin` (faces dépliées d'un matériau en projection UV qui la
+## porte), à plat, trois par triangle — le masque de la dilatation des cartes PBR (`cartes_pbr.gd`). Une face sans
+## UV retombe sur la boîte (elle ne lit pas l'atlas) : elle n'entre pas.
+func triangles_uv_de(chemin: String) -> PackedVector2Array:
+	var sortie := PackedVector2Array()
+	var lisent := {}
+	for k in materiaux.size():
+		if str(materiaux[k].get("texture", "")) == chemin and str(materiaux[k].get("projection", "")) == "uv":
+			lisent[k] = true
+	if lisent.is_empty():
+		return sortie
+	for c in tuiles:
+		var t: RefCounted = tuiles[c]
+		for f in t.faces.size():
+			if not lisent.has(t.mat(f)):
+				continue
+			var u: PackedVector2Array = t.uv(f)
+			if u.is_empty():
+				continue
+			for tri in t.trianguler(f):
+				sortie.append(u[tri[0]])
+				sortie.append(u[tri[1]])
+				sortie.append(u[tri[2]])
+	return sortie
+
+
+## L'ALBEDO CUIT DEPUIS LE RELIEF GÉOMÉTRIQUE — DEMANDÉ PAR JORDAN (2 octobre 2026 : « déduire aussi l'albedo du
+## relief géométrique, comme dans Materialize, autre algorithme »). Pour chaque texel d'un îlot qui lit `chemin`
+## (projection UV : un texel = UN point d'une tuile), le point de la tuile, et trois choses lues dans le MAILLAGE :
+##   • l'ORIENTATION de sa face (sol, paroi, plafond — une couleur chacun, fondues) ;
+##   • la CONVEXITÉ : près d'une arête saillante, la couleur d'usure (`arete`), selon l'angle et la distance ;
+##   • la CONCAVITÉ : près d'une arête rentrante, l'ombre de cavité (`cavite`).
+## ⚠ **LE LONG DES PLANS DE COUPE, ARÊTES ET CAVITÉS S'ÉTEIGNENT** (sur 1/16 de case) : de l'autre côté du plan, la
+## voisine du monde n'est pas celle du témoin — la discipline des coupes (§3) : là, seule l'orientation compte, et
+## elle est la même des deux côtés (une section partagée a les mêmes faces). Une arête posée SUR un plan de coupe n'a
+## pas de face voisine dans la tuile : elle n'est ni saillante ni rentrante.
+## ⚠ Seules les tuiles DÉPLIÉES ont un texel par point : en boîte ou en plan l'image se répète, et un relief cuit
+## n'aurait pas de sens — l'appelant le refuse et le dit. Rend {"image": Image RGBA8 (îlots dilatés), "texels": n}.
+const RELIEF_DEFAUTS := {"sol": [0.42, 0.55, 0.26], "paroi": [0.52, 0.44, 0.36], "plafond": [0.36, 0.34, 0.38],
+	"arete": [0.80, 0.76, 0.68], "usure": 0.7, "cavite": 0.6, "largeur": 0.06}
+const BANDE_DE_COUPE := 1.0 / 16.0
+
+
+static func reglages_du_relief(r: Variant) -> Dictionary:
+	var d := RELIEF_DEFAUTS.duplicate(true)
+	if r is Dictionary:
+		for k in r:
+			if d.has(k):
+				d[k] = r[k]
+	return d
+
+
+func albedo_du_relief(chemin: String, r: Variant, taille: Vector2i) -> Dictionary:
+	var g := reglages_du_relief(r)
+	var col := func(k: String) -> Color:
+		var a: Array = g[k]
+		return Color(float(a[0]), float(a[1]), float(a[2]))
+	var c_sol: Color = col.call("sol")
+	var c_paroi: Color = col.call("paroi")
+	var c_plafond: Color = col.call("plafond")
+	var c_arete: Color = col.call("arete")
+	var usure := float(g["usure"])
+	var cavite := float(g["cavite"])
+	var largeur := maxf(0.005, float(g["largeur"]))
+	var w := taille.x
+	var h := taille.y
+	var donnees := PackedByteArray()
+	donnees.resize(w * h * 4)
+	var masque := PackedByteArray()
+	masque.resize(w * h)
+	var lisent := {}
+	for k in materiaux.size():
+		if str(materiaux[k].get("texture", "")) == chemin and str(materiaux[k].get("projection", "")) == "uv":
+			lisent[k] = true
+	var texels := 0
+	for c in tuiles:
+		var t: RefCounted = tuiles[c]
+		# Les faces de chaque arête de la tuile (deux au plus : le témoin est orienté et étanche par tuile).
+		var faces_de := {}
+		for f in t.faces.size():
+			var fa: PackedInt32Array = t.faces[f]
+			for i in fa.size():
+				var a: int = fa[i]
+				var b: int = fa[(i + 1) % fa.size()]
+				var k := "%d|%d" % [mini(a, b), maxi(a, b)]
+				if not faces_de.has(k):
+					faces_de[k] = []
+				faces_de[k].append(f)
+		for f in t.faces.size():
+			if not lisent.has(t.mat(f)):
+				continue
+			var u: PackedVector2Array = t.uv(f)
+			if u.is_empty():
+				continue
+			var fa: PackedInt32Array = t.faces[f]
+			var n: Vector3 = t.normale(f)
+			# Les arêtes de la face qui comptent : [a, b, angle signé] (+ saillante, − rentrante).
+			var aretes: Array = []
+			for i in fa.size():
+				var ia: int = fa[i]
+				var ib: int = fa[(i + 1) % fa.size()]
+				var voisines: Array = faces_de["%d|%d" % [mini(ia, ib), maxi(ia, ib)]]
+				if voisines.size() != 2:
+					continue
+				var autre: int = voisines[0] if voisines[1] == f else voisines[1]
+				var n2: Vector3 = t.normale(autre)
+				var angle := acos(clampf(n.dot(n2), -1.0, 1.0))
+				if angle < 0.05:
+					continue
+				var centre := Vector3.ZERO
+				for s in t.faces[autre]:
+					centre += t.sommets[s]
+				centre /= float((t.faces[autre] as PackedInt32Array).size())
+				var milieu: Vector3 = (t.sommets[ia] + t.sommets[ib]) * 0.5
+				var signe := -1.0 if (centre - milieu).dot(n) > 0.0 else 1.0
+				aretes.append([t.sommets[ia], t.sommets[ib], signe * angle / (PI * 0.5)])
+			var w_sol := smoothstep(0.35, 0.75, n.y)
+			var w_plafond := smoothstep(0.35, 0.75, -n.y)
+			var base := c_paroi.lerp(c_sol, w_sol).lerp(c_plafond, w_plafond)
+			for tri in t.trianguler(f):
+				var pa: Vector3 = t.sommets[fa[tri[0]]]
+				var pb: Vector3 = t.sommets[fa[tri[1]]]
+				var pc: Vector3 = t.sommets[fa[tri[2]]]
+				var ua := u[tri[0]] * Vector2(w, h)
+				var ub := u[tri[1]] * Vector2(w, h)
+				var uc := u[tri[2]] * Vector2(w, h)
+				var aire := (ub - ua).cross(uc - ua)
+				if absf(aire) < 1e-9:
+					continue
+				var x0 := clampi(floori(minf(ua.x, minf(ub.x, uc.x))), 0, w - 1)
+				var x1 := clampi(ceili(maxf(ua.x, maxf(ub.x, uc.x))), 0, w - 1)
+				var y0 := clampi(floori(minf(ua.y, minf(ub.y, uc.y))), 0, h - 1)
+				var y1 := clampi(ceili(maxf(ua.y, maxf(ub.y, uc.y))), 0, h - 1)
+				for y in range(y0, y1 + 1):
+					for x in range(x0, x1 + 1):
+						var q := Vector2(x + 0.5, y + 0.5)
+						var l1 := (uc - ub).cross(q - ub) / aire
+						var l2 := (ua - uc).cross(q - uc) / aire
+						var l3 := 1.0 - l1 - l2
+						# Un texel touché d'un demi-texel est pris (le filtrage lit au bord de l'îlot).
+						var tol := 0.75 / maxf(1.0, sqrt(absf(aire)))
+						if l1 < -tol or l2 < -tol or l3 < -tol:
+							continue
+						var p := pa * l1 + pb * l2 + pc * l3
+						var bord := minf(0.5 - absf(p.x), minf(0.5 - absf(p.y), 0.5 - absf(p.z)))
+						var eteint := smoothstep(0.0, BANDE_DE_COUPE, bord)
+						var saillant := 0.0
+						var rentrant := 0.0
+						for e in aretes:
+							var d := _distance_au_segment_3d(p, e[0], e[1])
+							if d >= largeur:
+								continue
+							var force: float = absf(float(e[2])) * (1.0 - d / largeur)
+							if float(e[2]) > 0.0:
+								saillant = maxf(saillant, force)
+							else:
+								rentrant = maxf(rentrant, force)
+						saillant = clampf(saillant * eteint, 0.0, 1.0)
+						rentrant = clampf(rentrant * eteint, 0.0, 1.0)
+						var couleur := base.lerp(c_arete, saillant * usure) * (1.0 - rentrant * cavite)
+						var i := y * w + x
+						if masque[i] == 0:
+							texels += 1
+						masque[i] = 255
+						donnees[i * 4] = int(clampf(couleur.r, 0.0, 1.0) * 255.0 + 0.5)
+						donnees[i * 4 + 1] = int(clampf(couleur.g, 0.0, 1.0) * 255.0 + 0.5)
+						donnees[i * 4 + 2] = int(clampf(couleur.b, 0.0, 1.0) * 255.0 + 0.5)
+						donnees[i * 4 + 3] = 255
+	var img := Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, donnees)
+	if texels > 0:
+		img = load("res://addons/marchingblocks_core/cartes_pbr.gd").dilater(img,
+			Image.create_from_data(w, h, false, Image.FORMAT_L8, masque))
+	return {"image": img, "texels": texels}
+
+
+static func _distance_au_segment_3d(p: Vector3, a: Vector3, b: Vector3) -> float:
+	var ab := b - a
+	var l := ab.length_squared()
+	var t := 0.0 if l <= 0.0 else clampf((p - a).dot(ab) / l, 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
 ## LE TÉMOIN ASSEMBLÉ, pour le montrer ou le ranger dans la liste des travaux : chaque occurrence posée.
 ## Une surface par matériau (Godot plafonne un maillage à 256 surfaces).
 func assemble() -> ArrayMesh:
@@ -228,6 +410,11 @@ func vers_glb(chemin: String, pour_blender := false) -> String:
 	for cle in tuiles:
 		var m: ArrayMesh = tuiles[cle].vers_array_mesh(not pour_blender)
 		maillages[cle] = _soudee(m) if pour_blender else m
+	# ⚠ LES CARTES PBR AVANT D'ÉCRIRE, ET APRÈS LES MAILLAGES : le .glb embarque les textures telles qu'elles sont à cet
+	# instant — une génération encore en route partirait neutre (pente nulle) dans le monde et dans les moteurs ; et
+	# ce sont les maillages qui DEMANDENT les cartes (`materiau_godot`) : appelé avant eux, rien n'était à refaire
+	# (vu rougir, `test_cartes_pbr`). Les textures se mettent à jour en place, les maillages les citent déjà.
+	load("res://addons/marchingblocks_core/peinture.gd").suivre_les_cartes(true)
 	return BM.ecrire_le_temoin_lie(chemin, maillages)
 
 

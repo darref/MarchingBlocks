@@ -195,6 +195,47 @@ public sealed class WitnessTests
             + $"glTFast says: {ImporterReport("Assets/faux.mbset/tiles.glb")}");
     }
 
+    // The PBR maps MarchingBlocks derives from a material's image (normal, occlusion, metallic-roughness) travel in
+    // tiles.glb like any glTF material: glTFast must give every tile those three textures, and tangents for the
+    // normal map. The witness of pbr.mbset carries such a material on all of its tiles.
+    [Test]
+    public void TheDerivedPbrMapsArriveInUnity()
+    {
+        var manifest = AssetDatabase.LoadAssetAtPath<TextAsset>("Assets/pbr.mbset/tileset.json");
+        var tiles = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/pbr.mbset/tiles.glb");
+        Assert.IsNotNull(manifest, "pbr.mbset/tileset.json is missing — run preparer_essai_unity.gd");
+        Assert.IsNotNull(tiles, "pbr.mbset/tiles.glb is not imported as a GameObject");
+        var set = MBTileset.Load(manifest, tiles, out var error);
+        Assert.IsNull(error, error);
+        int complete = 0;
+        string first = null;
+        foreach (var kv in set.Tiles)
+        {
+            bool normal = false, occlusion = false, metallic = false;
+            foreach (var m in kv.Value.Materials)
+                if (m != null)
+                    foreach (var p in m.GetTexturePropertyNames())
+                    {
+                        if (m.GetTexture(p) == null) continue;
+                        var name = p.ToLowerInvariant();
+                        if (name.Contains("normal") || name.Contains("bump")) normal = true;
+                        if (name.Contains("occlusion")) occlusion = true;
+                        if (name.Contains("metallic")) metallic = true;
+                    }
+            var mesh = kv.Value.Mesh;
+            bool tangents = false;
+            if (mesh != null && mesh.vertexCount > 0 && mesh.tangents.Length == mesh.vertexCount)
+                foreach (var t in mesh.tangents)
+                    if (new Vector3(t.x, t.y, t.z).sqrMagnitude > 0.5f) { tangents = true; break; }
+            if (normal && occlusion && metallic && tangents) complete++;
+            else first = first ?? $"{kv.Key} (normal {normal}, occlusion {occlusion}, metallic {metallic}, tangents {tangents})";
+        }
+        Debug.Log($"PBR maps: {complete} of {set.Tiles.Count} tiles carry normal, occlusion, metallic-roughness and tangents");
+        Assert.AreEqual(52, set.Tiles.Count, "the PBR set is not one tile per key of the world");
+        Assert.AreEqual(set.Tiles.Count, complete, $"tiles without their PBR maps, e.g. {first}. "
+            + $"glTFast says: {ImporterReport("Assets/pbr.mbset/tiles.glb")}");
+    }
+
     // What glTFast's importer reported ("see inspector for details"), read by reflection so that this test
     // does not depend on glTFast's API: the console only says that the import failed, never why.
     static string ImporterReport(string path)

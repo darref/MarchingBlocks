@@ -49,6 +49,7 @@ const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
+const Cartes := preload("res://addons/marchingblocks_core/cartes_pbr.gd")
 const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
 const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const EauMaillage := preload("res://addons/marchingblocks_core/eau_maillage.gd")
@@ -138,7 +139,8 @@ var _atelier := "witness"
 var _section_jeu: Control
 var _titre_projet: Control
 var _section_projet: Control
-var _choix_monde: HBoxContainer
+var _choix_monde: VBoxContainer
+var _section_choix_monde: Section
 var _section_couches: Control
 var _etat_enregistre: Label
 var _case_associations: CheckButton
@@ -241,6 +243,8 @@ var _eau_active := 0
 var _corps_eau: Array = []      # par couche d'eau, un résultat de `FL.source` par source
 var _ocean_eau := {}
 var _occ_eau := {}               # les cases du monde entier au dernier calcul
+var _monde_eau := {}             # le dernier rendu de `FL.monde`, pour en REPRENDRE ce qu'un geste n'a pas touché
+var _maillages_eau: Array = []   # par couche d'eau : [ses corps, son maillage] — repris si ses corps le sont tous
 var _eau_a_refaire := false
 var _eau_vide := false            # aucune source au dernier calcul : les nappes sont vidées
 var _index_eau := {}              # case de lac ou de rivière → [couche, source]
@@ -269,6 +273,9 @@ func _notification(quoi: int) -> void:
 	if quoi == NOTIFICATION_WM_CLOSE_REQUEST and _minuterie_temoin != null:
 		_toujours_ecrire()
 	if quoi == NOTIFICATION_PREDELETE:
+		_attendre_l_ecriture()
+		# Les cartes PBR en route sur un autre fil : on ne démonte pas le moteur sous elles.
+		Peinture.attendre_les_cartes()
 		for m in _detachees:
 			m.free()
 		_histoire.free()
@@ -306,6 +313,9 @@ func _regler_fenetre() -> void:
 
 
 func _process(delta: float) -> void:
+	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
+	Peinture.suivre_les_cartes()
+	_dire_l_etat_pbr()
 	_ecoule += delta
 	if _ecoule < SECONDES_CONSEIL:
 		return
@@ -412,7 +422,7 @@ func _batir() -> void:
 	_minuterie_projet = Timer.new()
 	_minuterie_projet.one_shot = true
 	_minuterie_projet.wait_time = 1.0
-	_minuterie_projet.timeout.connect(_enregistrer)
+	_minuterie_projet.timeout.connect(_enregistrer.bind(true))
 	add_child(_minuterie_projet)
 	_minuterie_materiau = Timer.new()
 	_minuterie_materiau.one_shot = true
@@ -842,19 +852,24 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 
 	# ── LES COUCHES — où tout atterrit, donc AVANT les étapes qui y déposent.
 	# L'EXEMPLE OU TON MONDE (Jordan, 2 octobre 2026 : « un bouton exemple et un bouton world dans World, le soft ne
-	# doit pas forcer l'exemple à l'arrivée ») : deux boutons, celui du projet ouvert enfoncé.
-	_choix_monde = HBoxContainer.new()
+	# doit pas forcer l'exemple à l'arrivée »). ⚠ UN CHOIX SOUS SA SECTION, PAS DEUX BOUTONS (Jordan, le même jour :
+	# collés sous les ateliers, « c'est pas clair » — ils se lisaient comme deux ateliers de plus).
+	_section_choix_monde = Section.new("Which world", true, Icones.icone("monde"))
+	pile.add_child(_section_choix_monde)
+	_choix_monde = VBoxContainer.new()
+	_choix_monde.add_theme_constant_override("separation", 2)
 	var groupe_monde := ButtonGroup.new()
-	for b in [["My world", "monde", "Back to your own world: the last project you opened that is not the example.",
+	for b in [["My world", "Your own world: the last project you opened that is not the example.",
 				_ouvrir_mon_monde],
-			["Example", "livre", "The example world that comes with MarchingBlocks, in its own folder. Your changes "
+			["The example", "The example world that comes with MarchingBlocks, in its own folder. Your changes "
 				+ "to it are kept there.", _ouvrir_l_exemple]]:
-		var bouton := _bouton(b[0], b[2], b[3], b[1])
-		bouton.toggle_mode = true
-		bouton.button_group = groupe_monde
-		bouton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		_choix_monde.add_child(bouton)
-	pile.add_child(_choix_monde)
+		var choix := CheckBox.new()
+		choix.text = b[0]
+		choix.tooltip_text = b[1]
+		choix.button_group = groupe_monde
+		choix.pressed.connect(b[2])
+		_choix_monde.add_child(choix)
+	_section_choix_monde.contenu.add_child(_choix_monde)
 	var couches := Section.new("Layers", true, Icones.icone("couches"))
 	pile.add_child(couches)
 	_section_couches = couches
@@ -1179,16 +1194,10 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			"poubelle", Palette.DANGER),
 		_bouton("Clear", "Esc — forgets the selection. No cell changes.", _operer_selection.bind(""),
 			"croix"),
-		_bouton("Extrude ↑", "Adds the layer above, the selection follows it, AND the floor plane y "
-			+ "goes up with it — so you can keep drawing at the new level without touching PgUp.",
-			_operer_selection.bind("extruder_haut"), "extruder_haut"),
-		_bouton("Extrude ↓", "Adds the layer below, the selection follows it, and the floor plane y "
-			+ "goes down with it.",
-			_operer_selection.bind("extruder_bas"), "extruder_bas"),
 		_bouton("Grow", "Selects the matter touching the selection by a face.",
 			_operer_selection.bind("grandir"), "grandir"),
-		_bouton("Shrink", "Drops the selected cells that touch an unselected one.",
-			_operer_selection.bind("retrecir"), "retrecir"),
+		_bouton("Shrink", "Drops the edge of the selection: a rectangle loses its rim, a line its ends, a block its skin.",
+			_operer_selection.bind("retrecir_bord"), "retrecir"),
 		_bouton("Connected", "Selects all the matter linked to the selection by faces.",
 			_operer_selection.bind("connexe"), "connexe"),
 	]))
@@ -1215,22 +1224,33 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	pile.add_child(etage)
 	_etiquette_portee = _texte("", 11, Palette.GRIS)
 	etage.contenu.add_child(_etiquette_portee)
+	# EXTRUDE, UNE SEULE FOIS (Jordan, 2 octobre 2026) : Extend up / down et Extrude ↑ ↓ de la sélection faisaient la
+	# même chose sous deux noms ; ils ne font plus qu'un, et Maj / Alt étendent ou décalent la sélection
+	# (`Etages.extruder`).
+	var modes := ("
+Click: adds matter, the selection and the floor plane follow — click again to keep going."
+		+ "
+Shift+click: extends the selection one cell that way, without adding matter."
+		+ "
+Alt+click: moves the selection one cell that way, without adding matter."
+		+ "
+Acts on the selection if there is one, otherwise on the matter of floor y.")
 	var ops: Array = []
 	for op in [
-		["Extend up", "haut", "extruder_haut", "copies the cells one cell higher"],
-		["Extend down", "bas", "extruder_bas", "copies the cells one cell lower"],
-		["Widen", "elargir", "elargir", "adds a ring around the cells, in their plane"],
-		["Hollow", "creuser", "evider", "removes the cells whose four horizontal neighbours are full"],
-		["Extend facing", "face", "extruder_face", "copies the cells one cell away from the matter "
-			+ "behind them — a wall thickens toward the air, a cave ceiling comes down"],
+		["Extrude up", "haut", "extruder_haut", "One cell higher."],
+		["Extrude down", "bas", "extruder_bas", "One cell lower."],
+		["Widen", "elargir", "elargir", "Adds a ring around the cells, in their plane — the selection if there is "
+			+ "one, otherwise floor y."],
+		["Hollow", "creuser", "evider", "Removes the cells whose four horizontal neighbours are full — the "
+			+ "selection if there is one, otherwise floor y."],
+		["Extrude facing", "face", "extruder_face", "One cell away from the matter behind the cells — a wall "
+			+ "thickens toward the air, a cave ceiling comes down."],
 	]:
-		ops.append(_bouton(op[0], op[3] + " — the selection if there is one, otherwise floor y.",
-			_operer.bind(op[1]), op[2]))
+		if op[1] in ["haut", "bas", "face"]:
+			ops.append(_bouton(op[0], op[3] + modes, _extruder_au_clic.bind(op[1]), op[2]))
+		else:
+			ops.append(_bouton(op[0], op[3], _operer.bind(op[1]), op[2]))
 	etage.contenu.add_child(_grille(ops))
-	etage.contenu.add_child(_bouton("Paint the witness shape",
-		"Replaces this layer's cells with the witness's own cells (Ctrl+Z brings yours back).\n"
-		+ "Sliced from your work, the result must give your block back: that is the proof that "
-		+ "the round trip holds.", _peindre_la_forme_du_temoin, "cube"))
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
@@ -1418,7 +1438,7 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 		if not _eaux.is_empty():
 			_eaux[_eau_active]["preset"] = EauPresets.PRESETS[i]
 			_eau_perimee()
-			_enregistrer())
+			_enregistrer_plus_tard())
 	ligne.add_child(_preset_eau)
 	sec.contenu.add_child(ligne)
 	var note := _texte("These looks are examples, not a requirement: in your engine you can assign your own "
@@ -1506,6 +1526,19 @@ func _occupees_du_monde() -> Dictionary:
 	return occ
 
 
+## Les cases pleines qui ont changé depuis le dernier calcul de l'eau. ⚠ CHAQUE GESTE LES CONNAÎT (2 octobre 2026) :
+## relire les ~196 000 cases de l'exemple dans les grilles puis les comparer à l'état d'avant coûtait ~150 ms à CHAQUE
+## geste, pour en retrouver une. `_eau_cases_inconnues` : un changement dont on ne sait pas les cases (une couche
+## détachée ou rendue) — on relit tout.
+var _eau_changees := {}
+var _eau_cases_inconnues := false
+
+
+func _noter_pour_l_eau(cases_: Array) -> void:
+	for c in cases_:
+		_eau_changees[c] = true
+
+
 ## L'eau est à redéduire. ⚠ UNE FOIS PAR IMAGE au plus : un coup de pinceau touche des dizaines de cases.
 func _eau_perimee() -> void:
 	if _eau_a_refaire:
@@ -1532,12 +1565,37 @@ func _recalculer_eau(avec_barre := true) -> void:
 	if montrer:
 		await _attendre("Water", "lakes, rivers and seas follow the world")
 	var debut := Time.get_ticks_msec()
-	_occ_eau = _occupees_du_monde() if not toutes.is_empty() else {}
-	var w: Dictionary = FL.monde(_occ_eau, toutes)
+	# ⚠ LA REPRISE (2 octobre 2026) : seules les sources dont un geste a touché l'emprise sont recalculées. Les cases
+	# du monde sont tenues à jour par les gestes eux-mêmes (`_noter_pour_l_eau`) ; relues en entier seulement au
+	# premier calcul, ou quand on ne sait pas ce qui a changé.
+	var changees: Variant = null
+	if toutes.is_empty():
+		_occ_eau = {}
+	elif _occ_eau.is_empty() or _eau_cases_inconnues:
+		var occ_avant := _occ_eau
+		_occ_eau = _occupees_du_monde()
+		changees = FL.changees_entre(occ_avant, _occ_eau) if not occ_avant.is_empty() else null
+	else:
+		changees = _eau_changees
+		for c in _eau_changees:
+			var plein := false
+			for i in _vue.nombre_de_couches():
+				if (_vue.couche(i).get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+					plein = true
+					break
+			if plein:
+				_occ_eau[c] = true
+			else:
+				_occ_eau.erase(c)
+	_eau_changees = {}
+	_eau_cases_inconnues = false
+	var w: Dictionary = FL.monde(_occ_eau, toutes, FL.VOLUME_MAXI, _monde_eau, changees)
+	_monde_eau = w
 	_ocean_eau = w["ocean"]
 	_corps_eau.clear()
 	_index_eau.clear()
 	var nappes: Array = []
+	var maillages: Array = []
 	var k := 0
 	for i in _eaux.size():
 		var e: Dictionary = _eaux[i]
@@ -1558,7 +1616,15 @@ func _recalculer_eau(avec_barre := true) -> void:
 		var preset: String = e["preset"]
 		if not _materiaux_eau.has(preset):
 			_materiaux_eau[preset] = EauPresets.materiau(preset)
-		nappes.append([EauMaillage.maillage(corps, _occ_eau), _materiaux_eau[preset], bool(e["visible"])])
+		# Le maillage d'une couche dont tous les corps sont repris est repris aussi : il ne lit que leurs emprises.
+		var m: ArrayMesh = null
+		if i < _maillages_eau.size() and (_maillages_eau[i][0] as Array).size() == corps.size() 				and range(corps.size()).all(func(j): return is_same(_maillages_eau[i][0][j], corps[j])):
+			m = _maillages_eau[i][1]
+		else:
+			m = EauMaillage.maillage(corps, _occ_eau)
+		maillages.append([corps, m])
+		nappes.append([m, _materiaux_eau[preset], bool(e["visible"])])
+	_maillages_eau = maillages
 	_vue.poser_eaux(nappes)
 	_eau_vide = toutes.is_empty()
 	_durees["eau"] = (Time.get_ticks_msec() - debut) / 1000.0
@@ -1745,7 +1811,7 @@ func _retirer_eau(etat: Dictionary) -> void:
 func _activer_eau(i: int) -> void:
 	_eau_active = i
 	_rafraichir_eaux()
-	_enregistrer()
+	_enregistrer_plus_tard()
 
 
 func _montrer_eau(i: int, oui: bool) -> void:
@@ -1753,7 +1819,7 @@ func _montrer_eau(i: int, oui: bool) -> void:
 	var nappes: Array = _vue.nappes()
 	if i < nappes.size():
 		(nappes[i] as Node3D).visible = oui
-	_enregistrer()
+	_enregistrer_plus_tard()
 
 
 ## Une ligne par couche d'eau : l'œil, puis la couche (nom et ce qu'elle porte), qu'on choisit d'un clic.
@@ -2152,7 +2218,7 @@ func _contexte() -> void:
 	_section_projet.visible = projet
 	_section_couches.visible = monde or temoin
 	_section_monde_peint.visible = monde
-	_choix_monde.visible = monde and Exemple.disponible()
+	_section_choix_monde.visible = monde and Exemple.disponible()
 	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
 		e.visible = projet
@@ -2507,8 +2573,183 @@ func _batir_droite_texture(pile: VBoxContainer) -> void:
 			func() -> void: _demander("texture"), "texture"),
 		_bouton("No image", "Colour only.", func() -> void: _retoucher("texture", ""), "croix"),
 	], 2))
+	_batir_pbr(pile)
 	_redire_les_materiaux()
 	_batir_peinture(pile)
+
+
+# ── LES CARTES PBR — DÉCIDÉ (Jordan, 2 octobre 2026) ──────────────────────────────────────────────────────
+#
+# Les cartes (normale, rugosité, occlusion) se DÉDUISENT de l'image du matériau courant (`cartes_pbr.gd`), suivent
+# chaque retouche toutes seules, et partent dans le .glb ; seuls des RÉGLAGES s'enregistrent. Et la couleur de base
+# peut se CUIRE depuis le relief géométrique (projection UV).
+
+const REGLAGES_PBR := [
+	["Fine detail", "fin", 0.0, 2.0, 0.01, "Weight of the smallest bumps read in the image."],
+	["Medium", "moyen", 0.0, 2.0, 0.01, "Weight of the middle-sized shapes."],
+	["Large", "large", 0.0, 2.0, 0.01, "Weight of the broad shapes."],
+	["Contrast", "contraste", 0.0, 4.0, 0.01, "How tall the height read in the image is."],
+	["Normal", "normale", 0.0, 16.0, 0.1, "Strength of the normal map (how steep the bumps look)."],
+	["Occlusion", "occlusion", 0.0, 3.0, 0.01, "How dark the hollows get."],
+	["Roughness", "rugosite", 0.0, 1.0, 0.01, "Base roughness of the material."],
+	["Variation", "variation", -1.0, 1.0, 0.01, "Hollows rougher than bumps (or smoother, below 0)."],
+]
+const REGLAGES_RELIEF := [
+	["Edge wear", "usure", 0.0, 1.0, 0.01, "How much the convex edges take the wear colour."],
+	["Hollows", "cavite", 0.0, 1.0, 0.01, "How dark the concave edges get."],
+	["Width", "largeur", 0.01, 0.25, 0.005, "How far from an edge the wear and the shade reach, in cells."],
+]
+
+var _section_pbr: Control
+var _bouton_cuire: Button
+var _case_pbr: CheckBox
+var _reglages_pbr: VBoxContainer
+var _curseurs_pbr := {}
+var _case_inverser: CheckBox
+var _etat_pbr: Label
+var _couleurs_relief := {}
+var _curseurs_relief := {}
+
+
+func _batir_pbr(pile: VBoxContainer) -> void:
+	var sec := Section.new("PBR maps", true, Icones.icone("texture"))
+	pile.add_child(sec)
+	_section_pbr = sec
+	sec.contenu.add_child(_texte("Normal, roughness and occlusion are DERIVED from the material's image and follow "
+		+ "every brush stroke on their own; only these settings are saved. Metal is never guessed: the Metallic "
+		+ "slider stays in charge. The maps travel in the .glb to Godot, Unity and Unreal.", 11, Palette.GRIS))
+	_case_pbr = CheckBox.new()
+	_case_pbr.text = "Derive PBR maps from the image"
+	_case_pbr.focus_mode = Control.FOCUS_NONE
+	_case_pbr.toggled.connect(_basculer_pbr)
+	sec.contenu.add_child(_case_pbr)
+	_reglages_pbr = VBoxContainer.new()
+	sec.contenu.add_child(_reglages_pbr)
+	for r in REGLAGES_PBR:
+		var cle_pbr: String = r[1]
+		var c := _curseur_libre(_reglages_pbr, r[0], r[2], r[3], r[4], r[5])
+		c.value_changed.connect(func(v: float) -> void: _retoucher_pbr(cle_pbr, v))
+		_curseurs_pbr[cle_pbr] = c
+	_case_inverser = CheckBox.new()
+	_case_inverser.text = "Dark is high"
+	_case_inverser.focus_mode = Control.FOCUS_NONE
+	_case_inverser.tooltip_text = "By default the bright parts of the image are the high ones; tick it for the opposite."
+	_case_inverser.toggled.connect(func(v: bool) -> void: _retoucher_pbr("inverser", v))
+	_reglages_pbr.add_child(_case_inverser)
+	_reglages_pbr.add_child(_bouton("Reset settings", "Back to the default settings.", func() -> void:
+		if _modeleur.materiau_courant >= 0:
+			_retoucher("pbr", Cartes.DEFAUTS.duplicate())
+			_redire_les_materiaux(), "croix"))
+	_etat_pbr = _texte("", 11, Palette.AMBRE)
+	sec.contenu.add_child(_etat_pbr)
+
+	sec.contenu.add_child(_petit_titre("BASE COLOUR FROM THE GEOMETRY"))
+	sec.contenu.add_child(_texte("Bakes the base of the canvas from the shape itself: floors, walls and ceilings by "
+		+ "their colour, worn convex edges, shaded hollows — quiet along the cut planes, where any tile may meet any "
+		+ "other. Needs the UV projection (Unwrap all tiles). Your paint layers stay on top.", 11, Palette.GRIS))
+	var couleurs := GridContainer.new()
+	couleurs.columns = 2
+	for e in [["Floors", "sol"], ["Walls", "paroi"], ["Ceilings", "plafond"], ["Wear", "arete"]]:
+		var b := ColorPickerButton.new()
+		b.text = e[0]
+		b.edit_alpha = false
+		b.custom_minimum_size = Vector2(0, 28)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var cle_relief: String = e[1]
+		b.color_changed.connect(func(c: Color) -> void: _retoucher_relief(cle_relief, [c.r, c.g, c.b]))
+		couleurs.add_child(b)
+		_couleurs_relief[cle_relief] = b
+	sec.contenu.add_child(couleurs)
+	for r in REGLAGES_RELIEF:
+		var cle_relief: String = r[1]
+		var c := _curseur_libre(sec.contenu, r[0], r[2], r[3], r[4], r[5])
+		c.value_changed.connect(func(v: float) -> void: _retoucher_relief(cle_relief, v))
+		_curseurs_relief[cle_relief] = c
+	_bouton_cuire = _bouton("Bake base colour", "Replaces the BASE of this material's canvas (under the paint "
+		+ "layers) with the colour read from the geometry. Ctrl+Z undoes it.", func() -> void:
+			_regler_edition(true)
+			_modeleur.cuire_le_relief()
+			_redire_les_materiaux(), "remplir", Palette.PRINCIPAL)
+	sec.contenu.add_child(_bouton_cuire)
+
+
+## Un curseur nommé, sans branchement (l'appelant le branche).
+func _curseur_libre(parent: Control, nom: String, mini: float, maxi: float, pas: float, aide: String) -> HSlider:
+	var ligne := HBoxContainer.new()
+	var l := _texte(nom, 11, Palette.GRIS)
+	l.custom_minimum_size = Vector2(80, 0)
+	ligne.add_child(l)
+	var c := HSlider.new()
+	c.min_value = mini
+	c.max_value = maxi
+	c.step = pas
+	c.tooltip_text = aide
+	c.focus_mode = Control.FOCUS_NONE
+	c.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	c.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ligne.add_child(c)
+	parent.add_child(ligne)
+	return c
+
+
+## Allume ou éteint les cartes du matériau courant. Allumer sans image lui donne une toile (de sa couleur) : les cartes
+## se déduisent d'une image.
+func _basculer_pbr(oui: bool) -> void:
+	if _remplit_materiau or _modeleur.maillage == null or _modeleur.materiau_courant < 0:
+		return
+	_regler_edition(true)
+	var k: int = _modeleur.materiau_courant
+	if oui and str(_modeleur.maillage.materiaux[k].get("texture", "")) == "":
+		_modeleur._preparer_la_toile(k)
+	_retoucher("pbr", Cartes.DEFAUTS.duplicate() if oui else null)
+	_redire_les_materiaux()
+
+
+func _retoucher_pbr(cle_pbr: String, valeur: Variant) -> void:
+	if _remplit_materiau or _modeleur.maillage == null or _modeleur.materiau_courant < 0:
+		return
+	var actuel: Variant = _modeleur.maillage.materiaux[_modeleur.materiau_courant].get("pbr")
+	if not actuel is Dictionary:
+		return
+	var g: Dictionary = Cartes.reglages(actuel)
+	g[cle_pbr] = valeur
+	_retoucher("pbr", g)
+
+
+func _retoucher_relief(cle_relief: String, valeur: Variant) -> void:
+	if _remplit_materiau or _modeleur.maillage == null or _modeleur.materiau_courant < 0:
+		return
+	var g: Dictionary = TL.reglages_du_relief(_modeleur.maillage.materiaux[_modeleur.materiau_courant].get("relief"))
+	g[cle_relief] = valeur
+	_retoucher("relief", g)
+
+
+## Remplit la section PBR depuis le matériau courant (appelée par `_redire_les_materiaux`, `_remplit_materiau` tenu).
+func _redire_le_pbr(d: Dictionary) -> void:
+	if _case_pbr == null:
+		return
+	var actif: bool = d.get("pbr") is Dictionary
+	_case_pbr.button_pressed = actif
+	_reglages_pbr.visible = actif
+	var g: Dictionary = Cartes.reglages(d.get("pbr"))
+	for cle_pbr in _curseurs_pbr:
+		(_curseurs_pbr[cle_pbr] as HSlider).value = float(g[cle_pbr])
+	_case_inverser.button_pressed = bool(g["inverser"])
+	var r: Dictionary = TL.reglages_du_relief(d.get("relief"))
+	for cle_relief in _couleurs_relief:
+		var a: Array = r[cle_relief]
+		(_couleurs_relief[cle_relief] as ColorPickerButton).color = Color(float(a[0]), float(a[1]), float(a[2]))
+	for cle_relief in _curseurs_relief:
+		(_curseurs_relief[cle_relief] as HSlider).value = float(r[cle_relief])
+
+
+## L'état des cartes, une fois par image : « updating… » tant qu'une toile attend les siennes.
+func _dire_l_etat_pbr() -> void:
+	if _etat_pbr == null or not _etat_pbr.is_visible_in_tree():
+		return
+	var texte := "PBR maps: updating…" if Peinture.cartes_en_retard() > 0 else ""
+	if _etat_pbr.text != texte:
+		_etat_pbr.text = texte
 
 
 
@@ -2967,7 +3208,10 @@ func _redire_les_materiaux() -> void:
 		_etat_uv.visible = a_deplier > 0
 		var tex: String = str(d.get("texture", ""))
 		_texture_materiau.text = tex.get_file() if tex != "" else "no image"
+		_redire_le_pbr(d)
 		_remplit_materiau = false
+	if _section_pbr != null:
+		_section_pbr.visible = k >= 0
 	_redire_les_calques()
 
 
@@ -3053,6 +3297,13 @@ func _enregistrer_le_temoin_modele(complet := false) -> String:
 	for e in Peinture.enregistrer():
 		if str(e).begins_with("!"):
 			raison = "a paint canvas could not be written: " + str(e).substr(1)
+	# Les cartes : un enregistrement COMPLET (Ctrl+S, la fermeture, le tranchage) les finit d'abord ; l'enregistrement
+	# différé (une seconde après un geste) n'écrit que celles qui sont déjà à jour — il ne doit pas geler l'écran.
+	if complet:
+		Peinture.suivre_les_cartes(true)
+	for e in Peinture.enregistrer_les_cartes():
+		if str(e).begins_with("!"):
+			raison = "the PBR maps could not be written: " + str(e).substr(1)
 	for t in _temoins_sales.keys():
 		var c: Dictionary = _couche_du_temoin(t)
 		if c.is_empty():
@@ -3708,6 +3959,7 @@ func _touche(modif: Dictionary, nom: String) -> void:
 			changees.append(c)
 	_suivre_les_cases(changees)
 	_vue.rafraichir()
+	_noter_pour_l_eau(changees)
 	# ⚠ L'EAU SUIT EN DIRECT TANT QU'ELLE EST RAPIDE ; sur un monde où elle coûte (audit : un recalcul complet par
 	# image pendant tout le coup), elle attend la fin du coup — une fois.
 	if float(_durees.get("eau", 0.0)) < 0.05:
@@ -3852,7 +4104,16 @@ func _suivre_les_cases(cases_: Array) -> void:
 				_union[c] = i
 				break
 	for i in _vue.nombre_de_couches():
-		_vue.couche(i).reconstruire_autour(cases_)
+		var m: Node = _vue.couche(i)
+		# ⚠ UNE COUCHE CACHÉE N'EST PAS REFAITE (on ne la voit pas) : ces cases l'attendent, elle s'en refera en
+		# reparaissant (`_montrer_couche`).
+		if not (m as Node3D).visible:
+			var attente: Dictionary = m.get_meta("_a_refaire", {})
+			for c in cases_:
+				attente[c] = true
+			m.set_meta("_a_refaire", attente)
+			continue
+		m.reconstruire_autour(cases_)
 
 
 ## L'union entière et le rang de chaque couche — quand une couche apparaît, disparaît, se cache, se montre, ou à
@@ -3867,7 +4128,14 @@ func _refaire_l_union() -> void:
 			for c in (m.get_node("Cases") as GridMap).get_used_cells():
 				_union[c] = i
 	for i in _vue.nombre_de_couches():
-		_vue.couche(i).reconstruire()
+		var m: Node = _vue.couche(i)
+		m.remove_meta("_a_refaire")
+		# Une couche cachée n'est pas refaite (l'union ne porte pas ses cases) : elle le sera EN ENTIER en reparaissant.
+		if not (m as Node3D).visible:
+			m.set_meta("_tout_refaire", true)
+			continue
+		m.remove_meta("_tout_refaire")
+		m.reconstruire()
 
 
 ## UN PROJET D'AVANT (2 octobre 2026) peut porter une case dans plusieurs couches : la plus haute la garde. Rend
@@ -3893,6 +4161,7 @@ func _reconstruire(_massif: Node, touchees: Array) -> void:
 	_compter_les_cases_plus_tard()
 	_vue.rafraichir()
 	_dire_l_etage()
+	_noter_pour_l_eau(touchees)
 	_eau_perimee()   # la coulée suit le monde, dans les deux sens de l'historique
 
 
@@ -3918,6 +4187,8 @@ func _effacer_tout() -> void:
 	_remplacer_le_monde({}, "Clear the layer")
 
 
+## ⚠ PLUS DE BOUTON (Jordan, 2 octobre 2026 : « paint the witness shape est nul, il faut le retirer ») : la fonction
+## reste pour les captures de `DEV_TOOLS/`, qui peignent la forme du témoin pour la photographier.
 func _peindre_la_forme_du_temoin() -> void:
 	_remplacer_le_monde(BM.cases(0), "Paint the witness shape")
 	_aller_a("monde")
@@ -3931,22 +4202,48 @@ func _operer(quoi: String) -> void:
 	var op: Dictionary = Etages.operer(_occupees(), _vue.etage, quoi, _vue.selection)
 	var n := _appliquer(op, quoi)
 	if n == 0:
-		if quoi == "face":
-			_dire("[i]Nothing to extend on %s.[/i] No cell has matter behind it and air in front." % sur)
-		else:
-			_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
-		return
-	if quoi == "face":
-		# La sélection suit, et l'étage aussi quand on monte ou descend : cliquer encore recommence.
-		var sens: Vector3i = op["sens"]
-		if not _vue.selection.is_empty():
-			_vue.regler_selection(op["selection"])
-		if sens.y != 0:
-			_compteur_etage.value = _vue.etage + sens.y
-		_dire(("[b]Extend facing[/b] %s on %s — %d cell(s) changed. [i]Click again to keep going; "
-			+ "Ctrl+Z undoes the cells.[/i]") % [_nom_du_sens(sens), sur, n])
+		_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
 		return
 	_dire("[b]%s[/b] on %s — %d cell(s) changed. [i]Ctrl+Z undoes it.[/i]" % [quoi, sur, n])
+
+
+## Un clic sur Extrude up / down / facing : Maj étend la sélection, Alt la décale (Jordan, 2 octobre 2026).
+func _extruder_au_clic(quoi: String) -> void:
+	var mode := "poser"
+	if Input.is_key_pressed(KEY_SHIFT) or Input.is_physical_key_pressed(KEY_SHIFT):
+		mode = "etendre"
+	elif Input.is_key_pressed(KEY_ALT) or Input.is_physical_key_pressed(KEY_ALT):
+		mode = "decaler"
+	_extruder(quoi, mode)
+
+
+## EXTRUDE (`Etages.extruder`) : pose ou non, la sélection suit (étendue, décalée), l'étage suit le sens vertical.
+func _extruder(quoi: String, mode := "poser") -> void:
+	var avait_une_selection := not _vue.selection.is_empty()
+	var sur: String = ("the selection (%d cells)" % _vue.selection.size()) if avait_une_selection 		else "floor y = %d" % _vue.etage
+	var op: Dictionary = Etages.extruder(_occupees(), _vue.etage, quoi, _vue.selection, mode)
+	var sens: Vector3i = op["sens"]
+	if sens == Vector3i.ZERO:
+		_dire("[i]Nothing to extrude on %s.[/i] %s" % [sur, "No cell has matter behind it and air in front."
+			if quoi == "face" else "It holds no matter."])
+		return
+	var n := 0
+	if mode == "poser":
+		n = _appliquer(op, "Extrude %s" % _nom_du_sens(sens))
+	if mode != "poser" or avait_une_selection:
+		_vue.regler_selection(op["selection"])
+	if sens.y != 0:
+		_compteur_etage.value = _vue.etage + sens.y
+	match mode:
+		"etendre":
+			_dire("[b]Selection extended[/b] %s — %d cell(s) selected. [i]No matter added.[/i]"
+				% [_nom_du_sens(sens), _vue.selection.size()])
+		"decaler":
+			_dire("[b]Selection moved[/b] %s — %d cell(s). [i]No matter added.[/i]"
+				% [_nom_du_sens(sens), _vue.selection.size()])
+		_:
+			_dire(("[b]Extrude[/b] %s on %s — %d cell(s) added. [i]Click again to keep going; Shift+click extends "
+				+ "the selection, Alt+click moves it; Ctrl+Z undoes the cells.[/i]") % [_nom_du_sens(sens), sur, n])
 
 
 func _nom_du_sens(d: Vector3i) -> String:
@@ -3966,12 +4263,7 @@ func _operer_selection(quoi: String) -> void:
 	var op: Dictionary = Outils.operer_selection(_occupees(), _vue.selection, quoi)
 	var n := _appliquer(op, quoi)
 	_vue.regler_selection(op["selection"])
-	# ⚠ **L'ÉTAGE SUIT L'EXTRUSION — DEMANDÉ PAR JORDAN (28 septembre 2026).** Extruder puis continuer
-	# à dessiner obligeait à monter l'étage à la main (PgUp) : deux gestes pour un, et un rectangle
-	# tracé au mauvais niveau sans qu'on le voie venir. Le plan de visée accompagne désormais la
-	# sélection, donc le geste se répète tout seul : Fill, Extrude, Fill, Extrude.
-	if quoi == "extruder_haut" or quoi == "extruder_bas":
-		_compteur_etage.value = _vue.etage + (1 if quoi == "extruder_haut" else -1)
+	# (Extrude ↑ ↓ et l'étage qui le suit vivent désormais dans `_extruder`, Shape operations.)
 	_dire("[b]%s[/b] — %d cell(s) changed, %d selected. [i]Ctrl+Z undoes the cells.[/i]"
 		% [quoi, n, _vue.selection.size()])
 
@@ -4341,7 +4633,7 @@ func _activer(i: int) -> void:
 	_suivre_le_temoin_de_la_couche()
 	_rafraichir_couches()
 	_dire_l_etage()
-	_enregistrer()
+	_enregistrer_plus_tard()
 
 
 ## LE TÉMOIN SUIT LA COUCHE ACTIVE : si le modeleur en tient un, il prend celui de la nouvelle couche (le
@@ -4389,6 +4681,7 @@ func _detacher_couche(massif: Node) -> void:
 	_detachees.append(massif)
 	_refaire_l_union()   # les rangs ont glissé
 	_activer(mini(i, _couches.size() - 1))
+	_eau_cases_inconnues = true
 	_eau_perimee()
 
 
@@ -4398,6 +4691,7 @@ func _rattacher_couche(massif: Node, etat: Dictionary, i: int) -> void:
 	_couches.insert(i, etat)
 	_refaire_l_union()
 	_activer(i)
+	_eau_cases_inconnues = true
 	_eau_perimee()
 
 
@@ -4429,14 +4723,35 @@ func _renommer_couche() -> void:
 		return
 	_couches[_active]["nom"] = nom
 	_rafraichir_couches()
-	_enregistrer()
+	_enregistrer_plus_tard()
 
 
+## ⚠ PLUS DE RECONSTRUCTION COMPLÈTE (2 octobre 2026 : 4,5 s pour cacher une couche de l'exemple) : l'union ne change
+## qu'aux cases de cette couche (exclusives : elle seule les porte), donc les AUTRES couches ne se refont qu'autour
+## d'elles ; la couche cachée garde son état, et en reparaissant ne se refait qu'autour de ce qui a changé pendant
+## qu'elle était cachée (`_suivre_les_cases`).
 func _montrer_couche(i: int, oui: bool) -> void:
 	_couches[i]["visible"] = oui
-	_vue.couche(i).visible = oui
-	_refaire_l_union()   # une couche cachée sort de l'union : le monde se referme sans elle
-	_enregistrer()
+	var m: Node = _vue.couche(i)
+	(m as Node3D).visible = oui
+	var siennes: Array = (m.get_node("Cases") as GridMap).get_used_cells()
+	for c in siennes:
+		if oui:
+			_union[c] = i
+		elif _union.get(c, -1) == i:
+			_union.erase(c)
+	for j in _vue.nombre_de_couches():
+		if j != i and (_vue.couche(j) as Node3D).visible:
+			_vue.couche(j).reconstruire_autour(siennes)
+	if oui:
+		var attente: Dictionary = m.get_meta("_a_refaire", {})
+		m.remove_meta("_a_refaire")
+		if m.get_meta("_tout_refaire", false):
+			m.remove_meta("_tout_refaire")
+			m.reconstruire()
+		else:
+			m.reconstruire_autour(attente.keys())
+	_enregistrer_plus_tard()
 
 
 ## Une ligne par couche : l'œil (montrer / cacher), puis la couche elle-même, qu'on choisit d'un clic.
@@ -4522,7 +4837,7 @@ func _ouvrir_au_lancement() -> void:
 	# `--open-example` : l'exemple livré, directement (une démo, et l'épreuve de l'exe sans clic).
 	if OS.get_cmdline_args().has("--open-example") or OS.get_cmdline_user_args().has("--open-example"):
 		var erreurs: Array = []
-		var exemple := Exemple.installer(Exemple.ARCHIVE, Exemple.RACINE, erreurs)
+		var exemple := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
 		if exemple != "" and await _ouvrir(exemple):
 			return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
@@ -4547,10 +4862,15 @@ func _mon_dernier_monde() -> String:
 	return ""
 
 
-## Ce projet est-il l'exemple installé (dans `Exemple.RACINE`) ?
+## Où l'exemple s'installe : `Exemple.RACINE`. ⚠ La fumée la détourne vers son propre dossier : elle ouvrait la copie
+## INSTALLÉE de l'utilisateur — avec ses retouches — et l'appli la réenregistrait en fermant (2 octobre 2026).
+static var racine_exemple: String = Exemple.RACINE
+
+
+## Ce projet est-il l'exemple installé (dans `racine_exemple`) ?
 static func est_l_exemple(chemin: String) -> bool:
 	return chemin != "" and ProjectSettings.globalize_path(chemin).simplify_path().begins_with(
-		ProjectSettings.globalize_path(Exemple.RACINE).simplify_path())
+		ProjectSettings.globalize_path(racine_exemple).simplify_path())
 
 
 ## « My world » : ton dernier monde (pas l'exemple), ou un projet neuf s'il n'y en a pas.
@@ -4569,7 +4889,7 @@ func _ouvrir_mon_monde() -> void:
 ## n'importe quel projet.
 func _ouvrir_l_exemple() -> void:
 	var erreurs: Array = []
-	var chemin := Exemple.installer(Exemple.ARCHIVE, Exemple.RACINE, erreurs)
+	var chemin := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
 	if chemin == "":
 		_dire("[color=#e0603c]Cannot open the example[/color] — %s" % ", ".join(PackedStringArray(erreurs)))
 		_dire_le_projet()
@@ -4618,6 +4938,10 @@ func _vider_le_projet() -> void:
 	_corps_eau.clear()
 	_ocean_eau = {}
 	_occ_eau = {}
+	_eau_changees = {}
+	_eau_cases_inconnues = false
+	_monde_eau = {}
+	_maillages_eau = []
 	_index_eau.clear()
 	_eau_vide = false
 	if _vue != null:
@@ -4719,33 +5043,65 @@ func _habiller_couche(i: int) -> String:
 ## ⚠ L'ENREGISTREMENT EST AUTOMATIQUE, APRÈS CHAQUE CHANGEMENT — branché sur l'historique, donc sur
 ## chaque coup, chaque opération, chaque Ctrl+Z. On écrit À CÔTÉ puis on remplace : un logiciel coupé
 ## en pleine écriture ne doit pas laisser un projet à moitié écrit.
-func _enregistrer() -> void:
+## `en_fond` : l'enregistrement DIFFÉRÉ (la seconde de calme après un geste) met le texte en forme et l'écrit sur un
+## AUTRE FIL (2 octobre 2026 : sur l'exemple, ~0,3 s à chaque geste, une image gelée). Ici, sur le fil principal, on
+## ne fait que relever les cases (`get_used_cells`, quelques ms). Toute autre écriture (fermeture, Ctrl+S, changement
+## de projet, une opération d'écran) reste SYNCHRONE — et attend d'abord celle qui serait en cours : deux écritures
+## du même fichier ne se croisent jamais.
+func _enregistrer(en_fond := false) -> void:
 	if _ouverture or _projet == "" or _couches.is_empty():
 		return
 	if _minuterie_projet != null:
 		_minuterie_projet.stop()   # ce qui attendait est écrit maintenant
+	_attendre_l_ecriture()
 	_dire_le_projet()
 	var sorties: Array = []
 	for i in _couches.size():
-		var etat: Dictionary = _couches[i].duplicate()
-		var cases := {}
-		for p in (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
-			cases[p] = true
-		etat["cases"] = cases
-		sorties.append(etat)
-	var provisoire := _projet + ".tmp"
+		var c: Dictionary = _couches[i]
+		sorties.append({"nom": c["nom"], "source": c["source"], "visible": c["visible"], "temoin": c.get("temoin", ""),
+			"id": c.get("id", ""), "cases": (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells()})
+	var eaux: Array = _eaux.duplicate(true)
+	if en_fond:
+		_dire_enregistre("en_cours")
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, true))
+		return
+	_ecrire_le_projet(_projet, sorties, _active, eaux, false)
+
+
+var _tache_ecriture := -1
+
+
+## Attend l'écriture en cours sur l'autre fil, s'il y en a une.
+func _attendre_l_ecriture() -> void:
+	if _tache_ecriture >= 0:
+		WorkerThreadPool.wait_for_task_completion(_tache_ecriture)
+		_tache_ecriture = -1
+
+
+## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
+## `_ecriture_finie`, sur le fil principal).
+func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, en_fond: bool) -> void:
+	var raison := ""
+	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
-		_dire("[color=#e0603c]Project NOT saved[/color] — %s cannot be written (error %d)."
-			% [_projet, FileAccess.get_open_error()])
-		_dire_enregistre("echec")
-		return
-	f.store_string(Projet.vers_texte(sorties, _active, _eaux))
-	f.close()
-	var e: int = DirAccess.rename_absolute(provisoire, _projet)
-	if e != OK:
-		_dire("[color=#e0603c]Project NOT saved[/color] — %s could not replace the old file (error %d)."
-			% [_projet, e])
+		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
+	else:
+		f.store_string(Projet.vers_texte(sorties, active, eaux))
+		f.close()
+		var e: int = DirAccess.rename_absolute(provisoire, chemin)
+		if e != OK:
+			raison = "%s could not replace the old file (error %d)." % [chemin, e]
+	if en_fond:
+		_ecriture_finie.call_deferred(raison)
+	else:
+		_ecriture_finie(raison)
+
+
+func _ecriture_finie(raison: String) -> void:
+	_attendre_l_ecriture()   # la tâche est finie (ou finit) : on la rend au moteur
+	if raison != "":
+		_dire("[color=#e0603c]Project NOT saved[/color] — %s" % raison)
 		_dire_enregistre("echec")
 		return
 	# Un témoin modifié attend encore sa seconde : l'état reste « Saving… » jusqu'à ce qu'il soit écrit.
@@ -4757,6 +5113,8 @@ func _enregistrer() -> void:
 ## cases, mesuré) : une rafale de vingt Ctrl+Z en écrivait vingt. Il attend désormais une seconde de calme, comme
 ## le témoin ; la fermeture, Ctrl+S, le changement de projet et chaque passage par `_toujours_ecrire` l'écrivent
 ## tout de suite. La barre de titre dit « ● Saving… » pendant la seconde.
+## ⚠ LES RÉGLAGES D'ÉCRAN AUSSI (2 octobre 2026) : activer, montrer, renommer une couche, régler l'eau écrivaient le
+## projet sur-le-champ — ~0,3 s chacun sur l'exemple. Ils attendent la même seconde, et s'écrivent sur l'autre fil.
 func _enregistrer_plus_tard() -> void:
 	# ⚠ À LA FERMETURE, L'ÉCRAN EST DÉJÀ HORS DE L'ARBRE quand on libère l'historique, qui émet `version_changed`
 	# (mesuré, 2 octobre 2026) : la minuterie relancée là donnait « Unable to start the timer because it's not
@@ -4836,8 +5194,9 @@ func _enregistrer_tout() -> void:
 func _dire_enregistre(etat: String) -> void:
 	if _etat_enregistre == null:
 		return
-	# Tant qu'une écriture attend sa seconde (le projet ou un témoin), rien n'est encore « Saved ».
-	if etat == "enregistre" and (_attend(_minuterie_projet) or _attend(_minuterie_temoin)):
+	# Tant qu'une écriture attend sa seconde (le projet ou un témoin), ou s'écrit sur l'autre fil, rien n'est « Saved ».
+	if etat == "enregistre" and (_attend(_minuterie_projet) or _attend(_minuterie_temoin)
+			or (_tache_ecriture >= 0 and not WorkerThreadPool.is_task_completed(_tache_ecriture))):
 		etat = "en_cours"
 	match etat:
 		"en_cours":

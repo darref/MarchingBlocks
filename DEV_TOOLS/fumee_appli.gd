@@ -22,6 +22,7 @@ const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 const PlancheTuiles := preload("res://app/planche_tuiles.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
+const RACINE_EXEMPLE := "user://fumee/example"
 
 var _ok := 0
 var _echecs := 0
@@ -57,6 +58,10 @@ func _mener() -> void:
 		print("VERDICT : ÉCHEC")
 		quit(1)
 		return
+	# ⚠ L'EXEMPLE DE LA FUMÉE S'INSTALLE CHEZ ELLE, À NEUF : jamais dans la copie installée de l'utilisateur (ses
+	# retouches y vivent, et l'appli l'aurait réenregistrée en fermant).
+	_vider_dossier(RACINE_EXEMPLE)
+	script_ecran.racine_exemple = RACINE_EXEMPLE
 	var ed: Control = (load("res://app/editor.tscn") as PackedScene).instantiate()
 	root.add_child(ed)
 	for i in 10:
@@ -91,7 +96,7 @@ func _mener() -> void:
 	# ── La sélection et ses opérations ────────────────────────────────────────────────────────────
 	ed._vue.regler_selection({Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true})
 	_vrai(ed._section_selection.visible, "la section Selection apparaît dès qu'il y a une sélection")
-	ed._operer_selection("extruder_haut")
+	ed._extruder("haut")
 	_vrai(cases.get_cell_item(Vector3i(0, 1, 0)) != -1 and cases.get_cell_item(Vector3i(1, 1, 0)) != -1,
 		"extruder vers le haut pose au-dessus de la sélection")
 	_egal(ed._vue.selection, {Vector3i(0, 1, 0): true, Vector3i(1, 1, 0): true}, "la sélection suit")
@@ -139,6 +144,14 @@ func _mener() -> void:
 	_egal((ed._vue.couche(1).get_node("Cases") as GridMap).get_used_cells().size(), 1, "avec ses cases")
 
 	# ── Enregistrée à chaque changement, relue à l'identique ──────────────────────────────────────
+	# ⚠ DANS LA SECONDE, SUR L'AUTRE FIL (2 octobre 2026) : activer, montrer une couche n'écrivent plus sur-le-champ.
+	# La seconde est passée ici d'un coup (la minuterie), puis on attend l'écriture.
+	_vrai(not ed._minuterie_projet.is_stopped(), "le changement attend sa seconde avant de s'écrire")
+	ed._minuterie_projet.timeout.emit()
+	for i in 120:
+		if ed._tache_ecriture < 0:
+			break
+		await process_frame
 	var e: Array = []
 	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(JETABLE), e)
 	_egal(relu.get("couches", []).size(), 2, "le fichier porte les deux couches, sans qu'on ait rien enregistré")
@@ -195,9 +208,61 @@ func _mener() -> void:
 	ed._operer_selection("remplir")
 	_egal(cases0.get_used_cells().size(), avant + 9, "Fill pose de la matière dans les 9 cases du rectangle")
 	var avant_etage: int = ed._vue.etage
-	ed._operer_selection("extruder_haut")
-	_egal(cases0.get_used_cells().size(), avant + 18, "Extrude ↑ pose la couche du dessus")
+	# EXTRUDE, UN SEUL BOUTON (2 octobre 2026) : celui de Shape operations, cliqué pour de vrai ; Maj étend la
+	# sélection, Alt la décale — de VRAIES touches tenues (`Input.parse_input_event`). Attendus écrits à la main.
+	var bouton_haut: Button = null
+	for b in ed.find_children("*", "Button", true, false):
+		if (b as Button).text == "Extrude up":
+			bouton_haut = b
+	_vrai(bouton_haut != null and not ed.find_children("*", "Button", true, false).any(
+		func(b): return (b as Button).text in ["Extrude ↑", "Extrude ↓", "Extend up", "Extend down"]),
+		"un seul Extrude : dans Shape operations, plus de doublon dans Selection")
+	var rect9: Dictionary = ed._vue.selection.duplicate()
+	bouton_haut.pressed.emit()
+	_egal(cases0.get_used_cells().size(), avant + 18, "Extrude up pose la couche du dessus")
 	_egal(ed._vue.etage, avant_etage + 1, "et le plan de visée MONTE avec elle, pour continuer à cliquer")
+	var monte := {}
+	for c in rect9:
+		monte[c + Vector3i.UP] = true
+	_egal(ed._vue.selection, monte, "et la sélection la suit")
+	# Maj + clic : la sélection s'étend d'un cran vers le haut (9 + 9 cases), aucune matière posée.
+	var maj := InputEventKey.new()
+	maj.keycode = KEY_SHIFT
+	maj.physical_keycode = KEY_SHIFT
+	maj.pressed = true
+	Input.parse_input_event(maj)
+	Input.flush_buffered_events()
+	bouton_haut.pressed.emit()
+	var maj_relache: InputEventKey = maj.duplicate()
+	maj_relache.pressed = false
+	Input.parse_input_event(maj_relache)
+	Input.flush_buffered_events()
+	var etendue := monte.duplicate()
+	for c in monte:
+		etendue[c + Vector3i.UP] = true
+	_egal(ed._vue.selection, etendue, "Maj + Extrude up : la sélection s'étend d'un cran (18 cases)")
+	_egal(cases0.get_used_cells().size(), avant + 18, "… sans poser de matière")
+	_egal(ed._vue.etage, avant_etage + 2, "… et l'étage suit")
+	# Alt + clic sur Extrude up : la sélection MONTE d'un cran, rien n'est posé. ⚠ PAS SUR « DOWN » : sous la
+	# sélection tout est plein, un Extrude normal n'y posait rien non plus et décalait aussi la sélection — la
+	# mutation « Alt ignorée » restait MUETTE. Vers le haut, un Extrude normal poserait 9 cases.
+	var alt := InputEventKey.new()
+	alt.keycode = KEY_ALT
+	alt.physical_keycode = KEY_ALT
+	alt.pressed = true
+	Input.parse_input_event(alt)
+	Input.flush_buffered_events()
+	bouton_haut.pressed.emit()
+	var alt_relache: InputEventKey = alt.duplicate()
+	alt_relache.pressed = false
+	Input.parse_input_event(alt_relache)
+	Input.flush_buffered_events()
+	var montee := {}
+	for c in etendue:
+		montee[c + Vector3i.UP] = true
+	_egal(ed._vue.selection, montee, "Alt + Extrude up : la sélection monte d'un cran")
+	_egal(cases0.get_used_cells().size(), avant + 18, "… sans poser de matière")
+	_egal(ed._vue.etage, avant_etage + 3, "… et l'étage suit")
 	ed._histoire.undo()
 	ed._histoire.undo()
 	_egal(cases0.get_used_cells().size(), avant, "deux Ctrl+Z rendent la couche telle qu'elle était")
@@ -380,7 +445,7 @@ func _mener() -> void:
 	_les_deux_ateliers_du_temoin(ed)
 	_peindre_le_temoin(ed)
 	_vrai(_couches_finies, "les couches et leurs témoins sont allés JUSQU'AU BOUT")
-	_l_enregistrement_se_dit(ed)
+	await _l_enregistrement_se_dit(ed)
 	_les_sections_dans_le_modeleur(ed)
 	_les_gestes_topologiques_gardent_les_sections(ed)
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
@@ -580,6 +645,13 @@ func _l_enregistrement_se_dit(ed: Control) -> void:
 	_vrai(not ed._minuterie_projet.is_stopped(), "(il attend sa seconde)")
 	_egal(ed._etat_enregistre.text, "● Saving…", "et la barre dit « Saving… »")
 	ed._minuterie_projet.timeout.emit()
+	# ⚠ L'ENREGISTREMENT DIFFÉRÉ S'ÉCRIT SUR UN AUTRE FIL (2 octobre 2026) : la barre dit « Saving… » tant qu'il
+	# écrit, puis « Saved » — on attend qu'il ait fini, image par image.
+	_vrai(ed._tache_ecriture >= 0, "l'enregistrement différé part sur un autre fil")
+	for i in 120:
+		if ed._tache_ecriture < 0:
+			break
+		await process_frame
 	var relu_geste: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
 	_vrai(not relu_geste.is_empty() and relu_geste["couches"][ed._active]["cases"].has(loin),
 		"la seconde passée, le projet sur disque porte la case")
@@ -995,6 +1067,61 @@ func _les_sections_dans_le_modeleur(ed: Control) -> void:
 	_vrai(coupees_k >= 2 and _sans_partenaire(t) == 0,
 		"K parti d'un bord : la coupe est reportée dans %d autres tuiles, tout joint a son partenaire" % coupees_k)
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# LE COUTEAU TRAVERSANT (Jordan, 2 octobre 2026 : « des motifs qui traversent les bords ») : K, un clic dans une
+	# face de la paroi, un clic AU-DELÀ du bord, sur la copie voisine, Entrée — de VRAIS clics posés par la caméra.
+	# Attendu : la coupe passe dans les deux copies, tout sommet de joint garde son partenaire, UN Ctrl+Z rend tout.
+	# Avant ce jour, le second clic était ignoré sans un mot.
+	var cam_k: Camera3D = ed._vue._camera
+	var fb := -1
+	var kb := -1
+	var axe_b := -1
+	for g in mo.maillage.faces.size():
+		var fg: PackedInt32Array = mo.maillage.faces[g]
+		if fg.size() != 4 or fb >= 0:
+			continue
+		for k in 4:
+			var pa: Vector3 = mo.maillage.sommets[fg[k]]
+			var pb: Vector3 = mo.maillage.sommets[fg[(k + 1) % 4]]
+			for x in 3:
+				if fb < 0 and absf(absf(pa[x]) - 0.5) < 0.0005 and absf(pa[x] - pb[x]) < 0.0005:
+					fb = g
+					kb = k
+					axe_b = x
+	_vrai(fb >= 0, "la paroi a une face qui touche un bord")
+	var fk: PackedInt32Array = mo.maillage.faces[fb]
+	var milieu_b: Vector3 = (mo.maillage.sommets[fk[kb]] + mo.maillage.sommets[fk[(kb + 1) % 4]]) * 0.5
+	var en_face_b: Vector3 = (mo.maillage.sommets[fk[(kb + 2) % 4]] + mo.maillage.sommets[fk[(kb + 3) % 4]]) * 0.5
+	var dehors_b := milieu_b
+	dehors_b[axe_b] += 0.25 * signf(milieu_b[axe_b])
+	ed._vue._cible = mo.pose * mo.maillage.centre(fb)
+	ed._vue._distance = 2.5
+	ed._vue._caler()
+	var tailles := {}
+	for c in t.tuiles:
+		tailles[c] = [t.tuiles[c].sommets.size(), t.tuiles[c].faces.size()]
+	ed._input(_cle(KEY_K))
+	for q in [en_face_b.lerp(mo.maillage.centre(fb), 0.05), dehors_b]:
+		var clic_k := InputEventMouseButton.new()
+		clic_k.button_index = MOUSE_BUTTON_LEFT
+		clic_k.pressed = true
+		clic_k.position = cam_k.unproject_position(mo.pose * q)
+		ed._vue._gui_input(clic_k)
+	_vrai(mo._couteau.size() == 2 and int(mo._couteau[1]["occ"]) != mo.occurrence,
+		"le clic au-delà du bord est pris, sur la copie voisine (occurrence %s)" % [mo._couteau.map(func(p): return p.get("occ", -1))])
+	ed._input(_cle(KEY_ENTER))
+	_vrai(ed._rapport.text.contains("across 2 copies"), "Entrée : la coupe traverse le bord, dans les deux copies")
+	var fendues := 0
+	for c in t.tuiles:
+		if t.tuiles[c].faces.size() > int(tailles[c][1]):
+			fendues += 1
+	_vrai(fendues >= 1 and _sans_partenaire(t) == 0,
+		"… %d tuile(s) fendue(s), et tout sommet de joint garde son partenaire" % fendues)
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues_k := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets.size() == int(tailles[c][0]) and t.tuiles[c].faces.size() == int(tailles[c][1]):
+			rendues_k += 1
+	_egal(rendues_k, t.tuiles.size(), "UN Ctrl+Z rend toutes les tuiles")
 	# LA BRIDE (DÉCIDÉ, Jordan, 30 septembre 2026) : les faces ±Z de la paroi glissées d'une DEMI-case de côté (X
 	# de la tuile) — là où la capture voyait des faces repliées dans d'AUTRES tuiles. Le long de leur normale, la
 	# dalle ne fait que se translater : rien ne replie. Le geste doit s'arrêter
@@ -1540,12 +1667,100 @@ func _peindre_le_temoin(ed: Control) -> void:
 		rendues += int((t.tuiles[cl].uvs as Array) == uvs_avant[cl])
 	_vrai(rendues == porteuses.size() and str(t.materiaux[k].get("projection", "boite")) != "uv",
 		"UN Ctrl+Z rend les UV et la projection d'avant (%d / %d)" % [rendues, porteuses.size()])
+	_sentinelle_pbr = false
+	_les_cartes_pbr(ed, mo, t, k, chemin)
+	_vrai(_sentinelle_pbr, "SENTINELLE : la section des cartes PBR est allée jusqu'au bout")
 	ed._aller_a("witness")
 	_vrai(not mo.pinceau, "Geometry éteint le pinceau")
 	var restees := 0
 	for gi in mo.instances_des_bandes():
 		restees += int((gi as GeometryInstance3D).material_overlay != null)
 	_vrai(restees == 0 and mo.empreinte_montree.is_empty(), "et avec lui les bandes et le curseur (%d bandes restées)" % restees)
+
+
+## LES CARTES PBR (Jordan, 2 octobre 2026) — par les vrais contrôles de la section « PBR maps » : la case les allume
+## (le matériau lit les textures des cartes), un curseur les rend périmées, chaque retouche est UNE annulation ; la
+## cuisson du relief refuse la boîte et le dit, puis, l'atlas fait, remplace le FOND de la toile — un Ctrl+Z ; et les
+## cartes partent dans le .glb du témoin. Attendus : les défauts écrits dans `cartes_pbr.gd` (recopiés ici), le fond
+## d'avant relu octet par octet, le JSON du fichier.
+var _sentinelle_pbr := false
+
+
+func _les_cartes_pbr(ed: Node, mo: Node, t: RefCounted, k: int, chemin: String) -> void:
+	const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+	mo.materiau_courant = k
+	ed._redire_les_materiaux()
+	_vrai(ed._section_pbr.visible and not ed._case_pbr.button_pressed and not ed._reglages_pbr.visible,
+		"la section PBR maps montre le matériau courant : cartes éteintes")
+	ed._case_pbr.button_pressed = true
+	ed._inscrire_les_retouches()
+	# ⚠ LECTURES PRUDENTES (`pbr`) : une mutation qui laisse le réglage absent ne doit pas faire lever une erreur
+	# d'exécution — elle abandonnerait la fonction EN SILENCE (charte §6) ; la sentinelle ci-dessous le verrait.
+	var pbr := func() -> Dictionary:
+		var v: Variant = t.materiaux[k].get("pbr")
+		return v if v is Dictionary else {}
+	_vrai(float(pbr.call().get("normale", 0)) == 4.0 and float(pbr.call().get("fin", 0)) == 1.0
+		and ed._reglages_pbr.visible, "la case les allume, aux réglages par défaut (normale 4, fin 1)")
+	var tuile: RefCounted = t.tuiles[mo.cle]
+	var sm: StandardMaterial3D = tuile.materiau_godot(k)
+	var e: Dictionary = Peinture.cartes_de(chemin, pbr.call(), true)
+	_vrai(sm.normal_enabled and is_same(sm.normal_texture, e.get("normale")) and is_same(sm.ao_texture, e.get("orm")),
+		"le matériau lit la normale et l'ORM des cartes")
+	Peinture.suivre_les_cartes(true)
+	var penche := 0
+	var nimg: Image = e.get("images", {}).get("normale", Image.create(4, 4, false, Image.FORMAT_RGB8))
+	for y in range(0, nimg.get_height(), 4):
+		for x in range(0, nimg.get_width(), 4):
+			if absi(nimg.get_pixel(x, y).r8 - 128) > 6:
+				penche += 1
+	_vrai(Peinture.cartes_en_retard() == 0 and penche > 0, "générées depuis la toile peinte : %d texel(s) penchent" % penche)
+	ed._curseurs_pbr["normale"].value = 9.0
+	ed._inscrire_les_retouches()
+	_vrai(float(pbr.call().get("normale", 0)) == 9.0 and Peinture.cartes_en_retard() == 1,
+		"le curseur Normal change le réglage, et les cartes sont à refaire")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(float(pbr.call().get("normale", 0)) == 4.0 and is_equal_approx(ed._curseurs_pbr["normale"].value, 4.0),
+		"UN Ctrl+Z rend le réglage d'avant, et le curseur le montre")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(not t.materiaux[k].get("pbr") is Dictionary and not ed._case_pbr.button_pressed
+		and not tuile.materiau_godot(k).normal_enabled, "un second Ctrl+Z les éteint")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(t.materiaux[k].get("pbr") is Dictionary, "Ctrl+Y les rallume")
+	# La couleur de base cuite depuis le relief : refusée en boîte, et dite.
+	var fond_avant: PackedByteArray = Peinture.fond(chemin).get_data().duplicate()
+	ed._bouton_cuire.pressed.emit()
+	_vrai(ed._rapport.text.contains("needs the UV projection") and Peinture.fond(chemin).get_data() == fond_avant,
+		"en boîte, la cuisson refuse et le dit — le fond est intact")
+	mo.deplier_en_atlas()
+	ed._bouton_cuire.pressed.emit()
+	var fond_apres: PackedByteArray = Peinture.fond(chemin).get_data()
+	_vrai(ed._rapport.text.contains("Base colour baked") and fond_apres != fond_avant,
+		"l'atlas fait, « Bake base colour » remplace le fond de la toile")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(Peinture.fond(chemin).get_data() == fond_avant, "UN Ctrl+Z rend le fond d'avant, octet pour octet")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(Peinture.fond(chemin).get_data() == fond_apres, "Ctrl+Y le recuit")
+	# Écrites avec le témoin, et dans son .glb.
+	ed._enregistrer_le_temoin_modele(true)
+	var dossier: String = Peinture.dossier_des_cartes(chemin, false)
+	_vrai(FileAccess.file_exists(dossier.path_join("normal.png")) and FileAccess.file_exists(dossier.path_join("orm.png")),
+		"les cartes s'écrivent à côté de la toile (%s)" % dossier.get_file())
+	var f := FileAccess.open(ed._glb_du_temoin(ed._couches[ed._active]), FileAccess.READ)
+	f.seek(12)
+	var longueur := f.get_32()
+	f.get_32()
+	var json: Dictionary = JSON.parse_string(f.get_buffer(longueur).get_string_from_utf8())
+	var porte := false
+	for mat in json.get("materials", []):
+		if str(mat.get("name", "")) == str(t.materiaux[k]["nom"]) and (mat as Dictionary).has("normalTexture"):
+			porte = true
+	_vrai(porte, "le .glb du témoin porte la carte de normales du matériau")
+	# On rend l'état d'avant au reste de la fumée : l'atlas défait, les cartes éteintes.
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._case_pbr.button_pressed = false
+	ed._inscrire_les_retouches()
+	_sentinelle_pbr = true
 
 
 ## Deux couleurs égales à la quantification d'une image 8 bits près.
@@ -2282,15 +2497,33 @@ func _viser_d_en_haut(vue: Control, cible: Vector3) -> Vector2:
 func _les_fluides(ed: Control) -> void:
 	var vue = ed._vue
 	ed._aller_a("monde")
+	# ⚠ UNE CUVETTE CALME, NOYÉE DANS UN PLATEAU (y = 0..2, x de 54 à 68, z de 54 à 70) : posée seule sur le vide, sa
+	# rive donnerait sur une chute et elle DÉBORDERAIT (2 octobre 2026). L'intérieur 61..63 × 1..2 est le lac ; un
+	# chenal creusé sous le plateau en (62, 2, 54..59) mène à son bord, à plus de 4 cases de toute chute.
 	var cuvette := {}
-	for x in range(60, 65):
-		for z in range(60, 65):
-			cuvette[Vector3i(x, 0, z)] = true
-			if x == 60 or x == 64 or z == 60 or z == 64:
-				cuvette[Vector3i(x, 1, z)] = true
-				cuvette[Vector3i(x, 2, z)] = true
+	for x in range(54, 69):
+		for z in range(54, 71):
+			for y in 3:
+				if not (y > 0 and x >= 61 and x <= 63 and z >= 61 and z <= 63) 						and not (y == 2 and x == 62 and z < 60):
+					cuvette[Vector3i(x, y, z)] = true
+	# Le chenal est COUVERT (un toit en y = 3) : ouvert, il serait une chute à deux cases de la rive.
+	for z in range(54, 60):
+		cuvette[Vector3i(62, 3, z)] = true
 	ed._appliquer({"poser": cuvette, "effacer": {}}, "Add")
 
+	# LE DÉZOOM DU MONDE (Jordan, 2 octobre 2026) : la molette recule jusqu'à 1 000 cases (120 avant), et les ombres
+	# suivent. Attendus écrits à la main.
+	var distance_avant: float = vue._distance
+	var molette := InputEventMouseButton.new()
+	molette.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	molette.pressed = true
+	for i in 80:
+		vue._gui_input(molette)
+	_vrai(is_equal_approx(vue._distance, 1000.0) and vue._soleil.directional_shadow_max_distance >= 2000.0,
+		"World : la molette recule jusqu'à 1 000 cases, les ombres jusqu'à 2 000 (%.0f, %.0f)"
+		% [vue._distance, vue._soleil.directional_shadow_max_distance])
+	vue._distance = distance_avant
+	vue._caler()
 	# FLUIDS EST UN ATELIER (Jordan, 2 octobre 2026) : par son VRAI bouton ; l'outil de World d'avant est Dig.
 	ed._choisir_outil("creuser")
 	(ed._boutons_atelier["fluides"] as Button).pressed.emit()
@@ -2316,7 +2549,7 @@ func _les_fluides(ed: Control) -> void:
 	_vrai(nappe.material_override is ShaderMaterial, "… avec le preset de RiverStones")
 	_vrai(ed._rapport.text.contains("Lake"), "… et l'écran le dit")
 
-	# LE MONDE CHANGE, L'EAU SUIT : une échancrure dans le mur fait tomber le lac au niveau 1 ; Ctrl+Z le rend.
+	# LE MONDE CHANGE, L'EAU SUIT : une échancrure dans le mur, vers le chenal, fait tomber le lac au niveau 1.
 	# ⚠ ON NE RECALCULE PAS À LA MAIN : on attend une image, c'est l'appli qui doit suivre d'elle-même.
 	ed._appliquer({"poser": {}, "effacer": {Vector3i(62, 2, 60): true}}, "Dig")
 	await process_frame
@@ -2337,11 +2570,21 @@ func _les_fluides(ed: Control) -> void:
 	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "le mur refermé : le lac remonte")
+	# LA REPRISE (2 octobre 2026) : une case posée loin du lac, au-dessus de tout ce qu'il a regardé, ne le recalcule
+	# pas — le même corps, le même maillage.
+	var corps_avant: Dictionary = ed._corps_eau[0][0]
+	var maillage_avant: ArrayMesh = ed._maillages_eau[0][1]
+	ed._appliquer({"poser": {Vector3i(55, 8, 55): true}, "effacer": {}}, "Add")
+	await process_frame
+	_vrai(is_same(ed._corps_eau[0][0], corps_avant) and is_same(ed._maillages_eau[0][1], maillage_avant),
+		"une case posée loin du lac : ni le lac ni sa nappe ne sont recalculés")
+	ed._appliquer({"poser": {}, "effacer": {Vector3i(55, 8, 55): true}}, "Dig")
+	await process_frame
 
 	# ⚠ UN COUP DE PINCEAU N'EST PAS REJOUÉ PAR L'HISTORIQUE (les cases sont posées pendant le glissé) : c'est le
 	# coup lui-même qui doit rappeler l'eau. Un coup « Dig » sur le mur : le lac redescend ; Ctrl+Z le rend.
 	ed._coup_commence()
-	ed._touche({"poser": {}, "effacer": {Vector3i(62, 2, 64): true}}, "Dig")
+	ed._touche({"poser": {}, "effacer": {Vector3i(62, 2, 60): true}}, "Dig")
 	ed._coup_fini()
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "un coup de pinceau dans le mur : le lac redescend")
@@ -2813,10 +3056,30 @@ func _les_couches_exclusives(ed: Control) -> void:
 		_vrai(ed._vue.couche(k)._etat == avant[k], "la couche %d tenue par morceaux = reconstruite en entier" % k)
 
 	# UNE COUCHE CACHÉE sort de l'union : le monde se referme sans elle.
+	# ⚠ CACHER NE REFAIT PLUS TOUT (2 octobre 2026) : seule A se refait, autour des cases de B ; B, invisible, garde
+	# son état (on ne la voit pas, le Play test la saute) et se refait en reparaissant, autour de ce qui a changé.
 	ed._montrer_couche(ib, false)
-	_memes_proprietaires(ed, [ia, ib], "B cachée")
+	_vrai(not (ed._vue.couche(ib) as Node3D).visible, "B cachée : invisible")
+	_memes_proprietaires(ed, [ia], "B cachée")
+	# Pendant qu'elle est cachée, on peint dans A, contre la frontière : B devra s'en refaire en reparaissant.
+	ed._activer(ia)
+	ed._appliquer({"poser": {Vector3i(204, 2, 1): true, Vector3i(205, 2, 2): true}, "effacer": {}}, "Add")
 	ed._montrer_couche(ib, true)
 	_memes_proprietaires(ed, [ia, ib], "B remontrée")
+	for k in [ia, ib]:
+		var tenu := (ed._vue.couche(k)._etat as Dictionary).duplicate(true)
+		ed._vue.couche(k).reconstruire()
+		_vrai(ed._vue.couche(k)._etat == tenu, "B remontrée : la couche %d refaite par morceaux = reconstruite en entier" % k)
+	# Second tour : cachée, puis l'union refaite entière (ce que font supprimer, déplacer, ouvrir) — B n'y est pas
+	# refaite ; en reparaissant elle doit l'être EN ENTIER.
+	ed._montrer_couche(ib, false)
+	ed._appliquer({"poser": {Vector3i(204, 2, 3): true}, "effacer": {}}, "Add")
+	ed._refaire_l_union()
+	ed._montrer_couche(ib, true)
+	_memes_proprietaires(ed, [ia, ib], "B remontrée après l'union refaite")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	ed._activer(ib)
 	# ↑ ↓ : B passe AU-DESSUS de A par le vrai bouton — la frontière change de propriétaire, un Ctrl+Z le rend.
 	var nom_a: String = ed._couches[ia]["nom"]
 	var nom_b: String = ed._couches[ib]["nom"]
@@ -2872,7 +3135,7 @@ func _les_couches_exclusives(ed: Control) -> void:
 func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
 	const Exemple := preload("res://app/exemple.gd")
 	var mien: String = ed._projet
-	var faux_exemple := Exemple.RACINE.path_join("v0/example.mbproj")
+	var faux_exemple := RACINE_EXEMPLE.path_join("v0/example.mbproj")
 	DirAccess.make_dir_recursive_absolute(faux_exemple.get_base_dir())
 	FileAccess.open(faux_exemple, FileAccess.WRITE).store_string("{}")
 	_vrai(ed.est_l_exemple(faux_exemple) and ed.est_l_exemple(ProjectSettings.globalize_path(faux_exemple))
@@ -2906,9 +3169,9 @@ func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
 	ed._projet = mien
 	ed._dire_le_projet()
 	ed._aller_a("monde")
-	_vrai(ed._choix_monde.visible == Exemple.disponible(), "dans World, les deux boutons s'il y a un exemple (%s)" % Exemple.disponible())
+	_vrai(ed._section_choix_monde.visible == Exemple.disponible(), "dans World, les deux boutons s'il y a un exemple (%s)" % Exemple.disponible())
 	ed._aller_a("projet")
-	_vrai(not ed._choix_monde.visible, "hors de World, pas de boutons")
+	_vrai(not ed._section_choix_monde.visible, "hors de World, pas de boutons")
 	var f := FileAccess.open(REGLAGES, FileAccess.WRITE)
 	f.store_string(avant)
 	f.close()
@@ -2953,8 +3216,6 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 		"la barre de gauche garde la palette de l'écran (l'olive)")
 	_vrai(ed._section_couches.get_child(0).get_theme_color("font_color").is_equal_approx(Palette.OLIVE),
 		"… ses sections aussi")
-
-
 func _l_exemple(ed: Control) -> void:
 	const Exemple := preload("res://app/exemple.gd")
 	if not Exemple.disponible():
@@ -2983,16 +3244,38 @@ func _l_exemple(ed: Control) -> void:
 	_vrai(ed._projet.ends_with("example.mbproj") and ed._projet.contains("/example/"),
 		"l'exemple s'ouvre depuis son dossier d'installation — %s" % ed._projet)
 	_egal(ed._couches.size(), (attendu["couches"] as Array).size(), "toutes ses couches")
+	# ⚠ LES COUCHES EXCLUSIVES : une case que l'archive met dans deux couches reste à la plus HAUTE (la première de la
+	# liste) — l'exemple repris le 2 octobre 2026 en avait deux. L'attendu le recompte ici, sur l'archive.
+	var plus_hautes := {}
 	for i in mini(ed._couches.size(), (attendu["couches"] as Array).size()):
 		var c: Dictionary = attendu["couches"][i]
 		var m: Node = ed._vue.couche(i)
-		_egal((m.get_node("Cases") as GridMap).get_used_cells().size(), (c["cases"] as Array).size() / 3,
-			"« %s » : ses cases" % c["nom"])
+		var plat: Array = c["cases"]
+		var siennes := {}
+		for k in range(0, plat.size(), 3):
+			var v := Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))
+			if not plus_hautes.has(v):
+				siennes[v] = true
+		for v in siennes:
+			plus_hautes[v] = true
+		_egal((m.get_node("Cases") as GridMap).get_used_cells().size(), siennes.size(),
+			"« %s » : ses cases (celles qu'une couche plus haute n'a pas)" % c["nom"])
 		var poses := (m.get_node("Rendu") as GridMap).get_used_cells().size()
 		var fautes := (m.get_node("Fautes") as GridMap).get_used_cells().size()
 		_vrai(poses > 0 and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
 			% [c["nom"], poses, fautes])
 	_vrai(not ed._rapport.text.contains("missing"), "rien ne manque à l'ouverture")
+
+
+## Vide un dossier de `user://fumee` (récursif) — jamais ailleurs.
+func _vider_dossier(chemin: String) -> void:
+	if not chemin.begins_with("user://fumee/") or not DirAccess.dir_exists_absolute(chemin):
+		return
+	for d in DirAccess.get_directories_at(chemin):
+		_vider_dossier(chemin.path_join(d))
+	for f in DirAccess.get_files_at(chemin):
+		DirAccess.remove_absolute(chemin.path_join(f))
+	DirAccess.remove_absolute(chemin)
 
 
 func _souris(vue: Control, ou: Vector2, bouton: int, appuye: bool, ctrl := false, maj := false) -> void:

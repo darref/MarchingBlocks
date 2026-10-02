@@ -119,7 +119,8 @@ static func modification(outil: String, cibles: Array, occupe: Callable) -> Dict
 ##   extruder_haut/bas — pose la couche d'à côté, et la sélection LA SUIT : on répète pour monter une
 ##                       paroi ;
 ##   grandir           — ajoute la matière qui touche la sélection par une face ;
-##   retrecir          — retire ce qui touche une case non sélectionnée ;
+##   retrecir          — (les greffons) ne garde que les cases pleines dont les six voisines sont sélectionnées ;
+##   retrecir_bord     — (l'appli) retire le bord : les cases où la sélection s'arrête d'un côté et continue de l'autre ;
 ##   connexe           — toute la matière reliée à la sélection par des faces ;
 ##   remplir           — POSE de la matière dans chaque case sélectionnée qui est vide.
 ##
@@ -154,6 +155,9 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 					if occupees.has(c + f):
 						apres[c + f] = true
 		"retrecir":
+			# ⚠ LA RÈGLE D'AVANT, GARDÉE POUR LES GREFFONS (« les greffons attendent la fin du logiciel », §0) : ses cas
+			# d'épreuve sont dans `tools_conformance.json`. L'appli emploie `retrecir_bord` ; les trois greffons la
+			# prendront (liste des greffons à faire).
 			for c in selection:
 				if not occupees.has(c):
 					continue
@@ -163,6 +167,21 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 						interieur = false
 						break
 				if interieur:
+					apres[c] = true
+		"retrecir_bord":
+			# ⚠ **LE BORD DANS LE SENS OÙ LA SÉLECTION S'ÉTEND (Jordan, 2 octobre 2026 : « shrink ne fonctionne pas,
+			# il la supprime »)** : on ne gardait que les cases dont les SIX voisines étaient sélectionnées — or une
+			# sélection est presque toujours mince (un Rect d'une case, une peau peinte au Select), chaque case y a
+			# du non-sélectionné dessus ou dessous, et tout disparaissait ; les cases vides étaient jetées aussi. Une
+			# case est du bord quand, sur un axe, la sélection continue d'un côté et s'arrête de l'autre : un
+			# rectangle perd son pourtour, une ligne ses bouts, un cube sa peau ; une case seule reste.
+			for c in selection:
+				var bord := false
+				for f in FACES:
+					if selection.has(c - f) and not selection.has(c + f):
+						bord = true
+						break
+				if not bord:
 					apres[c] = true
 		"remplir":
 			# ⚠ **ON NE TOUCHE PAS À LA SÉLECTION** : remplir puis extruder puis remplir est le geste

@@ -106,6 +106,30 @@ func _initialize() -> void:
 		"connexe prend toute la matière reliée, pas la case isolée")
 	_vrai(op["poser"].is_empty() and op["effacer"].is_empty(), "grandir / connexe ne touchent aucune case")
 
+	# ── SHRINK, LE BORD (`retrecir_bord`, Jordan, 2 octobre 2026 : « shrink la sélection ne fonctionne pas, il la
+	# supprime »). Attendus écrits à la main, sur un monde VIDE : la sélection est faite de cases vides, et rien ne doit
+	# disparaître pour ça. Un rectangle plat 3×3 garde son centre ; une ligne de 4 garde ses deux du milieu ; une case
+	# seule reste ; un cube 3³ garde son cœur.
+	var plat := {}
+	for x in 3:
+		for z in 3:
+			plat[Vector3i(x, 0, z)] = true
+	_egal(Outils.operer_selection({}, plat, "retrecir_bord")["selection"], {Vector3i(1, 0, 1): true},
+		"shrink sur un rectangle plat (cases vides) : il perd son pourtour, garde son centre")
+	var ligne := {Vector3i(0, 4, 0): true, Vector3i(1, 4, 0): true, Vector3i(2, 4, 0): true, Vector3i(3, 4, 0): true}
+	_egal(Outils.operer_selection({}, ligne, "retrecir_bord")["selection"], {Vector3i(1, 4, 0): true, Vector3i(2, 4, 0): true},
+		"shrink sur une ligne : elle perd ses deux bouts")
+	_egal(Outils.operer_selection({}, {Vector3i(7, 7, 7): true}, "retrecir_bord")["selection"], {Vector3i(7, 7, 7): true},
+		"shrink sur une case seule : elle reste")
+	var cube := {}
+	for x in 3:
+		for y in 3:
+			for z in 3:
+				cube[Vector3i(x, y, z)] = true
+	var r_cube: Dictionary = Outils.operer_selection(cube, cube, "retrecir_bord")
+	_egal(r_cube["selection"], {Vector3i(1, 1, 1): true}, "shrink sur un cube plein 3³ : il garde son cœur")
+	_vrai(r_cube["poser"].is_empty() and r_cube["effacer"].is_empty(), "shrink ne touche aucune case")
+
 	var bloc := {}
 	for x in 3:
 		for y in 3:

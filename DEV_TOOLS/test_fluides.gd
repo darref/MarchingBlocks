@@ -22,6 +22,8 @@ func _initialize() -> void:
 	print("=== TEST — les fluides ===\n")
 	_cuvette()
 	_cuvette_echancree()
+	_portee_du_debordement()
+	_cuvette_qui_deborde()
 	_cuvette_a_poche()
 	_departage()
 	_eau_voisine()
@@ -29,8 +31,10 @@ func _initialize() -> void:
 	_escalier()
 	_riviere_par_un_lac()
 	_ocean()
+	_ocean_par_colonnes()
 	_riviere_vers_l_ocean()
 	_cavite_close()
+	_reprise()
 	_refus()
 	_maillage()
 	_nappes_fusionnees()
@@ -70,6 +74,16 @@ func _monde_cuvette() -> Dictionary:
 	return m
 
 
+## LA MÊME CUVETTE, CALME : noyée dans un plateau (y = 0..2, x et z de −6 à 10) au ras de ses murs. Le seuil, sur le
+## haut d'un mur, est à au moins 7 cases à plat de la première chute (le bord du plateau) : plus que
+## `PORTEE_DE_DEBORD` (4), le lac ne déborde pas. (La cuvette nue, elle, donne sur le vide : elle déborde.)
+func _monde_cuvette_calme() -> Dictionary:
+	var m := {}
+	_boite(m, Vector3i(-6, 0, -6), Vector3i(10, 2, 10))
+	_boite(m, Vector3i(1, 1, 1), Vector3i(3, 2, 3), false)
+	return m
+
+
 static func _cours(r: Dictionary) -> Array:
 	var a: Array = []
 	for e in r["cours"]:
@@ -82,7 +96,7 @@ static func _cours(r: Dictionary) -> Array:
 ## La cuvette se remplit jusqu'à ras bord : le bord est en y = 2, donc la première case qui déborde est en
 ## y = 3 et le lac est au niveau 2 — les 3 × 3 × 2 = 18 cases de l'intérieur. Pas de rivière.
 func _cuvette() -> void:
-	var m := _monde_cuvette()
+	var m := _monde_cuvette_calme()
 	var attendu := {}
 	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 2, 3))
 	for depart in [Vector3i(2, 1, 2), Vector3i(2, 2, 2), Vector3i(1, 9, 3)]:
@@ -99,16 +113,73 @@ func _cuvette() -> void:
 	_egal(FL.profondeur(r["eau"], m, Vector3i(2, 2, 2)), 2, "profondeur sous la surface : 2 cases")
 
 
-## Une échancrure en (2, 2, 0) dans le mur : le bord tombe à y = 1, le lac au niveau 1 — 9 cases.
+## Une échancrure en (2, 2, 0) dans le mur de la cuvette NUE : le bord tombe à y = 1, le lac au niveau 1 — 9 cases.
+## ⚠ ET IL DÉBORDE (Jordan, 2 octobre 2026 : « un lac qui a une digue qui donne sur une falaise ») : par l'échancrure,
+## l'eau passe en (2, 2, 0) puis (2, 2, −1), au-dessus du vide, et tombe — (2, 1, −1), (2, 0, −1), (2, −1, −1), le
+## bas du monde.
 func _cuvette_echancree() -> void:
 	var m := _monde_cuvette()
 	m.erase(Vector3i(2, 2, 0))
 	var attendu := {}
 	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 1, 3))
 	var r := FL.source(m, Vector3i(2, 1, 2))
-	_egal(r["genre"], "lac", "échancrée : toujours un lac (rien ne tombe à l'étage 1)")
-	_egal(r["niveau"], 1, "échancrée : le seuil descend à 1")
-	_egal_ens(r["eau"], attendu, "échancrée : la rangée du bas seule")
+	_egal(r["genre"], "riviere", "échancrée sur le vide : le lac déborde, c'est une rivière")
+	_egal(r["lacs"].size(), 1, "échancrée : un lac, le sien")
+	if r["lacs"].size() == 1:
+		_egal(r["lacs"][0]["niveau"], 1, "échancrée : le seuil descend à 1")
+		_egal_ens(r["lacs"][0]["cases"], attendu, "échancrée : la rangée du bas seule")
+	var cours := _cours(r)
+	_egal(cours.slice(cours.size() - 5), [[Vector3i(2, 2, 0), "coule"], [Vector3i(2, 2, -1), "coule"],
+		[Vector3i(2, 1, -1), "chute"], [Vector3i(2, 0, -1), "chute"], [Vector3i(2, -1, -1), "chute"]],
+		"échancrée : l'eau passe par l'échancrure et tombe au pied de la digue")
+	_egal(r["fin"], "sort", "échancrée : la chute quitte le monde")
+	# La même, CALME : l'échancrure donne sur le plateau, au ras de la digue — plus d'issue à l'étage 2.
+	var calme := _monde_cuvette_calme()
+	calme.erase(Vector3i(2, 2, 0))
+	var rc := FL.source(calme, Vector3i(2, 1, 2))
+	_egal([rc["genre"], rc["cours"].size()], ["lac", 0], "dans le plateau : un lac calme, rien ne coule")
+
+
+## LA PORTÉE DU DÉBORDEMENT (PROPOSÉ : `PORTEE_DE_DEBORD` = 4). Un chenal (murs z = ±1 et x = −1, y = 0..2), une
+## dalle y = 0 sur x = 0..n, un plateau y = 1 sur x = 1..n : la fosse (0, 1, 0) est un lac d'une case. Son issue est
+## au-dessus du plateau, à l'étage 2 ; le seuil est (0, 2, 0), et la première chute est en (n + 1, 2, 0) — à n + 1
+## cases. Déroulé à la main pour n = 3 (à 4 cases, il déborde) : le lac, puis (0..4, 2, 0) à plat, et la chute
+## (4, 1, 0), (4, 0, 0), (4, −1, 0) — le bas du monde. Pour n = 4 (à 5 cases) : un lac calme.
+func _portee_du_debordement() -> void:
+	for n in [3, 4]:
+		var m := {}
+		_boite(m, Vector3i(-1, 0, -1), Vector3i(n, 2, -1))
+		_boite(m, Vector3i(-1, 0, 1), Vector3i(n, 2, 1))
+		_boite(m, Vector3i(-1, 0, 0), Vector3i(-1, 2, 0))
+		_boite(m, Vector3i(0, 0, 0), Vector3i(n, 0, 0))
+		_boite(m, Vector3i(1, 1, 0), Vector3i(n, 1, 0))
+		var r := FL.source(m, Vector3i(0, 1, 0))
+		if n == 3:
+			_egal(r["genre"], "riviere", "chute à 4 cases du seuil : le lac déborde")
+			_egal(_cours(r), [[Vector3i(0, 1, 0), "lac"], [Vector3i(0, 2, 0), "coule"], [Vector3i(1, 2, 0), "coule"],
+				[Vector3i(2, 2, 0), "coule"], [Vector3i(3, 2, 0), "coule"], [Vector3i(4, 2, 0), "coule"],
+				[Vector3i(4, 1, 0), "chute"], [Vector3i(4, 0, 0), "chute"], [Vector3i(4, -1, 0), "chute"]],
+				"chute à 4 cases : le cours, case par case")
+			_egal_ens(r["eau"], _ens([Vector3i(0, 1, 0)]), "chute à 4 cases : le lac d'une case")
+			_egal(r["fin"], "sort", "chute à 4 cases : elle quitte le monde")
+		else:
+			_egal([r["genre"], r["niveau"], r["cours"].size()], ["lac", 1, 0], "chute à 5 cases : un lac calme")
+
+
+## La cuvette NUE, sans échancrure : à ras bord (18 cases, niveau 2), elle déborde par-dessus un mur et tombe au
+## pied de la cuvette — une rivière qui quitte le monde.
+func _cuvette_qui_deborde() -> void:
+	var m := _monde_cuvette()
+	var attendu := {}
+	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 2, 3))
+	var r := FL.source(m, Vector3i(2, 1, 2))
+	_egal(r["genre"], "riviere", "cuvette posée sur le vide : elle déborde")
+	_vrai(r["lacs"].size() == 1 and r["lacs"][0]["niveau"] == 2, "… après s'être remplie à ras bord (niveau 2)")
+	_egal_ens(r["eau"], attendu, "… ses 18 cases")
+	var chutes: Array = r["cours"].filter(func(e): return e["genre"] == "chute")
+	_vrai(chutes.size() == 4 and chutes.all(func(e): return not attendu.has(e["case"]) and not m.has(e["case"]))
+		and (chutes[-1]["case"] as Vector3i).y == -1, "… et tombe de 4 cases, hors de la cuvette, jusqu'au bas du monde")
+	_egal(r["fin"], "sort", "… elle quitte le monde")
 
 
 ## DÉCIDÉ (vases communicants) : une poche ouverte SOUS l'eau se remplit. Le plancher s'étend jusqu'à
@@ -116,11 +187,10 @@ func _cuvette_echancree() -> void:
 ## (6, 1, 2), (5, 1, 1), (5, 1, 3) et le toit (5, 2, 2). Lac : 18 + 2 = 20 cases ; la surface ne compte
 ## ni l'ouverture ni la poche, qui sont sous la roche.
 func _cuvette_a_poche() -> void:
-	var m := _monde_cuvette()
-	_boite(m, Vector3i(5, 0, 0), Vector3i(6, 0, 4))
-	for c in [Vector3i(6, 1, 2), Vector3i(5, 1, 1), Vector3i(5, 1, 3), Vector3i(5, 2, 2)]:
-		m[c] = true
+	# Dans le plateau (le lac reste calme) : la poche y est déjà close de toutes parts, on la creuse.
+	var m := _monde_cuvette_calme()
 	m.erase(Vector3i(4, 1, 2))
+	m.erase(Vector3i(5, 1, 2))
 	var attendu := {}
 	_boite(attendu, Vector3i(1, 1, 1), Vector3i(3, 2, 3))
 	attendu[Vector3i(4, 1, 2)] = true
@@ -147,8 +217,7 @@ func _departage() -> void:
 	_boite(m, Vector3i(0, 1, 1), Vector3i(6, 3, 1))
 	m[Vector3i(1, 1, 0)] = true
 	m[Vector3i(5, 1, 0)] = true
-	var r: Dictionary = FL._creux(m, FL.boite(m), func(_c: Vector3i) -> bool: return false, Vector3i(2, 1, 0), 1,
-		FL.VOLUME_MAXI)
+	var r: Dictionary = FL._creux(m, FL.boite(m), {}, {}, Vector3i(2, 1, 0), 1, FL.VOLUME_MAXI)
 	_egal([r["niveau"], r["issue"], r["seuil"]], [1, "sort", Vector3i(2, 2, 0)],
 		"deux seuils égaux : le premier inséré l'emporte, côté −X")
 	_egal(r["cases"].size(), 3, "deux seuils égaux : la fosse jusqu'aux barrages")
@@ -273,6 +342,60 @@ func _ocean() -> void:
 
 ## L'île et un océan au niveau 1 ; une source sur le toit (3, 4, 3). Le bord le plus proche est à 4 cases
 ## dans les quatre directions : 5 cases à plat, puis la chute — (x, 3), (x, 2) — et (x, 1) est l'océan.
+## L'OCÉAN PAR TRONÇONS (2 octobre 2026) rend EXACTEMENT ce que rendait le remplissage case par case. L'attendu est
+## ce remplissage, réécrit ICI : depuis un coin de la boîte, voisins par les faces, sans dépasser le niveau, ni sortir
+## de la boîte, ni entrer dans la roche. Mondes au hasard (graine fixe), troués de grottes, de surplombs et d'arches ;
+## et la surface lue sur les tronçons (`EM.surface_des_colonnes`) = `FL.surface` + `FL.profondeur`.
+func _ocean_par_colonnes() -> void:
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 20261002
+	var ecarts := 0
+	var surfaces := 0
+	var grottes := 0
+	for essai in 12:
+		var m := {}
+		for x in 14:
+			for z in 14:
+				var h := hasard.randi_range(0, 6)
+				for y in h:
+					if hasard.randf() > 0.25:   # des trous dans la roche : grottes, surplombs, arches
+						m[Vector3i(x, y, z)] = true
+		var niveau := hasard.randi_range(0, 5)
+		var b := FL.boite(m)
+		var lo: Vector3i = b["lo"]
+		var hi: Vector3i = b["hi"]
+		var attendu := {lo: true}
+		var file: Array = [lo]
+		var i := 0
+		while i < file.size():
+			var c: Vector3i = file[i]
+			i += 1
+			for f in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0), Vector3i(0, 0, 1),
+					Vector3i(0, 0, -1)]:
+				var v: Vector3i = c + f
+				if v.y > niveau or attendu.has(v) or m.has(v) or v.x < lo.x or v.y < lo.y or v.z < lo.z 						or v.x > hi.x or v.y > hi.y or v.z > hi.z:
+					continue
+				attendu[v] = true
+				file.append(v)
+		var o := FL.ocean(m, niveau)
+		var eau: Dictionary = o["eau"]
+		if eau.size() != attendu.size() or not attendu.keys().all(func(k): return eau.has(k)):
+			ecarts += 1
+		# Des grottes sous la roche reliées à la mer : le cas qui exerce le passage d'un tronçon à son voisin.
+		for k: Vector3i in eau:
+			if m.has(k + Vector3i.UP) and k.y > lo.y and not eau.has(k + Vector3i.DOWN):
+				grottes += 1
+		var lue: Dictionary = EM.surface_des_colonnes(o["colonnes"], m, b)
+		var faite := {}
+		for k in FL.surface(eau, m):
+			faite[k] = FL.profondeur(eau, m, k)
+		if lue != faite:
+			surfaces += 1
+	_egal(ecarts, 0, "océan par tronçons : le même ensemble que le remplissage case par case, sur 12 mondes au hasard")
+	_egal(surfaces, 0, "océan par tronçons : la même surface, les mêmes profondeurs")
+	_vrai(grottes > 0, "… et ces mondes ont des grottes noyées perchées sur la roche (%d cases) : le passage d'un tronçon à l'autre est exercé" % grottes)
+
+
 func _riviere_vers_l_ocean() -> void:
 	var m := {}
 	_boite(m, Vector3i(0, 0, 0), Vector3i(6, 3, 6))
@@ -315,6 +438,88 @@ func _cavite_close() -> void:
 	_egal([r["niveau"], r["eau"].size()], [1, 1], "cavité close, clic en bas : une case")
 
 
+## LA REPRISE (`FL.monde(…, avant, changees)`, 2 octobre 2026) ne change RIEN au résultat : après chaque geste d'une
+## suite au hasard (graine fixe), le rendu repris est comparé à un calcul COMPLET (sans `avant`) — genre, niveau,
+## eau, cours, fin, et l'eau des océans. Et elle reprend vraiment : peindre au-dessus de la mer, loin du lac, ne
+## recalcule ni la mer ni le lac (le même dictionnaire, `is_same`).
+## Le monde : une île 0..16 en x et z, roche jusqu'à y = 6, un creux 7..9 × 5..6 × 7..9 dans son dos (le lac,
+## calme : la première chute est à plus de 4 cases de sa rive), une colonne (la rivière) ; la mer au niveau 1.
+func _reprise() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(16, 6, 16))
+	_boite(m, Vector3i(7, 5, 7), Vector3i(9, 6, 9), false)
+	_boite(m, Vector3i(14, 7, 14), Vector3i(14, 11, 14))
+	var sources: Array = [Vector3i(-3, 1, -3), Vector3i(8, 5, 8), Vector3i(14, 12, 14)]
+	var w := FL.monde(m, sources)
+	_vrai(w["corps"][0]["genre"] == "ocean" and w["corps"][1]["genre"] == "lac" and w["corps"][2]["genre"] == "riviere",
+		"reprise : une mer, un lac, une rivière")
+	# Peindre au-dessus de la mer, loin du lac et de la rivière : tout est repris.
+	var avant := m.duplicate()
+	m[Vector3i(1, 10, 1)] = true   # au-dessus de l'emprise du lac (ses cases vues montent à la rangée 8, + 1)
+	var w2 := FL.monde(m, sources, FL.VOLUME_MAXI, w, FL.changees_entre(avant, m))
+	_vrai(is_same(w2["corps"][0], w["corps"][0]) and is_same(w2["corps"][1], w["corps"][1]) and is_same(w2["ocean"], w["ocean"]),
+		"peindre au-dessus de la mer, loin du lac : ni la mer ni le lac ne sont recalculés")
+	# Creuser la digue du lac : le lac est recalculé, la mer non.
+	avant = m.duplicate()
+	m[Vector3i(8, 7, 6)] = true
+	var w3 := FL.monde(m, sources, FL.VOLUME_MAXI, w2, FL.changees_entre(avant, m))
+	_vrai(is_same(w3["corps"][0], w2["corps"][0]) and not is_same(w3["corps"][1], w2["corps"][1]),
+		"poser une case contre la rive du lac : le lac est recalculé, la mer reprise")
+	# Creuser le FOND du lac : une case pleine, jamais « vue » par le remplissage — c'est la marge d'une case de
+	# l'emprise qui la couvre. Le lac doit être recalculé, et descendre d'une case (19 cases au lieu de 18).
+	avant = m.duplicate()
+	m.erase(Vector3i(8, 4, 8))
+	var w4 := FL.monde(m, sources, FL.VOLUME_MAXI, w3, FL.changees_entre(avant, m))
+	_vrai(not is_same(w4["corps"][1], w3["corps"][1]) and w4["corps"][1]["eau"].size() == FL.monde(m, sources)["corps"][1]["eau"].size(),
+		"creuser le fond du lac : il est recalculé (%d cases)" % w4["corps"][1]["eau"].size())
+	w3 = w4
+	# Peindre AU-DESSUS DE TOUT monte le dessus de la boîte du monde : le lac, qui n'y est jamais monté, est repris.
+	avant = m.duplicate()
+	m[Vector3i(1, 20, 1)] = true
+	var w5 := FL.monde(m, sources, FL.VOLUME_MAXI, w3, FL.changees_entre(avant, m))
+	_vrai(FL.boite(m) != FL.boite(avant) and is_same(w5["corps"][1], w3["corps"][1]),
+		"peindre au-dessus de tout (la boîte monte) : le lac est repris")
+	m.erase(Vector3i(1, 20, 1))
+	w3 = FL.monde(m, sources, FL.VOLUME_MAXI, w5, FL.changees_entre(avant, m).merged({Vector3i(1, 20, 1): true}))
+	# Une suite de gestes au hasard, chacun comparé à un calcul complet ; un sur trois loin dehors, pour que les faces
+	# de la boîte bougent.
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 1002
+	var ecarts := 0
+	var reprises := 0
+	var prec := w3
+	for geste in 150:
+		avant = m.duplicate()
+		for n in hasard.randi_range(1, 3):
+			var c := Vector3i(hasard.randi_range(-1, 17), hasard.randi_range(0, 12), hasard.randi_range(-1, 17))
+			if hasard.randi() % 3 == 0:
+				c = Vector3i(hasard.randi_range(-4, 20), hasard.randi_range(-3, 16), hasard.randi_range(-4, 20))
+			if m.has(c):
+				m.erase(c)
+			elif not sources.has(c):
+				m[c] = true
+		# Un geste sur quatre RETIRE une case lointaine (hors de l'île) : la boîte du monde rétrécit, ses faces rentrent.
+		if hasard.randi() % 4 == 0:
+			var loin: Array = m.keys().filter(func(k: Vector3i) -> bool:
+				return k.x < 0 or k.z < 0 or k.x > 16 or k.z > 16 or k.y > 11)
+			if not loin.is_empty():
+				m.erase(loin[hasard.randi() % loin.size()])
+		var repris := FL.monde(m, sources, FL.VOLUME_MAXI, prec, FL.changees_entre(avant, m))
+		var complet := FL.monde(m, sources)
+		for i in sources.size():
+			var a: Dictionary = repris["corps"][i]
+			var b: Dictionary = complet["corps"][i]
+			if is_same(a, prec["corps"][i]):
+				reprises += 1
+			if [a["genre"], a["erreur"], a["niveau"], a["fin"], _cours(a)] != [b["genre"], b["erreur"], b["niveau"], b["fin"], _cours(b)] 					or a["eau"].size() != b["eau"].size() or not b["eau"].keys().all(func(k): return a["eau"].has(k)):
+				ecarts += 1
+		if repris["ocean"].size() != complet["ocean"].size():
+			ecarts += 1
+		prec = repris
+	_egal(ecarts, 0, "150 gestes au hasard : le rendu repris est celui d'un calcul complet")
+	_vrai(reprises > 50, "… et la reprise a servi (%d sources reprises sur 450)" % reprises)
+
+
 func _refus() -> void:
 	var m := _monde_cuvette()
 	_egal(FL.source(m, Vector3i(0, 0, 0))["erreur"], "dans_la_matiere", "dans la roche : refusé")
@@ -331,7 +536,7 @@ func _refus() -> void:
 func _maillage() -> void:
 	# La cuvette : ses 9 cases de surface à 2,7, FUSIONNÉES en une nappe (même profondeur partout) ; le bord avance
 	# de 0,45 sous chaque mur → x, z ∈ [0,55 ; 4,45] ; profondeur 2 partout (2 cases d'eau, puis le plancher) → 2 / 8.
-	var m := _monde_cuvette()
+	var m := _monde_cuvette_calme()
 	var q := _quads(EM.maillage([FL.source(m, Vector3i(2, 1, 2))], m))
 	_egal(q.size(), 1, "cuvette : une seule nappe (9 cases fusionnées)")
 	_vrai(_meme_boite(_boite_de(q), [Vector3(0.55, 2.7, 0.55), Vector3(4.45, 2.7, 4.45)]), "cuvette : à 2,7, sous les murs")

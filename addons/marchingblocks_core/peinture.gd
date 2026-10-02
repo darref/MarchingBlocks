@@ -56,7 +56,8 @@ static func _inscrire(chemin: String, img: Image, date: int) -> Dictionary:
 	if img.has_mipmaps():
 		img.clear_mipmaps()
 	img.convert(Image.FORMAT_RGBA8)
-	var t := {"image": img, "texture": ImageTexture.create_from_image(img), "date": date, "sale": false,
+	var t := {"image": img, "texture": ImageTexture.create_from_image(img), "date": date, "sale": false, "version": 0,
+		"touchee": 0,
 		"fond": img.duplicate(), "calques": [_calque("Base", img.duplicate())], "actif": 0, "calques_ecartes": false}
 	_toiles[chemin] = t
 	_lire_les_calques(chemin, t)
@@ -227,6 +228,9 @@ static func montrer(chemin: String) -> void:
 	var t: Dictionary = _toiles[chemin]
 	(t["texture"] as ImageTexture).update(t["image"])
 	t["sale"] = true
+	# Les cartes PBR de cette toile sont périmées : `suivre_les_cartes` les refera quand la main se sera posée.
+	t["version"] = int(t["version"]) + 1
+	t["touchee"] = Time.get_ticks_msec()
 
 
 ## La pipette : la couleur au point.
@@ -248,6 +252,13 @@ static func poser_region(chemin: String, region: Image, position: Vector2i, calq
 	var cible: Image = calque if calque != null else calque_actif(chemin)
 	cible.blit_rect(region, Rect2i(Vector2i.ZERO, region.get_size()), position)
 	composer(chemin, Rect2i(position, region.get_size()))
+
+
+## Le FOND de la toile (sous tous les calques) : ce que la gomme fait revenir, et ce que l'albedo cuit depuis le relief
+## remplace (`TemoinLie.albedo_du_relief`).
+static func fond(chemin: String) -> Image:
+	var t := toile(chemin)
+	return t.get("fond", null)
 
 
 ## L'image du calque actif (celle où le pinceau et la gomme écrivent).
@@ -438,4 +449,224 @@ static func a_ecrire() -> bool:
 
 ## Oublie toutes les toiles (les tests partent d'un état propre).
 static func oublier() -> void:
+	attendre_les_cartes()
 	_toiles.clear()
+	_cartes.clear()
+
+
+# ── LES CARTES PBR DÉDUITES — DÉCIDÉ (Jordan, 2 octobre 2026) ───────────────────────────────────────────
+#
+# Chaque toile peut porter ses cartes (normale, ORM, hauteur), DÉDUITES de sa composition par `cartes_pbr.gd` selon
+# les réglages du matériau. Les textures sont PARTAGÉES comme la toile : le matériau Godot les cite une fois, et une
+# génération finie les met à jour partout, sans rien redessiner.
+# ⚠ **AUTOMATIQUE (Jordan, 2 octobre 2026), MAIS PAS PENDANT LE GESTE** : on regénère quand la composition n'a plus
+# bougé depuis `CALME_MS` (la main s'est posée), sur un AUTRE FIL — ~1,7 s sur 1024², l'écran reste vivant.
+# ⚠ Une génération demandée pendant qu'une autre tourne attend la fin de la première (un fil par toile).
+# ⚠ Les cartes s'écrivent à côté de l'image (`<image>.pbr/` : normal.png, orm.png, height.png, et `pbr.json`, la
+# SIGNATURE — MD5 de l'image écrite, réglages, bouclage) ; à la réouverture, une signature identique les relit sans
+# rien recalculer. La hauteur n'est lue par aucun moteur (le glTF n'en porte pas) : elle est là pour l'artiste.
+
+const Cartes := preload("res://addons/marchingblocks_core/cartes_pbr.gd")
+const CALME_MS := 350
+
+## clé (chemin|boucle) → {"chemin", "boucle", "reglages", "normale": ImageTexture, "orm": ImageTexture,
+##   "images": {normale, orm} (les dernières posées), "hauteur": Image, "source": [id de l'image, version] des cartes posées, "tache": id ou −1, "voulue": [id, version,
+##   réglages] de la génération en cours, "resultat": Array (rempli par le fil), "ecrites": bool}
+static var _cartes := {}
+
+## Qui sait dire, pour une toile dépliée (projection UV), les triangles UV des îlots qui la lisent : l'écran le pose
+## (le témoin entier n'est connu que de lui). Callable(chemin) → PackedVector2Array ; invalide = pas de masque.
+static var fournisseur_de_masque: Callable = Callable()
+
+
+## Les textures des cartes d'une toile (`boucle` : l'image se répète). Créées au premier appel — relues du disque si
+## leur signature tient, sinon neutres (pente nulle, rugosité du réglage) en attendant la première génération.
+static func cartes_de(chemin: String, reglages: Variant, boucle: bool) -> Dictionary:
+	var t := toile(chemin)
+	if t.is_empty():
+		return {}
+	var cle := "%s|%s" % [chemin, str(boucle)]
+	var g := Cartes.reglages(reglages)
+	if not _cartes.has(cle):
+		var e := {"chemin": chemin, "boucle": boucle, "reglages": g, "source": [], "tache": -1, "voulue": [],
+			"resultat": [], "ecrites": false}
+		var lues := _lire_les_cartes(chemin, g, boucle, t)
+		if lues.is_empty():
+			lues = _cartes_neutres((t["image"] as Image).get_size(), g)
+		else:
+			e["source"] = [(t["image"] as Image).get_instance_id(), t["version"]]
+			e["ecrites"] = true
+		e["normale"] = ImageTexture.create_from_image(lues["normale"])
+		e["orm"] = ImageTexture.create_from_image(lues["orm"])
+		e["images"] = {"normale": lues["normale"], "orm": lues["orm"]}
+		e["hauteur"] = lues["hauteur"]
+		_cartes[cle] = e
+	var e: Dictionary = _cartes[cle]
+	if JSON.stringify(e["reglages"]) != JSON.stringify(g):
+		e["reglages"] = g
+		e["source"] = []   # périmées : `suivre_les_cartes` les refait
+	return e
+
+
+static func _cartes_neutres(taille: Vector2i, g: Dictionary) -> Dictionary:
+	var n := Image.create(taille.x, taille.y, false, Image.FORMAT_RGB8)
+	n.fill(Color(0.5, 0.5, 1.0))
+	var o := Image.create(taille.x, taille.y, false, Image.FORMAT_RGB8)
+	o.fill(Color(1.0, float(g["rugosite"]), 1.0))
+	var h := Image.create(taille.x, taille.y, false, Image.FORMAT_L8)
+	h.fill(Color(0.5, 0.5, 0.5))
+	return {"normale": n, "orm": o, "hauteur": h}
+
+
+## Les cartes à refaire : la composition a changé, ou les réglages.
+static func _perimee(e: Dictionary) -> bool:
+	var t := toile(e["chemin"])
+	if t.is_empty():
+		return false
+	return e["source"] != [(t["image"] as Image).get_instance_id(), t["version"]]
+
+
+## À appeler à chaque image (l'écran le fait) : lance sur un autre fil la génération des cartes périmées dont la
+## toile est au calme, et pose celles qui sont finies. `tout_de_suite` : sans attendre le calme, et sur CE fil
+## (les tests, l'écriture d'un .glb qui doit emporter des cartes justes).
+static func suivre_les_cartes(tout_de_suite := false) -> void:
+	for cle in _cartes:
+		var e: Dictionary = _cartes[cle]
+		if int(e["tache"]) >= 0:
+			if not tout_de_suite and not WorkerThreadPool.is_task_completed(e["tache"]):
+				continue
+			WorkerThreadPool.wait_for_task_completion(e["tache"])
+			e["tache"] = -1
+			_poser(e)
+		if not _perimee(e):
+			continue
+		var t := toile(e["chemin"])
+		if not tout_de_suite and Time.get_ticks_msec() - int(t["touchee"]) < CALME_MS:
+			continue
+		var image := (t["image"] as Image).duplicate() as Image
+		var triangles := PackedVector2Array()
+		if not e["boucle"] and fournisseur_de_masque.is_valid():
+			triangles = fournisseur_de_masque.call(e["chemin"])
+		var g: Dictionary = (e["reglages"] as Dictionary).duplicate()
+		var boucle: bool = e["boucle"]
+		e["voulue"] = [(t["image"] as Image).get_instance_id(), t["version"], g]
+		var boite: Array = []
+		e["resultat"] = boite
+		var travail := func() -> void:
+			var m: Image = null
+			if not triangles.is_empty():
+				m = Cartes.masque_des_triangles(triangles, image.get_size())
+			boite.append(Cartes.generer(image, g, boucle, m))
+		if tout_de_suite:
+			travail.call()
+			_poser(e)
+		else:
+			e["tache"] = WorkerThreadPool.add_task(travail)
+
+
+## Attend la fin de toutes les générations en route (la fermeture : un fil qui tourne pendant que le moteur se démonte
+## le fait planter). Ne pose rien.
+static func attendre_les_cartes() -> void:
+	for cle in _cartes:
+		var e: Dictionary = _cartes[cle]
+		if int(e["tache"]) >= 0:
+			WorkerThreadPool.wait_for_task_completion(e["tache"])
+			e["tache"] = -1
+			e["resultat"] = []
+
+
+## Pose une génération finie, si elle répond encore aux réglages voulus (sinon elle est jetée, la suivante viendra).
+static func _poser(e: Dictionary) -> void:
+	var r: Array = e["resultat"]
+	if r.is_empty():
+		return
+	var cartes: Dictionary = r[0]
+	e["resultat"] = []
+	var voulue: Array = e["voulue"]
+	# ⚠ UNE GÉNÉRATION DÉPASSÉE SE MONTRE QUAND MÊME (on glisse un curseur : on voit où l'on va), mais ne vaut pas
+	# « à jour » — la suivante part aussitôt.
+	var a_jour := JSON.stringify(voulue[2]) == JSON.stringify(e["reglages"])
+	# ⚠ `set_image`, PAS `update` : la texture reste le MÊME objet (le matériau la garde), et le headless ne garde pas
+	# ce qu'`update` envoie (charte §5, la peinture) — les tests et l'écriture relisent les images gardées ici.
+	for nom in ["normale", "orm"]:
+		(e[nom] as ImageTexture).set_image(cartes[nom])
+		e["images"][nom] = cartes[nom]
+	e["hauteur"] = cartes["hauteur"]
+	e["source"] = [voulue[0], voulue[1]] if a_jour else []
+	e["ecrites"] = false
+
+
+## Combien de toiles attendent leurs cartes (l'écran le dit : « PBR maps: updating… »).
+static func cartes_en_retard() -> int:
+	var n := 0
+	for cle in _cartes:
+		if _perimee(_cartes[cle]):
+			n += 1
+	return n
+
+
+## Le dossier des cartes d'une image (`_uv` pour une image dépliée : ses cartes ne sont pas celles d'une image
+## répétée).
+static func dossier_des_cartes(chemin: String, boucle := true) -> String:
+	return chemin.get_basename() + (".pbr" if boucle else ".pbr_uv")
+
+
+static func _signature(chemin: String, g: Dictionary, boucle: bool) -> String:
+	return "%s|%s|%s" % [FileAccess.get_md5(chemin), JSON.stringify(g), str(boucle)]
+
+
+static func _lire_les_cartes(chemin: String, g: Dictionary, boucle: bool, t: Dictionary) -> Dictionary:
+	if t["sale"]:
+		return {}
+	var dossier := dossier_des_cartes(chemin, boucle)
+	var desc := dossier.path_join("pbr.json")
+	if not FileAccess.file_exists(desc):
+		return {}
+	var lu: Variant = JSON.parse_string(FileAccess.get_file_as_string(desc))
+	if not lu is Dictionary or str((lu as Dictionary).get("signature", "")) != _signature(chemin, g, boucle):
+		return {}
+	var sortie := {}
+	for nom in [["normale", "normal.png", Image.FORMAT_RGB8], ["orm", "orm.png", Image.FORMAT_RGB8],
+			["hauteur", "height.png", Image.FORMAT_L8]]:
+		var p: String = dossier.path_join(nom[1])
+		if not FileAccess.file_exists(p):
+			return {}
+		var img := Image.load_from_file(p)
+		if img == null or img.get_size() != (t["image"] as Image).get_size():
+			return {}
+		img.convert(nom[2])
+		sortie[nom[0]] = img
+	return sortie
+
+
+## Écrit les cartes à jour qui ne le sont pas encore (APRÈS l'écriture des toiles : la signature lit l'image écrite).
+static func enregistrer_les_cartes() -> Array:
+	var sortie: Array = []
+	for cle in _cartes:
+		var e: Dictionary = _cartes[cle]
+		if e["ecrites"] or _perimee(e):
+			continue
+		var t := toile(e["chemin"])
+		if t.is_empty() or t["sale"]:
+			continue
+		var dossier := dossier_des_cartes(e["chemin"], e["boucle"])
+		DirAccess.make_dir_recursive_absolute(dossier)
+		var err := (e["images"]["normale"] as Image).save_png(dossier.path_join("normal.png"))
+		if err == OK:
+			err = (e["images"]["orm"] as Image).save_png(dossier.path_join("orm.png"))
+		if err == OK:
+			err = (e["hauteur"] as Image).save_png(dossier.path_join("height.png"))
+		if err == OK:
+			var f := FileAccess.open(dossier.path_join("pbr.json"), FileAccess.WRITE)
+			if f == null:
+				err = FileAccess.get_open_error()
+			else:
+				f.store_string(JSON.stringify({"signature": _signature(e["chemin"], e["reglages"], e["boucle"]),
+					"note": "Derived by MarchingBlocks from the albedo; regenerated when it changes."}, "\t"))
+				f.close()
+		if err != OK:
+			sortie.append("!%s (%d)" % [dossier, err])
+			continue
+		e["ecrites"] = true
+		sortie.append(dossier)
+	return sortie

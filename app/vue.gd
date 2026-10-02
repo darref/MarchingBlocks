@@ -82,6 +82,9 @@ var _cible := Vector3(6, 4, 6)
 var _azimut := 0.7
 var _elevation := 0.55
 var _distance := 26.0
+## LE DÉZOOM DU MONDE (Jordan, 2 octobre 2026 : « on doit pouvoir dézoomer beaucoup plus loin ») : 120 cases ne
+## laissaient pas voir une grande carte entière. Le témoin garde 120 (un bloc de 12³).
+const DISTANCE_MAXI_MONDE := 1000.0
 
 var _temoin: MeshInstance3D
 ## LES PLANS DE COUPE du témoin — là où le trancheur coupe. Montrés à la demande (« Show the cells »).
@@ -597,6 +600,9 @@ func _caler() -> void:
 	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation),
 		cos(_elevation) * cos(_azimut))
 	_camera.look_at_from_position(_cible + direction * _distance, _cible, Vector3.UP)
+	# Les ombres suivent le recul : à 100 cases (le défaut du moteur) une carte vue de loin n'en avait plus.
+	if _soleil != null and mode != "jeu":
+		_soleil.directional_shadow_max_distance = maxf(100.0, _distance * 2.0)
 
 
 ## LA NAVIGATION — la caméra VOLE au lieu d'orbiter.
@@ -680,7 +686,7 @@ func _gui_input(event: InputEvent) -> void:
 			accept_event()
 			return
 		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_distance = minf(120.0, _distance * 1.12)
+			_distance = minf(DISTANCE_MAXI_MONDE if mode == "monde" else 120.0, _distance * 1.12)
 			_caler()
 			accept_event()
 			return

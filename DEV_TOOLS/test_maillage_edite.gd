@@ -438,6 +438,28 @@ func _le_couteau() -> void:
 	_egal(e.couper([{"arete": Vector2i(0, 1), "t": 0.5}, {"arete": Vector2i(6, 7), "t": 0.5}]), [],
 		"deux points sans face commune : refusé")
 	_vrai(e.faces.size() == avant and e.sommets.size() == s0, "et rien n'a été coupé à moitié")
+	# LE COUTEAU PAR POSITIONS (2 octobre 2026, le couteau traversant). Attendus écrits à la main sur le cube.
+	var p1 := _cube()
+	p1.couper_aux_positions([Vector3(0.5, 1, 0), Vector3(0.5, 1, 1)])
+	_egal(p1.faces.size(), 7, "par positions : le dessus fendu en deux, comme par arêtes")
+	_egal(_etanche(p1), "", "par positions : étanche")
+	# ⚠ DEUX POINTS SUR LA MÊME ARÊTE, PUIS À TRAVERS : `couper` cherchait le second sur l'arête que le premier venait
+	# de fendre, et refusait tout. Trois sommets neufs (0,25 et 0,75 sur l'arête avant du dessus, 0,75 sur l'arrière),
+	# le dessus fendu UNE fois (le pas le long de l'arête ne fend rien).
+	var p2 := _cube()
+	var n2: Array = p2.couper_aux_positions([Vector3(0.25, 1, 0), Vector3(0.75, 1, 0), Vector3(0.75, 1, 1)])
+	_egal(n2.size(), 3, "le long d'une arête puis à travers : trois sommets neufs")
+	_egal(p2.faces.size(), 7, "… le dessus fendu une fois")
+	_egal(_etanche(p2), "", "… étanche")
+	_vrai(is_equal_approx(_volume(p2), 1.0), "… volume inchangé")
+	# D'un sommet à l'autre : la diagonale du dessus, aucun sommet neuf.
+	var p3 := _cube()
+	_egal(p3.couper_aux_positions([Vector3(0, 1, 0), Vector3(1, 1, 1)]), [], "de sommet à sommet : aucun sommet neuf")
+	_egal(p3.faces.size(), 7, "… mais le dessus est fendu en diagonale")
+	# Un point hors du maillage : rien.
+	var p4 := _cube()
+	_egal(p4.couper_aux_positions([Vector3(0.5, 1, 0), Vector3(0.5, 3, 0.5)]), [], "un point hors du maillage : refusé")
+	_vrai(p4.faces.size() == 6 and p4.sommets.size() == 8, "… et rien n'a été coupé à moitié")
 
 
 # ── 14 — les matériaux suivent les faces ──────────────────────────────────────────────────────────

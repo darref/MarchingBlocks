@@ -221,18 +221,22 @@ func _outils() -> String:
 	l.append(_note("While you drag Add, the cells you just placed are transparent to the ray: the "
 		+ "stroke lays a skin on the surface instead of a tower towards you."))
 	l.append(_titre("Selection"))
-	l.append("[b]Delete[/b], [b]Extrude ↑ / ↓[/b] (the selection follows, repeat to raise a wall), "
-		+ "[b]Grow[/b], [b]Shrink[/b], [b]Connected[/b]. The arrow keys move it, following the camera; "
+	l.append("[b]Fill[/b], [b]Delete[/b], [b]Grow[/b], [b]Shrink[/b] (drops the edge: a rectangle loses its rim, a line its ends), [b]Connected[/b]. To raise, extend or move "
+		+ "it, see Extrude below. The arrow keys move it, following the camera; "
 		+ _touche("Shift") + " + up / down lifts it.")
 	l.append(_touche("Ctrl+C") + " " + _touche("Ctrl+X") + " " + _touche("Ctrl+V") + " copy, cut and "
 		+ "paste — into this layer or any other. The paste follows the mouse; click to place it.")
 	l.append(_note("Moving or pasting onto matter merges with it; it never erases it."))
 	l.append(_titre("Shape operations"))
-	l.append("[b]Extend up / down[/b], [b]Widen[/b], [b]Hollow[/b], [b]Extend facing[/b] act on the "
-		+ "selection if there is one, otherwise on the whole floor y.")
-	l.append("[b]Extend facing[/b] extends away from the matter: it picks the direction most cells face "
-		+ "(air in front, matter behind) and copies them one cell that way. The selection follows, so "
-		+ "click again to keep going. Select a wall to thicken it, a cave ceiling to lower it.")
+	l.append("[b]Extrude up / down / facing[/b], [b]Widen[/b], [b]Hollow[/b] act on the selection if there is "
+		+ "one, otherwise on the matter of floor y.")
+	l.append("[b]Extrude[/b] adds one cell in front of the matter, and the selection and the floor plane follow: "
+		+ "click again to keep going (Fill a Rect, then Extrude up to raise a wall). [b]Facing[/b] picks the "
+		+ "direction most cells face (air in front, matter behind): select a wall to thicken it, a cave ceiling "
+		+ "to lower it.")
+	l.append(_touche("Shift") + " + click [b]extends the selection[/b] one cell that way, " + _touche("Alt")
+		+ " + click [b]moves it[/b] one cell — neither adds matter. Select a floor, Shift + Extrude up three "
+		+ "times, then Fill: a block three cells high.")
 	l.append(_titre("Special shapes"))
 	l.append("[b]Tunnel[/b] digs into a wall, [b]Well[/b] into a floor or a ceiling, [b]Bridge[/b] builds a "
 		+ "deck across the air from a wall, [b]Balcony[/b] puts a slab with its rail against a wall, "
@@ -371,7 +375,7 @@ func _modeleur() -> String:
 	l.append(_titre("Mesh"))
 	l.append(_touche("E") + " extrude (faces follow their normal) · " + _touche("I") + " inset · "
 		+ _touche("Ctrl+B") + " bevel the selected edges · " + _touche("Ctrl+R") + " loop cut · "
-		+ _touche("K") + " knife: click points on edges, face by face, " + _touche("Enter") + " cuts · "
+		+ _touche("K") + " knife: click points on the surface — the cut follows it across faces and across tile borders, onto the next copies, so a pattern can run over the joints; " + _touche("Enter") + " cuts · "
 		+ _touche("X") + " delete · " + _touche("M") + " merge at center · " + _touche("F")
 		+ " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
 	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you."))
@@ -414,6 +418,23 @@ func _modeleur() -> String:
 		+ "nothing), and keep the free drawing in the middle of the tiles. The bands only show where to be "
 		+ "careful; the slicer still checks the texture seams. Untick [b]Seam bands[/b] in the Paint section to "
 		+ "hide them."))
+	l.append(_titre("PBR maps — in Witness texturing"))
+	l.append("Tick [b]Derive PBR maps from the image[/b] (PBR maps section) and the material gets a [b]normal[/b], a "
+		+ "[b]roughness[/b] and an [b]occlusion[/b] map, all read from its image: bright parts are high (or the "
+		+ "opposite with [b]Dark is high[/b]), hollows get darker and rougher. Nothing to paint by hand — they follow "
+		+ "every brush stroke on their own, a moment after you stop. [b]Fine detail[/b], [b]Medium[/b] and "
+		+ "[b]Large[/b] weigh the bumps by size, [b]Contrast[/b] makes them taller, [b]Normal[/b], [b]Occlusion[/b], "
+		+ "[b]Roughness[/b] and [b]Variation[/b] set the rest. Only these settings are saved; each change is one "
+		+ _touche("Ctrl+Z") + ".")
+	l.append(_note("Metal is never guessed from the image: the [b]Metallic[/b] slider of the material stays in "
+		+ "charge. The maps travel in the .glb like any glTF material — Godot, Unity and Unreal read them as they are. "
+		+ "They are also written next to the image (a [i].pbr[/i] folder: normal, ORM, and a height map for your own "
+		+ "shaders — no engine reads height from a glTF)."))
+	l.append("[b]Base colour from the geometry[/b] — [b]Bake base colour[/b] paints the BASE of the canvas from the "
+		+ "shape itself: floors, walls and ceilings in their own colour, worn convex edges, shaded hollows. It stays "
+		+ "quiet along the cut planes, where any tile may meet any other. It needs the UV projection ([b]Unwrap all "
+		+ "tiles (atlas)[/b] first): with Box, the image repeats and one pixel is many places. Your paint layers stay "
+		+ "on top, and " + _touche("Ctrl+Z") + " gives the old base back.")
 	l.append(_titre("View"))
 	l.append("Middle drag turns, " + _touche("Shift") + " + middle drag slides, the wheel zooms. Numpad "
 		+ _touche("1") + " front, " + _touche("3") + " right, " + _touche("7") + " top (" + _touche("Ctrl")
@@ -444,8 +465,6 @@ func _aller_retour() -> String:
 	l.append("[b]The seams are the artist's responsibility.[/b] The slicer cuts straight through the "
 		+ "cell centres and judges nothing else — the report lists the seam remarks.")
 	l.append(_titre("Proving the round trip"))
-	l.append("[b]Paint the witness shape[/b] fills a layer with the witness's own cells. Slice your work "
-		+ "into it: the result must give your block back.")
 	l.append(_note("A class has ONE tile, the same everywhere it appears. With the linked witness, the "
 		+ "rebuilt block is exactly the witness. A single-mesh work (everything joined, or an .obj) only "
 		+ "gives the clearest copy of each tile — the report says so: anything sculpted on the other copies "

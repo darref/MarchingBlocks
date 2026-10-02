@@ -46,15 +46,29 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 	return {"nom": nom, "visible": true, "preset": "stylise", "sources": [], "id": id}
 
 
+## ⚠ LES CASES S'ÉCRIVENT D'UN BLOC (Jordan, 2 octobre 2026 : « trop d'algos lents pendant l'édition ») : sur
+## l'exemple (194 692 cases), chaque enregistrement bâtissait un tableau de 584 076 nombres, que `JSON.stringify` posait
+## UN PAR LIGNE (indenté) — 4,8 Mo, ~270 ms, et une image de ~0,9 s une seconde après chaque geste. Les cases passent
+## par un `PackedInt32Array`, que le moteur écrit lui-même en « [x, y, z, …] » sur une ligne, à la place d'une marque
+## dans le JSON. Même format, relu par `depuis_texte` à l'identique ; 2,5 Mo, ~100 ms.
+## `c["cases"]` : un dictionnaire {case: true} ou un tableau de cases (`GridMap.get_used_cells()`).
 static func vers_texte(couches: Array, active: int, eaux: Array = []) -> String:
 	var sorties: Array = []
+	var blocs: Array[String] = []
 	for c in couches:
-		var plat: Array = []
-		for p in c["cases"]:
+		var liste: Array = c["cases"].keys() if c["cases"] is Dictionary else c["cases"]
+		var plat := PackedInt32Array()
+		plat.resize(liste.size() * 3)
+		var i := 0
+		for p in liste:
 			var v: Vector3i = p
-			plat.append_array([v.x, v.y, v.z])
+			plat[i] = v.x
+			plat[i + 1] = v.y
+			plat[i + 2] = v.z
+			i += 3
+		blocs.append(str(plat))
 		sorties.append({"nom": c["nom"], "source": c["source"],
-			"visible": c["visible"], "cases": plat, "temoin": str(c.get("temoin", "")),
+			"visible": c["visible"], "cases": MARQUE_CASES % (blocs.size() - 1), "temoin": str(c.get("temoin", "")),
 			"id": str(c.get("id", ""))})
 	var sorties_eau: Array = []
 	for e in eaux:
@@ -64,8 +78,15 @@ static func vers_texte(couches: Array, active: int, eaux: Array = []) -> String:
 			plat.append_array([v.x, v.y, v.z])
 		sorties_eau.append({"nom": e["nom"], "visible": e["visible"], "preset": e["preset"], "id": str(e["id"]),
 			"sources": plat})
-	return JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties,
-		"eaux": sorties_eau}, "\t")
+	var texte := JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties,
+		"eaux": sorties_eau}, "	")
+	for k in blocs.size():
+		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
+	return texte
+
+
+## La marque d'un bloc de cases dans le JSON, remplacée par le bloc lui-même (`vers_texte`).
+const MARQUE_CASES := "@@marchingblocks-cells-%d@@"
 
 
 ## Rend {"couches": [...], "active": int}, ou {} en ajoutant la raison à `erreurs`.

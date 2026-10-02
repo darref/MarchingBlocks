@@ -14,6 +14,8 @@ extends SceneTree
 ##   witness_world.mbworld/  un MONDE PEINT de trois couches, écrit par `FormatMonde.exporter` : Rock (la
 ##                           forme du témoin), Ice (CACHÉE, même source, donc même dossier de tuiles),
 ##                           Draft (sans tuiles) — le même monde que `test_greffon_peinture` ;
+##   pbr.mbset/              le témoin lié, un matériau aux CARTES PBR DÉDUITES sur toutes ses tuiles : la normale,
+##                           l'occlusion, le métal-rugosité et les tangentes doivent arriver (`cartes_pbr.gd`) ;
 ##   witness_world_expected.json  par couche : nom, visibilité, cases, et les poses que l'appli y fait
 ##                           (`FN.attendu`, null pour la couche sans tuiles).
 ## ⚠ L'attendu vient de la RÉFÉRENCE, pas du greffon Unity : `WitnessTests.cs` compare le greffon à lui.
@@ -68,7 +70,48 @@ func _preparer() -> void:
 		quit(1)
 		return
 	print("%s — %d tuiles texturées" % [rf["dossier"], rf["tuiles"]])
+	if not _pbr():
+		quit(1)
+		return
 	quit(0)
+
+
+## LES CARTES PBR DÉDUITES (2 octobre 2026) : le témoin lié, un matériau peint qui dérive ses cartes sur toutes ses
+## tuiles, écrit, relu lié, exporté — `pbr.mbset/`. Unity doit y lire la normale, l'occlusion, le métal-rugosité, et
+## des tangentes sur chaque tuile.
+func _pbr() -> bool:
+	const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+	const Cartes := preload("res://addons/marchingblocks_core/cartes_pbr.gd")
+	const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
+	var dossier := ProjectSettings.globalize_path("user://essai_unity_pbr")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var toile := dossier.path_join("rock.png")
+	Peinture.nouvelle_toile(toile, Color(0.5, 0.42, 0.33), 256)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	for i in 60:
+		Peinture.tamponner(Peinture.calque_actif(toile), Vector2(rng.randf() * 256, rng.randf() * 256), rng.randf_range(4, 16),
+			Color(0.8, 0.75, 0.7) if i % 2 == 0 else Color(0.2, 0.18, 0.15), 0.5, 1.0)
+	Peinture.composer(toile)
+	var t: RefCounted = TL.depuis_le_temoin_calcule()
+	t.materiaux.append({"nom": "rock", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": toile,
+		"echelle": 1.0, "pbr": Cartes.DEFAUTS.duplicate()})
+	for c in t.tuiles:
+		t.tuiles[c].assigner(range(t.tuiles[c].faces.size()), 0)
+	var glb := dossier.path_join("pbr_witness.glb")
+	var err: String = t.vers_glb(glb)
+	var bilan: Dictionary = BM.librairie_depuis_glb(glb) if err == "" else {}
+	if bilan.is_empty() or not (bilan["erreurs"] as Array).is_empty():
+		print("✗ le témoin PBR ne se relit pas : %s" % str(err if bilan.is_empty() else bilan["erreurs"]))
+		return false
+	_vider(CIBLE.path_join("pbr.mbset"))
+	var r: Dictionary = FN.exporter(bilan["lot"], CIBLE, "pbr", "MarchingBlocks (test)")
+	if r.has("erreur"):
+		print("✗ " + r["erreur"])
+		return false
+	print("%s — %d tuiles aux cartes PBR" % [r["dossier"], r["tuiles"]])
+	Peinture.oublier()
+	return true
 
 
 ## LE MONDE PEINT : exporté par la référence, et son attendu calculé par la référence, couche par couche.

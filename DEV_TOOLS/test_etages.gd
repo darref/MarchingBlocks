@@ -107,6 +107,44 @@ func _initialize() -> void:
 	var seule: Dictionary = Etages.operer({Vector3i(4, 4, 4): true}, 4, "face")
 	_egal(seule["poser"], [], "extend facing ne fait rien sur une case adossée à rien")
 
+	# ── EXTRUDE, ÉTENDRE, DÉCALER (`Etages.extruder`, Jordan, 2 octobre 2026 : « Maj étend et Alt décale »).
+	# Attendus écrits à la main. Un sol de deux cases (0,0,0) (1,0,0).
+	var sol := {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true}
+	var x1: Dictionary = Etages.extruder(sol, 0, "haut", {}, "poser")
+	_egal(x1["poser"], [Vector3i(0, 1, 0), Vector3i(1, 1, 0)], "extrude sans sélection : la matière de l'étage, un cran plus haut")
+	_egal(x1["selection"], [], "… et aucune sélection n'apparaît (l'étage suit, la sélection reste vide)")
+	_vrai(x1["sens"] == Vector3i.UP, "… le sens rendu est +Y, pour que l'étage suive")
+	# Une sélection d'une case pleine et d'une case VIDE : on ne pose que devant la pleine ; toute la sélection avance.
+	var mixte := {Vector3i(0, 0, 0): true, Vector3i(5, 0, 0): true}
+	var x2: Dictionary = Etages.extruder(sol, 0, "haut", mixte, "poser")
+	_egal(x2["poser"], [Vector3i(0, 1, 0)], "extrude pose devant la matière seulement, jamais devant une case vide")
+	_egal(x2["selection"], [Vector3i(0, 1, 0), Vector3i(5, 1, 0)], "… et la sélection avance d'un cran, cases vides comprises")
+	# Maj : étendre, sans rien poser.
+	var x3: Dictionary = Etages.extruder(sol, 0, "haut", {Vector3i(0, 0, 0): true}, "etendre")
+	_egal(x3["poser"], [], "Maj (étendre) ne pose aucune matière")
+	_egal(x3["selection"], [Vector3i(0, 0, 0), Vector3i(0, 1, 0)], "Maj étend la sélection d'un cran vers le haut")
+	var x4: Dictionary = Etages.extruder(sol, 0, "haut", {}, "etendre")
+	_egal(x4["selection"], [Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0), Vector3i(1, 1, 0)],
+		"Maj sans sélection : la matière de l'étage, plus le cran du dessus")
+	# Alt : décaler, sans rien poser.
+	var x5: Dictionary = Etages.extruder(sol, 0, "bas", {Vector3i(1, 0, 0): true, Vector3i(7, 3, 0): true}, "decaler")
+	_egal(x5["poser"], [], "Alt (décaler) ne pose aucune matière")
+	_egal(x5["selection"], [Vector3i(1, -1, 0), Vector3i(7, 2, 0)], "Alt décale la sélection d'un cran vers le bas")
+	# Facing : le sens de la règle « face » (le mur x = 0 du massif regarde +X), étendu.
+	var mur2 := {}
+	var face2 := {}
+	for x in range(-2, 1):
+		for y in 2:
+			mur2[Vector3i(x, y, 0)] = true
+			if x == 0:
+				face2[Vector3i(x, y, 0)] = true
+	var x6: Dictionary = Etages.extruder(mur2, 0, "face", face2, "etendre")
+	_egal(x6["selection"], [Vector3i(0, 0, 0), Vector3i(0, 1, 0), Vector3i(1, 0, 0), Vector3i(1, 1, 0)],
+		"Maj sur Extrude facing : la sélection s'étend vers l'air (+X)")
+	# Un étage vide : rien.
+	var x7: Dictionary = Etages.extruder(sol, 7, "haut", {}, "poser")
+	_vrai(x7["sens"] == Vector3i.ZERO and x7["poser"].is_empty(), "un étage sans matière : rien à extruder")
+
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
 	quit(1 if _echecs > 0 else 0)
@@ -126,3 +164,12 @@ func _egal(obtenu: Dictionary, attendu: Array, quoi: String) -> void:
 	else:
 		_echecs += 1
 		print("  ÉCHEC — %s : obtenu %s" % [quoi, str(obtenu.keys())])
+
+
+func _vrai(v: bool, quoi: String) -> void:
+	if v:
+		_ok += 1
+		print("  ✓ %s" % quoi)
+	else:
+		_echecs += 1
+		print("  ÉCHEC — %s" % quoi)

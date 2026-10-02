@@ -85,5 +85,54 @@ static func operer(occupees: Dictionary, etage: int, quoi: String, portee: Dicti
 	return {"poser": a_poser, "effacer": a_effacer}
 
 
+## EXTRUDE — UNE OPÉRATION AU LIEU DE DEUX (Jordan, 2 octobre 2026 : « Extend up / down de Shape operations et
+## Extrude ↑ / ↓ de Selection, on ne sait pas lequel fait quoi » — c'était une redondance : mêmes cases posées, mêmes
+## icônes ; seul Extrude suivait, et seulement sur une sélection). `quoi` : "haut", "bas" ou "face" (le sens où le
+## plus de cases regardent l'air, adossées à la matière — la règle de `operer("face")`). La BASE est la sélection,
+## sinon la matière de l'étage `etage`. `mode` (Jordan : « Maj étend et Alt décale ») :
+##   "poser"   — pose une case devant chaque case PLEINE de la base, là où c'est vide ; la sélection (s'il y en a une)
+##               avance d'un cran, cases vides comprises : on reclique pour continuer ;
+##   "etendre" — ne pose rien : la sélection devient la base PLUS la base décalée d'un cran (cases vides comprises) ;
+##   "decaler" — ne pose rien : la sélection devient la base décalée d'un cran.
+## Rend {"poser", "effacer", "selection", "sens"} ; l'appelant fait suivre l'étage de `sens.y`. Sens nul (une face que
+## rien ne regarde) : rien ne change.
+static func extruder(occupees: Dictionary, etage: int, quoi: String, selection: Dictionary, mode: String) -> Dictionary:
+	var base := selection
+	if base.is_empty():
+		base = {}
+		for c in occupees:
+			if (c as Vector3i).y == etage:
+				base[c] = true
+	var sens := Vector3i.ZERO
+	match quoi:
+		"haut":
+			sens = Vector3i.UP
+		"bas":
+			sens = Vector3i.DOWN
+		"face":
+			sens = operer(occupees, etage, "face", selection).get("sens", Vector3i.ZERO)
+	var rendu := {"poser": {}, "effacer": {}, "selection": selection, "sens": sens}
+	if sens == Vector3i.ZERO or base.is_empty():
+		rendu["sens"] = Vector3i.ZERO
+		return rendu
+	var decalee := {}
+	for c in base:
+		decalee[(c as Vector3i) + sens] = true
+	match mode:
+		"etendre":
+			var etendue := base.duplicate()
+			etendue.merge(decalee)
+			rendu["selection"] = etendue
+		"decaler":
+			rendu["selection"] = decalee
+		_:
+			for c in base:
+				var p: Vector3i = (c as Vector3i) + sens
+				if occupees.has(c) and not occupees.has(p):
+					rendu["poser"][p] = true
+			rendu["selection"] = decalee if not selection.is_empty() else {}
+	return rendu
+
+
 static func _dans(p: Vector3i, etage: int, portee: Dictionary) -> bool:
 	return portee.has(p) if not portee.is_empty() else p.y == etage

@@ -51,7 +51,7 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 			continue
 		match r["genre"]:
 			"ocean":
-				_nappe(a, r["eau"], occupees)
+				_nappe(a, r["eau"], occupees, surface_des_colonnes(r.get("colonnes", null), occupees, b))
 				_large(a, b, float(r["niveau"]) + NAPPE)
 			"lac":
 				_nappe(a, r["eau"], occupees)
@@ -118,8 +118,8 @@ static func _case_plate(a: Dictionary, c: Vector3i, h: float, occupees: Dictiona
 ## Les cases sont FUSIONNÉES en grands rectangles (`rectangles_de_nappe`), sans rien changer à ce qu'on voit : même
 ## aire couverte (débords compris), même couleur par point, mêmes UV (x, z du monde). ⚠ Ce n'est PAS un plan
 ## unique : il traverserait les grottes sèches au niveau de l'eau.
-static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary) -> void:
-	for r in rectangles_de_nappe(eau, occupees):
+static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary, surface: Variant = null) -> void:
+	for r in rectangles_de_nappe(eau, occupees, surface):
 		_plat(a, r["x0"], r["x1"], r["z0"], r["z1"], r["h"], r["couleur"])
 
 
@@ -131,15 +131,21 @@ static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary) -> void
 ##      sur leur bord commun, s'unissent.
 ## Chaque union ne joint que deux rectangles qui partagent un côté ENTIER : l'aire couverte est exactement celle des
 ## carrés d'avant. Ordre fixe (y, z, x) : la sortie ne dépend d'aucune table de hachage (les greffons la réécriront).
-static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary) -> Array:
-	var cases: Array = FL.surface(eau, occupees)
-	cases.sort_custom(func(p: Vector3i, q: Vector3i) -> bool:
-		return p.y < q.y or (p.y == q.y and (p.z < q.z or (p.z == q.z and p.x < q.x))))
+## `surface` : la surface et ses profondeurs déjà connues ({case: profondeur}, `surface_des_colonnes`), sinon null —
+## elle est alors relue dans `eau` (`FL.surface`, `FL.profondeur`).
+static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: Variant = null) -> Array:
+	var profondeurs: Dictionary = {}
+	if surface == null:
+		for c: Vector3i in FL.surface(eau, occupees):
+			profondeurs[c] = FL.profondeur(eau, occupees, c)
+	else:
+		profondeurs = surface
+	var cases: Array = _triees(profondeurs.keys())
 	# 1. Les rangées.
 	var bandes: Array = []
 	var cour := {}
 	for c: Vector3i in cases:
-		var p: int = FL.profondeur(eau, occupees, c)
+		var p: int = profondeurs[c]
 		var couleur := _couleur(Vector2.ZERO, DORMANTE, 1.0 if p < 0 else p / 8.0)
 		var xm := DEBORD if occupees.has(c + Vector3i(-1, 0, 0)) else 0.0
 		var xp := DEBORD if occupees.has(c + Vector3i(1, 0, 0)) else 0.0
@@ -178,6 +184,49 @@ static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary) -> Array:
 		if b["zp"] == 0.0:
 			ouverts[[b["y"], b["z"] + 1, x0, x1, b["couleur"]]] = r
 	return rects
+
+
+## Les cases dans l'ordre (y, z, x). ⚠ PAR UNE CLÉ ENTIÈRE ET LE TRI NATIF : un `sort_custom` appelait une fonction
+## GDScript à chaque comparaison — ~70 ms pour les 10 000 cases de surface d'un océan (mesuré, `sonde_cout_eau.gd`).
+static func _triees(cases: Array) -> Array:
+	if cases.is_empty():
+		return cases
+	var lo := Vector3i(2147483647, 2147483647, 2147483647)
+	var hi := -lo
+	for c: Vector3i in cases:
+		lo = Vector3i(mini(lo.x, c.x), mini(lo.y, c.y), mini(lo.z, c.z))
+		hi = Vector3i(maxi(hi.x, c.x), maxi(hi.y, c.y), maxi(hi.z, c.z))
+	var nx := hi.x - lo.x + 1
+	var nz := hi.z - lo.z + 1
+	var cles := PackedInt64Array()
+	cles.resize(cases.size())
+	for i in cases.size():
+		var c: Vector3i = cases[i]
+		cles[i] = (int(c.y - lo.y) * nz + (c.z - lo.z)) * nx + (c.x - lo.x)
+	cles.sort()
+	var rendu: Array = []
+	rendu.resize(cles.size())
+	for i in cles.size():
+		var k: int = cles[i]
+		rendu[i] = Vector3i(lo.x + k % nx, lo.y + k / (nx * nz), lo.z + (k / nx) % nz)
+	return rendu
+
+
+## LA SURFACE D'UN OCÉAN, LUE SUR SES TRONÇONS (`FL.ocean`, « colonnes ») : {case: profondeur}, la même que
+## `FL.surface` + `FL.profondeur`, sans relire le volume. Le haut d'un tronçon est en surface si la case du dessus n'est
+## pas pleine (au-dessus, rien n'est de l'eau : le tronçon est maximal) ; sa profondeur est sa hauteur, ou −1 s'il
+## descend jusqu'au fond de la boîte (sans fond). Null si les tronçons manquent.
+static func surface_des_colonnes(colonnes: Variant, occupees: Dictionary, b: Dictionary) -> Variant:
+	if colonnes == null or b.is_empty():
+		return null
+	var lo_y: int = (b["lo"] as Vector3i).y
+	var s := {}
+	for t: Array in colonnes:
+		var haut := Vector3i(t[0], t[3], t[1])
+		if occupees.has(haut + Vector3i.UP):
+			continue
+		s[haut] = -1 if t[2] == lo_y else t[3] - t[2] + 1
+	return s
 
 
 ## L'océan hors de la boîte du monde : quatre grands rectangles autour d'elle, sans fond. Sans monde, un seul.
