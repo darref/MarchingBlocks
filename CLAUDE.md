@@ -73,6 +73,25 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **`MarchingBlocks.exe --open-example`** l'ouvre au lancement (une démo, et l'épreuve de l'exe sans clic).
     **ÉPROUVÉ DANS L'EXE CHIFFRÉ** : l'archive est lue depuis le PCK chiffré, installée (7 fichiers), le monde
     s'ouvre texturé, 2 couches, aucun cube rouge (capture d'écran) ; `test.mbproj` intact (MD5).
+  - **SES TÉMOINS ONT ÉTÉ RÉPARÉS (Jordan, 2 octobre 2026 : « des trous qui datent de quand la subdivision ne se
+    répandait pas à tout le témoin »)** — `DEV_TOOLS/reparer_temoins.gd` (mesure seule par défaut ; `--ecrire` garde
+    chaque original en `.avant_reparation`, `.glb` compris). **MESURÉ, les deux couches identiques** : 159 points
+    absents de leur classe de sections, tous dans la classe 5, et 366 sommets de joint sans partenaire. ⚠ **CE
+    N'ÉTAIT PAS QUE DES SECTIONS** : `completer` échouait 159 fois sur 159 (les points de la subdivision d'alors
+    avaient été DÉPLACÉS hors des arêtes des autres faces), et trois tuiles étaient ABÎMÉES dans leur maillage —
+    `arete_b2h0_dehors`, `coin_b1h0_dehors`, `equerre_b3h0_dehors` : 26 arêtes ouvertes hors des coupes, 29 à plus
+    de deux faces (faces en double retournées l'une contre l'autre, faces superposées). Ôter les doublons ne les
+    refermait pas.
+    - **DÉCIDÉ (Jordan) : les remettre à neuf.** Le témoin CALCULÉ ne convenait pas (sa section diffère de la
+      sculpture propagée jusque sur les arêtes de case : 278 absences, 3 faces repliées) ; elles reprennent la
+      géométrie de leur JUMELLE sous roche, même forme, saine et déjà calée (`--depuis=mb_arete_b2h0:mb_arete_b2h0_dehors,…`).
+      Leur sculpture et leur peinture d'air libre sont perdues — à refaire.
+    - `_conformer` (la section portée par le plus de faces fait foi ; les points manquants prennent les intrus les plus
+      proches, par paires, jusqu'à 0,1 case ; les autres glissent dans leur plan) n'a plus eu qu'un sommet à déplacer,
+      de 0,004 case. **Après, relu sur le disque : 0 absence, 0 sommet de joint sans partenaire, 0 arête ouverte, 0 à
+      plus de deux faces, 0 face repliée.** Vu à l'image dans l'exemple remballé (`DEV_TOOLS/capture_exemple.gd`).
+    - ⚠ Pas de mutation : un outil de réparation à usage unique, jugé par des mesures qui ne passent pas par lui
+      (`_sans_partenaire` recopié de `test_sections`, `_variete`). ⚠ Pas jugé par Jordan.
   - **POUR LE FIGER** : créer `exemple/FIGE` (l'emballeur ne reprend plus rien), retirer `exemple/exemple.zip` du
     `.gitignore` et le commiter — tant qu'il vit, il n'entre pas au dépôt (repris à chaque export).
   - **MESURÉ** : 7 fichiers, 865 Ko ; `test_projet` 72 (archive bâtie à la main : chemins réécrits, image octet pour
