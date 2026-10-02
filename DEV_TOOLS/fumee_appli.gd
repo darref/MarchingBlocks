@@ -2294,7 +2294,7 @@ func _les_fluides(ed: Control) -> void:
 	_vrai(lac["genre"] == "lac" and lac["eau"].size() == 18 and lac["niveau"] == 2, "… un lac de 18 cases, niveau 2")
 	var nappe: MeshInstance3D = vue.nappes()[0]
 	_vrai(nappe.mesh != null and nappe.visible and (nappe.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-		as PackedVector3Array).size() == 36, "… dessiné : 9 nappes dans la vue")
+		as PackedVector3Array).size() == 4, "… dessiné : UNE nappe dans la vue (les 9 cases, même profondeur, fusionnées)")
 	_vrai(nappe.material_override is ShaderMaterial, "… avec le preset de RiverStones")
 	_vrai(ed._rapport.text.contains("Lake"), "… et l'écran le dit")
 

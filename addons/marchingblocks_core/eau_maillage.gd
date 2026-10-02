@@ -114,11 +114,70 @@ static func _case_plate(a: Dictionary, c: Vector3i, h: float, occupees: Dictiona
 
 
 ## La nappe d'une eau dormante : sa surface (`FL.surface`), à la hauteur de sa rangée + `NAPPE`.
+## ⚠ **PAS UN CARRÉ PAR CASE — DEMANDÉ PAR JORDAN (2 octobre 2026)** : un océan en posait un par case de sa surface.
+## Les cases sont FUSIONNÉES en grands rectangles (`rectangles_de_nappe`), sans rien changer à ce qu'on voit : même
+## aire couverte (débords compris), même couleur par point, mêmes UV (x, z du monde). ⚠ Ce n'est PAS un plan
+## unique : il traverserait les grottes sèches au niveau de l'eau.
 static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary) -> void:
-	for c in FL.surface(eau, occupees):
+	for r in rectangles_de_nappe(eau, occupees):
+		_plat(a, r["x0"], r["x1"], r["z0"], r["z1"], r["h"], r["couleur"])
+
+
+## LES RECTANGLES D'UNE NAPPE : chaque case de surface est le rectangle [x − débord, x + 1 + débord] × [z …] à la
+## hauteur de sa rangée + `NAPPE`, de la couleur de sa profondeur (comme `_case_plate`) ; puis
+##   1. dans une RANGÉE (même y, même z), les cases contiguës en x de même couleur et de mêmes débords en z
+##      s'unissent (le débord en x du premier et du dernier reste) ;
+##   2. deux bandes de rangées VOISINES en z, de même étendue en x (débords compris), de même couleur, sans débord
+##      sur leur bord commun, s'unissent.
+## Chaque union ne joint que deux rectangles qui partagent un côté ENTIER : l'aire couverte est exactement celle des
+## carrés d'avant. Ordre fixe (y, z, x) : la sortie ne dépend d'aucune table de hachage (les greffons la réécriront).
+static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary) -> Array:
+	var cases: Array = FL.surface(eau, occupees)
+	cases.sort_custom(func(p: Vector3i, q: Vector3i) -> bool:
+		return p.y < q.y or (p.y == q.y and (p.z < q.z or (p.z == q.z and p.x < q.x))))
+	# 1. Les rangées.
+	var bandes: Array = []
+	var cour := {}
+	for c: Vector3i in cases:
 		var p: int = FL.profondeur(eau, occupees, c)
 		var couleur := _couleur(Vector2.ZERO, DORMANTE, 1.0 if p < 0 else p / 8.0)
-		_case_plate(a, c, c.y + NAPPE, occupees, couleur)
+		var xm := DEBORD if occupees.has(c + Vector3i(-1, 0, 0)) else 0.0
+		var xp := DEBORD if occupees.has(c + Vector3i(1, 0, 0)) else 0.0
+		var zm := DEBORD if occupees.has(c + Vector3i(0, 0, -1)) else 0.0
+		var zp := DEBORD if occupees.has(c + Vector3i(0, 0, 1)) else 0.0
+		if not cour.is_empty() and cour["y"] == c.y and cour["z"] == c.z and cour["fin"] == c.x \
+				and cour["xp"] == 0.0 and xm == 0.0 and cour["zm"] == zm and cour["zp"] == zp \
+				and cour["couleur"] == couleur:
+			cour["fin"] = c.x + 1
+			cour["xp"] = xp
+			continue
+		if not cour.is_empty():
+			bandes.append(cour)
+		cour = {"y": c.y, "z": c.z, "debut": c.x, "fin": c.x + 1, "xm": xm, "xp": xp, "zm": zm, "zp": zp,
+			"couleur": couleur}
+	if not cour.is_empty():
+		bandes.append(cour)
+	# 2. Les bandes voisines en z, de même étendue : chaque bande cherche, dans la rangée d'au-dessus, celle qui la
+	# prolonge (index par (y, z+1, étendue, couleur)).
+	var rects: Array = []
+	var ouverts := {}   # (y, z_fin, x0, x1, couleur) → rectangle encore prolongeable
+	for b: Dictionary in bandes:
+		var x0: float = b["debut"] - b["xm"]
+		var x1: float = b["fin"] + b["xp"]
+		var cle := [b["y"], b["z"], x0, x1, b["couleur"]]
+		var r: Variant = ouverts.get(cle, null)
+		# ⚠ Pas de test « sans débord vers le bas » : deux bandes de même étendue ont les mêmes cases en x, et celle
+		# d'en dessous est de l'eau — la bande n'a donc jamais de débord vers elle (mutation ÉQUIVALENTE, mesurée).
+		if r != null:
+			ouverts.erase(cle)
+			r["z1"] = b["z"] + 1 + b["zp"]
+		else:
+			r = {"x0": x0, "x1": x1, "z0": b["z"] - b["zm"], "z1": b["z"] + 1 + b["zp"], "h": b["y"] + NAPPE,
+				"couleur": b["couleur"]}
+			rects.append(r)
+		if b["zp"] == 0.0:
+			ouverts[[b["y"], b["z"] + 1, x0, x1, b["couleur"]]] = r
+	return rects
 
 
 ## L'océan hors de la boîte du monde : quatre grands rectangles autour d'elle, sans fond. Sans monde, un seul.

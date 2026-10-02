@@ -2294,6 +2294,23 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
   profondeur devrait le régler sans rien déclarer) ; la hauteur exacte du plan dans sa case ; l'océan au bord du
   vide ; nager dans le Play test ; d'autres liquides (lave, marécage) comme simples presets.
 
+- **PAS UN PLAN PAR CASE — DEMANDÉ PAR JORDAN (2 octobre 2026) : « pour l'océan précisément il ne faut pas un plan
+  par tuile », ÉCRIT LE MÊME JOUR.** Une nappe (océan, lac, lac d'une rivière) posait un carré par case de sa surface :
+  `EauMaillage.rectangles_de_nappe` les FUSIONNE — dans une rangée, les cases contiguës de même couleur (profondeur) et
+  de mêmes débords en z ; puis les bandes voisines en z de même étendue et de même couleur. Chaque union joint deux
+  rectangles qui partagent un côté ENTIER : l'aire couverte, la couleur en chaque point et les UV (x, z du monde) sont
+  ceux d'avant. ⚠ **PAS UN PLAN UNIQUE** : il traverserait les grottes sèches au niveau de l'eau. Ordre fixe (y, z, x).
+  - **MESURÉ** : l'océan autour du plateau 12 × 12 passe de 266 sommets-triplets à 12, le lac de la cuvette (9 cases) à
+    UNE nappe ; `test_fluides` (156, +8) compare À LA RÈGLE D'AVANT recalculée dans le test (un carré par case, débords
+    de 0,45, couleur de profondeur), point par point sur une grille fine décalée des bords — l'ensemble des couleurs
+    qui couvrent chaque point est le même, sur l'île à deux niveaux, la cuvette et un fond varié qu'un îlot perce.
+    Trois mutations rouges (couleur ignorée, débord du dernier oublié, débords en z non comparés). ⚠ « bandes unies
+    malgré un débord vers le bas » était MUETTE, et ÉQUIVALENTE : deux bandes de même étendue ont les mêmes cases, et
+    celle d'en dessous est de l'eau — la condition a été retirée.
+  - ⚠ **LE REFUS SUR UN PETIT MONDE N'EST PAS REPRODUIT** (sonde hors dépôt : une case, une île, un plateau, une
+    cuvette, huit clics chacun — jamais d'erreur). Mais un clic SUR l'île vise la case au-dessus de la matière : l'eau
+    y devient un lac ou une rivière, jamais un océan — un océan naît d'un clic dans le VIDE. OUVERT : le message exact
+    vu par Jordan.
 - **TROIS PRESETS DE FLUIDES DE PLUS — DEMANDÉ PAR JORDAN (2 octobre 2026)**, transmis par une autre session :
   **lave**, **eau de marais**, **acide luminescent**. Ce sont des presets de couche d'eau, à côté des trois qui
   existent (`eau_presets.gd`) : ça répond au « d'autres liquides (lave, marécage) comme simples presets » laissé

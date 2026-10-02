@@ -33,6 +33,7 @@ func _initialize() -> void:
 	_cavite_close()
 	_refus()
 	_maillage()
+	_nappes_fusionnees()
 	_surface_pour_nager()
 	_presets()
 	_export_du_monde()
@@ -328,11 +329,11 @@ func _refus() -> void:
 ## lame de cascade 0,1 en retrait du plan entre la lèvre et la case d'où l'eau vient, du haut de la bande jusqu'à
 ## la dernière chute − 0,3 ; une bande sur chaque case du cours qui repose sur la matière (jamais sur une lèvre).
 func _maillage() -> void:
-	# La cuvette : 9 nappes à 2,7 ; le bord avance de 0,45 sous chaque mur → x, z ∈ [0,55 ; 4,45] ;
-	# profondeur 2 partout (2 cases d'eau, puis le plancher) → alpha 2 / 8.
+	# La cuvette : ses 9 cases de surface à 2,7, FUSIONNÉES en une nappe (même profondeur partout) ; le bord avance
+	# de 0,45 sous chaque mur → x, z ∈ [0,55 ; 4,45] ; profondeur 2 partout (2 cases d'eau, puis le plancher) → 2 / 8.
 	var m := _monde_cuvette()
 	var q := _quads(EM.maillage([FL.source(m, Vector3i(2, 1, 2))], m))
-	_egal(q.size(), 9, "cuvette : 9 nappes")
+	_egal(q.size(), 1, "cuvette : une seule nappe (9 cases fusionnées)")
 	_vrai(_meme_boite(_boite_de(q), [Vector3(0.55, 2.7, 0.55), Vector3(4.45, 2.7, 4.45)]), "cuvette : à 2,7, sous les murs")
 	_vrai(q.all(func(e): return _couleur_proche(e["c"], Color(0.5, 0.5, 0.0, 0.25))),
 		"cuvette : dormante, profondeur 2 cases")
@@ -368,14 +369,67 @@ func _maillage() -> void:
 		_vrai(lame.size() == 1 and _couleur_proche(lame[0]["c"], Color(1.0, 0.5, 1.0, 0.05)), "escalier : la lame en x = %s, de %s à %s" % l)
 	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
 
-	# L'océan autour de l'île, niveau 2 : 32 nappes et 4 rectangles jusqu'à ±2000.
+	# L'océan autour de l'île, niveau 2 : ses 32 cases de surface fusionnées, et 4 rectangles jusqu'à ±2000.
 	var ile := _monde_ile()
 	q = _quads(EM.maillage([FL.source(ile, Vector3i(10, 2, 10))], ile))
-	_egal(q.size(), 36, "océan : 32 nappes et 4 au large")
+	_vrai(q.size() > 4 and q.size() < 32 + 4, "océan : moins d'une nappe par case (%d quads pour 32 cases)" % q.size())
 	_vrai(_meme_boite(_boite_de(q), [Vector3(-2000, 2.7, -2000), Vector3(2000, 2.7, 2000)]),
 		"océan : jusqu'à l'horizon, à 2,7 — %s" % [_boite_de(q)])
 	_vrai(_bien_tournes(q), "océan : faces avant horaires")
 	_egal(EM.maillage([FL.source(_monde_cuvette(), Vector3i(0, 0, 0))], {}), null, "un refus : rien à dessiner")
+
+
+## LES NAPPES FUSIONNÉES (Jordan, 2 octobre 2026 : « pas un plan par tuile ») — le dessin ne change PAS. L'attendu est
+## la règle d'avant, recalculée ICI (hors de `eau_maillage.gd`) : un carré par case de surface, avancé de 0,45 sous
+## chaque voisine pleine, à la rangée + 0,7, de la couleur de sa profondeur. On compare point par point, sur une grille
+## fine décalée des bords : l'ENSEMBLE des couleurs qui couvrent chaque point doit être le même.
+func _nappes_fusionnees() -> void:
+	var fond_varie := {}
+	for x in range(0, 14):
+		for z in range(0, 14):
+			_boite(fond_varie, Vector3i(x, 0, z), Vector3i(x, (x * 7 + z * 3) % 4, z))
+	_boite(fond_varie, Vector3i(5, 0, 5), Vector3i(8, 6, 8))   # un îlot qui perce
+	var cas := [["l'île, niveau 2", _monde_ile(), Vector3i(10, 2, 10)], ["l'île, niveau 1", _monde_ile(), Vector3i(10, 1, 10)],
+		["la cuvette", _monde_cuvette(), Vector3i(2, 1, 2)], ["un fond varié", fond_varie, Vector3i(30, 4, 30)]]
+	for c in cas:
+		var m: Dictionary = c[1]
+		var r: Dictionary = FL.source(m, c[2])
+		var eau: Dictionary = r["eau"]
+		var carres: Array = []
+		var lo := Vector2(INF, INF)
+		var hi := Vector2(-INF, -INF)
+		for k: Vector3i in FL.surface(eau, m):
+			var p: int = FL.profondeur(eau, m, k)
+			var x0 := k.x - (0.45 if m.has(k + Vector3i(-1, 0, 0)) else 0.0)
+			var x1 := k.x + 1 + (0.45 if m.has(k + Vector3i(1, 0, 0)) else 0.0)
+			var z0 := k.z - (0.45 if m.has(k + Vector3i(0, 0, -1)) else 0.0)
+			var z1 := k.z + 1 + (0.45 if m.has(k + Vector3i(0, 0, 1)) else 0.0)
+			carres.append([x0, x1, z0, z1, k.y + 0.7, 1.0 if p < 0 else p / 8.0])
+			lo = Vector2(minf(lo.x, x0), minf(lo.y, z0))
+			hi = Vector2(maxf(hi.x, x1), maxf(hi.y, z1))
+		var rects: Array = EM.rectangles_de_nappe(eau, m)
+		var ecarts := 0
+		var points := 0
+		var x := lo.x - 0.5 + 0.0333
+		while x < hi.x + 0.5:
+			var z := lo.y - 0.5 + 0.0333
+			while z < hi.y + 0.5:
+				var attendu := {}
+				for q in carres:
+					if x > q[0] and x < q[1] and z > q[2] and z < q[3]:
+						attendu["%.2f|%.3f" % [q[4], q[5]]] = true
+				var lu := {}
+				for q in rects:
+					if x > q["x0"] and x < q["x1"] and z > q["z0"] and z < q["z1"]:
+						lu["%.2f|%.3f" % [q["h"], (q["couleur"] as Color).a]] = true
+				points += 1
+				if attendu.keys().size() != lu.keys().size() or not attendu.keys().all(func(e): return lu.has(e)):
+					ecarts += 1
+				z += 0.1
+			x += 0.1
+		_vrai(ecarts == 0 and carres.size() > 0, "%s : %d carrés → %d rectangles, le même dessin en %d points (%d écarts)"
+			% [c[0], carres.size(), rects.size(), points, ecarts])
+		_vrai(rects.size() < carres.size() or carres.size() <= 1, "%s : la fusion réduit (%d < %d)" % [c[0], rects.size(), carres.size()])
 
 
 ## LA SURFACE OÙ L'ON NAGE (`niveau_au_point`) : la hauteur DESSINÉE de la nappe (rangée du haut + 0,7).
