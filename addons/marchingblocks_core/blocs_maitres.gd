@@ -1130,6 +1130,7 @@ static func _assembler(pieces: Dictionary, sources: Dictionary = {}) -> Dictiona
 			manquantes.append(c["nom"])   # ⚠ PAS de repli : l'absence doit se voir
 		else:
 			id = _poser_la_tuile(lot, id, c["nom"], mesh, c["bits"])
+			id = _poser_les_variantes(lot, id, c["nom"], pieces, c["bits"])
 
 		# ── LA VARIANTE D'AIR LIBRE ─────────────────────────────────────────────────────────────────
 		#
@@ -1144,6 +1145,7 @@ static func _assembler(pieces: Dictionary, sources: Dictionary = {}) -> Dictiona
 		if dehors == null or dehors.get_surface_count() == 0:
 			continue
 		id = _poser_la_tuile(lot, id, MB.nom_en_contexte(c["nom"], true), dehors, c["bits"])
+		id = _poser_les_variantes(lot, id, MB.nom_en_contexte(c["nom"], true), pieces, c["bits"])
 		variantes += 1
 
 	# LA PROVENANCE : pour chaque tuile du lot (par son NOM), le sommet du témoin d'où elle vient. La légende
@@ -1155,6 +1157,18 @@ static func _assembler(pieces: Dictionary, sources: Dictionary = {}) -> Dictiona
 			sommets[nom] = sources[nom]["sommet"]
 	lot.set_meta(META_SOMMETS, sommets)
 	return {"lot": lot, "manquantes": manquantes, "variantes": variantes}
+
+
+## LES VARIANTES VOULUES d'une clé (4 octobre 2026) : `<clé>_var1`, `_var2`… tant qu'elles se suivent sans trou
+## (`MB.nombre_de_variantes`, la règle du peintre). Rend l'`id` suivant.
+static func _poser_les_variantes(lot: MeshLibrary, id: int, cle: String, pieces: Dictionary, bits: int) -> int:
+	var n: int = MB.nombre_de_variantes(cle, pieces)
+	for k in range(1, n + 1):
+		var m: ArrayMesh = pieces[MB.nom_de_variante(cle, k)]
+		if m == null or m.get_surface_count() == 0:
+			break
+		id = _poser_la_tuile(lot, id, MB.nom_de_variante(cle, k), m, bits)
+	return id
 
 
 ## Pose la tuile d'une clé, de nom nu. Rend l'`id` suivant.
@@ -1386,7 +1400,9 @@ static func exporter_le_temoin_lie(chemin: String) -> String:
 ## ÉCRIT UN TÉMOIN LIÉ : `maillages` = {clé: ArrayMesh dans le repère de référence, matériaux compris}.
 ## ⚠ UNE SEULE ÉCRITURE pour l'export du témoin calculé et pour le témoin modélisé dans l'appli
 ## (`TemoinLie.vers_glb`) : deux écritures finiraient par poser les nœuds différemment.
-static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> String:
+## `affectation` = {sommet: k} : les occurrences qui montrent la VARIANTE k de leur clé (4 octobre 2026) — leur nœud
+## reçoit le maillage `<clé>_var<k>`, nommé « …_var<k> » : c'est ce nom que la relecture lit (`tuiles_liees`).
+static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary, affectation: Dictionary = {}) -> String:
 	var FormatNeutre := load("res://addons/marchingblocks_core/format_neutre.gd")
 	for cle in maillages:
 		(maillages[cle] as ArrayMesh).resource_name = FormatNeutre.nom_de_tuile(cle)
@@ -1403,21 +1419,26 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary) -> Strin
 	for o in occurrences_du_temoin(0):
 		if not maillages.has(o["cle"]):
 			continue   # une clé que le témoin calculé ne livre pas : `librairie()` l'a déjà signalée
+		var tuile: String = o["cle"]
+		if affectation.has(o["sommet"]):
+			var v: String = MB.nom_de_variante(o["cle"], int(affectation[o["sommet"]]))
+			if maillages.has(v):
+				tuile = v
 		# ⚠ UN NŒUD CRÉÉ PUIS REMPLACÉ FUYAIT (mesuré le 2 octobre 2026 : 52 `Node3D` orphelins à chaque écriture, un
 		# par clé, vus à la fermeture de l'appli) : on crée le bon nœud tout de suite.
 		var mi: Node3D
-		if not deja.has(o["cle"]):
-			deja[o["cle"]] = true
+		if not deja.has(tuile):
+			deja[tuile] = true
 			mi = MeshInstance3D.new()
-			(mi as MeshInstance3D).mesh = maillages[o["cle"]]
+			(mi as MeshInstance3D).mesh = maillages[tuile]
 		else:
 			mi = Node3D.new()
-		mi.name = "%s_%d" % [maillages[o["cle"]].resource_name, n]
+		mi.name = "%s_%d" % [maillages[tuile].resource_name, n]
 		mi.transform = Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
 			Vector3(o["sommet"]) + Vector3.ONE)
 		racine.add_child(mi)
 		mi.owner = racine
-		cle_du_noeud[String(mi.name)] = o["cle"]
+		cle_du_noeud[String(mi.name)] = tuile
 		n += 1
 	grille.free()
 	var document := GLTFDocument.new()
@@ -1537,6 +1558,7 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 		occurrence_de[o["sommet"]] = o
 	var grille := GridMap.new()
 	var par_cle := {}
+	var affectation := {}
 	var porteurs := 0
 	var hors := 0
 	for i in noeuds.size():
@@ -1552,9 +1574,18 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 		var o: Dictionary = occurrence_de[sommet]
 		var attendue := Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
 			Vector3(sommet) + Vector3.ONE)
-		if not par_cle.has(o["cle"]):
-			par_cle[o["cle"]] = []
-		par_cle[o["cle"]].append({"sommet": sommet, "mesh": nd.mesh,
+		# ⚠ UNE VARIANTE SE RECONNAÎT AU NOM DE SON MAILLAGE (4 octobre 2026) — « <tuile de la clé>_var<k> », un
+		# « .001 » de Blender toléré. C'est la seule chose qui se DÉCLARE ici : la clé, elle, vient toujours de la
+		# position. Un nom perdu (Join, Make Single User renommé) ramène la copie à sa clé, où elle diverge : c'est
+		# l'erreur « ne montrent plus la même tuile », jamais un départage en silence.
+		var tuile: String = o["cle"]
+		var k: int = _variante_du_maillage(maillages[nd.mesh] as GLTFMesh, o["cle"])
+		if k > 0:
+			tuile = MB.nom_de_variante(o["cle"], k)
+			affectation[sommet] = k
+		if not par_cle.has(tuile):
+			par_cle[tuile] = []
+		par_cle[tuile].append({"sommet": sommet, "mesh": nd.mesh,
 			"vers_reference": attendue.affine_inverse() * pose})
 	grille.free()
 	# ⚠ **LA MOITIÉ DES PLACES DU TÉMOIN, PAS SEULEMENT LA MOITIÉ DES OBJETS** : un bloc d'un seul tenant
@@ -1621,7 +1652,25 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 	if hors > 0:
 		remarques.append(("objets : %d objet(s) ne sont sur aucune place du témoin et sont ignorés — un prop "
 			+ "entier (rocher, décor) n'est pas encore pris en charge") % hors)
-	return {"pieces": pieces, "sources": sources, "occurrences": porteurs - hors, "hors": hors, "tableaux": tableaux}
+	return {"pieces": pieces, "sources": sources, "occurrences": porteurs - hors, "hors": hors, "tableaux": tableaux,
+		"affectation": affectation}
+
+
+## Le rang de variante qu'un maillage glTF porte pour la clé `cle` (0 : la tuile de base, ou un nom qui n'en est pas une).
+static func _variante_du_maillage(gm: GLTFMesh, cle: String) -> int:
+	var FormatNeutre := load("res://addons/marchingblocks_core/format_neutre.gd")
+	var nom: String = gm.original_name if gm.original_name != "" else gm.resource_name
+	var point := nom.rfind(".")
+	if point > 0 and nom.substr(point + 1).is_valid_int():
+		nom = nom.substr(0, point)
+	var base: String = FormatNeutre.nom_de_tuile(cle) + MB.SUFFIXE_VARIANTE
+	if not nom.begins_with(base):
+		return 0
+	var reste := nom.substr(base.length())
+	if reste.length() != 1 or not reste.is_valid_int():
+		return 0
+	var k := int(reste)
+	return k if k >= 1 and k <= MB.VARIANTES_MAXI else 0
 
 
 ## Les surfaces d'un maillage importé, [[tableaux, matériau]…] — un `ImporterMesh` se lit sans GPU.

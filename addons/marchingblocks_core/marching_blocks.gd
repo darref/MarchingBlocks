@@ -943,8 +943,98 @@ static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictiona
 
 ## Le nom de CLASSE d'une tuile, le suffixe d'air libre retiré. ⚠ C'est par là que les contrôles existants
 ## comparent ce qui est POSÉ à ce que les règles DISENT, sans être desserrés pour autant.
+## ⚠ Le suffixe d'une VARIANTE (« _var2 », 4 octobre 2026) part d'abord : une variante est de la classe de sa clé.
 static func nom_nu(nom: String) -> String:
-	return nom.trim_suffix(SUFFIXE_DEHORS)
+	return cle_de_tuile(nom).trim_suffix(SUFFIXE_DEHORS)
+
+
+## ── LES VARIANTES VOULUES — DÉCIDÉ (Jordan, 4 octobre 2026 : « des tuiles alternatives pour les parties qui se
+## répètent beaucoup […] un mode choix en monde et un mode choix aléatoire ») ─────────────────────────────────────
+##
+## Une clé garde UNE tuile de base ; l'artiste peut lui sculpter des VARIANTES, nommées `<clé>_var<k>` (k ≥ 1). Ce ne
+## sont pas les exemplaires d'avant le 30 septembre : elles sont VOULUES (créées une à une dans le témoin, sur des
+## occurrences désignées), et leurs bords sont ceux de leur clé (les sections partagées les tiennent : une variante est
+## un nœud de plus dans les classes de sa clé). Le monde choisit, par sommet :
+##   • un CHOIX posé (`choix` = {sommet: k}, 0 = la base) l'emporte, s'il désigne une tuile que le lot a ;
+##   • sinon le TIRAGE : des poids ENTIERS (`poids` = {clé: [base, var1, …]}, 1 par défaut, négatif = 0), et un
+##     hachage de la POSITION — jamais `randi()` : le monde doit être le même à chaque reconstruction.
+## ⚠ « UN MOT, UNE CHOSE » (§6) : la « variante d'AIR LIBRE » (`_dehors`) est une autre CLÉ ; une variante est une
+## autre SCULPTURE de la même clé, contexte compris (`mb_x_dehors_var1`).
+const SUFFIXE_VARIANTE := "_var"
+## Combien de variantes une clé peut porter (au-delà, un nom n'est pas lu comme une variante).
+const VARIANTES_MAXI := 9
+
+
+static func nom_de_variante(cle: String, k: int) -> String:
+	return cle if k <= 0 else "%s%s%d" % [cle, SUFFIXE_VARIANTE, k]
+
+
+## Le rang de variante d'un nom de tuile (0 : la tuile de base, ou un nom qui n'est pas une variante).
+static func rang_de_variante(nom: String) -> int:
+	var i := nom.rfind(SUFFIXE_VARIANTE)
+	if i < 0:
+		return 0
+	var reste := nom.substr(i + SUFFIXE_VARIANTE.length())
+	if reste.length() != 1 or not reste.is_valid_int():
+		return 0
+	var k := int(reste)
+	return k if k >= 1 and k <= VARIANTES_MAXI else 0
+
+
+## La clé d'une tuile : son nom, le suffixe de variante retiré.
+static func cle_de_tuile(nom: String) -> String:
+	var k := rang_de_variante(nom)
+	return nom if k == 0 else nom.substr(0, nom.length() - SUFFIXE_VARIANTE.length() - 1)
+
+
+## Combien de variantes le lot porte pour `cle` : les rangs 1, 2, … PRÉSENTS SANS TROU (un trou arrête le compte — une
+## variante 3 sans 2 n'est jamais posée ; le témoin renumérote quand on en supprime une).
+static func nombre_de_variantes(cle: String, cles: Dictionary) -> int:
+	var n := 0
+	while n < VARIANTES_MAXI and cles.has(nom_de_variante(cle, n + 1)):
+		n += 1
+	return n
+
+
+## LE HACHAGE D'UN SOMMET — entier, sur 31 bits, le même en GDScript, en C# et en C++ (64 bits non signés, masqués) :
+## les trois grands premiers de Teschner mêlés par OU-exclusif, puis un brassage (sans lui, `h mod n` sur de petits n
+## dessinait des bandes régulières : les bits bas d'un produit dépendent peu des bits hauts des coordonnées).
+static func hachage_du_sommet(s: Vector3i) -> int:
+	var h: int = ((s.x * 73856093) ^ (s.y * 19349663) ^ (s.z * 83492791)) & 0x7FFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF
+	return h ^ (h >> 16)
+
+
+## LA TUILE POSÉE au sommet `s` pour la clé `cle` (déjà choisie par `pose_du_sommet`) : son nom dans le lot.
+## `cles` : les noms que le lot porte ; `poids`, `choix` : voir plus haut. Sans variante, la clé elle-même.
+static func tuile_du_sommet(s: Vector3i, cle: String, cles: Dictionary, poids: Dictionary = {},
+		choix: Dictionary = {}) -> String:
+	if cle == "":
+		return ""
+	var n := nombre_de_variantes(cle, cles)
+	if n == 0:
+		return cle
+	if choix.has(s):
+		var k := int(choix[s])
+		if k >= 0 and k <= n:
+			return nom_de_variante(cle, k)
+	var w: Array = poids.get(cle, [])
+	var total := 0
+	var ws: Array = []
+	for k in n + 1:
+		var x := int(w[k]) if k < w.size() else 1
+		x = maxi(0, x)
+		ws.append(x)
+		total += x
+	if total <= 0:
+		return cle
+	var r := hachage_du_sommet(s) % total
+	for k in n + 1:
+		r -= int(ws[k])
+		if r < 0:
+			return nom_de_variante(cle, k)
+	return cle
 
 
 ## Ce sommet est-il sous le ciel ? `plafond` borne le balayage vers le haut.

@@ -60,7 +60,11 @@ static func id_de_cle(cle: String) -> String:
 
 ## Le nom de la tuile d'une clé, en sortie. ⚠ UNE tuile par clé (charte §3, 30 septembre 2026) : son nom
 ## EST l'id de la clé — les « _2 », « _3 » des exemplaires ont vécu du 27 au 30 septembre.
+## ⚠ Une VARIANTE VOULUE (4 octobre 2026) garde le nom de sa clé, suivi de « _var<k> » : « slab_b2h2_outdoor_var1 ».
 static func nom_de_tuile(cle: String) -> String:
+	var k: int = MB.rang_de_variante(cle)
+	if k > 0:
+		return id_de_cle(MB.cle_de_tuile(cle)) + MB.SUFFIXE_VARIANTE + str(k)
 	return id_de_cle(cle)
 
 
