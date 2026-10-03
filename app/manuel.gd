@@ -265,6 +265,10 @@ func _outils() -> String:
 		+ "[b]Floors[/b] cells high inside, with its walls, floor and ceiling, hollow within ([b]Down[/b]: the "
 		+ "rectangle is the ceiling and the room sinks below it). Inside rock, the inside is dug. "
 		+ _touche("[") + " " + _touche("]") + " set the floors. It has no door: open one with a tunnel.")
+	l.append("[b]Room from selection[/b] (Selection section) — any footprint, not just a rectangle: paint it flat with the "
+		+ "Select brush (« Select empty cells too », Disc brush), set the floors and Up / Down, and press the button. Its "
+		+ "outline becomes the walls, the whole footprint the floor and the ceiling, the inside is hollowed out. One "
+		+ _touche("Ctrl+Z") + " undoes it.")
 	l.append("[b]Straight[/b] — one click: the shape leaves the face square to it. A tunnel or a well goes "
 		+ "through to the next cave (or [b]Depth[/b] cells deep, a dead end); a bridge runs to the first wall "
 		+ "in front, within [b]Reach[/b].")

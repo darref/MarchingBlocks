@@ -41,7 +41,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
-    si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas).
+    si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
+    « Room from selection » (`FS.salle_depuis`, réécrite en C# et en C++, avec ses cas).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
@@ -2711,6 +2712,17 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
   - Gardé par `fumee_appli` (627, +16, de vrais clics à travers la caméra et les vrais boutons : l'air pris ou non,
     ↑ ×2 et ↓ sans rien poser, Fill qui peint une colonne dans l'air, trois sources en travers et UN Ctrl+Z, l'image
     copiée avec sa normale) ; quatre mutations (voir le commit).
+  - **ROOM FROM SELECTION — DEMANDÉE PAR JORDAN (« la special shape Room a-t-elle une fonction pour dessiner une sélection
+    quelconque à plat, et l'extruder en room verticalement ? » — non ; « go »), ÉCRITE LE MÊME JOUR.** `FS.salle_depuis` :
+    l'EMPREINTE est la sélection vue d'en haut ; sa base, la plus basse rangée vers le haut, la plus haute vers le bas ;
+    le sol et le plafond couvrent l'empreinte, les MURS sont ses cases de bord (un voisin horizontal hors d'elle), le
+    reste est creux ; les contacts par arête qu'elle crée sont comblés comme pour `salle` (à un angle rentrant, les deux
+    murs). Dans Selection : Floors et Up / Down (les MÊMES réglages que la forme Room, synchronisés dans les deux sens) et
+    le bouton. `test_formes_speciales` 140 (+11 : l'empreinte 3 × 3 = la salle du rectangle, haut et bas ; un L de 21
+    cases — 6 intérieures, 72 de coque et 4 de réparation, compté à la main ; dans la roche, les 12 cases du dedans
+    creusées ; une ligne refusée ; la base sur deux hauteurs ; deux carrés par un coin réparés) ; `fumee_appli` 683 (+4 :
+    le vrai bouton, 76 cases, une annulation, les réglages synchronisés). Cinq mutations rouges. ⚠ Mon premier décompte
+    du L (19 cases, 64) était FAUX — la règle avait raison.
   - **LE MICRO DE L'EAU** (Jordan : « la texture des eaux a une macro mais pas de micro, à l'échelle du stickman ») :
     les vagues allaient de 2 à 5 cases (et un bruit de ~0,8) ; rien de plus fin. `pente_micro` (tronc commun) : trois
     octaves d'un bruit DÉRIVABLE (~0,14 / 0,07 / 0,04 case), tournées, qui défilent avec le courant ; pente analytique ;

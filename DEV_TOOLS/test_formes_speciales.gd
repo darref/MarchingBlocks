@@ -34,6 +34,7 @@ func _initialize() -> void:
 	_erreurs()
 	_reparation()
 	_salle()
+	_salle_depuis_une_selection()
 	_reparer_les_diagonales()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	quit(1 if _echecs > 0 else 0)
@@ -104,6 +105,70 @@ func _salle() -> void:
 	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(199, 0, 199), 30, true)["erreur"], "trop_grand", "200 × 200 × 32 : refusée")
 	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 999, true)["boite"][1].y, FS.ETAGES_MAXI + 1,
 		"les étages sont bornés à %d" % FS.ETAGES_MAXI)
+
+
+## LA SALLE D'UNE SÉLECTION (Jordan, 3 octobre 2026). Attendus à la main ; l'empreinte rectangulaire est comparée à
+## `salle`, déjà éprouvée.
+func _empreinte(cases: Array, y := 0) -> Dictionary:
+	var d := {}
+	for p in cases:
+		d[Vector3i(p.x, y, p.y)] = true
+	return d
+
+
+func _salle_depuis_une_selection() -> void:
+	var carre: Array = []
+	for x in 3:
+		for z in 3:
+			carre.append(Vector2i(x, z))
+	for haut in [true, false]:
+		var r := FS.salle_depuis({}, _empreinte(carre), 1, haut)
+		var ref := FS.salle({}, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 1, haut)
+		_egal_ens(r["poser"], ref["poser"], "une empreinte 3 × 3 (%s) : exactement la salle du rectangle" % ("haut" if haut else "bas"))
+	# Un L de 21 cases : x 0..4 sur z 0..2 (15), plus x 0..2 sur z 3..4 (6). Ses cases intérieures (les quatre voisins
+	# dedans), comptées à la main : (1,1) (2,1) (3,1) (1,2) (2,2) (1,3) — 6, donc 15 de mur. Deux étages : sol 21 +
+	# plafond 21 + 2 × 15 murs = 72 ; et à l'ANGLE RENTRANT, les murs (3,2) et (2,3) ne se touchent que par une arête :
+	# la paire vide (2,2)-(3,3) est comblée sur les deux étages, comme pour `salle` — 4 de plus, 76.
+	var l: Array = []
+	for x in 5:
+		for z in 3:
+			l.append(Vector2i(x, z))
+	for x in 3:
+		for z in range(3, 5):
+			l.append(Vector2i(x, z))
+	var r := FS.salle_depuis({}, _empreinte(l), 2, true)
+	_egal([r["erreur"], r["poser"].size(), r["effacer"].size(), r["reparees"]], ["", 76, 0, 4],
+		"un L de 21 cases, 2 étages : 72 cases de coque et 4 de réparation à l'angle rentrant")
+	_vrai(not r["poser"].has(Vector3i(1, 1, 3)) and r["poser"].has(Vector3i(3, 1, 2)) and r["poser"].has(Vector3i(2, 2, 3))
+		and r["poser"].has(Vector3i(1, 3, 1)) and r["poser"].has(Vector3i(1, 0, 3)),
+		"… creux en (1,1,3), murs en (3,1,2) et (2,2,3) qui bordent l'angle rentrant, plafond et sol")
+	var roche := {}
+	_boite(roche, Vector3i(-3, -3, -3), Vector3i(8, 8, 8))
+	r = FS.salle_depuis(roche, _empreinte(l), 2, true)
+	var dedans := {}
+	for p in [Vector2i(1, 1), Vector2i(2, 1), Vector2i(3, 1), Vector2i(1, 2), Vector2i(2, 2), Vector2i(1, 3)]:
+		for y in [1, 2]:
+			dedans[Vector3i(p.x, y, p.y)] = true
+	_egal(r["poser"].size(), 0, "le L dans la roche : rien à poser")
+	_egal_ens(r["effacer"], dedans, "… le dedans est creusé : les 6 cases intérieures, sur 2 étages")
+	# Trop mince, vide.
+	_egal(FS.salle_depuis({}, _empreinte([Vector2i(0, 0), Vector2i(1, 0), Vector2i(2, 0), Vector2i(3, 0)]), 2, true)["erreur"],
+		"trop_petit", "une ligne : aucune case intérieure, refusée")
+	_egal(FS.salle_depuis({}, {}, 2, true)["erreur"], "vide", "rien de sélectionné : refusée")
+	# Une sélection sur deux hauteurs : la base est la plus basse vers le haut, la plus haute vers le bas.
+	var deux := _empreinte(carre)
+	deux[Vector3i(1, 3, 1)] = true
+	_egal(FS.salle_depuis({}, deux, 1, true)["boite"][0].y, 0, "vers le haut, la base est la rangée la plus basse (0)")
+	_egal(FS.salle_depuis({}, deux, 1, false)["boite"][1].y, 3, "vers le bas, la plus haute (3)")
+	# Deux carrés qui ne se touchent que par un COIN : les murs se toucheraient par une arête — la forme répare.
+	var deux_carres: Array = []
+	for x in 3:
+		for z in 3:
+			deux_carres.append(Vector2i(x, z))
+			deux_carres.append(Vector2i(x + 3, z + 3))
+	r = FS.salle_depuis({}, _empreinte(deux_carres), 1, true)
+	_vrai(r["erreur"] == "" and r["reparees"] > 0 and MB.contacts_par_arete(_apres({}, r)) == 0,
+		"deux carrés par un coin : %d case(s) ajoutée(s), plus aucun contact par une arête" % r["reparees"])
 
 
 # ── les mondes ───────────────────────────────────────────────────────────────────────────────────────

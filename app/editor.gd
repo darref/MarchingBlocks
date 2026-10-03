@@ -235,6 +235,8 @@ var _garde_corps: CheckButton
 var _ligne_taille_forme: Control
 var _ligne_salle: VBoxContainer
 var _etages_forme: SpinBox
+var _etages_selection: SpinBox
+var _sens_selection := {}
 var _boutons_sens_salle := {}
 var _reglages_forme: Control
 var _aide_forme: Label
@@ -1253,6 +1255,33 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			_extruder.bind("bas", "etendre"), "extruder_bas"),
 	]:
 		sel.contenu.get_child(sel.contenu.get_child_count() - 1).add_child(b)
+	# LA SALLE D'UNE SÉLECTION (Jordan, 3 octobre 2026 : « dessiner une sélection quelconque à plat, et l'extruder en
+	# room verticalement ») — `FS.salle_depuis`. Les étages et le sens sont ceux de la forme Room (synchronisés).
+	sel.contenu.add_child(_petit_titre("ROOM FROM THE SELECTION"))
+	var ligne_salle := HBoxContainer.new()
+	ligne_salle.add_theme_constant_override("separation", 8)
+	ligne_salle.add_child(_texte("Floors", 12))
+	_etages_selection = SpinBox.new()
+	_etages_selection.min_value = 1
+	_etages_selection.max_value = FS.ETAGES_MAXI
+	_etages_selection.value = int(_vue.forme_speciale["etages"])
+	_etages_selection.tooltip_text = "How high the room is inside, in cells (the same setting as the Room shape)."
+	_etages_selection.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_etages_selection.value_changed.connect(func(v: float) -> void:
+		_vue.forme_speciale["etages"] = int(v)
+		if _etages_forme != null:
+			_etages_forme.set_value_no_signal(v))
+	ligne_salle.add_child(_etages_selection)
+	sel.contenu.add_child(ligne_salle)
+	sel.contenu.add_child(_rangee_de_choix(_sens_selection, [
+		["haut", "Up", "extruder_haut", "The selection is the floor: the room rises from it."],
+		["bas", "Down", "extruder_bas", "The selection is the ceiling: the room sinks below it."],
+	], func(v: String) -> void: _regler_le_sens_de_salle(v)))
+	(_sens_selection["haut"] as Button).set_pressed_no_signal(true)
+	sel.contenu.add_child(_bouton("Room from selection", "Turns the selection, seen from above, into a room: its outline "
+		+ "becomes the walls, the whole footprint the floor and the ceiling, and the inside is hollowed out. Paint the "
+		+ "footprint flat with the Select brush (« Select empty cells too », Disc brush), then press this.",
+		_salle_de_la_selection, "salle", Palette.PRINCIPAL))
 	sel.contenu.add_child(_petit_titre("MOVE  ·  arrows, Shift + ↑ ↓"))
 	var bouger: Array = []
 	for m in [["X −", Vector3i(-1, 0, 0)], ["Y +", Vector3i(0, 1, 0)], ["X +", Vector3i(1, 0, 0)],
@@ -1399,17 +1428,15 @@ func _batir_formes_speciales(pile: VBoxContainer) -> void:
 	_etages_forme.tooltip_text = "[ and ] — how high the room is inside, in cells. Walls, floor and ceiling add one each."
 	_etages_forme.value_changed.connect(func(v: float) -> void:
 		_vue.forme_speciale["etages"] = int(v)
+		if _etages_selection != null:
+			_etages_selection.set_value_no_signal(v)
 		_vue.rafraichir())
 	_etages_forme.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ligne_etages.add_child(_etages_forme)
 	_ligne_salle.add_child(_rangee_de_choix(_boutons_sens_salle, [
 		["haut", "Up", "extruder_haut", "The rectangle is the floor: the room rises from it."],
 		["bas", "Down", "extruder_bas", "The rectangle is the ceiling: the room sinks below it."],
-	], func(v: String) -> void:
-		_vue.forme_speciale["vers_le_haut"] = v == "haut"
-		(_boutons_sens_salle[v] as Button).button_pressed = true
-		_contexte_des_outils()   # l'aide dit « rises » ou « sinks »
-		_vue.rafraichir()))
+	], func(v: String) -> void: _regler_le_sens_de_salle(v)))
 	(_boutons_sens_salle["haut"] as Button).set_pressed_no_signal(true)
 	_reglages_forme.add_child(_ligne_salle)
 	var longueur := HBoxContainer.new()
@@ -4993,6 +5020,37 @@ const NOMS_DE_FORME := {"tunnel": "Tunnel", "puits": "Well", "pont": "Bridge", "
 
 
 ## Une forme posée : UNE action, donc UN Ctrl+Z, par la seule entrée de tout ce qui change des cases.
+## Le sens de la salle (Up / Down), partagé par la forme Room et « Room from selection ».
+func _regler_le_sens_de_salle(v: String) -> void:
+	_vue.forme_speciale["vers_le_haut"] = v == "haut"
+	for rangee in [_boutons_sens_salle, _sens_selection]:
+		if (rangee as Dictionary).has(v):
+			(rangee[v] as Button).set_pressed_no_signal(true)
+			for autre in rangee:
+				if autre != v:
+					(rangee[autre] as Button).set_pressed_no_signal(false)
+	_contexte_des_outils()   # l'aide dit « rises » ou « sinks »
+	_vue.rafraichir()
+
+
+## « Room from selection » : `FS.salle_depuis`, posée comme une forme (une annulation, les réparations dites).
+func _salle_de_la_selection() -> void:
+	var r: Dictionary = FS.salle_depuis(_occupees(), _vue.selection, int(_vue.forme_speciale["etages"]),
+		bool(_vue.forme_speciale["vers_le_haut"]))
+	match r["erreur"]:
+		"vide":
+			_dire("[i]Nothing selected.[/i] Paint the footprint first: Select brush, « Select empty cells too ».")
+			return
+		"trop_petit":
+			_dire("[color=#e0603c]Room from selection[/color] — the footprint is too thin: a room needs at least one "
+				+ "cell whose four neighbours are in the selection.")
+			return
+		"trop_grand":
+			_dire("[color=#e0603c]Room from selection[/color] — too large (more than %d cells)." % Outils.VOLUME_MAXI)
+			return
+	_forme_posee({"poser": r["poser"], "effacer": r["effacer"]}, "salle", r)
+
+
 func _forme_posee(modif: Dictionary, quoi: String, info: Dictionary) -> void:
 	var nom: String = NOMS_DE_FORME.get(quoi, quoi)
 	var n := _appliquer(modif, nom)

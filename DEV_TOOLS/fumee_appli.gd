@@ -3417,6 +3417,31 @@ func _les_demandes_du_3_octobre(ed: Control) -> void:
 	ed._operer_selection("remplir")
 	_vrai(vue.cases().get_used_cells().size() == cases_avant + 4, "Fill la remplit : une colonne de 4 cases peinte dans l'air")
 	ed._histoire.undo()
+	# ROOM FROM SELECTION : le L de 21 cases de `test_formes_speciales`, sélectionné loin de tout (y = 60), 2 étages vers
+	# le haut — 72 cases de coque et 4 de réparation, comptées à la main là-bas ; par le vrai bouton, une annulation.
+	vue.vider_selection()
+	var l := {}
+	for x in 5:
+		for z in 3:
+			l[Vector3i(200 + x, 60, z)] = true
+	for x in 3:
+		for z in range(3, 5):
+			l[Vector3i(200 + x, 60, z)] = true
+	vue.regler_selection(l)
+	ed._etages_selection.value = 2
+	_vrai(int(vue.forme_speciale["etages"]) == 2 and int(ed._etages_forme.value) == 2,
+		"les étages de « Room from selection » sont ceux de la forme Room (synchronisés)")
+	(ed._sens_selection["haut"] as Button).pressed.emit()
+	var avant_salle: int = vue.cases().get_used_cells().size()
+	etendre.call("Room from selection")
+	_vrai(vue.cases().get_used_cells().size() == avant_salle + 76 and vue.cases().get_cell_item(Vector3i(201, 61, 1)) == -1
+		and vue.cases().get_cell_item(Vector3i(200, 61, 0)) != -1,
+		"Room from selection : le L devient une salle de 76 cases, creuse dedans (%d)" % (vue.cases().get_used_cells().size() - avant_salle))
+	ed._histoire.undo()
+	_vrai(vue.cases().get_used_cells().size() == avant_salle, "UN Ctrl+Z la retire entière")
+	vue.vider_selection()
+	etendre.call("Room from selection")
+	_vrai(ed._rapport.text.contains("Nothing selected"), "sans sélection, le bouton le dit")
 	ed._case_vides.button_pressed = false
 	ed._choisir_outil("ajouter")
 	_vrai(not ed._case_vides.visible, "hors de Select, la case se cache")

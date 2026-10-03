@@ -666,6 +666,59 @@ static func _colonne(occupees: Dictionary, corps: Dictionary, dessus: Vector3i, 
 const ETAGES_MAXI := 32
 
 
+## LA SALLE D'UNE SÉLECTION (Jordan, 3 octobre 2026 : « une fonction pour dessiner une sélection quelconque à plat, et
+## l'extruder en room verticalement »). L'EMPREINTE est la sélection vue d'en haut (ses (x, z)) ; sa base est la plus
+## basse rangée de la sélection vers le haut, la plus haute vers le bas. Comme `salle` : vers le haut l'empreinte est le
+## SOL, vers le bas le PLAFOND ; `etages` = la hauteur libre. Le sol et le plafond couvrent toute l'empreinte ; les MURS
+## sont ses cases de BORD (un de leurs quatre voisins horizontaux hors de l'empreinte) ; le reste est creux — la roche
+## qui s'y trouvait est creusée. Une empreinte sans case intérieure (trop mince) est « trop_petit ». Mêmes réparations
+## et même retour que `salle`.
+static func salle_depuis(occupees: Dictionary, selection: Dictionary, etages: int, vers_le_haut: bool) -> Dictionary:
+	var r := {"poser": {}, "effacer": {}, "erreur": "", "reparees": 0, "boite": []}
+	if selection.is_empty():
+		r["erreur"] = "vide"
+		return r
+	var empreinte := {}
+	var base: int = 0
+	var premier := true
+	for c: Vector3i in selection:
+		empreinte[Vector2i(c.x, c.z)] = true
+		if premier or (c.y < base if vers_le_haut else c.y > base):
+			base = c.y
+			premier = false
+	var dedans := {}
+	for p: Vector2i in empreinte:
+		if empreinte.has(p + Vector2i(1, 0)) and empreinte.has(p + Vector2i(-1, 0)) \
+				and empreinte.has(p + Vector2i(0, 1)) and empreinte.has(p + Vector2i(0, -1)):
+			dedans[p] = true
+	if dedans.is_empty():
+		r["erreur"] = "trop_petit"
+		return r
+	var e: int = clampi(etages, 1, ETAGES_MAXI)
+	var y0: int = base if vers_le_haut else base - e - 1
+	var y1: int = y0 + e + 1
+	if empreinte.size() * (e + 2) > Outils.VOLUME_MAXI:
+		r["erreur"] = "trop_grand"
+		return r
+	var poser: Dictionary = r["poser"]
+	var effacer: Dictionary = r["effacer"]
+	var lo := Vector3i(2147483647, y0, 2147483647)
+	var hi := Vector3i(-2147483647, y1, -2147483647)
+	for p: Vector2i in empreinte:
+		lo = Vector3i(mini(lo.x, p.x), y0, mini(lo.z, p.y))
+		hi = Vector3i(maxi(hi.x, p.x), y1, maxi(hi.z, p.y))
+		for y in range(y0, y1 + 1):
+			var c := Vector3i(p.x, y, p.y)
+			if y == y0 or y == y1 or not dedans.has(p):
+				if not occupees.has(c):
+					poser[c] = true
+			elif occupees.has(c):
+				effacer[c] = true
+	r["reparees"] = _reparer(occupees, poser, effacer, false)
+	r["boite"] = [lo, hi]
+	return r
+
+
 static func salle(occupees: Dictionary, a: Vector3i, b: Vector3i, etages: int, vers_le_haut: bool) -> Dictionary:
 	var r := {"poser": {}, "effacer": {}, "erreur": "", "reparees": 0, "boite": []}
 	var x0: int = mini(a.x, b.x)
