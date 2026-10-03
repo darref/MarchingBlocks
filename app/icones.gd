@@ -39,6 +39,8 @@ const TRACES := {
 	"visee_sculpt": '<path d="M15 9.5l5.5 3.2v6.1L15 22l-5.5-3.2v-6.1z"/><path d="M9.5 12.7 15 15.9l5.5-3.2M15 15.9V22"/><path d="M3 3l6 6M9 4v5H4"/>',
 	"ajouter": '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M12 8v8M8 12h8"/>',
 	"creuser": '<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><path d="M8 12h8"/>',
+	# Les variantes : deux tuiles l'une sur l'autre, la seconde en pointillé — une autre sculpture de la même.
+	"variante": '<rect x="3.5" y="8.5" width="11" height="11" rx="2"/><rect x="9.5" y="3.5" width="11" height="11" rx="2" stroke-dasharray="3 2.4"/>',
 	"selectionner": '<path d="M5 3.5 19 10.5l-6.2 2.2-2.3 6.3z"/>',
 	"boite": '<rect x="3.5" y="3.5" width="17" height="17" rx="2" stroke-dasharray="3.5 2.6"/>',
 	# Le rectangle est PLAT : un losange en perspective, comme le plan de l'étage que vise la grille.

@@ -474,6 +474,8 @@ func _mener() -> void:
 	await _les_teintes_des_ateliers(ed)
 	await _la_molette(ed)
 	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
+	_les_variantes(ed)
+	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -4230,3 +4232,143 @@ func _forme_de(mesh: Mesh) -> String:
 	var l: Array = pos.keys()
 	l.sort()
 	return "%s|%.4f" % [";".join(PackedStringArray(l)).md5_text(), aire]
+
+
+## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) — par les VRAIS boutons : dans Witness geometry, une variante de la
+## paroi naît d'une copie, Ctrl+Z / Ctrl+Y ; on sculpte son cœur ; dans World, le monde peint de la forme du témoin
+## pose base ET variante selon le tirage (attendu recalculé ici : hachage de Python écrit dans `test_variantes`, ici la
+## même règle déroulée à la main sur les sommets de la paroi), l'outil Variant fait passer UNE tuile à la suivante
+## (un Ctrl+Z), un poids à 0 l'écarte, la sélection impose la variante 1, le projet enregistre poids et choix.
+var _variantes_finies := false
+
+
+func _les_variantes(ed: Control) -> void:
+	var v0: int = ed._histoire.get_version()
+	var n_couches: int = ed._couches.size()
+	ed._aller_a("witness")
+	ed._nouvelle_couche()
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var t: RefCounted = mo.temoin
+	var paroi := "mb_plaque_b2h2_dehors"
+	var var1 := paroi + "_var1"
+	var occ: Array = t.occurrences_de(paroi)
+	mo.activer(occ[occ.size() / 2])
+	ed._variantes.dire_temoin()
+	var creer: Button = null
+	for b in ed.find_children("*", "Button", true, false):
+		if (b as Button).text == "New variant from this copy":
+			creer = b
+	_vrai(creer != null and not creer.disabled, "Witness geometry : « New variant from this copy » existe et sert")
+	if creer == null:
+		return
+	creer.pressed.emit()
+	_vrai(t.tuiles.has(var1) and mo.cle == var1 and t.occurrences_de(var1).size() == 1,
+		"une variante neuve : la copie en édition la montre (%s)" % mo.cle)
+	_egal(_sans_partenaire(t), 0, "la variante copie la base : aucun joint ouvert")
+	ed._variantes.dire_temoin()
+	_vrai(ed._variantes.etiquette_temoin.text.contains("variant 1") and ed._variantes.montrer.get_selected_id() == 1,
+		"la section le dit (%s)" % ed._variantes.etiquette_temoin.text)
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(not t.tuiles.has(var1) and mo.cle == paroi, "UN Ctrl+Z défait la variante")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(t.tuiles.has(var1) and mo.cle == var1, "Ctrl+Y la refait")
+	# Son cœur sculpté (à la main : un sommet intérieur relevé), la base ne bouge pas.
+	var m1: RefCounted = t.tuiles[var1]
+	var base_avant: PackedVector3Array = (t.tuiles[paroi].sommets as PackedVector3Array).duplicate()
+	for i in m1.sommets.size():
+		var p: Vector3 = m1.sommets[i]
+		if absf(p.x) < 0.45 and absf(p.y) < 0.45 and absf(p.z) < 0.45:
+			m1.sommets[i] = p + Vector3(0, 0.04, 0)
+			break
+	ed._temoin_modifie(t)
+	_vrai(t.tuiles[paroi].sommets == base_avant and t.tuiles[var1].sommets != base_avant, "la variante a son propre cœur")
+	# LE MONDE : la forme du témoin peinte dans cette couche ; la paroi pose sa base OU sa variante, par le tirage.
+	ed._peindre_la_forme_du_temoin()
+	var m: Node = ed._vue.monde()
+	var rendu: GridMap = m.get_node("Rendu")
+	var lot: MeshLibrary = rendu.mesh_library
+	_vrai(lot.find_item_by_name(var1) >= 0, "World : le lot de la couche porte la variante")
+	var justes := 0
+	var parois := 0
+	var vues := {}
+	var un_sommet = null
+	for c in rendu.get_used_cells():
+		var nom: String = lot.get_item_name(rendu.get_cell_item(c))
+		if MB.cle_de_tuile(nom) != paroi:
+			continue
+		parois += 1
+		vues[nom] = true
+		# La règle, déroulée : deux tuiles de poids 1, h mod 2.
+		if nom == (paroi if MB.hachage_du_sommet(c) % 2 == 0 else var1):
+			justes += 1
+		if un_sommet == null and nom == paroi:
+			un_sommet = c
+	_vrai(parois > 100 and justes == parois and vues.size() == 2,
+		"la paroi du monde pose base et variante selon le tirage (%d / %d)" % [justes, parois])
+	if un_sommet == null:
+		return
+	# L'OUTIL VARIANT : un clic, la suivante ; Ctrl+Z ; le clic droit rend le tirage.
+	ed._variantes.choisir_l_outil()
+	_vrai(ed._vue.outil == "variante" and ed._variantes.bouton_outil.button_pressed
+		and not (ed._boutons_outil["ajouter"] as Button).button_pressed, "l'outil Variant est choisi, seul")
+	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_LEFT)
+	_egal(lot.get_item_name(rendu.get_cell_item(un_sommet)), var1, "un clic : cette tuile passe à la variante 1")
+	_vrai(ed._variantes.cle_designee == paroi and ed._variantes._compteurs.size() == 2,
+		"la ligne des poids parle de sa clé (base et variante 1)")
+	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_LEFT)
+	_egal(lot.get_item_name(rendu.get_cell_item(un_sommet)), paroi, "un second clic : elle revient à la base")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(lot.get_item_name(rendu.get_cell_item(un_sommet)), var1, "Ctrl+Z : la variante 1 revient")
+	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_RIGHT)
+	_vrai(not (m.choix as Dictionary).has(un_sommet) and lot.get_item_name(rendu.get_cell_item(un_sommet)) == paroi,
+		"le clic droit rend le tirage (la base, ici)")
+	ed._choisir_outil("ajouter")
+	_vrai(not ed._variantes.bouton_outil.button_pressed, "choisir Add relâche l'outil Variant")
+	# LES POIDS : la variante à 0, plus aucune ; Ctrl+Z.
+	(ed._variantes._compteurs[1] as SpinBox).value = 0
+	var restantes := 0
+	for c in rendu.get_used_cells():
+		if lot.get_item_name(rendu.get_cell_item(c)) == var1:
+			restantes += 1
+	_egal(restantes, 0, "poids de la variante à 0 : le tirage ne la pose plus")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	restantes = 0
+	for c in rendu.get_used_cells():
+		if lot.get_item_name(rendu.get_cell_item(c)) == var1:
+			restantes += 1
+	_vrai(restantes > 50 and (ed._variantes._compteurs[1] as SpinBox).value == 1, "Ctrl+Z rend le poids et les variantes")
+	# LA SÉLECTION : toute la forme, « Variant 1 », Apply → chaque paroi la montre.
+	var tout := {}
+	for c in ed._vue.cases().get_used_cells():
+		tout[c] = true
+	ed._vue.regler_selection(tout)
+	ed._variantes.choix_selection.select(2)
+	ed._variantes.appliquer_a_la_selection()
+	var toutes_v1 := true
+	for c in rendu.get_used_cells():
+		var nom: String = lot.get_item_name(rendu.get_cell_item(c))
+		if MB.cle_de_tuile(nom) == paroi and nom != var1:
+			toutes_v1 = false
+	_vrai(toutes_v1, "Apply « Variant 1 » sur la sélection : chaque paroi la montre")
+	ed._vue.regler_selection({})
+	# L'ENREGISTREMENT : poids et choix dans le .mbproj, relus.
+	(ed._variantes._compteurs[0] as SpinBox).value = 3
+	ed._enregistrer()
+	var erreurs: Array = []
+	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), erreurs)
+	var c_relue: Dictionary = (relu.get("couches", []) as Array)[ed._active] if not relu.is_empty() else {}
+	_vrai(erreurs.is_empty() and (c_relue.get("poids", {}) as Dictionary).get(paroi, []) == [3, 1]
+		and (c_relue.get("choix", {}) as Dictionary).size() == (m.choix as Dictionary).size() and (m.choix as Dictionary).size() > 100,
+		"le projet enregistre poids et choix de la couche (%s, %d)" % [c_relue.get("poids", {}), (c_relue.get("choix", {}) as Dictionary).size()])
+	# Tout défaire, puis la couche supprimée : la suite retrouve le monde d'avant.
+	while ed._histoire.get_version() > v0 and ed._histoire.has_undo():
+		ed._histoire.undo()
+	if ed._couches.size() > n_couches:
+		ed._supprimer_couche()
+	_egal(ed._couches.size(), n_couches, "(la couche de l'essai est retirée)")
+	# Ce que l'essai a laissé en attente s'écrit maintenant (la suite juge la barre « Saved »).
+	ed._minuterie_temoin.stop()
+	ed._enregistrer_le_temoin_modele(true)
+	ed._enregistrer()
+	_variantes_finies = true

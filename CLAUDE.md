@@ -52,6 +52,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
+  - **Les variantes voulues** (§3, « les variantes voulues ») : lire `variants` de `tileset.json` et
+    `variant_weights` / `variant_choices` de `world.json` (la règle : `FormatNeutre.regle_des_variantes()`, le hachage
+    écrit en entiers 64 bits — les valeurs de Python de `test_variantes` sont leurs cas) ; les porter dans `regle()`,
+    `conformance.json` et `world_conformance.json` ; et dans les trois éditeurs, l'outil Variant (clic : la suivante,
+    clic droit : le tirage). ⚠ Sans cela, un greffon pose la tuile de BASE partout : le monde est juste, sans variété.
 
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
@@ -558,7 +563,70 @@ témoin montre ce que le monde montrera.
     autre checkout, il aurait fait éprouver à Unity l'ANCIEN paquet. Il dérive désormais du projet ouvert.
   - ⚠ **`global_blender_bevel_and_tripo_texture.mbset`** (le jeu exporté par Jordan, dans le dépôt) est au
     format d'avant — des LISTES par clé : les greffons le refusent désormais. À réexporter depuis l'appli.
-  - La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections — OUVERT.
+  - ~~La variété pourra revenir en VARIANTES VOULUES dont l'appli fige les sections — OUVERT.~~ **FAIT le 4 octobre
+    2026** : section suivante.
+
+### LES VARIANTES VOULUES — DÉCIDÉ (Jordan, 4 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « un système de tuiles alternatives pour les parties qui se répètent beaucoup, comme le plein de falaise, les
+runs de corner, les pleins de ground, simplement avec un mode choix en monde et un mode choix aléatoire », puis, aux
+trois questions posées (où se sculpte une variante, comment on choisit dans World, les poids) : « choisis le mieux ».
+**Les trois réponses sont donc PROPOSÉES par délégation** : sur place dans le témoin ; un outil par tuile ET une
+application à la sélection ; des poids entiers réglables par variante, 1 par défaut.
+
+- **CE N'EST PAS LE RETOUR DES EXEMPLAIRES** (renversés le 30 septembre) : un exemplaire était découpé là où le hasard
+  du témoin l'avait mis ; une variante est CRÉÉE (« New variant from this copy »), une à une, sur la clé qu'on veut, et
+  ses bords sont ceux de sa clé PAR CONSTRUCTION — elle entre dans les classes de sections de sa clé
+  (`Sections._faces_de` lit `MB.cle_de_tuile`), donc un sommet de bord déplacé dans la variante entraîne la base et
+  toutes les tuiles d'en face, et inversement. Le raccord reste garanti dans tout monde.
+- **LE NOM** : `<clé>_var<k>` (k de 1 à `MB.VARIANTES_MAXI` = 9), « slab_b2h2_outdoor_var1 » en anglais. ⚠ Un mot, une
+  chose (§6) : la « variante d'air libre » (`_dehors`) reste une autre CLÉ. `MB.nom_nu` retire les deux suffixes.
+- **LE TÉMOIN** (`temoin_lie.gd`) : une variante est une tuile de plus dans `tuiles` ; `affectation` = {sommet du témoin:
+  k} dit quelles occurrences la montrent (chaque occurrence a `cle` — la TUILE montrée — et `modele` — sa clé). Le
+  témoin montre donc la variante POSÉE parmi ses vraies voisines : c'est là qu'on juge son raccord. Supprimer une
+  variante renumérote les suivantes (une var3 sans var2 n'est jamais posée). Le `.mbtiles` porte l'affectation.
+- **LE .glb LIÉ** : l'occurrence affectée reçoit le maillage nommé « …_var<k> » ; à la relecture (`tuiles_liees`) la
+  clé vient toujours de la POSITION, et la variante du NOM DU MAILLAGE (un « .001 » de Blender toléré). ⚠ **C'EST LA
+  SEULE CHOSE QUI SE DÉCLARE** ici, contre la doctrine (§4) — rien d'autre ne distingue deux sculptures voulues d'une
+  copie abîmée. Un nom perdu (Join, renommage) ramène la copie à sa clé, où elle diverge : l'erreur « ne montrent plus
+  la même tuile » est dite, jamais un départage en silence (mesuré par mutation : 244 occurrences, 2 formes).
+- **LE MONDE** (`MB.tuile_du_sommet`, appelée par le peintre APRÈS `pose_du_sommet`, qui ne change pas) : un CHOIX posé
+  à ce sommet l'emporte s'il désigne une tuile que le lot a (0 = la base) ; sinon le TIRAGE — poids entiers de la
+  couche (`poids` = {clé: [base, var1, …]}, absent = 1, négatif = 0), et `hachage_du_sommet` (Teschner, puis deux
+  brassages : sans eux `h mod n` dessinait des bandes). Jamais `randi()` : le même monde à chaque reconstruction.
+  Poids et choix appartiennent à la COUCHE (`.mbproj` : `poids`, `choix` à plat par quatre), les variantes à son
+  témoin. ⚠ **PROPOSÉ** : un choix est attaché au SOMMET, pas à la tuile — si l'on repeint autour et que la clé du
+  sommet change, le choix s'applique à la nouvelle clé (s'il a ce rang de variante), sinon retombe sur le tirage.
+- **L'ÉCRAN** (`app/variantes.gd`, branché par quelques lignes dans `editor.gd`) : Witness geometry → « Variants »
+  (la copie montre base / variante k, « New variant from this copy », « This copy shows », « Delete this variant »,
+  UNE annulation chacun) ; World → « Variants » (l'outil Variant : clic = la suivante, clic droit = le tirage ; les
+  POIDS de la clé pointée ; « On the selection » : Random / Base / Variant k sur les sommets des cases sélectionnées ;
+  « Back to random everywhere »). L'icône `variante`. Le manuel (F1) a ses deux paragraphes.
+- **LES FORMATS** : `tileset.json` garde `tiles` = {clé: SA BASE} et ajoute `variants` = {clé: [var1, var2…]} et
+  `variants_rules_text` ; `world.json` ajoute par couche `variant_weights` et `variant_choices` (`FormatMonde.
+  lire_variantes`, refus d'un sommet choisi deux fois, de choix qui ne vont pas par quatre, d'un poids non entier).
+  ⚠ **PAS DANS `regle()` NI DANS LES CAS D'ÉPREUVE** : un greffon d'aujourd'hui lit le même fichier et pose la base —
+  vérifié pour Godot (`test_greffon_peinture` 255 vert sur le nouvel export). Dans la liste des greffons à faire (§0).
+- **MESURÉ** : `test_variantes` (76 : noms ; hachage contre des valeurs calculées en PYTHON ; tirage 2:1:1 sur 6 400
+  sommets à 3 points près, deux voisins identiques 0,375 du temps ± 0,04 — sans bandes ; poids nuls, négatifs,
+  absents ; choix ; le peintre contre `MB.poses` + le tirage déroulé ; choix refait localement = reconstruction
+  complète ; le témoin : variante, affectation, 0 absence de section, cœur sculpté sans toucher la base, un bord de
+  variante propagé → 0 joint ouvert recompté à part ; `.mbtiles`, `.glb` lié, lot, témoin relu de Blender ; suppression
+  et renumérotation ; annulation ; les deux formats). `test_projet` 95 (+5). `fumee_appli` 740 (+22, par les vrais
+  boutons : la variante, Ctrl+Z / Ctrl+Y, le monde peint de la forme du témoin — 244 parois, base et variante selon
+  le tirage, l'outil Variant (suivante, retour, Ctrl+Z, clic droit), un poids à 0, Ctrl+Z, la sélection, l'enregistrement).
+  **21 MUTATIONS, TOUTES ROUGES** : le cœur 9 (choix ignoré, hachage sans brassage, peintre sans variantes, lot sans
+  variantes, relecture sans le nom — 244 occurrences « en 2 formes » —, écriture sans affectation, sections par nom de
+  tuile, suppression sans renumérotation, poids ignorés) ; les formats 3 et le projet 2 ; l'écran 7 (clic non branché,
+  choix sans reconstruction, geste du témoin sans annulation, Add qui ne relâche pas l'outil, poids non enregistrés,
+  la sélection qui pose la base, un poids qui ne retire rien). ⚠ **« `tiles` PORTE LES VARIANTES » D'ABORD MUETTE, PAR
+  LE TEST** : il cherchait la clé fautive sous son nom juste, alors que `id_de_cle` d'une variante rend
+  « slab_b2h2_dehors_var1 » — il compte désormais les entrées. **Vu à l'image** (`DEV_TOOLS/capture_variantes.gd`,
+  Xvfb, OpenGL) : une variante rouge du sol et de la paroi, mêlées par le tirage dans le monde, toutes posées par la
+  sélection ; dans le témoin, seule la copie désignée la montre.
+- ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** : la lisibilité de la section, le geste de l'outil, si les poids se
+  règlent bien « pour la clé pointée ». La planche des tuiles montre aussi les variantes (une carte chacune), sans test.
+  Les greffons n'ont rien de tout cela.
 
 ### LES SECTIONS PARTAGÉES — DEMANDÉ PAR JORDAN (30 septembre 2026), ÉCRIT EN TROIS POINTS ET LA BRIDE
 
@@ -3488,6 +3556,8 @@ désormais le greffon.
     ⚠ **ET UNE LIMITE À ÉCRIRE AVANT LA VENTE, PAS APRÈS** : un atlas ne porte pas d'unicité
     (§3). Une clé vue 81 fois porte 81 exemplaires, pas 81 emplacements — un détail sculpté à UN
     endroit réapparaît ailleurs. L'acheteur doit le lire avant d'acheter, jamais le découvrir.
+    (Depuis le 4 octobre 2026, les VARIANTES VOULUES atténuent la répétition — jusqu'à dix sculptures par tuile, mêlées
+    ou choisies — sans la supprimer : la limite reste à écrire, avec elles comme réponse.)
     ⚠ **MARCHÉ — MESURÉ À MOITIÉ, PROPOSÉ pour le reste** : l'Asset Library officielle de Godot
     est GRATUITE uniquement (un registre de liens, elle n'encaisse rien), donc un addon payant
     passe par itch.io ou Gumroad. ⚠ **La vraie différence n'est pas la commission, c'est la

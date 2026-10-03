@@ -38,6 +38,7 @@ const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd
 const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
+const Variantes := preload("res://app/variantes.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
@@ -204,6 +205,8 @@ var _ouverture := false
 var _detachees: Array = []
 
 var _histoire := UndoRedo.new()
+## LES VARIANTES VOULUES (4 octobre 2026) : leurs deux sections et leurs gestes vivent dans `variantes.gd`.
+var _variantes: RefCounted = Variantes.new(self)
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -328,6 +331,8 @@ func _regler_fenetre() -> void:
 func _process(delta: float) -> void:
 	_suivre_le_geste()
 	_dire_les_trous()
+	if _atelier == "witness":
+		_variantes.dire_temoin()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
 	Peinture.suivre_les_cartes()
 	_dire_l_etat_pbr()
@@ -382,6 +387,7 @@ func _batir() -> void:
 	_vue.forme_dite.connect(_forme_dite)
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
+	_vue.variante_cliquee.connect(_variantes.cliquer)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
 	_vue.molette_contextuelle = _molette
 	_vue.boite_trop_grande.connect(func() -> void:
@@ -429,6 +435,7 @@ func _batir() -> void:
 	_legende_formes.zone_choisie.connect(_vue.cadrer_zone)
 	# LE SENS INVERSE, dans World : la tuile survolée dit de quelle forme du témoin elle vient.
 	_vue.tuile_survolee.connect(_legende_formes.montrer_provenance)
+	_vue.tuile_survolee.connect(_variantes.survoler)
 	_legende_formes.voir_dans_le_temoin.connect(_voir_dans_le_temoin)
 	# LA PLANCHE DES TUILES (charte §3) : le témoin qu'on édite s'il est chargé, sinon le témoin calculé.
 	_legende_formes.fournir_temoin = _temoin_pour_la_planche
@@ -1351,6 +1358,7 @@ Acts on the selection if there is one, otherwise on the matter of floor y.")
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
+	_variantes.batir_monde(pile)
 
 
 ## ── 4. LES FORMES SPÉCIALES (Jordan, 1er octobre 2026) — la règle vit dans `formes_speciales.gd`.
@@ -2792,6 +2800,8 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Fill holes · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
 			func() -> void: _boucher_les_trous(true), "remplir"),
 	], 2))
+
+	_variantes.batir_temoin(pile)
 
 	var vue := Section.new("View", true, Icones.icone("oeil"))
 	pile.add_child(vue)
@@ -4892,7 +4902,7 @@ func _exporter_le_monde(dossier: String) -> void:
 		var massif: Node = _vue.couche(i)
 		couches.append({"nom": _couches[i]["nom"], "visible": _couches[i]["visible"],
 			"source": _couches[i]["source"], "lot": massif.lot,
-			"cases": (massif.get_node("Cases") as GridMap).get_used_cells()})
+			"cases": (massif.get_node("Cases") as GridMap).get_used_cells(), "poids": massif.poids, "choix": massif.choix})
 	await _attendre("Exporting the world", "%d layer(s)" % couches.size())
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
 	var nom: String = _projet.get_file().get_basename() if _projet != "" else "world"
@@ -5157,6 +5167,7 @@ func _choisir_visee(v: String) -> void:
 func _choisir_outil(o: String) -> void:
 	_vue.outil = o
 	(_boutons_outil[o] as Button).button_pressed = true
+	_variantes.outil_change()
 	for b in _boutons_forme_speciale.values():
 		(b as Button).set_pressed_no_signal(false)
 	_vue.oublier_ancre()
@@ -5171,6 +5182,7 @@ func _choisir_forme_speciale(quoi: String) -> void:
 	for b in _boutons_outil.values():
 		(b as Button).set_pressed_no_signal(false)
 	(_boutons_forme_speciale[quoi] as Button).button_pressed = true
+	_variantes.outil_change()
 	_basculer_navigation(false)
 	_contexte_des_outils()
 	_vue.rafraichir()
@@ -5343,6 +5355,9 @@ func _ajouter_couche(etat: Dictionary) -> int:
 			id = ""
 	_couches.append({"nom": etat["nom"], "source": etat["source"], "visible": etat["visible"],
 		"temoin": str(etat.get("temoin", "")), "id": id if id != "" else _nouvel_id()})
+	# Les variantes de son monde (4 octobre 2026) : le peintre les tient, l'enregistrement les relit.
+	massif.poids = (etat.get("poids", {}) as Dictionary).duplicate(true)
+	massif.choix = (etat.get("choix", {}) as Dictionary).duplicate()
 	# La dernière de la liste : la moins prioritaire. Vide, elle ne change rien à l'union.
 	massif.union = _union
 	massif.rang = _couches.size() - 1
@@ -5361,6 +5376,7 @@ func _nouvel_id() -> String:
 func _activer(i: int) -> void:
 	_active = clampi(i, 0, _couches.size() - 1)
 	_vue.activer(_active)
+	_variantes.dire_poids()
 	_suivre_le_temoin_de_la_couche()
 	_rafraichir_couches()
 	_dire_l_etage()
@@ -5927,7 +5943,8 @@ func _enregistrer(en_fond := false) -> void:
 	for i in _couches.size():
 		var c: Dictionary = _couches[i]
 		sorties.append({"nom": c["nom"], "source": c["source"], "visible": c["visible"], "temoin": c.get("temoin", ""),
-			"id": c.get("id", ""), "cases": (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells()})
+			"id": c.get("id", ""), "cases": (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells(),
+			"poids": (_vue.couche(i).poids as Dictionary).duplicate(true), "choix": (_vue.couche(i).choix as Dictionary).duplicate()})
 	var eaux: Array = _eaux.duplicate(true)
 	var travaux := _chemins_des_travaux()
 	if en_fond:

@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_le_peintre()
 	var t: RefCounted = TL.depuis_le_temoin_calcule()
 	_le_temoin(t)
+	_les_formats(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -344,3 +345,65 @@ func _sur_le_plan(t: RefCounted, o: Dictionary, axe: int, plan: float) -> Dictio
 		if absf(w[axe] - plan) < 0.0005:
 			sortie[Vector3i((w * 1000.0).round())] = true
 	return sortie
+
+
+# ── 6. LES FORMATS ───────────────────────────────────────────────────────────────────────────────────
+
+func _les_formats(t: RefCounted) -> void:
+	print("6. les formats")
+	var FM := load("res://addons/marchingblocks_core/format_monde.gd")
+	var cle := "mb_plaque_b2h2_dehors"
+	var occ: Array = t.occurrences_de(cle)
+	t.creer_variante(occ[5])
+	t.creer_variante(occ[9])
+	var chemin := ProjectSettings.globalize_path("user://test_variantes_formats.glb")
+	t.vers_glb(chemin)
+	var lot: MeshLibrary = BM.librairie_depuis_glb(chemin)["lot"]
+	var dossier := ProjectSettings.globalize_path("user://test_variantes_formats")
+	var r: Dictionary = FM.exporter([{"nom": "Rock", "visible": true, "source": chemin, "lot": lot,
+		"cases": [Vector3i(0, 0, 0)], "poids": {cle: [3, 1, 0]}, "choix": {Vector3i(4, 5, 6): 2, Vector3i(-1, 0, 0): 0}}],
+		dossier, "Variant world", "test")
+	_dire(not r.has("erreur"), "le monde s'exporte (%s)" % r.get("erreur", ""))
+	var jeu = JSON.parse_string(FileAccess.get_file_as_string(dossier.path_join("variant_world.mbworld/rock.mbset/tileset.json")))
+	_dire(jeu is Dictionary, "tileset.json relu")
+	if not jeu is Dictionary:
+		return
+	# Écrit à la main : la clé anglaise, et ses deux variantes dans l'ordre.
+	_dire(jeu.get("variants", {}) == {"slab_b2h2_outdoor": ["slab_b2h2_outdoor_var1", "slab_b2h2_outdoor_var2"]},
+		"tileset.json : variants = %s" % [jeu.get("variants", {})])
+	# ⚠ ATTENDU : autant d'entrées que de tuiles de BASE dans le lot (compté ici par le nom), et aucune clé en « var ».
+	var bases := 0
+	for i in lot.get_item_list():
+		if not lot.get_item_name(i).contains("_var"):
+			bases += 1
+	var tiles: Dictionary = jeu["tiles"]
+	_dire(tiles.size() == bases and tiles.keys().all(func(k): return not str(k).contains("var"))
+		and tiles["slab_b2h2_outdoor"] == "slab_b2h2_outdoor",
+		"tiles ne garde que les %d bases (%d entrées) : un greffon qui ignore les variantes pose la base" % [bases, tiles.size()])
+	_dire((jeu.get("variants_rules_text", []) as Array).size() > 5, "la règle des variantes est écrite dans le manifeste")
+	# Le glTF porte les trois tuiles, nommées.
+	var gltf := GLTFDocument.new()
+	var etat := GLTFState.new()
+	gltf.append_from_file(dossier.path_join("variant_world.mbworld/rock.mbset/tiles.glb"), etat)
+	var noms := {}
+	for nd: GLTFNode in etat.get_nodes():
+		noms[nd.resource_name] = true
+	_dire(noms.has("slab_b2h2_outdoor") and noms.has("slab_b2h2_outdoor_var1") and noms.has("slab_b2h2_outdoor_var2"),
+		"tiles.glb porte la base et les deux variantes")
+	# world.json : poids et choix, relus par la règle de lecture.
+	var monde = JSON.parse_string(FileAccess.get_file_as_string(dossier.path_join("variant_world.mbworld/world.json")))
+	var couche: Dictionary = monde["layers"][0]
+	_dire(couche.get("variant_weights", {}) == {"slab_b2h2_outdoor": [3.0, 1.0, 0.0]}, "world.json : les poids, sous la clé anglaise")
+	_dire(couche.get("variant_choices", []) == [-1.0, 0.0, 0.0, 0.0, 4.0, 5.0, 6.0, 2.0], "world.json : les choix, triés")
+	var lu: Dictionary = FM.lire_variantes(couche)
+	_dire(not lu.has("error") and lu["choices"] == {Vector3i(4, 5, 6): 2, Vector3i(-1, 0, 0): 0}, "relus par la règle de lecture")
+	_dire(not FM.lire(monde).has("error"), "la lecture de base l'accepte (les clés en plus sont ignorées)")
+	var abime := couche.duplicate(true)
+	abime["variant_choices"] = [1, 2, 3, 0, 1, 2, 3, 1]
+	_dire(FM.lire_variantes(abime).has("error"), "un sommet choisi deux fois est refusé")
+	abime["variant_choices"] = [1, 2, 3]
+	_dire(FM.lire_variantes(abime).has("error"), "des choix qui ne vont pas par quatre sont refusés")
+	abime["variant_choices"] = []
+	abime["variant_weights"] = {"x": [1, 0.5]}
+	_dire(FM.lire_variantes(abime).has("error"), "un poids non entier est refusé")
+	DirAccess.remove_absolute(chemin)

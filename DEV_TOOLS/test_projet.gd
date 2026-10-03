@@ -152,6 +152,7 @@ func _initialize() -> void:
 	_les_fichiers_dans_windows()
 	_l_exemple()
 	_les_travaux()
+	_les_variantes()
 	_le_dev_de_l_exemple()
 	_les_durees()
 
@@ -224,6 +225,34 @@ func _les_travaux() -> void:
 	var abime := texte.replace('"C:/y/glace.glb"', "12")
 	var r2 := Projet.depuis_texte(abime, [])
 	_egal(r2.get("travaux", []), ["D:/x/rocher.glb"], "une entrée qui n'est pas un chemin est écartée, le projet s'ouvre")
+
+
+## LES VARIANTES D'UNE COUCHE (4 octobre 2026) : poids et choix s'écrivent et se relisent ; un projet d'avant n'en a pas ;
+## une entrée malformée refuse le fichier entier (comme les cases).
+func _les_variantes() -> void:
+	var c := Projet.couche("A")
+	c["poids"] = {"mb_plaque_b2h2_dehors": [3, 1, 0]}
+	c["choix"] = {Vector3i(4, -5, 6): 2, Vector3i(0, 0, 0): 0}
+	var texte := Projet.vers_texte([c], 0)
+	var erreurs: Array = []
+	var relu: Dictionary = Projet.depuis_texte(texte, erreurs)
+	var cr: Dictionary = (relu.get("couches", [{}]) as Array)[0]
+	_egal(cr.get("poids", {}), {"mb_plaque_b2h2_dehors": [3, 1, 0]}, "les poids des variantes reviennent")
+	_egal(cr.get("choix", {}), {Vector3i(4, -5, 6): 2, Vector3i(0, 0, 0): 0}, "les choix posés reviennent")
+	var nu := Projet.depuis_texte(Projet.vers_texte([Projet.couche("B")], 0), [])
+	_vrai(not Projet.vers_texte([Projet.couche("B")], 0).contains("choix") and (nu["couches"][0]["choix"] as Dictionary).is_empty()
+		and (nu["couches"][0]["poids"] as Dictionary).is_empty(), "sans variante, rien n'est écrit, rien n'est relu")
+	var abime: Dictionary = JSON.parse_string(texte)
+	abime["couches"][0]["cases"] = []
+	abime["couches"][0]["choix"] = [1, 2, 3]
+	var e3: Array = []
+	_vrai(Projet.depuis_texte(JSON.stringify(abime), e3).is_empty() and not e3.is_empty(),
+		"des choix qui ne vont pas par quatre refusent le fichier (%s)" % [e3])
+	abime["couches"][0]["choix"] = []
+	abime["couches"][0]["poids"] = {"x": ["lourd"]}
+	var e4: Array = []
+	_vrai(Projet.depuis_texte(JSON.stringify(abime), e4).is_empty() and not e4.is_empty(),
+		"un poids qui n'est pas un nombre refuse le fichier (%s)" % [e4])
 
 
 ## ÉDITER L'EXEMPLE PENDANT LE DÉV (3 octobre 2026) : la source désignée par un fichier pointeur, hors de l'export.

@@ -36,6 +36,8 @@ signal tuile_survolee(info: Dictionary)
 ## L'outil Water (charte §5, « le mode Fluids ») : la case où une source se poserait, sous la souris (ou null).
 signal eau_survolee(source: Variant)
 signal eau_cliquee(source: Variant, bouton: int)
+## L'outil Variant (4 octobre 2026) : un clic sur une tuile du monde — `info` comme `tuile_sous`.
+signal variante_cliquee(info: Dictionary, bouton: int)
 ## Ctrl+clic en World : la case de matière touchée (couches visibles), ou `null` si le rayon ne touche rien.
 signal etage_sur_la_matiere(case: Variant)
 
@@ -595,8 +597,9 @@ func _dire_la_tuile(position: Vector2) -> void:
 ## est l'aperçu des cases, calé sur la grille : c'est ce que le clic changera. La boîte blanche de la tuile
 ## ne se montre qu'en Navigate, où rien n'est peint et où l'on regarde le monde tuile par tuile. Le
 ## bandeau « Where is it from? » suit la tuile survolée dans les deux cas.
+## L'outil Variant la montre aussi : c'est elle qu'un clic change.
 func _marquer_la_tuile_dite() -> void:
-	montrer_tuile(_tuile_dite[0] if naviguer and _tuile_dite != null else null)
+	montrer_tuile(_tuile_dite[0] if (naviguer or outil == "variante") and _tuile_dite != null else null)
 
 
 ## Cadrer une forme sous l'angle de sa photo, pour que la vue ressemble à la carte qu'on a cliquée.
@@ -883,6 +886,9 @@ func _survoler(position: Vector2) -> void:
 	if outil == "eau":
 		eau_survolee.emit(source_visee(position))
 		return
+	if outil == "variante":
+		_apercu.visible = false
+		return
 	if point.is_empty() or cases() == null:
 		_apercu.visible = false
 		return
@@ -962,6 +968,9 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		return
 	if outil == "eau":
 		eau_cliquee.emit(source_visee(position), bouton)
+		return
+	if outil == "variante":
+		variante_cliquee.emit(tuile_sous(position), bouton)
 		return
 	if outil == "boite" or outil == "rect":
 		var depart := _coin_vise(position)
