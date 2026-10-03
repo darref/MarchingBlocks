@@ -29,6 +29,7 @@ func _initialize() -> void:
 	_eau_voisine()
 	_du_haut_du_mur()
 	_escalier()
+	_riviere_large()
 	_riviere_par_un_lac()
 	_ocean()
 	_ocean_par_colonnes()
@@ -270,6 +271,42 @@ func _escalier() -> void:
 		[Vector3i(6, 0, 0), "chute"], [Vector3i(6, -1, 0), "chute"]], "escalier : le cours, case par case")
 	_egal(r["fin"], "sort", "escalier : elle quitte le monde")
 	_egal(r["eau"].size(), 0, "escalier : aucun lac en route")
+
+
+## LA LARGEUR À LA POSE (Jordan, 3 octobre 2026). Une marche large : x = 0..2 haute de 3 (y = 0..2), x = 3..5 haute
+## de 1 (y = 0), sur z = −3..3 ; un mur derrière (x = −1, y = 0..4). L'eau posée en (0, 3, 0) coule vers +X (3 pas
+## jusqu'à la chute en x = 3, contre 4 jusqu'au bord en z = 4) : les sources se rangent EN TRAVERS, le long de Z.
+## Attendus écrits à la main.
+func _riviere_large() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, -3), Vector3i(2, 2, 3))
+	_boite(m, Vector3i(3, 0, -3), Vector3i(5, 0, 3))
+	_boite(m, Vector3i(-1, 0, -3), Vector3i(-1, 4, 3))
+	var s := Vector3i(0, 3, 0)
+	_egal(FL.sources_en_largeur(m, s, 1), [s], "largeur 1 : la source seule")
+	_egal(FL.sources_en_largeur(m, s, 3), [s, Vector3i(0, 3, -1), Vector3i(0, 3, 1)],
+		"largeur 3 : en travers du courant (+X), le long de Z, centrée")
+	_egal(FL.sources_en_largeur(m, s, 4), [s, Vector3i(0, 3, -1), Vector3i(0, 3, 1), Vector3i(0, 3, 2)],
+		"largeur 4 (paire) : une case de plus du côté +")
+	_egal(FL.sources_en_largeur(m, s, 9).size(), 7,
+		"largeur 9 : les deux bouts au-dessus du vide (z = ±4) seraient une MER — écartés")
+	m[Vector3i(0, 3, 1)] = true
+	_egal(FL.sources_en_largeur(m, s, 3), [s, Vector3i(0, 3, -1)], "une voisine dans la matière : écartée")
+	m.erase(Vector3i(0, 3, 1))
+	# Un lac ne s'élargit pas : la cuvette CALME (la nue déborde sur le vide : c'est une rivière).
+	var c := _monde_cuvette_calme()
+	_egal(FL.source(c, Vector3i(2, 1, 2))["genre"], "lac", "(la cuvette calme est bien un lac)")
+	_egal(FL.sources_en_largeur(c, Vector3i(2, 1, 2), 5), [Vector3i(2, 1, 2)], "un lac : la source seule")
+	# Le maillage d'une rivière large : plusieurs bandes, sans doublon (deux sources ne posent pas deux eaux).
+	var corps: Array = []
+	for src in FL.sources_en_largeur(m, s, 3):
+		corps.append(FL.source(m, src))
+	var largeurs := {}
+	for r in corps:
+		for e in r["cours"]:
+			if e["genre"] == "chute":
+				largeurs[(e["case"] as Vector3i).z] = true
+	_vrai(largeurs.size() == 3, "largeur 3 : la cascade tombe sur trois colonnes en z (%s)" % [largeurs.keys()])
 
 
 ## La rivière remplit un creux en route, puis en déborde. Une dalle y = 0 (x = 0..10, z = −1..1), des murs
@@ -827,6 +864,16 @@ func _bien_tournes(q: Array) -> bool:
 ## lit dans le TEXTE — dont le piège payé deux fois en écrivant les presets : un paramètre de fonction qui porte
 ## le nom d'un uniforme (« Redefinition of 'ampleur' », puis « 'ecume' »).
 func _presets() -> void:
+	# LE MICRO (Jordan, 3 octobre 2026 : « une macro mais pas de micro à l'échelle du stickman ») : les presets à
+	# normale passent par `normale_eau` (vagues + micro-rides, effacées selon la taille du pixel), le stylisé a ses
+	# éclats ; la lave, visqueuse, n'en a pas. Ce qu'ils DONNENT se juge à l'image (Vulkan) : ici, qu'ils y sont.
+	for preset in ["transparent", "reflechissant", "marais", "acide"]:
+		var code_p: String = EP.code(preset)
+		_vrai(code_p.contains("normale_eau(v_monde.xz") and code_p.contains("fwidth(v_monde.xz)")
+			and code_p.contains("uniform float micro") and not code_p.contains("normale_vagues(v_monde.xz"),
+			"« %s » : la normale porte les micro-rides, effacées au loin" % preset)
+	_vrai(EP.code("stylise").contains("float eclat"), "le stylisé a ses éclats")
+	_vrai(not EP.code("lave").contains("normale_eau(v_monde"), "la lave, visqueuse, n'a pas de rides")
 	var re_uniforme := RegEx.create_from_string("(?m)^\\s*(?:uniform|varying)\\s+\\w+\\s+(\\w+)")
 	var re_fonction := RegEx.create_from_string("(?m)^\\w+\\s+(\\w+)\\s*\\(([^)]*)\\)\\s*\\{")
 	var codes := {}

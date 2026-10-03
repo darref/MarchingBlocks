@@ -39,6 +39,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     les plats **sans jonction en T** ; le **clapot sur les cascades aussi** (§5, « l'eau du 3 octobre »).
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
+  - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
+    cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
+    si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
@@ -2659,6 +2662,41 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
     cuvette, huit clics chacun — jamais d'erreur). Mais un clic SUR l'île vise la case au-dessus de la matière : l'eau
     y devient un lac ou une rivière, jamais un océan — un océan naît d'un clic dans le VIDE. OUVERT : le message exact
     vu par Jordan.
+- **LES DEMANDES DU 3 OCTOBRE 2026 — ÉCRITES LE MÊME JOUR** (Jordan : « il faut copier l'image qu'on choisit ? et les
+  waterfalls n'ont pas de largeur réglable à la pose […] pas de bouton simple pour étendre verticalement une sélection
+  depuis qu'on a fusionné Extrude […] pas de radius de peinture de sélection pour le mode Select dans World, afin de
+  peindre une sélection pour en faire ce qu'on veut, comme une room quelconque ») :
+  - **L'IMAGE CHOISIE EST COPIÉE DANS LE PROJET** (`Peinture.copier_dans_le_projet`) : l'albedo ET son ensemble PBR
+    (les cartes trouvées à côté) dans `<couche>_images/<nom de l'albedo>/`, noms inchangés (l'ensemble s'y retrouve) ;
+    une copie identique (MD5) est reprise, une autre image du même nom va dans `<nom>_2/` ; un dossier resté VIDE se
+    reprend (⚠ défaut vu par une mutation : il poussait la copie en `_3`). Peindre ne touche plus jamais l'original
+    (le « vu en passant » des ensembles PBR, ci-dessus, est réglé). `test_peinture` 58 (+6, de vrais fichiers) ; trois
+    mutations rouges.
+  - **LA LARGEUR D'UNE RIVIÈRE À LA POSE** (`FL.sources_en_largeur`, réglage « River width » 1 à 9 dans Fluids) :
+    autant de sources côte à côte, EN TRAVERS du premier pas horizontal de la rivière, centrées (une de plus du côté +
+    si paire) ; seules restent les voisines qui sont des RIVIÈRES (ni matière, ni lac, ni mer, ni eau déjà là). UNE
+    annulation pour toutes ; l'aperçu montre la rivière entière. Un lac et la mer ne s'élargissent pas. `test_fluides`
+    210 (+8, une marche large écrite à la main) ; trois mutations rouges (le long du courant, toute voisine acceptée,
+    pas centrée). ⚠ La cuvette NUE des tests déborde (c'est une rivière) : le cas « un lac » prend la cuvette calme.
+  - **« Extend selection ↑ » / « ↓ »** dans la section Selection : le mode « étendre » d'Extrude (Maj + clic), en
+    bouton, cases vides comprises, sans rien poser. ⚠ « SELECTION » DANS LE NOM : l'ancien « Extend up » posait de la
+    matière comme Extrude, et c'est cette ambiguïté qui l'avait fait retirer le 2 octobre — la garde interdit toujours
+    les anciens noms.
+  - **« Select empty cells too »** (sous le pinceau, visible avec Select) : le pinceau Select prend aussi l'AIR
+    (`Vue.selection_vide`), aperçu compris — peindre l'empreinte d'une pièce sur la grille (pinceau Disque), puis
+    Extend selection ↑ et Fill.
+  - Gardé par `fumee_appli` (627, +16, de vrais clics à travers la caméra et les vrais boutons : l'air pris ou non,
+    ↑ ×2 et ↓ sans rien poser, Fill qui peint une colonne dans l'air, trois sources en travers et UN Ctrl+Z, l'image
+    copiée avec sa normale) ; quatre mutations (voir le commit).
+  - **LE MICRO DE L'EAU** (Jordan : « la texture des eaux a une macro mais pas de micro, à l'échelle du stickman ») :
+    les vagues allaient de 2 à 5 cases (et un bruit de ~0,8) ; rien de plus fin. `pente_micro` (tronc commun) : trois
+    octaves d'un bruit DÉRIVABLE (~0,14 / 0,07 / 0,04 case), tournées, qui défilent avec le courant ; pente analytique ;
+    chaque octave s'EFFACE quand un pixel couvre plus d'un quart de ride. `normale_eau` l'ajoute aux vagues dans les
+    presets clair, réfléchissant, marais et acide (uniform `micro`, 0 l'éteint) ; le stylisé a de courts ÉCLATS clairs à
+    la même échelle ; la lave n'en a pas. ⚠ **QUATRE ONDES PURES FAISAIENT UN QUADRILLAGE DE POINTS** (vu à l'image) :
+    remplacées par le bruit. ⚠ Sous Xvfb (OpenGL), les shaders à texture d'écran sont dégradés : le rendu se juge en
+    Vulkan. Gardé par `test_fluides` (216 : l'appel par preset, au TEXTE) ; une mutation rouge.
+  - **OUVERT, POSÉ À JORDAN** : des outils de SCULPT pour la géométrie du témoin.
 - **L'EAU DU 3 OCTOBRE 2026 — DEMANDÉE PAR JORDAN ET ÉCRITE** (« il ne doit y avoir qu'un seul océan à un seul niveau
   Y ; des bandes fines de vide là où la découpe se fait ; un mauvais raccord là où l'océan passe une case de gap sous un
   étage flottant ; les cascades ont des bugs de construction »). Vu d'abord à l'image, sur une COPIE de son projet

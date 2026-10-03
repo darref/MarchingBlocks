@@ -34,6 +34,7 @@ func _initialize() -> void:
 	_la_gomme_et_les_calques()
 	_les_calques_s_ecrivent()
 	_le_fond_se_voit()
+	_l_image_choisie_est_copiee()
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -471,6 +472,48 @@ func _le_fond_se_voit() -> void:
 	Peinture.poser_region(vieux, vert, Vector2i.ZERO, Peinture.fond(vieux))
 	_dire(_egal((t["image"] as Image).get_pixel(2, 2), Color.GREEN) and _egal((t["image"] as Image).get_pixel(8, 8), Color.RED),
 		"… puis un fond recuit s'y voit, sous le rouge")
+
+
+## L'IMAGE CHOISIE EST COPIÉE DANS LE PROJET, AVEC SON ENSEMBLE (Jordan, 3 octobre 2026). De vrais fichiers ; les
+## attendus sont des noms et des MD5 relevés ici, pas par la fonction éprouvée.
+func _l_image_choisie_est_copiee() -> void:
+	var biblio := _dossier.path_join("bibliotheque")
+	var projet := _dossier.path_join("projet_images")
+	for d in [biblio, projet]:
+		for sous in DirAccess.get_directories_at(d):
+			for nom in DirAccess.get_files_at(d.path_join(sous)):
+				DirAccess.remove_absolute(d.path_join(sous).path_join(nom))
+			DirAccess.remove_absolute(d.path_join(sous))
+		for nom in DirAccess.get_files_at(d):
+			DirAccess.remove_absolute(d.path_join(nom))
+	DirAccess.make_dir_recursive_absolute(biblio)
+	# Un dossier de copie resté VIDE (une copie interrompue) se reprend : il ne pousse pas la copie en « _2 ».
+	DirAccess.make_dir_recursive_absolute(projet.path_join("cliff_color_1k"))
+	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	for n in [["cliff_color_1k.png", Color.RED], ["cliff_normal_gl_1k.png", Color(0.5, 0.5, 1.0)],
+			["cliff_roughness_1k.png", Color.GRAY], ["autre_chose.png", Color.GREEN]]:
+		img.fill(n[1])
+		img.save_png(biblio.path_join(n[0]))
+	var source := biblio.path_join("cliff_color_1k.png")
+	var copie := Peinture.copier_dans_le_projet(source, projet)
+	var ici := projet.path_join("cliff_color_1k")
+	_dire(copie == ici.path_join("cliff_color_1k.png") and FileAccess.get_md5(copie) == FileAccess.get_md5(source),
+		"l'albedo est copié dans le projet, sous son nom (%s)" % copie)
+	var copies := Array(DirAccess.get_files_at(ici))
+	copies.sort()
+	_dire(copies == ["cliff_color_1k.png", "cliff_normal_gl_1k.png", "cliff_roughness_1k.png"],
+		"… avec SON ensemble (normale, rugosité), sans le reste du dossier : %s" % [copies])
+	_dire(Peinture.copier_dans_le_projet(source, projet) == copie and not DirAccess.dir_exists_absolute(ici + "_2"),
+		"la même image choisie deux fois : la copie est reprise")
+	img.fill(Color.BLUE)
+	img.save_png(source)
+	var autre := Peinture.copier_dans_le_projet(source, projet)
+	_dire(autre == projet.path_join("cliff_color_1k_2/cliff_color_1k.png") and FileAccess.get_md5(copie) != FileAccess.get_md5(autre),
+		"une AUTRE image du même nom va à part, la première copie n'est pas écrasée")
+	_dire(Peinture.copier_dans_le_projet(copie, projet) == copie, "une image déjà dans le projet n'est pas recopiée")
+	var erreurs: Array = []
+	_dire(Peinture.copier_dans_le_projet(biblio.path_join("absente.png"), projet, erreurs) == "" and erreurs.size() == 1,
+		"une image absente : rien, et la raison")
 
 
 func _egal(a: Color, b: Color) -> bool:

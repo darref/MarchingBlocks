@@ -216,7 +216,7 @@ func _mener() -> void:
 			bouton_haut = b
 	_vrai(bouton_haut != null and not ed.find_children("*", "Button", true, false).any(
 		func(b): return (b as Button).text in ["Extrude ↑", "Extrude ↓", "Extend up", "Extend down"]),
-		"un seul Extrude : dans Shape operations, plus de doublon dans Selection")
+		"un seul Extrude : dans Shape operations ; dans Selection, seulement « Extend selection ↑ ↓ » (qui ne posent rien)")
 	var rect9: Dictionary = ed._vue.selection.duplicate()
 	bouton_haut.pressed.emit()
 	_egal(cases0.get_used_cells().size(), avant + 18, "Extrude up pose la couche du dessus")
@@ -458,6 +458,8 @@ func _mener() -> void:
 	await _les_couches_exclusives(ed)
 	_vrai(_exclusives_finies, "les couches exclusives sont allées JUSQU'AU BOUT")
 	_l_exemple_ne_s_impose_pas(ed)
+	await _les_demandes_du_3_octobre(ed)
+	_vrai(_demandes_finies, "les demandes du 3 octobre sont allées JUSQU'AU BOUT")
 	await _l_exemple(ed)
 	_les_teintes_des_ateliers(ed)
 
@@ -3154,6 +3156,97 @@ func _les_couches_exclusives(ed: Control) -> void:
 	_vrai(ed._rapport.text.contains("2 cell(s) belonged to several layers"), "et l'écran le dit")
 	_memes_proprietaires(ed, [0, 1], "à l'ouverture")
 	_exclusives_finies = true
+
+
+## LES DEMANDES DU 3 OCTOBRE 2026 (Jordan) — par de vrais clics et les vrais boutons, attendus écrits à la main :
+## peindre une sélection DANS LE VIDE ; Extend up / down d'un bouton ; une rivière large à la pose ; l'image
+## choisie copiée dans le projet.
+var _demandes_finies := false
+
+
+func _les_demandes_du_3_octobre(ed: Control) -> void:
+	const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+	var vue: Control = ed._vue
+	ed._aller_a("monde")
+	ed._choisir_visee("grille")
+	ed._compteur_etage.value = 0
+	ed._choisir_outil("selectionner")
+	_vrai(ed._case_vides.visible, "Select : la case « Select empty cells too » se montre")
+	vue.taille = 1
+	vue.forme = "cube"
+	vue.vider_selection()
+	_viser_depuis(vue, Vector3(80.5, 0.0, 80.5), 0.6, 12.0)
+	vue._elevation = 0.9
+	vue._caler()
+	await process_frame
+	var ou: Vector2 = vue._camera.unproject_position(Vector3(80.5, 0.0, 80.5))
+	_clic_vue(vue, ou)
+	_vrai(vue.selection.is_empty(), "sans la case, le pinceau Select ne prend pas l'air")
+	ed._case_vides.button_pressed = true
+	_clic_vue(vue, ou)
+	_vrai(vue.selection.has(Vector3i(80, 0, 80)) and vue.selection.size() == 1,
+		"avec la case, un clic sur la grille sélectionne la case VIDE visée (%s)" % [vue.selection.keys()])
+	var cases_avant: int = vue.cases().get_used_cells().size()
+	var etendre := func(texte: String) -> void:
+		for b in ed._section_selection.find_children("*", "Button", true, false):
+			if (b as Button).text == texte:
+				(b as Button).pressed.emit()
+				return
+		_vrai(false, "le bouton « %s » existe" % texte)
+	etendre.call("Extend selection ↑")
+	etendre.call("Extend selection ↑")
+	_vrai(vue.selection.size() == 3 and vue.selection.has(Vector3i(80, 2, 80))
+		and vue.cases().get_used_cells().size() == cases_avant, "Extend selection ↑ ×2 : la sélection monte de deux, rien n'est posé")
+	etendre.call("Extend selection ↓")
+	_vrai(vue.selection.has(Vector3i(80, -1, 80)) and vue.selection.size() == 4, "Extend selection ↓ : une de plus en dessous")
+	ed._operer_selection("remplir")
+	_vrai(vue.cases().get_used_cells().size() == cases_avant + 4, "Fill la remplit : une colonne de 4 cases peinte dans l'air")
+	ed._histoire.undo()
+	ed._case_vides.button_pressed = false
+	ed._choisir_outil("ajouter")
+	_vrai(not ed._case_vides.visible, "hors de Select, la case se cache")
+	vue.vider_selection()
+	# LA RIVIÈRE LARGE : la marche de `test_fluides` (x = 100..102 haute de 3, 103..105 de 1, z = −3..3, mur en 99).
+	var marche := {}
+	for x in range(99, 106):
+		for z in range(-3, 4):
+			var h := 5 if x == 99 else (3 if x <= 102 else 1)
+			for y in h:
+				marche[Vector3i(x, y, z)] = true
+	ed._appliquer({"poser": marche, "effacer": {}}, "Add")
+	ed._occ_eau = {}
+	ed._largeur_eau.value = 3
+	var e_avant: int = 0 if ed._eaux.is_empty() else (ed._eaux[ed._eau_active]["sources"] as Array).size()
+	ed._eau_cliquee(Vector3i(100, 3, 0), MOUSE_BUTTON_LEFT)
+	var srcs: Array = ed._eaux[ed._eau_active]["sources"]
+	_vrai(srcs.size() == e_avant + 3 and srcs.slice(e_avant) == [Vector3i(100, 3, 0), Vector3i(100, 3, -1), Vector3i(100, 3, 1)],
+		"River width 3 : trois sources côte à côte, en travers du courant (%s)" % [srcs.slice(e_avant)])
+	ed._histoire.undo()
+	_vrai((ed._eaux[ed._eau_active]["sources"] as Array).size() == e_avant, "UN Ctrl+Z les retire toutes")
+	ed._largeur_eau.value = 1
+	ed._histoire.undo()   # la marche
+	ed._occ_eau = {}
+	# L'IMAGE CHOISIE EST COPIÉE DANS LE PROJET, avec son ensemble.
+	ed._aller_a("texture")
+	ed._regler_edition(true)
+	ed._nouveau_materiau()
+	var biblio := ProjectSettings.globalize_path("user://fumee/bibliotheque")
+	DirAccess.make_dir_recursive_absolute(biblio)
+	var img := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.6, 0.4, 0.3))
+	img.save_png(biblio.path_join("pierre_albedo.png"))
+	img.fill(Color(0.5, 0.5, 1.0))
+	img.save_png(biblio.path_join("pierre_normal.png"))
+	ed._action_fichier = "texture"
+	ed._fichier_choisi(biblio.path_join("pierre_albedo.png"))
+	var k: int = ed._modeleur.materiau_courant
+	var tex: String = str(ed._modeleur.maillage.materiaux[k].get("texture", ""))
+	var dossier: String = ed._modeleur.dossier_toiles
+	_vrai(tex.begins_with(dossier) and tex.ends_with("pierre_albedo/pierre_albedo.png") and FileAccess.file_exists(tex)
+		and FileAccess.file_exists(tex.get_base_dir().path_join("pierre_normal.png")),
+		"l'image choisie est COPIÉE dans les images de la couche, avec sa normale (%s)" % tex)
+	ed._aller_a("monde")
+	_demandes_finies = true
 
 
 ## L'EXEMPLE NE S'IMPOSE PAS (Jordan, 2 octobre 2026 : « le soft ne doit pas forcer l'exemple à l'arrivée ») — sans

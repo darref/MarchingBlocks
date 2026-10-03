@@ -151,6 +151,8 @@ var _ancre_vue: MultiMeshInstance3D
 ## La SÉLECTION — des cases de la couche active. ⚠ Un état d'écran, pas une donnée : elle n'est ni
 ## enregistrée ni annulable, et se vide quand on change de couche.
 var selection := {}
+## Le pinceau Select prend aussi les cases VIDES (Jordan, 3 octobre 2026 : peindre l'empreinte d'une pièce).
+var selection_vide := false
 ## LE COLLAGE EN COURS — le presse-papiers (décalages relatifs, `Outils.copier`) qui suit la souris
 ## jusqu'au clic. Vide hors d'un collage.
 var collage: Array = []
@@ -866,7 +868,7 @@ func _survoler(position: Vector2) -> void:
 		"creuser":
 			montrees = Outils.modification("creuser", toutes, _occupe_actif)["effacer"].keys()
 		_:
-			montrees = toutes.filter(_occupe_actif)
+			montrees = toutes if selection_vide and g == "selectionner" else toutes.filter(_occupe_actif)
 	var teinte: Color = {"ajouter": TEINTE_AJOUTER, "creuser": TEINTE_CREUSER}.get(g, TEINTE_SELECTIONNER)
 	_remplir(_apercu, montrees, teinte)
 
@@ -894,7 +896,7 @@ func _toucher(position: Vector2) -> void:
 			for c in toutes:
 				if g == "deselectionner":
 					selection.erase(c)
-				elif _occupe_actif(c):
+				elif selection_vide or _occupe_actif(c):
 					selection[c] = true
 			_dessiner_selection()
 			selection_changee.emit()

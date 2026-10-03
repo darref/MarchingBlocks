@@ -716,6 +716,47 @@ static var _ensembles := {}
 
 
 ## Les fichiers de l'ensemble d'un albedo : {carte: chemin absolu} (+ "normale_dx"), vide s'il n'en a pas.
+## L'IMAGE CHOISIE EST COPIÉE DANS LE PROJET (Jordan, 3 octobre 2026 : « il faut copier l'image qu'on choisit ? ») —
+## oui : peindre sur une image de bibliothèque écrivait ses calques et ses cartes À CÔTÉ D'ELLE, hors du projet
+## (`D:/Spirit3D/…`), et un projet déplacé perdait ses textures. L'albedo ET son ensemble (les cartes trouvées à côté,
+## `fichiers_de_l_ensemble`) vont dans `dossier/<nom de l'albedo>/`, NOMS INCHANGÉS — l'ensemble s'y retrouve par les
+## mêmes noms. Une copie identique déjà là (même MD5) est reprise ; une autre image du même nom va dans `<nom>_2/`…
+## Une image déjà dans `dossier` n'est pas recopiée. Rend le chemin de la copie (ou "" et la raison dans `erreurs`).
+static func copier_dans_le_projet(chemin: String, dossier: String, erreurs: Array = []) -> String:
+	if chemin == "" or not FileAccess.file_exists(chemin):
+		erreurs.append("the image cannot be read")
+		return ""
+	var dedans := ProjectSettings.globalize_path(dossier).simplify_path()
+	if ProjectSettings.globalize_path(chemin).simplify_path().begins_with(dedans + "/"):
+		return chemin
+	var fichiers: Array = [chemin]
+	var ensemble := fichiers_de_l_ensemble(chemin)
+	for carte in ensemble:
+		if carte != "normale_dx" and ensemble[carte] is String:
+			fichiers.append(ensemble[carte])
+	var nom := chemin.get_file().get_basename()
+	var n := 1
+	while true:
+		var cible := dossier.path_join(nom if n == 1 else "%s_%d" % [nom, n])
+		# Libre si l'albedo n'y est pas (un dossier resté vide se reprend) ; le même s'il y est, au même MD5.
+		var la := cible.path_join(chemin.get_file())
+		var libre := not FileAccess.file_exists(la)
+		var meme := not libre and FileAccess.get_md5(la) == FileAccess.get_md5(chemin)
+		if libre or meme:
+			DirAccess.make_dir_recursive_absolute(cible)
+			for f: String in fichiers:
+				var vers := cible.path_join(f.get_file())
+				if FileAccess.file_exists(vers) and FileAccess.get_md5(vers) == FileAccess.get_md5(f):
+					continue
+				var err := DirAccess.copy_absolute(f, vers)
+				if err != OK:
+					erreurs.append("could not copy %s (error %d)" % [f.get_file(), err])
+					return ""
+			return cible.path_join(chemin.get_file())
+		n += 1
+	return ""
+
+
 static func fichiers_de_l_ensemble(chemin: String) -> Dictionary:
 	if chemin == "" or not FileAccess.file_exists(chemin):
 		return {}

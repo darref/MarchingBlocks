@@ -161,6 +161,8 @@ var _bouton_naviguer: Button
 var _titre_pinceau: Control
 var _ligne_taille: Control
 var _ligne_forme: Control
+var _case_vides: CheckBox
+var _largeur_eau: HSlider
 
 var _plans: CheckButton
 var _etiquette_vue: Label
@@ -1157,6 +1159,15 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			+ "thickening it."],
 	], _choisir_forme)
 	outils.contenu.add_child(_ligne_forme)
+	# PEINDRE UNE SÉLECTION DANS LE VIDE (Jordan, 3 octobre 2026 : « peindre une sélection pour en faire ce qu'on
+	# veut, comme une room quelconque ») : le pinceau Select ne prenait que la matière.
+	_case_vides = CheckBox.new()
+	_case_vides.text = "Select empty cells too"
+	_case_vides.focus_mode = Control.FOCUS_NONE
+	_case_vides.tooltip_text = ("The Select brush also takes the air: paint the outline of a room on the floor grid "
+		+ "(Disc brush), then Extend up and Fill — or anything else the Selection section does.")
+	_case_vides.toggled.connect(func(v: bool) -> void: _vue.selection_vide = v)
+	outils.contenu.add_child(_case_vides)
 
 	outils.contenu.add_child(_petit_titre("FLOOR  ·  PgUp PgDn"))
 	var ligne := HBoxContainer.new()
@@ -1200,6 +1211,14 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			_operer_selection.bind("retrecir_bord"), "retrecir"),
 		_bouton("Connected", "Selects all the matter linked to the selection by faces.",
 			_operer_selection.bind("connexe"), "connexe"),
+		# ÉTENDRE EN HAUTEUR, D'UN BOUTON (Jordan, 3 octobre 2026 : « depuis qu'on a fusionné Extrude, seulement des
+		# raccourcis ») : le mode « étendre » d'Extrude (Maj + clic), sans rien poser. ⚠ « SELECTION » DANS LE NOM : l'ancien
+		# « Extend up » posait de la matière comme Extrude, et c'est cette ambiguïté qui l'avait fait retirer (2 octobre).
+		_bouton("Extend selection ↑", "Adds the cells one level above the selection, empty ones too — no matter added. "
+			+ "Then Fill, or keep extending: a room's walls rise this way.", _extruder.bind("haut", "etendre"),
+			"extruder_haut"),
+		_bouton("Extend selection ↓", "Adds the cells one level below the selection, empty ones too — no matter added.",
+			_extruder.bind("bas", "etendre"), "extruder_bas"),
 	]))
 	sel.contenu.add_child(_petit_titre("MOVE  ·  arrows, Shift + ↑ ↓"))
 	var bouger: Array = []
@@ -1416,6 +1435,28 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 	sec.contenu.add_child(_aide_eau)
 	sec.contenu.add_child(_bouton("Leave", "Back to World and its painting tools (Esc).",
 		_changer_d_atelier.bind("monde"), "croix"))
+	# LA LARGEUR D'UNE RIVIÈRE À LA POSE (Jordan, 3 octobre 2026) : plusieurs sources côte à côte, en travers du courant.
+	var ligne_largeur := HBoxContainer.new()
+	ligne_largeur.add_theme_constant_override("separation", 8)
+	var lib := _texte("River width", 12)
+	lib.tooltip_text = ("A river (and its waterfalls) this many cells wide: as many sources side by side, across the "
+		+ "flow. Lakes and the sea are not affected.")
+	lib.mouse_filter = Control.MOUSE_FILTER_PASS
+	ligne_largeur.add_child(lib)
+	_largeur_eau = HSlider.new()
+	_largeur_eau.min_value = 1
+	_largeur_eau.max_value = 9
+	_largeur_eau.step = 1
+	_largeur_eau.value = 1
+	_largeur_eau.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_largeur_eau.focus_mode = Control.FOCUS_NONE
+	var val := _texte("1", 12)
+	_largeur_eau.value_changed.connect(func(v: float) -> void:
+		val.text = str(int(v))
+		_cle_apercu_eau = "")
+	ligne_largeur.add_child(_largeur_eau)
+	ligne_largeur.add_child(val)
+	sec.contenu.add_child(ligne_largeur)
 	sec.contenu.add_child(_petit_titre("WATER LAYERS"))
 	_liste_eaux = VBoxContainer.new()
 	_liste_eaux.add_theme_constant_override("separation", 4)
@@ -1672,7 +1713,18 @@ func _eau_survolee(s: Variant) -> void:
 	if r["erreur"] != "":
 		_vue.montrer_apercu([s], Vue.TEINTE_CREUSER)
 		return
-	_vue.montrer_apercu(_cases_d_un_corps(r), Vue.TEINTE_EAU)
+	var montrees := _cases_d_un_corps(r)
+	for c in _sources_a_poser(s).slice(1):
+		montrees.append_array(_cases_d_un_corps(FL.source(_occ_eau, c, _ocean_eau)))
+	_vue.montrer_apercu(montrees, Vue.TEINTE_EAU)
+
+
+## LA LARGEUR À LA POSE (Jordan, 3 octobre 2026) : les sources d'une rivière de `River width` cases
+## (`FL.sources_en_largeur`), sans celles qui tombent dans une eau déjà là.
+func _sources_a_poser(s: Vector3i) -> Array:
+	var largeur := int(_largeur_eau.value) if _largeur_eau != null else 1
+	return FL.sources_en_largeur(_occ_eau, s, largeur, _ocean_eau).filter(
+		func(c: Vector3i) -> bool: return c == s or _eau_sous(c).is_empty())
 
 
 ## Ce qu'on montre d'un corps : sa surface (un océan n'a pas à montrer tout son volume) et son cours.
@@ -1722,11 +1774,13 @@ func _eau_cliquee(s: Variant, bouton: int) -> void:
 		}.get(r["erreur"], r["erreur"]))
 		return
 	var e: Dictionary = _eaux[_eau_active]
+	var sources := _sources_a_poser(s)
 	_histoire.create_action("Water: " + {"ocean": "sea", "lac": "lake", "riviere": "river"}[r["genre"]])
-	_histoire.add_do_method(_poser_source.bind(e, s))
-	_histoire.add_undo_method(_oter_source.bind(e, (e["sources"] as Array).size()))
+	_histoire.add_do_method(_poser_sources.bind(e, sources))
+	_histoire.add_undo_method(_oter_sources.bind(e, (e["sources"] as Array).size(), sources.size()))
 	_histoire.commit_action()
-	_dire(_dire_un_corps(r) + " [i]Ctrl+Z undoes it.[/i]")
+	_dire(_dire_un_corps(r) + (" [b]%d cells wide[/b] (%d sources side by side)." % [sources.size(), sources.size()]
+		if sources.size() > 1 else "") + " [i]Ctrl+Z undoes it.[/i]")
 
 
 ## Les sources de mer de toutes les couches d'eau : [[couche, indice, source]], dans l'ordre.
@@ -1795,6 +1849,17 @@ func _dire_un_corps(r: Dictionary) -> String:
 		", fills %d lake(s) on its way" % lacs if lacs > 0 else "",
 		{"sort": "leaves the world", "rejoint": "joins the water below",
 			"ferme": "ends in a closed hollow"}.get(r["fin"], "stops")]
+
+
+func _poser_sources(e: Dictionary, sources: Array) -> void:
+	(e["sources"] as Array).append_array(sources)
+	_eau_perimee()
+
+
+func _oter_sources(e: Dictionary, debut: int, n: int) -> void:
+	for i in n:
+		(e["sources"] as Array).remove_at(debut)
+	_eau_perimee()
 
 
 func _poser_source(e: Dictionary, s: Vector3i) -> void:
@@ -2367,6 +2432,7 @@ func _contexte_des_outils() -> void:
 	_titre_pinceau.visible = pinceau
 	_ligne_taille.visible = pinceau
 	_ligne_forme.visible = pinceau
+	_case_vides.visible = _vue.outil == "selectionner"
 	_creux.visible = _vue.outil == "boite"
 	if _reglages_forme == null:
 		return
@@ -3801,7 +3867,20 @@ func _fichier_choisi(fichier: String) -> void:
 			# de moitié et plus — un rendu « vraiment pauvre » (Jordan, 3 octobre 2026). Une image choisie part en blanc,
 			# comme dans Blender ; la couleur reste là pour la teinter.
 			_retoucher("couleur", Color.WHITE)
-			_retoucher("texture", fichier)
+			# ⚠ L'IMAGE EST COPIÉE DANS LE PROJET (Jordan, 3 octobre 2026), avec son ensemble PBR : peindre dessus
+			# écrivait sinon hors du projet, et un projet déplacé perdait ses textures.
+			var erreurs: Array = []
+			var dossier: String = _modeleur.dossier_toiles if _modeleur.dossier_toiles != "" \
+				else _projet.get_basename() + "_images"
+			var copie := Peinture.copier_dans_le_projet(fichier, dossier, erreurs)
+			if copie == "":
+				_dire("[color=#e0603c]The image could not be copied into the project[/color] — %s. It is used where it "
+					% ", ".join(PackedStringArray(erreurs)) + "is.")
+				copie = fichier
+			elif copie != fichier:
+				_dire("[b]Image copied into the project[/b] → %s [i](its PBR maps with it, if any). Painting on it "
+					% copie.get_base_dir().get_file() + "never touches the original.[/i]")
+			_retoucher("texture", copie)
 			_inscrire_les_retouches()
 		"patron":
 			_exporter_le_patron(fichier)

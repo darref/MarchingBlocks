@@ -89,6 +89,53 @@ vec3 normale_vagues(vec2 p, vec2 flux, float defile, float t, float relief) {
 	return normalize(vec3(-(hx - h0) / e * relief, 1.0, -(hz - h0) / e * relief));
 }
 
+// LE MICRO (Jordan, 3 octobre 2026 : « la texture des eaux a une macro mais pas de micro, à l'échelle du stickman ») :
+// des rides d'environ 0,14, 0,07 et 0,04 case — trois octaves d'un bruit DÉRIVABLE, tournées l'une par rapport à
+// l'autre, qui défilent avec le courant. ⚠ Quatre ondes pures faisaient un QUADRILLAGE de points, lu comme un motif
+// imprimé (vu à l'image) : un bruit ne se répète pas. La pente est ANALYTIQUE (les différences finies de
+// `normale_vagues`, au pas de 0,04, sont trop grossières ici) ; chaque octave s'EFFACE quand un pixel couvre plus
+// d'un quart de ride (`pas` : la taille d'un pixel, en cases) — sinon, au loin, elles scintillent.
+vec3 bruit_derive(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	vec2 du = 6.0 * f * (1.0 - f);
+	float a = bruit(i);
+	float b = bruit(i + vec2(1.0, 0.0));
+	float c = bruit(i + vec2(0.0, 1.0));
+	float d = bruit(i + vec2(1.0, 1.0));
+	float k = a - b - c + d;
+	return vec3(a + (b - a) * u.x + (c - a) * u.y + k * u.x * u.y,
+		du * vec2(b - a + k * u.y, c - a + k * u.x));
+}
+
+// La pente (d/dx, d/dz) des micro-rides, dans le monde.
+vec2 pente_micro(vec2 p, vec2 flux, float defile, float t, float pas) {
+	vec2 n = vec2(-flux.y, flux.x);
+	vec2 q = vec2(dot(p, n), dot(p, flux) - defile * 1.3);
+	vec2 g = vec2(0.0);
+	float amp = 1.0;
+	float fr = 7.0;
+	mat2 r = mat2(vec2(1.0, 0.0), vec2(0.0, 1.0));
+	mat2 tour = mat2(vec2(0.80, 0.60), vec2(-0.60, 0.80));
+	for (int o = 0; o < 3; o++) {
+		vec3 b = bruit_derive((r * q) * fr + vec2(t * 0.45 * float(o + 1), -t * 0.3));
+		float efface = 1.0 - smoothstep(0.15, 0.4, pas * fr);
+		g += amp * efface * fr * (transpose(r) * b.yz);
+		amp *= 0.5;
+		fr *= 1.95;
+		r = tour * r;
+	}
+	return (g.x * n + g.y * flux) * 0.02;
+}
+
+// La normale MONDE des vagues ET des micro-rides. `pas` : length(fwidth(position xz)), pris dans fragment().
+vec3 normale_eau(vec2 p, vec2 flux, float defile, float t, float relief, float pas, float force_micro) {
+	vec3 b = normale_vagues(p, flux, defile, t, relief);
+	vec2 g = pente_micro(p, flux, defile, t, pas) * force_micro;
+	return normalize(vec3(b.x / b.y - g.x, 1.0, b.z / b.y - g.y));
+}
+
 // La profondeur VERTICALE sous ce fragment, jusqu'au terrain rendu (le tampon de profondeur des opaques).
 float profondeur_sous(sampler2D tex, vec2 uv, mat4 inv_proj, mat4 inv_vue, float y) {
 	float dz = texture(tex, uv).x;
@@ -193,6 +240,8 @@ uniform float vitesse_riviere = 1.6;
 uniform float vitesse_dormante = 0.25;
 uniform float clapot = 0.03;
 
+// Les micro-rides, à l'échelle du personnage (`pente_micro`) : 0 les éteint.
+uniform float micro = 0.55;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
@@ -215,7 +264,7 @@ void fragment() {
 	bool cascade = v_genre > 0.75;
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
-	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_vagues(v_monde.xz, flux, defile, t, ampleur);
+	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
 	float prof = profondeur_sous(depth_tex, SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX, v_monde.y);
 	// La réfraction : le fond lu à côté, d'autant plus que l'eau est profonde (rien au ras de la rive).
 	vec2 decal = nw.xz * refraction * clamp(prof, 0.0, 1.0) * (cascade ? 0.0 : 1.0);
@@ -257,6 +306,8 @@ uniform float vitesse_riviere = 1.6;
 uniform float vitesse_dormante = 0.25;
 uniform float clapot = 0.03;
 
+// Les micro-rides, à l'échelle du personnage (`pente_micro`) : 0 les éteint.
+uniform float micro = 0.40;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
@@ -277,7 +328,7 @@ void fragment() {
 	bool cascade = v_genre > 0.75;
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
-	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_vagues(v_monde.xz, flux, defile, t, ampleur);
+	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
 	vec3 nv = cascade ? NORMAL : normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
 	float prof = max(profondeur_sous(depth_tex, SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX, v_monde.y), 0.0);
 	// Fresnel (Schlick, eau ≈ 0,02) : transparente vue d'en haut, miroir en rasant.
@@ -367,6 +418,8 @@ uniform float vitesse_riviere = 0.8;
 uniform float vitesse_dormante = 0.04;
 uniform float clapot = 0.01;
 
+// Les micro-rides, à l'échelle du personnage (`pente_micro`) : 0 les éteint.
+uniform float micro = 0.25;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
@@ -387,7 +440,7 @@ void fragment() {
 	bool cascade = v_genre > 0.75;
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
-	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_vagues(v_monde.xz, flux, defile, t, ampleur);
+	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
 	float prof = max(profondeur_sous(depth_tex, SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX, v_monde.y), 0.0);
 	// Le fond se perd vite : une demi-case suffit à le noyer.
 	vec3 fond = textureLod(ecran, SCREEN_UV, 0.0).rgb;
@@ -427,6 +480,8 @@ uniform float vitesse_riviere = 1.4;
 uniform float vitesse_dormante = 0.2;
 uniform float clapot = 0.025;
 
+// Les micro-rides, à l'échelle du personnage (`pente_micro`) : 0 les éteint.
+uniform float micro = 0.45;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
@@ -447,7 +502,7 @@ void fragment() {
 	bool cascade = v_genre > 0.75;
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
-	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_vagues(v_monde.xz, flux, defile, t, ampleur);
+	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
 	float prof = max(profondeur_sous(depth_tex, SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX, v_monde.y), 0.0);
 	vec3 fond = textureLod(ecran, SCREEN_UV + nw.xz * 0.02 * clamp(prof, 0.0, 1.0), 0.0).rgb;
 	float transmis = exp(-prof * absorption);
@@ -586,6 +641,12 @@ void fragment() {
 	float autour = (1.0 - smoothstep(0.0, 0.16, max(prof, 0.0))) * (0.35 + 0.5 * force);
 
 	c *= 1.0 - ampleur + ampleur * 2.0 * marche;
+	// --- le micro, à l'échelle du personnage (Jordan, 3 octobre 2026) : de courts éclats clairs, étirés en travers
+	// du courant, qui défilent ; effacés quand un pixel couvre un éclat (au loin, ils scintilleraient).
+	vec2 m = vec2(dot(v_monde.xz, n) * 6.0, (dot(v_monde.xz, flux) - defile * 1.3) * 14.0);
+	float pas_m = max(length(dFdx(m)), length(dFdy(m)));
+	float eclat = smoothstep(0.80, 0.93, bruit_lisse(m + vec2(t * 0.7, 0.0))) * (1.0 - smoothstep(0.25, 0.6, pas_m));
+	c = mix(c, bleu_frange, eclat * 0.45 * (1.0 - 0.5 * p));
 	float encre = clamp(max(max(lignes * 0.5, 0.0), max(bord_rive * 0.85, autour)), 0.0, 1.0);
 	c = mix(c, couleur_ligne, encre);
 
