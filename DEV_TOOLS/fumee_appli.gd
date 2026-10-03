@@ -2630,6 +2630,24 @@ func _les_fluides(ed: Control) -> void:
 	_vrai((ed._liste_eaux.get_child(0).get_child(1) as Button).text.contains("1 sea, 1 lake, 1 river"),
 		"la liste des couches d'eau dit ce que porte la couche")
 
+	# UN SEUL OCÉAN (Jordan, 3 octobre 2026) : un clic dans le vide à une autre hauteur DÉPLACE la mer — l'ancienne
+	# source part dans la même action ; un Ctrl+Z la rend. À la même hauteur, rien ne change, et l'écran le dit.
+	vue.regler_etage(1)
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(95.5, 1.0, 95.5)))
+	ed._recalculer_eau()
+	_egal(ed._eaux[0]["sources"], [Vector3i(62, 1, 62), Vector3i(70, 4, 62), Vector3i(95, 1, 95)],
+		"un clic dans le vide plus haut : la mer y passe, l'ancienne source s'en va")
+	_vrai(ed._corps_eau[0][2]["genre"] == "ocean" and ed._corps_eau[0][2]["niveau"] == 1
+		and ed._rapport.text.contains("only one sea"), "… une seule mer, au niveau 1, et l'écran le dit")
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(99.5, 1.0, 99.5)))
+	_vrai(ed._eaux[0]["sources"].size() == 3 and ed._rapport.text.contains("already at height 1"),
+		"à la même hauteur : rien ne change, et l'écran le dit")
+	ed._histoire.undo()
+	ed._recalculer_eau()
+	_egal(ed._eaux[0]["sources"], [Vector3i(62, 1, 62), Vector3i(70, 4, 62), Vector3i(90, 0, 90)],
+		"Ctrl+Z : la mer revient au niveau 0, À SA PLACE dans la liste")
+	vue.regler_etage(0)
+
 	# LE CLIC DROIT RETIRE l'eau visée ; Ctrl+Z la rend.
 	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(62.5, 1.0, 62.5)), MOUSE_BUTTON_RIGHT)
 	_egal(ed._eaux[0]["sources"], [Vector3i(70, 4, 62), Vector3i(90, 0, 90)], "un clic droit sur le lac retire SA source")

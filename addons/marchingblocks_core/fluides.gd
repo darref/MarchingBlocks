@@ -538,6 +538,12 @@ static func monde(occupees: Dictionary, sources: Array, maxi := VOLUME_MAXI, ava
 	for i in sources.size():
 		var s: Vector3i = sources[i]
 		if not occupees.has(s) and dans_le_vide(occupees, s, b):
+			# ⚠ UN SEUL OCÉAN, À UN SEUL NIVEAU (Jordan, 3 octobre 2026) : le premier dans l'ordre des sources l'est ;
+			# un autre est refusé (« un_seul_ocean ») — deux plans à deux hauteurs n'ont pas de sens.
+			if n_oceans > 0:
+				corps[i] = _refus({"genre": "", "erreur": "", "niveau": 0, "eau": {}, "lacs": [], "cours": [],
+					"fin": ""}, "un_seul_ocean")
+				continue
 			n_oceans += 1
 			var r: Variant = reprendre.call(s)
 			if r == null or r["genre"] != "ocean":

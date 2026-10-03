@@ -386,7 +386,9 @@ static func _distance_au_segment_3d(p: Vector3, a: Vector3, b: Vector3) -> float
 func assemble() -> ArrayMesh:
 	var par_cle := {}
 	for cle in tuiles:
-		par_cle[cle] = tuiles[cle].vers_array_mesh(false)
+		# Avec ses normales (une par face) : sans elles, un matériau à carte de normales n'a pas de tangentes à lire, et
+		# le moteur le dit à chaque vignette (3 octobre 2026).
+		par_cle[cle] = tuiles[cle].vers_array_mesh(true)
 	var racine := Node3D.new()
 	for o in occurrences:
 		var mi := MeshInstance3D.new()

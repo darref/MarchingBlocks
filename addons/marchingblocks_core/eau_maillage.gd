@@ -29,10 +29,12 @@ const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const NAPPE := 0.7
 const RIVIERE := -0.15
 const DEBORD := 0.45
-## La lame d'une cascade est EN RETRAIT de cette distance sur le plan qui sépare la colonne de la lèvre de celle
-## d'où l'eau vient : la falaise amincie est à 0,25 en retrait, la lame passe 0,15 devant elle, et la bande d'en
-## haut (qui va jusqu'au plan) la recouvre de 0,1 — la nappe et la lame se rejoignent sans fente.
-const LAME := 0.1
+## La lame d'une cascade est EN AVANT de cette distance sur le plan qui sépare la colonne de la lèvre de celle d'où
+## l'eau vient. ⚠ **PLUS EN RETRAIT (Jordan, 3 octobre 2026 : « les cascades ont des bugs de construction »)** : à 0,1
+## en retrait, elle passait 0,15 devant la falaise amincie — et le relief SCULPTÉ de la falaise (qui a le droit de
+## déborder, règle (A)) la perçait de pointes noires à chaque case. À 0,3 devant le plan, elle est à 0,55 de la
+## falaise lisse. Une LÈVRE plate relie la bande d'en haut (qui s'arrête au plan) au haut de la lame.
+const LAME := 0.3
 ## L'océan s'étend au-delà de la boîte du monde jusqu'à cette distance : « aussi loin que la vue montre ».
 const LARGE := 2000.0
 
@@ -43,22 +45,35 @@ const CASCADE := 1.0
 
 ## Le maillage d'une liste de corps (des résultats de `FL.source`), contre les cases pleines `occupees`.
 ## Rend un ArrayMesh d'une surface, ou null s'il n'y a rien à dessiner.
+## ⚠ **TOUT CE QUI EST À PLAT PASSE PAR `_poser_les_plats`, SANS JONCTION EN T (Jordan, 3 octobre 2026 : « des bandes
+## fines de vide là où la découpe se fait »)** : les nappes fusionnées en grands rectangles (et le large, et les bandes
+## de rivière) posaient le coin d'un rectangle AU MILIEU du côté de son voisin. Le GPU ne garantit rien sur un tel
+## sommet : un fil de pixels de fond passait le long de chaque côté partagé.
 static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 	var a := _tableaux()
 	var b := FL.boite(occupees)
+	var plats: Array = []
+	var vus := {}
 	for r in corps:
 		if r == null or r["erreur"] != "":
 			continue
 		match r["genre"]:
 			"ocean":
-				_nappe(a, r["eau"], occupees, surface_des_colonnes(r.get("colonnes", null), occupees, b))
-				_large(a, b, float(r["niveau"]) + NAPPE)
+				var niveau: int = r["niveau"]
+				var h := NAN
+				if not b.is_empty() and niveau > (b["hi"] as Vector3i).y:
+					h = niveau + NAPPE   # le monde est noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau
+				plats.append_array(rectangles_de_nappe(r["eau"], occupees,
+					surface_des_colonnes(r.get("colonnes", null), occupees, b, niveau), niveau, h))
+				plats.append_array(_large(b, float(niveau) + NAPPE))
 			"lac":
-				_nappe(a, r["eau"], occupees)
+				plats.append_array(rectangles_de_nappe(r["eau"], occupees, null, r["niveau"]))
 			"riviere":
 				for lac in r["lacs"]:
-					_nappe(a, lac["cases"], occupees)
-				_riviere(a, r["cours"], occupees)
+					plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"]))
+				_riviere(a, r["cours"], occupees, plats, vus)
+	_poser_les_lames(a, vus, plats)
+	_poser_les_plats(a, plats)
 	if (a["v"] as PackedVector3Array).is_empty():
 		return null
 	var arr := []
@@ -71,6 +86,91 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	return m
+
+
+## LES PLATS SANS JONCTION EN T : chaque rectangle horizontal {x0, x1, z0, z1, h, couleur} ; un sommet d'un AUTRE
+## rectangle de même hauteur posé sur l'un de ses côtés y est inséré, et le rectangle est alors dessiné en éventail
+## autour de son centre (un polygone convexe : aucun triangle plat). Sans sommet inséré, deux triangles, comme avant.
+## UV = (x, z) du monde, partout. Les coordonnées sont des multiples de 0,05 : comparées en vingtièmes, exactement.
+static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
+	var sur_z := {}   # (h, z) → [x des sommets sur cette ligne]
+	var sur_x := {}   # (h, x) → [z]
+	for r: Dictionary in plats:
+		var hk := _k(r["h"])
+		for x in [r["x0"], r["x1"]]:
+			for z in [r["z0"], r["z1"]]:
+				_noter(sur_z, Vector2i(hk, _k(z)), _k(x))
+				_noter(sur_x, Vector2i(hk, _k(x)), _k(z))
+	for cle in sur_z:
+		(sur_z[cle] as Array).sort()
+	for cle in sur_x:
+		(sur_x[cle] as Array).sort()
+	for r: Dictionary in plats:
+		var hk := _k(r["h"])
+		var x0 := _k(r["x0"])
+		var x1 := _k(r["x1"])
+		var z0 := _k(r["z0"])
+		var z1 := _k(r["z1"])
+		# Le tour, dans un sens fixe : (x0,z0) → (x1,z0) → (x1,z1) → (x0,z1).
+		var tour: Array[Vector2i] = [Vector2i(x0, z0)]
+		for x in _entre(sur_z.get(Vector2i(hk, z0), []), x0, x1):
+			tour.append(Vector2i(x, z0))
+		tour.append(Vector2i(x1, z0))
+		for z in _entre(sur_x.get(Vector2i(hk, x1), []), z0, z1):
+			tour.append(Vector2i(x1, z))
+		tour.append(Vector2i(x1, z1))
+		var retour: Array = _entre(sur_z.get(Vector2i(hk, z1), []), x0, x1)
+		retour.reverse()
+		for x in retour:
+			tour.append(Vector2i(x, z1))
+		tour.append(Vector2i(x0, z1))
+		var monte: Array = _entre(sur_x.get(Vector2i(hk, x0), []), z0, z1)
+		monte.reverse()
+		for z in monte:
+			tour.append(Vector2i(x0, z))
+		var h: float = r["h"]
+		var c: Color = r["couleur"]
+		if tour.size() == 4:
+			_plat(a, r["x0"], r["x1"], r["z0"], r["z1"], h, c)
+			continue
+		var base: int = (a["v"] as PackedVector3Array).size()
+		var centre := Vector3((float(r["x0"]) + float(r["x1"])) * 0.5, h, (float(r["z0"]) + float(r["z1"])) * 0.5)
+		a["v"].append(centre)
+		a["n"].append(Vector3.UP)
+		a["c"].append(c)
+		a["uv"].append(Vector2(centre.x, centre.z))
+		for t in tour:
+			var p := Vector3(t.x / 20.0, h, t.y / 20.0)
+			a["v"].append(p)
+			a["n"].append(Vector3.UP)
+			a["c"].append(c)
+			a["uv"].append(Vector2(p.x, p.z))
+		var n := tour.size()
+		for k in n:
+			# Le tour est celui de `_plat` ((x0,z0) → (x1,z0) → (x1,z1)) : le produit vectoriel de (centre, k, k+1)
+			# pointe vers le BAS, à l'opposé de la normale — l'ordre que Godot veut (charte §4).
+			a["i"].append_array([base, base + 1 + k, base + 1 + (k + 1) % n])
+
+
+static func _k(v: float) -> int:
+	return roundi(v * 20.0)
+
+
+static func _noter(d: Dictionary, cle: Vector2i, v: int) -> void:
+	if not d.has(cle):
+		d[cle] = [v]
+	elif not (d[cle] as Array).has(v):
+		(d[cle] as Array).append(v)
+
+
+## Les valeurs triées de `l` strictement entre a et b.
+static func _entre(l: Array, a: int, b: int) -> Array:
+	var sortie: Array = []
+	var i := l.bsearch(a, false)
+	while i < l.size() and int(l[i]) < b:
+		sortie.append(l[i])
+		i += 1
+	return sortie
 
 
 static func _tableaux() -> Dictionary:
@@ -104,23 +204,28 @@ static func _plat(a: Dictionary, x0: float, x1: float, z0: float, z1: float, h: 
 		[Vector2(x0, z0), Vector2(x1, z0), Vector2(x1, z1), Vector2(x0, z1)])
 
 
-## La case `c` à la hauteur `h`, avancée de `DEBORD` sous chaque voisine pleine de son étage.
-static func _case_plate(a: Dictionary, c: Vector3i, h: float, occupees: Dictionary, couleur: Color) -> void:
+## La case `c` à la hauteur `h`, avancée de `DEBORD` sous chaque voisine pleine de son étage : un rectangle pour
+## `_poser_les_plats`.
+static func _case_plate(c: Vector3i, h: float, occupees: Dictionary, couleur: Color) -> Dictionary:
 	var xm := DEBORD if occupees.has(c + Vector3i(-1, 0, 0)) else 0.0
 	var xp := DEBORD if occupees.has(c + Vector3i(1, 0, 0)) else 0.0
 	var zm := DEBORD if occupees.has(c + Vector3i(0, 0, -1)) else 0.0
 	var zp := DEBORD if occupees.has(c + Vector3i(0, 0, 1)) else 0.0
-	_plat(a, c.x - xm, c.x + 1 + xp, c.z - zm, c.z + 1 + zp, h, couleur)
+	return {"x0": c.x - xm, "x1": c.x + 1 + xp, "z0": c.z - zm, "z1": c.z + 1 + zp, "h": h, "couleur": couleur}
 
 
-## La nappe d'une eau dormante : sa surface (`FL.surface`), à la hauteur de sa rangée + `NAPPE`.
-## ⚠ **PAS UN CARRÉ PAR CASE — DEMANDÉ PAR JORDAN (2 octobre 2026)** : un océan en posait un par case de sa surface.
-## Les cases sont FUSIONNÉES en grands rectangles (`rectangles_de_nappe`), sans rien changer à ce qu'on voit : même
-## aire couverte (débords compris), même couleur par point, mêmes UV (x, z du monde). ⚠ Ce n'est PAS un plan
-## unique : il traverserait les grottes sèches au niveau de l'eau.
-static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary, surface: Variant = null) -> void:
-	for r in rectangles_de_nappe(eau, occupees, surface):
-		_plat(a, r["x0"], r["x1"], r["z0"], r["z1"], r["h"], r["couleur"])
+## LA SURFACE DESSINÉE d'une eau dormante de niveau `niveau` : `FL.surface` (rien au-dessus), PLUS ses cases du niveau
+## sous un plafond. ⚠ **SOUS UN ÉTAGE FLOTTANT, L'EAU SE VOIT (Jordan, 3 octobre 2026 : « un mauvais raccord là où
+## l'océan passe une case de gap sous un étage flottant de matière »)** : la case pleine du dessus ne se voit qu'à un
+## quart de case au-dessus de son bas (l'aminci), donc à 0,55 au-dessus de la nappe — il y a de l'air, et la nappe y
+## manquait : un trou noir sous chaque surplomb. Une case noyée PLUS BAS que le niveau sous un plafond (une galerie
+## sous pression) n'a toujours pas de surface : l'eau y touche la roche.
+static func surface_dessinee(eau: Dictionary, occupees: Dictionary, niveau: int) -> Array[Vector3i]:
+	var s := FL.surface(eau, occupees)
+	for c: Vector3i in eau:
+		if c.y == niveau and occupees.has(c + Vector3i.UP):
+			s.append(c)
+	return s
 
 
 ## LES RECTANGLES D'UNE NAPPE : chaque case de surface est le rectangle [x − débord, x + 1 + débord] × [z …] à la
@@ -132,11 +237,14 @@ static func _nappe(a: Dictionary, eau: Dictionary, occupees: Dictionary, surface
 ## Chaque union ne joint que deux rectangles qui partagent un côté ENTIER : l'aire couverte est exactement celle des
 ## carrés d'avant. Ordre fixe (y, z, x) : la sortie ne dépend d'aucune table de hachage (les greffons la réécriront).
 ## `surface` : la surface et ses profondeurs déjà connues ({case: profondeur}, `surface_des_colonnes`), sinon null —
-## elle est alors relue dans `eau` (`FL.surface`, `FL.profondeur`).
-static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: Variant = null) -> Array:
+## elle est alors relue dans `eau` (`FL.surface`, ou `surface_dessinee` si le `niveau` de l'eau est donné ;
+## `FL.profondeur`). `h_forcee` : la hauteur de toute la nappe, si ce n'est pas la rangée + `NAPPE` (un océan qui noie
+## le monde : ses colonnes s'arrêtent au haut de la boîte).
+static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: Variant = null, niveau: Variant = null,
+		h_forcee := NAN) -> Array:
 	var profondeurs: Dictionary = {}
 	if surface == null:
-		for c: Vector3i in FL.surface(eau, occupees):
+		for c: Vector3i in (FL.surface(eau, occupees) if niveau == null else surface_dessinee(eau, occupees, niveau)):
 			profondeurs[c] = FL.profondeur(eau, occupees, c)
 	else:
 		profondeurs = surface
@@ -178,7 +286,8 @@ static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: 
 			ouverts.erase(cle)
 			r["z1"] = b["z"] + 1 + b["zp"]
 		else:
-			r = {"x0": x0, "x1": x1, "z0": b["z"] - b["zm"], "z1": b["z"] + 1 + b["zp"], "h": b["y"] + NAPPE,
+			r = {"x0": x0, "x1": x1, "z0": b["z"] - b["zm"], "z1": b["z"] + 1 + b["zp"],
+				"h": h_forcee if not is_nan(h_forcee) else b["y"] + NAPPE,
 				"couleur": b["couleur"]}
 			rects.append(r)
 		if b["zp"] == 0.0:
@@ -213,38 +322,38 @@ static func _triees(cases: Array) -> Array:
 
 
 ## LA SURFACE D'UN OCÉAN, LUE SUR SES TRONÇONS (`FL.ocean`, « colonnes ») : {case: profondeur}, la même que
-## `FL.surface` + `FL.profondeur`, sans relire le volume. Le haut d'un tronçon est en surface si la case du dessus n'est
-## pas pleine (au-dessus, rien n'est de l'eau : le tronçon est maximal) ; sa profondeur est sa hauteur, ou −1 s'il
+## `FL.surface` + `FL.profondeur` (ou `surface_dessinee`, si le `niveau` est donné), sans relire le volume. Le haut
+## d'un tronçon est en surface si la case du dessus n'est pas pleine (au-dessus, rien n'est de l'eau : le tronçon est
+## maximal), ou s'il est AU NIVEAU de l'océan (sous un étage flottant) ; sa profondeur est sa hauteur, ou −1 s'il
 ## descend jusqu'au fond de la boîte (sans fond). Null si les tronçons manquent.
-static func surface_des_colonnes(colonnes: Variant, occupees: Dictionary, b: Dictionary) -> Variant:
+static func surface_des_colonnes(colonnes: Variant, occupees: Dictionary, b: Dictionary, niveau: Variant = null) -> Variant:
 	if colonnes == null or b.is_empty():
 		return null
 	var lo_y: int = (b["lo"] as Vector3i).y
 	var s := {}
 	for t: Array in colonnes:
 		var haut := Vector3i(t[0], t[3], t[1])
-		if occupees.has(haut + Vector3i.UP):
+		if occupees.has(haut + Vector3i.UP) and (niveau == null or t[3] != int(niveau)):
 			continue
 		s[haut] = -1 if t[2] == lo_y else t[3] - t[2] + 1
 	return s
 
 
 ## L'océan hors de la boîte du monde : quatre grands rectangles autour d'elle, sans fond. Sans monde, un seul.
-static func _large(a: Dictionary, b: Dictionary, h: float) -> void:
+static func _large(b: Dictionary, h: float) -> Array:
 	var c := _couleur(Vector2.ZERO, DORMANTE, 1.0)
+	var r := func(x0: float, x1: float, z0: float, z1: float) -> Dictionary:
+		return {"x0": x0, "x1": x1, "z0": z0, "z1": z1, "h": h, "couleur": c}
 	if b.is_empty():
-		_plat(a, -LARGE, LARGE, -LARGE, LARGE, h, c)
-		return
+		return [r.call(-LARGE, LARGE, -LARGE, LARGE)]
 	var lo: Vector3i = b["lo"]
 	var hi: Vector3i = b["hi"]
 	var x0 := float(lo.x)
 	var x1 := float(hi.x + 1)
 	var z0 := float(lo.z)
 	var z1 := float(hi.z + 1)
-	_plat(a, -LARGE, LARGE, -LARGE, z0, h, c)
-	_plat(a, -LARGE, LARGE, z1, LARGE, h, c)
-	_plat(a, -LARGE, x0, z0, z1, h, c)
-	_plat(a, x1, LARGE, z0, z1, h, c)
+	return [r.call(-LARGE, LARGE, -LARGE, z0), r.call(-LARGE, LARGE, z1, LARGE), r.call(-LARGE, x0, z0, z1),
+		r.call(x1, LARGE, z0, z1)]
 
 
 ## LA SURFACE DE L'EAU AU-DESSUS DU POINT `p` — pour nager au Play test. `cases` : les cases d'eau DORMANTE (lacs,
@@ -295,23 +404,28 @@ static func _horizontal(d: Vector3i) -> bool:
 
 
 ## Une rivière : une bande sur chaque case du cours qui REPOSE SUR DE LA MATIÈRE, dans le sens du courant ; une
-## lame par suite de « chute ».
+## lame par suite de « chute ». Les bandes (et les lèvres) partent dans `plats`, les lames dans `vus` (posées ensuite
+## par `_poser_les_lames`, toutes rivières réunies).
 ## ⚠ PAS UNE BANDE PAR CASE « COULE » — VU À L'IMAGE (`capture_fluides.gd`) : la lèvre (la case d'où l'eau tombe)
 ## est au-dessus du VIDE, sa bande flottait en l'air en haut de chaque cascade ; et la case où l'eau retombe est
 ## une « chute », elle n'en avait pas : chaque marche d'un escalier restait sèche.
-static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary) -> void:
+## ⚠ **UNE CASE, UNE BANDE (Jordan, 3 octobre 2026)** : deux rivières qui passent au même endroit posaient deux bandes
+## (et deux lames) l'une dans l'autre — du scintillement, et une eau deux fois plus opaque. `vus` retient ce qui est
+## posé, pour toutes les rivières d'une couche.
+static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: Array, vus: Dictionary) -> void:
 	var n := cours.size()
 	for i in n:
 		var e: Dictionary = cours[i]
 		var c: Vector3i = e["case"]
-		if e["genre"] == "lac" or not occupees.has(c + Vector3i.DOWN):
+		if e["genre"] == "lac" or not occupees.has(c + Vector3i.DOWN) or vus.has(c):
 			continue
 		var d := Vector3i.ZERO
 		if i + 1 < n and _horizontal(cours[i + 1]["case"] - c):
 			d = cours[i + 1]["case"] - c
 		elif i > 0 and _horizontal(c - cours[i - 1]["case"]):
 			d = c - cours[i - 1]["case"]
-		_case_plate(a, c, c.y + RIVIERE, occupees, _couleur(Vector2(d.x, d.z), COURANTE, 0.05))
+		vus[c] = true
+		plats.append(_case_plate(c, c.y + RIVIERE, occupees, _couleur(Vector2(d.x, d.z), COURANTE, 0.05)))
 	var i := 0
 	while i < n:
 		var e: Dictionary = cours[i]
@@ -330,28 +444,81 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary) -> void:
 					if occupees.has(c - f):
 						d = f
 						break
-			_lame(a, levre, cours[j - 1]["case"], d)
+			_lame(levre, cours[j - 1]["case"], d, occupees, vus)
 			i = j
 		else:
 			i += 1
 
 
-## La lame d'une cascade, de la lèvre `levre` (la case d'où l'eau tombe) jusqu'à la dernière case de chute
-## `bas`, collée à la falaise qu'elle quitte (le côté −`d`). Sans sens connu, au milieu de la colonne.
-static func _lame(a: Dictionary, levre: Vector3i, bas: Vector3i, d: Vector3i) -> void:
+## La lame d'une cascade, de la lèvre `levre` (la case d'où l'eau tombe) jusqu'à la dernière case de chute `bas`,
+## `LAME` DEVANT le plan de la falaise qu'elle quitte (le côté −`d`). Retenue dans `vus` sous la clé de son plan et de sa
+## place sur ce plan ; deux rivières qui tombent au même endroit n'en font qu'une, de la plus haute lèvre au plus bas
+## pied. Sans sens connu, au milieu de la colonne.
+static func _lame(levre: Vector3i, bas: Vector3i, d: Vector3i, occupees: Dictionary, vus: Dictionary) -> void:
 	var haut := levre.y + RIVIERE
 	var pied := bas.y - 0.3
-	var c := _couleur(Vector2(d.x, d.z), CASCADE, 0.05)
-	if d.x != 0:
-		var x := float(levre.x) + (-LAME if d.x > 0 else 1.0 + LAME)
-		_quad(a, [Vector3(x, haut, levre.z), Vector3(x, haut, levre.z + 1), Vector3(x, pied, levre.z + 1),
-			Vector3(x, pied, levre.z)], Vector3(d.x, 0, 0), c,
-			[Vector2(levre.z, haut), Vector2(levre.z + 1, haut), Vector2(levre.z + 1, pied), Vector2(levre.z, pied)])
+	# Le plan : x = const (axe 0) ou z = const (axe 2) ; `a` la case le long du plan ; `plan` le plan de la falaise.
+	var axe := 0 if d.x != 0 else 2
+	var sens: int = d.x if d.x != 0 else d.z
+	var a_le_long: int = levre.z if axe == 0 else levre.x
+	var plan := 0.0
+	var coord := 0.0
+	if sens == 0:
+		axe = 2
+		sens = 1
+		a_le_long = levre.x
+		coord = levre.z + 0.5
+		plan = coord
 	else:
-		var sz: int = d.z if d.z != 0 else 1
-		var z := float(levre.z) + (-LAME if sz > 0 else 1.0 + LAME)
-		if d.z == 0:
-			z = levre.z + 0.5
-		_quad(a, [Vector3(levre.x, haut, z), Vector3(levre.x + 1, haut, z), Vector3(levre.x + 1, pied, z),
-			Vector3(levre.x, pied, z)], Vector3(0, 0, sz), c,
-			[Vector2(levre.x, haut), Vector2(levre.x + 1, haut), Vector2(levre.x + 1, pied), Vector2(levre.x, pied)])
+		var bord: int = levre.x if axe == 0 else levre.z
+		plan = float(bord) if sens > 0 else float(bord + 1)
+		coord = plan + LAME * sens
+	# La lèvre : la bande de la case d'avant s'arrête au plan de la falaise ; elle s'avance jusqu'à la lame. Seulement
+	# si cette case porte une bande (elle repose sur la matière), sinon elle flotterait.
+	var avant := levre - d
+	var levre_plate := d != Vector3i.ZERO and occupees.has(avant + Vector3i.DOWN) and not occupees.has(avant)
+	var cle := "%d|%d|%d" % [axe, roundi(coord * 20.0), a_le_long]
+	var l: Dictionary = vus.get(cle, {})
+	if l.is_empty():
+		vus[cle] = {"axe": axe, "sens": sens, "coord": coord, "plan": plan, "a": a_le_long, "haut": haut, "pied": pied,
+			"d": d, "levre": levre_plate}
+	else:
+		l["haut"] = maxf(l["haut"], haut)
+		l["pied"] = minf(l["pied"], pied)
+		l["levre"] = l["levre"] or levre_plate
+
+
+## Les lames retenues dans `vus`, et leurs lèvres. ⚠ **UNE LAME S'ÉLARGIT DE `LAME` AU BOUT QUI N'A PAS DE VOISINE SUR
+## SON PLAN** : posée devant la falaise, elle ne rejoignait plus celle de l'autre face à un coin saillant — on y voyait
+## l'arête de la roche entre deux rideaux. Élargies, les deux se rejoignent pile au coin (à `LAME` de chaque face) ; à
+## un coin rentrant, le bout élargi entre dans la roche, qui le cache.
+static func _poser_les_lames(a: Dictionary, vus: Dictionary, plats: Array) -> void:
+	for cle in vus:
+		if not cle is String:
+			continue
+		var l: Dictionary = vus[cle]
+		var axe: int = l["axe"]
+		var cle_plan := "%d|%d|" % [axe, roundi(float(l["coord"]) * 20.0)]
+		var debut := float(l["a"]) - (0.0 if vus.has(cle_plan + str(int(l["a"]) - 1)) or l["d"] == Vector3i.ZERO else LAME)
+		var fin := float(l["a"]) + 1.0 + (0.0 if vus.has(cle_plan + str(int(l["a"]) + 1)) or l["d"] == Vector3i.ZERO else LAME)
+		var haut: float = l["haut"]
+		var pied: float = l["pied"]
+		var coord: float = l["coord"]
+		var dd: Vector3i = l["d"]
+		var c := _couleur(Vector2(dd.x, dd.z), CASCADE, 0.05)
+		var n := Vector3(l["sens"], 0, 0) if axe == 0 else Vector3(0, 0, l["sens"])
+		var p: Array
+		if axe == 0:
+			p = [Vector3(coord, haut, debut), Vector3(coord, haut, fin), Vector3(coord, pied, fin), Vector3(coord, pied, debut)]
+		else:
+			p = [Vector3(debut, haut, coord), Vector3(fin, haut, coord), Vector3(fin, pied, coord), Vector3(debut, pied, coord)]
+		_quad(a, p, n, c, [Vector2(debut, haut), Vector2(fin, haut), Vector2(fin, pied), Vector2(debut, pied)])
+		if l["levre"]:
+			# La lèvre, à plat, du plan de la falaise jusqu'à la lame : une bande qui coule (la cascade la prolonge).
+			var cl := _couleur(Vector2(dd.x, dd.z), COURANTE, 0.05)
+			var p0: float = minf(l["plan"], coord)
+			var p1: float = maxf(l["plan"], coord)
+			if axe == 0:
+				plats.append({"x0": p0, "x1": p1, "z0": debut, "z1": fin, "h": haut, "couleur": cl})
+			else:
+				plats.append({"x0": debut, "x1": fin, "z0": p0, "z1": p1, "h": haut, "couleur": cl})

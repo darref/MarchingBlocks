@@ -543,6 +543,13 @@ func _maillage() -> void:
 	_vrai(q.all(func(e): return _couleur_proche(e["c"], Color(0.5, 0.5, 0.0, 0.25))),
 		"cuvette : dormante, profondeur 2 cases")
 	_vrai(_bien_tournes(q), "cuvette : faces avant horaires, normales en haut")
+	# Un couvercle sur une rangée de la cuvette (x 1..3, y 3, z 1) : le lac est le même, et sa nappe passe dessous.
+	var couverte := _monde_cuvette_calme()
+	_boite(couverte, Vector3i(1, 3, 1), Vector3i(3, 3, 1))
+	var lac_couvert := FL.source(couverte, Vector3i(2, 1, 2))
+	_egal([lac_couvert["genre"], lac_couvert["niveau"]], ["lac", 2], "cuvette couverte d'une rangée : le même lac")
+	_egal(_quads(EM.maillage([lac_couvert], couverte)).filter(func(e): return _couvre(e, Vector3(2.5, 2.7, 1.5))).size(), 1,
+		"cuvette couverte : la nappe passe sous le couvercle")
 
 	# L'escalier : 6 bandes — (0,3) (1,3), la retombée (2,2) et (3,2), la retombée (4,1) et (5,1) ; ni les lèvres
 	# (2,3) (4,2) (6,1), au-dessus du vide, ni (6,0) (6,−1), qui tombent hors du monde — et 3 lames.
@@ -554,25 +561,36 @@ func _maillage() -> void:
 	_boite(esc, Vector3i(-1, 0, 1), Vector3i(5, 4, 1))
 	_boite(esc, Vector3i(-1, 0, 0), Vector3i(-1, 4, 0))
 	q = _quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc))
-	_egal(q.size(), 9, "escalier : 6 bandes, 3 lames")
+	_egal(q.size(), 12, "escalier : 6 bandes, 3 lames, 3 lèvres")
 	for c in [Vector3i(2, 2, 0), Vector3i(4, 1, 0)]:
 		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y - 0.15, -0.45),
 			Vector3(c.x + 1, c.y - 0.15, 1.45)])).size(), 1,
 			"escalier : la marche %s, où l'eau retombe, est mouillée (et s'avance sous la marche d'au-dessus)" % c)
+	# Sur une lèvre, seule la LÈVRE de la cascade s'avance, de 0,3 au plus : aucune bande ne la couvre.
 	for c in [Vector3i(2, 3, 0), Vector3i(4, 2, 0), Vector3i(6, 1, 0)]:
-		_vrai(q.all(func(e): return not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[0].x != c.x),
-			"escalier : aucune bande ne flotte sur la lèvre %s" % c)
+		_vrai(q.all(func(e): return not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[1].x < c.x + 0.3001),
+			"escalier : aucune bande ne flotte sur la lèvre %s (la lèvre de la cascade s'arrête à 0,3)" % c)
 	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 2,85,
 	# courant vers +X.
 	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 2.85, -0.45), Vector3(1, 2.85, 1.45)]))
 	_egal(bande.size(), 1, "escalier : la bande de la première case, à sa place")
 	if bande.size() == 1:
 		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.05)), "… courant +X, genre rivière")
-	# Les lames, 0,1 en retrait du plan de la lèvre : x = 1,9 (2,85 → 1,7), 3,9 (1,85 → 0,7), 5,9 (0,85 → −1,3).
-	for l in [[1.9, 2.85, 1.7], [3.9, 1.85, 0.7], [5.9, 0.85, -1.3]]:
-		var lame := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0], l[2], 0), Vector3(l[0], l[1], 1)]))
+	# Les lames, 0,3 DEVANT le plan de la falaise (x = 2,3 ; 4,3 ; 6,3), élargies de 0,3 aux deux bouts (aucune voisine
+	# sur leur plan) : z ∈ [−0,3 ; 1,3] ; de 2,85 à 1,7, de 1,85 à 0,7, de 0,85 à −1,3. Et leurs lèvres, à plat, du plan
+	# de la falaise à la lame, à la hauteur de la bande.
+	for l in [[2.3, 2.85, 1.7], [4.3, 1.85, 0.7], [6.3, 0.85, -1.3]]:
+		var lame := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0], l[2], -0.3), Vector3(l[0], l[1], 1.3)]))
 		_vrai(lame.size() == 1 and _couleur_proche(lame[0]["c"], Color(1.0, 0.5, 1.0, 0.05)), "escalier : la lame en x = %s, de %s à %s" % l)
+		var levre := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0] - 0.3, l[1], -0.3), Vector3(l[0], l[1], 1.3)]))
+		_vrai(levre.size() == 1 and _couleur_proche(levre[0]["c"], Color(1.0, 0.5, 0.5, 0.05)),
+			"escalier : la lèvre de la lame en x = %s, de x = %s à la lame, à %s" % [l[0], l[0] - 0.3, l[1]])
 	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
+	_vrai(_sans_jonction_en_t(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc)),
+		"escalier : aucune jonction en T (la lèvre est plus large que la bande qu'elle prolonge)")
+	# DEUX RIVIÈRES AU MÊME ENDROIT n'en dessinent qu'une (charte : « une case, une bande »).
+	_egal(_quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0)), FL.source(esc, Vector3i(0, 3, 0))], esc)).size(), 12,
+		"escalier : deux fois la même rivière — les mêmes 12 morceaux, rien en double")
 
 	# L'océan autour de l'île, niveau 2 : ses 32 cases de surface fusionnées, et 4 rectangles jusqu'à ±2000.
 	var ile := _monde_ile()
@@ -581,7 +599,35 @@ func _maillage() -> void:
 	_vrai(_meme_boite(_boite_de(q), [Vector3(-2000, 2.7, -2000), Vector3(2000, 2.7, 2000)]),
 		"océan : jusqu'à l'horizon, à 2,7 — %s" % [_boite_de(q)])
 	_vrai(_bien_tournes(q), "océan : faces avant horaires")
+	_vrai(_sans_jonction_en_t(EM.maillage([FL.source(ile, Vector3i(10, 2, 10))], ile)),
+		"océan : aucune jonction en T entre les nappes fusionnées et le large (Jordan : « des bandes fines de vide »)")
 	_egal(EM.maillage([FL.source(_monde_cuvette(), Vector3i(0, 0, 0))], {}), null, "un refus : rien à dessiner")
+
+	# SOUS UN ÉTAGE FLOTTANT (Jordan, 3 octobre 2026 : « un mauvais raccord là où l'océan passe une case de gap sous
+	# un étage flottant ») : une dalle (0..4, 3, 0..4) sur un pilier (2, 0..2, 2), la mer au niveau 2 ; sous la dalle,
+	# la case (1, 2, 1) est de la mer, sous un plafond : la nappe y passe, à 2,7 (la dalle ne se voit qu'à 3,25).
+	var dalle := {}
+	_boite(dalle, Vector3i(0, 3, 0), Vector3i(4, 3, 4))
+	_boite(dalle, Vector3i(2, 0, 2), Vector3i(2, 2, 2))
+	var mer := FL.source(dalle, Vector3i(10, 2, 10))
+	_egal(mer["genre"], "ocean", "la dalle sur son pilier : une mer au niveau 2")
+	q = _quads(EM.maillage([mer], dalle))
+	_egal(q.filter(func(e): return _couvre(e, Vector3(1.5, 2.7, 1.5))).size(), 1, "sous la dalle, à 2,7 : la nappe passe")
+	_vrai(_sans_jonction_en_t(EM.maillage([mer], dalle)), "sous la dalle : aucune jonction en T")
+	# Une galerie noyée PLUS BAS que le niveau, sous un plafond : pas de nappe (l'eau y touche la roche).
+	q = _quads(EM.maillage([FL.source(ile, Vector3i(10, 2, 10))], ile))
+	_egal(q.filter(func(e): return _couvre(e, Vector3(4.5, 1.7, 3.5))).size(), 0,
+		"la galerie de l'île sous le niveau : aucune nappe dans la roche")
+	_egal(q.filter(func(e): return _couvre(e, Vector3(4.5, 2.7, 3.5))).size(), 1,
+		"la chambre de l'île AU niveau, sous son plafond : la nappe y est")
+
+	# UN SEUL OCÉAN (Jordan, 3 octobre 2026) : deux sources de mer à deux hauteurs — la première l'est, l'autre refusée.
+	var w := FL.monde(ile, [Vector3i(10, 2, 10), Vector3i(-8, 0, -8)])
+	_egal([w["corps"][0]["genre"], w["corps"][1]["erreur"]], ["ocean", "un_seul_ocean"],
+		"deux mers : la première est LA mer, la seconde est refusée")
+	_egal((w["ocean"] as Dictionary).size(), 181, "… et l'eau de la mer est celle du niveau 2 seulement")
+	w = FL.monde(ile, [Vector3i(-8, 0, -8), Vector3i(10, 2, 10)])
+	_egal([w["corps"][0]["niveau"], w["corps"][1]["erreur"]], [0, "un_seul_ocean"], "… dans l'autre ordre, celle du niveau 0")
 
 
 ## LES NAPPES FUSIONNÉES (Jordan, 2 octobre 2026 : « pas un plan par tuile ») — le dessin ne change PAS. L'attendu est
@@ -664,18 +710,78 @@ func _surface_pour_nager() -> void:
 	_egal(EM.niveau_au_point({}, [], {}, Vector3.ZERO), -INF, "sans eau : nulle part")
 
 
-## Les quads d'un maillage : [{"p": 4 sommets, "c": couleur du premier, "n": normale}].
+## Les MORCEAUX d'un maillage — chaque rectangle, lame ou lèvre est un groupe de sommets que ses triangles relient (un
+## quad, ou un éventail autour de son centre quand des sommets voisins y sont insérés) : [{"p": ses sommets, "c": la
+## couleur du premier, "n": sa normale}].
 func _quads(mesh: ArrayMesh) -> Array:
 	var q: Array = []
 	if mesh == null:
 		return q
 	var a := mesh.surface_get_arrays(0)
 	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	for k in range(0, v.size(), 4):
-		q.append({"p": [v[k], v[k + 1], v[k + 2], v[k + 3]], "c": (a[Mesh.ARRAY_COLOR] as PackedColorArray)[k],
-			"n": (a[Mesh.ARRAY_NORMAL] as PackedVector3Array)[k], "i": a[Mesh.ARRAY_INDEX], "k": k,
-			"v": v})
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var parent: Array = range(v.size())
+	var racine := func(i: int) -> int:
+		while parent[i] != i:
+			i = parent[i]
+		return i
+	for t in range(0, idx.size(), 3):
+		var r0: int = racine.call(idx[t])
+		for k in [1, 2]:
+			var rk: int = racine.call(idx[t + k])
+			if rk != r0:
+				parent[rk] = r0
+	var groupes := {}
+	for i in v.size():
+		var r: int = racine.call(i)
+		if not groupes.has(r):
+			groupes[r] = []
+		groupes[r].append(i)
+	for r in groupes:
+		var membres: Array = groupes[r]
+		var p: Array = []
+		for i in membres:
+			p.append(v[i])
+		q.append({"p": p, "c": (a[Mesh.ARRAY_COLOR] as PackedColorArray)[membres[0]],
+			"n": (a[Mesh.ARRAY_NORMAL] as PackedVector3Array)[membres[0]], "mesh": mesh})
 	return q
+
+
+## Le morceau horizontal `e` couvre-t-il le point p (à sa hauteur, strictement dans sa boîte) ?
+func _couvre(e: Dictionary, p: Vector3) -> bool:
+	var b := _boite_de([e])
+	return absf(b[0].y - p.y) < 1e-4 and absf(b[1].y - p.y) < 1e-4 and p.x > b[0].x and p.x < b[1].x \
+		and p.z > b[0].z and p.z < b[1].z
+
+
+## AUCUNE JONCTION EN T : aucun sommet du maillage n'est posé STRICTEMENT à l'intérieur d'une arête d'un triangle (sur
+## les faces horizontales, là où les nappes se touchent). Attendu recalculé ici, sur les triangles tels qu'ils sont.
+func _sans_jonction_en_t(mesh: ArrayMesh) -> bool:
+	var a := mesh.surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var nor: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var points := {}
+	for i in v.size():
+		if nor[i].y > 0.5:
+			points[v[i]] = true
+	for t in range(0, idx.size(), 3):
+		if nor[idx[t]].y < 0.5:
+			continue
+		for k in 3:
+			var p0: Vector3 = v[idx[t + k]]
+			var p1: Vector3 = v[idx[t + (k + 1) % 3]]
+			var l := p0.distance_to(p1)
+			for p: Vector3 in points:
+				if absf(p.y - p0.y) > 1e-4:
+					continue
+				var u := (p - p0).dot(p1 - p0) / (l * l)
+				if u <= 1e-5 or u >= 1.0 - 1e-5:
+					continue
+				if (p0 + (p1 - p0) * u).distance_to(p) < 1e-3:
+					print("    jonction en T : ", p, " sur ", p0, " → ", p1)
+					return false
+	return true
 
 
 ## [min, max] des sommets. ⚠ PAS ARRONDIS : `snappedf(0,001)` sur un Vector3 (flottants 32 bits) écarte −2000 de
@@ -705,12 +811,10 @@ func _couleur_proche(a: Color, b: Color) -> bool:
 func _bien_tournes(q: Array) -> bool:
 	if q.is_empty():
 		return false
-	var idx: PackedInt32Array = q[0]["i"]
-	var v: PackedVector3Array = q[0]["v"]
-	var nn: Dictionary = {}
-	for e in q:
-		for d in 4:
-			nn[e["k"] + d] = e["n"]
+	var a: Array = (q[0]["mesh"] as ArrayMesh).surface_get_arrays(0)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var nn: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+	var idx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
 	for t in range(0, idx.size(), 3):
 		var x := (v[idx[t + 1]] - v[idx[t]]).cross(v[idx[t + 2]] - v[idx[t]])
 		if x.dot(nn[idx[t]]) >= 0.0:
@@ -745,6 +849,11 @@ func _presets() -> void:
 		# Le contrat : chaque preset lit le courant, le genre et la profondeur du terrain.
 		_vrai(code.contains("COLOR.rg") and code.contains("COLOR.b") and code.contains("hint_depth_texture"),
 			"« %s » lit le contrat (courant, genre) et la profondeur du terrain" % preset)
+		# Le clapot soulève TOUT (cascades comprises) : réservé aux nappes, il décollait la lèvre du haut de la lame — un
+		# fil sombre le long de chaque cascade (vu à l'image, 3 octobre 2026).
+		var vertex: String = code.substr(code.find("void vertex()"), code.find("void fragment()") - code.find("void vertex()"))
+		_vrai(vertex.contains("clapot") and not vertex.contains("v_genre <") and not vertex.contains("v_genre >"),
+			"« %s » : le clapot ne dépend pas du genre (la lame suit sa lèvre)" % preset)
 	_egal(codes.size(), EP.PRESETS.size(), "un shader différent par preset")
 	# Les trois liquides du 2 octobre 2026 : présents, exportés sous leur nom anglais, et un voile chacun.
 	_egal(EP.PRESETS, ["stylise", "transparent", "reflechissant", "lave", "marais", "acide"], "six liquides")

@@ -203,9 +203,10 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
-	}
+	// ⚠ LE CLAPOT SOULÈVE AUSSI LES CASCADES (3 octobre 2026) : il ne soulevait que les nappes, et le bord de la
+	// lèvre montait et descendait au-dessus du haut FIXE de la lame — un fil sombre le long de chaque cascade.
+	// Il dépend de (x, z) seulement : deux sommets à la même place bougent ensemble, la lame suit sa lèvre.
+	VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
 }
 
 void fragment() {
@@ -266,9 +267,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
-	}
+	// Le clapot, cascades comprises (voir le premier preset).
+	VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
 }
 
 void fragment() {
@@ -324,9 +324,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.4 + v_monde.x * 0.6 + TIME * 0.7);
-	}
+	// Le clapot, cascades comprises (voir le premier preset).
+	VERTEX.y += clapot * sin(v_monde.z * 0.4 + v_monde.x * 0.6 + TIME * 0.7);
 }
 
 void fragment() {
@@ -378,9 +377,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.5 + v_monde.x * 0.7 + TIME * 0.9);
-	}
+	// Le clapot, cascades comprises (voir le premier preset).
+	VERTEX.y += clapot * sin(v_monde.z * 0.5 + v_monde.x * 0.7 + TIME * 0.9);
 }
 
 void fragment() {
@@ -439,9 +437,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.6 + v_monde.x * 0.9 + TIME * 2.1);
-	}
+	// Le clapot, cascades comprises (voir le premier preset).
+	VERTEX.y += clapot * sin(v_monde.z * 0.6 + v_monde.x * 0.9 + TIME * 2.1);
 }
 
 void fragment() {
@@ -541,9 +538,8 @@ void vertex() {
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
 	// Le clapot : une ondulation légère des nappes, jamais des cascades.
-	if (v_genre < 0.75) {
-		VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
-	}
+	// Le clapot, cascades comprises (voir le premier preset).
+	VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
 }
 
 void fragment() {

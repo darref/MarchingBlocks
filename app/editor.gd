@@ -1702,11 +1702,16 @@ func _eau_cliquee(s: Variant, bouton: int) -> void:
 		_histoire.commit_action()
 		_dire("[b]Water removed[/b] from « %s ». [i]Ctrl+Z brings it back.[/i]" % e["nom"])
 		return
+	if _eaux.is_empty():
+		_ajouter_eau(Projet.couche_d_eau("Water 1"))
+	# ⚠ UN SEUL OCÉAN, À UN SEUL NIVEAU (Jordan, 3 octobre 2026) : un clic dans le vide DÉPLACE la mer à sa hauteur —
+	# les autres sources de mer, dans toutes les couches d'eau, sont retirées dans la même action (un Ctrl+Z).
+	if not _occ_eau.has(s) and FL.dans_le_vide(_occ_eau, s):
+		_poser_la_mer(s)
+		return
 	if not _eau_sous(s).is_empty():
 		_dire("[i]There is water here already.[/i] Right click removes it.")
 		return
-	if _eaux.is_empty():
-		_ajouter_eau(Projet.couche_d_eau("Water 1"))
 	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau)
 	if r["erreur"] != "":
 		_dire("[color=#e0603c]Water[/color] — %s" % {
@@ -1722,6 +1727,52 @@ func _eau_cliquee(s: Variant, bouton: int) -> void:
 	_histoire.add_undo_method(_oter_source.bind(e, (e["sources"] as Array).size()))
 	_histoire.commit_action()
 	_dire(_dire_un_corps(r) + " [i]Ctrl+Z undoes it.[/i]")
+
+
+## Les sources de mer de toutes les couches d'eau : [[couche, indice, source]], dans l'ordre.
+func _sources_de_mer() -> Array:
+	var sortie: Array = []
+	for e in _eaux:
+		for i in (e["sources"] as Array).size():
+			var src: Vector3i = e["sources"][i]
+			if not _occ_eau.has(src) and FL.dans_le_vide(_occ_eau, src):
+				sortie.append([e, i, src])
+	return sortie
+
+
+## La mer à la hauteur de `s` : la seule. Les autres sources de mer partent dans la même action.
+func _poser_la_mer(s: Vector3i) -> void:
+	var anciennes := _sources_de_mer()
+	if anciennes.size() == 1 and (anciennes[0][2] as Vector3i).y == s.y:
+		_dire("[i]The sea is already at height %d.[/i] Click higher or lower in the open air to move it; right click "
+			% s.y + "on it removes it.")
+		return
+	var r: Dictionary = FL.source(_occ_eau, s, {})
+	if r["erreur"] != "":
+		_dire("[color=#e0603c]Water[/color] — %s" % {"trop_grand": "too large to fill (more than %d cells)." % FL.VOLUME_MAXI
+			}.get(r["erreur"], r["erreur"]))
+		return
+	var e: Dictionary = _eaux[_eau_active]
+	_histoire.create_action("Water: sea at height %d" % s.y)
+	_histoire.add_do_method(_changer_la_mer.bind(anciennes, e, s))
+	_histoire.add_undo_method(_rendre_la_mer.bind(anciennes, e))
+	_histoire.commit_action()
+	_dire(_dire_un_corps(r) + (" The sea that was at height %d is gone: [i]there is only one sea.[/i]"
+		% (anciennes[0][2] as Vector3i).y if not anciennes.is_empty() else "") + " [i]Ctrl+Z undoes it.[/i]")
+
+
+func _changer_la_mer(anciennes: Array, e: Dictionary, s: Vector3i) -> void:
+	for k in range(anciennes.size() - 1, -1, -1):
+		(anciennes[k][0]["sources"] as Array).remove_at(anciennes[k][1])
+	(e["sources"] as Array).append(s)
+	_eau_perimee()
+
+
+func _rendre_la_mer(anciennes: Array, e: Dictionary) -> void:
+	(e["sources"] as Array).remove_at((e["sources"] as Array).size() - 1)
+	for k in anciennes.size():
+		(anciennes[k][0]["sources"] as Array).insert(anciennes[k][1], anciennes[k][2])
+	_eau_perimee()
 
 
 func _dire_un_corps(r: Dictionary) -> String:
@@ -1876,8 +1927,11 @@ func _bilan_d_eau(i: int) -> String:
 	for g in [["ocean", "sea"], ["lac", "lake"], ["riviere", "river"]]:
 		if n[g[0]] > 0:
 			morceaux.append("%d %s%s" % [n[g[0]], g[1], "s" if n[g[0]] > 1 else ""])
-	if n[""] > 0:
-		morceaux.append("%d without water" % n[""])
+	var de_trop := (_corps_eau[i] as Array).filter(func(r): return r["erreur"] == "un_seul_ocean").size()
+	if n[""] - de_trop > 0:
+		morceaux.append("%d without water" % (n[""] - de_trop))
+	if de_trop > 0:
+		morceaux.append("%d other sea ignored — one sea only" % de_trop)
 	return ", ".join(PackedStringArray(morceaux)) if not morceaux.is_empty() else "empty"
 
 
@@ -2601,6 +2655,8 @@ const REGLAGES_RELIEF := [
 ]
 
 var _section_pbr: Control
+var _case_ensemble: CheckBox
+var _etat_ensemble: Label
 var _bouton_cuire: Button
 var _case_pbr: CheckBox
 var _reglages_pbr: VBoxContainer
@@ -2618,6 +2674,18 @@ func _batir_pbr(pile: VBoxContainer) -> void:
 	sec.contenu.add_child(_texte("Normal, roughness and occlusion are DERIVED from the material's image and follow "
 		+ "every brush stroke on their own; only these settings are saved. Metal is never guessed: the Metallic "
 		+ "slider stays in charge. The maps travel in the .glb to Godot, Unity and Unreal.", 11, Palette.GRIS))
+	# L'ENSEMBLE PBR (3 octobre 2026) : les cartes trouvées à côté de l'image, par leur nom.
+	_case_ensemble = CheckBox.new()
+	_case_ensemble.text = "Use the maps found next to the image"
+	_case_ensemble.focus_mode = Control.FOCUS_NONE
+	_case_ensemble.tooltip_text = ("A texture set (rock_color.png, rock_normal_gl.png, rock_roughness.png, "
+		+ "rock_ambient_occlusion.png…) brings maps made from the real relief: they are used as they are, and win "
+		+ "over the derived ones.")
+	_case_ensemble.toggled.connect(func(v: bool) -> void: _retoucher("ensemble", v))
+	sec.contenu.add_child(_case_ensemble)
+	_etat_ensemble = _texte("", 11, Palette.GRIS)
+	_etat_ensemble.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(_etat_ensemble)
 	_case_pbr = CheckBox.new()
 	_case_pbr.text = "Derive PBR maps from the image"
 	_case_pbr.focus_mode = Control.FOCUS_NONE
@@ -2729,8 +2797,23 @@ func _redire_le_pbr(d: Dictionary) -> void:
 	if _case_pbr == null:
 		return
 	var actif: bool = d.get("pbr") is Dictionary
+	var fichiers: Dictionary = Peinture.fichiers_de_l_ensemble(str(d.get("texture", "")))
+	var a_un_ensemble := fichiers.has("normale") or fichiers.has("rugosite") or fichiers.has("occlusion") 		or fichiers.has("orm")
+	var ensemble_pris := a_un_ensemble and bool(d.get("ensemble", true))
+	_case_ensemble.visible = a_un_ensemble
+	_case_ensemble.button_pressed = ensemble_pris
+	var noms := {"normale": "normal", "rugosite": "roughness", "occlusion": "occlusion", "metal": "metal",
+		"orm": "packed AO-rough-metal", "hauteur": "height (not used)"}
+	var lus: Array = []
+	for carte in noms:
+		if fichiers.has(carte):
+			lus.append("%s (%s)" % [noms[carte], (fichiers[carte] as String).get_file()])
+	_etat_ensemble.visible = a_un_ensemble
+	_etat_ensemble.text = ("Texture set found: " + ", ".join(PackedStringArray(lus)) + "."
+		+ ("" if ensemble_pris else " Not used: the maps below are derived instead.")) if a_un_ensemble else ""
+	_case_pbr.disabled = ensemble_pris
 	_case_pbr.button_pressed = actif
-	_reglages_pbr.visible = actif
+	_reglages_pbr.visible = actif and not ensemble_pris
 	var g: Dictionary = Cartes.reglages(d.get("pbr"))
 	for cle_pbr in _curseurs_pbr:
 		(_curseurs_pbr[cle_pbr] as HSlider).value = float(g[cle_pbr])
@@ -3714,6 +3797,10 @@ func _fichier_choisi(fichier: String) -> void:
 		"monde":
 			_exporter_le_monde(fichier)
 		"texture":
+			# ⚠ LA COULEUR MULTIPLIE L'IMAGE : une couleur sombre laissée d'avant (un gris à 0,39) assombrissait la texture
+			# de moitié et plus — un rendu « vraiment pauvre » (Jordan, 3 octobre 2026). Une image choisie part en blanc,
+			# comme dans Blender ; la couleur reste là pour la teinter.
+			_retoucher("couleur", Color.WHITE)
 			_retoucher("texture", fichier)
 			_inscrire_les_retouches()
 		"patron":
@@ -5003,10 +5090,77 @@ func _ouvrir(chemin: String) -> bool:
 	_ouverture = false
 	_activer(etat["active"])
 	_retenir_le_projet()
+	# LES ENSEMBLES PBR (3 octobre 2026) : un monde tranché avant qu'on lise les cartes posées à côté des images porte
+	# encore l'albedo seul (ou des cartes déduites) — son `.glb` est réécrit une fois, et on le dit.
+	for c in _couches:
+		if _ensembles_en_retard(c):
+			_temoin_de(c)
+			c["_glb_perime"] = true
+			notes.append("« %s » now uses the PBR maps found next to its images (normal, roughness, occlusion)." % c["nom"])
+	_rhabiller_les_mondes()
 	_aller_a("monde")
 	_dire("[color=#b4bd85][b]Project opened[/b][/color] ← %s\n%d layer(s). [i]Every change is saved as you "
 		% [chemin, _couches.size()] + "go — no need for Ctrl+S.[/i]%s"
 		% ("" if notes.is_empty() else "\n\n" + "\n".join(PackedStringArray(notes))))
+	return true
+
+
+## Le monde posé d'une couche (son lot) porte-t-il les cartes des ENSEMBLES PBR de son témoin ? Vrai s'il est en
+## retard : un matériau du témoin dont l'image a un ensemble avec une normale, et le matériau du même nom, dans le lot,
+## sans cette normale (absente, ou une autre — les cartes déduites d'avant). Lit le `.mbtiles` sans charger le témoin.
+func _ensembles_en_retard(c: Dictionary) -> bool:
+	var chemin := str(c.get("temoin", ""))
+	if chemin == "" or not FileAccess.file_exists(chemin) or not _source_liee(c):
+		return false
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(chemin))
+	if not d is Dictionary:
+		return false
+	var voulues := {}   # nom du matériau → l'image de la normale de son ensemble
+	for m in (d as Dictionary).get("materiaux", []):
+		if not m is Dictionary or not bool(m.get("ensemble", true)):
+			continue
+		var e: Dictionary = Peinture.ensemble_de(str(m.get("texture", "")))
+		if not e.is_empty() and e["normale"] != null:
+			voulues[str(m.get("nom", ""))] = (e["normale"] as ImageTexture).get_image()
+	if voulues.is_empty():
+		return false
+	var lot: MeshLibrary = _vue.couche(_couches.find(c)).lot
+	if lot == null:
+		return false
+	for id in lot.get_item_list():
+		var mesh: Mesh = lot.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var sm := mesh.surface_get_material(s) as BaseMaterial3D
+			if sm == null or not voulues.has(sm.resource_name):
+				continue
+			var lue: Image = sm.normal_texture.get_image() if sm.normal_texture != null else null
+			if lue == null or not _memes_pixels(lue, voulues[sm.resource_name]):
+				return true
+			voulues.erase(sm.resource_name)
+			if voulues.is_empty():
+				return false
+	return false
+
+
+## Deux images à peu près égales (même taille, seize pixels à 3/255 près) — une normale relue d'un .glb (PNG) contre
+## celle de l'ensemble.
+static func _memes_pixels(a: Image, b: Image) -> bool:
+	if a.get_size() != b.get_size():
+		return false
+	var ia := a.duplicate() as Image
+	var ib := b.duplicate() as Image
+	for i in [ia, ib]:
+		if i.is_compressed():
+			i.decompress()
+	for k in 16:
+		var x: int = (k * 37 + 3) % a.get_width()
+		var y: int = (k * 53 + 7) % a.get_height()
+		var pa := ia.get_pixel(x, y)
+		var pb := ib.get_pixel(x, y)
+		if absf(pa.r - pb.r) > 0.012 or absf(pa.g - pb.g) > 0.012 or absf(pa.b - pb.b) > 0.012:
+			return false
 	return true
 
 

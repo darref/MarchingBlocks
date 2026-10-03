@@ -40,6 +40,7 @@ func _initialize() -> void:
 	_les_cartes_partent_dans_le_glb()
 	_le_trajet_jusqu_au_greffon()
 	_l_albedo_du_relief()
+	_les_ensembles()
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -765,3 +766,98 @@ func _uv_du_point(m: RefCounted, f: int, p: Vector3) -> Vector2:
 		if w.x >= -1e-4 and w.y >= -1e-4 and w.z >= -1e-4:
 			return u[tri[0]] * w.x + u[tri[1]] * w.y + u[tri[2]] * w.z
 	return Vector2.INF
+
+
+## LES ENSEMBLES PBR (Jordan, 3 octobre 2026 : « sur les ensembles PBR appliqués aux UV d'un witness de test, je ne vois
+## toujours que l'albedo ») — les cartes faites par l'auteur de la texture, trouvées à côté d'elle par leur nom. Attendus
+## écrits à la main : les noms, les pixels des cartes posées.
+func _les_ensembles() -> void:
+	var ps := func(l: Array) -> PackedStringArray: return PackedStringArray(l)
+	var c: Dictionary = Cartes.compagnons("D:/x/cliff_rocks_01_color_1k.png", ps.call(["cliff_rocks_01_color_1k.png",
+		"cliff_rocks_01_normal_dx_1k.png", "cliff_rocks_01_normal_gl_1k.png", "cliff_rocks_01_roughness_1k.png",
+		"cliff_rocks_01_ambient_occlusion_1k.png", "cliff_rocks_01_height_1k.png", "cliff_rocks_01_metallic_1k.png",
+		"cliff_rocks_01_color_1k.png.import", "autre_normal_gl_1k.png"]))
+	_dire(c == {"normale": "cliff_rocks_01_normal_gl_1k.png", "rugosite": "cliff_rocks_01_roughness_1k.png",
+		"occlusion": "cliff_rocks_01_ambient_occlusion_1k.png", "metal": "cliff_rocks_01_metallic_1k.png",
+		"hauteur": "cliff_rocks_01_height_1k.png"}, "ensemble « _color_ » : chaque carte trouvée, la normale OpenGL préférée — %s" % c)
+	c = Cartes.compagnons("rock_color.png", ps.call(["rock_color.png", "rock_normal_dx.png"]))
+	_dire(c == {"normale": "rock_normal_dx.png", "normale_dx": true}, "une normale DirectX seule : prise, et dite DirectX — %s" % c)
+	c = Cartes.compagnons("Rock_Diff_2K.JPG", ps.call(["Rock_Diff_2K.JPG", "Rock_Nor_GL_2K.jpg", "Rock_ARM_2K.jpg"]))
+	_dire(c == {"normale": "Rock_Nor_GL_2K.jpg", "orm": "Rock_ARM_2K.jpg"}, "nommage Poly Haven (diff, nor_gl, arm), casse gardée — %s" % c)
+	c = Cartes.compagnons("rock_base_color.png", ps.call(["rock_base_color.png", "rock_normal.png", "rock_roughness.png"]))
+	_dire(c == {"normale": "rock_normal.png", "rugosite": "rock_roughness.png"}, "« base_color » remplacé en entier — %s" % c)
+	_dire(Cartes.compagnons("rock.png", ps.call(["rock.png", "rock_normal.png"])).is_empty(), "sans mot de couleur : pas d'ensemble")
+	_dire(Cartes.compagnons("rock_colored.png", ps.call(["rock_colored.png", "rock_normaled.png", "rock_normal.png"])).is_empty(),
+		"« colored » n'est pas le mot « color » : pas d'ensemble")
+
+	# Les pixels : une normale DirectX a le vert inversé ; l'ORM range occlusion, rugosité, métal (blanc s'il manque).
+	var n := Image.create(2, 2, false, Image.FORMAT_RGB8)
+	n.fill(Color8(128, 77, 255))
+	var dx: Image = Cartes.normale_de_l_ensemble(n, Vector2i(2, 2), true)
+	_dire(dx.get_pixel(1, 1).g8 == 255 - 77 and dx.get_pixel(1, 1).r8 == 128, "DirectX → OpenGL : vert inversé (77 → 178)")
+	var gris := func(v: int) -> Image:
+		var i := Image.create(4, 4, false, Image.FORMAT_RGB8)
+		i.fill(Color8(v, v, v))
+		return i
+	var orm: Image = Cartes.orm_de_l_ensemble(Vector2i(2, 2), gris.call(51), gris.call(153), null)
+	var px := orm.get_pixel(0, 1)
+	_dire(px.r8 == 51 and px.g8 == 153 and px.b8 == 255 and orm.get_size() == Vector2i(2, 2),
+		"ORM : occlusion en R (51), rugosité en G (153), métal absent = blanc, à la taille demandée — %s" % px)
+
+	# Le matériau : de vrais fichiers, un ensemble à côté d'une image.
+	var dossier := _dossier.path_join("ensemble")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	for f in DirAccess.get_files_at(dossier):
+		DirAccess.remove_absolute(dossier.path_join(f))
+	Peinture.oublier()
+	Peinture.oublier_les_ensembles()
+	var ecrire := func(nom: String, couleur: Color) -> void:
+		var i := Image.create(8, 8, false, Image.FORMAT_RGB8)
+		i.fill(couleur)
+		i.save_png(dossier.path_join(nom))
+	ecrire.call("pierre_color.png", Color8(200, 60, 40))
+	ecrire.call("pierre_normal_gl.png", Color8(128, 191, 255))
+	ecrire.call("pierre_roughness.png", Color8(102, 102, 102))
+	ecrire.call("pierre_ao.png", Color8(179, 179, 179))
+	var chemin := dossier.path_join("pierre_color.png")
+	var m: RefCounted = _cube()
+	m.materiaux.append({"nom": "pierre", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+		"echelle": 1.0, "projection": "boite"})
+	m.assigner(range(m.faces.size()), 0)
+	var sm: StandardMaterial3D = m.materiau_godot(0)
+	_dire(sm.normal_enabled and sm.normal_texture != null
+		and (sm.normal_texture.get_image().get_pixel(3, 3) as Color).g8 == 191,
+		"un matériau dont l'image a un ensemble : SA carte de normales, sans rien cocher")
+	var o: Image = sm.roughness_texture.get_image() if sm.roughness_texture != null else null
+	_dire(o != null and o.get_pixel(3, 3).r8 == 179 and o.get_pixel(3, 3).g8 == 102 and o.get_pixel(3, 3).b8 == 255
+		and sm.roughness_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_GREEN and sm.ao_enabled
+		and is_same(sm.ao_texture, sm.roughness_texture) and sm.ao_texture_channel == BaseMaterial3D.TEXTURE_CHANNEL_RED,
+		"… et SON occlusion (179) et SA rugosité (102), rangées en ORM")
+	# ⚠ Godot rend un tableau de tangentes même quand on n'en a pas donné : on juge leur SENS — celui de u dans la
+	# projection boîte (face +x : u = −z ; face −x : u = +z ; −z : u = −x), écrit ici d'après la règle.
+	var ta: Array = m.vers_array_mesh().surface_get_arrays(0)
+	var tg = ta[Mesh.ARRAY_TANGENT]
+	var nn: PackedVector3Array = ta[Mesh.ARRAY_NORMAL]
+	var de_travers := 0
+	if tg != null and (tg as PackedFloat32Array).size() == nn.size() * 4:
+		for i in nn.size():
+			var attendu := Vector3(0, 0, -1) if nn[i].x > 0.9 else (Vector3(0, 0, 1) if nn[i].x < -0.9
+				else (Vector3(-1, 0, 0) if nn[i].z < -0.9 else Vector3(1, 0, 0)))
+			if Vector3(tg[i * 4], tg[i * 4 + 1], tg[i * 4 + 2]).dot(attendu) < 0.99:
+				de_travers += 1
+	else:
+		de_travers = -1
+	_dire(de_travers == 0, "… et le maillage porte des tangentes CALCULÉES, dans le sens de u (%d de travers)" % de_travers)
+	# L'ensemble l'emporte sur les cartes déduites.
+	var m2: RefCounted = _cube()
+	m2.materiaux.append({"nom": "pierre", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+		"echelle": 1.0, "pbr": Cartes.DEFAUTS.duplicate()})
+	var sm2: StandardMaterial3D = m2.materiau_godot(0)
+	_dire(is_same(sm2.normal_texture, Peinture.ensemble_de(chemin)["normale"]), "ensemble ET cartes déduites : l'ensemble l'emporte")
+	# Écarté par l'artiste : plus de carte (ni déduite : la case n'est pas cochée).
+	var m3: RefCounted = _cube()
+	m3.materiaux.append({"nom": "pierre", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+		"echelle": 1.0, "ensemble": false})
+	var sm3: StandardMaterial3D = m3.materiau_godot(0)
+	_dire(not sm3.normal_enabled and sm3.roughness_texture == null, "« ensemble » décoché : l'image seule")
+	Peinture.oublier_les_ensembles()

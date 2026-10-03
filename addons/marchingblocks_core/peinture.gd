@@ -701,3 +701,64 @@ static func enregistrer_les_cartes() -> Array:
 		e["ecrites"] = true
 		sortie.append(dossier)
 	return sortie
+
+
+# ── LES ENSEMBLES PBR (3 octobre 2026) — les cartes faites par l'auteur de la texture, trouvées à côté d'elle ──────
+#
+# `Cartes.compagnons` trouve, par leur nom, la normale, la rugosité, l'occlusion, le métal d'un albedo ; on les lit
+# UNE fois, on range l'occlusion, la rugosité et le métal en un ORM (la convention des cartes déduites, que le glTF et
+# les trois moteurs lisent), et les textures sont PARTAGÉES comme la toile. Rien ne s'écrit : les fichiers sont ceux de
+# l'ensemble.
+
+## chemin de l'albedo → {"normale": ImageTexture ou null, "orm": ImageTexture ou null, "fichiers": {carte: chemin}},
+## ou {} sans ensemble.
+static var _ensembles := {}
+
+
+## Les fichiers de l'ensemble d'un albedo : {carte: chemin absolu} (+ "normale_dx"), vide s'il n'en a pas.
+static func fichiers_de_l_ensemble(chemin: String) -> Dictionary:
+	if chemin == "" or not FileAccess.file_exists(chemin):
+		return {}
+	var dossier := chemin.get_base_dir()
+	var trouves := Cartes.compagnons(chemin, DirAccess.get_files_at(dossier))
+	var sortie := {}
+	for carte in trouves:
+		sortie[carte] = trouves[carte] if carte == "normale_dx" else dossier.path_join(trouves[carte])
+	return sortie
+
+
+## Les textures de l'ensemble d'un albedo (relues une fois) : {"normale", "orm", "fichiers"} ; {} sans ensemble, ou
+## quand l'ensemble ne porte ni normale ni rugosité ni occlusion.
+static func ensemble_de(chemin: String) -> Dictionary:
+	if _ensembles.has(chemin):
+		return _ensembles[chemin]
+	var f := fichiers_de_l_ensemble(chemin)
+	var e := {}
+	if f.has("normale") or f.has("rugosite") or f.has("occlusion") or f.has("orm"):
+		var lues := {}
+		for carte in ["normale", "rugosite", "occlusion", "metal", "orm"]:
+			if f.has(carte):
+				var img := Image.load_from_file(f[carte])
+				if img != null and not img.is_empty():
+					lues[carte] = img
+		# La taille : celle de la normale (le détail fin), sinon de la première carte lue.
+		var taille := Vector2i.ZERO
+		for carte in ["normale", "rugosite", "occlusion", "orm", "metal"]:
+			if lues.has(carte):
+				taille = (lues[carte] as Image).get_size()
+				break
+		if taille != Vector2i.ZERO:
+			e = {"fichiers": f, "normale": null, "orm": null}
+			if lues.has("normale"):
+				e["normale"] = ImageTexture.create_from_image(
+					Cartes.normale_de_l_ensemble(lues["normale"], taille, bool(f.get("normale_dx", false))))
+			if lues.has("rugosite") or lues.has("occlusion") or lues.has("orm") or lues.has("metal"):
+				e["orm"] = ImageTexture.create_from_image(Cartes.orm_de_l_ensemble(taille, lues.get("occlusion"),
+					lues.get("rugosite"), lues.get("metal"), lues.get("orm")))
+	_ensembles[chemin] = e
+	return e
+
+
+## Oublie les ensembles lus (un fichier de l'ensemble a changé sur le disque, les tests).
+static func oublier_les_ensembles() -> void:
+	_ensembles.clear()

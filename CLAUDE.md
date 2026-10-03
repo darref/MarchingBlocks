@@ -34,7 +34,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     le 2 octobre 2026 lave, marais, acide luminescent — leurs aspects exportés : `lava`, `swamp`, `acid`) qui
     lisent le contrat (COLOR_0 : courant, genre, profondeur) ; un emplacement de matériau par genre d'eau ; plus
     tard, recalculer l'eau quand on peint (`fluides.gd` réécrit en C# et C++, avec ses cas d'épreuve) ; prévenir
-    l'artiste que les presets ne sont pas obligatoires.
+    l'artiste que les presets ne sont pas obligatoires. Et depuis le 3 octobre 2026 : **un seul océan** (une
+    seconde source de mer est refusée, `un_seul_ocean`) ; la nappe **sous un étage flottant** (`surface_dessinee`) ;
+    les plats **sans jonction en T** ; le **clapot sur les cascades aussi** (§5, « l'eau du 3 octobre »).
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
@@ -1937,6 +1939,28 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     - ⚠ **CE QUI N'EST PAS FAIT** : un témoin relu de BLENDER perd ses réglages PBR (le glTF ne les porte pas : il
       revient avec son albedo, sans cartes) ; pas de masque métal ni d'émission (palier 2) ; la génération coûte
       ~1,7 s par toile de 1024² (2,7 s avec masque) — à mesurer sur 2048², avec fenêtre. **PAS TENU EN MAIN.**
+    - **LES ENSEMBLES PBR — ÉCRITS (Jordan, 3 octobre 2026 : « sur les ensembles PBR appliqués aux UV d'un witness de
+      test, je ne vois toujours que l'albedo, et le rendu est vraiment pauvre »).** Ses textures (HEART_WORLD :
+      `cliff_rocks_01_color_1k.png`, et à côté `…_normal_gl_1k`, `…_roughness_1k`, `…_ambient_occlusion_1k`…) sont des
+      ENSEMBLES faits depuis le vrai relief ; l'appli les ignorait et ne faisait que DEVINER des cartes depuis l'albedo.
+      - **trouvés par leur NOM** (`Cartes.compagnons`, pur) : le mot de la couleur (`color`, `albedo`, `diff`,
+        `base_color`…, un morceau entier) remplacé par celui de chaque carte ; normale OpenGL préférée, une normale
+        DirectX seule a son vert inversé ; une carte « ARM » est prise telle quelle. Lus une fois
+        (`Peinture.ensemble_de`), rangés en ORM (la convention des cartes déduites : R occlusion, G rugosité, B métal,
+        blanc s'il manque — le facteur reste maître). **Automatique** ; ils l'EMPORTENT sur les cartes déduites ; la
+        case « Use the maps found next to the image » (section PBR maps) les écarte (`ensemble: false`). Les
+        tangentes suivent (`MaillageEdite.a_des_cartes`).
+      - **un monde tranché avant** porte encore l'albedo seul : à l'ouverture, une couche dont le lot n'a pas la normale
+        de l'ensemble (comparée au pixel, `_ensembles_en_retard`) voit son `.glb` réécrit UNE fois, et le rapport le dit.
+        Sur la copie du projet de Jordan : 11 → 24 Mo par `.glb` (les cartes 2k du gazon).
+      - **une image choisie part en BLANC** : sa couleur la multiplie, et le « Material 2 » de Jordan gardait un gris à
+        0,39 — la falaise à 40 % de sa luminosité. ⚠ Le projet de Jordan n'a PAS été retouché : à faire par lui.
+      - **MESURÉ** : `test_cartes_pbr` 67 (+13, noms et pixels écrits à la main, de vrais fichiers) ; quatre mutations
+        rouges (le drapeau DirectX, l'ensemble ignoré, l'ORM inversé, les tangentes non calculées — ⚠ D'ABORD MUETTE :
+        Godot rend un tableau de tangentes même quand on n'en donne pas ; la garde juge leur SENS). Vu à l'image sur la
+        copie du projet de Jordan (gazon et falaise en relief). ⚠ Pas jugé par Jordan.
+      - ⚠ **VU EN PASSANT, PAS CORRIGÉ** : peindre sur une image de bibliothèque écrit ses calques et ses cartes À CÔTÉ
+        D'ELLE (`D:/Spirit3D/…/cliff_rocks_01_color_1k.layers/`, `.pbr_uv/`) — hors du projet.
     **OUVERT** : le panneau 2D du patron ; fusionner un calque sur celui du dessous.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
@@ -2635,6 +2659,31 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
     cuvette, huit clics chacun — jamais d'erreur). Mais un clic SUR l'île vise la case au-dessus de la matière : l'eau
     y devient un lac ou une rivière, jamais un océan — un océan naît d'un clic dans le VIDE. OUVERT : le message exact
     vu par Jordan.
+- **L'EAU DU 3 OCTOBRE 2026 — DEMANDÉE PAR JORDAN ET ÉCRITE** (« il ne doit y avoir qu'un seul océan à un seul niveau
+  Y ; des bandes fines de vide là où la découpe se fait ; un mauvais raccord là où l'océan passe une case de gap sous un
+  étage flottant ; les cascades ont des bugs de construction »). Vu d'abord à l'image, sur une COPIE de son projet
+  (`test.mbproj` : une mer au niveau 13, une autre au niveau 0, une dalle flottante au niveau 14, ~80 rivières).
+  - **UN SEUL OCÉAN** : dans `FL.monde`, la première source de mer (dans l'ordre des couches d'eau) l'est, les autres
+    sont refusées (`un_seul_ocean` ; la liste des couches d'eau dit « other sea ignored »). Un clic dans le vide
+    DÉPLACE la mer (`_poser_la_mer` : les autres sources de mer, toutes couches, partent dans la même action) ; à la
+    même hauteur, rien, et l'écran le dit. Un projet d'avant n'est pas migré : la seconde mer est ignorée, pas effacée.
+  - **SOUS UN ÉTAGE FLOTTANT** : une case d'eau AU NIVEAU de son eau sous une case pleine porte la nappe
+    (`surface_dessinee`, `surface_des_colonnes(…, niveau)`) — la dalle ne se voit qu'à 0,55 au-dessus. Une galerie
+    noyée plus bas que le niveau n'en a toujours pas.
+  - **LES FENTES** : les rectangles fusionnés (et le large, et les bandes) posaient des JONCTIONS EN T ;
+    `_poser_les_plats` insère les sommets voisins sur chaque côté et dessine en éventail autour du centre.
+  - **LES CASCADES** : (1) la lame passe 0,3 DEVANT le plan de la falaise (elle était 0,1 derrière, à 0,15 de la roche
+    amincie — le relief sculpté de Jordan la perçait de pointes noires à chaque case) ; une LÈVRE plate la relie à la
+    bande d'en haut ; élargie de 0,3 au bout sans voisine (les coins saillants se rejoignent) ; (2) deux rivières au
+    même endroit ne posent plus deux bandes ni deux lames ; (3) ⚠ **UN FIL SOMBRE LE LONG DU HAUT DE CHAQUE CASCADE,
+    DANS LES SIX PRESETS** : le clapot du vertex shader ne soulevait que les nappes — le bord de la lèvre bougeait,
+    le haut de la lame non. Il soulève tout (il ne dépend que de x, z).
+  - **MESURÉ** : `test_fluides` 202 (+23 ; attendus à la main, et `_sans_jonction_en_t` recalculé sur les triangles) ;
+    `fumee_appli` 623 (+4 : la mer déplacée par un vrai clic, « already », Ctrl+Z). **Huit mutations rouges** (pas
+    d'éventail, pas de nappe sous un plafond ×2, pas de déduplication, lame derrière la falaise, deux mers acceptées,
+    l'ancienne mer gardée, le clapot réservé aux nappes) ; ⚠ « pas de surface dessinée pour un LAC » d'abord MUETTE —
+    aucun lac couvert n'était éprouvé : la cuvette a reçu un couvercle. Vu à l'image (les pointes et le fil disparus,
+    l'eau continue sous la dalle). ⚠ Pas tenu en main par Jordan.
 - **TROIS PRESETS DE FLUIDES DE PLUS — DEMANDÉ PAR JORDAN (2 octobre 2026)**, transmis par une autre session :
   **lave**, **eau de marais**, **acide luminescent**. Ce sont des presets de couche d'eau, à côté des trois qui
   existent (`eau_presets.gd`) : ça répond au « d'autres liquides (lave, marécage) comme simples presets » laissé

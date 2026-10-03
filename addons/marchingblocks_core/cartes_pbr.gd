@@ -294,3 +294,117 @@ static func _distance_au_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 	var l := ab.length_squared()
 	var t := 0.0 if l <= 0.0 else clampf((p - a).dot(ab) / l, 0.0, 1.0)
 	return p.distance_to(a + ab * t)
+
+
+# ── LES ENSEMBLES PBR — Jordan, 3 octobre 2026 : « sur les ensembles PBR appliqués aux UV d'un witness de test, je ne
+# vois toujours que l'albedo, et le rendu est vraiment pauvre ». ──────────────────────────────────────────────────
+#
+# Une texture achetée ou téléchargée (Poly Haven, ambientCG, Quixel…) vient en ENSEMBLE : `rock_color_1k.png` et, à
+# côté, `rock_normal_gl_1k.png`, `rock_roughness_1k.png`, `rock_ambient_occlusion_1k.png`… Ces cartes-là sont faites
+# par leur auteur depuis le vrai relief : les déduire de l'albedo (ci-dessus) ne fait que les deviner, et bien moins
+# bien. **Quand elles existent, on les PREND** ; on ne déduit que pour une image seule. On ne déclare rien : les
+# compagnons se trouvent par leur NOM, le mot de la couleur remplacé par celui de chaque carte.
+
+## Le mot qui dit « couleur » dans le nom de l'albedo (un morceau entre « _ », « - », « . » ou espaces).
+const MOTS_COULEUR := ["color", "colour", "albedo", "basecolor", "basecolour", "base_color", "diffuse", "diff", "col",
+	"alb", "basecol"]
+## Pour chaque carte, ses noms dans l'ordre de préférence. ⚠ Une normale « DirectX » a le vert inversé : `_dx` le dit.
+const MOTS_CARTES := {
+	"normale": ["normal_gl", "normalgl", "nor_gl", "nrm_gl", "normal_opengl", "normal", "nrm", "nor", "norm",
+		"normal_dx", "normaldx", "nor_dx", "nrm_dx", "normal_directx"],
+	"rugosite": ["roughness", "rough", "rgh"],
+	"occlusion": ["ambient_occlusion", "ambientocclusion", "ambient_occ", "occlusion", "ao"],
+	"metal": ["metallic", "metalness", "metal", "mtl"],
+	"orm": ["arm", "orm"],   # occlusion, rugosité, métal déjà rangés en R, G, B
+	"hauteur": ["height", "displacement", "disp", "bump"],
+}
+const EXTENSIONS := ["png", "jpg", "jpeg", "webp", "tga", "bmp"]
+
+
+## Les compagnons d'un albedo, trouvés parmi `fichiers` (les noms du même dossier) : {carte: nom du fichier}, et
+## "normale_dx": true si la normale est au format DirectX. Vide si le nom de l'albedo ne porte aucun mot de couleur.
+## PUR : aucun accès au disque (l'appelant liste le dossier).
+static func compagnons(albedo: String, fichiers: PackedStringArray) -> Dictionary:
+	var base := albedo.get_file().get_basename()
+	var bas := base.to_lower()
+	var par_nom := {}
+	for f in fichiers:
+		if f.get_extension().to_lower() in EXTENSIONS:
+			par_nom[f.get_basename().to_lower()] = f
+	# Les places possibles du mot de couleur : un morceau entier, bordé par le début, la fin ou un séparateur.
+	var sortie := {}
+	for mot: String in MOTS_COULEUR:
+		var depuis := 0
+		while true:
+			var i := bas.find(mot, depuis)
+			if i < 0:
+				break
+			depuis = i + 1
+			var avant_ok := i == 0 or bas[i - 1] in ["_", "-", ".", " "]
+			var j := i + mot.length()
+			var apres_ok := j == bas.length() or bas[j] in ["_", "-", ".", " "]
+			if not (avant_ok and apres_ok):
+				continue
+			for carte: String in MOTS_CARTES:
+				if sortie.has(carte):
+					continue
+				for remplacant: String in MOTS_CARTES[carte]:
+					var nom := bas.substr(0, i) + remplacant + bas.substr(j)
+					if par_nom.has(nom) and nom != bas:
+						sortie[carte] = par_nom[nom]
+						if carte == "normale" and (remplacant.contains("dx") or remplacant.contains("directx")):
+							sortie["normale_dx"] = true
+						break
+			if not sortie.is_empty():
+				return sortie
+	return sortie
+
+
+## L'ORM d'un ensemble : R occlusion, G rugosité, B métal — chacun lu dans le ROUGE de sa carte (une carte en gris), à
+## la taille `taille`. Une carte absente vaut blanc (occlusion nulle, rugosité pleine, métal laissé au facteur du
+## matériau — §3, le métal n'est jamais deviné). `orm` : une carte déjà rangée (« ARM »), prise telle quelle.
+static func orm_de_l_ensemble(taille: Vector2i, occlusion: Image, rugosite: Image, metal: Image, orm: Image = null) -> Image:
+	if orm != null:
+		var o := _a_la_taille(orm, taille)
+		o.convert(Image.FORMAT_RGB8)
+		return o
+	var canaux: Array = []
+	for img in [occlusion, rugosite, metal]:
+		canaux.append(_a_la_taille(img, taille).get_data() if img != null else PackedByteArray())
+	var n := taille.x * taille.y
+	var donnees := PackedByteArray()
+	donnees.resize(n * 3)
+	for k in 3:
+		var src: PackedByteArray = canaux[k]
+		if src.is_empty():
+			for i in n:
+				donnees[i * 3 + k] = 255
+		else:
+			for i in n:
+				donnees[i * 3 + k] = src[i * 4]
+	return Image.create_from_data(taille.x, taille.y, false, Image.FORMAT_RGB8, donnees)
+
+
+## Une normale de l'ensemble, en convention OpenGL (celle de Godot et du glTF : +Y vers le HAUT de l'image). Une
+## normale DirectX a le vert inversé.
+static func normale_de_l_ensemble(img: Image, taille: Vector2i, dx: bool) -> Image:
+	var o := _a_la_taille(img, taille)
+	o.convert(Image.FORMAT_RGB8)
+	if dx:
+		var d := o.get_data()
+		for i in range(1, d.size(), 3):
+			d[i] = 255 - d[i]
+		o = Image.create_from_data(taille.x, taille.y, false, Image.FORMAT_RGB8, d)
+	return o
+
+
+## Une copie RGBA8 à la taille voulue, décompressée, sans mipmaps.
+static func _a_la_taille(img: Image, taille: Vector2i) -> Image:
+	var o := img.duplicate() as Image
+	if o.is_compressed():
+		o.decompress()
+	o.clear_mipmaps()
+	o.convert(Image.FORMAT_RGBA8)
+	if o.get_size() != taille:
+		o.resize(taille.x, taille.y, Image.INTERPOLATE_BILINEAR)
+	return o

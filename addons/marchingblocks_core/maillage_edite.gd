@@ -268,7 +268,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 			a[Mesh.ARRAY_TEX_UV] = uv_sortie
 			# Une carte de normales a besoin de TANGENTES, dans la convention du moteur : celles de MikkTSpace
 			# (`SurfaceTool.generate_tangents`), que les importeurs glTF recalculent de la même façon.
-			if avec_normales and materiaux[m].get("pbr") is Dictionary:
+			if avec_normales and a_des_cartes(materiaux[m]):
 				a = avec_tangentes(a)
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 		# ⚠ **CHAQUE SURFACE PORTE SON MATÉRIAU, LA LÉGENDE COMPRISE.** Un `material_override` unique (la
@@ -375,9 +375,25 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 		# et un coup de pinceau la met à jour partout, sans rien redessiner.
 		var Peinture: Script = load("res://addons/marchingblocks_core/peinture.gd")
 		sm.albedo_texture = Peinture.texture_de(chemin)
+		# L'ENSEMBLE PBR DE L'IMAGE (3 octobre 2026) : les cartes faites par l'auteur de la texture, à côté d'elle
+		# (`Peinture.ensemble_de`) — elles l'emportent sur les cartes déduites, qui ne font que les deviner.
+		var ens: Dictionary = Peinture.ensemble_de(chemin) if bool(d.get("ensemble", true)) else {}
+		if not ens.is_empty() and sm.albedo_texture != null:
+			if ens["normale"] != null:
+				sm.normal_enabled = true
+				sm.normal_texture = ens["normale"]
+			if ens["orm"] != null:
+				sm.roughness = 1.0
+				sm.roughness_texture = ens["orm"]
+				sm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+				sm.metallic_texture = ens["orm"]
+				sm.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+				sm.ao_enabled = true
+				sm.ao_texture = ens["orm"]
+				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		# LES CARTES PBR DÉDUITES de l'albedo (`cartes_pbr.gd`), si le matériau les demande : normale, et l'ORM
 		# (R occlusion, G rugosité, B métal BLANC — le facteur « metal » reste seul maître). Partagées comme la toile.
-		if d.get("pbr") is Dictionary and sm.albedo_texture != null:
+		elif d.get("pbr") is Dictionary and sm.albedo_texture != null:
 			var c: Dictionary = Peinture.cartes_de(chemin, d["pbr"], str(d.get("projection", "boite")) != "uv")
 			if not c.is_empty():
 				sm.normal_enabled = true
@@ -392,6 +408,17 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 	_cache_godot[cle] = sm
 	return sm
+
+
+## Le matériau `d` porte-t-il des cartes (une normale à lire, donc des TANGENTES à donner) : déduites, ou celles de
+## l'ensemble PBR de son image ?
+static func a_des_cartes(d: Dictionary) -> bool:
+	if d.get("pbr") is Dictionary:
+		return true
+	var chemin := str(d.get("texture", ""))
+	if chemin == "" or not bool(d.get("ensemble", true)):
+		return false
+	return not (load("res://addons/marchingblocks_core/peinture.gd").ensemble_de(chemin) as Dictionary).is_empty()
 
 
 ## Assigne un matériau (ou −1, la légende) à des faces.
