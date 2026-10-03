@@ -50,6 +50,7 @@ func _initialize() -> void:
 	_l_accelerateur_de_rayons()
 	_le_materiau_voyage_jusqu_au_greffon()
 	_les_gardes_de_repli()
+	_les_pinceaux_de_sculpt()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -822,6 +823,81 @@ func _aire(mesh: ArrayMesh) -> float:
 			var p2: Vector3 = pos[ind[t + 2] if ind != null else t + 2]
 			total += (p1 - p0).cross(p2 - p0).length() * 0.5
 	return total
+
+
+## LES PINCEAUX DE SCULPT (Jordan, 3 octobre 2026). Une grille plate de 5 × 5 sommets espacés de 0,25 (y = 0) et le
+## cube ; attendus calculés À LA MAIN. Au centre (0,5 ; 0,5), un rayon de 0,3 prend le centre et ses 4 voisins
+## (à 0,25), pas les diagonales (0,354).
+func _grille_plate() -> RefCounted:
+	var m: RefCounted = ME.new()
+	for z in 5:
+		for x in 5:
+			m.sommets.append(Vector3(x * 0.25, 0.0, z * 0.25))
+	for z in 4:
+		for x in 4:
+			var a := z * 5 + x
+			m.faces.append(PackedInt32Array([a, a + 5, a + 6, a + 1]))
+			m.teintes.append(Color.WHITE)
+	return m
+
+
+func _proches(d: Dictionary, attendu: Dictionary) -> bool:
+	if d.size() != attendu.size():
+		return false
+	for i in attendu:
+		if not d.has(i) or (d[i] as Vector3).distance_to(attendu[i]) > 1e-5:
+			return false
+	return true
+
+
+func _les_pinceaux_de_sculpt() -> void:
+	var g := _grille_plate()
+	var c := Vector3(0.5, 0.0, 0.5)
+	var croix := [12, 7, 11, 13, 17]   # le centre et ses quatre voisins
+	_egal(g.normale(0).y > 0.9, true, "(la grille regarde vers le haut)")
+	var att := {}
+	for i in croix:
+		att[i] = Vector3(0, 0.03, 0)
+	_vrai(_proches(g.pinceau_sculpt("draw", c, Vector3.UP, 0.3, 1.0, 1.0), att),
+		"draw, dureté 1 : le centre et ses 4 voisins montent de 10 % du rayon (0,03), pas les diagonales")
+	for i in croix:
+		att[i] = Vector3(0, -0.03, 0)
+	_vrai(_proches(g.pinceau_sculpt("draw", c, Vector3.UP, 0.3, 1.0, 1.0, true), att), "draw + Ctrl : ils descendent")
+	# Dureté 0 : le centre a le poids 1, un voisin (t = 0,25 / 0,3) a 1 − smoothstep(0, 1, t) = 1 − t²(3 − 2t).
+	var t := 0.25 / 0.3
+	var w := 1.0 - t * t * (3.0 - 2.0 * t)
+	var d0: Dictionary = g.pinceau_sculpt("draw", c, Vector3.UP, 0.3, 1.0, 0.0)
+	_vrai(absf((d0[12] as Vector3).y - 0.03) < 1e-6 and absf((d0[7] as Vector3).y - 0.03 * w) < 1e-6,
+		"draw, dureté 0 : le centre plein, un voisin à %.4f du plein" % w)
+	_vrai(g.pinceau_sculpt("draw", Vector3(5, 0, 5), Vector3.UP, 0.3, 1.0, 1.0).is_empty(), "hors de la grille : rien")
+	# Smooth : une pointe au centre (y = 0,2), rayon 0,1 (le centre seul) — elle revient à la moyenne de ses voisins.
+	var pointe := _grille_plate()
+	pointe.sommets[12] = Vector3(0.5, 0.2, 0.5)
+	_vrai(_proches(pointe.pinceau_sculpt("smooth", Vector3(0.5, 0.2, 0.5), Vector3.UP, 0.1, 1.0, 1.0), {12: Vector3(0, -0.2, 0)}),
+		"smooth : la pointe redescend à la moyenne de ses voisins")
+	# Flatten : la même pointe, rayon 0,35 (les voisins sont à √(0,25² + 0,2²) = 0,32 du centre visé, les diagonales à
+	# 0,41) — plan moyen à y = 0,2 / 5 = 0,04 ; la pointe descend de 0,16, les voisins
+	# montent de 0,04.
+	att = {12: Vector3(0, -0.16, 0)}
+	for i in [7, 11, 13, 17]:
+		att[i] = Vector3(0, 0.04, 0)
+	_vrai(_proches(pointe.pinceau_sculpt("flatten", Vector3(0.5, 0.2, 0.5), Vector3.UP, 0.35, 1.0, 1.0), att),
+		"flatten : tout va au plan moyen (y = 0,04)")
+	# Inflate sur le cube : le coin (1,1,1) part le long de SA normale, (1,1,1)/√3, de 10 % du rayon.
+	var cube := _cube()
+	var n := Vector3.ONE.normalized()
+	_vrai(_proches(cube.pinceau_sculpt("inflate", Vector3.ONE, Vector3.UP, 0.5, 1.0, 1.0), {7: n * 0.05}),
+		"inflate : le coin du cube s'écarte le long de sa normale de sommet (1,1,1)/√3, pas de la normale visée")
+	# ⚠ « draw sur la normale des sommets » était MUETTE sur la grille plate (toutes ses normales sont la normale visée) :
+	# sur le coin du cube, draw suit la normale VISÉE (ici le haut), pas (1,1,1)/√3.
+	_vrai(_proches(cube.pinceau_sculpt("draw", Vector3.ONE, Vector3.UP, 0.5, 1.0, 1.0), {7: Vector3(0, 0.05, 0)}),
+		"draw sur le coin du cube : le long de la normale visée, pas de celle du sommet")
+	# Grab : le glissé, pondéré.
+	att = {}
+	for i in croix:
+		att[i] = Vector3(0.1, 0, 0)
+	_vrai(_proches(g.pinceau_sculpt("grab", c, Vector3.UP, 0.3, 1.0, 1.0, false, Vector3(0.1, 0, 0)), att),
+		"grab : le centre et ses voisins suivent le glissé")
 
 
 func _vrai(v: bool, quoi: String) -> void:

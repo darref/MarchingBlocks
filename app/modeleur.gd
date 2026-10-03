@@ -1166,11 +1166,15 @@ func _contraindre_et_propager() -> void:
 			deltas[i] = d
 	if deltas.is_empty():
 		return
-	var r: Dictionary = sections.propager(cle, deltas)
+	# UN GROUPE, UN MOUVEMENT : des sommets reliés par les sections reçoivent celui du plus déplacé — un pinceau ou
+	# l'édition proportionnelle leur en donnaient de différents (`Sections.propager_par_groupe`).
+	var r: Dictionary = sections.propager_par_groupe(cle, deltas)
 	for i in r.get(cle, {}):
 		maillage.sommets[i] = _depart[i] + (r[cle][i] as Vector3)
 	r.erase(cle)
 	sections.deplacer(r, _photo)
+	for c in r:
+		_touchees[c] = true
 
 
 ## LA COMPLÉTION APRÈS UNE COUPE (point 3) : un sommet neuf posé sur un bord est reporté sur chaque face de sa
@@ -1692,6 +1696,8 @@ func souris_entree(event: InputEvent) -> bool:
 		return false
 	if pinceau and not geometrie and modal == "" and _peindre_a_la_souris(event):
 		return true
+	if sculpt and geometrie and modal == "" and _sculpter_a_la_souris(event):
+		return true
 	if event is InputEventMouseMotion:
 		souris = (event as InputEventMouseMotion).position
 		if modal == "lasso":
@@ -1941,6 +1947,287 @@ var dossier_toiles := ""
 var _trait := {}
 
 
+# ── LE SCULPT (Jordan, 3 octobre 2026 : « devrait-on ajouter des outils de sculpt à la géométrie ? » — oui) ──────
+#
+# Dans Witness geometry, des PINCEAUX comme ceux de Blender : Draw, Inflate, Smooth, Flatten, Grab. Le déplacement
+# d'un coup vient du cœur (`MaillageEdite.pinceau_sculpt`) ; ici, il suit les routes de G : copies liées (une tuile
+# par clé, toutes ses copies suivent), sommets de BORD ramenés dans leur plan et propagés aux autres tuiles
+# (`_contraindre_et_propager`), et la BRIDE — un coup qui replierait une face s'arrête au dernier point sain. Un trait
+# entier est UNE annulation, pour toutes les tuiles touchées. Ctrl creuse (Draw, Inflate) ; Maj lisse (Smooth), comme
+# dans Blender. Le pinceau n'agit que sur la tuile du point où le trait a commencé.
+
+var sculpt := false
+var sculpt_genre := "draw"
+## En cases.
+var sculpt_rayon := 0.2
+var sculpt_force := 0.5
+var sculpt_durete := 0.3
+signal sculpt_change(oui: bool)
+## Le trait en cours : {avant, coups, point (repère de la tuile), occurrence}.
+var _sculpt_trait := {}
+const GENRES_SCULPT := ["draw", "inflate", "smooth", "flatten", "grab"]
+
+
+func regler_sculpt(oui: bool) -> void:
+	if oui == sculpt:
+		return
+	_finir_le_sculpt()
+	sculpt = oui
+	sculpt_change.emit(oui)
+	if oui:
+		dit.emit("[b]Sculpt[/b] — left drag pushes the shape under the brush: %s. [i]Ctrl digs instead, Shift smooths; "
+			% sculpt_genre.capitalize() + "border points slide in their cut plane and the tiles around follow; a "
+			+ "stroke stops before folding a face. One Ctrl+Z per stroke.[/i]")
+	_montrer_le_cercle({})
+
+
+func _sculpter_a_la_souris(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		if b.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		souris = b.position
+		if b.pressed:
+			_commencer_le_sculpt(b.position)
+			_coup_de_sculpt(b.position, b.ctrl_pressed, b.shift_pressed)
+		else:
+			_finir_le_sculpt()
+		return true
+	if event is InputEventMouseMotion:
+		var m := event as InputEventMouseMotion
+		souris = m.position
+		_montrer_le_cercle(_impact(m.position))
+		if not _sculpt_trait.is_empty() and (m.button_mask & MOUSE_BUTTON_MASK_LEFT):
+			_coup_de_sculpt(m.position, m.ctrl_pressed, m.shift_pressed)
+			return true
+	return false
+
+
+func _commencer_le_sculpt(p: Vector2) -> void:
+	_finir_le_sculpt()
+	var i := _impact(p)
+	if i.is_empty():
+		return
+	# Le trait sculpte la tuile visée : elle passe en édition (comme un clic de sélection).
+	if temoin != null and i.has("occurrence") and int(i["occurrence"]) != occurrence:
+		activer(int(i["occurrence"]))
+		i = _impact(p)
+		if i.is_empty():
+			return
+	_sculpt_trait = {"avant": maillage.copie(), "coups": 0, "point": i["point"], "occurrence": occurrence}
+	_faces_par_sommet = {}
+	_portee_de = {}
+	_gardes_de = {}
+	_depart = maillage.sommets.duplicate()
+	_ids = []
+	_candidats = []
+	_touchees = {}
+	_sections_du_geste = sections != null
+	if _sections_du_geste:
+		sections.indexer()
+		_photo = sections.photo()
+
+
+## UN COUP DE PINCEAU au point visé : le déplacement du cœur, appliqué, propagé, bridé.
+func _coup_de_sculpt(p: Vector2, ctrl: bool, maj: bool) -> void:
+	if _sculpt_trait.is_empty():
+		return
+	var i := _impact(p)
+	if i.is_empty() or i["cle"] != cle:
+		return
+	var point: Vector3 = i["point"]
+	var genre := "smooth" if maj else sculpt_genre
+	var glisse := Vector3.ZERO
+	if genre == "grab":
+		glisse = point - (_sculpt_trait["point"] as Vector3)
+		point = _sculpt_trait["point"]
+	var d: Dictionary = maillage.pinceau_sculpt(genre, point, maillage.normale(int(i["face"])), sculpt_rayon,
+		sculpt_force, sculpt_durete, ctrl, glisse)
+	if genre == "grab":
+		_sculpt_trait["point"] = i["point"]
+	if d.is_empty():
+		return
+	var avant_coup: PackedVector3Array = maillage.sommets.duplicate()
+	for j in d:
+		if not _ids.has(j):
+			_ids.append(j)
+	# ⚠ CE COUP SEULEMENT (mesuré : 91 ms par coup quand chaque coup repropageait et redessinait les 48 tuiles touchées
+	# depuis le début du trait). Les positions restent ABSOLUES depuis le départ du trait (`_depart`, `_photo`) : propager
+	# les seuls sommets de ce coup suffit, les autres ont déjà mis leurs tuiles en place.
+	var bord_du_coup := {}
+	if _sections_du_geste:
+		for j in d:
+			if sections.est_de_bord(cle, j):
+				bord_du_coup[j] = Vector3.ONE
+	var atteints := _portee(bord_du_coup)
+	var autres := {}
+	var gardes := {cle: _gardes_du_trait(cle, maillage, d)}
+	for c in atteints:
+		if c == cle:
+			continue
+		autres[c] = (temoin.tuiles[c].sommets as PackedVector3Array).duplicate()
+		gardes[c] = _gardes_du_trait(c, temoin.tuiles[c], atteints[c])
+	var ids_du_trait := _ids
+	var appliquer := func(s: float) -> void:
+		maillage.sommets = avant_coup.duplicate()
+		for c in autres:
+			temoin.tuiles[c].sommets = (autres[c] as PackedVector3Array).duplicate()
+		for j in d:
+			maillage.sommets[j] += (d[j] as Vector3) * s
+		_ids = d.keys()
+		_contraindre_et_propager()
+		_ids = ids_du_trait
+	var replie := func() -> bool:
+		for c in gardes:
+			var m: RefCounted = maillage if c == cle else temoin.tuiles[c]
+			if m.replie(gardes[c]):
+				return true
+		return false
+	appliquer.call(1.0)
+	var s := 1.0
+	if replie.call():
+		var sain := 0.0
+		var mauvais := 1.0
+		for k in AFFINAGES_DE_BRIDE:
+			var mi := (sain + mauvais) * 0.5
+			appliquer.call(mi)
+			if replie.call():
+				mauvais = mi
+			else:
+				sain = mi
+		appliquer.call(sain)
+		s = sain
+	_sculpt_trait["coups"] = int(_sculpt_trait["coups"]) + 1
+	bride = s
+	# Les AUTRES tuiles se redessinent au plus dix fois par seconde pendant le trait (48 tuiles atteintes par un bord
+	# de paroi : ~30 ms à chaque coup), et toutes au relâcher. La tuile sculptée et ses copies suivent à chaque coup.
+	for c in autres:
+		_a_rafraichir[c] = true
+	if Time.get_ticks_msec() - _dernier_rafraichi >= 100:
+		_rafraichir_les_attentes()
+	redessiner()
+	if s < 1.0:
+		dit.emit("[b]Sculpt[/b] [color=#e0a03c]— the stroke stops here: further would fold a face.[/color]")
+
+
+## CE QUI NE DÉPEND QUE DE LA TOPOLOGIE SE CALCULE UNE FOIS PAR TRAIT (elle ne change pas pendant un trait) :
+##   • la PORTÉE d'un sommet de bord — les tuiles et sommets que sa propagation atteint ;
+##   • les GARDES d'une face, prises la première fois qu'un coup l'atteint : elle n'a pas encore bougé, c'est donc sa
+##     forme de DÉPART, comme pour G.
+var _portee_de := {}
+var _gardes_de := {}
+
+
+func _portee(bord: Dictionary) -> Dictionary:
+	var union := {}
+	for j in bord:
+		if not _portee_de.has(j):
+			_portee_de[j] = sections.propager(cle, {j: Vector3.ONE})
+		for c in _portee_de[j]:
+			if not union.has(c):
+				union[c] = {}
+			for k in _portee_de[j][c]:
+				union[c][k] = true
+	return union
+
+
+func _gardes_du_trait(c: String, m: RefCounted, sommets_: Dictionary) -> Array:
+	if not _gardes_de.has(c):
+		_gardes_de[c] = {}
+	var cache: Dictionary = _gardes_de[c]
+	var neuves: Array = []
+	var sortie: Array = []
+	for f in _faces_des_sommets(c, m, sommets_):
+		if cache.has(f):
+			if cache[f] != null:
+				sortie.append(cache[f])
+		else:
+			neuves.append(f)
+	for f in neuves:
+		cache[f] = null
+	for g in m.gardes_de_repli(neuves):
+		cache[int(g[0])] = g
+		sortie.append(g)
+	return sortie
+
+
+## Les faces qui portent ces sommets, par un index sommet → faces bâti UNE fois par tuile et par trait.
+var _faces_par_sommet := {}
+
+
+func _faces_des_sommets(c: String, m: RefCounted, sommets_: Dictionary) -> Array:
+	if not _faces_par_sommet.has(c):
+		var index := {}
+		for f in m.faces.size():
+			for j in m.faces[f]:
+				if not index.has(j):
+					index[j] = []
+				index[j].append(f)
+		_faces_par_sommet[c] = index
+	var vues := {}
+	for j in sommets_:
+		for f in (_faces_par_sommet[c] as Dictionary).get(j, []):
+			vues[f] = true
+	return vues.keys()
+
+
+var _a_rafraichir := {}
+var _dernier_rafraichi := 0
+
+
+func _rafraichir_les_attentes() -> void:
+	for c in _a_rafraichir:
+		_rafraichir_tuile(c)
+	_a_rafraichir = {}
+	_dernier_rafraichi = Time.get_ticks_msec()
+
+
+func _finir_le_sculpt() -> void:
+	_rafraichir_les_attentes()
+	if _sculpt_trait.is_empty():
+		return
+	var t := _sculpt_trait
+	_sculpt_trait = {}
+	if int(t["coups"]) == 0:
+		_sections_du_geste = false
+		return
+	if _sections_du_geste and not _touchees.is_empty():
+		_emettre_le_lot(t["avant"], "Sculpt")
+	else:
+		_emettre(t["avant"], "Sculpt")
+	_sections_du_geste = false
+	_touchees = {}
+	redessiner()
+
+
+## Le cercle du pinceau de sculpt, dans le plan de la face visée, au rayon réglé.
+var cercle_montre := PackedVector3Array()
+
+
+func _montrer_le_cercle(i: Dictionary) -> void:
+	if _curseur_mi == null:
+		_montrer_le_curseur({})
+	var im := _curseur_mi.mesh as ImmediateMesh
+	cercle_montre = PackedVector3Array()
+	if not sculpt or not geometrie:
+		return
+	im.clear_surfaces()
+	if i.is_empty():
+		return
+	var n: Vector3 = (i["tuile"] as RefCounted).normale(int(i["face"]))
+	var e1 := n.cross(Vector3.UP if absf(n.y) < 0.9 else Vector3.RIGHT).normalized()
+	var e2 := n.cross(e1).normalized()
+	var pose_i: Transform3D = i.get("pose", Transform3D.IDENTITY)
+	for k in 49:
+		var a := TAU * k / 48.0
+		cercle_montre.append((i["point"] as Vector3) + (e1 * cos(a) + e2 * sin(a)) * sculpt_rayon + n * 0.004)
+	im.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+	im.surface_set_color(Color(1.0, 0.75, 0.3))
+	for q in cercle_montre:
+		im.surface_add_vertex(pose_i * q)
+	im.surface_end()
+
+
 func regler_gomme(oui: bool) -> void:
 	gomme = oui
 	gomme_changee.emit(oui)
@@ -2116,7 +2403,8 @@ func _impact(p: Vector2) -> Dictionary:
 			return {}
 		var o: Dictionary = temoin.occurrences[int(hit["occurrence"])]
 		return {"tuile": temoin.tuiles[hit["cle"]], "cle": hit["cle"], "face": int(hit["face"]),
-			"point": (o["pose"] as Transform3D).affine_inverse() * (hit["point"] as Vector3), "pose": o["pose"]}
+			"point": (o["pose"] as Transform3D).affine_inverse() * (hit["point"] as Vector3), "pose": o["pose"],
+			"occurrence": int(hit["occurrence"])}
 	var h: Dictionary = maillage.lancer_rayon_rapide(_origine(p), _direction(p))
 	if h.is_empty():
 		return {}

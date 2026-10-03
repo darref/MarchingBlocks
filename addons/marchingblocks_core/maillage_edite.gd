@@ -945,6 +945,110 @@ func transformer(ids: Array, t: Transform3D, depart: PackedVector3Array, rayon :
 ## ⚠ **L'ORIENTATION DU QUAD DE CÔTÉ EST FORCÉE PAR SES DEUX VOISINES** : `[a, b, b', a']` parcourt a→b à
 ## l'inverse de la face du dehors (qui avait b→a) et b'→a' à l'inverse de la face extrudée (a'→b'). Un
 ## seul autre ordre, et la coque se retournait par bandes.
+## LES PINCEAUX DE SCULPT (Jordan, 3 octobre 2026 : « devrait-on ajouter des outils de sculpt à la géométrie ? » — oui).
+## Le DÉPLACEMENT d'un coup de pinceau, sans rien bouger : {sommet: Vector3}, dans le repère de la tuile. Le modeleur
+## l'applique, ramène les sommets de bord dans leur plan, propage aux autres tuiles et bride (les mêmes routes que G).
+##   `genre`   — "draw" (le long de la normale du point visé), "inflate" (chaque sommet le long de SA normale),
+##               "smooth" (vers la moyenne de ses voisins), "flatten" (vers le plan moyen sous le pinceau),
+##               "grab" (le déplacement `glisse`, pondéré) ;
+##   `centre`, `normale` — le point visé et la normale de sa face ; `rayon` en cases ; `force` 0..1 ; `durete`
+##               comme le pinceau de peinture (plein jusqu'à elle, puis une descente douce) ; `inverse` : Ctrl, qui
+##               creuse au lieu de bosser (draw, inflate) ;
+##   `glisse`  — grab seulement : le déplacement de la souris, dans le repère de la tuile.
+## Un coup « draw » à force 1 et poids 1 pousse de 10 % du rayon.
+func pinceau_sculpt(genre: String, centre: Vector3, normale_vis: Vector3, rayon: float, force: float, durete: float,
+		inverse := false, glisse := Vector3.ZERO) -> Dictionary:
+	var sortie := {}
+	var r := maxf(rayon, 1e-4)
+	var poids := {}
+	for i in sommets.size():
+		var t: float = sommets[i].distance_to(centre) / r
+		if t >= 1.0:
+			continue
+		var w := 1.0 if t <= durete else 1.0 - smoothstep(durete, 1.0, t)
+		if w > 0.0:
+			poids[i] = w
+	if poids.is_empty():
+		return sortie
+	var signe := -1.0 if inverse else 1.0
+	match genre:
+		"draw":
+			var n := normale_vis.normalized()
+			for i in poids:
+				sortie[i] = n * (r * 0.1 * force * poids[i] * signe)
+		"inflate":
+			var nv := normales_des_sommets(poids.keys())
+			for i in poids:
+				sortie[i] = (nv[i] as Vector3) * (r * 0.1 * force * poids[i] * signe)
+		"smooth":
+			var voisins := voisins_des_sommets(poids.keys())
+			for i in poids:
+				var v: Array = voisins.get(i, [])
+				if v.is_empty():
+					continue
+				var m := Vector3.ZERO
+				for j in v:
+					m += sommets[j]
+				sortie[i] = (m / v.size() - sommets[i]) * clampf(force * poids[i], 0.0, 1.0)
+		"flatten":
+			var c := Vector3.ZERO
+			var somme := 0.0
+			for i in poids:
+				c += sommets[i] * poids[i]
+				somme += poids[i]
+			c /= somme
+			var n := normale_vis.normalized()
+			for i in poids:
+				sortie[i] = -n * n.dot(sommets[i] - c) * clampf(force * poids[i], 0.0, 1.0)
+		"grab":
+			for i in poids:
+				sortie[i] = glisse * poids[i]
+	return sortie
+
+
+## La normale d'un sommet : la moyenne des normales des faces qui le portent (pondérée par leur aire).
+func normales_des_sommets(ids: Array) -> Dictionary:
+	var voulus := {}
+	for i in ids:
+		voulus[i] = Vector3.ZERO
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		var porte := false
+		for i in face:
+			if voulus.has(i):
+				porte = true
+				break
+		if not porte:
+			continue
+		var n := normale(f) * maxf(_aire(f), 1e-9)
+		for i in face:
+			if voulus.has(i):
+				voulus[i] += n
+	for i in voulus:
+		voulus[i] = (voulus[i] as Vector3).normalized()
+	return voulus
+
+
+## Les voisins d'un sommet : les sommets qui partagent une arête avec lui.
+func voisins_des_sommets(ids: Array) -> Dictionary:
+	var voulus := {}
+	for i in ids:
+		voulus[i] = {}
+	for face in faces:
+		var n := (face as PackedInt32Array).size()
+		for k in n:
+			var a: int = face[k]
+			var b: int = face[(k + 1) % n]
+			if voulus.has(a):
+				voulus[a][b] = true
+			if voulus.has(b):
+				voulus[b][a] = true
+	var sortie := {}
+	for i in voulus:
+		sortie[i] = (voulus[i] as Dictionary).keys()
+	return sortie
+
+
 func extruder_faces(choix: Array) -> Dictionary:
 	var region := {}
 	for f in choix:

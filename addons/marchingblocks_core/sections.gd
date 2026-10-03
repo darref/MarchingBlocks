@@ -319,6 +319,32 @@ func projeter(cle: String, i: int, d: Vector3) -> Vector3:
 	return d
 
 
+## UN GROUPE, UN MOUVEMENT (3 octobre 2026) : des sommets de `cle` RELIÉS par les sections (les faces x+ et x− d'une
+## paroi, et de proche en proche par les sommets d'arête, qui sont de deux classes) doivent bouger ensemble. Un geste
+## rigide (G) leur donne le même déplacement ; un PINCEAU de sculpt, ou l'édition proportionnelle, leur en donne de
+## différents — et `propager_plusieurs` les posait tous d'abord, puis gardait le premier venu : les copies voisines
+## divergeaient (mesuré : 4 742 sommets de joint sans partenaire après un trait ; une moyenne par point n'en laissait
+## que 1 572, deux classes se contredisant sur leurs arêtes communes). Ici, les sources passent UNE PAR UNE, du plus
+## grand déplacement au plus petit, et chacune ne part que si la propagation des précédentes ne l'a pas atteinte :
+## chaque groupe relié reçoit le mouvement de son membre le plus déplacé (le plus près du centre du pinceau).
+func propager_par_groupe(cle: String, deltas: Dictionary) -> Dictionary:
+	conflits = 0
+	var sources: Array = deltas.keys()
+	sources.sort_custom(func(a: int, b: int) -> bool:
+		var la: float = (deltas[a] as Vector3).length_squared()
+		var lb: float = (deltas[b] as Vector3).length_squared()
+		return la > lb or (la == lb and a < b))
+	var sortie := {}
+	var faits := {}
+	for i in sources:
+		if sortie.has(cle) and (sortie[cle] as Dictionary).has(i):
+			continue
+		var file: Array = []
+		_poser(sortie, cle, i, deltas[i], file)
+		_etendre(sortie, file, faits)
+	return sortie
+
+
 ## LA PROPAGATION : `deltas` = {i: déplacement} sur la tuile `cle` (DÉJÀ projetés). Rend {clé: {i: déplacement}}
 ## pour TOUS les sommets touchés, de proche en proche (un sommet d'arête passe d'une classe à l'autre), les
 ## sommets de départ compris.
@@ -335,7 +361,12 @@ func propager_plusieurs(depart: Dictionary) -> Dictionary:
 			_poser(sortie, cle, i, depart[cle][i], file)
 	# ⚠ UN POINT CANONIQUE SE TRAITE UNE FOIS : tous ses membres reçoivent le même mouvement, et le relire depuis
 	# chacun d'eux (une trentaine) faisait O(sommets × membres) — encore 40 ms après avoir précalculé les cartes.
-	var faits := {}
+	_etendre(sortie, file, {})
+	return sortie
+
+
+## La propagation de proche en proche depuis `file` ; `faits` : les points canoniques déjà traités.
+func _etendre(sortie: Dictionary, file: Array, faits: Dictionary) -> void:
 	while not file.is_empty():
 		var x: Array = file.pop_front()
 		var c: String = x[0]
@@ -352,7 +383,6 @@ func propager_plusieurs(depart: Dictionary) -> Dictionary:
 					continue
 				var de: Vector3 = _hors_de_la_face(Vector3.ZERO, e["axe"], appliquer(e["rt"], dc))
 				_poser(sortie, e["cle"], e["i"], de, file)
-	return sortie
 
 
 ## APPLIQUE une propagation : chaque sommet touché prend sa position de DÉPART plus son déplacement.

@@ -28,6 +28,7 @@ func _initialize() -> void:
 	_les_correspondants(t, paires)
 	_la_projection(t)
 	_la_propagation_garde_les_joints(t, paires)
+	_plusieurs_sources_un_mouvement(t, paires)
 	_la_completion(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -199,6 +200,42 @@ func _la_propagation_garde_les_joints(t0: RefCounted, paires: Array) -> void:
 	var d2: Vector3 = s2.projeter(e2["cle"], e2["i"], Vector3(0.05, 0.05, 0.05))
 	s2.deplacer({e2["cle"]: {e2["i"]: d2}})
 	_dire(_ouvertes(t2, paires) > 0, "contrôle : sans propagation, le même déplacement ouvre %d joint(s)" % _ouvertes(t2, paires))
+
+
+## UN GROUPE, UN MOUVEMENT (3 octobre 2026 : le sculpt ouvrait 4 742 joints) — TOUS les sommets de bord de la paroi
+## reçoivent chacun un déplacement DIFFÉRENT (au hasard, graine fixe), comme sous un pinceau. L'autorité reste les VRAIS
+## joints du témoin. Contrôle : les mêmes sources propagées ensemble (`propager`) en ouvrent, avec des conflits.
+func _plusieurs_sources_un_mouvement(t0: RefCounted, paires: Array) -> void:
+	var cle := "mb_plaque_b2h2_dehors"
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 310
+	var t: RefCounted = t0.copie()
+	var s = Sections.new(t)
+	s.indexer()
+	var deltas := {}
+	for i in s.bords[cle]:
+		deltas[i] = s.projeter(cle, i, Vector3(rng.randf_range(-0.05, 0.05), rng.randf_range(-0.05, 0.05),
+			rng.randf_range(-0.05, 0.05)))
+	var r: Dictionary = s.propager_par_groupe(cle, deltas)
+	var conflits: int = s.conflits
+	var plus_fort := -1
+	for i in deltas:
+		if plus_fort < 0 or (deltas[i] as Vector3).length() > (deltas[plus_fort] as Vector3).length():
+			plus_fort = i
+	_dire((r[cle][plus_fort] as Vector3).distance_to(deltas[plus_fort]) < 1e-9,
+		"le sommet le plus déplacé garde SON mouvement : c'est lui qui mène son groupe")
+	s.deplacer(r)
+	_dire(deltas.size() > 10 and conflits == 0 and _ouvertes(t, paires) == 0,
+		"%d sources différentes sur la paroi, propagées PAR GROUPE : 0 conflit, tous les joints coïncident (%d ouverts)"
+		% [deltas.size(), _ouvertes(t, paires)])
+	var t2: RefCounted = t0.copie()
+	var s2 = Sections.new(t2)
+	s2.indexer()
+	var r2: Dictionary = s2.propager(cle, deltas)
+	var conflits2: int = s2.conflits
+	s2.deplacer(r2)
+	_dire(conflits2 > 0 and _ouvertes(t2, paires) > 0,
+		"contrôle : propagées ensemble, %d conflit(s) et %d joint(s) ouvert(s)" % [conflits2, _ouvertes(t2, paires)])
 
 
 ## LA COMPLÉTION (point 3) : une coupe qui pose un sommet sur un bord doit le poser sur chaque face de sa

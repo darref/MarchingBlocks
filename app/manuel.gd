@@ -372,6 +372,13 @@ func _modeleur() -> String:
 		+ "cancel. " + _touche("X") + " " + _touche("Y") + " " + _touche("Z") + " lock an axis — [b]Z is up[/b], "
 		+ "as in Blender. Type a number for an exact value (degrees for R). " + _touche("O")
 		+ " turns proportional editing on: nearby vertices follow part of the way; the wheel sets the radius.")
+	l.append(_titre("Sculpt"))
+	l.append("Press [b]Sculpt[/b] (Witness geometry), then left drag on the witness: [b]Draw[/b] pushes out along the "
+		+ "surface, [b]Inflate[/b] swells, [b]Smooth[/b] evens out, [b]Flatten[/b] levels, [b]Grab[/b] drags. "
+		+ _touche("Ctrl") + " digs instead, " + _touche("Shift") + " smooths with any brush. Radius (in cells), strength "
+		+ "and hardness are in the Sculpt section; the ring under the mouse shows the radius. Every copy of the tile "
+		+ "follows; points on a tile border slide in their cut plane and the tiles around follow, so no joint opens. A "
+		+ "stroke stops before folding a face. One " + _touche("Ctrl+Z") + " per stroke.")
 	l.append(_titre("Mesh"))
 	l.append(_touche("E") + " extrude (faces follow their normal) · " + _touche("I") + " inset · "
 		+ _touche("Ctrl+B") + " bevel the selected edges · " + _touche("Ctrl+R") + " loop cut · "

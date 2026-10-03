@@ -2696,7 +2696,40 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
     la même échelle ; la lave n'en a pas. ⚠ **QUATRE ONDES PURES FAISAIENT UN QUADRILLAGE DE POINTS** (vu à l'image) :
     remplacées par le bruit. ⚠ Sous Xvfb (OpenGL), les shaders à texture d'écran sont dégradés : le rendu se juge en
     Vulkan. Gardé par `test_fluides` (216 : l'appel par preset, au TEXTE) ; une mutation rouge.
-  - **OUVERT, POSÉ À JORDAN** : des outils de SCULPT pour la géométrie du témoin.
+  - **LE SCULPT — DÉCIDÉ (Jordan : « 1 et 2 », oui aux outils de sculpt) ET ÉCRIT LE MÊME JOUR.** Dans Witness geometry,
+    une section **Sculpt** : un interrupteur, cinq pinceaux (**Draw**, **Inflate**, **Smooth**, **Flatten**, **Grab**),
+    rayon (cases), force, dureté ; Ctrl creuse, Maj lisse, comme dans Blender ; un cercle sous la souris. Le pinceau
+    agit sur la tuile où le trait commence ; toutes ses copies suivent (une tuile par clé).
+    - **Le cœur** (`MaillageEdite.pinceau_sculpt`, pur) : le déplacement de chaque sommet sous le pinceau. Draw le long
+      de la normale VISÉE, Inflate le long de la normale de CHAQUE sommet, Smooth vers la moyenne des voisins, Flatten
+      vers le plan moyen pondéré, Grab le glissé ; un coup Draw à force 1 pousse de 10 % du rayon.
+    - **Le modeleur** suit les routes de G : sommets de bord ramenés dans leur plan et propagés aux autres tuiles, BRIDE
+      (un coup qui replierait une face s'arrête au dernier point sain, par dichotomie), UN Ctrl+Z par trait pour toutes
+      les tuiles.
+    - ⚠ **UN DÉFAUT DE FOND, TROUVÉ PAR LA FUMÉE : 4 742 SOMMETS DE JOINT SANS PARTENAIRE APRÈS UN TRAIT.** Un pinceau
+      donne des déplacements DIFFÉRENTS aux membres d'un même point de section (les faces x+ et x− d'une paroi), et
+      `propager_plusieurs` les posait tous puis gardait le premier venu. Une moyenne par point n'en laissait que 1 572
+      (deux classes se contredisaient sur leurs sommets d'arête communs). **`Sections.propager_par_groupe`** : les
+      sources une par une, de la plus déplacée à la moins, chacune seulement si la propagation des précédentes ne l'a
+      pas atteinte — chaque groupe relié reçoit le mouvement de son membre le plus déplacé. Utilisée par TOUS les
+      gestes (`_contraindre_et_propager`) : pour un G rigide, c'est la même chose ; ⚠ **L'ÉDITION PROPORTIONNELLE avait
+      le même défaut, jamais éprouvé** — elle passe désormais par là aussi.
+    - ⚠ **LE COÛT : 91 MS PAR COUP** au premier jet (un bord de paroi atteint 48 tuiles). La portée d'un sommet de bord
+      et les gardes d'une face sont mises en cache pour le trait (la topologie ne change pas ; les gardes sont prises
+      à la première atteinte, donc sur la forme de départ, comme G) ; les AUTRES tuiles se redessinent au plus dix fois
+      par seconde pendant le trait, toutes au relâcher. **Mesuré sans fenêtre : ~10 ms par coup avec un grand pinceau
+      sur un bord (+ ~30 ms de redessin des voisines dix fois par seconde), ~2 ms avec un petit loin des bords.**
+    - **MESURÉ** : `test_maillage_edite` 180 (+10 ; une grille plate de 5 × 5 et le cube, attendus à la main) ;
+      `test_sections` 33 (+3 : 16 sources différentes sur la paroi propagées par groupe, 0 conflit, tous les VRAIS joints
+      fermés ; le plus déplacé garde son mouvement ; contrôle : propagées ensemble, des conflits et des joints ouverts) ;
+      `fumee_appli` 639 (+12 : de vrais traits à la souris sur une copie de la paroi, par le vrai bouton — des sommets
+      bougent, d'autres tuiles suivent, 0 sommet de joint sans partenaire, 0 face repliée, UN Ctrl+Z rend les 52 tuiles,
+      Ctrl+Y, un petit trait, Texturing éteint le sculpt). Mutations rouges : Inflate sur la normale visée, Smooth à
+      l'envers, Flatten sur le point visé, dureté ignorée, Draw sur la normale des sommets (⚠ d'abord MUETTE sur la
+      grille plate : le coin du cube l'a fait rougir), pas de saut par groupe, ordre inversé, le sculpt avec l'ancienne
+      propagation. ⚠ **La bride du sculpt n'a pas de garde qui la fasse rougir seule** (aucun trait de la fumée ne
+      replie sans elle) ; les gardes de repli et la dichotomie sont celles de G, éprouvées.
+    - ⚠ **PAS TENU EN MAIN, NI VU AVEC FENÊTRE** : le ressenti, la force, le cercle.
 - **L'EAU DU 3 OCTOBRE 2026 — DEMANDÉE PAR JORDAN ET ÉCRITE** (« il ne doit y avoir qu'un seul océan à un seul niveau
   Y ; des bandes fines de vide là où la découpe se fait ; un mauvais raccord là où l'océan passe une case de gap sous un
   étage flottant ; les cascades ont des bugs de construction »). Vu d'abord à l'image, sur une COPIE de son projet

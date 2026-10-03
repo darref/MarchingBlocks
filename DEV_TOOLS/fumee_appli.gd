@@ -444,6 +444,8 @@ func _mener() -> void:
 	_le_manuel_dit_le_rendu(ed)
 	_les_deux_ateliers_du_temoin(ed)
 	_peindre_le_temoin(ed)
+	_sculpter_le_temoin(ed)
+	_vrai(_sculpt_fini, "le sculpt est allé JUSQU'AU BOUT")
 	_vrai(_couches_finies, "les couches et leurs témoins sont allés JUSQU'AU BOUT")
 	await _l_enregistrement_se_dit(ed)
 	_les_sections_dans_le_modeleur(ed)
@@ -1226,6 +1228,115 @@ func _min_de_tuile(t: RefCounted, depart: Dictionary, c: String) -> float:
 
 ## Les faces saines au départ (normale de Newell non nulle, triangles en éventail d'aire positive) qu'un triangle
 ## en éventail a aplaties ou retournées depuis. Faces de 3 et 4 côtés : l'éventail est alors le dessin exact.
+## LE SCULPT (Jordan, 3 octobre 2026) — de vrais traits à la souris sur une copie de la paroi, par le vrai bouton.
+## Attendus hors du code éprouvé : les VRAIS joints du témoin (`_sans_partenaire`), aucune face repliée (`_repliees`,
+## recalculé ici), les positions de départ relevées avant le trait.
+var _sculpt_fini := false
+
+
+func _sculpter_le_temoin(ed: Control) -> void:
+	var mo: Node3D = ed._modeleur
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var t: RefCounted = mo.temoin
+	var cam: Camera3D = mo.camera
+	var paroi := "mb_plaque_b2h2_dehors"
+	var vise := {}
+	for i in t.occurrences_de(paroi):
+		var pose: Transform3D = t.occurrences[i]["pose"]
+		var tuile: RefCounted = t.tuiles[paroi]
+		for f in tuile.faces.size():
+			var monde: Vector3 = pose * tuile.centre(f)
+			if cam.is_position_behind(monde):
+				continue
+			var ecran: Vector2 = cam.unproject_position(monde)
+			if not Rect2(Vector2(60, 60), ed._vue.size - Vector2(120, 120)).has_point(ecran):
+				continue
+			var hit: Dictionary = t.rayon(cam.project_ray_origin(ecran), cam.project_ray_normal(ecran))
+			if not hit.is_empty() and int(hit["occurrence"]) == i and int(hit["face"]) == f:
+				vise = {"occurrence": i, "ecran": ecran}
+				break
+		if not vise.is_empty():
+			break
+	_vrai(not vise.is_empty(), "sculpt : une face de la paroi est visible à l'écran")
+	if vise.is_empty():
+		return
+	var depart := {}
+	for c in t.tuiles:
+		depart[c] = (t.tuiles[c].sommets as PackedVector3Array).duplicate()
+	ed._bouton_sculpt.button_pressed = true
+	_vrai(mo.sculpt and ed._vue.edition, "le bouton Sculpt allume le sculpt, en édition")
+	var survol := InputEventMouseMotion.new()
+	survol.position = vise["ecran"]
+	mo.souris_entree(survol)
+	_vrai(mo.cercle_montre.size() > 0, "survoler montre le cercle du pinceau")
+	mo.sculpt_genre = "draw"
+	mo.sculpt_rayon = 0.6
+	mo.sculpt_force = 1.0
+	mo.sculpt_durete = 0.5
+	var b := InputEventMouseButton.new()
+	b.button_index = MOUSE_BUTTON_LEFT
+	b.pressed = true
+	b.position = vise["ecran"]
+	mo.souris_entree(b)
+	var chrono := Time.get_ticks_usec()
+	for k in 8:
+		var m := InputEventMouseMotion.new()
+		m.position = vise["ecran"] + Vector2(2.0 * k, 0.0)
+		m.button_mask = MOUSE_BUTTON_MASK_LEFT
+		mo.souris_entree(m)
+	print("  (sculpt : %.1f ms par coup de pinceau, sans fenêtre)" % ((Time.get_ticks_usec() - chrono) / 8000.0))
+	b.pressed = false
+	mo.souris_entree(b)
+	var bouge := 0
+	var autres := 0
+	for c in t.tuiles:
+		var avant: PackedVector3Array = depart[c]
+		var maintenant: PackedVector3Array = t.tuiles[c].sommets
+		if avant.size() != maintenant.size():
+			continue
+		var change := false
+		for j in avant.size():
+			if avant[j].distance_to(maintenant[j]) > 1e-4:
+				change = true
+				if c == paroi:
+					bouge += 1
+		if change and c != paroi:
+			autres += 1
+	_vrai(bouge > 0, "un trait Draw déplace des sommets de la paroi (%d) — toutes ses copies avec elle" % bouge)
+	_vrai(autres > 0, "ses bords glissent dans leur plan, et %d autre(s) tuile(s) suivent" % autres)
+	_egal(_sans_partenaire(t), 0, "après le trait, tout sommet de joint a son partenaire : pas une fente")
+	_egal(_repliees(t, depart), 0, "après le trait, aucune face repliée dans aucune tuile")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues := 0
+	for c in t.tuiles:
+		rendues += int((t.tuiles[c].sommets as PackedVector3Array) == (depart[c] as PackedVector3Array))
+	_egal(rendues, t.tuiles.size(), "UN Ctrl+Z rend les %d tuiles comme avant le trait" % t.tuiles.size())
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(_sans_partenaire(t) == 0 and (t.tuiles[paroi].sommets as PackedVector3Array) != (depart[paroi] as PackedVector3Array),
+		"Ctrl+Y refait le trait, joints fermés")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# Le coût d'un petit pinceau (rayon 0,05), au même endroit — le cas courant, loin des bords.
+	mo.sculpt_rayon = 0.05
+	b.pressed = true
+	mo.souris_entree(b)
+	var chrono2 := Time.get_ticks_usec()
+	for k in 8:
+		var m2 := InputEventMouseMotion.new()
+		m2.position = vise["ecran"] + Vector2(1.0 * k, 0.0)
+		m2.button_mask = MOUSE_BUTTON_MASK_LEFT
+		mo.souris_entree(m2)
+	print("  (sculpt, rayon 0,05 : %.1f ms par coup, sans fenêtre)" % ((Time.get_ticks_usec() - chrono2) / 8000.0))
+	b.pressed = false
+	mo.souris_entree(b)
+	_egal(_sans_partenaire(t), 0, "un petit trait aussi garde tous les joints")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._aller_a("texture")
+	_vrai(not mo.sculpt and mo.cercle_montre.is_empty(), "Texturing éteint le sculpt")
+	ed._aller_a("witness")
+	_sculpt_fini = true
+
+
 func _repliees(t: RefCounted, depart: Dictionary) -> int:
 	var n := 0
 	for c in t.tuiles:

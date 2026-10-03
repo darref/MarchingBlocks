@@ -2354,6 +2354,8 @@ func _contexte() -> void:
 	_modeleur.geometrie = not texturing
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
+	if not geometrie and _modeleur.sculpt:
+		_modeleur.regler_sculpt(false)
 	if _bouton_pinceau != null:
 		_bouton_pinceau.set_pressed_no_signal(_modeleur.pinceau)
 	_legende_formes.visible = temoin or monde
@@ -2505,6 +2507,8 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		+ "radius during a move.")
 	_bouton_prop.toggled.connect(func(v: bool) -> void: _modeleur.proportionnel = v)
 	tr.contenu.add_child(_bouton_prop)
+
+	_batir_sculpt(pile)
 
 	var mesh := Section.new("Mesh", true, Icones.icone("couteau"))
 	pile.add_child(mesh)
@@ -2805,6 +2809,61 @@ func _batir_pbr(pile: VBoxContainer) -> void:
 			_modeleur.cuire_le_relief()
 			_redire_les_materiaux(), "remplir", Palette.PRINCIPAL)
 	sec.contenu.add_child(_bouton_cuire)
+
+
+## LE SCULPT (Jordan, 3 octobre 2026) — `Modeleur.sculpt` : un interrupteur, cinq pinceaux, rayon, force, dureté.
+func _batir_sculpt(pile: VBoxContainer) -> void:
+	var sec := Section.new("Sculpt", true, Icones.icone("grandir"))
+	pile.add_child(sec)
+	sec.contenu.add_child(_texte("Brushes push the shape under the mouse, like Blender's sculpt mode. Every copy of "
+		+ "the tile follows; border points slide in their cut plane and the tiles around follow; a stroke stops "
+		+ "before folding a face. Ctrl digs instead, Shift smooths. One Ctrl+Z per stroke.", 11, Palette.GRIS))
+	_bouton_sculpt = Button.new()
+	_bouton_sculpt.text = "Sculpt"
+	_bouton_sculpt.icon = Icones.icone("grandir")
+	_bouton_sculpt.toggle_mode = true
+	_bouton_sculpt.focus_mode = Control.FOCUS_NONE
+	_bouton_sculpt.custom_minimum_size = Vector2(0, 34)
+	_bouton_sculpt.tooltip_text = "Left drag sculpts; Ctrl digs, Shift smooths. Click again to select and move again."
+	_bouton_sculpt.toggled.connect(func(v: bool) -> void:
+		if v:
+			_regler_edition(true)
+		_modeleur.regler_sculpt(v))
+	_modeleur.sculpt_change.connect(func(v: bool) -> void: _bouton_sculpt.set_pressed_no_signal(v))
+	sec.contenu.add_child(_bouton_sculpt)
+	var groupe := ButtonGroup.new()
+	var pinceaux: Array = []
+	for g in [["Draw", "draw", "Pushes out along the surface (Ctrl: digs in)."],
+			["Inflate", "inflate", "Swells each point along its own normal (Ctrl: shrinks)."],
+			["Smooth", "smooth", "Evens out bumps (also Shift with any brush)."],
+			["Flatten", "flatten", "Pulls the points onto their average plane."],
+			["Grab", "grab", "Drags the shape under the brush with the mouse."]]:
+		var b := Button.new()
+		b.text = g[0]
+		b.tooltip_text = g[2]
+		b.toggle_mode = true
+		b.button_group = groupe
+		b.focus_mode = Control.FOCUS_NONE
+		b.button_pressed = g[1] == _modeleur.sculpt_genre
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var genre: String = g[1]
+		b.pressed.connect(func() -> void: _modeleur.sculpt_genre = genre)
+		pinceaux.append(b)
+		_boutons_sculpt[genre] = b
+	sec.contenu.add_child(_grille(pinceaux, 3))
+	for r in [["Radius", 0.03, 1.0, 0.01, "sculpt_rayon", "The brush radius, in cells."],
+			["Strength", 0.05, 1.0, 0.01, "sculpt_force", "How far one dab moves the shape."],
+			["Hardness", 0.0, 1.0, 0.01, "sculpt_durete", "Full strength up to this part of the radius, then softer."]]:
+		var c := _curseur_libre(sec.contenu, r[0], r[1], r[2], r[3], r[5])
+		c.value = _modeleur.get(r[4])
+		var prop: String = r[4]
+		c.value_changed.connect(func(v: float) -> void: _modeleur.set(prop, v))
+		_curseurs_sculpt[prop] = c
+
+
+var _bouton_sculpt: Button
+var _boutons_sculpt := {}
+var _curseurs_sculpt := {}
 
 
 ## Un curseur nommé, sans branchement (l'appelant le branche).
