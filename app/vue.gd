@@ -97,6 +97,7 @@ var _couches: Node3D
 ## compte les enfants de `_couches`.
 var _eaux: Node3D
 var _soleil: DirectionalLight3D
+var _disque_solaire: DirectionalLight3D
 ## L'EAU DU PLAY TEST, posée par l'écran avant de jouer : {"cases" (l'eau dormante des couches d'eau VISIBLES),
 ## "oceans" (leurs niveaux), "boite" (`FL.boite` du monde)}. Vide : on ne nage nulle part.
 var eau_du_jeu := {}
@@ -256,8 +257,20 @@ func _ready() -> void:
 	soleil.rotation_degrees = SOLEIL_ROTATION
 	soleil.light_energy = SOLEIL_ENERGIE
 	soleil.shadow_enabled = true
+	# ⚠ LE DISQUE SOLAIRE (Jordan, 3 octobre 2026 : « un soleil visible réglable, le disque solaire en Play test ») : le
+	# ciel procédural le dessine à la taille de `light_angular_distance` — qui ADOUCIT AUSSI LES OMBRES. Le soleil
+	# n'éclaire donc que le monde (LIGHT_ONLY), et une SECONDE lumière, enfant de lui (même direction), ne fait que le
+	# disque (SKY_ONLY) : elle n'éclaire rien, ses réglages ne touchent pas les ombres. Cachée hors du Play test (le ciel
+	# de World sert aux reflets des métaux : un soleil y ferait des taches).
+	soleil.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	_vue.add_child(soleil)
 	_soleil = soleil
+	_disque_solaire = DirectionalLight3D.new()
+	_disque_solaire.name = "DisqueSolaire"
+	_disque_solaire.sky_mode = DirectionalLight3D.SKY_MODE_SKY_ONLY
+	_disque_solaire.shadow_enabled = false
+	_disque_solaire.visible = false
+	soleil.add_child(_disque_solaire)
 	rendu_par_defaut()
 
 	_temoin = MeshInstance3D.new()
@@ -1592,6 +1605,9 @@ const REGLAGES_RENDU := [
 	{"cle": "soleil_hauteur", "groupe": "Light", "nom": "Sun height", "genre": "curseur", "min": 2.0, "max": 90.0, "pas": 1.0, "defaut": -SOLEIL_ROTATION.x},
 	{"cle": "soleil_energie", "groupe": "Light", "nom": "Sun strength", "genre": "curseur", "min": 0.0, "max": 4.0, "pas": 0.05, "defaut": SOLEIL_ENERGIE},
 	{"cle": "soleil_couleur", "groupe": "Light", "nom": "Sun colour", "genre": "couleur", "defaut": Color(1, 1, 1)},
+	{"cle": "soleil_disque", "groupe": "Light", "nom": "Sun disk in the sky", "genre": "case", "defaut": true},
+	{"cle": "soleil_disque_taille", "groupe": "Light", "nom": "Sun disk size (°)", "genre": "curseur", "min": 0.3, "max": 12.0, "pas": 0.1, "defaut": 2.0},
+	{"cle": "soleil_disque_eclat", "groupe": "Light", "nom": "Sun disk brightness", "genre": "curseur", "min": 0.2, "max": 16.0, "pas": 0.1, "defaut": 4.0},
 	{"cle": "ombres", "groupe": "Light", "nom": "Shadows", "genre": "case", "defaut": true},
 	{"cle": "ambiante_couleur", "groupe": "Light", "nom": "Ambient colour", "genre": "couleur", "defaut": AMBIANTE_COULEUR},
 	{"cle": "ambiante_energie", "groupe": "Light", "nom": "Ambient strength", "genre": "curseur", "min": 0.0, "max": 3.0, "pas": 0.05, "defaut": AMBIANTE_ENERGIE},
@@ -1795,8 +1811,18 @@ func _appliquer_rendu(cle: String) -> void:
 		"soleil_energie":
 			# La météo assombrit (ou force) le soleil RÉGLÉ, sans toucher au réglage.
 			_soleil.light_energy = float(v) * (float(METEO_SOLEIL.get(meteo, 1.0)) if personnage != null else 1.0)
+			_appliquer_rendu("soleil_disque_eclat")
 		"soleil_couleur":
 			_soleil.light_color = v
+			_disque_solaire.light_color = v
+		"soleil_disque":
+			_disque_solaire.visible = personnage != null and bool(v)
+		"soleil_disque_taille":
+			_disque_solaire.light_angular_distance = v
+		"soleil_disque_eclat":
+			# La météo voile aussi le disque : le même facteur que la lumière.
+			_disque_solaire.light_energy = float(rendu.get("soleil_disque_eclat", 4.0)) \
+				* (float(METEO_SOLEIL.get(meteo, 1.0)) if personnage != null else 1.0)
 		"ombres":
 			_soleil.shadow_enabled = v
 		"ambiante_couleur":
@@ -1867,6 +1893,7 @@ func _appliquer_brouillard() -> void:
 
 ## L'ÉCLAIRAGE DU TRAVAIL (World, Witness) : celui de la charte, quoi qu'on ait essayé au Play test.
 func _rendre_le_travail() -> void:
+	_disque_solaire.visible = false
 	_soleil.rotation_degrees = SOLEIL_ROTATION
 	_soleil.light_energy = SOLEIL_ENERGIE
 	_soleil.light_color = Color(1, 1, 1)

@@ -2974,6 +2974,19 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
   et Unreal non relancés (une constante).
 
 
+### LE DISQUE SOLAIRE DU PLAY TEST — DEMANDÉ PAR JORDAN (3 octobre 2026), ÉCRIT LE MÊME JOUR
+
+« Un soleil visible réglable, le disque solaire en Play test. » Le ciel procédural dessine le disque à la taille de
+`light_angular_distance` de la lumière — à 0 ici, d'où l'absence de disque. ⚠ **CET ANGLE ADOUCIT AUSSI LES OMBRES** :
+le soleil passe en `SKY_MODE_LIGHT_ONLY` (il n'éclaire que le monde) et une SECONDE lumière, ENFANT de lui (même
+direction, même hauteur), en `SKY_MODE_SKY_ONLY`, ne fait que le disque — elle n'éclaire rien. Trois réglages dans la
+barre de rendu (Light) : **Sun disk in the sky** (oui), **Sun disk size** (2°, de 0,3 à 12), **Sun disk brightness** (4,
+de 0,2 à 16) ; il prend la couleur du soleil et la météo le voile du même facteur. ⚠ **CACHÉ HORS DU PLAY TEST** : le
+ciel de World sert aux reflets des métaux, un soleil y ferait des taches. Gardé par `fumee_appli` (679, +5 : le disque au
+départ, les curseurs qui le règlent sans toucher l'angle du vrai soleil, la case, World sans disque, la pluie qui le
+voile à 45 %) ; trois mutations rouges (la taille portée aussi par le vrai soleil, le disque laissé en World, la météo
+qui ne le voile pas). Photo dans `capture_meteo.gd` (« soleil_1_defaut », « soleil_2_gros »).
+
 ### LA MÉTÉO DU PLAY TEST — DEMANDÉE PAR JORDAN (2 octobre 2026), ÉCRITE LE MÊME JOUR
 
 Transmise par une autre session. Dans le Play test, une **météo réglable**, dans la **barre de droite** (celle des

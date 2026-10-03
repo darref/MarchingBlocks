@@ -2911,6 +2911,21 @@ func _le_rendu_du_play_test(ed: Control) -> void:
 	var env: Environment = vue._env
 	_vrai(env.ssao_enabled and env.ssil_enabled and not env.sdfgi_enabled and env.glow_enabled,
 		"au départ : SSAO, SSIL, halo, pas de SDFGI")
+	# LE DISQUE SOLAIRE (Jordan, 3 octobre 2026) : une lumière qui ne fait QUE le disque, enfant du soleil ; le soleil
+	# n'éclaire que le monde. Attendus écrits à la main (2°, éclat 4, l'angle du vrai soleil à 0 : ses ombres intactes).
+	var disque: DirectionalLight3D = vue._disque_solaire
+	_vrai(disque.visible and disque.sky_mode == DirectionalLight3D.SKY_MODE_SKY_ONLY
+		and vue._soleil.sky_mode == DirectionalLight3D.SKY_MODE_LIGHT_ONLY and disque.get_parent() == vue._soleil
+		and is_equal_approx(disque.light_angular_distance, 2.0) and is_equal_approx(disque.light_energy, 4.0),
+		"au Play test, le disque solaire se voit : 2°, éclat 4, enfant du soleil, ciel seulement")
+	(ed._controles_rendu["soleil_disque_taille"] as HSlider).value = 6.0
+	(ed._controles_rendu["soleil_disque_eclat"] as HSlider).value = 9.0
+	_vrai(is_equal_approx(disque.light_angular_distance, 6.0) and is_equal_approx(disque.light_energy, 9.0)
+		and is_equal_approx(vue._soleil.light_angular_distance, 0.0),
+		"les curseurs règlent le disque (6°, éclat 9), jamais l'angle du vrai soleil : les ombres ne changent pas")
+	(ed._controles_rendu["soleil_disque"] as CheckButton).button_pressed = false
+	_vrai(not disque.visible, "décocher « Sun disk in the sky » le cache")
+	(ed._controles_rendu["soleil_disque"] as CheckButton).button_pressed = true
 	(ed._controles_rendu["ssao"] as CheckButton).button_pressed = false
 	(ed._controles_rendu["sdfgi"] as CheckButton).button_pressed = true
 	(ed._controles_rendu["soleil_hauteur"] as HSlider).value = 20.0
@@ -2934,6 +2949,7 @@ func _le_rendu_du_play_test(ed: Control) -> void:
 	ed._aller_a("monde")
 	_vrai(env.ssao_enabled and not env.sdfgi_enabled and not env.glow_enabled
 		and is_equal_approx(vue._soleil.light_energy, vue.SOLEIL_ENERGIE), "de retour dans World : l'éclairage du travail")
+	_vrai(not vue._disque_solaire.visible, "… et pas de disque solaire (il marquerait les reflets des métaux)")
 	ed._remettre_le_rendu()
 
 
@@ -2961,6 +2977,7 @@ func _la_meteo(ed: Control) -> void:
 		"Rain : 9 000 gouttes autour de l'œil")
 	_vrai(env.fog_enabled and is_equal_approx(env.fog_density, 0.02), "Rain : un brouillard léger (0,02)")
 	_vrai(is_equal_approx(vue._soleil.light_energy, 1.15 * 0.45), "Rain : le soleil réglé (1,15) à 45 %")
+	_vrai(is_equal_approx(vue._disque_solaire.light_energy, 4.0 * 0.45), "Rain : le disque solaire voilé de même (4 × 45 %)")
 	# L'ŒIL BOUGE (le personnage déplacé de 6 cases) : la boîte d'émission le suit.
 	var depart_oeil: Vector3 = vue._camera.global_position
 	vue.personnage.global_position += Vector3(6, 0, 0)

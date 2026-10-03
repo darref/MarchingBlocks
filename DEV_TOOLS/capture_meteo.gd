@@ -48,6 +48,19 @@ func _derouler() -> void:
 		_ecran._choix_meteo.item_selected.emit(i)
 		await _images(90)
 		_photo("meteo_%d_%s" % [i, _ecran._vue.METEOS[i][0]])
+	# LE DISQUE SOLAIRE (Jordan, 3 octobre 2026) : sans météo, le soleil bas, DROIT DEVANT la caméra (le disque est du
+	# côté du +Z de la lumière : azimut = celui du regard), d'abord au réglage par défaut puis gros et brillant.
+	_ecran._choix_meteo.select(0)
+	_ecran._choix_meteo.item_selected.emit(0)
+	var f: Vector3 = -_ecran._vue._camera.global_transform.basis.z
+	(_ecran._controles_rendu["soleil_azimut"] as HSlider).value = rad_to_deg(atan2(f.x, f.z))
+	(_ecran._controles_rendu["soleil_hauteur"] as HSlider).value = 6.0
+	await _images(60)
+	_photo("soleil_1_defaut")
+	(_ecran._controles_rendu["soleil_disque_taille"] as HSlider).value = 7.0
+	(_ecran._controles_rendu["soleil_disque_eclat"] as HSlider).value = 12.0
+	await _images(30)
+	_photo("soleil_2_gros")
 	_ecran._remettre_le_rendu()
 	_rendre()
 	quit(0)
