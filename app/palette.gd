@@ -163,6 +163,49 @@ static func _teinter(n: Node, a: Color) -> void:
 		_teinter(enfant, a)
 
 
+## Une icône de case (carrée) ou de choix exclusif (ronde), 16 px, adoucie au bord : décochée, un contour gris clair ;
+## cochée, la teinte pleine et un point (rond) ou une coche (carré) sombre.
+static func _case(cochee: bool, ronde: bool, teinte: Color) -> ImageTexture:
+	const N := 16
+	var img := Image.create(N, N, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	var bord := Color(0.78, 0.78, 0.74) if not cochee else teinte
+	for y in N:
+		for x in N:
+			var p := Vector2(x + 0.5, y + 0.5) - Vector2(N, N) / 2.0
+			# distance signée au bord de la forme (rayon 7)
+			var d: float
+			if ronde:
+				d = p.length() - 7.0
+			else:
+				var q := p.abs() - Vector2(4.5, 4.5)
+				d = Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - 2.5
+			var c := Color(0, 0, 0, 0)
+			if cochee:
+				c = Color(teinte, clampf(0.5 - d, 0.0, 1.0))
+			else:
+				c = Color(bord, clampf(1.3 - absf(d + 1.0), 0.0, 1.0))
+			if cochee:
+				var marque := 0.0
+				if ronde:
+					marque = clampf(3.0 - p.length(), 0.0, 1.0)
+				else:
+					# la coche : deux segments, (−3.5, 0) → (−1, 2.5) → (3.5, −2.5)
+					var dc := minf(_dist_segment(p, Vector2(-3.5, 0.0), Vector2(-1.0, 2.5)),
+						_dist_segment(p, Vector2(-1.0, 2.5), Vector2(3.5, -2.5)))
+					marque = clampf(1.6 - dc, 0.0, 1.0)
+				if marque > 0.0 and c.a > 0.0:
+					c = c.lerp(Color(SOMBRE, c.a), marque)
+			img.set_pixel(x, y, c)
+	return ImageTexture.create_from_image(img)
+
+
+static func _dist_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var t := clampf((p - a).dot(ab) / ab.length_squared(), 0.0, 1.0)
+	return p.distance_to(a + ab * t)
+
+
 static func fond(couleur: Color, rayon := 0, marge := 10) -> StyleBoxFlat:
 	var s := StyleBoxFlat.new()
 	s.bg_color = couleur
@@ -270,6 +313,17 @@ static func theme(accent := OLIVE) -> Theme:
 		t.set_color("font_pressed_color", type, accent.lightened(0.2))
 		t.set_color("font_hover_color", type, TEXTE)
 		t.set_color("font_hover_pressed_color", type, accent.lightened(0.2))
+	# ⚠ LES CASES DÉCOCHÉES ÉTAIENT INVISIBLES (vu à l'image, 3 octobre 2026) : les icônes par défaut de Godot sont gris
+	# foncé sur un fond sombre — « Very simple example », « Select empty cells too » n'avaient pas de case. Dessinées
+	# ici : un contour clair décoché, la teinte pleine cochée ; un rond pour les choix exclusifs (radio).
+	t.set_icon("unchecked", "CheckBox", _case(false, false, accent))
+	t.set_icon("checked", "CheckBox", _case(true, false, accent))
+	t.set_icon("radio_unchecked", "CheckBox", _case(false, true, accent))
+	t.set_icon("radio_checked", "CheckBox", _case(true, true, accent))
+	t.set_icon("unchecked_disabled", "CheckBox", _case(false, false, Color(GRIS, 0.4)))
+	t.set_icon("checked_disabled", "CheckBox", _case(true, false, Color(GRIS, 0.4)))
+	t.set_icon("radio_unchecked_disabled", "CheckBox", _case(false, true, Color(GRIS, 0.4)))
+	t.set_icon("radio_checked_disabled", "CheckBox", _case(true, true, Color(GRIS, 0.4)))
 
 	# Les champs.
 	for type in ["LineEdit", "SpinBox"]:

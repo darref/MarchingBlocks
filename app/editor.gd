@@ -592,17 +592,26 @@ func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
 	p.anchor_right = 0.0 if a_gauche else 1.0
 	p.offset_left = 0.0 if a_gauche else -largeur
 	p.offset_right = largeur if a_gauche else 0.0
+	# ⚠ SI UN CONTENU LA FORÇAIT À S'ÉLARGIR, LA BARRE DE DROITE GRANDIRAIT VERS LA DROITE, HORS DE L'ÉCRAN (vu par Jordan,
+	# 3 octobre 2026) : elle grandit vers la gauche, sur la vue. La garde de la fumée exige qu'elle ne grandisse pas.
+	if not a_gauche:
+		p.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	parent.add_child(p)
 	var colonne := VBoxContainer.new()
 	colonne.add_theme_constant_override("separation", 10)
 	p.add_child(colonne)
 	var defile := ScrollContainer.new()
-	defile.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	# ⚠ À DROITE, LE CONTENU NE PEUT PLUS ÉLARGIR LA BARRE (3 octobre 2026 : « la barre de droite déborde à droite en
+	# World », mesuré par `DEV_TOOLS/sonde_largeur_droite.gd`) : dès qu'une sélection allongeait la barre, l'ascenseur
+	# vertical apparaissait et ajoutait sa largeur — 311 px au lieu de 308, et 358 avec les deux « Extend selection »
+	# côte à côte. « Jamais montré » au lieu de « désactivé » : la largeur minimale du contenu ne remonte plus, et la
+	# marge passe de 8 à 4 pour que le plus large (Shape operations, 275 px) tienne à côté de l'ascenseur.
+	defile.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED if a_gauche else ScrollContainer.SCROLL_MODE_SHOW_NEVER
 	defile.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	colonne.add_child(defile)
 	var marge := MarginContainer.new()
 	marge.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	marge.add_theme_constant_override("margin_right", 8)
+	marge.add_theme_constant_override("margin_right", 8 if a_gauche else 4)
 	defile.add_child(marge)
 	var pile := VBoxContainer.new()
 	pile.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -879,7 +888,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var groupe_monde := ButtonGroup.new()
 	for b in [["My world", "Your own world: the last project you opened that is not the example.",
 				_ouvrir_mon_monde],
-			["The example", "The example world that comes with MarchingBlocks, in its own folder. Your changes "
+			["Very simple example", "A very simple example world that comes with MarchingBlocks, in its own folder. Your changes "
 				+ "to it are kept there.", _ouvrir_l_exemple]]:
 		var choix := CheckBox.new()
 		choix.text = b[0]
@@ -1229,6 +1238,11 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			_operer_selection.bind("retrecir_bord"), "retrecir"),
 		_bouton("Connected", "Selects all the matter linked to the selection by faces.",
 			_operer_selection.bind("connexe"), "connexe"),
+	]))
+	# ⚠ UN PAR LIGNE (3 octobre 2026 : « la barre de droite déborde à droite en World ») : côte à côte dans la grille,
+	# les deux « Extend selection » (158 px chacun) élargissaient la barre de 308 à 358 px dès qu'une sélection existait.
+	sel.contenu.add_child(VBoxContainer.new())
+	for b in [
 		# ÉTENDRE EN HAUTEUR, D'UN BOUTON (Jordan, 3 octobre 2026 : « depuis qu'on a fusionné Extrude, seulement des
 		# raccourcis ») : le mode « étendre » d'Extrude (Maj + clic), sans rien poser. ⚠ « SELECTION » DANS LE NOM : l'ancien
 		# « Extend up » posait de la matière comme Extrude, et c'est cette ambiguïté qui l'avait fait retirer (2 octobre).
@@ -1237,7 +1251,8 @@ func _batir_droite(pile: VBoxContainer) -> void:
 			"extruder_haut"),
 		_bouton("Extend selection ↓", "Adds the cells one level below the selection, empty ones too — no matter added.",
 			_extruder.bind("bas", "etendre"), "extruder_bas"),
-	]))
+	]:
+		sel.contenu.get_child(sel.contenu.get_child_count() - 1).add_child(b)
 	sel.contenu.add_child(_petit_titre("MOVE  ·  arrows, Shift + ↑ ↓"))
 	var bouger: Array = []
 	for m in [["X −", Vector3i(-1, 0, 0)], ["Y +", Vector3i(0, 1, 0)], ["X +", Vector3i(1, 0, 0)],

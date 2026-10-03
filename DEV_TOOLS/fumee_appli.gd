@@ -470,6 +470,7 @@ func _mener() -> void:
 	await _le_mode_dev_de_l_exemple(ed)
 	await _reparer_les_diagonales_au_bouton(ed)
 	await _la_barre_des_gestes(ed)
+	await _la_barre_de_droite_tient(ed)
 	await _les_teintes_des_ateliers(ed)
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
@@ -3556,7 +3557,7 @@ func _l_exemple(ed: Control) -> void:
 	z.close()
 	var bouton: Button = null
 	for b in ed.find_children("*", "Button", true, false):
-		if (b as Button).text in ["The example", "Example"]:
+		if (b as Button).text == "Very simple example":
 			bouton = b
 	_vrai(bouton != null, "World porte le choix « The example » (le seul : plus de bouton à part dans Project)")
 	var double := false
@@ -3595,6 +3596,37 @@ func _l_exemple(ed: Control) -> void:
 		_vrai((poses > 0 or siennes.is_empty()) and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
 			% [c["nom"], poses, fautes])
 	_vrai(not ed._rapport.text.contains("missing"), "rien ne manque à l'ouverture")
+
+
+## « LA BARRE DE DROITE DÉBORDE À DROITE EN WORLD » (Jordan, 3 octobre 2026) : avec une sélection, la barre passait à
+## 358 px (les deux « Extend selection » côte à côte), puis 311 (l'ascenseur vertical). Elle doit garder sa largeur, et
+## son bord droit doit rester celui de l'écran. Et une case DÉCOCHÉE doit avoir une icône lisible (claire).
+func _la_barre_de_droite_tient(ed: Control) -> void:
+	ed._aller_a("monde")
+	ed._choisir_outil("selectionner")
+	var grande := {}
+	for x in 3:
+		grande[Vector3i(x, 0, 0)] = true
+	ed._vue.regler_selection(grande)
+	for i in 3:
+		await process_frame
+	var barre: Control = ed._droite
+	_vrai(is_equal_approx(barre.size.x, ed.LARGEUR_DROITE) and is_equal_approx(barre.get_global_rect().end.x, ed.size.x),
+		"avec une sélection, la barre de droite garde %d px et son bord est celui de l'écran (%.0f px, bord %.0f / %.0f)"
+		% [ed.LARGEUR_DROITE, barre.size.x, barre.get_global_rect().end.x, ed.size.x])
+	var case := CheckBox.new()
+	barre.get_meta("pile").add_child(case)
+	var icone: Texture2D = case.get_theme_icon("unchecked")
+	var clair := 0.0
+	if icone != null:
+		var img := icone.get_image()
+		for y in img.get_height():
+			for x in img.get_width():
+				var c := img.get_pixel(x, y)
+				clair = maxf(clair, c.a * c.get_luminance())
+	_vrai(clair > 0.5, "une case décochée a une icône lisible (luminance × opacité %.2f)" % clair)
+	case.queue_free()
+	ed._vue.vider_selection()
 
 
 ## LA BARRE POUR TOUT GESTE QUI DURE (Jordan, 3 octobre 2026). Sans fenêtre, le suivi est forcé (`_gestes_suivis`).

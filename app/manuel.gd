@@ -339,7 +339,7 @@ func _couches() -> String:
 		+ "Windows account only. Untick [b]File icons & double-click[/b] (Project) to remove it. "
 		+ "[b]New[/b] starts an empty project, [b]Open[/b] opens one, [b]Save as[/b] puts it where you want; it "
 		+ "keeps saving itself there. [b]Recent[/b], under them, reopens the last projects in one click.")
-	l.append("[b]The example[/b], in World, opens a finished world made with MarchingBlocks: walk it in Play test, "
+	l.append("[b]Very simple example[/b], in World, opens a small world made with MarchingBlocks: walk it in Play test, "
 		+ "open its witnesses, change anything. It lives in its own folder and keeps your changes. [b]My world[/b] "
 		+ "takes you back to yours. MarchingBlocks always starts on your world, never on the example.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "

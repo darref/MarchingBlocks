@@ -2948,6 +2948,20 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
     retenir). ⚠ « Rejouer sans la marque » est MUETTE et ÉQUIVALENTE : le geste rejoué arrive pendant son propre
     chronométrage, donc n'est jamais retenu deux fois ; la marque reste en garde-fou. ⚠ Sans fenêtre, rien n'est appris
     ni montré (les suites ne touchent pas aux réglages). ⚠ PAS TENU EN MAIN.
+- **« VERY SIMPLE EXAMPLE » (Jordan, 3 octobre 2026)** : le choix de World et le manuel nomment ainsi l'exemple.
+- **LA BARRE DE DROITE DÉBORDAIT À DROITE EN WORLD — MESURÉ ET CORRIGÉ (Jordan, 3 octobre 2026)**
+  (`DEV_TOOLS/sonde_largeur_droite.gd`, avec fenêtre) : avec une sélection, 358 px au lieu de 308 (les deux « Extend
+  selection » côte à côte, 158 px chacun), puis 311 une fois ceux-ci mis un par ligne — l'ascenseur vertical, apparu
+  parce que la barre devenait plus haute que l'écran, ajoutait sa largeur. Désormais le défilement de la barre de
+  droite est « jamais montré » en largeur (le contenu ne peut plus l'élargir), sa marge passe de 8 à 4 (le plus large,
+  Shape operations, 275 px, tient : 285 demandés, 286 disponibles avec l'ascenseur), et elle grandirait vers la
+  GAUCHE (`grow_horizontal`), jamais hors de l'écran. Fumée (+1 : largeur et bord droit avec une sélection).
+- **LES CASES DÉCOCHÉES ÉTAIENT INVISIBLES** (vu sur la même image) : les icônes par défaut de Godot sont gris foncé sur
+  fond sombre. `Palette._case` les dessine (contour clair décoché, teinte de l'atelier cochée ; ronde pour un choix
+  exclusif). Fumée (+1 : une case décochée a une icône claire). Vu à l'image.
+- ⚠ **L'EXEMPLE REPRIS À L'EXPORT DU 3 OCTOBRE PORTE 89 CONTACTS DIAGONAUX** (GreyRock 28 124 cases, Grass 51 914 —
+  17 et 152 cubes rouges) : `fumee_appli` (« ses tuiles, sans un cube rouge ») le refuse, et c'est juste — un exemple
+  livré ne doit pas en montrer. À réparer dans la source (Fix diagonal contacts), puis réemballer.
 - **L'OCÉAN N'EST JAMAIS REFUSÉ POUR SA TAILLE — DÉCIDÉ PAR JORDAN (3 octobre 2026)** : `FL.ocean` ne rend plus
   « trop_grand » (il va par tronçons de colonne, il ne s'emballe pas) ; les LACS et les rivières gardent leur garde
   (`FL.VOLUME_MAXI`, case par case). `test_fluides` : un océan au-delà de la borne est rendu, un lac au-delà est refusé.
