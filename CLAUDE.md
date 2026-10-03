@@ -37,6 +37,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     l'artiste que les presets ne sont pas obligatoires. Et depuis le 3 octobre 2026 : **un seul océan** (une
     seconde source de mer est refusée, `un_seul_ocean`) ; la nappe **sous un étage flottant** (`surface_dessinee`) ;
     les plats **sans jonction en T** ; le **clapot sur les cascades aussi** (§5, « l'eau du 3 octobre »).
+    Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
+    remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
+    `motif_cascade` est à réécrire dans chaque preset.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
@@ -2790,6 +2793,40 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
     l'ancienne mer gardée, le clapot réservé aux nappes) ; ⚠ « pas de surface dessinée pour un LAC » d'abord MUETTE —
     aucun lac couvert n'était éprouvé : la cuvette a reçu un couvercle. Vu à l'image (les pointes et le fil disparus,
     l'eau continue sous la dalle). ⚠ Pas tenu en main par Jordan.
+- **LES CASCADES DU 3 OCTOBRE 2026 — DEMANDÉES PAR JORDAN ET ÉCRITES** (« les waterfalls sont trop carrées, sans
+  remous, texture animée moche, sans volume, et pas refermées contre la façade », puis « il manque aussi la source »).
+  Vues d'abord à l'image (`DEV_TOOLS/capture_cascades.gd`, avec fenêtre : une falaise de sept cases, un chenal de trois,
+  un bassin au pied, une rivière d'une case, la mer) : une lame plate posée 0,3 devant la falaise, sans côtés, des
+  taches floues étirées, rien au pied.
+  - **LA NAPPE COURBE** (`eau_maillage.gd`, `_poser_les_lames`) : elle part du plan de la falaise au bout de la bande,
+    se courbe vers l'avant (`LAME` 0,35 × √(chute / 0,7)), puis tombe en s'évasant un peu ; ses rangées sont fines en
+    haut. **À UN BOUT SANS VOISINE, ELLE S'ARRONDIT ET RENTRE DANS LA ROCHE** (0,4 derrière le plan, la falaise amincie
+    est à 0,25) : de profil, plus de jour entre l'eau et la paroi. Deux cascades voisines sur un plan se rejoignent à
+    plat. Normales par sommet (le volume se lit à la lumière).
+  - **LE REMOUS** (genre **0,75**, un nouveau genre) : un anneau d'écume à plat sur l'eau où elle tombe, qui fait le tour
+    des bouts arrondis, et des embruns qui montent de 0,9 devant le pied (effacés sur les bouts : ils y faisaient deux
+    ailerons). Transparents, posés EN DERNIER dans le maillage, ÉCARTÉS sous un seuil d'alpha (sinon leur profondeur
+    trouait la nappe dessinée après). ⚠ **TOMBÉE DANS UN CREUX QU'ELLE REMPLIT, LA CHUTE FINIT AU FOND** : le remous y
+    était sous la nappe, invisible (vu à l'image) — il se pose sur la nappe de l'eau dormante qui noie son pied.
+  - **LA SOURCE** : la première case d'une rivière qui coule sur la matière porte un disque d'écume bombé (0,7 de
+    rayon) et un petit voile — l'eau ne sort plus de nulle part. Pas de source pour une rivière née d'un lac.
+  - **LE MOTIF** (`EauPresets.CASCADE`, `motif_cascade`, dans les six presets) : trois couches de filets de plus en plus
+    fins et rapides, une eau lisse sur la lèvre (là où la normale regarde en haut), l'écume (COLOR.a) qui bouillonne et
+    monte au pied. Le stylisé (non éclairé) peint un modelé ; le marais tombe en eau boueuse (noire avant).
+  - **LE CONTRAT CHANGE** (`FormatMonde.regle_eau`) : genre 0,75 = l'écume ; sur une cascade et sur l'écume, COLOR_0 a
+    est la quantité d'écume, plus une profondeur ; NORMAL porte la forme. Dans la liste des greffons à faire.
+  - ⚠ **DEUX DÉFAUTS TROUVÉS PAR LES TESTS** : le haut de la nappe posait des jonctions en T sur le bout de la bande
+    (ses sommets y sont insérés, en multiples de 0,05 — `_poser_les_plats` accepte des points seuls) ; et le centre du
+    disque de source n'était employé par aucun triangle — l'export glTF l'ôtait (`_sans_orphelins`).
+  - **MESURÉ** : `test_fluides` 244 (l'escalier : la nappe part du plan, 0,35 devant à 0,7 de chute, ses bouts à 0,4
+    dans la roche, l'écume de (1 − 1/1,3)² en haut à 1 au pied, l'anneau à plat sur la bande de la marche, les embruns,
+    la source ; le bassin : l'anneau sur sa nappe à 1,72 ; le texte des six presets — attendus à la main). **Neuf
+    mutations rouges** (bouts hors de la roche, lame droite, pas de remous, remous au fond du bassin, pas de source,
+    jonctions en T, orphelins, écume plate, remous non écarté). `fumee_appli` 690 / 692 (les deux échecs : l'exemple
+    et ses contacts diagonaux, connus), `test_greffon_peinture` 255, `test_projet` 96. Vu à l'image, six presets, RTX
+    2060 Vulkan.
+  - ⚠ **PAS TENU EN MAIN, NI JUGÉ PAR JORDAN** ; ni vu sur de l'art sculpté (une falaise qui déborde de plus de 0,4
+    percerait les bouts) ; une cascade qui tombe à un coin saillant n'a pas été regardée.
 - **TROIS PRESETS DE FLUIDES DE PLUS — DEMANDÉ PAR JORDAN (2 octobre 2026)**, transmis par une autre session :
   **lave**, **eau de marais**, **acide luminescent**. Ce sont des presets de couche d'eau, à côté des trois qui
   existent (`eau_presets.gd`) : ça répond au « d'autres liquides (lave, marécage) comme simples presets » laissé

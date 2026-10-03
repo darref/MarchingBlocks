@@ -29,17 +29,38 @@ const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const NAPPE := 0.7
 const RIVIERE := -0.15
 const DEBORD := 0.45
-## La lame d'une cascade est EN AVANT de cette distance sur le plan qui sépare la colonne de la lèvre de celle d'où
-## l'eau vient. ⚠ **PLUS EN RETRAIT (Jordan, 3 octobre 2026 : « les cascades ont des bugs de construction »)** : à 0,1
-## en retrait, elle passait 0,15 devant la falaise amincie — et le relief SCULPTÉ de la falaise (qui a le droit de
-## déborder, règle (A)) la perçait de pointes noires à chaque case. À 0,3 devant le plan, elle est à 0,55 de la
-## falaise lisse. Une LÈVRE plate relie la bande d'en haut (qui s'arrête au plan) au haut de la lame.
-const LAME := 0.3
+## LA CASCADE EST UN RIDEAU EN VOLUME, REFERMÉ CONTRE LA FAÇADE (Jordan, 3 octobre 2026 : « trop carrées, sans remous,
+## texture animée moche, sans volume, et pas refermées contre la façade »). Ce n'est plus une lame plate posée devant
+## la falaise, mais une NAPPE COURBE :
+##   - elle part de la lèvre À PLAT, au bout de la bande (le plan de la falaise, à la hauteur de la bande), et se
+##     courbe vers l'avant comme une eau lancée — `LAME` × √(chute / `ARC`) —, puis tombe presque droite, en
+##     s'écartant encore un peu (`EVASE` par case de chute, jusqu'à `EVASE_MAXI`) ;
+##   - à un bout sans voisine sur son plan, elle s'arrondit (`ARRONDI`, un quart d'ellipse) et RENTRE DANS LA ROCHE
+##     (`DANS_LA_ROCHE` derrière le plan, la falaise amincie est à 0,25) : de profil, plus de jour entre l'eau et la
+##     paroi ; elle dépasse la case de `DEPASSE` à ce bout ;
+##   - ⚠ À 0,3 DEVANT LE PLAN DÈS LE HAUT, le relief SCULPTÉ de la falaise la perçait (règle (A)) : la courbe part du
+##     plan (au-dessus de la roche) et est à `LAME` dès 0,7 de chute ;
+##   - au pied, le REMOUS (genre 0,75) : un anneau d'écume posé sur l'eau où elle tombe, qui s'évase autour des bouts
+##     arrondis (`REMOUS` de large), et des EMBRUNS, un voile qui monte devant le pied (`EMBRUN` de haut). Ils sont
+##     posés APRÈS tout le reste du maillage (`maillage`) : transparents, ils doivent passer par-dessus la nappe.
+## Le contrat de la cascade et du remous : COLOR.a est la quantité d'ÉCUME (0 en haut, 1 au pied), pas une profondeur.
+const LAME := 0.35
+const ARC := 0.7
+const EVASE := 0.04
+const EVASE_MAXI := 0.2
+const DANS_LA_ROCHE := 0.4
+const ARRONDI := 0.35
+const DEPASSE := 0.1
+const REMOUS := 0.85
+const EMBRUN := 0.9
+## L'écume monte de 0 à 1 sur cette hauteur au-dessus de l'eau où la cascade tombe.
+const MONTEE_D_ECUME := 1.3
 ## L'océan s'étend au-delà de la boîte du monde jusqu'à cette distance : « aussi loin que la vue montre ».
 const LARGE := 2000.0
 
 const DORMANTE := 0.0
 const COURANTE := 0.5
+const REMOUS_GENRE := 0.75
 const CASCADE := 1.0
 
 
@@ -54,6 +75,19 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 	var b := FL.boite(occupees)
 	var plats: Array = []
 	var vus := {}
+	var sources: Array = []
+	# Les eaux DORMANTES (océan, lacs, lacs des rivières) : une cascade qui tombe dans l'une d'elles pose son remous sur
+	# SA nappe, pas au fond (`_lame`).
+	var dormantes: Array = []
+	for r in corps:
+		if r == null or r["erreur"] != "":
+			continue
+		if r["genre"] == "ocean" or r["genre"] == "lac":
+			dormantes.append(r["eau"])
+		elif r["genre"] == "riviere":
+			for lac in r["lacs"]:
+				dormantes.append(lac["cases"])
+	vus["dormantes"] = dormantes
 	for r in corps:
 		if r == null or r["erreur"] != "":
 			continue
@@ -71,9 +105,15 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 			"riviere":
 				for lac in r["lacs"]:
 					plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"]))
-				_riviere(a, r["cours"], occupees, plats, vus)
-	_poser_les_lames(a, vus, plats)
+				_riviere(a, r["cours"], occupees, plats, vus, sources)
+	var remous: Array = []
+	_poser_les_lames(a, vus, remous, plats)
+	for c: Vector3i in sources:
+		remous.append_array(_source(c))
 	_poser_les_plats(a, plats)
+	for g: Dictionary in remous:
+		_grille(a, g)
+	_sans_orphelins(a)
 	if (a["v"] as PackedVector3Array).is_empty():
 		return null
 	var arr := []
@@ -96,6 +136,12 @@ static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
 	var sur_z := {}   # (h, z) → [x des sommets sur cette ligne]
 	var sur_x := {}   # (h, x) → [z]
 	for r: Dictionary in plats:
+		if r.has("pts"):
+			# Des SOMMETS d'autre chose (le haut d'une cascade, posé sur le bout de sa bande) : à insérer, rien à dessiner.
+			for q: Vector3 in r["pts"]:
+				_noter(sur_z, Vector2i(_k(q.y), _k(q.z)), _k(q.x))
+				_noter(sur_x, Vector2i(_k(q.y), _k(q.x)), _k(q.z))
+			continue
 		var hk := _k(r["h"])
 		for x in [r["x0"], r["x1"]]:
 			for z in [r["z0"], r["z1"]]:
@@ -106,6 +152,8 @@ static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
 	for cle in sur_x:
 		(sur_x[cle] as Array).sort()
 	for r: Dictionary in plats:
+		if r.has("pts"):
+			continue
 		var hk := _k(r["h"])
 		var x0 := _k(r["x0"])
 		var x1 := _k(r["x1"])
@@ -150,6 +198,36 @@ static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
 			# Le tour est celui de `_plat` ((x0,z0) → (x1,z0) → (x1,z1)) : le produit vectoriel de (centre, k, k+1)
 			# pointe vers le BAS, à l'opposé de la normale — l'ordre que Godot veut (charte §4).
 			a["i"].append_array([base, base + 1 + k, base + 1 + (k + 1) % n])
+
+
+## Retire les sommets qu'aucun triangle n'emploie (le centre d'un disque, où tous les triangles d'un côté sont plats) :
+## l'export glTF les ôte, et le maillage relu n'aurait plus les mêmes sommets que celui qu'on dessine.
+static func _sans_orphelins(a: Dictionary) -> void:
+	var idx: PackedInt32Array = a["i"]
+	var n: int = (a["v"] as PackedVector3Array).size()
+	var neuf := PackedInt32Array()
+	neuf.resize(n)
+	neuf.fill(-1)
+	for i in idx:
+		neuf[i] = 0
+	var k := 0
+	for i in n:
+		if neuf[i] == 0:
+			neuf[i] = k
+			k += 1
+	if k == n:
+		return
+	for cle in ["v", "n", "c", "uv"]:
+		var src = a[cle]
+		var dst = src.duplicate()
+		dst.resize(k)
+		for i in n:
+			if neuf[i] >= 0:
+				dst[neuf[i]] = src[i]
+		a[cle] = dst
+	for t in idx.size():
+		idx[t] = neuf[idx[t]]
+	a["i"] = idx
 
 
 static func _k(v: float) -> int:
@@ -412,8 +490,14 @@ static func _horizontal(d: Vector3i) -> bool:
 ## ⚠ **UNE CASE, UNE BANDE (Jordan, 3 octobre 2026)** : deux rivières qui passent au même endroit posaient deux bandes
 ## (et deux lames) l'une dans l'autre — du scintillement, et une eau deux fois plus opaque. `vus` retient ce qui est
 ## posé, pour toutes les rivières d'une couche.
-static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: Array, vus: Dictionary) -> void:
+static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: Array, vus: Dictionary,
+		sources: Array = []) -> void:
 	var n := cours.size()
+	# LA SOURCE (Jordan, 3 octobre 2026 : « il manque aussi la source ») : la première case d'une rivière qui coule sur la
+	# matière — l'eau n'y sort plus de nulle part, elle y SOURD (`_source`). Une rivière qui part d'un lac qui déborde
+	# n'en a pas : elle sort du lac. Une seule par case.
+	if n > 0 and cours[0]["genre"] == "coule" and occupees.has((cours[0]["case"] as Vector3i) + Vector3i.DOWN) 			and not sources.has(cours[0]["case"]):
+		sources.append(cours[0]["case"])
 	for i in n:
 		var e: Dictionary = cours[i]
 		var c: Vector3i = e["case"]
@@ -472,75 +556,304 @@ static func courants(cours: Array, occupees: Dictionary) -> Dictionary:
 	return sortie
 
 
-## La lame d'une cascade, de la lèvre `levre` (la case d'où l'eau tombe) jusqu'à la dernière case de chute `bas`,
-## `LAME` DEVANT le plan de la falaise qu'elle quitte (le côté −`d`). Retenue dans `vus` sous la clé de son plan et de sa
-## place sur ce plan ; deux rivières qui tombent au même endroit n'en font qu'une, de la plus haute lèvre au plus bas
-## pied. Sans sens connu, au milieu de la colonne.
+## La cascade d'une rivière, de la lèvre `levre` (la case d'où l'eau tombe) jusqu'à la dernière case de chute `bas`,
+## sur le plan de la falaise qu'elle quitte (le côté −`d`). Retenue dans `vus` sous la clé de son plan et de sa place
+## sur ce plan ; deux rivières qui tombent au même endroit n'en font qu'une, de la plus haute lèvre au plus bas pied.
+## Sans sens connu, au milieu de la colonne, droite.
+## `sol` : la hauteur de l'eau où elle tombe — la bande de `bas` s'il repose sur la matière, sinon la nappe d'en dessous
+## (`bas.y − 0,3` = rangée du dessous + `NAPPE`). Le pied de la nappe est 0,15 plus bas, sous l'eau.
 static func _lame(levre: Vector3i, bas: Vector3i, d: Vector3i, occupees: Dictionary, vus: Dictionary) -> void:
 	var haut := levre.y + RIVIERE
 	var pied := bas.y - 0.3
+	var sol := bas.y + RIVIERE if occupees.has(bas + Vector3i.DOWN) else pied
+	# ⚠ TOMBÉE DANS UN CREUX QU'ELLE REMPLIT, la chute finit au FOND (la case du bas repose sur la matière) : le remous y
+	# était posé sous la nappe, invisible (vu à l'image). Sur l'eau dormante qui noie `bas`, il est sur sa nappe.
+	for eau: Dictionary in vus.get("dormantes", []):
+		if eau.has(bas):
+			var h := bas
+			while eau.has(h + Vector3i.UP):
+				h += Vector3i.UP
+			sol = h.y + NAPPE
+			pied = minf(pied, sol - 0.15)
+			break
 	# Le plan : x = const (axe 0) ou z = const (axe 2) ; `a` la case le long du plan ; `plan` le plan de la falaise.
 	var axe := 0 if d.x != 0 else 2
 	var sens: int = d.x if d.x != 0 else d.z
 	var a_le_long: int = levre.z if axe == 0 else levre.x
 	var plan := 0.0
-	var coord := 0.0
 	if sens == 0:
 		axe = 2
 		sens = 1
 		a_le_long = levre.x
-		coord = levre.z + 0.5
-		plan = coord
+		plan = levre.z + 0.5
 	else:
 		var bord: int = levre.x if axe == 0 else levre.z
 		plan = float(bord) if sens > 0 else float(bord + 1)
-		coord = plan + LAME * sens
-	# La lèvre : la bande de la case d'avant s'arrête au plan de la falaise ; elle s'avance jusqu'à la lame. Seulement
-	# si cette case porte une bande (elle repose sur la matière), sinon elle flotterait.
-	var avant := levre - d
-	var levre_plate := d != Vector3i.ZERO and occupees.has(avant + Vector3i.DOWN) and not occupees.has(avant)
-	var cle := "%d|%d|%d" % [axe, roundi(coord * 20.0), a_le_long]
+	var cle := "%d|%d|%d" % [axe, roundi(plan * 20.0), a_le_long]
 	var l: Dictionary = vus.get(cle, {})
 	if l.is_empty():
-		vus[cle] = {"axe": axe, "sens": sens, "coord": coord, "plan": plan, "a": a_le_long, "haut": haut, "pied": pied,
-			"d": d, "levre": levre_plate}
+		vus[cle] = {"axe": axe, "sens": sens, "plan": plan, "a": a_le_long, "haut": haut, "pied": pied, "sol": sol,
+			"d": d}
 	else:
 		l["haut"] = maxf(l["haut"], haut)
 		l["pied"] = minf(l["pied"], pied)
-		l["levre"] = l["levre"] or levre_plate
+		l["sol"] = minf(l["sol"], sol)
 
 
-## Les lames retenues dans `vus`, et leurs lèvres. ⚠ **UNE LAME S'ÉLARGIT DE `LAME` AU BOUT QUI N'A PAS DE VOISINE SUR
-## SON PLAN** : posée devant la falaise, elle ne rejoignait plus celle de l'autre face à un coin saillant — on y voyait
-## l'arête de la roche entre deux rideaux. Élargies, les deux se rejoignent pile au coin (à `LAME` de chaque face) ; à
-## un coin rentrant, le bout élargi entre dans la roche, qui le cache.
-static func _poser_les_lames(a: Dictionary, vus: Dictionary, plats: Array) -> void:
+## Les chutes successives d'une nappe : sa courbe (fine en haut, où elle se cintre), puis tous les 0,5, puis son pied.
+## Ne dépend que de la hauteur totale : deux cascades voisines de même lèvre et de même pied ont les mêmes rangées.
+static func _chutes(total: float) -> PackedFloat32Array:
+	var c := PackedFloat32Array()
+	for h in [0.0, 0.02, 0.06, 0.12, 0.2, 0.3, 0.42, 0.55, ARC]:
+		if h < total - 0.01:
+			c.append(h)
+	var h := ARC + 0.5
+	while h < total - 0.2:
+		c.append(h)
+		h += 0.5
+	c.append(total)
+	return c
+
+
+## Jusqu'où la nappe est sortie du plan après `chute` cases de chute (au milieu, loin des bouts).
+static func _sortie(chute: float) -> float:
+	return LAME * sqrt(clampf(chute / ARC, 0.0, 1.0)) + minf(EVASE * maxf(chute - ARC, 0.0), EVASE_MAXI)
+
+
+## Le profil en travers : 1 au milieu, 0 au bout d'un bout libre (où la nappe est rentrée dans la roche).
+static func _profil(u: float, u0: float, u1: float, libre0: bool, libre1: bool) -> float:
+	var r := 1.0
+	if libre0 and u < u0 + ARRONDI:
+		var t := clampf((u - u0) / ARRONDI, 0.0, 1.0)
+		r = minf(r, sqrt(1.0 - (1.0 - t) * (1.0 - t)))
+	if libre1 and u > u1 - ARRONDI:
+		var t := clampf((u1 - u) / ARRONDI, 0.0, 1.0)
+		r = minf(r, sqrt(1.0 - (1.0 - t) * (1.0 - t)))
+	return r
+
+
+## La position, devant le plan, d'un point de la nappe : `r` son profil en travers, `chute` sa chute. Tout en haut elle
+## est sur le plan (au bout de la bande) ; dès 0,15 de chute ses bouts libres sont à `DANS_LA_ROCHE` derrière.
+static func _devant(r: float, chute: float) -> float:
+	return lerpf(-DANS_LA_ROCHE * clampf(chute / 0.15, 0.0, 1.0), _sortie(chute), r)
+
+
+## Le point (u, chute) d'une cascade retenue `l`, dans le monde.
+static func _point_de_lame(l: Dictionary, u: float, chute: float) -> Vector3:
+	var r := 0.0 if l["droite"] else _profil(u, l["u0"], l["u1"], l["libre0"], l["libre1"])
+	var p: float = float(l["plan"]) + (0.0 if l["droite"] else _devant(r, chute)) * int(l["sens"])
+	var y: float = float(l["haut"]) - chute
+	return Vector3(p, y, u) if int(l["axe"]) == 0 else Vector3(u, y, p)
+
+
+## La normale d'une cascade en (u, chute), par différences — vers l'AVANT : (vers le bas) × (le long du plan) pointe vers
+## −x pour l'axe 0, vers +z pour l'axe 2, d'où `_signe`.
+static func _normale_de_lame(l: Dictionary, u: float, chute: float) -> Vector3:
+	var e := 0.01
+	var tu := _point_de_lame(l, u + e, chute) - _point_de_lame(l, u - e, chute)
+	var th := _point_de_lame(l, u, chute + e) - _point_de_lame(l, u, maxf(chute - e, 0.0))
+	var n := th.cross(tu) * _signe(l)
+	if n.length() < 1e-9:
+		return Vector3(l["sens"], 0, 0) if int(l["axe"]) == 0 else Vector3(0, 0, l["sens"])
+	return n.normalized()
+
+
+static func _signe(l: Dictionary) -> int:
+	return -int(l["sens"]) if int(l["axe"]) == 0 else int(l["sens"])
+
+
+## Les cascades retenues dans `vus` : chacune posée tout de suite (opaque), son remous gardé dans `remous` (transparent,
+## posé en dernier). ⚠ **UN BOUT SANS VOISINE SUR SON PLAN S'ARRONDIT ET RENTRE DANS LA ROCHE** ; un bout qui en a une
+## reste droit et finit sur la frontière de la case, où la voisine reprend (mêmes rangées, mêmes points).
+static func _poser_les_lames(a: Dictionary, vus: Dictionary, remous: Array, plats: Array = []) -> void:
 	for cle in vus:
-		if not cle is String:
+		if not cle is String or cle == "dormantes":
 			continue
 		var l: Dictionary = vus[cle]
-		var axe: int = l["axe"]
-		var cle_plan := "%d|%d|" % [axe, roundi(float(l["coord"]) * 20.0)]
-		var debut := float(l["a"]) - (0.0 if vus.has(cle_plan + str(int(l["a"]) - 1)) or l["d"] == Vector3i.ZERO else LAME)
-		var fin := float(l["a"]) + 1.0 + (0.0 if vus.has(cle_plan + str(int(l["a"]) + 1)) or l["d"] == Vector3i.ZERO else LAME)
+		var u_case: int = l["a"]
+		l["droite"] = l["d"] == Vector3i.ZERO
+		var cle_plan := "%d|%d|" % [l["axe"], roundi(float(l["plan"]) * 20.0)]
+		l["libre0"] = not l["droite"] and not vus.has(cle_plan + str(u_case - 1))
+		l["libre1"] = not l["droite"] and not vus.has(cle_plan + str(u_case + 1))
+		l["u0"] = float(u_case) - (DEPASSE if l["libre0"] else 0.0)
+		l["u1"] = float(u_case) + 1.0 + (DEPASSE if l["libre1"] else 0.0)
+		var us := _travers(l)
 		var haut: float = l["haut"]
-		var pied: float = l["pied"]
-		var coord: float = l["coord"]
+		var sol: float = l["sol"]
+		var total: float = haut - float(l["pied"])
 		var dd: Vector3i = l["d"]
-		var c := _couleur(Vector2(dd.x, dd.z), CASCADE, 0.05)
-		var n := Vector3(l["sens"], 0, 0) if axe == 0 else Vector3(0, 0, l["sens"])
-		var p: Array
-		if axe == 0:
-			p = [Vector3(coord, haut, debut), Vector3(coord, haut, fin), Vector3(coord, pied, fin), Vector3(coord, pied, debut)]
-		else:
-			p = [Vector3(debut, haut, coord), Vector3(fin, haut, coord), Vector3(fin, pied, coord), Vector3(debut, pied, coord)]
-		_quad(a, p, n, c, [Vector2(debut, haut), Vector2(fin, haut), Vector2(fin, pied), Vector2(debut, pied)])
-		if l["levre"]:
-			# La lèvre, à plat, du plan de la falaise jusqu'à la lame : une bande qui coule (la cascade la prolonge).
-			var cl := _couleur(Vector2(dd.x, dd.z), COURANTE, 0.05)
-			var p0: float = minf(l["plan"], coord)
-			var p1: float = maxf(l["plan"], coord)
-			if axe == 0:
-				plats.append({"x0": p0, "x1": p1, "z0": debut, "z1": fin, "h": haut, "couleur": cl})
-			else:
-				plats.append({"x0": debut, "x1": fin, "z0": p0, "z1": p1, "h": haut, "couleur": cl})
+		var courant := Vector2(dd.x, dd.z)
+		var g := {"p": [], "n": [], "c": [], "uv": []}
+		for chute in _chutes(total):
+			var rp: Array = []
+			var rn: Array = []
+			var rc: Array = []
+			var ruv: Array = []
+			for u in us:
+				var p := _point_de_lame(l, u, chute)
+				var e := clampf(1.0 - (p.y - sol) / MONTEE_D_ECUME, 0.0, 1.0)
+				rp.append(p)
+				rn.append(_normale_de_lame(l, u, chute))
+				rc.append(_couleur(courant, CASCADE, e * e))
+				ruv.append(Vector2(u, p.y))
+			g["p"].append(rp)
+			g["n"].append(rn)
+			g["c"].append(rc)
+			g["uv"].append(ruv)
+		_grille(a, g)
+		# ⚠ SON HAUT EST SUR LE BOUT DE LA BANDE qui y arrive : ses sommets y sont insérés (`_poser_les_plats`), sinon des
+		# jonctions en T — un fil de fond le long de la lèvre. Ils sont des multiples de 0,05, comme les plats.
+		plats.append({"pts": g["p"][0]})
+		# LE REMOUS : au pied, là où la nappe traverse l'eau (`sol`). Chaque point du pied s'écarte selon la normale de la
+		# nappe à cet endroit — devant au milieu, de côté sur les bouts arrondis : l'anneau fait le tour.
+		var chute_sol := clampf(haut - sol, 0.0, total)
+		var pieds: Array = []
+		var dirs: Array = []
+		for u in us:
+			var p := _point_de_lame(l, u, chute_sol)
+			var n := _normale_de_lame(l, u, chute_sol)
+			var h := Vector3(n.x, 0.0, n.z)
+			if h.length() < 0.2:
+				h = Vector3(l["sens"], 0, 0) if int(l["axe"]) == 0 else Vector3(0, 0, l["sens"])
+			pieds.append(Vector3(p.x, sol, p.z))
+			dirs.append(h.normalized())
+		remous.append(_couronne(pieds, dirs, us, courant, sol, [0.0, 0.25, 0.55, REMOUS], [0.0, 0.0, 0.0, 0.0],
+			[1.0, 0.85, 0.45, 0.0], true))
+		# Les embruns montent DEVANT la nappe seulement : sur les bouts arrondis ils s'effacent (leur écume × le profil),
+		# sinon ils y faisaient deux ailerons durs de chaque côté (vu à l'image).
+		var profils: Array = []
+		for u in us:
+			profils.append(1.0 if l["droite"] else pow(_profil(u, l["u0"], l["u1"], l["libre0"], l["libre1"]), 3.0))
+		remous.append(_couronne(pieds, dirs, us, courant, sol, [0.06, 0.16, 0.22, 0.2], [0.0, 0.3, 0.6, EMBRUN],
+			[0.95, 0.7, 0.35, 0.0], false, profils))
+
+
+## Les points en travers d'une cascade : les bouts arrondis finement, les frontières des cases, le milieu.
+static func _travers(l: Dictionary) -> Array:
+	var u0: float = l["u0"]
+	var u1: float = l["u1"]
+	var us: Array = []
+	# Des multiples de 0,05 (le haut de la nappe est inséré dans la bande, comparée en vingtièmes).
+	for f in [0.0, 0.05, 0.1, 0.2, 0.3, ARRONDI]:
+		if l["libre0"]:
+			us.append(u0 + f)
+		if l["libre1"]:
+			us.append(u1 - f)
+	var a: int = l["a"]
+	for u in [float(a), a + 0.5, a + 1.0]:
+		us.append(u)
+	us.sort()
+	var propres: Array = []
+	for u: float in us:
+		if u < u0 - 0.001 or u > u1 + 0.001:
+			continue
+		if propres.is_empty() or u - float(propres[-1]) > 0.005:
+			propres.append(u)
+	return propres
+
+
+## Une couronne du remous autour du pied : rangée k à `ecarts[k]` du pied, `montees[k]` au-dessus de l'eau, d'écume
+## `ecumes[k]` (× `poids[i]` s'il est donné). `a_plat` : l'anneau posé sur l'eau (normale vers le haut, 0,02 au-dessus) ;
+## sinon les embruns, debout.
+static func _couronne(pieds: Array, dirs: Array, us: Array, courant: Vector2, sol: float, ecarts: Array, montees: Array,
+		ecumes: Array, a_plat: bool, poids: Array = []) -> Dictionary:
+	var g := {"p": [], "n": [], "c": [], "uv": []}
+	for k in ecarts.size():
+		var rp: Array = []
+		var rn: Array = []
+		var rc: Array = []
+		var ruv: Array = []
+		for i in us.size():
+			var p: Vector3 = pieds[i] + dirs[i] * float(ecarts[k]) + Vector3(0, float(montees[k]) + (0.02 if a_plat else 0.0), 0)
+			rp.append(p)
+			rn.append(Vector3.UP if a_plat else dirs[i])
+			rc.append(_couleur(courant, REMOUS_GENRE, float(ecumes[k]) * (float(poids[i]) if not poids.is_empty() else 1.0)))
+			ruv.append(Vector2(us[i], sol - float(ecarts[k]) * 1.5 if a_plat else p.y))
+		g["p"].append(rp)
+		g["n"].append(rn)
+		g["c"].append(rc)
+		g["uv"].append(ruv)
+	return g
+
+
+## LA SOURCE d'une rivière, sur la bande de la case `c` : l'eau SOURD — un bouillon d'écume en disque, bombé au centre,
+## qui s'étale et s'efface (`SOURCE` de rayon), et un petit voile d'embruns. Genre « remous » (transparent, en dernier) ;
+## UV : (angle × rayon, hauteur − rayon) — le bouillon du motif s'écarte du centre.
+const SOURCE := 0.7
+const SOURCE_DOME := 0.08
+
+
+static func _source(c: Vector3i) -> Array:
+	var centre := Vector3(c.x + 0.5, c.y + RIVIERE, c.z + 0.5)
+	var tours := 16
+	var disque := {"p": [], "n": [], "c": [], "uv": []}
+	var rayons := [0.0, 0.2, 0.42, SOURCE]
+	var bosses := [SOURCE_DOME, SOURCE_DOME * 0.7, SOURCE_DOME * 0.3, 0.02]
+	var ecumes := [1.0, 0.95, 0.6, 0.0]
+	for k in rayons.size():
+		var rp: Array = []
+		var rn: Array = []
+		var rc: Array = []
+		var ruv: Array = []
+		for i in tours + 1:
+			var ang := TAU * float(i % tours) / tours
+			var d := Vector3(cos(ang), 0, sin(ang))
+			rp.append(centre + d * float(rayons[k]) + Vector3(0, float(bosses[k]), 0))
+			rn.append(Vector3.UP)
+			rc.append(_couleur(Vector2.ZERO, REMOUS_GENRE, ecumes[k]))
+			ruv.append(Vector2(ang * 0.6, centre.y - float(rayons[k]) * 1.5))
+		disque["p"].append(rp)
+		disque["n"].append(rn)
+		disque["c"].append(rc)
+		disque["uv"].append(ruv)
+	var voile := {"p": [], "n": [], "c": [], "uv": []}
+	for k in 3:
+		var r: float = [0.12, 0.2, 0.24][k]
+		var h: float = [0.02, 0.18, 0.34][k]
+		var rp: Array = []
+		var rn: Array = []
+		var rc: Array = []
+		var ruv: Array = []
+		for i in tours + 1:
+			var ang := TAU * float(i % tours) / tours
+			var d := Vector3(cos(ang), 0, sin(ang))
+			rp.append(centre + d * r + Vector3(0, h, 0))
+			rn.append(d)
+			rc.append(_couleur(Vector2.ZERO, REMOUS_GENRE, [0.8, 0.45, 0.0][k]))
+			ruv.append(Vector2(ang * 0.6, centre.y + h))
+		voile["p"].append(rp)
+		voile["n"].append(rn)
+		voile["c"].append(rc)
+		voile["uv"].append(ruv)
+	return [disque, voile]
+
+
+## Une grille de sommets (`p`, `n`, `c`, `uv` : des rangées de même longueur) en triangles. Chaque triangle est tourné à
+## l'endroit pour Godot d'après la normale de son premier sommet (charte §4) ; un triangle sans aire n'est pas posé.
+static func _grille(a: Dictionary, g: Dictionary) -> void:
+	var p: Array = g["p"]
+	var nr := p.size()
+	if nr < 2:
+		return
+	var nc: int = (p[0] as Array).size()
+	var base: int = (a["v"] as PackedVector3Array).size()
+	for i in nr:
+		for j in nc:
+			a["v"].append(p[i][j])
+			a["n"].append(g["n"][i][j])
+			a["c"].append(g["c"][i][j])
+			a["uv"].append(g["uv"][i][j])
+	var v: PackedVector3Array = a["v"]
+	for i in nr - 1:
+		for j in nc - 1:
+			var k := [base + i * nc + j, base + i * nc + j + 1, base + (i + 1) * nc + j + 1, base + (i + 1) * nc + j]
+			for t in [[k[0], k[1], k[2]], [k[0], k[2], k[3]]]:
+				var x: Vector3 = (v[t[1]] - v[t[0]]).cross(v[t[2]] - v[t[0]])
+				if x.length() < 1e-7:
+					continue
+				# Tourné d'après la normale de son PREMIER sommet : là où la nappe se replie (le coin du haut d'un bout
+				# libre, qui rentre dans la roche), la normale moyenne du quad le retournait.
+				if x.dot(a["n"][t[0]]) > 0.0:
+					a["i"].append_array([t[0], t[2], t[1]])
+				else:
+					a["i"].append_array([t[0], t[1], t[2]])

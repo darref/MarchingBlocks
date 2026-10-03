@@ -573,8 +573,8 @@ func _refus() -> void:
 
 ## LE MAILLAGE (`eau_maillage.gd`). Attendus écrits à la main depuis les hauteurs de la charte : nappe en
 ## rangée + 0,7, bande de rivière en rangée − 0,15, débord de 0,45 sous une voisine pleine de même rangée,
-## lame de cascade 0,1 en retrait du plan entre la lèvre et la case d'où l'eau vient, du haut de la bande jusqu'à
-## la dernière chute − 0,3 ; une bande sur chaque case du cours qui repose sur la matière (jamais sur une lèvre).
+## cascade en nappe courbe depuis le plan de la falaise, du haut de la bande jusqu'à la dernière chute − 0,3 ; une bande
+## sur chaque case du cours qui repose sur la matière (jamais sur une lèvre).
 func _maillage() -> void:
 	# La cuvette : ses 9 cases de surface à 2,7, FUSIONNÉES en une nappe (même profondeur partout) ; le bord avance
 	# de 0,45 sous chaque mur → x, z ∈ [0,55 ; 4,45] ; profondeur 2 partout (2 cases d'eau, puis le plancher) → 2 / 8.
@@ -603,36 +603,81 @@ func _maillage() -> void:
 	_boite(esc, Vector3i(-1, 0, 1), Vector3i(5, 4, 1))
 	_boite(esc, Vector3i(-1, 0, 0), Vector3i(-1, 4, 0))
 	q = _quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc))
-	_egal(q.size(), 12, "escalier : 6 bandes, 3 lames, 3 lèvres")
+	# 6 bandes, 3 cascades, et à chacune son anneau d'écume et ses embruns ; la source : un disque et son voile.
+	_egal(q.size(), 17, "escalier : 6 bandes, 3 cascades, 3 anneaux, 3 embruns, la source et son voile")
 	for c in [Vector3i(2, 2, 0), Vector3i(4, 1, 0)]:
 		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y - 0.15, -0.45),
 			Vector3(c.x + 1, c.y - 0.15, 1.45)])).size(), 1,
 			"escalier : la marche %s, où l'eau retombe, est mouillée (et s'avance sous la marche d'au-dessus)" % c)
-	# Sur une lèvre, seule la LÈVRE de la cascade s'avance, de 0,3 au plus : aucune bande ne la couvre.
+	# Sur une lèvre, aucune bande : la cascade part du plan de la falaise.
 	for c in [Vector3i(2, 3, 0), Vector3i(4, 2, 0), Vector3i(6, 1, 0)]:
-		_vrai(q.all(func(e): return not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[1].x < c.x + 0.3001),
-			"escalier : aucune bande ne flotte sur la lèvre %s (la lèvre de la cascade s'arrête à 0,3)" % c)
+		_vrai(q.all(func(e): return not _genre(e, 0.5) or not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[1].x < c.x + 0.001),
+			"escalier : aucune bande ne flotte sur la lèvre %s" % c)
 	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 2,85,
 	# courant vers +X.
 	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 2.85, -0.45), Vector3(1, 2.85, 1.45)]))
 	_egal(bande.size(), 1, "escalier : la bande de la première case, à sa place")
 	if bande.size() == 1:
 		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.05)), "… courant +X, genre rivière")
-	# Les lames, 0,3 DEVANT le plan de la falaise (x = 2,3 ; 4,3 ; 6,3), élargies de 0,3 aux deux bouts (aucune voisine
-	# sur leur plan) : z ∈ [−0,3 ; 1,3] ; de 2,85 à 1,7, de 1,85 à 0,7, de 0,85 à −1,3. Et leurs lèvres, à plat, du plan
-	# de la falaise à la lame, à la hauteur de la bande.
-	for l in [[2.3, 2.85, 1.7], [4.3, 1.85, 0.7], [6.3, 0.85, -1.3]]:
-		var lame := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0], l[2], -0.3), Vector3(l[0], l[1], 1.3)]))
-		_vrai(lame.size() == 1 and _couleur_proche(lame[0]["c"], Color(1.0, 0.5, 1.0, 0.05)), "escalier : la lame en x = %s, de %s à %s" % l)
-		var levre := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(l[0] - 0.3, l[1], -0.3), Vector3(l[0], l[1], 1.3)]))
-		_vrai(levre.size() == 1 and _couleur_proche(levre[0]["c"], Color(1.0, 0.5, 0.5, 0.05)),
-			"escalier : la lèvre de la lame en x = %s, de x = %s à la lame, à %s" % [l[0], l[0] - 0.3, l[1]])
+	# LES CASCADES (Jordan, 3 octobre 2026 : « trop carrées, sans remous, sans volume, pas refermées contre la façade »).
+	# Attendus à la main, depuis la règle écrite dans `eau_maillage.gd` : la nappe part du plan de la falaise (x = 2, 4, 6)
+	# à la hauteur de la bande (2,85 ; 1,85 ; 0,85), est à 0,35 devant le plan à 0,7 de chute, au milieu ; ses deux bouts
+	# (z = −0,1 et 1,1 : libres, la case dépasse de 0,1) sont à 0,4 DERRIÈRE le plan — dans la roche, dont la face amincie
+	# est à 0,25 ; l'écume vaut 0 en haut et 1 au pied. Son anneau d'écume est À PLAT sur l'eau où elle tombe (la bande de
+	# la marche, 1,85 et 0,85 ; hors du monde, son pied −1,3) + 0,02.
+	# L'écume du haut : (1 − (haut − eau) / 1,3)², 0 au-delà — une case de chute : (1 − 1 / 1,3)² = 0,0533 ; 2,15 : 0.
+	for l in [[2.0, 2.85, 1.87, 0.0533], [4.0, 1.85, 0.87, 0.0533], [6.0, 0.85, -1.28, 0.0]]:
+		var plan: float = l[0]
+		var haut: float = l[1]
+		var nappe := q.filter(func(e): return _genre(e, 1.0) and absf(_boite_de([e])[1].y - haut) < 1e-4)
+		_egal(nappe.size(), 1, "escalier : une cascade sous la lèvre x = %s" % plan)
+		if nappe.size() != 1:
+			continue
+		var pts: Array = nappe[0]["p"]
+		_vrai(pts.filter(func(p): return absf(p.y - haut) < 1e-4).all(func(p): return absf(p.x - plan) < 1e-4),
+			"… x = %s : elle part du plan de la falaise, au bout de la bande" % plan)
+		_vrai(pts.any(func(p): return p.distance_to(Vector3(plan + 0.35, haut - 0.7, 0.5)) < 1e-4),
+			"… x = %s : 0,35 devant le plan à 0,7 de chute (elle se courbe)" % plan)
+		for z in [-0.1, 1.1]:
+			_vrai(pts.any(func(p): return p.distance_to(Vector3(plan - 0.4, haut - 0.7, z)) < 1e-4),
+				"… x = %s : son bout z = %s rentre dans la roche (0,4 derrière le plan)" % [plan, z])
+		var a: Array = (nappe[0]["mesh"] as ArrayMesh).surface_get_arrays(0)
+		var alphas := {}
+		for k in (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size():
+			var v: Vector3 = a[Mesh.ARRAY_VERTEX][k]
+			# ⚠ Les sommets de la CASCADE seulement : le bout de la bande porte des sommets aux mêmes places (insérés).
+			if pts.has(v) and absf((a[Mesh.ARRAY_COLOR][k] as Color).b - 1.0) < 0.003:
+				alphas[v] = (a[Mesh.ARRAY_COLOR][k] as Color).a
+		var bas: float = _boite_de(nappe)[0].y
+		_vrai(alphas.keys().all(func(p): return absf(p.y - haut) > 1e-4 or absf(alphas[p] - l[3]) < 0.003)
+			and alphas.keys().all(func(p): return absf(p.y - bas) > 1e-4 or alphas[p] > 0.997),
+			"… x = %s : l'écume vaut %s en haut, 1 au pied" % [plan, l[3]])
+		var anneau := q.filter(func(e): return _genre(e, 0.75) and _a_plat(e, l[2]) and _boite_de([e])[1].x > plan + 1.0)
+		_egal(anneau.size(), 1, "… x = %s : un anneau d'écume à plat, à %s, qui s'écarte du pied" % [plan, l[2]])
+		var embrun := q.filter(func(e): return _genre(e, 0.75) and absf(_boite_de([e])[0].y - (l[2] - 0.02)) < 1e-4 and absf(_boite_de([e])[1].y - (l[2] + 0.88)) < 1e-4)
+		_egal(embrun.size(), 1, "… x = %s : des embruns qui montent de 0,9 devant le pied" % plan)
+	# LA SOURCE (Jordan : « il manque aussi la source ») : un disque d'écume centré sur la case (0,3,0), bombé de 0,08.
+	var source := q.filter(func(e): return _genre(e, 0.75) and _meme_boite(_boite_de([e]), [Vector3(-0.2, 2.87, -0.2), Vector3(1.2, 2.93, 1.2)]))
+	_egal(source.size(), 1, "escalier : la source sourd en (0,3,0) — un disque d'écume de 0,7, bombé de 0,08")
 	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
 	_vrai(_sans_jonction_en_t(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc)),
-		"escalier : aucune jonction en T (la lèvre est plus large que la bande qu'elle prolonge)")
+		"escalier : aucune jonction en T (le haut des cascades est inséré dans le bout des bandes)")
 	# DEUX RIVIÈRES AU MÊME ENDROIT n'en dessinent qu'une (charte : « une case, une bande »).
-	_egal(_quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0)), FL.source(esc, Vector3i(0, 3, 0))], esc)).size(), 12,
-		"escalier : deux fois la même rivière — les mêmes 12 morceaux, rien en double")
+	_egal(_quads(EM.maillage([FL.source(esc, Vector3i(0, 3, 0)), FL.source(esc, Vector3i(0, 3, 0))], esc)).size(), 17,
+		"escalier : deux fois la même rivière — les mêmes 17 morceaux, rien en double")
+	# UNE CHUTE DANS UN BASSIN QU'ELLE REMPLIT finit au fond ; son anneau d'écume est sur la NAPPE du bassin (1,7 + 0,02),
+	# pas au fond, sous l'eau (vu à l'image, 3 octobre 2026). Une falaise (x ≤ 2, dessus en 4), un bassin d'une case de
+	# profondeur au pied (x 3..5, z 0..2, en y = 1, cerné d'un rebord), la rivière part de (2, 5, 1).
+	var bassin := {}
+	_boite(bassin, Vector3i(-4, 0, -3), Vector3i(7, 0, 5))
+	_boite(bassin, Vector3i(-4, 1, -3), Vector3i(2, 4, 5))
+	_boite(bassin, Vector3i(3, 1, -1), Vector3i(6, 1, 3))
+	_boite(bassin, Vector3i(3, 1, 0), Vector3i(5, 1, 2), false)
+	var riv := FL.source(bassin, Vector3i(2, 5, 1))
+	_egal([riv["genre"], (riv["lacs"] as Array).size()], ["riviere", 1], "le bassin : une rivière qui le remplit")
+	q = _quads(EM.maillage([riv], bassin))
+	_egal(q.filter(func(e): return _genre(e, 0.75) and _a_plat(e, 1.72)).size(), 1,
+		"le bassin : l'anneau d'écume est sur sa nappe, à 1,72")
 
 	# L'océan autour de l'île, niveau 2 : ses 32 cases de surface fusionnées, et 4 rectangles jusqu'à ±2000.
 	var ile := _monde_ile()
@@ -828,6 +873,17 @@ func _sans_jonction_en_t(mesh: ArrayMesh) -> bool:
 
 ## [min, max] des sommets. ⚠ PAS ARRONDIS : `snappedf(0,001)` sur un Vector3 (flottants 32 bits) écarte −2000 de
 ## 1,2·10⁻⁴ — l'arrondi faussait la comparaison qu'il devait rendre sûre.
+## Le genre d'un morceau (COLOR.b, quantifié au 1/255).
+func _genre(e: Dictionary, g: float) -> bool:
+	return absf((e["c"] as Color).b - g) < 0.003
+
+
+## Un morceau tout à plat à la hauteur y.
+func _a_plat(e: Dictionary, y: float) -> bool:
+	var b := _boite_de([e])
+	return absf(b[0].y - y) < 1e-4 and absf(b[1].y - y) < 1e-4
+
+
 func _boite_de(q: Array) -> Array:
 	var lo := Vector3(INF, INF, INF)
 	var hi := -lo
@@ -886,7 +942,12 @@ func _presets() -> void:
 		_vrai(EP.NOMS.has(preset), "le preset « %s » a un nom à l'écran" % preset)
 		var code: String = EP.code(preset)
 		codes[code] = true
-		_vrai(code.contains("shader_type spatial") and not code.contains("%COMMUN%") and not code.contains("%CAUSTIQUE%"),
+		# LES CASCADES (3 octobre 2026) : le même motif dans les six (filets, écume du pied, eau lisse sur la lèvre), et le
+		# remous (genre 0,75) transparent, ÉCARTÉ sous un seuil — sinon il écrirait sa profondeur et trouerait la nappe.
+		_vrai(code.contains("motif_cascade(UV") and code.contains("v_mousse = COLOR.a") and code.contains("v_genre < 0.9")
+			and code.contains("discard;"), "« %s » : les cascades lisent le motif commun, l'écume (COLOR.a) et le remous" % preset)
+		_vrai(code.contains("shader_type spatial") and not code.contains("%COMMUN%") and not code.contains("%CAUSTIQUE%")
+			and not code.contains("%CASCADE%"),
 			"« %s » : un shader spatial, marqueurs remplacés" % preset)
 		var globaux := {}
 		for m in re_uniforme.search_all(code):

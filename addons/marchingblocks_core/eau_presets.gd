@@ -184,16 +184,15 @@ float bulle_ronde(vec2 q) {
 	return 1.0 - smoothstep(0.18, 0.32, length(fract(q) - 0.5));
 }
 
-// Les stries d'une cascade, qui tombent (UV.y est la hauteur du monde).
-float stries(vec2 uv, float t) {
-	return smoothstep(0.5, 0.85, bruit_lisse(vec2(uv.x * 7.0, uv.y * 0.9 + t * 3.0)));
-}
+// %CASCADE%
 
 // ⚠ UNE CASCADE EST DE L'ÉCUME, PAS DE L'EAU CLAIRE : transparente comme une nappe, la lame n'était qu'un fantôme
-// gris contre la falaise (vu à l'image). Elle garde ses stries qui tombent, sur un voile blanc-bleu presque opaque.
-vec3 couleur_cascade(vec3 c_eau, vec3 c_ecume, vec2 uv, float t) {
-	float voile = bruit_lisse(vec2(uv.x * 2.0, uv.y * 0.4 + t * 2.2));
-	return mix(mix(c_eau, c_ecume, 0.35 + 0.25 * voile), c_ecume, stries(uv, t) * 0.75);
+// gris contre la falaise (vu à l'image). Une eau claire et lisse sur la lèvre (`m.z`), des filets blancs qui tombent
+// (`m.x`), l'écume du pied (`m.y`) ; `bord` : 1 sur les bords arrondis, vus de biais (l'eau y est plus aérée).
+vec3 couleur_cascade(vec3 c_eau, vec3 c_ecume, vec3 m, float bord) {
+	vec3 base = mix(mix(c_eau, c_ecume, 0.32), c_eau * 1.2 + 0.05, m.z);
+	base = mix(base, c_ecume, bord * 0.35);
+	return mix(mix(base, c_ecume, m.x * 0.9), c_ecume, m.y);
 }
 
 // LE REFLET DU RELIEF, EN ESPACE ÉCRAN : le SSR du moteur ne voit pas les matériaux transparents, on marche donc
@@ -224,6 +223,30 @@ vec4 reflet_ecran(vec3 pos, vec3 dir, sampler2D tex_ecran, sampler2D tex_prof, m
 }
 """
 
+## LE MOTIF DES CASCADES ET DE LEUR REMOUS (Jordan, 3 octobre 2026 : « texture animée moche ») — partagé par les six
+## presets (inséré dans `COMMUN` et dans « stylise », qui a ses propres bruits de mêmes noms). Il remplace des stries
+## d'un seul bruit étiré, qui faisaient des taches floues : trois couches de FILETS (larges, moyens, fins), chacune plus
+## rapide que la précédente — l'eau accélère en tombant, ce qu'on lit comme de la profondeur ; sur la LÈVRE (la nappe
+## encore à plat, sa normale vers le haut) une eau lisse, sans filets ; au PIED, l'écume (COLOR.a de la cascade et du
+## remous) qui bouillonne et MONTE, à contre-courant des filets. Rend (filets, écume, lisse), dans [0, 1].
+## ⚠ Aucun paramètre ne porte le nom d'un uniforme (« ecume » en est un dans trois presets) : `mousse`.
+const CASCADE := """
+vec3 motif_cascade(vec2 uv, float t, float n_haut, float mousse) {
+	float y = uv.y;
+	float a = bruit_lisse(vec2(uv.x * 4.5, (y + t * 2.2) * 0.35));
+	float b = bruit_lisse(vec2(uv.x * 11.0 + 7.3, (y + t * 3.1) * 0.75));
+	float c = bruit_lisse(vec2(uv.x * 27.0 + 1.7, (y + t * 4.3) * 1.9));
+	float filets = clamp(smoothstep(0.42, 0.82, a) * 0.5 + smoothstep(0.5, 0.88, b) * 0.45
+		+ smoothstep(0.6, 0.9, c) * 0.4, 0.0, 1.0);
+	float lisse = smoothstep(0.45, 0.85, n_haut) * (1.0 - mousse);
+	filets *= 1.0 - lisse * 0.9;
+	float bouillon = bruit_lisse(vec2(uv.x * 3.5 + t * 0.25, (y - t * 0.8) * 2.6)) * 0.6
+		+ bruit_lisse(vec2(uv.x * 9.0 - t * 0.4, (y - t * 1.3) * 6.5)) * 0.4;
+	float e = smoothstep(0.2, 0.7, mousse + (bouillon - 0.5) * 0.75);
+	return vec3(filets, e, lisse);
+}
+"""
+
 const TRANSPARENT := """
 shader_type spatial;
 render_mode cull_disabled, depth_draw_always;
@@ -245,6 +268,8 @@ uniform float micro = 0.55;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 // %COMMUN%
 
@@ -252,6 +277,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// ⚠ LE CLAPOT SOULÈVE AUSSI LES CASCADES (3 octobre 2026) : il ne soulevait que les nappes, et le bord de la
 	// lèvre montait et descendait au-dessus du haut FIXE de la lame — un fil sombre le long de chaque cascade.
 	// Il dépend de (x, z) seulement : deux sommets à la même place bougent ensemble, la lame suit sa lèvre.
@@ -261,7 +288,10 @@ void vertex() {
 void fragment() {
 	float t = TIME;
 	bool courante = v_genre > 0.25;
-	bool cascade = v_genre > 0.75;
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 m = motif_cascade(UV, t, normalize(v_n).y, v_mousse);
+	float bord_c = 1.0 - abs(dot(NORMAL, VIEW));
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
 	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
@@ -279,12 +309,16 @@ void fragment() {
 	// Le liseré : là où l'eau touche la roche.
 	float rive = 1.0 - smoothstep(0.02, 0.12, max(prof, 0.0));
 	float blanc = rive * 0.7;
-	ALBEDO = cascade ? couleur_cascade(teinte, ecume, UV, t) : mix(eau * (1.0 - transmis), ecume, blanc);
+	ALBEDO = cascade ? couleur_cascade(teinte, ecume, m, bord_c) : mix(eau * (1.0 - transmis), ecume, blanc);
 	EMISSION = cascade ? vec3(0.0) : fond * transmis * (1.0 - blanc);
-	ROUGHNESS = cascade ? 0.5 : 0.06;
+	ROUGHNESS = cascade ? mix(0.45, 0.1, m.z) : 0.06;
 	SPECULAR = 0.55;
 	NORMAL = cascade ? NORMAL : normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
-	ALPHA = 1.0;
+	// Le remous : l'écume seule, transparente ailleurs — écartée sous un seuil, pour ne pas écrire sa profondeur.
+	ALPHA = remous ? m.y : 1.0;
+	if (remous && m.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -311,6 +345,8 @@ uniform float micro = 0.40;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 // %COMMUN%
 
@@ -318,6 +354,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// Le clapot, cascades comprises (voir le premier preset).
 	VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
 }
@@ -325,7 +363,10 @@ void vertex() {
 void fragment() {
 	float t = TIME;
 	bool courante = v_genre > 0.25;
-	bool cascade = v_genre > 0.75;
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 m = motif_cascade(UV, t, normalize(v_n).y, v_mousse);
+	float bord_c = 1.0 - abs(dot(NORMAL, VIEW));
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
 	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
@@ -340,14 +381,17 @@ void fragment() {
 	vec3 n_miroir = normalize(mix((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz, nv, aplati));
 	vec4 r = cascade ? vec4(0.0) : reflet_ecran(VERTEX, reflect(-VIEW, n_miroir), ecran, depth_tex,
 		PROJECTION_MATRIX, INV_PROJECTION_MATRIX);
-	ALBEDO = cascade ? couleur_cascade(teinte_cascade, ecume, UV, t) : mix(teinte, ecume, blanc);
+	ALBEDO = cascade ? couleur_cascade(teinte_cascade, ecume, m, bord_c) : mix(teinte, ecume, blanc);
 	// Le relief reflété : pondéré par Fresnel, il REMPLACE le ciel là où le rayon touche quelque chose.
 	EMISSION = r.rgb * r.a * fresnel * force_reflet;
-	ROUGHNESS = cascade ? 0.5 : mix(0.03, 0.4, blanc);
+	ROUGHNESS = cascade ? mix(0.45, 0.1, m.z) : mix(0.03, 0.4, blanc);
 	METALLIC = 0.0;
 	SPECULAR = 0.8 * (1.0 - r.a * 0.8);
 	NORMAL = nv;
-	ALPHA = cascade ? 0.92 : clamp(max(max(opacite_min, fresnel), max(1.0 - exp(-prof * absorption), blanc)), 0.0, 1.0);
+	ALPHA = remous ? m.y : (cascade ? 0.92 : clamp(max(max(opacite_min, fresnel), max(1.0 - exp(-prof * absorption), blanc)), 0.0, 1.0));
+	if (remous && m.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -368,6 +412,8 @@ uniform float clapot = 0.015;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 // %COMMUN%
 
@@ -375,6 +421,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// Le clapot, cascades comprises (voir le premier preset).
 	VERTEX.y += clapot * sin(v_monde.z * 0.4 + v_monde.x * 0.6 + TIME * 0.7);
 }
@@ -382,7 +430,9 @@ void vertex() {
 void fragment() {
 	float t = TIME;
 	bool courante = v_genre > 0.25;
-	bool cascade = v_genre > 0.75;
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 m = motif_cascade(UV, t * 0.3, normalize(v_n).y, v_mousse);
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
 	float prof = max(profondeur_sous(depth_tex, SCREEN_UV, INV_PROJECTION_MATRIX, INV_VIEW_MATRIX, v_monde.y), 0.0);
@@ -393,12 +443,15 @@ void fragment() {
 	float chaleur = smoothstep(0.05, 0.6, prof) * (0.75 + 0.25 * sin(t * 1.3 + bruit_lisse(p * 2.0) * 6.0));
 	vec3 albedo = mix(croute, roche_chaude, bruit_lisse(p * 3.0) * 0.6);
 	float lueur = fissure * chaleur + 0.08 * chaleur;
-	// La cascade : une coulée vive, rayée de croûte qui tombe.
-	float s = stries(UV, t * 0.3);
-	ALBEDO = cascade ? mix(roche_chaude, croute, s * 0.7) : albedo;
+	// La cascade : une coulée vive, rayée de croûte qui tombe (les filets) ; au pied, la croûte s'amasse (l'écume).
+	float s = clamp(m.x * 0.8 + m.y, 0.0, 1.0);
+	ALBEDO = cascade ? mix(roche_chaude, croute, s * 0.75) : albedo;
 	EMISSION = magma * incandescence * (cascade ? (1.0 - s * 0.7) * 0.8 : lueur);
 	ROUGHNESS = 0.9;
-	ALPHA = 1.0;
+	ALPHA = remous ? m.y : 1.0;
+	if (remous && m.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -423,6 +476,8 @@ uniform float micro = 0.25;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 // %COMMUN%
 
@@ -430,6 +485,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// Le clapot, cascades comprises (voir le premier preset).
 	VERTEX.y += clapot * sin(v_monde.z * 0.5 + v_monde.x * 0.7 + TIME * 0.9);
 }
@@ -437,7 +494,10 @@ void vertex() {
 void fragment() {
 	float t = TIME;
 	bool courante = v_genre > 0.25;
-	bool cascade = v_genre > 0.75;
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 m = motif_cascade(UV, t, normalize(v_n).y, v_mousse);
+	float bord_c = 1.0 - abs(dot(NORMAL, VIEW));
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
 	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
@@ -455,12 +515,16 @@ void fragment() {
 		* bulle_ronde(v_monde.xz * 5.0);
 	vec3 c = mix(eau * (1.0 - transmis), lentilles * (0.8 + 0.4 * bruit(floor(q * 9.0))), plaque);
 	c = mix(c, vec3(0.34, 0.37, 0.24), bulle);
-	ALBEDO = cascade ? mix(boue, trouble, stries(UV, t) * 0.6) : c;
+	// Une chute de marais est de l'eau BOUEUSE qui s'aère : à la teinte du marais seule, elle était presque noire.
+	ALBEDO = cascade ? couleur_cascade(mix(trouble, boue, 0.5) * 1.6, vec3(0.62, 0.58, 0.42), m, bord_c) : c;
 	EMISSION = cascade ? vec3(0.0) : fond * transmis * (1.0 - plaque);
 	ROUGHNESS = cascade ? 0.7 : mix(0.15, 0.85, plaque);
 	SPECULAR = 0.4;
 	NORMAL = cascade ? NORMAL : normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
-	ALPHA = 1.0;
+	ALPHA = remous ? m.y : 1.0;
+	if (remous && m.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -485,6 +549,8 @@ uniform float micro = 0.45;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 // %COMMUN%
 
@@ -492,6 +558,8 @@ void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// Le clapot, cascades comprises (voir le premier preset).
 	VERTEX.y += clapot * sin(v_monde.z * 0.6 + v_monde.x * 0.9 + TIME * 2.1);
 }
@@ -499,7 +567,10 @@ void vertex() {
 void fragment() {
 	float t = TIME;
 	bool courante = v_genre > 0.25;
-	bool cascade = v_genre > 0.75;
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 m = motif_cascade(UV, t, normalize(v_n).y, v_mousse);
+	float bord_c = 1.0 - abs(dot(NORMAL, VIEW));
 	vec2 flux = length(v_courant) > 0.1 ? normalize(v_courant) : vec2(0.6, 0.8);
 	float defile = t * (courante ? vitesse_riviere : vitesse_dormante);
 	vec3 nw = cascade ? vec3(0.0, 0.0, 1.0) : normale_eau(v_monde.xz, flux, defile, t, ampleur, length(fwidth(v_monde.xz)), micro);
@@ -515,14 +586,17 @@ void fragment() {
 	float bulle = step(0.985, bruit(cb + floor(t * 1.5 + bruit(cb) * 10.0))) * bulle_ronde(v_monde.xz * 6.0);
 	float rive = 1.0 - smoothstep(0.02, 0.15, prof);
 	// ⚠ La cascade garde son vert : avec les stries à 0,9 d'écume, elle n'était qu'un aplat jaune (vu à l'image).
-	float blanc = cascade ? stries(UV, t) * 0.45 : max(rive * 0.8, bulle);
+	float blanc = cascade ? clamp(m.x * 0.45 + m.y * 0.8, 0.0, 1.0) : max(rive * 0.8, bulle);
 	ALBEDO = mix(teinte * 0.3, ecume, blanc);
 	EMISSION = mix(teinte * luminescence * (0.55 + 0.45 * crete), ecume * luminescence * 1.3, blanc)
 		+ fond * transmis * 0.4;
 	ROUGHNESS = 0.1;
 	SPECULAR = 0.6;
 	NORMAL = cascade ? NORMAL : normalize((VIEW_MATRIX * vec4(nw, 0.0)).xyz);
-	ALPHA = 1.0;
+	ALPHA = remous ? m.y : 1.0;
+	if (remous && m.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -571,6 +645,8 @@ uniform float clapot = 0.03;
 varying vec3 v_monde;
 varying vec2 v_courant;
 varying float v_genre;
+varying vec3 v_n;
+varying float v_mousse;
 
 float bruit(vec2 p) {
 	return fract(sin(dot(floor(p), vec2(127.1, 311.7))) * 43758.5453);
@@ -588,10 +664,14 @@ float bruit_lisse(vec2 p) {
 
 // %CAUSTIQUE%
 
+// %CASCADE%
+
 void vertex() {
 	v_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_courant = COLOR.rg * 2.0 - 1.0;
 	v_genre = COLOR.b;
+	v_n = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+	v_mousse = COLOR.a;
 	// Le clapot : une ondulation légère des nappes, jamais des cascades.
 	// Le clapot, cascades comprises (voir le premier preset).
 	VERTEX.y += clapot * sin(v_monde.z * 0.55 + v_monde.x * 0.85 + TIME * 1.9);
@@ -650,13 +730,24 @@ void fragment() {
 	float encre = clamp(max(max(lignes * 0.5, 0.0), max(bord_rive * 0.85, autour)), 0.0, 1.0);
 	c = mix(c, couleur_ligne, encre);
 
-	// --- la cascade : une lame rayée de stries qui tombent
-	float stries = smoothstep(0.5, 0.85, bruit_lisse(vec2(UV.x * 7.0, UV.y * 0.9 + t * 3.0)));
-	float voile = bruit_lisse(vec2(UV.x * 2.0, UV.y * 0.4 + t * 2.2));
-	vec3 chute = mix(mix(bleu_clair, bleu_frange, voile), couleur_ligne, stries * 0.85);
+	// --- la cascade (3 octobre 2026) : le motif commun, et un MODELÉ peint — le preset n'est pas éclairé, sa nappe
+	// courbe serait plate à l'œil : les faces tournées vers le soleil de la scène s'éclaircissent, les bords arrondis
+	// (vus de biais) blanchissent, l'eau lisse de la lèvre reste bleue.
+	bool cascade = v_genre > 0.6;
+	bool remous = cascade && v_genre < 0.9;
+	vec3 mc = motif_cascade(UV, t, normalize(v_n).y, v_mousse);
+	float modele = 0.78 + 0.32 * clamp(dot(normalize(v_n), normalize(vec3(0.45, 0.75, 0.5))), 0.0, 1.0);
+	float bord_c = 1.0 - abs(dot(NORMAL, VIEW));
+	vec3 chute = mix(mix(bleu_fonce, bleu_clair, 0.55), bleu_clair * 1.1, mc.z) * modele;
+	chute = mix(chute, bleu_frange, bord_c * 0.45);
+	chute = mix(chute, couleur_ligne, mc.x * 0.85);
+	chute = mix(chute, couleur_ligne, mc.y);
 
-	ALBEDO = v_genre > 0.75 ? chute : c;
-	ALPHA = 1.0;
+	ALBEDO = cascade ? chute : c;
+	ALPHA = remous ? mc.y : 1.0;
+	if (remous && mc.y < 0.04) {
+		discard;
+	}
 }
 """
 
@@ -664,17 +755,21 @@ void fragment() {
 static func code(preset: String) -> String:
 	match preset:
 		"transparent":
-			return TRANSPARENT.replace("// %COMMUN%", COMMUN)
+			return TRANSPARENT.replace("// %COMMUN%", _commun())
 		"reflechissant":
-			return REFLECHISSANT.replace("// %COMMUN%", COMMUN)
+			return REFLECHISSANT.replace("// %COMMUN%", _commun())
 		"lave":
-			return LAVE.replace("// %COMMUN%", COMMUN)
+			return LAVE.replace("// %COMMUN%", _commun())
 		"marais":
-			return MARAIS.replace("// %COMMUN%", COMMUN)
+			return MARAIS.replace("// %COMMUN%", _commun())
 		"acide":
-			return ACIDE.replace("// %COMMUN%", COMMUN)
+			return ACIDE.replace("// %COMMUN%", _commun())
 		_:
-			return STYLISE.replace("// %CAUSTIQUE%", CAUSTIQUE)
+			return STYLISE.replace("// %CAUSTIQUE%", CAUSTIQUE).replace("// %CASCADE%", CASCADE)
+
+
+static func _commun() -> String:
+	return COMMUN.replace("// %CASCADE%", CASCADE)
 
 
 ## LE VOILE DE CHAQUE LIQUIDE, VU DE DEDANS (la caméra sous la nappe, au Play test) : [couleur, densité du brouillard].
