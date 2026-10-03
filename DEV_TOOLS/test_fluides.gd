@@ -40,6 +40,7 @@ func _initialize() -> void:
 	_maillage()
 	_nappes_fusionnees()
 	_surface_pour_nager()
+	_le_courant()
 	_presets()
 	_export_du_monde()
 	_cout()
@@ -560,9 +561,13 @@ func _reprise() -> void:
 func _refus() -> void:
 	var m := _monde_cuvette()
 	_egal(FL.source(m, Vector3i(0, 0, 0))["erreur"], "dans_la_matiere", "dans la roche : refusé")
-	_egal(FL.source(_monde_ile(), Vector3i(10, 2, 10), {}, 50)["erreur"], "trop_grand", "océan trop grand : refusé")
-	var r := FL.source(_monde_ile(), Vector3i(10, 2, 10), {}, 50)
-	_egal([r["genre"], r["eau"].size()], ["", 0], "un refus ne rend rien")
+	# ⚠ L'OCÉAN N'EST JAMAIS REFUSÉ POUR SA TAILLE (Jordan, 3 octobre 2026) : même au-delà de la borne, il est rendu.
+	var o := FL.source(_monde_ile(), Vector3i(10, 2, 10), {}, 50)
+	_vrai(o["erreur"] == "" and o["genre"] == "ocean" and o["eau"].size() > 50,
+		"un océan plus grand que la borne n'est PAS refusé (%d cases, borne 50)" % o["eau"].size())
+	# Un LAC, lui, garde sa garde : la cuvette (18 cases) au-delà d'une borne de 5.
+	var r := FL.source(_monde_cuvette_calme(), Vector3i(2, 1, 2), {}, 5)
+	_egal([r["erreur"], r["genre"], r["eau"].size()], ["trop_grand", "", 0], "un lac trop grand : refusé, et rien n'est rendu")
 	_egal(FL.source({}, Vector3i(0, 3, 0))["genre"], "ocean", "sans monde : un océan, un plan seul")
 
 
@@ -1028,6 +1033,24 @@ func _cout() -> void:
 
 
 # ── outillage ────────────────────────────────────────────────────────────────────────────────────────
+
+## LE COURANT D'UNE RIVIÈRE AU PLAY TEST (3 octobre 2026) : un cours écrit à la main — deux cases qui coulent vers +X
+## sur un sol, une qui coule vers +Z au-dessus du VIDE, une chute, un lac. Seules les cases posées sur la matière, au sens
+## connu, portent un courant.
+func _le_courant() -> void:
+	var sol := {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true, Vector3i(2, 0, 1): true, Vector3i(5, 0, 5): true}
+	var cours := [
+		{"case": Vector3i(0, 1, 0), "genre": "coule"},
+		{"case": Vector3i(1, 1, 0), "genre": "coule"},
+		{"case": Vector3i(2, 1, 0), "genre": "coule"},   # rien dessous : pas de bande, pas de courant
+		{"case": Vector3i(2, 1, 1), "genre": "coule"},   # le sens vient de la précédente : +Z
+		{"case": Vector3i(2, 0, 1), "genre": "chute"},
+		{"case": Vector3i(5, 1, 5), "genre": "lac"},
+	]
+	var c: Dictionary = EM.courants(cours, sol)
+	_egal(c, {Vector3i(0, 1, 0): Vector2(1, 0), Vector3i(1, 1, 0): Vector2(1, 0), Vector3i(2, 1, 1): Vector2(0, 1)},
+		"le courant : sur les bandes seulement, dans le sens du cours")
+
 
 func _vrai(v: bool, quoi: String) -> void:
 	if v:

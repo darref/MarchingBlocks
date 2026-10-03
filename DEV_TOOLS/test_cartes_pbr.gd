@@ -38,6 +38,7 @@ func _initialize() -> void:
 	_les_cartes_suivent_la_toile()
 	_le_materiau_et_les_tangentes()
 	_les_cartes_partent_dans_le_glb()
+	_le_retour_de_blender()
 	_le_trajet_jusqu_au_greffon()
 	_l_albedo_du_relief()
 	_les_ensembles()
@@ -431,6 +432,78 @@ func _les_cartes_partent_dans_le_glb() -> void:
 	_dire(vues > 0 and tangentes, "ses primitives portent leurs tangentes (%d primitive(s))" % vues)
 	_dire(Peinture.cartes_en_retard() == 0, "le .glb n'est parti qu'avec des cartes à jour")
 	Peinture.oublier()
+
+
+## 8 ter. LE RETOUR DE BLENDER (3 octobre 2026) : un témoin lié relu d'un .glb garde ses cartes — la normale et l'ORM du
+## matériau écrits à côté de son albedo sous des noms d'ENSEMBLE — et, repris du témoin d'avant par le nom du matériau,
+## ses réglages de cartes déduites. Avant, il revenait avec son albedo seul.
+func _le_retour_de_blender() -> void:
+	Peinture.oublier()
+	Peinture.oublier_les_ensembles()
+	var chemin := _dossier.path_join("retour.png")
+	Peinture.nouvelle_toile(chemin, Color(0.5, 0.4, 0.3), 64)
+	Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(20, 20), 6.0, Color.WHITE, 1.0, 1.0)
+	Peinture.composer(chemin)
+	var t: RefCounted = TL.depuis_le_temoin_calcule()
+	var reglages: Dictionary = Cartes.DEFAUTS.duplicate()
+	reglages["contraste"] = 3.0
+	t.materiaux.append({"nom": "rock", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+		"echelle": 2.0, "pbr": reglages})
+	for cle in t.tuiles:
+		t.tuiles[cle].assigner(range(t.tuiles[cle].faces.size()), 0)
+	var glb := _dossier.path_join("retour.glb")
+	_dire(t.vers_glb(glb) == "", "le témoin peint s'écrit")
+	var cartes: Dictionary = Peinture.cartes_de(chemin, reglages, true)
+	var parties := {"normale": (cartes["normale"] as Texture2D).get_image(), "orm": (cartes["orm"] as Texture2D).get_image()}
+	var images := _dossier.path_join("retour_images")
+	# ⚠ VIDÉ D'ABORD : les cartes d'un passage précédent rendaient muette la mutation « rien n'est écrit ».
+	for f in DirAccess.get_files_at(images):
+		DirAccess.remove_absolute(images.path_join(f))
+	var lu: RefCounted = TL.depuis_glb(glb, images)
+	_dire(lu != null, "relu comme témoin lié")
+	if lu == null:
+		return
+	var m: Dictionary = {}
+	for x in lu.materiaux:
+		if str(x.get("nom", "")) == "rock":
+			m = x
+	var tex := str(m.get("texture", ""))
+	_dire(tex.ends_with("_color.png") and FileAccess.file_exists(tex), "l'albedo revient, nommé comme un ensemble (%s)" % tex.get_file())
+	var base := tex.trim_suffix("_color.png")
+	_dire(FileAccess.file_exists(base + "_normal_gl.png") and FileAccess.file_exists(base + "_arm.png"),
+		"la normale et l'ORM du matériau sont écrits à côté")
+	var trouves: Dictionary = Cartes.compagnons(tex, DirAccess.get_files_at(images))
+	_dire(trouves.has("normale") and trouves.has("orm"), "… et se retrouvent comme un ensemble : %s" % trouves)
+	var n := Image.load_from_file(base + "_normal_gl.png") if FileAccess.file_exists(base + "_normal_gl.png") else null
+	var attendue: Image = (parties["normale"] as Image).duplicate()
+	if n != null:
+		n.convert(Image.FORMAT_RGB8)
+		attendue.convert(Image.FORMAT_RGB8)
+	_dire(n != null and n.get_size() == attendue.get_size() and _ecart_max(n, attendue) <= 2,
+		"la normale revenue est celle qui est partie (écart %d)" % (_ecart_max(n, attendue) if n != null and n.get_size() == attendue.get_size() else -1))
+	var arm := Image.load_from_file(base + "_arm.png") if FileAccess.file_exists(base + "_arm.png") else null
+	var orm: Image = (parties["orm"] as Image).duplicate()
+	var ecart_g := 999
+	if arm != null and arm.get_size() == orm.get_size():
+		arm.convert(Image.FORMAT_RGB8)
+		orm.convert(Image.FORMAT_RGB8)
+		ecart_g = 0
+		for y in orm.get_height():
+			for x in orm.get_width():
+				ecart_g = maxi(ecart_g, absi(_octet(arm, x, y, 1) - _octet(orm, x, y, 1)))
+				ecart_g = maxi(ecart_g, absi(_octet(arm, x, y, 0) - _octet(orm, x, y, 0)))
+	_dire(ecart_g <= 2, "l'ORM revenu porte l'occlusion (R) et la rugosité (G) parties (écart %d)" % ecart_g)
+	_dire(not m.has("pbr"), "sans le témoin d'avant, aucun réglage de cartes déduites (le glTF ne les porte pas)")
+	_egal_int(lu.reprendre_les_reglages(t), 1, "repris du témoin d'avant : le matériau « rock », par son nom")
+	_dire(m.get("pbr") is Dictionary and float(m["pbr"].get("contraste", 0)) == 3.0 and float(m.get("echelle", 0)) == 2.0,
+		"… ses réglages de cartes et sa répétition")
+	_dire(m.get("ensemble", true) == false, "… et ses cartes, qui étaient DÉDUITES, se redéduisent (l'ensemble rapporté est écarté)")
+	Peinture.oublier()
+	Peinture.oublier_les_ensembles()
+
+
+func _egal_int(a: int, b: int, quoi: String) -> void:
+	_dire(a == b, "%s (%d, attendu %d)" % [quoi, a, b])
 
 
 ## 8 bis. LE TRAJET ENTIER : le témoin lié et ses cartes → son .glb → le tranchage (la relecture liée) → le lot du

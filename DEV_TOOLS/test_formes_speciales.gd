@@ -34,8 +34,41 @@ func _initialize() -> void:
 	_erreurs()
 	_reparation()
 	_salle()
+	_reparer_les_diagonales()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	quit(1 if _echecs > 0 else 0)
+
+
+## RÉPARER LES CONTACTS DIAGONAUX D'UN MONDE (3 octobre 2026, le bouton « Fix diagonal contacts »). Attendus à la main :
+##   (0,0,0) et (1,1,0) se touchent par une arête : combler pose (1,0,0) et (0,1,0) ; creuser les retire tous deux ;
+##   creuser quand l'un n'est pas modifiable (une autre couche) comble ; une case vide figée (couche cachée) : rien, le
+##   contact reste ; un escalier en diagonale de trois cases : combler pose quatre cases, et plus aucun contact (jugé par
+##   `MB.contacts_par_arete`, l'autorité à part) ; un monde sans contact : rien.
+func _reparer_les_diagonales() -> void:
+	var paire := {Vector3i(0, 0, 0): true, Vector3i(1, 1, 0): true}
+	var r := FS.reparer_les_diagonales(paire, false)
+	_egal([r["poser"], r["effacer"], r["restantes"]], [{Vector3i(1, 0, 0): true, Vector3i(0, 1, 0): true}, {}, 0],
+		"diagonales, combler : les deux cases vides du carré")
+	r = FS.reparer_les_diagonales(paire, true, paire)
+	_egal([r["poser"], r["effacer"], r["restantes"]], [{}, paire, 0], "diagonales, creuser : les deux cases qui se touchent")
+	r = FS.reparer_les_diagonales(paire, true, {Vector3i(0, 0, 0): true})
+	_egal([r["poser"].size(), r["effacer"].size(), r["restantes"]], [2, 0, 0],
+		"diagonales, creuser quand l'une est d'une autre couche : on comble")
+	r = FS.reparer_les_diagonales(paire, false, {}, {Vector3i(1, 0, 0): true})
+	_egal([r["poser"].size(), r["effacer"].size(), r["restantes"]], [0, 0, 1],
+		"diagonales, une case à combler figée (couche cachée) : rien, le contact reste et se compte")
+	var escalier := {Vector3i(0, 0, 0): true, Vector3i(1, 1, 0): true, Vector3i(2, 2, 0): true}
+	r = FS.reparer_les_diagonales(escalier, false)
+	var fin := escalier.duplicate()
+	fin.merge(r["poser"])
+	_vrai(r["poser"].size() == 4 and r["effacer"].is_empty() and MB.contacts_par_arete(fin) == 0 and r["restantes"] == 0,
+		"diagonales, un escalier de trois cases : quatre cases posées, plus aucun contact (%s)" % [r["poser"].keys()])
+	var cube := {}
+	for x in 2:
+		for y in 2:
+			cube[Vector3i(x, y, 0)] = true
+	r = FS.reparer_les_diagonales(cube, false)
+	_vrai(r["poser"].is_empty() and r["effacer"].is_empty() and r["restantes"] == 0, "diagonales, un monde sans contact : rien")
 
 
 ## LA SALLE (2 octobre 2026). Attendus déroulés à la main :
@@ -67,7 +100,8 @@ func _salle() -> void:
 		"une case qui touche un coin par une arête : la paire vide est comblée (%d)" % r["reparees"])
 	_egal(MB.contacts_par_arete(_apres(m, r)), 0, "… et le monde n'a plus aucun contact par une arête")
 	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(1, 0, 5), 2, true)["erreur"], "trop_petit", "2 cases de large : refusée")
-	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(99, 0, 99), 30, true)["erreur"], "trop_grand", "100 × 100 × 32 : refusée")
+	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(99, 0, 99), 30, true)["erreur"], "", "100 × 100 × 32 : acceptée (borne de 1 048 576 cases)")
+	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(199, 0, 199), 30, true)["erreur"], "trop_grand", "200 × 200 × 32 : refusée")
 	_egal(FS.salle({}, Vector3i(0, 0, 0), Vector3i(2, 0, 2), 999, true)["boite"][1].y, FS.ETAGES_MAXI + 1,
 		"les étages sont bornés à %d" % FS.ETAGES_MAXI)
 

@@ -35,8 +35,8 @@ extends RefCounted
 ## ⚠ **LA BOÎTE DU MONDE** : celle des cases pleines, élargie d'une case. Son bord est donc toujours vide : c'est
 ## l'HORIZON. Une eau qui l'atteint est sortie du monde.
 
-## Au-delà, un remplissage s'arrête et la source est refusée (« trop_grand ») : un océan sur un monde immense
-## gèlerait l'appli.
+## Au-delà, le remplissage d'un LAC (ou du lac d'une rivière) s'arrête et la source est refusée (« trop_grand ») : il
+## va case par case et gèlerait l'appli. ⚠ PAS L'OCÉAN (3 octobre 2026) : il n'est jamais refusé pour sa taille.
 const VOLUME_MAXI := 64 * 64 * 64
 ## Une rivière de plus d'étapes est refusée (« trop_long ») — une garde, pas une règle.
 const ETAPES_MAXI := 4096
@@ -93,8 +93,8 @@ static func dans_le_vide(occupees: Dictionary, source: Vector3i, b: Dictionary =
 
 
 ## L'OCÉAN au niveau `niveau` : toutes les cases vides de la boîte, au plus à ce niveau, reliées (par les
-## faces) à l'horizon. Rend {"eau": {case: true}, "colonnes": [[x, z, y0, y1], …], "erreur": ""} ; erreur
-## « trop_grand » au-delà de `maxi`. Un océan sous le monde entier, ou sans monde, n'a aucune case : il n'est qu'un
+## faces) à l'horizon. Rend {"eau": {case: true}, "colonnes": [[x, z, y0, y1], …], "erreur": ""} — jamais refusé
+## pour sa taille (3 octobre 2026). Un océan sous le monde entier, ou sans monde, n'a aucune case : il n'est qu'un
 ## plan, à l'horizon.
 ## ⚠ **PAR TRONÇONS DE COLONNE, PAS CASE PAR CASE (Jordan, 2 octobre 2026 : « les algos d'eau sont beaucoup trop
 ## lents »)** : un tronçon est un intervalle vertical de cases vides d'une colonne, sous le niveau. Le fond de la boîte
@@ -169,11 +169,9 @@ static func ocean(occupees: Dictionary, niveau: int, maxi := VOLUME_MAXI, b: Dic
 				if dans[j] == 0 and t0[j] <= t1[i] and t1[j] >= t0[i]:
 					dans[j] = 1
 					file.append(j)
-	var volume := 0
-	for i in file:
-		volume += t1[i] - t0[i] + 1
-	if volume > maxi:
-		return {"eau": {}, "colonnes": [], "erreur": "trop_grand"}
+	# ⚠ L'OCÉAN N'EST JAMAIS REFUSÉ POUR SA TAILLE (Jordan, 3 octobre 2026 : « l'océan ne doit jamais refuser sous
+	# prétexte de taille »). Son remplissage va par tronçons de colonne : il ne s'emballe pas comme un lac case par case.
+	# `maxi` reste dans la signature (les lacs et les rivières le lisent toujours).
 	var colonnes: Array = []
 	for i in file:
 		colonnes.append([tx[i], tz[i], t0[i], t1[i]])

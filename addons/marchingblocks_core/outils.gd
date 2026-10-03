@@ -219,7 +219,9 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 ## ⚠ **ON BORNE LE VOLUME**, parce qu'ici on parcourt la BOÎTE et non la matière : deux coins éloignés
 ## par accident (un rayon perdu à l'horizon) demanderaient des millions de cases et gèleraient l'écran.
 ## Au-delà, on rend vide plutôt que de ramer — l'appelant le DIT.
-const VOLUME_MAXI := 262144
+## ⚠ PORTÉE À 128 × 64 × 128 (Jordan, 3 octobre 2026 : « les opérations de sélection refusent si vraiment c'est
+## démesuré ») : 64³ refusait une boîte de 100 × 30 × 100. La même borne dans les trois greffons (cas d'épreuve).
+const VOLUME_MAXI := 128 * 64 * 128
 
 
 static func volume_de_la_boite(a: Vector3i, b: Vector3i, creux := false) -> Dictionary:

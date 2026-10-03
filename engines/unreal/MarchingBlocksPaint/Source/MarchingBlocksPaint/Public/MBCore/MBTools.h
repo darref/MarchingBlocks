@@ -65,7 +65,7 @@ namespace MBPaint
 	{
 		/// A box of more cells returns empty: two corners far apart by accident (a ray lost on the
 		/// horizon) would otherwise freeze the editor.
-		constexpr long long BoxVolumeMax = 262144;
+		constexpr long long BoxVolumeMax = 1048576;
 
 		MARCHINGBLOCKSPAINT_API std::vector<FCell> Sorted(const FCellSet& Cells);
 

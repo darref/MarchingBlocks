@@ -387,6 +387,42 @@ func _la_gomme_et_les_calques() -> void:
 	Peinture.supprimer_calque(chemin, 2)
 	Peinture.supprimer_calque(chemin, 1)
 	_dire(not Peinture.supprimer_calque(chemin, 0) and noms.call() == ["Base"], "le dernier calque ne se supprime pas")
+	_la_fusion_vers_le_bas()
+
+
+## FUSIONNER VERS LE BAS (3 octobre 2026). Attendus à la main : un calque A rouge à 50 % sur du bleu, B vert par-dessus.
+## Fusionner B sur A ne change pas l'image ; A reçoit son opacité CUITE (rouge, alpha ½) et le vert ; l'état d'avant rend
+## les deux calques intacts.
+func _la_fusion_vers_le_bas() -> void:
+	var chemin := _dossier.path_join("fusion.png")
+	Peinture.nouvelle_toile(chemin, Color(0, 0, 1), 32)
+	var compo: Image = Peinture.toile(chemin)["image"]
+	Peinture.nouveau_calque(chemin, "A")
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(16, 16), 3.0, Color.RED, 1.0, 1.0))
+	Peinture.regler_calque(chemin, 1, "opacite", 0.5)
+	Peinture.nouveau_calque(chemin, "B")
+	Peinture.composer(chemin, Peinture.tamponner(Peinture.calque_actif(chemin), Vector2(8, 8), 3.0, Color.GREEN, 1.0, 1.0))
+	var a_img: Image = Peinture.toile(chemin)["calques"][1]["image"]
+	var etat_avant: Dictionary = Peinture.etat(chemin)
+	_dire(not Peinture.fusionner_vers_le_bas(chemin, 0), "le calque du bas ne se fusionne sur rien")
+	Peinture.regler_calque(chemin, 1, "visible", false)
+	_dire(not Peinture.fusionner_vers_le_bas(chemin, 2), "un calque caché en dessous : refusé")
+	Peinture.regler_calque(chemin, 1, "visible", true)
+	_dire(Peinture.fusionner_vers_le_bas(chemin, 2), "B fusionné sur A")
+	var cal: Array = Peinture.toile(chemin)["calques"]
+	_dire(cal.size() == 2 and cal[1]["nom"] == "A" and int(Peinture.toile(chemin)["actif"]) == 1,
+		"il reste Base et A, A est l'actif")
+	_dire(_egal(compo.get_pixel(16, 16), Color(0.5, 0, 0.5)) and _egal(compo.get_pixel(8, 8), Color.GREEN)
+		and _egal(compo.get_pixel(2, 30), Color(0, 0, 1)), "l'image ne change pas (%s, %s)" % [compo.get_pixel(16, 16), compo.get_pixel(8, 8)])
+	var fus: Image = cal[1]["image"]
+	_dire(float(cal[1]["opacite"]) == 1.0 and _egal(fus.get_pixel(16, 16), Color(1, 0, 0, 0.5))
+		and _egal(fus.get_pixel(8, 8), Color(0, 1, 0, 1)), "A porte son opacité cuite et le vert de B (%s)" % fus.get_pixel(16, 16))
+	_dire(not is_same(fus, a_img) and _egal(a_img.get_pixel(16, 16), Color.RED) and a_img.get_pixel(8, 8).a == 0.0,
+		"l'image d'avant de A n'est pas touchée (une image neuve)")
+	Peinture.poser_etat(chemin, etat_avant)
+	cal = Peinture.toile(chemin)["calques"]
+	_dire(cal.size() == 3 and is_same(cal[1]["image"], a_img) and float(cal[1]["opacite"]) == 0.5
+		and _egal(compo.get_pixel(16, 16), Color(0.5, 0, 0.5)), "l'état d'avant rend A et B, intacts")
 
 
 ## La pile s'écrit à côté de l'image et se relit telle quelle ; une image retouchée AILLEURS met la pile de côté.

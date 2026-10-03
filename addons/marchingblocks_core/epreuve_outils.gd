@@ -199,13 +199,13 @@ static func cas_d_epreuve() -> Dictionary:
 		["hollow 3x3x3", Vector3i(0, 0, 0), Vector3i(2, 2, 2), true],
 		["hollow 4x3x5, negative", Vector3i(-2, -1, -2), Vector3i(1, 1, 2), true],
 		["hollow but flat: stays solid", Vector3i(0, 4, 0), Vector3i(2, 4, 2), true],
-		["too large: empty", Vector3i(0, 0, 0), Vector3i(64, 63, 63), false],
-		["exactly the limit: 64^3, solid", Vector3i(0, 0, 0), Vector3i(63, 63, 63), false],
+		["too large: empty", Vector3i(0, 0, 0), Vector3i(128, 63, 127), false],
+		["exactly the limit: 128 x 64 x 128, solid", Vector3i(0, 0, 0), Vector3i(127, 63, 127), false],
 	]
 	for b in boites:
 		var vol: Dictionary = Outils.volume_de_la_boite(b[1], b[2], b[3])
 		var attendu := {"count": vol.size()}
-		# ⚠ La boîte à la limite fait 262 144 cases : on n'en écrit que le compte.
+		# ⚠ La boîte à la limite fait 1 048 576 cases : on n'en écrit que le compte.
 		if vol.size() <= 200:
 			attendu["cells"] = _cases(vol)
 		cas.append({"name": "box: " + b[0], "kind": "box",
@@ -373,7 +373,7 @@ static func _cas_des_formes() -> Array:
 		["room against a lone cell by an edge: repaired", "seule", Vector3i(-4, 0, -4), Vector3i(-1, 0, -1), 1, true],
 		["room floors are clamped to the maximum", "plat", Vector3i(10, 0, 10), Vector3i(12, 0, 12), 99, true],
 		["error: a room two cells wide", "plat", Vector3i(0, 0, -6), Vector3i(1, 0, -2), 2, true],
-		["error: a room too large", "plat", Vector3i(-60, 0, -60), Vector3i(60, 0, 60), 32, true],
+		["error: a room too large", "plat", Vector3i(-100, 0, -100), Vector3i(100, 0, 100), 32, true],
 	]
 	for s in salles:
 		var res2: Dictionary = FS.salle(mondes[s[1]], s[2], s[3], s[4], s[5])

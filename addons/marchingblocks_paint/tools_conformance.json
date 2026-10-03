@@ -1702,7 +1702,7 @@
       },
       "input": {
         "a": [0, 0, 0],
-        "b": [64, 63, 63],
+        "b": [128, 63, 127],
         "hollow": false
       },
       "kind": "box",
@@ -1710,15 +1710,15 @@
     },
     {
       "expected": {
-        "count": 262144
+        "count": 1048576
       },
       "input": {
         "a": [0, 0, 0],
-        "b": [63, 63, 63],
+        "b": [127, 63, 127],
         "hollow": false
       },
       "kind": "box",
-      "name": "box: exactly the limit: 64^3, solid"
+      "name": "box: exactly the limit: 128 x 64 x 128, solid"
     },
     {
       "expected": {
@@ -4308,8 +4308,8 @@
         "set": []
       },
       "input": {
-        "a": [-60, 0, -60],
-        "b": [60, 0, 60],
+        "a": [-100, 0, -100],
+        "b": [100, 0, 100],
         "floors": 32,
         "up": true,
         "world": "plat"
@@ -4320,7 +4320,7 @@
   ],
   "format": "marchingblocks-tools-conformance",
   "limits": {
-    "box_volume_max": 262144,
+    "box_volume_max": 1048576,
     "room_floors_max": 32,
     "shape_length_max": 64,
     "shape_span_max": 128,

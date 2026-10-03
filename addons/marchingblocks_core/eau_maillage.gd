@@ -419,11 +419,7 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: A
 		var c: Vector3i = e["case"]
 		if e["genre"] == "lac" or not occupees.has(c + Vector3i.DOWN) or vus.has(c):
 			continue
-		var d := Vector3i.ZERO
-		if i + 1 < n and _horizontal(cours[i + 1]["case"] - c):
-			d = cours[i + 1]["case"] - c
-		elif i > 0 and _horizontal(c - cours[i - 1]["case"]):
-			d = c - cours[i - 1]["case"]
+		var d := sens_du_cours(cours, i)
 		vus[c] = true
 		plats.append(_case_plate(c, c.y + RIVIERE, occupees, _couleur(Vector2(d.x, d.z), COURANTE, 0.05)))
 	var i := 0
@@ -448,6 +444,32 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: A
 			i = j
 		else:
 			i += 1
+
+
+## Le SENS du courant à la case `i` d'un cours (horizontal, ou nul) : vers la case suivante si elle est à côté, sinon
+## depuis la précédente. La règle de la bande dessinée (`_riviere`) ET du courant du Play test (`courants`).
+static func sens_du_cours(cours: Array, i: int) -> Vector3i:
+	var c: Vector3i = cours[i]["case"]
+	if i + 1 < cours.size() and _horizontal(cours[i + 1]["case"] - c):
+		return cours[i + 1]["case"] - c
+	if i > 0 and _horizontal(c - cours[i - 1]["case"]):
+		return c - cours[i - 1]["case"]
+	return Vector3i.ZERO
+
+
+## LE COURANT D'UNE RIVIÈRE, pour le Play test (3 octobre 2026) : {case: sens (x, z)} sur chaque case du cours qui
+## REPOSE SUR LA MATIÈRE (celles qui portent une bande) et dont le sens est connu. On y marche : il pousse.
+static func courants(cours: Array, occupees: Dictionary) -> Dictionary:
+	var sortie := {}
+	for i in cours.size():
+		var e: Dictionary = cours[i]
+		var c: Vector3i = e["case"]
+		if e["genre"] == "lac" or not occupees.has(c + Vector3i.DOWN):
+			continue
+		var d := sens_du_cours(cours, i)
+		if d != Vector3i.ZERO and not sortie.has(c):
+			sortie[c] = Vector2(d.x, d.z)
+	return sortie
 
 
 ## La lame d'une cascade, de la lèvre `levre` (la case d'où l'eau tombe) jusqu'à la dernière case de chute `bas`,

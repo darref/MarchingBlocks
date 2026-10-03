@@ -1451,6 +1451,7 @@ func commencer_partie() -> String:
 	_vue.add_child(personnage)
 	personnage.global_position = _depart
 	personnage.surface_eau = surface_eau_au_point
+	personnage.courant_eau = courant_au_point
 	_orbite_d_avant = [_cible, _azimut, _elevation, _distance]
 	_elevation = CAMERA_ELEVATION
 	_distance = CAMERA_DISTANCE
@@ -1883,6 +1884,19 @@ func _rendre_le_travail() -> void:
 	_env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
 	_env.tonemap_exposure = 1.0
 	_env.adjustment_enabled = false
+
+
+## Le courant d'une rivière sous les pieds `p` (un sens unitaire dans le plan, ou zéro) : la case qui porte la bande
+## est celle où sont les pieds, posés sur le dessus aminci de la matière (0,25 sous le bas de la case).
+func courant_au_point(p: Vector3) -> Vector3:
+	var c: Dictionary = eau_du_jeu.get("courants", {})
+	if c.is_empty():
+		return Vector3.ZERO
+	var k := Vector3i(floori(p.x), floori(p.y + 0.3), floori(p.z))
+	if not c.has(k):
+		return Vector3.ZERO
+	var d: Vector2 = c[k]
+	return Vector3(d.x, 0.0, d.y)
 
 
 ## La surface de l'eau au-dessus de `p`, −INF hors de l'eau (la règle vit dans le cœur, `EauMaillage`).

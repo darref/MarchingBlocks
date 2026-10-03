@@ -87,6 +87,31 @@ static func habiller_barre(barre: Control, atelier: String) -> void:
 		s.border_width_left = maxi(s.border_width_left, 2)
 		barre.add_theme_stylebox_override("panel", s)
 	_teinter(barre, a)
+	barre.set_meta(META_TEINTE, a)
+
+
+const META_TEINTE := "teinte_d_atelier"
+
+
+## CE QUI NAÎT PLUS TARD DANS UNE BARRE PREND SA TEINTE (3 octobre 2026) : une liste rebâtie (couches d'eau, matériaux…)
+## crée des étiquettes olive après `habiller_barre` — elles gardaient l'olive. Chaque nœud ajouté sous une barre
+## habillée est teinté à l'image suivante (ses surcharges sont posées après `add_child`, parfois).
+static func teinter_ce_qui_arrive(arbre: SceneTree) -> void:
+	if arbre.has_meta(META_TEINTE):   # une fois par arbre (la fumée bâtit l'écran plusieurs fois)
+		return
+	arbre.set_meta(META_TEINTE, true)
+	arbre.node_added.connect(func(n: Node) -> void:
+		if not (n is Control):
+			return
+		var p := n.get_parent()
+		while p != null:
+			if p.has_meta(META_TEINTE):
+				var a: Color = p.get_meta(META_TEINTE)
+				(func() -> void:
+					if is_instance_valid(n):
+						_teinter(n, a)).call_deferred()
+				return
+			p = p.get_parent())
 
 
 ## Le BOUTON de l'atelier, dans la barre de gauche : sa teinte, même au repos (icône et filet), pleine une fois choisi.

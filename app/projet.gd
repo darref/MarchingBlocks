@@ -52,7 +52,8 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## par un `PackedInt32Array`, que le moteur écrit lui-même en « [x, y, z, …] » sur une ligne, à la place d'une marque
 ## dans le JSON. Même format, relu par `depuis_texte` à l'identique ; 2,5 Mo, ~100 ms.
 ## `c["cases"]` : un dictionnaire {case: true} ou un tableau de cases (`GridMap.get_used_cells()`).
-static func vers_texte(couches: Array, active: int, eaux: Array = []) -> String:
+## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
+static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = []) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -78,8 +79,10 @@ static func vers_texte(couches: Array, active: int, eaux: Array = []) -> String:
 			plat.append_array([v.x, v.y, v.z])
 		sorties_eau.append({"nom": e["nom"], "visible": e["visible"], "preset": e["preset"], "id": str(e["id"]),
 			"sources": plat})
-	var texte := JSON.stringify({"format": FORMAT, "version": VERSION, "active": active, "couches": sorties,
-		"eaux": sorties_eau}, "	")
+	var tout := {"format": FORMAT, "version": VERSION, "active": active, "couches": sorties, "eaux": sorties_eau}
+	if not travaux.is_empty():
+		tout["travaux"] = travaux.map(func(t): return str(t))
+	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
 	return texte
@@ -149,7 +152,15 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 			sources.append(Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2])))
 		eaux.append({"nom": str(e.get("nom", "Water %d" % (i + 1))), "visible": bool(e.get("visible", true)),
 			"preset": str(e.get("preset", "stylise")), "sources": sources, "id": str(e.get("id", ""))})
-	return {"couches": couches, "active": active, "eaux": eaux}
+	# Les travaux importés (3 octobre 2026) : un projet d'avant n'en a pas ; une entrée qui n'est pas un texte est
+	# écartée (ce n'est qu'une liste de raccourcis, pas du travail).
+	var travaux: Array = []
+	var liste_travaux = brut.get("travaux", [])
+	if liste_travaux is Array:
+		for t in liste_travaux:
+			if t is String and t != "" and not travaux.has(t):
+				travaux.append(t)
+	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux}
 
 
 ## CE QUI DIT QUE LA SOURCE A CHANGÉ. Vide si elle n'existe pas (ou pas encore).

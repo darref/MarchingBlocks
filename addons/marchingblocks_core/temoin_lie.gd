@@ -78,9 +78,15 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 			e["metal"] = sm.metallic
 			if sm.albedo_texture != null and sm.albedo_texture.get_image() != null:
 				DirAccess.make_dir_recursive_absolute(dossier_images)
-				var png := dossier_images.path_join("%s_%d.png" % [chemin.get_file().get_basename(), t.materiaux.size()])
+				# ⚠ LES CARTES DU glTF REVIENNENT AUSSI (3 octobre 2026) : la normale et l'ORM que portait le matériau
+				# sont écrits À CÔTÉ de l'albedo, sous les noms d'un ENSEMBLE (`_color`, `_normal_gl`, `_arm`) —
+				# `Peinture.ensemble_de` les retrouve comme ceux d'une bibliothèque. Avant, le témoin revenait de
+				# Blender avec son albedo seul.
+				var base := dossier_images.path_join("%s_%d" % [chemin.get_file().get_basename(), t.materiaux.size()])
+				var png := base + "_color.png"
 				if sm.albedo_texture.get_image().save_png(png) == OK:
 					e["texture"] = png
+					_ecrire_les_cartes_du_gltf(sm, base)
 		connus[id] = t.materiaux.size()
 		t.materiaux.append(e)
 		return {"mat": connus[id], "teinte": null}
@@ -89,6 +95,74 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 	t._partager()
 	t._deduire_les_occurrences()
 	return t
+
+
+## La normale (`<base>_normal_gl.png`, convention glTF = OpenGL) et l'ORM (`<base>_arm.png` : R occlusion, G rugosité,
+## B métal — la disposition du glTF) d'un matériau importé, s'il en porte.
+static func _ecrire_les_cartes_du_gltf(sm: BaseMaterial3D, base: String) -> void:
+	if sm.normal_enabled and sm.normal_texture != null and sm.normal_texture.get_image() != null:
+		var n := sm.normal_texture.get_image().duplicate() as Image
+		if n.is_compressed():
+			n.decompress()
+		n.save_png(base + "_normal_gl.png")
+	var mr: Image = sm.roughness_texture.get_image() if sm.roughness_texture != null else null
+	var ao: Image = sm.ao_texture.get_image() if sm.ao_enabled and sm.ao_texture != null else null
+	if mr == null and ao == null:
+		return
+	var taille: Vector2i = (mr if mr != null else ao).get_size()
+	var arm := Image.create(taille.x, taille.y, false, Image.FORMAT_RGB8)
+	var a := _rgba8(mr, taille)
+	var o := _rgba8(ao, taille)
+	for y in taille.y:
+		for x in taille.x:
+			var r := o.get_pixel(x, y).r if o != null else 1.0
+			var g := a.get_pixel(x, y).g if a != null else 1.0
+			var b := a.get_pixel(x, y).b if a != null else 1.0
+			arm.set_pixel(x, y, Color(r, g, b))
+	arm.save_png(base + "_arm.png")
+
+
+static func _rgba8(img: Image, taille: Vector2i) -> Image:
+	if img == null:
+		return null
+	var c := img.duplicate() as Image
+	if c.is_compressed():
+		c.decompress()
+	c.convert(Image.FORMAT_RGBA8)
+	if c.get_size() != taille:
+		c.resize(taille.x, taille.y, Image.INTERPOLATE_BILINEAR)
+	return c
+
+
+## LES RÉGLAGES QUE LE glTF NE PORTE PAS (3 octobre 2026) — cartes déduites (`pbr`), choix de l'ensemble (`ensemble`),
+## répétition (`echelle`) — repris de `ancien` (le témoin d'avant le retour de Blender), matériau par matériau, par
+## leur NOM. Un matériau dont les cartes étaient DÉDUITES les redéduit de son albedo (mêmes réglages, même rendu) plutôt
+## que de garder la copie figée que le .glb a rapportée. Rend le nombre de matériaux repris.
+func reprendre_les_reglages(ancien: RefCounted) -> int:
+	if ancien == null:
+		return 0
+	var par_nom := {}
+	for m in ancien.materiaux:
+		par_nom[str(m.get("nom", ""))] = m
+	var n := 0
+	for m in materiaux:
+		var a: Dictionary = par_nom.get(str(m.get("nom", "")), {})
+		if a.is_empty():
+			continue
+		if a.get("pbr") is Dictionary:
+			m["pbr"] = (a["pbr"] as Dictionary).duplicate(true)
+			# Ses cartes venaient-elles d'un ensemble posé à côté de son image ? Alors le .glb a rapporté CET ensemble,
+			# qu'on garde ; sinon elles étaient déduites, et on les redéduit.
+			var Peinture := load("res://addons/marchingblocks_core/peinture.gd")
+			var tex := str(a.get("texture", ""))
+			if not (bool(a.get("ensemble", true)) and tex != "" and not Peinture.ensemble_de(tex).is_empty()):
+				m["ensemble"] = false
+		elif a.has("ensemble"):
+			m["ensemble"] = a["ensemble"]
+		if a.has("echelle"):
+			m["echelle"] = a["echelle"]
+		n += 1
+	return n
 
 
 func _deduire_les_occurrences() -> void:

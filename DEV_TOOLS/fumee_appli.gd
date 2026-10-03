@@ -102,9 +102,13 @@ func _mener() -> void:
 	_egal(ed._vue.selection, {Vector3i(0, 1, 0): true, Vector3i(1, 1, 0): true}, "la sélection suit")
 	ed._operer("elargir")
 	_egal(cases.get_used_cells().size(), 5 + 6, "élargir porte sur la SÉLECTION (étage y=1), pas sur l'étage 0")
+	# L'ÉCRAN PARLE ANGLAIS (audit du 3 octobre 2026) : le rapport et l'annulation disaient « elargir ».
+	_vrai(ed._rapport.text.contains("Widen") and ed._histoire.get_current_action_name() == "Widen",
+		"le rapport et l'annulation nomment « Widen », pas le nom de code (%s)" % ed._histoire.get_current_action_name())
 	ed._histoire.undo()
 	ed._operer_selection("supprimer")
 	_egal(cases.get_used_cells().size(), 3, "supprimer retire la sélection")
+	_egal(ed._histoire.get_current_action_name(), "Delete", "… et l'annulation s'appelle « Delete »")
 	ed._operer_selection("")
 	_vrai(ed._vue.selection.is_empty() and not ed._section_selection.visible, "Échap / Clear vide la sélection")
 
@@ -463,7 +467,10 @@ func _mener() -> void:
 	await _les_demandes_du_3_octobre(ed)
 	_vrai(_demandes_finies, "les demandes du 3 octobre sont allées JUSQU'AU BOUT")
 	await _l_exemple(ed)
-	_les_teintes_des_ateliers(ed)
+	await _le_mode_dev_de_l_exemple(ed)
+	await _reparer_les_diagonales_au_bouton(ed)
+	await _la_barre_des_gestes(ed)
+	await _les_teintes_des_ateliers(ed)
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -831,8 +838,25 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	_vrai(relu_vieux != null and relu_vieux.tuiles[paroi].sommets[0].is_equal_approx(retouche)
 		and FileAccess.file_exists(vieux.get_basename() + "_witness.glb"),
 		"une retouche du témoin repris s'écrit dans SON fichier (et son .glb à côté)")
-	# On rend le projet de la fumée.
-	await ed._ouvrir(projet)
+	# On rend le projet de la fumée — PAR LA LISTE DES PROJETS RÉCENTS (3 octobre 2026) : il y est, l'ouvert n'y est pas.
+	var recent: Button = null
+	for b in ed._recents.get_children():
+		if b is Button and (b as Button).tooltip_text == "Open " + projet:
+			recent = b
+	_vrai(recent != null, "Project : le projet d'avant est dans « Recent »")
+	var ouvert_dedans := false
+	for b in ed._recents.get_children():
+		ouvert_dedans = ouvert_dedans or (b is Button and (b as Button).tooltip_text == "Open " + ed._projet)
+	_vrai(not ouvert_dedans, "… pas le projet ouvert")
+	if recent != null:
+		recent.pressed.emit()
+		for i in 120:
+			await process_frame
+			if ed._projet == projet and not ed._ouverture:
+				break
+	if ed._projet != projet:
+		await ed._ouvrir(projet)
+	_egal(ed._projet, projet, "un clic sur un projet récent le rouvre")
 	for chemin in [vieux, vieux_temoin, vieux.get_basename() + "_witness.glb"]:
 		DirAccess.remove_absolute(chemin)
 	_couches_finies = true
@@ -1719,6 +1743,16 @@ func _peindre_le_temoin(ed: Control) -> void:
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai((pile.call() as Array).size() == 2 and is_same((pile.call() as Array)[1]["image"], haut)
 		and _proche(lu.call(), Color(0.1, 0.2, 0.9)), "Ctrl+Z rend le MÊME calque, et son bleu")
+	# MERGE DOWN (3 octobre 2026), par le vrai bouton : l'image ne change pas, un calque de moins ; UN Ctrl+Z.
+	_vrai(not ed._boutons_calques["Merge down"].disabled, "Merge down : possible sur le calque du haut")
+	ed._boutons_calques["Merge down"].pressed.emit()
+	_vrai((pile.call() as Array).size() == 1 and _proche(lu.call(), Color(0.1, 0.2, 0.9))
+		and _proche((pile.call() as Array)[0]["image"].get_pixel(int(px.x), int(px.y)), Color(0.1, 0.2, 0.9)),
+		"Merge down : un seul calque, qui porte le bleu ; l'image ne change pas")
+	_vrai(ed._boutons_calques["Merge down"].disabled, "… et plus rien à fusionner sous le dernier")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai((pile.call() as Array).size() == 2 and is_same((pile.call() as Array)[1]["image"], haut),
+		"Ctrl+Z défait la fusion : les deux calques reviennent")
 	ed._enregistrer_le_temoin_modele(true)
 	_vrai(FileAccess.file_exists(Peinture.dossier_des_calques(chemin).path_join("layers.json")),
 		"la pile s'écrit à côté de la toile, avec le témoin")
@@ -2314,6 +2348,22 @@ func _le_modeleur(ed: Control) -> void:
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(mo.maillage.uv(f).is_empty(), "Ctrl+Z défait le dépliage")
 	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(not ed._rapport.text.contains("other tile"), "U, seule tuile à porter ce matériau déplié : pas d'avertissement")
+	# LE PIÈGE (3 octobre 2026) : une AUTRE tuile porte le même matériau, dépliée — U le dit, et nomme l'atlas.
+	var autre_cle := ""
+	for c2 in mo.temoin.tuiles:
+		if autre_cle == "" and c2 != mo.cle:
+			autre_cle = c2
+	var autre_avant: RefCounted = mo.temoin.tuiles[autre_cle].copie()
+	mo.temoin.tuiles[autre_cle].assigner([0], 0)
+	mo.temoin.tuiles[autre_cle].deplier([0])
+	ed._vue._gui_input(clic)
+	ed._input(_cle(KEY_U))
+	_vrai(ed._rapport.text.contains("1 other tile(s) use this material") and ed._rapport.text.contains("Unwrap all tiles"),
+		"U quand une autre tuile porte ce matériau déplié : l'écran dit que leurs peintures se recouvrent, et l'atlas")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	mo.temoin.poser_tuile(autre_cle, autre_avant)
 	ed._retoucher("projection", "uv")
 	ed._inscrire_les_retouches()
 	var patron: String = ProjectSettings.globalize_path("user://fumee/patron.png")
@@ -2678,7 +2728,9 @@ func _les_fluides(ed: Control) -> void:
 	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "une échancrure creusée : le lac redescend (9 cases), sans un clic")
 	# ⚠ L'EAU APPARTIENT AU MONDE ENTIER : boucher l'échancrure dans une AUTRE couche, CACHÉE, retient le lac.
 	var rock: int = ed._active
+	var atelier_avant: String = ed._atelier
 	ed._nouvelle_couche()
+	_egal(ed._atelier, atelier_avant, "New layer : on reste dans l'atelier où l'on est (%s)" % atelier_avant)
 	ed._montrer_couche(ed._active, false)
 	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
 	await process_frame
@@ -2687,8 +2739,8 @@ func _les_fluides(ed: Control) -> void:
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 9, "supprimer la couche qui bouchait : le lac retombe")
 	ed._activer(rock)
-	# « New layer » mène à World (les couches de tuiles ne sont pas dans Fluids) : on y revient.
-	ed._aller_a("fluides")
+	if ed._atelier != "fluides":
+		ed._aller_a("fluides")
 	ed._appliquer({"poser": {Vector3i(62, 2, 60): true}, "effacer": {}}, "Add")
 	await process_frame
 	_egal(ed._corps_eau[0][0]["eau"].size(), 18, "le mur refermé : le lac remonte")
@@ -2800,9 +2852,22 @@ func _les_fluides(ed: Control) -> void:
 	_egal(ed._eaux.size(), 2, "Ctrl+Z la rend")
 	_vrai(vue._eaux.visible, "dans World, les nappes se montrent")
 
+	# LA LISTE DES TRAVAUX SURVIT (3 octobre 2026) : un travail importé (le .glb du témoin d'une couche, relu comme un
+	# travail) revient dans l'étape 2 à la réouverture, et se relit quand on le regarde.
+	var travail_glb := ""
+	for c in ed._couches:
+		if travail_glb == "" and FileAccess.file_exists(ed._glb_du_temoin(c)):
+			travail_glb = ed._glb_du_temoin(c)
+	if travail_glb != "":
+		await ed._importer(travail_glb)
+	_vrai(travail_glb != "" and ed._travaux.size() == 1, "un travail importé est dans la liste (%s)" % travail_glb.get_file())
 	# ROUVRIR le projet : l'eau revient de ses seules sources, et se redéduit.
 	await ed._ouvrir(ed._projet)
 	await process_frame
+	_vrai(ed._travaux.size() == 1 and str(ed._travaux[0]["chemin"]) == travail_glb and ed._travaux[0]["maillage"] == null,
+		"rouvert : le travail importé revient dans la liste, sans être relu")
+	_vrai(ed._travail_maillage() != null and ed._liste_travaux.get_child_count() == 1,
+		"… il se relit quand on le regarde, et l'étape 2 le montre")
 	_vrai(ed._eaux.size() == 2 and ed._eaux[0]["sources"].size() == 3 and ed._corps_eau.size() == 2
 		and ed._corps_eau[0][0]["genre"] == "lac" and ed._corps_eau[0][0]["eau"].size() == 18,
 		"rouvert : les deux couches d'eau, leurs sources, et le lac redéduit")
@@ -2995,6 +3060,27 @@ func _la_nage(ed: Control) -> void:
 	# elle il arrive en 60,94 sans s'être hissé. Il faut qu'il ait FRANCHI le mur.
 	_vrai(p.global_position.x < 60.3,
 		"contre la berge, il se hisse et franchit le mur (x = %.2f, le mur est en x = 60..61)" % p.global_position.x)
+	# LE COURANT D'UNE RIVIÈRE (3 octobre 2026) : debout, sans toucher à rien, sur des cases qui portent un courant
+	# vers +Z, il dérive vers +Z ; sans courant, il reste.
+	for i in 30:
+		await physics_frame
+	var depart := p.global_position
+	var sous := Vector3i(floori(depart.x), floori(depart.y + 0.3), floori(depart.z))
+	var courants := {}
+	for dx in range(-3, 4):
+		for dz in range(-3, 6):
+			courants[sous + Vector3i(dx, 0, dz)] = Vector2(0, 1)
+	ed._vue.eau_du_jeu["courants"] = courants
+	for i in 60:
+		await physics_frame
+	var derive := p.global_position - depart
+	_vrai(p.is_on_floor() and derive.z > 0.8 and absf(derive.x) < 0.2,
+		"sur le courant d'une rivière, il dérive dans son sens (%.2f, %.2f)" % [derive.x, derive.z])
+	ed._vue.eau_du_jeu["courants"] = {}
+	depart = p.global_position
+	for i in 30:
+		await physics_frame
+	_vrai((p.global_position - depart).length() < 0.1, "sans courant, il reste où il est")
 	ed._aller_a("monde")
 	_vrai(not ed._vue._env.fog_enabled, "hors du jeu, jamais de voile")
 	ed._eaux[0]["preset"] = preset_avant
@@ -3426,6 +3512,18 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu"]:
 		vues[Palette.teinte(a).to_html(false)] = true
 	_egal(vues.size(), 6, "six ateliers, six teintes différentes")
+	# CE QUI NAÎT PLUS TARD dans une barre (une liste rebâtie) prend sa teinte ; dans la barre de gauche, l'olive reste.
+	var tard := Label.new()
+	tard.add_theme_color_override("font_color", Palette.OLIVE)
+	(ed._droite_fluides.get_meta("pile") as Control).add_child(tard)
+	var gauche := Label.new()
+	gauche.add_theme_color_override("font_color", Palette.OLIVE)
+	ed._section_couches.contenu.add_child(gauche)
+	await process_frame
+	_vrai(tard.get_theme_color("font_color").is_equal_approx(bleu), "une étiquette olive née PLUS TARD dans Fluids devient bleue")
+	_vrai(gauche.get_theme_color("font_color").is_equal_approx(Palette.OLIVE), "… celle de la barre de gauche reste olive")
+	tard.queue_free()
+	gauche.queue_free()
 	_vrai(not vues.has(Palette.OLIVE.to_html(false)), "aucun atelier n'a l'olive de l'écran")
 	for b in [[ed._droite, "monde"], [ed._droite_temoin, "witness"], [ed._droite_texture, "texture"],
 			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"]]:
@@ -3493,9 +3591,110 @@ func _l_exemple(ed: Control) -> void:
 			"« %s » : ses cases (celles qu'une couche plus haute n'a pas)" % c["nom"])
 		var poses := (m.get_node("Rendu") as GridMap).get_used_cells().size()
 		var fautes := (m.get_node("Fautes") as GridMap).get_used_cells().size()
-		_vrai(poses > 0 and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
+		# ⚠ UNE COUCHE SANS CASE (l'exemple du 3 octobre 2026 en porte une, « Grass ») ne pose rien, et c'est juste.
+		_vrai((poses > 0 or siennes.is_empty()) and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
 			% [c["nom"], poses, fautes])
 	_vrai(not ed._rapport.text.contains("missing"), "rien ne manque à l'ouverture")
+
+
+## LA BARRE POUR TOUT GESTE QUI DURE (Jordan, 3 octobre 2026). Sans fenêtre, le suivi est forcé (`_gestes_suivis`).
+## Un geste inconnu qui bloque 0,5 s s'apprend, sans barre la première fois ; un Ctrl+Z connu pour être long est RETENU
+## (le panneau « Undo », rien encore défait), puis REJOUÉ une seule fois : une case sur deux est défaite, pas les deux.
+func _la_barre_des_gestes(ed: Control) -> void:
+	ed._aller_a("monde")
+	ed._gestes_suivis = true
+	ed._durees_gestes.par_unite.clear()
+	var cases: GridMap = ed._vue.cases()
+	var c1 := Vector3i(300, 0, 300)
+	var c2 := Vector3i(302, 0, 300)
+	ed._appliquer({"poser": {c1: true}, "effacer": {}}, "Add")
+	ed._appliquer({"poser": {c2: true}, "effacer": {}}, "Add")
+	ed._input(_cle(KEY_F9))
+	OS.delay_msec(500)   # le travail qui bloque
+	for i in 3:
+		await process_frame
+	_vrai(ed._durees_gestes.prevoir("touche:monde:F9", ed._union.size()) > 0.4 and not ed._attente.visible,
+		"un geste inconnu qui a bloqué 0,5 s est appris (%.2f s prévues), sans barre cette fois"
+		% ed._durees_gestes.prevoir("touche:monde:F9", ed._union.size()))
+	ed._durees_gestes.par_unite["touche:monde:Ctrl+Z"] = 1.0
+	Input.parse_input_event(_cle(KEY_Z, true))
+	Input.flush_buffered_events()
+	_vrai(ed._attente.visible and ed._attente_titre.text == "Undo" and cases.get_cell_item(c2) != -1,
+		"un Ctrl+Z connu pour être long : le panneau « Undo » d'abord, rien n'est encore défait (« %s »)" % ed._attente_titre.text)
+	for i in 6:
+		await process_frame
+	_vrai(cases.get_cell_item(c2) == -1 and cases.get_cell_item(c1) != -1,
+		"… puis il est rejoué UNE fois : la dernière case est défaite, pas l'autre")
+	_vrai(not ed._attente.visible, "… et le panneau s'en va")
+	ed._durees_gestes.par_unite.clear()
+	ed._gestes_suivis = false
+	ed._appliquer({"poser": {}, "effacer": {c1: true}}, "Dig")
+
+
+## « FIX DIAGONAL CONTACTS » (Jordan, 3 octobre 2026), par les VRAIS boutons, loin de tout (x = 200) : deux cases qui se
+## touchent par une arête. Attendus à la main : Fill pose (201,0,200) et (200,1,200) ; Dig retire les deux ; un Ctrl+Z.
+func _reparer_les_diagonales_au_bouton(ed: Control) -> void:
+	ed._aller_a("monde")
+	var a := Vector3i(200, 0, 200)
+	var b := Vector3i(201, 1, 200)
+	ed._appliquer({"poser": {a: true, b: true}, "effacer": {}}, "Add")
+	var cases: GridMap = ed._vue.cases()
+	(ed._boutons_diagonales[0] as Button).pressed.emit()
+	await process_frame
+	_vrai(cases.get_cell_item(Vector3i(201, 0, 200)) != -1 and cases.get_cell_item(Vector3i(200, 1, 200)) != -1
+		and ed._rapport.text.contains("fixed"), "Fix diagonal contacts · Fill : les deux cases vides du carré sont posées")
+	_vrai(MB.contacts_par_arete(ed._union) == 0, "… et le monde visible n'a plus aucun contact par une arête")
+	ed._histoire.undo()
+	_vrai(cases.get_cell_item(Vector3i(201, 0, 200)) == -1 and cases.get_cell_item(a) != -1,
+		"UN Ctrl+Z défait la réparation, la paire d'origine reste")
+	(ed._boutons_diagonales[1] as Button).pressed.emit()
+	await process_frame
+	_vrai(cases.get_cell_item(a) == -1 and cases.get_cell_item(b) == -1, "Fix diagonal contacts · Dig : la paire est creusée")
+	(ed._boutons_diagonales[0] as Button).pressed.emit()
+	await process_frame
+	(ed._boutons_diagonales[0] as Button).pressed.emit()
+	await process_frame
+	_vrai(ed._rapport.text.contains("No diagonal contact"), "sans contact, le bouton le dit (%s)" % ed._rapport.text.left(80))
+
+
+## ÉDITER L'EXEMPLE PENDANT LE DÉV (3 octobre 2026) — `DEV_TOOLS/dev_exemple.gd`, branché à la main sur l'écran (la
+## fumée tourne sans `--dev-example`), avec un pointeur et une archive JETABLES : « The example » ouvre la SOURCE, elle
+## compte comme l'exemple et n'est jamais retenue comme « ton monde », et la fermeture la réemballe.
+func _le_mode_dev_de_l_exemple(ed: Control) -> void:
+	var D: GDScript = load("res://DEV_TOOLS/dev_exemple.gd")
+	D.pointeur_force = ProjectSettings.globalize_path("user://fumee/dev/exemple_source.txt")
+	D.archive_force = ProjectSettings.globalize_path("user://fumee/dev/exemple.zip")
+	DirAccess.make_dir_recursive_absolute(D.archive_force.get_base_dir())
+	DirAccess.remove_absolute(D.archive_force)
+	var mon_monde: String = ed._projet
+	var source := ProjectSettings.globalize_path("user://fumee/dev/preuve.mbproj")
+	var couche := Projet.couche("Proof")
+	couche["cases"] = {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true}
+	var f := FileAccess.open(source, FileAccess.WRITE)
+	f.store_string(Projet.vers_texte([couche], 0))
+	f.close()
+	_egal(D.designer(source), "", "dev : la source de l'exemple est désignée")
+	ed._dev = D.new(ed)
+	ed.dev_suivre_la_source()
+	await ed._ouvrir_l_exemple()
+	_egal(ed._projet, source, "dev : « The example » ouvre la SOURCE, pas la copie installée")
+	_vrai(ed.est_l_exemple(source) and (ed._choix_monde.get_child(1) as Button).button_pressed,
+		"dev : elle compte comme l'exemple (« Which world » coche The example)")
+	var r := ConfigFile.new()
+	r.load(ed.REGLAGES)
+	_vrai(str(r.get_value("projet", "monde", "")) != source, "dev : elle n'est jamais retenue comme « ton monde »")
+	ed._dev.a_la_fermeture(ed._projet)
+	var z := ZIPReader.new()
+	var lu := ""
+	if z.open(D.archive_force) == OK:
+		lu = z.read_file("example.mbproj").get_string_from_utf8() if z.get_files().has("example.mbproj") else ""
+		z.close()
+	_vrai(lu.contains("Proof"), "dev : à la fermeture, l'exemple est réemballé depuis la source")
+	ed._dev = null
+	ed.source_dev_exemple = ""
+	D.pointeur_force = ""
+	D.archive_force = ""
+	await ed._ouvrir(mon_monde)
 
 
 ## Vide un dossier de `user://fumee` (récursif) — jamais ailleurs.

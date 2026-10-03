@@ -17,7 +17,7 @@ const FACES: Array[Vector3i] = [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(
 
 ## A box of more cells returns empty: two corners far apart by accident (a ray lost on the horizon)
 ## would otherwise freeze the editor.
-const BOX_VOLUME_MAX := 262144
+const BOX_VOLUME_MAX := 1048576
 
 const TOOLS := ["add", "dig", "select"]
 const SHAPES := ["sphere", "cube", "disc"]

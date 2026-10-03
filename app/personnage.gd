@@ -56,6 +56,11 @@ var entree := Vector2.ZERO
 var saut := false
 ## La surface de l'eau au-dessus d'un point (−INF hors de l'eau), fournie par la vue ; vide : pas d'eau.
 var surface_eau := Callable()
+## LE COURANT D'UNE RIVIÈRE sous les pieds (un sens unitaire, ou zéro), fourni par la vue ; vide : aucun.
+## Sur la bande d'une rivière, il pousse le personnage de `COURANT` cases/s (3 octobre 2026) — on y marche encore,
+## à contre-courant plus lentement.
+var courant_eau := Callable()
+const COURANT := 1.6
 ## Vrai : il nage (lu par l'animation, la vue et les tests).
 var nage := false
 var course := false
@@ -224,7 +229,10 @@ func _physics_process(dt: float) -> void:
 	var vitesse := VITESSE_COURSE if course else VITESSE_MARCHE
 	# Une inertie courte : on démarre et on s'arrête vite, mais pas au pixel près.
 	var reactivite := 14.0 if is_on_floor() else 4.0
-	var plan := Vector3(velocity.x, 0.0, velocity.z).lerp(voulu * vitesse, minf(1.0, reactivite * dt))
+	var pousse := Vector3.ZERO
+	if courant_eau.is_valid() and is_on_floor():
+		pousse = courant_eau.call(global_position) * COURANT
+	var plan := Vector3(velocity.x, 0.0, velocity.z).lerp(voulu * vitesse + pousse, minf(1.0, reactivite * dt))
 	velocity.x = plan.x
 	velocity.z = plan.z
 

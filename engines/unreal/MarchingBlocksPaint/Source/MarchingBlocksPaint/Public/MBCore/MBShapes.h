@@ -61,7 +61,7 @@ namespace MBPaint
 		constexpr int LengthMax = 64;
 		constexpr int SpanMax = 128;
 		constexpr int StepMax = 4;
-		constexpr long long VolumeMax = 262144;
+		constexpr long long VolumeMax = 1048576;
 		constexpr int RoomFloorsMax = 32;
 
 		/// A ROOM: a rectangle drawn flat on a floor (A and B its corners, A.Y the floor's y), raised UP — the

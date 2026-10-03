@@ -18,7 +18,7 @@ const PROFILES := ["round", "square", "arch"]
 const LENGTH_MAX := 64
 const SPAN_MAX := 128
 const STEP_MAX := 4
-const VOLUME_MAX := 262144
+const VOLUME_MAX := 1048576
 const ROOM_FLOORS_MAX := 32
 
 const PLANES := [

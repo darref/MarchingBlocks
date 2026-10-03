@@ -70,7 +70,7 @@ const CONSEILS: Array[String] = [
 	"Play test: walk your world. Z Q S D to move, Space to jump, Shift to run, left drag to orbit the camera.",
 	"Tab switches Grid (paint on the floor plane) and Sculpt (paint against the matter).",
 	"Space turns Navigate on and off: A Z E Q S D to fly (Q W E A S D on QWERTY), right drag to look.",
-	"A, D, S, B pick Add, Dig, Select, Box. [ and ] change the brush size.",
+	"A, D, S, R, B pick Add, Dig, Select, Rect, Box. [ and ] change the brush size.",
 	"Arrow keys move the selection, Shift + Up / Down lifts it. Ctrl+C, Ctrl+X, Ctrl+V work across layers.",
 	"Middle mouse turns the view, Shift + middle slides it, the wheel zooms.",
 	"A red cube is a tile your library does not have. Nothing is ever filled in for you.",
@@ -126,6 +126,7 @@ var _attente_barre: ProgressBar
 var _pile_attente: Array = []
 ## Ce qu'a duré la dernière fois chaque opération variable, pour ne montrer la barre que si elle dépasse le seuil.
 const SEUIL_ATTENTE := 0.4
+const Durees := preload("res://app/durees.gd")
 var _durees := {}
 var _bandeau: Button
 var _manuel: Control
@@ -195,6 +196,8 @@ var _nom_couche: LineEdit
 var _projet := ""
 var _etiquette_projet: Label
 var _etiquette_projet_chemin: Label
+var _recents: VBoxContainer
+const RECENTS_MAXI := 6
 ## Vrai pendant qu'on rebâtit un projet : rien ne s'enregistre d'un monde à moitié relu.
 var _ouverture := false
 ## Les couches supprimées, gardées vivantes tant qu'un Ctrl+Z peut les rendre.
@@ -273,7 +276,11 @@ func _notification(quoi: int) -> void:
 	# ⚠ LA FERMETURE ÉCRIT CE QUI ATTENDAIT : la seconde d'attente après le dernier geste, et le `.glb` du monde.
 	# Sans elle, fermer juste après un geste le perdait.
 	if quoi == NOTIFICATION_WM_CLOSE_REQUEST and _minuterie_temoin != null:
+		_retenir_les_durees()
 		_toujours_ecrire()
+		if _dev != null:
+			_attendre_l_ecriture()
+			_dev.a_la_fermeture(_projet)
 	if quoi == NOTIFICATION_PREDELETE:
 		_attendre_l_ecriture()
 		# Les cartes PBR en route sur un autre fil : on ne démonte pas le moteur sous elles.
@@ -285,6 +292,7 @@ func _notification(quoi: int) -> void:
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_brancher_le_dev()
 	_regler_fenetre()
 	_batir()
 	_montrer_temoin()
@@ -292,6 +300,7 @@ func _ready() -> void:
 	_dire("[i]Look at the witness, open Project to exchange it with your artist, or open the World "
 		+ "and paint.[/i]")
 	_histoire.version_changed.connect(_enregistrer_plus_tard)
+	_lire_les_durees()
 	await get_tree().process_frame
 	_regler_fenetre()
 	await _ouvrir_au_lancement()
@@ -315,6 +324,7 @@ func _regler_fenetre() -> void:
 
 
 func _process(delta: float) -> void:
+	_suivre_le_geste()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
 	Peinture.suivre_les_cartes()
 	_dire_l_etat_pbr()
@@ -400,6 +410,8 @@ func _batir() -> void:
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
 			[_droite_fluides, "fluides"]]:
 		Palette.habiller_barre(b[0], b[1])
+	if is_inside_tree():
+		Palette.teinter_ce_qui_arrive(get_tree())
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -816,6 +828,10 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		_bouton("Save as", "Writes the project where you want it. It keeps saving itself there.",
 			func() -> void: _demander("enregistrer"), "enregistrer"),
 	], 4))
+	# LES PROJETS RÉCENTS (3 octobre 2026) : reprendre un monde sans passer par la boîte de fichiers.
+	_recents = VBoxContainer.new()
+	_recents.add_theme_constant_override("separation", 2)
+	projet.contenu.add_child(_recents)
 	# L'EXEMPLE LIVRÉ s'ouvre dans World (« Which world » : My world / The example) — plus de bouton à part ici
 	# (Jordan, 2 octobre 2026 : « on a l'exemple dans exemple, plus besoin de l'exemple en projet séparé »).
 	# LES FICHIERS DANS WINDOWS (Jordan, 30 septembre 2026) : inscrits au premier lancement ; la case les retire
@@ -872,6 +888,8 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 		choix.pressed.connect(b[2])
 		_choix_monde.add_child(choix)
 	_section_choix_monde.contenu.add_child(_choix_monde)
+	if _dev != null:
+		pile.add_child(_dev.panneau(Section, _bouton, _texte))
 	var couches := Section.new("Layers", true, Icones.icone("couches"))
 	pile.add_child(couches)
 	_section_couches = couches
@@ -1165,7 +1183,7 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	_case_vides.text = "Select empty cells too"
 	_case_vides.focus_mode = Control.FOCUS_NONE
 	_case_vides.tooltip_text = ("The Select brush also takes the air: paint the outline of a room on the floor grid "
-		+ "(Disc brush), then Extend up and Fill — or anything else the Selection section does.")
+		+ "(Disc brush), then Extend selection ↑ and Fill — or anything else the Selection section does.")
 	_case_vides.toggled.connect(func(v: bool) -> void: _vue.selection_vide = v)
 	outils.contenu.add_child(_case_vides)
 
@@ -1270,6 +1288,18 @@ Acts on the selection if there is one, otherwise on the matter of floor y.")
 		else:
 			ops.append(_bouton(op[0], op[3], _operer.bind(op[1]), op[2]))
 	etage.contenu.add_child(_grille(ops))
+	# RÉPARER LES CONTACTS DIAGONAUX (Jordan, 3 octobre 2026 : « un bouton fix diagonals errors dans World ») — un
+	# geste voulu, sur tout le monde visible ; le pinceau, lui, ne répare toujours rien de lui-même (§2).
+	etage.contenu.add_child(_petit_titre("FIX DIAGONAL CONTACTS"))
+	_boutons_diagonales = [
+		_bouton("Fill", "Two cells that touch only by an edge make red cubes. Fill adds the two missing cells of each "
+			+ "such square, in the active layer, everywhere in the visible world. One Ctrl+Z.",
+			_reparer_les_diagonales.bind(false), "remplir"),
+		_bouton("Dig", "Two cells that touch only by an edge make red cubes. Dig removes the two touching cells of each "
+			+ "such square when both belong to the active layer (otherwise it fills), everywhere in the visible world. "
+			+ "One Ctrl+Z.", _reparer_les_diagonales.bind(true), "creuser"),
+	]
+	etage.contenu.add_child(_rangee(_boutons_diagonales))
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
@@ -1529,6 +1559,7 @@ func _eau_pour_le_jeu() -> Dictionary:
 		_recalculer_eau(false)
 	# Chaque case porte le PRESET de sa couche d'eau : le voile sous la surface dépend du liquide (lave, marais…).
 	var cases := {}
+	var courants := {}
 	var oceans: Array = []
 	var preset_ocean := ""
 	var plus_haut := -2147483647
@@ -1550,12 +1581,15 @@ func _eau_pour_le_jeu() -> Dictionary:
 			else:
 				for lac in r["lacs"]:
 					a_poser.append(lac["cases"])
+				# LE COURANT (3 octobre 2026) : sur la bande d'une rivière, il pousse le personnage.
+				courants.merge(EauMaillage.courants(r["cours"], _occ_eau))
 			for d in a_poser:
 				for c in d:
 					cases[c] = preset
-	if cases.is_empty() and oceans.is_empty():
+	if cases.is_empty() and oceans.is_empty() and courants.is_empty():
 		return {}
-	return {"cases": cases, "oceans": oceans, "preset_ocean": preset_ocean, "boite": FL.boite(_occ_eau)}
+	return {"cases": cases, "oceans": oceans, "preset_ocean": preset_ocean, "boite": FL.boite(_occ_eau),
+		"courants": courants}
 
 
 ## Les cases de toutes les couches de tuiles : l'eau appartient au monde entier.
@@ -2195,6 +2229,174 @@ func _montrer_attente() -> void:
 	_attente.visible = true
 
 
+## ── LA BARRE POUR TOUT GESTE QUI DURE (Jordan, 3 octobre 2026 : « la majorité des moments où quelque chose se fait en
+## durant sans qu'une barre de progression se montre ») ────────────────────────────────────────────────────────────
+## Chaque geste — une touche, un bouton, un clic dans la vue — est repéré dans `_input`, AVANT que l'interface ne le
+## traite, et chronométré jusqu'à l'image qui suit son image (le travail, puis le dessin). `Durees` apprend ce qu'il
+## coûte, rapporté à la taille du monde, et s'en souvient d'une session à l'autre (`reglages.cfg`, section « durees »).
+## Un geste connu pour dépasser 0,4 s est RETENU : le panneau d'attente s'affiche, on attend qu'il soit réellement
+## dessiné (`_laisser_peindre`), puis le MÊME événement est rejoué (`Input.parse_input_event`, marqué pour passer) — le
+## travail bloque alors un écran qui dit ce qui se passe. Deux images de délai, pour les seuls gestes longs.
+## ⚠ PAS DE DESSIN FORCÉ (`RenderingServer.force_draw`), ESSAYÉ ET ÉCARTÉ — VU À L'IMAGE : le panneau apparaissait,
+## mais avec le texte d'une attente d'avant (« Opening the project ») — Godot ne redessine un texte changé qu'en fin
+## d'image (`capture_attente_forcee.gd`). ⚠ La première fois qu'un geste est long, il n'a pas de barre : il n'était
+## pas connu.
+## ⚠ Sans fenêtre (les suites) rien n'est appris ni montré, sauf si `_gestes_suivis` est forcé.
+var _durees_gestes := Durees.new()
+var _gestes_suivis := false
+var _geste := ""
+var _geste_debut := 0
+var _geste_vu_en_process := false
+var _geste_taille := 0
+var _geste_attente: Array = []
+const CLE_DUREES := "gestes"
+const NOMS_DES_TOUCHES := {"Ctrl+Z": "Undo", "Ctrl+Y": "Redo", "Ctrl+Shift+Z": "Redo", "Ctrl+S": "Saving",
+	"Ctrl+V": "Paste", "Ctrl+X": "Cut", "Ctrl+C": "Copy", "Delete": "Delete", "Tab": "Edit mode"}
+
+
+## La clé d'un geste et ce qu'on en dit à l'écran : [clé, libellé], ou [] si ce n'est pas un geste qui compte.
+func _cle_du_geste(event: InputEvent) -> Array:
+	var k := event as InputEventKey
+	if k != null:
+		if not k.pressed or k.echo or k.keycode in [KEY_SHIFT, KEY_CTRL, KEY_ALT, KEY_META, KEY_CAPSLOCK]:
+			return []
+		var texte := k.as_text_keycode()
+		return ["touche:%s:%s" % [_atelier, texte], NOMS_DES_TOUCHES.get(texte, texte)]
+	var m := event as InputEventMouseButton
+	if m == null or not m.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT]:
+		return []
+	var sous: Control = get_viewport().gui_get_hovered_control() if is_inside_tree() else null
+	if sous == null:
+		return []
+	# Un bouton agit au RELÂCHER ; la vue, à l'appui.
+	if sous is BaseButton and not (sous is OptionButton):
+		if m.pressed or m.button_index != MOUSE_BUTTON_LEFT:
+			return []
+		var nom := ""
+		if sous is Button and (sous as Button).text != "":
+			nom = (sous as Button).text
+		else:
+			nom = sous.tooltip_text.get_slice("\n", 0).left(40)
+		if nom == "":
+			nom = str(sous.name)
+		return ["bouton:" + nom, nom]
+	if _vue != null and (sous == _vue or _vue.is_ancestor_of(sous)) and m.pressed:
+		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides"] else ("edition" if _modeleur.maillage != null else "vue")
+		return ["vue:%s:%s:%s" % [_atelier, outil, "droit" if m.button_index == MOUSE_BUTTON_RIGHT else "gauche"],
+			{"monde": "Painting", "fluides": "Water", "witness": "Geometry", "texture": "Texturing", "jeu": "Play test",
+				"projet": "Project"}.get(_atelier, "Working")]
+	return []
+
+
+## Rend vrai si l'événement est RETENU (il sera rejoué une fois le panneau à l'écran) : `_input` s'arrête là.
+func _noter_le_geste(event: InputEvent) -> bool:
+	if not (_ecran_vivant() or _gestes_suivis):
+		return false
+	if event.has_meta(META_REJEU):
+		event.remove_meta(META_REJEU)
+		return false   # le geste rejoué : il est déjà chronométré
+	# ⚠ PENDANT QU'UN GESTE ATTEND SON PANNEAU, TOUT CE QUI ARRIVE ATTEND AVEC LUI, DANS L'ORDRE : le relâcher d'un clic
+	# retenu arriverait sinon AVANT son appui.
+	if _retenus_en_route:
+		_retenus.append(event)
+		if is_inside_tree():
+			get_viewport().set_input_as_handled()
+		return true
+	if _geste != "":
+		return false
+	var g := _cle_du_geste(event)
+	if g.is_empty():
+		return false
+	var taille := _union.size()
+	if _pile_attente.is_empty() and _durees_gestes.doit_montrer(g[0], taille):
+		if is_inside_tree():
+			get_viewport().set_input_as_handled()
+		_rejouer_apres_le_panneau(event, g, taille)
+		return true
+	_commencer_le_geste(g[0], taille)
+	return false
+
+
+const META_REJEU := "mb_rejeu"
+
+
+func _commencer_le_geste(cle: String, taille: int) -> void:
+	_geste = cle
+	_geste_debut = Time.get_ticks_usec()
+	_geste_vu_en_process = false
+	_geste_taille = taille
+
+
+var _retenus: Array = []
+var _retenus_en_route := false
+
+
+func _rejouer_apres_le_panneau(event: InputEvent, g: Array, taille: int) -> void:
+	_retenus_en_route = true
+	_retenus = [event]
+	_geste_attente = _occupe(g[1], "Working… (%.1f s last time)" % _durees_gestes.prevoir(g[0], taille))
+	await _laisser_peindre()
+	_retenus_en_route = false
+	_commencer_le_geste(g[0], taille)
+	for e in _retenus:
+		(e as InputEvent).set_meta(META_REJEU, true)
+		Input.parse_input_event(e)
+	_retenus = []
+
+
+## À la DEUXIÈME image après le geste : son image (le travail, le dessin) est passée — on note ce qu'il a coûté, et le
+## panneau montré pour lui s'en va.
+func _suivre_le_geste() -> void:
+	if _geste == "":
+		return
+	if not _geste_vu_en_process:
+		_geste_vu_en_process = true
+		return
+	var secondes := (Time.get_ticks_usec() - _geste_debut) / 1000000.0
+	var etait_connu: bool = _durees_gestes.par_unite.has(_geste)
+	_durees_gestes.apprendre(_geste, secondes, _geste_taille)
+	if not _geste_attente.is_empty():
+		_fin_occupe(_geste_attente)
+		_geste_attente = []
+	if not etait_connu and _durees_gestes.par_unite.has(_geste):
+		_retenir_les_durees()
+	_geste = ""
+
+
+## Montre le panneau d'attente (une entrée à part dans la pile, rendue par `_fin_occupe`).
+func _occupe(titre: String, note := "") -> Array:
+	var e := [titre, note, 0, 0, "auto"]
+	_pile_attente.push_back(e)
+	_montrer_attente()
+	return e
+
+
+func _fin_occupe(e: Array) -> void:
+	for i in range(_pile_attente.size() - 1, -1, -1):
+		if is_same(_pile_attente[i], e):
+			_pile_attente.remove_at(i)
+			break
+	if _pile_attente.is_empty():
+		_attente.visible = false
+	else:
+		_montrer_attente()
+
+
+func _lire_les_durees() -> void:
+	var r := ConfigFile.new()
+	r.load(REGLAGES)
+	_durees_gestes.depuis_dictionnaire(r.get_value("durees", CLE_DUREES, {}))
+
+
+func _retenir_les_durees() -> void:
+	if not _ecran_vivant():
+		return
+	var r := ConfigFile.new()
+	r.load(REGLAGES)
+	r.set_value("durees", CLE_DUREES, _durees_gestes.vers_dictionnaire())
+	r.save(REGLAGES)
+
+
 ## ⚠ SANS FENÊTRE, `frame_post_draw` NE VIENT JAMAIS (la fumée pendait sur tout ce qui attendait) : on n'attend
 ## alors que l'image suivante.
 func _laisser_peindre() -> void:
@@ -2527,7 +2729,7 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			func() -> void: _geste_modeleur("remplir"), "remplir"),
 		_bouton("Bevel  ·  Ctrl+B", "Ctrl+B — chamfer the selected edges (or the edges of the selected "
 			+ "faces); the width follows the mouse or is typed.", func() -> void: _geste_modeleur("bevel"), "evider"),
-		_bouton("Knife  ·  K", "K — click points on edges, face by face; Enter cuts.",
+		_bouton("Knife  ·  K", "K — click points on the surface: the cut follows it across faces and tile borders; Enter cuts.",
 			func() -> void: _geste_modeleur("knife"), "couper"),
 		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: F closes it.",
 			func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
@@ -2593,7 +2795,7 @@ func _sections_d_edition(pile: VBoxContainer, titre: String, selmode: Dictionary
 	sel.contenu.add_child(_grille([
 		_bouton("All  ·  A", "A — select everything.", func() -> void: _geste_modeleur("tout"), "grandir"),
 		_bouton("None  ·  Alt+A", "Alt+A — select nothing.", func() -> void: _geste_modeleur("rien"), "croix"),
-		_bouton("Box  ·  B", "B, then drag a rectangle. It also takes what is hidden behind.",
+		_bouton("Box  ·  B", "B, then drag a rectangle. It takes what you see — with X-ray (Alt+Z), what is hidden behind too.",
 			func() -> void: _geste_modeleur("B"), "boite"),
 		_bouton("Lasso", "Ctrl + right drag (Shift + Ctrl removes), as in Blender — or click here, then drag with "
 			+ "the left button (Ctrl or Shift removes). It takes what you see; Alt+Z for X-ray.",
@@ -3098,6 +3300,12 @@ func _batir_calques(contenu: Control) -> void:
 		boutons.add_child(bouton)
 		_boutons_calques[nom] = bouton
 	_reglages_calque.add_child(boutons)
+	# FUSIONNER VERS LE BAS (3 octobre 2026) : l'image ne change pas, la pile perd un calque. Un Ctrl+Z.
+	var fusion := _bouton("Merge down", "Merges the active layer into the one below it — the image does not change. "
+		+ "Both must be visible.", func() -> void: _geste_calques("Paint: merge layer down", func(c: String) -> void:
+			Peinture.fusionner_vers_le_bas(c, int(Peinture.toile(c)["actif"]))), "bas")
+	_reglages_calque.add_child(fusion)
+	_boutons_calques["Merge down"] = fusion
 	_redire_les_calques()
 
 
@@ -3206,6 +3414,8 @@ func _redire_les_calques() -> void:
 	_boutons_calques["Delete"].disabled = cal.size() <= 1
 	_boutons_calques["Up"].disabled = int(t["actif"]) >= cal.size() - 1
 	_boutons_calques["Down"].disabled = int(t["actif"]) <= 0
+	_boutons_calques["Merge down"].disabled = (int(t["actif"]) <= 0 or not bool(actif["visible"])
+		or not bool(cal[int(t["actif"]) - 1]["visible"]))
 
 
 var _bouton_gomme: Button
@@ -3807,6 +4017,9 @@ func _travail_chemin() -> String:
 func _travail_maillage() -> ArrayMesh:
 	if _travail_actif < 0 or _travail_actif >= _travaux.size():
 		return null
+	# Un travail rouvert avec le projet n'est relu qu'ici, la première fois qu'on le regarde.
+	if _travaux[_travail_actif]["maillage"] == null:
+		_travaux[_travail_actif]["maillage"] = BM.travail_depuis_glb(_travail_chemin(), [])
 	return _travaux[_travail_actif]["maillage"] as ArrayMesh
 
 
@@ -4025,7 +4238,7 @@ func _importer(fichier: String) -> void:
 			+ "the witness tiles back.[/color]") if ecart == 0 \
 			else "%d new vertex position(s) compared to the witness." % ecart
 	_dire(("[color=#b4bd85][b]Work imported[/b][/color] ← %s\n%s\n\nThe view shows it as the slicer "
-		+ "will read it: whatever leaves the block's box is gone.\n[i]« Slice the work » re-reads the "
+		+ "will read it: whatever leaves the block's box is gone.\n[i]« Slice the selected work » re-reads the "
 		+ "file when clicked — saving again in Blender meanwhile is enough.[/i]") % [fichier, ecart_dit])
 
 
@@ -4057,6 +4270,9 @@ func _trancher_travail() -> void:
 		var ancien := _chemin_temoin_de(c)
 		if FileAccess.file_exists(ancien):
 			DirAccess.copy_absolute(ancien, ancien.get_basename() + ".previous.mbtiles")
+		# CE QUE LE glTF NE PORTE PAS revient du témoin d'avant, par le nom du matériau (3 octobre 2026).
+		var repris: int = lu.reprendre_les_reglages(_temoin_de(c))
+		Peinture.oublier_les_ensembles()   # ses cartes viennent d'être réécrites sous les mêmes noms
 		c["_temoin"] = lu
 		c.erase("_lie")
 		_temoins_sales[lu] = true
@@ -4066,7 +4282,8 @@ func _trancher_travail() -> void:
 		var propre := _glb_du_temoin(c)
 		var bilan_lie: Dictionary = await _trancher_source(propre)
 		_poser_lot(bilan_lie, "work", propre, ("[b]%s became the witness of « %s »[/b] — edit it in Witness, "
-			+ "slice it again in step 3.\n") % [chemin.get_file(), c["nom"]])
+			+ "slice it again in step 3.\n%s") % [chemin.get_file(), c["nom"],
+			("%d material(s) kept their PBR settings (matched by name).\n" % repris) if repris > 0 else ""])
 		return
 	var bilan: Dictionary = await _trancher_source(chemin)
 	var entete := "[b]Sliced from[/b] %s\n" % chemin
@@ -4408,6 +4625,39 @@ func _remplacer_le_monde(nouvelles: Dictionary, nom: String) -> void:
 	_appliquer({"poser": nouvelles, "effacer": effacer}, nom)
 
 
+var _boutons_diagonales: Array = []
+
+
+## Répare les contacts diagonaux du monde VISIBLE (`FS.reparer_les_diagonales`) : on pose dans la couche active, on ne
+## creuse que ses cases, on ne remplit jamais une case d'une couche cachée. UNE action.
+func _reparer_les_diagonales(creuse: bool) -> void:
+	if not (_vue.monde() as Node3D).visible:
+		_dire("[i]The active layer is hidden.[/i] Show it first: the fix adds or removes ITS cells.")
+		return
+	var pleines := _union.duplicate()
+	var modifiables := _occupees()
+	var figees := {}
+	for i in _vue.nombre_de_couches():
+		var m := _vue.couche(i) as Node3D
+		if not m.visible:
+			for c in (m.get_node("Cases") as GridMap).get_used_cells():
+				figees[c] = true
+	await _attendre("Fixing diagonal contacts", "%d cells" % pleines.size())
+	var r: Dictionary = await _en_fond(func() -> Dictionary:
+		return FS.reparer_les_diagonales(pleines, creuse, modifiables, figees))
+	_fin_attente()
+	var poses: int = (r["poser"] as Dictionary).size()
+	var creusees: int = (r["effacer"] as Dictionary).size()
+	if poses + creusees == 0:
+		_dire("[b]No diagonal contact to fix[/b]%s" % ("." if int(r["restantes"]) == 0 else
+			(" — %d remain that only touch hidden layers' cells: show them, or fix them by hand." % int(r["restantes"]))))
+		return
+	_appliquer({"poser": r["poser"], "effacer": r["effacer"]}, "Fix diagonal contacts")
+	_dire(("[b]Diagonal contacts fixed[/b] — %d cell(s) added, %d removed, in « %s ». [i]Ctrl+Z undoes it.[/i]%s")
+		% [poses, creusees, _couches[_active]["nom"], "" if int(r["restantes"]) == 0 else
+		"\n[color=#f2ca79]%d contact(s) remain[/color]: they involve a hidden layer's cells." % int(r["restantes"])])
+
+
 func _effacer_tout() -> void:
 	_remplacer_le_monde({}, "Clear the layer")
 
@@ -4425,11 +4675,18 @@ func _operer(quoi: String) -> void:
 	var sur: String = ("the selection (%d cells)" % _vue.selection.size()) if not _vue.selection.is_empty() \
 		else "floor y = %d" % _vue.etage
 	var op: Dictionary = Etages.operer(_occupees(), _vue.etage, quoi, _vue.selection)
-	var n := _appliquer(op, quoi)
+	var nom: String = NOMS_OPERATIONS.get(quoi, quoi)
+	var n := _appliquer(op, nom)
 	if n == 0:
 		_dire("[i]Nothing to do on %s.[/i] It is empty, or the operation found nothing to change." % sur)
 		return
-	_dire("[b]%s[/b] on %s — %d cell(s) changed. [i]Ctrl+Z undoes it.[/i]" % [quoi, sur, n])
+	_dire("[b]%s[/b] on %s — %d cell(s) changed. [i]Ctrl+Z undoes it.[/i]" % [nom, sur, n])
+
+
+## LES NOMS À L'ÉCRAN des opérations (le rapport et « Undone: … ») — elles étaient dites par leur nom de code,
+## en français (« elargir », « retrecir_bord »…), vu par un audit le 3 octobre 2026.
+const NOMS_OPERATIONS := {"elargir": "Widen", "creuser": "Hollow", "evider": "Hollow", "remplir": "Fill",
+	"supprimer": "Delete", "grandir": "Grow", "retrecir_bord": "Shrink", "retrecir": "Shrink", "connexe": "Connected"}
 
 
 ## Un clic sur Extrude up / down / facing : Maj étend la sélection, Alt la décale (Jordan, 2 octobre 2026).
@@ -4486,11 +4743,12 @@ func _operer_selection(quoi: String) -> void:
 			+ "over the matter with Select (S).")
 		return
 	var op: Dictionary = Outils.operer_selection(_occupees(), _vue.selection, quoi)
-	var n := _appliquer(op, quoi)
+	var nom: String = NOMS_OPERATIONS.get(quoi, quoi)
+	var n := _appliquer(op, nom)
 	_vue.regler_selection(op["selection"])
 	# (Extrude ↑ ↓ et l'étage qui le suit vivent désormais dans `_extruder`, Shape operations.)
 	_dire("[b]%s[/b] — %d cell(s) changed, %d selected. [i]Ctrl+Z undoes the cells.[/i]"
-		% [quoi, n, _vue.selection.size()])
+		% [nom, n, _vue.selection.size()])
 
 
 func _deplacer(decalage: Vector3i) -> void:
@@ -4879,9 +5137,12 @@ func _suivre_le_temoin_de_la_couche() -> void:
 
 func _nouvelle_couche() -> void:
 	_activer(_ajouter_couche(Projet.couche("Layer %d" % (_couches.size() + 1))))
-	_aller_a("monde")
-	_dire("[b]New layer[/b] — empty, and the one you paint on now.\n[i]Slice the witness or your "
-		+ "work into it to give it tiles.[/i]")
+	# ⚠ ON RESTE OÙ L'ON EST (3 octobre 2026) : créée depuis Witness pour en sculpter le témoin, ou depuis Fluids, la
+	# couche renvoyait dans World. Seuls Project et Play test, qui ne montrent pas les couches, mènent à World.
+	if not _atelier in ["monde", "witness", "texture", "fluides"]:
+		_aller_a("monde")
+	_dire("[b]New layer[/b] — empty and active: paint its cells in World, sculpt its witness in Witness.\n"
+		+ "[i]Slice the witness or your work into it to give it tiles.[/i]")
 
 
 ## ⚠ SUPPRIMER S'ANNULE, COMME TOUT LE RESTE (charte §5) : la couche est DÉTACHÉE, pas détruite — ses
@@ -5054,6 +5315,48 @@ func _dire_la_source(c: Dictionary) -> String:
 
 # ── LE PROJET ────────────────────────────────────────────────────────────────────────────────────────
 
+## ÉDITER L'EXEMPLE PENDANT LE DÉVELOPPEMENT (Jordan, 3 octobre 2026) — `DEV_TOOLS/dev_exemple.gd`, exclu de l'export,
+## chargé seulement sans modèle d'export ET avec `--dev-example` (`DEV_TOOLS/editer_l_exemple.cmd`). Les tests ne le
+## voient jamais.
+var _dev: RefCounted = null
+
+
+func _brancher_le_dev() -> void:
+	const CHEMIN := "res://DEV_TOOLS/dev_exemple.gd"
+	if OS.has_feature("template") or not ResourceLoader.exists(CHEMIN):
+		return
+	var D: GDScript = load(CHEMIN)
+	if not D.demande():
+		return
+	_dev = D.new(self)
+	dev_suivre_la_source()
+
+
+func dev_suivre_la_source() -> void:
+	source_dev_exemple = ProjectSettings.globalize_path(_dev.source()).replace("\\", "/")
+	_dire_le_projet()
+
+
+func dev_projet_ouvert() -> String:
+	return _projet
+
+
+func dev_dire(texte: String) -> void:
+	_dire(texte)
+
+
+func dev_tout_ecrire() -> void:
+	_toujours_ecrire()
+	_attendre_l_ecriture()
+
+
+func dev_ouvrir_la_source() -> void:
+	if not FileAccess.file_exists(_dev.source()):
+		_dire("[color=#e0603c]The example source does not exist:[/color] " + _dev.source())
+		return
+	await _ouvrir(_dev.source())
+
+
 ## ⚠ UN PROJET QUI NE S'OUVRE PAS N'EST JAMAIS ÉCRASÉ : on en commence un autre, à côté. L'enregistrement
 ## automatique réécrirait sinon, au premier coup de pinceau, le seul exemplaire d'un monde abîmé.
 func _ouvrir_au_lancement() -> void:
@@ -5067,6 +5370,9 @@ func _ouvrir_au_lancement() -> void:
 			return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
 	if passe != "" and await _ouvrir(passe):
+		return
+	# LE MODE DEV DE L'EXEMPLE (`DEV_TOOLS/dev_exemple.gd`) : on ouvre la SOURCE de l'exemple, pour l'éditer.
+	if _dev != null and FileAccess.file_exists(_dev.source()) and await _ouvrir(_dev.source()):
 		return
 	# ⚠ L'EXEMPLE N'EST JAMAIS ROUVERT AU LANCEMENT (Jordan, 2 octobre 2026) : on rouvre TON monde, le dernier projet
 	# qui n'est pas l'exemple (`monde`). Un réglage d'avant n'a que `dernier`, qui peut être l'exemple : écarté.
@@ -5092,8 +5398,16 @@ func _mon_dernier_monde() -> String:
 static var racine_exemple: String = Exemple.RACINE
 
 
-## Ce projet est-il l'exemple installé (dans `racine_exemple`) ?
+## La source de l'exemple, en mode dev seulement (`DEV_TOOLS/dev_exemple.gd`) : elle compte comme l'exemple.
+static var source_dev_exemple := ""
+
+
+## Ce projet est-il l'exemple installé (dans `racine_exemple`) — ou, en mode dev, sa source ?
 static func est_l_exemple(chemin: String) -> bool:
+	if source_dev_exemple != "" and chemin != "":
+		var a := ProjectSettings.globalize_path(chemin).replace("\\", "/").simplify_path().to_lower()
+		if a == source_dev_exemple.simplify_path().to_lower():
+			return true
 	return chemin != "" and ProjectSettings.globalize_path(chemin).simplify_path().begins_with(
 		ProjectSettings.globalize_path(racine_exemple).simplify_path())
 
@@ -5113,6 +5427,9 @@ func _ouvrir_mon_monde() -> void:
 ## L'exemple, installé une fois par version dans les données de l'appli (`Exemple.installer`), puis ouvert comme
 ## n'importe quel projet.
 func _ouvrir_l_exemple() -> void:
+	if _dev != null:   # en mode dev, « The example » est sa SOURCE, qu'on édite
+		await dev_ouvrir_la_source()
+		return
 	var erreurs: Array = []
 	var chemin := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
 	if chemin == "":
@@ -5160,6 +5477,8 @@ func _vider_le_projet() -> void:
 	_active = 0
 	_eaux.clear()
 	_eau_active = 0
+	_travaux.clear()
+	_travail_actif = -1
 	_corps_eau.clear()
 	_ocean_eau = {}
 	_occ_eau = {}
@@ -5224,6 +5543,13 @@ func _ouvrir(chemin: String) -> bool:
 	_refaire_l_union()
 	for e in etat.get("eaux", []):
 		_ajouter_eau(e)
+	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
+	# en choisit un. Un fichier disparu depuis n'y revient pas.
+	for t in etat.get("travaux", []):
+		if FileAccess.file_exists(t):
+			_travaux.append({"chemin": t, "maillage": null})
+	_travail_actif = _travaux.size() - 1
+	_redire_les_travaux()
 	_eau_active = 0
 	_ouverture = false
 	_activer(etat["active"])
@@ -5237,6 +5563,8 @@ func _ouvrir(chemin: String) -> bool:
 			notes.append("« %s » now uses the PBR maps found next to its images (normal, roughness, occlusion)." % c["nom"])
 	_rhabiller_les_mondes()
 	_aller_a("monde")
+	if _dev != null:
+		_dev.noter_ouverture(chemin)
 	_dire("[color=#b4bd85][b]Project opened[/b][/color] ← %s\n%d layer(s). [i]Every change is saved as you "
 		% [chemin, _couches.size()] + "go — no need for Ctrl+S.[/i]%s"
 		% ("" if notes.is_empty() else "\n\n" + "\n".join(PackedStringArray(notes))))
@@ -5353,11 +5681,17 @@ func _enregistrer(en_fond := false) -> void:
 		sorties.append({"nom": c["nom"], "source": c["source"], "visible": c["visible"], "temoin": c.get("temoin", ""),
 			"id": c.get("id", ""), "cases": (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells()})
 	var eaux: Array = _eaux.duplicate(true)
+	var travaux := _chemins_des_travaux()
 	if en_fond:
 		_dire_enregistre("en_cours")
-		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, true))
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true))
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, false)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false)
+
+
+## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
+func _chemins_des_travaux() -> Array:
+	return _travaux.map(func(t): return str(t["chemin"]))
 
 
 var _tache_ecriture := -1
@@ -5372,14 +5706,14 @@ func _attendre_l_ecriture() -> void:
 
 ## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
 ## `_ecriture_finie`, sur le fil principal).
-func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, en_fond: bool) -> void:
+func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -5518,8 +5852,37 @@ func _retenir_le_projet() -> void:
 	reglages.set_value("projet", "dernier", _projet)
 	if not est_l_exemple(_projet):
 		reglages.set_value("projet", "monde", _projet)
+		var recents: Array = reglages.get_value("projet", "recents", [])
+		recents.erase(_projet)
+		recents.push_front(_projet)
+		reglages.set_value("projet", "recents", recents.slice(0, RECENTS_MAXI))
 	reglages.save(REGLAGES)
 	_dire_le_projet()
+	_redire_les_recents()
+
+
+## Les projets récents (pas l'exemple, pas celui qui est ouvert, seulement ceux qui existent encore) : un bouton chacun.
+func _redire_les_recents() -> void:
+	if _recents == null:
+		return
+	for b in _recents.get_children():
+		_recents.remove_child(b)
+		b.queue_free()
+	var reglages := ConfigFile.new()
+	reglages.load(REGLAGES)
+	var liste: Array = []
+	for chemin in reglages.get_value("projet", "recents", []):
+		if str(chemin) != _projet and FileAccess.file_exists(str(chemin)) and not est_l_exemple(str(chemin)):
+			liste.append(str(chemin))
+	if liste.is_empty():
+		return
+	_recents.add_child(_texte("Recent", 11, Palette.GRIS))
+	for chemin in liste:
+		var b := _bouton(chemin.get_file().get_basename(), "Open " + chemin, func() -> void: await _ouvrir(chemin), "ouvrir")
+		b.clip_text = true
+		b.autowrap_mode = TextServer.AUTOWRAP_OFF
+		b.custom_minimum_size = Vector2(0, 26)
+		_recents.add_child(b)
 
 
 func _dire_le_projet() -> void:
@@ -5654,6 +6017,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 ## ⚠ LES FLÈCHES AUSSI, et pour la même raison : elles déplacent le focus entre les boutons. Elles
 ## répètent quand on les tient (`echo`), comme on l'attend d'un déplacement.
 func _input(event: InputEvent) -> void:
+	if _noter_le_geste(event):
+		return
 	var k := event as InputEventKey
 	if k != null and k.pressed and not k.echo and k.keycode == KEY_F1 and not _manuel.visible:
 		_manuel.ouvrir()

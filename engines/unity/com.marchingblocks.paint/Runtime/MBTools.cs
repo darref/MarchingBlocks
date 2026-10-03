@@ -76,7 +76,7 @@ namespace MarchingBlocks.Paint
     {
         /// <summary>A box of more cells returns empty: two corners far apart by accident (a ray lost on
         /// the horizon) would otherwise freeze the editor.</summary>
-        public const int BoxVolumeMax = 262144;
+        public const int BoxVolumeMax = 1048576;
 
         public static readonly Int3[] Faces =
         {

@@ -103,6 +103,28 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       (`_sans_partenaire` recopié de `test_sections`, `_variete`). ⚠ Pas jugé par Jordan.
   - **POUR LE FIGER** : créer `exemple/FIGE` (l'emballeur ne reprend plus rien), retirer `exemple/exemple.zip` du
     `.gitignore` et le commiter — tant qu'il vit, il n'entre pas au dépôt (repris à chaque export).
+  - **ÉDITER L'EXEMPLE PENDANT LE DÉV — DEMANDÉ PAR JORDAN (3 octobre 2026) ET ÉCRIT** : « un moyen qui ne se retrouve
+    pas dans le produit final d'éditer l'exemple pendant le dev et de le maintenir dans le soft ». Puis : on itère sur
+    un PROJET PREUVE jusqu'à la perfection, et c'est lui qui devient l'exemple du produit.
+    - **LA SOURCE** est un projet ordinaire n'importe où ; son chemin est dans `~/.marchingblocks/exemple_source.txt`
+      (HORS du dépôt, comme la clé), sinon `C:/Users/jorda/Desktop/test.mbproj`. `prendre_l_exemple.gd` lit la même
+      (`dev_exemple.gd` : `source()`).
+    - **LE MODE DEV** (`DEV_TOOLS/dev_exemple.gd`, EXCLU DE L'EXPORT avec tout `DEV_TOOLS/*`) : lancé par
+      **`DEV_TOOLS/editer_l_exemple.cmd`** (Godot sur les sources, `-- --dev-example`). Il ouvre la SOURCE au lancement,
+      la compte comme « l'exemple » (« Which world » coche The example, et « The example » ouvre la source, pas la copie
+      installée), montre une section **DEV · EXAMPLE** (la source, *Open the example source*, *Use this project as the
+      example* — qui réécrit le pointeur —, *Repack the example now*) et **RÉEMBALLE `exemple/exemple.zip` À LA
+      FERMETURE** si la source a été ouverte. ⚠ L'écran ne le charge que sans modèle d'export ET avec le drapeau : les
+      suites ne l'allument jamais (elles n'ouvriront pas la vraie source). `exemple/FIGE` arrête aussi ce réemballage.
+    - ⚠ **LES TRAVAUX IMPORTÉS** (la liste de l'étape 2, enregistrée dans le projet depuis le même jour) sont des
+      raccourcis de l'auteur : l'emballeur les retire du `.mbproj` (sinon leurs `.glb` partiraient dans l'archive).
+    - **MESURÉ** : `test_projet` (+8 : pointeur absent / désigné / refusé, le drapeau éteint, `DEV_TOOLS/` exclu, un
+      vrai réemballage, sans la liste des travaux) ; `fumee_appli` (+5, pointeur et archive JETABLES —
+      `pointeur_force`, `archive_force` : « The example » ouvre la source, elle compte comme l'exemple, jamais retenue
+      comme ton monde, la fermeture réemballe) ; deux mutations rouges (l'emballeur qui garde les travaux, la fermeture
+      qui ne réemballe pas). ⚠ Le lanceur `.cmd` et la section DEV n'ont pas été menés avec fenêtre ni à la main.
+    - ⚠ **L'EXEMPLE ACTUEL** (repris le 3 octobre) porte une couche « Grass » SANS CASE (toutes prises par GreyRock,
+      couches exclusives) : la fumée l'exigeait peinte — corrigée, une couche vide ne pose rien.
   - **MESURÉ** : 7 fichiers, 865 Ko ; `test_projet` 72 (archive bâtie à la main : chemins réécrits, image octet pour
     octet, pas d'écrasement, un STAMP neuf à côté, refus) ; `fumee_appli` 535 (la VRAIE archive par le bouton, dans
     un dossier de données vierge : 2 couches, leurs cases, leurs tuiles, 0 faute, rien de « missing »). Quatre
@@ -243,7 +265,8 @@ damier.
   pour incomplet de 33 classes, et c'est ce qui faisait traîner un SECOND témoin bourré de diagonales.
 - ⚠ **UNE CLASSE DIAGONALE N'EST PAS « MANQUANTE », ELLE EST HORS DU MONDE** : `librairie()` ne la
   réclame pas, mais le peintre qui en rencontre une pose toujours un cube rouge (§3).
-- **DÉCIDÉ (Jordan, 27 septembre 2026) — LE ROUGE, PAS LA COMPLÉTION.** Peindre une diagonale pose un
+- **DÉCIDÉ (Jordan, 27 septembre 2026) — LE ROUGE, PAS LA COMPLÉTION.** (Depuis le 3 octobre 2026, un BOUTON
+  « Fix diagonal contacts » répare à la demande — §5, « la passe du 3 octobre » ; le pinceau, lui, ne répare rien.) Peindre une diagonale pose un
   cube rouge, et le pinceau ne retouche rien de lui-même. `MB.completer_les_carres()` reste (le
   vérificateur s'en sert) mais **le pinceau ne l'appelle pas** : la réponse d'avant — « on complète le
   trou pour qu'il soit carré » — est retirée. C'est aussi la ligne du §3 : l'absence doit se VOIR là où
@@ -1939,8 +1962,8 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     - ⚠ **UN PLANTAGE À LA SORTIE, CAUSE MESURÉE** : `Peinture.fournisseur_de_masque`, variable STATIQUE, gardait une
       fonction anonyme du modeleur jusqu'au démontage du moteur — `fumee_appli` finissait « VERDICT : OK » puis code
       139 (vu par une autre session ; reproduit, puis disparu une fois la variable effacée dans `_exit_tree`).
-    - ⚠ **CE QUI N'EST PAS FAIT** : un témoin relu de BLENDER perd ses réglages PBR (le glTF ne les porte pas : il
-      revient avec son albedo, sans cartes) ; pas de masque métal ni d'émission (palier 2) ; la génération coûte
+    - ⚠ **CE QUI N'EST PAS FAIT** : ~~un témoin relu de BLENDER perd ses réglages PBR~~ (fait le 3 octobre 2026 : ses
+      cartes reviennent en ensemble, ses réglages par le nom du matériau) ; pas de masque métal ni d'émission (palier 2) ; la génération coûte
       ~1,7 s par toile de 1024² (2,7 s avec masque) — à mesurer sur 2048², avec fenêtre. **PAS TENU EN MAIN.**
     - **LES ENSEMBLES PBR — ÉCRITS (Jordan, 3 octobre 2026 : « sur les ensembles PBR appliqués aux UV d'un witness de
       test, je ne vois toujours que l'albedo, et le rendu est vraiment pauvre »).** Ses textures (HEART_WORLD :
@@ -1964,7 +1987,7 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
         copie du projet de Jordan (gazon et falaise en relief). ⚠ Pas jugé par Jordan.
       - ⚠ **VU EN PASSANT, PAS CORRIGÉ** : peindre sur une image de bibliothèque écrit ses calques et ses cartes À CÔTÉ
         D'ELLE (`D:/Spirit3D/…/cliff_rocks_01_color_1k.layers/`, `.pbr_uv/`) — hors du projet.
-    **OUVERT** : le panneau 2D du patron ; fusionner un calque sur celui du dessous.
+    **OUVERT** : le panneau 2D du patron. (Fusionner un calque sur celui du dessous : fait le 3 octobre 2026.)
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 
@@ -2137,7 +2160,7 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
   sa ligne du manuel. La fonction reste pour les captures de `DEV_TOOLS/`.
 - **LES QUATRE ÉTAPES À GAUCHE (Jordan, 28 septembre 2026)** : Export · Import · Slice · Export to
   engines, numérotées, et les imports gardés en LISTE (réimporter un même fichier le remplace). La
-  liste ne survit pas à la session : OUVERT.
+  liste survit à la session depuis le 3 octobre 2026 (§5, « la passe du 3 octobre »).
 - **NAVIGATE — DEMANDÉ PAR JORDAN (28 septembre 2026), SORTI DES VISÉES LE 29.** Elle ne vise rien :
   clic droit glissé pour regarder, aucun clic ne peint. Elle était la troisième visée du cycle de Tab ;
   **DÉCIDÉ (Jordan, 29 septembre 2026)** : Tab n'alterne plus que Grid et Sculpt, qui restent ensemble, et
@@ -2382,7 +2405,7 @@ une paroi, une case sur une autre, même diagonale, un PROFIL, et l'outil les re
     la fumée a d'abord attrapé l'aide qui disait encore « rises » après Down. Vu à l'image (aperçu, coupe du creux).
   - ⚠ **PAS TENU EN MAIN.**
 - **OUVERT** : un raccord COURBE (aujourd'hui deux jambes et un segment droit) ; un escalier dans un puits ;
-  le coût d'un aperçu sur un long conduit de taille 7 (recalculé à chaque case visée, non mesuré).
+  ~~le coût d'un aperçu sur un long conduit de taille 7~~ — mesuré et divisé par cinq le 3 octobre 2026 (22 ms).
 
 #### STAIRS — DEMANDÉ PAR JORDAN (1er octobre 2026 : « ajoute une special shape Stairs »), ÉCRIT LE MÊME JOUR
 
@@ -2851,6 +2874,92 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
   à chaque appel ; le décor du Play test rebâti à chaque entrée ; le MD5 du `.glb` à chaque rafraîchissement des
   couches (⚠ pas de cache par date : la charte l'a déjà écarté, la date n'est précise qu'à la seconde).
 
+### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
+### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)
+
+- **LA LISTE DES TRAVAUX IMPORTÉS SURVIT** (étape 2) : `Projet.vers_texte(…, travaux)` les écrit (`"travaux"`, chemins
+  dans l'ordre ; une entrée qui n'est pas un texte est écartée, le projet s'ouvre) ; rouverts, ils reviennent dans la
+  liste et ne sont RELUS qu'au premier regard (`_travail_maillage`). Un fichier disparu ne revient pas.
+- **LES PROJETS RÉCENTS** : six, dans `reglages.cfg` (`projet/recents`, jamais l'exemple), une rangée « Recent » sous
+  New · Open · Save as (sans le projet ouvert).
+- **« New layer » RESTE DANS L'ATELIER** (World, Geometry, Texturing, Fluids) : il menait toujours à World.
+- **UNE ÉTIQUETTE OLIVE NÉE PLUS TARD DANS UNE BARRE DE DROITE PREND SA TEINTE** (`Palette.teinter_ce_qui_arrive` :
+  `node_added`, un nœud sous une barre habillée — méta `teinte_d_atelier` — est teinté à l'image suivante).
+- **UN TÉMOIN REVENU DE BLENDER GARDE SES CARTES** : la normale et l'ORM du matériau glTF sont écrits À CÔTÉ de l'albedo
+  sous des noms d'ENSEMBLE (`…_color.png`, `…_normal_gl.png`, `…_arm.png`) — `Peinture.ensemble_de` les retrouve ; et
+  `TemoinLie.reprendre_les_reglages` reprend du témoin d'avant, PAR LE NOM du matériau, ce que le glTF ne porte pas
+  (`pbr`, `ensemble`, `echelle`) — un matériau aux cartes DÉDUITES les redéduit (même rendu) plutôt que de garder la
+  copie figée. `test_cartes_pbr` (+11, dont normale et ORM revenues comparées à celles parties) ; deux mutations
+  rouges — ⚠ la première d'abord MUETTE : les cartes d'un passage précédent restaient dans le dossier du test.
+- **MERGE DOWN** (calques de peinture, `Peinture.fusionner_vers_le_bas`) : l'image ne change pas ; le calque du dessous
+  est remplacé par une image NEUVE (son opacité cuite) — l'annulation, qui garde les images par référence, rend les
+  deux intacts. Refusé sur le calque du bas ou si l'un est caché. `test_peinture` (+8, attendus à la main), fumée (le
+  vrai bouton, Ctrl+Z).
+- **U PRÉVIENT** quand une autre tuile porte le même matériau déplié (le même carré 0–1 : leurs peintures se
+  recouvrent) et nomme l'atlas. Fumée (+2).
+- **LE COURANT DES RIVIÈRES AU PLAY TEST** : `EauMaillage.courants` (les cases qui portent une bande, au sens
+  `sens_du_cours` — la règle SORTIE de `_riviere`, une seule pour la bande et le courant) ; la vue le lit sous les pieds
+  (`courant_au_point`), le personnage dérive de `COURANT` = 1,6 case/s (**PROPOSÉ**), au sol seulement. `test_fluides`
+  (+1, cours écrit à la main), fumée (+2 : il dérive dans le sens, sans courant il reste).
+- **L'APERÇU D'UNE FORME SPÉCIALE, ~5 FOIS PLUS RAPIDE — MESURÉ** (`DEV_TOOLS/sonde_cout_apercu_forme.gd`, massif plein
+  de 40³) : tunnel rond de taille 7 sur 32 cases **114 → 22 ms**, carré 170 → 34. Ce n'était PAS le balayage (1 ms)
+  mais la réparation des damiers : 48 appels d'une fonction anonyme par case. `plein` écrit en ligne ; une case dont
+  les six voisines par une face ont changé comme elle est sautée (un damier n'a jamais deux coins voisins égaux —
+  ⚠ tester les dix-huit voisines était une mutation ÉQUIVALENTE, mesurée) ; un segment sur un axe se balaie par
+  tranches. Sortie identique : les cas d'épreuve des greffons, recalculés par `test_greffon_peinture`, n'ont pas
+  bougé ; mutation rouge (tout sauter : 13 échecs). ⚠ Lire une grille 3×3 par plan était PLUS LENT (70 ms) : retiré.
+  ⚠ Les greffons gardent l'ancien algorithme (même sortie) : une optimisation à porter avec eux.
+- **LE MANUEL ET L'ÉCRAN D'ACCORD** (un audit, 3 octobre 2026) : « Slice the work », « Slice the witness » dans World,
+  « Extend up », « Save as… », « the Witness workspace », « 52 » écrit en dur, la boîte B qui « prend aussi le caché »
+  (infobulle et invite — c'est l'X-ray qui le fait), le couteau « face par face », R absent des outils, P / E / U /
+  Alt+clic absents de la table, « SDFGI not used » alors que le Play test l'offre — corrigés ; ajoutés : Rect, Hollow
+  box, Select empty cells, Extend selection, Clear, les flèches, Clear the layer, Size et Rail, Delete layer et le
+  renommage, River width, une seule mer, New / Open / Recent, ⚠ Not saved, UV (unwrapped), Export UV layout, Image… ,
+  Merge down, Reset settings, les ensembles PBR, Reset to the computed witness, le bandeau Shapes et « Where is it
+  from? ». **L'ÉCRAN PARLAIT FRANÇAIS** : le rapport et l'annulation des opérations disaient « elargir »,
+  « retrecir_bord »… (`NOMS_OPERATIONS`) ; fumée (+2).
+- **« FIX DIAGONAL CONTACTS » — DÉCIDÉ PAR JORDAN (3 octobre 2026 : « un bouton fix diagonals errors dans World ? »),
+  ÉCRIT LE MÊME JOUR.** Deux boutons dans Shape operations, **Fill** et **Dig**, sur tout le monde VISIBLE, UNE action
+  (`FS.reparer_les_diagonales`) : combler pose les deux cases vides de chaque damier dans la couche active ; creuser
+  retire les deux pleines si elles sont toutes deux de la couche active, sinon comble ; jamais une case d'une couche
+  cachée (on la lui volerait) ; une case ne change qu'une fois, donc ça termine ; ce qui reste est compté et DIT.
+  ⚠ **CE N'EST PAS LE RETOUR DE LA COMPLÉTION** (§2, « le rouge, pas la complétion ») : le pinceau ne répare toujours
+  rien de lui-même ; le bouton est un geste voulu. `test_formes_speciales` (+6, attendus à la main, l'escalier jugé par
+  `MB.contacts_par_arete`) ; fumée (+5, les vrais boutons, Ctrl+Z) ; mutation rouge (creuser une autre couche).
+- **LA BARRE POUR TOUT GESTE QUI DURE — DEMANDÉE PAR JORDAN (3 octobre 2026 : « il y a encore la majorité des moments
+  où quelque chose se fait en durant sans qu'une barre de progression se montre »), ÉCRITE LE MÊME JOUR.** Les barres
+  posées une à une (ouverture, tranchage, eau, Play test…) ne couvraient pas le reste. Désormais :
+  - **chaque geste** — une touche (par atelier), un bouton (par son texte), un clic dans la vue (atelier, outil) — est
+    repéré dans `_input` de l'écran, AVANT l'interface (c'est le seul `_input` de l'appli), et chronométré jusqu'à
+    l'image qui suit la sienne ; `app/durees.gd` (PUR) apprend son coût RAPPORTÉ À LA TAILLE DU MONDE (secondes par
+    case + 1 000), moyenne à moitié, et l'écrit dans `reglages.cfg` (section « durees ») : une session apprend pour la
+    suivante ;
+  - **un geste connu pour dépasser 0,4 s est RETENU** : le panneau d'attente s'affiche, on attend qu'il soit DESSINÉ,
+    puis l'événement est rejoué (`Input.parse_input_event`, marqué) — et tout ce qui arrive pendant l'attente est
+    retenu avec lui, dans l'ordre (le relâcher d'un clic après son appui). Deux images de délai, pour les seuls gestes
+    longs. ⚠ **LA PREMIÈRE FOIS QU'UN GESTE EST LONG, IL N'A PAS DE BARRE** : il n'était pas connu ;
+  - ⚠ **LE DESSIN FORCÉ (`RenderingServer.force_draw`) A ÉTÉ ESSAYÉ ET ÉCARTÉ — VU À L'IMAGE** : le panneau
+    apparaissait bien, mais avec le texte d'une attente d'avant (« Opening the project ») — un texte changé ne se
+    redessine qu'en fin d'image. `DEV_TOOLS/capture_attente_forcee.gd` (avec fenêtre) photographie désormais le
+    panneau d'un vrai geste retenu : son nom y est.
+  - **MESURÉ** : `test_projet` (+7, attendus à la main : l'échelle par la taille, le seuil, le négligeable, la moyenne,
+    les réglages abîmés) ; `fumee_appli` (+4 : un geste qui a bloqué 0,5 s s'apprend sans barre ; un vrai Ctrl+Z
+    appris long montre « Undo » sans encore rien défaire, puis est rejoué UNE fois). Mutation rouge (ne jamais
+    retenir). ⚠ « Rejouer sans la marque » est MUETTE et ÉQUIVALENTE : le geste rejoué arrive pendant son propre
+    chronométrage, donc n'est jamais retenu deux fois ; la marque reste en garde-fou. ⚠ Sans fenêtre, rien n'est appris
+    ni montré (les suites ne touchent pas aux réglages). ⚠ PAS TENU EN MAIN.
+- **L'OCÉAN N'EST JAMAIS REFUSÉ POUR SA TAILLE — DÉCIDÉ PAR JORDAN (3 octobre 2026)** : `FL.ocean` ne rend plus
+  « trop_grand » (il va par tronçons de colonne, il ne s'emballe pas) ; les LACS et les rivières gardent leur garde
+  (`FL.VOLUME_MAXI`, case par case). `test_fluides` : un océan au-delà de la borne est rendu, un lac au-delà est refusé.
+- **LES SÉLECTIONS NE REFUSENT QUE LE DÉMESURÉ — DÉCIDÉ PAR JORDAN (3 octobre 2026)** : `Outils.VOLUME_MAXI` passe de
+  64³ (262 144 : une boîte de 100 × 30 × 100 était refusée) à **128 × 64 × 128 = 1 048 576** (**PROPOSÉ** : la sélection
+  se dessine case par case, au-delà l'écran rame). Boîte, Rect, salle et balayage des formes la lisent. ⚠ **LA MÊME
+  BORNE DANS LES TROIS GREFFONS** (`mb_tools`, `mb_shapes`, `MBTools.cs`, `MBShapes.cs`, `MBTools.h`, `MBShapes.h`) et
+  dans leurs cas d'épreuve (régénérés : la boîte à la limite, celle au-delà, une salle trop grande de 201 × 201 × 34).
+  Vert : les suites Godot, le banc .NET (121 cas d'outils) et le banc C++ (clang de Unity, drapeaux d'Unreal) ; Unity
+  et Unreal non relancés (une constante).
+
+
 ### LA MÉTÉO DU PLAY TEST — DEMANDÉE PAR JORDAN (2 octobre 2026), ÉCRITE LE MÊME JOUR
 
 Transmise par une autre session. Dans le Play test, une **météo réglable**, dans la **barre de droite** (celle des
@@ -2984,6 +3093,9 @@ sert comme d'une bibliothèque, et le greffon reste le nôtre.
   `test_fluides` 148, `fumee_appli` 426, `test_decoupe` 20 ; les autres comme au relevé du 1er octobre au soir.
   Bancs relancés le même jour : .NET et C++ 18 cas / 1 624 poses / 103 cas d'outils / 0 échec, Unity 6.6 26 tests
   sur 26, Unreal 5.8.3 BuildPlugin sans avertissement.
+  **Relevé le 3 octobre 2026, après la passe d'avant le projet preuve**, 20 suites, 0 échec : `fumee_appli` 681,
+  `test_cartes_pbr` 78, `test_fluides` 217, `test_peinture` 66, `test_projet` 96 ; les autres inchangées (1 468, 22, 27,
+  36, 117, 129, 255, 180, 1 986, 96, 62, 3 922, 33, 32, 53). Bancs hors Godot non relancés (les greffons n'ont pas bougé).
   **Relevé suite par suite le 2 octobre 2026 au soir, après les couches exclusives**, 19 suites, **9 118
   vérifications, 0 échec** : `test_massif_peint` 96, `fumee_appli` 535 (après Up / Down et l'exemple), `test_projet` 72, `test_formes_speciales`
   122, `test_peinture` 29, `test_greffon_peinture` 221 ; les autres comme au relevé précédent. Bancs hors Godot

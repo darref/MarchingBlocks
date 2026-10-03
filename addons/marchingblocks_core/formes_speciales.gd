@@ -310,6 +310,47 @@ static func _balayer(points: Array[Vector3i], demi: int, profil: String, garde: 
 		var h2: int = demi * demi
 		for q in traverser(p0, p1):
 			corps[q] = true
+		# ⚠ UN SEGMENT DROIT SUR UN AXE (le cas courant : une paroi droite) SE BALAIE PAR TRANCHES (3 octobre 2026) :
+		# t ne dépend que de la coordonnée le long de l'axe, a et b que des deux autres — le profil est testé UNE fois
+		# par case de la tranche, puis posé sur chaque position retenue le long de l'axe. Mêmes tests, même sortie
+		# (gardée par les cas d'épreuve des greffons, recalculés et comparés) ; un aperçu de tunnel de taille 7 sur
+		# 32 cases passait ~115 ms à balayer sa boîte case par case.
+		var axe := -1
+		if (dv.x != 0 and dv.y == 0 and dv.z == 0):
+			axe = 0
+		elif (dv.x == 0 and dv.y != 0 and dv.z == 0):
+			axe = 1
+		elif (dv.x == 0 and dv.y == 0 and dv.z != 0):
+			axe = 2
+		if axe >= 0:
+			var le_long: Array[int] = []
+			for k in range(bas[axe], haut[axe] + 1):
+				var q := p0
+				q[axe] = k
+				var t: int = _p(q - p0, dv)
+				if t < 0 and (e0 == 0 or t * t > e0 * e0 * ddv):
+					continue
+				if t > ddv and (e1 == 0 or (t - ddv) * (t - ddv) > e1 * e1 * ddv):
+					continue
+				le_long.append(k)
+			var i1: int = (axe + 1) % 3
+			var i2: int = (axe + 2) % 3
+			for c1 in range(bas[i1], haut[i1] + 1):
+				for c2 in range(bas[i2], haut[i2] + 1):
+					var d := Vector3i.ZERO
+					d[i1] = c1 - p0[i1]
+					d[i2] = c2 - p0[i2]
+					var dest := _classer_dans_le_profil(_p(d, u), _p(d, v), uu, vv, h2, demi, profil, avec_rebord)
+					if dest == 0:
+						continue
+					var cible: Dictionary = corps if dest == 1 else (rebords if dest == 2 else passage)
+					for k in le_long:
+						var q := Vector3i.ZERO
+						q[axe] = k
+						q[i1] = c1
+						q[i2] = c2
+						cible[q] = true
+			continue
 		for x in range(bas.x, haut.x + 1):
 			for y in range(bas.y, haut.y + 1):
 				for z in range(bas.z, haut.z + 1):
@@ -349,6 +390,102 @@ static func _balayer(points: Array[Vector3i], demi: int, profil: String, garde: 
 		if not passage.has(q):
 			corps[q] = true
 	return corps
+
+
+## Où tombe une case de coordonnées en travers (ca, cb) dans le profil : 0 dehors, 1 le corps, 2 un rebord du
+## garde-corps, 3 le passage au-dessus du tablier. LES MÊMES TESTS que la boucle case par case de `_balayer`.
+static func _classer_dans_le_profil(ca: int, cb: int, uu: int, vv: int, h2: int, demi: int, profil: String,
+		avec_rebord: bool) -> int:
+	var a2: int = ca * ca
+	var b2: int = cb * cb
+	match profil:
+		"rond":
+			return 1 if a2 * vv + b2 * uu <= h2 * uu * vv else 0
+		"carre":
+			return 1 if a2 <= h2 * uu and b2 <= h2 * vv else 0
+		"arche":
+			if cb >= 0:
+				return 1 if a2 * vv + b2 * uu <= h2 * uu * vv else 0
+			return 1 if a2 <= h2 * uu and b2 <= h2 * vv else 0
+		"tablier":
+			if a2 <= h2 * uu and 4 * b2 <= vv:
+				return 1
+			if avec_rebord and cb > 0 and 4 * b2 <= 9 * vv and a2 <= h2 * uu:
+				return 2 if a2 > (demi - 1) * (demi - 1) * uu else 3
+	return 0
+
+
+## RÉPARER LES CONTACTS DIAGONAUX D'UN MONDE — DEMANDÉ PAR JORDAN (3 octobre 2026 : « un bouton fix diagonals errors
+## dans World »). Un BOUTON, donc un geste voulu : ce n'est pas la complétion silencieuse retirée du pinceau (§2, « le
+## rouge, pas la complétion »), qui reste retirée.
+##   pleines      — les cases du monde (l'union des couches visibles) ;
+##   creuse       — faux : on COMBLE chaque damier (ses deux cases vides deviennent pleines) ; vrai : on le CREUSE (ses
+##                  deux cases pleines se vident), seulement si elles sont toutes deux dans `modifiables` (la couche
+##                  active), sinon on le comble ;
+##   figees       — des cases qu'on ne peut pas remplir (celles d'une couche cachée : les poser les lui volerait).
+## Par tours, comme `_reparer` : chaque tour lit l'état du tour d'avant. ⚠ UNE CASE NE CHANGE QU'UNE FOIS (on ne vide
+## que des cases d'origine, on ne remplit que des cases vides jamais vidées) : ça termine toujours. Un damier qu'aucune
+## règle ne peut défaire reste — `restantes` les compte (`MB.contacts_par_arete` sur l'état final).
+## Rend {"poser", "effacer", "restantes"}.
+static func reparer_les_diagonales(pleines: Dictionary, creuse: bool, modifiables: Dictionary = {},
+		figees: Dictionary = {}) -> Dictionary:
+	var poser := {}
+	var effacer := {}
+	var front: Array = pleines.keys()
+	while not front.is_empty():
+		var a_poser := {}
+		var a_effacer := {}
+		for c in front:
+			for plan in PLANS:
+				var e1: Vector3i = plan[0]
+				var e2: Vector3i = plan[1]
+				for o in [c, c - e1, c - e2, c - e1 - e2]:
+					var p00: Vector3i = o
+					var p10: Vector3i = o + e1
+					var p01: Vector3i = o + e2
+					var p11: Vector3i = o + e1 + e2
+					var f00: bool = poser.has(p00) or (pleines.has(p00) and not effacer.has(p00))
+					var f10: bool = poser.has(p10) or (pleines.has(p10) and not effacer.has(p10))
+					var f01: bool = poser.has(p01) or (pleines.has(p01) and not effacer.has(p01))
+					var f11: bool = poser.has(p11) or (pleines.has(p11) and not effacer.has(p11))
+					if not (f00 == f11 and f10 == f01 and f00 != f10):
+						continue
+					var vides: Array = [p10, p01] if f00 else [p00, p11]
+					var pleins: Array = [p00, p11] if f00 else [p10, p01]
+					if creuse and modifiables.has(pleins[0]) and modifiables.has(pleins[1]) \
+							and not poser.has(pleins[0]) and not poser.has(pleins[1]):
+						a_effacer[pleins[0]] = true
+						a_effacer[pleins[1]] = true
+					elif not (effacer.has(vides[0]) or effacer.has(vides[1]) or figees.has(vides[0])
+							or figees.has(vides[1])):
+						a_poser[vides[0]] = true
+						a_poser[vides[1]] = true
+		front = []
+		for q in a_effacer:
+			if not effacer.has(q):
+				effacer[q] = true
+				front.append(q)
+		for q in a_poser:
+			if not poser.has(q) and not effacer.has(q):
+				poser[q] = true
+				front.append(q)
+		if poser.size() + effacer.size() > Outils.VOLUME_MAXI * 8:
+			break
+	var fin := {}
+	for c in pleines:
+		if not effacer.has(c):
+			fin[c] = true
+	for c in poser:
+		fin[c] = true
+	var MB := load("res://addons/marchingblocks_core/marching_blocks.gd")
+	return {"poser": poser, "effacer": effacer, "restantes": MB.contacts_par_arete(fin)}
+
+
+## Les six voisines de `c` par une face sont-elles toutes dans `changees` ?
+static func _entouree(changees: Dictionary, c: Vector3i) -> bool:
+	return (changees.has(c + Vector3i(1, 0, 0)) and changees.has(c - Vector3i(1, 0, 0))
+		and changees.has(c + Vector3i(0, 1, 0)) and changees.has(c - Vector3i(0, 1, 0))
+		and changees.has(c + Vector3i(0, 0, 1)) and changees.has(c - Vector3i(0, 0, 1)))
 
 
 ## LA TRAVERSÉE DE L'AXE — les cases que la droite de centre à centre traverse, un axe à la fois.
@@ -567,13 +704,20 @@ static func salle(occupees: Dictionary, a: Vector3i, b: Vector3i, etages: int, v
 ## changer, ce qui compte pour trois implémentations. Creuser vide la paire PLEINE, remplir comble la paire
 ## VIDE : la matière va dans un seul sens, donc ça termine.
 static func _reparer(occupees: Dictionary, poser: Dictionary, effacer: Dictionary, creuse: bool) -> int:
-	var plein := func(c: Vector3i) -> bool:
-		return poser.has(c) or (occupees.has(c) and not effacer.has(c))
 	var front: Array = (effacer if creuse else poser).keys()
 	var ajoutees := 0
 	while not front.is_empty():
 		var a_changer := {}
 		for c in front:
+			# ⚠ UNE CASE DONT LES SIX VOISINES PAR UNE FACE ONT CHANGÉ COMME ELLE ne peut toucher aucun damier : chaque
+			# carré qui la contient contient aussi deux de ces voisines, de son état — or un damier n'a jamais deux coins
+			# voisins égaux (3 octobre 2026 : l'intérieur d'un tunnel creusé, ~60 % de ses cases, était relu 48 fois
+			# chacune). On ne la regarde pas. ⚠ Vérifier les dix-huit voisines (arêtes comprises) rendait la même chose :
+			# mutation équivalente, mesurée.
+			if creuse and _entouree(effacer, c):
+				continue
+			if not creuse and _entouree(poser, c):
+				continue
 			for plan in PLANS:
 				var e1: Vector3i = plan[0]
 				var e2: Vector3i = plan[1]
@@ -582,10 +726,12 @@ static func _reparer(occupees: Dictionary, poser: Dictionary, effacer: Dictionar
 					var p10: Vector3i = o + e1
 					var p01: Vector3i = o + e2
 					var p11: Vector3i = o + e1 + e2
-					var f00: bool = plein.call(p00)
-					var f10: bool = plein.call(p10)
-					var f01: bool = plein.call(p01)
-					var f11: bool = plein.call(p11)
+					# ⚠ `plein` ÉCRIT EN LIGNE (3 octobre 2026) : appelée 48 fois par case, la fonction anonyme coûtait
+					# l'essentiel d'un aperçu de tunnel (~100 ms pour 3 700 cases). Même expression.
+					var f00: bool = poser.has(p00) or (occupees.has(p00) and not effacer.has(p00))
+					var f10: bool = poser.has(p10) or (occupees.has(p10) and not effacer.has(p10))
+					var f01: bool = poser.has(p01) or (occupees.has(p01) and not effacer.has(p01))
+					var f11: bool = poser.has(p11) or (occupees.has(p11) and not effacer.has(p11))
 					if f00 == f11 and f10 == f01 and f00 != f10:
 						var paire: Array = [p00, p11] if f00 == creuse else [p10, p01]
 						for q in paire:

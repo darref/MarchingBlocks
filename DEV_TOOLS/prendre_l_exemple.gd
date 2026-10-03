@@ -1,6 +1,7 @@
 extends SceneTree
 ##
-## PRENDRE L'EXEMPLE — emballe le projet de Jordan (`C:/Users/jorda/Desktop/test.mbproj` par défaut) dans
+## PRENDRE L'EXEMPLE — emballe la SOURCE de l'exemple (`dev_exemple.gd` : `~/.marchingblocks/exemple_source.txt`,
+## sinon `C:/Users/jorda/Desktop/test.mbproj`) dans
 ## `res://exemple/exemple.zip`, l'exemple que l'exe livre (`app/exemple.gd`). DÉCIDÉ (Jordan, 2 octobre 2026) : il
 ## suit ses modifications tant que le développement n'est pas clos, puis il est FIGÉ.
 ##
@@ -22,10 +23,14 @@ const SOURCE_DEFAUT := "C:/Users/jorda/Desktop/test.mbproj"
 const SORTIE := "res://exemple/exemple.zip"
 const FIGE := "res://exemple/FIGE"
 const NOM := "example"
+## Retire la liste des travaux importés (`"travaux": [...]`) du texte d'un projet.
+const REGLE_TRAVAUX := ",\\s*\"travaux\":\\s*\\[[^\\]]*\\]"
 
 
 func _initialize() -> void:
-	var source := SOURCE_DEFAUT
+	# LA SOURCE est celle du mode dev (`dev_exemple.gd` : `~/.marchingblocks/exemple_source.txt`, sinon SOURCE_DEFAUT).
+	# ⚠ `load`, pas `preload` : `dev_exemple.gd` précharge ce script-ci.
+	var source: String = load("res://DEV_TOOLS/dev_exemple.gd").source()
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--projet="):
 			source = a.substr("--projet=".length())
@@ -48,6 +53,9 @@ static func prendre(source: String, sortie: String) -> String:
 	var dossier := source.get_base_dir()
 	var base := source.get_file().get_basename()
 	var texte := FileAccess.get_file_as_string(source)
+	# Les travaux importés (étape 2) sont des raccourcis de l'auteur, pas de l'exemple : retirés (sinon ses `.glb`
+	# partiraient dans l'archive).
+	texte = RegEx.create_from_string(REGLE_TRAVAUX).sub(texte, "")
 	var etat = JSON.parse_string(texte)
 	if not (etat is Dictionary) or not etat.has("couches"):
 		return "projet illisible : " + source

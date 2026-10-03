@@ -52,7 +52,7 @@ namespace MarchingBlocks.Paint
         public const int LengthMax = 64;
         public const int SpanMax = 128;
         public const int StepMax = 4;
-        public const long VolumeMax = 262144;
+        public const long VolumeMax = 1048576;
         public const int RoomFloorsMax = 32;
 
         /// <summary>A ROOM: a rectangle drawn flat on a floor (a and b its corners, a.y the floor's y), raised UP — the

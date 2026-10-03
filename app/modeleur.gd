@@ -1884,7 +1884,8 @@ func touche(k: InputEventKey) -> bool:
 			commencer_cercle()
 		KEY_B:
 			modal = "B"
-			dit.emit("[b]Box select[/b] — drag a rectangle (it also takes what is hidden). Esc cancels.")
+			dit.emit("[b]Box select[/b] — drag a rectangle (%s). Esc cancels." % ("it also takes what is hidden: X-ray"
+				if rayons_x else "only what you see; Alt+Z for X-ray"))
 		KEY_X, KEY_DELETE:
 			operer("supprimer")
 		KEY_M:
@@ -2697,9 +2698,34 @@ func deplier_selection() -> void:
 	var r: Dictionary = maillage.deplier(fs)
 	_emettre(avant, "Unwrap")
 	redessiner()
+	# ⚠ LE PIÈGE DU DÉPLIAGE D'UNE TUILE (3 octobre 2026) : chaque tuile dépliée seule est rangée dans le MÊME carré
+	# 0–1 ; si une autre tuile porte le même matériau déplié, leurs peintures se recouvrent. On le DIT, avec la sortie.
+	var partagees := _tuiles_qui_partagent_les_uv(fs)
 	dit.emit(("[b]Unwrapped[/b] — %d face(s) in %d island(s), laid out in the 0–1 square at one scale. "
 		+ "[i]Export UV layout… to paint on it; give the material the « UV » projection.[/i]")
-		% [r["faces"], r["ilots"]])
+		% [r["faces"], r["ilots"]] + ("" if partagees == 0 else ("\n[color=#f2ca79]%d other tile(s) use this material, "
+		+ "unwrapped in the SAME 0–1 square: painting one paints the others.[/color] Use [b]Unwrap all tiles (atlas)[/b] "
+		+ "to give every tile its own place.") % partagees))
+
+
+## Combien d'AUTRES tuiles portent, dépliées, un matériau des faces `fs` de la tuile en édition.
+func _tuiles_qui_partagent_les_uv(fs: Array) -> int:
+	if temoin == null or maillage == null:
+		return 0
+	var mats := {}
+	for f in (fs if not fs.is_empty() else range(maillage.faces.size())):
+		if maillage.mats[f] >= 0:
+			mats[maillage.mats[f]] = true
+	var n := 0
+	for c in temoin.tuiles:
+		var t: RefCounted = temoin.tuiles[c]
+		if t == maillage or c == cle:
+			continue
+		for f in t.faces.size():
+			if mats.has(t.mats[f]) and f < t.uvs.size() and not (t.uvs[f] as PackedVector2Array).is_empty():
+				n += 1
+				break
+	return n
 
 
 ## L'ATLAS DU TÉMOIN : les faces du matériau courant (toutes, s'il n'y en a pas), dans TOUTES les tuiles, dépliées

@@ -151,6 +151,9 @@ func _initialize() -> void:
 
 	_les_fichiers_dans_windows()
 	_l_exemple()
+	_les_travaux()
+	_le_dev_de_l_exemple()
+	_les_durees()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -208,6 +211,69 @@ func _l_exemple() -> void:
 	erreurs = []
 	_vrai(Exemple.installer(DOSSIER + "/absente.zip", racine, erreurs) == "" and not erreurs.is_empty(),
 		"pas d'archive : refusé, et dit")
+
+
+## LA LISTE DES TRAVAUX IMPORTÉS survit à la session (3 octobre 2026).
+func _les_travaux() -> void:
+	var c := Projet.couche("A")
+	var texte := Projet.vers_texte([c], 0, [], ["D:/x/rocher.glb", "C:/y/glace.glb"])
+	var relu := Projet.depuis_texte(texte, [])
+	_egal(relu.get("travaux", []), ["D:/x/rocher.glb", "C:/y/glace.glb"], "les travaux importés reviennent, dans l'ordre")
+	_vrai(not Projet.vers_texte([c], 0).contains("travaux"), "sans travail, rien n'est écrit")
+	_egal(Projet.depuis_texte(Projet.vers_texte([c], 0), []).get("travaux", null), [], "un projet d'avant : aucun travail")
+	var abime := texte.replace('"C:/y/glace.glb"', "12")
+	var r2 := Projet.depuis_texte(abime, [])
+	_egal(r2.get("travaux", []), ["D:/x/rocher.glb"], "une entrée qui n'est pas un chemin est écartée, le projet s'ouvre")
+
+
+## ÉDITER L'EXEMPLE PENDANT LE DÉV (3 octobre 2026) : la source désignée par un fichier pointeur, hors de l'export.
+func _le_dev_de_l_exemple() -> void:
+	var D: GDScript = load("res://DEV_TOOLS/dev_exemple.gd")
+	var pointeur := ProjectSettings.globalize_path(DOSSIER + "/pointeur/exemple_source.txt")
+	DirAccess.remove_absolute(pointeur)
+	_egal(D.source(pointeur), D.SOURCE_DEFAUT, "sans pointeur, la source est le projet par défaut")
+	var projet := ProjectSettings.globalize_path(DOSSIER + "/preuve.mbproj")
+	# Un projet qui porte un travail importé : l'emballeur le retire (un raccourci de l'auteur, pas de l'exemple).
+	_ecrire(projet, Projet.vers_texte([Projet.couche("A")], 0, [], ["D:/quelque/part/travail.glb"]))
+	_egal(D.designer(projet, pointeur), "", "désigner un projet qui existe")
+	_egal(D.source(pointeur), projet, "… il devient la source")
+	_vrai(D.designer(DOSSIER + "/absent.mbproj", pointeur) != "", "un projet absent est refusé")
+	_egal(D.source(pointeur), projet, "… et la source ne change pas")
+	_vrai(not D.demande(), "sans --dev-example, le mode dev ne s'allume pas (les tests n'ouvrent jamais la vraie source)")
+	var export := FileAccess.get_file_as_string("res://export_presets.cfg")
+	_vrai(export.contains("exclude_filter=\"DEV_TOOLS/*"), "DEV_TOOLS/ est exclu de l'exe : le mode dev n'y part pas")
+	var archive := DOSSIER + "/dev_exemple.zip"
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(archive))
+	_egal(D.reemballer(projet, archive), "", "réemballer la source")
+	var z := ZIPReader.new()
+	_vrai(z.open(archive) == OK and z.get_files().has("example.mbproj") and z.get_files().has("STAMP"),
+		"l'archive porte le projet, renommé « example », et son STAMP")
+	var dedans := z.read_file("example.mbproj").get_string_from_utf8() if z.get_files().has("example.mbproj") else ""
+	_vrai(dedans != "" and not dedans.contains("travaux") and Projet.depuis_texte(dedans, []).get("couches", []).size() == 1,
+		"… sans la liste des travaux, et toujours lisible")
+	z.close()
+
+
+## CE QUE DURE CHAQUE GESTE (3 octobre 2026, `app/durees.gd`). Attendus à la main : une mesure d'1,1 s sur un monde
+## de 10 000 cases vaut 0,0001 s par case de (taille + 1 000) ; sur 21 000 cases elle prédit 2,2 s ; sur un monde vide
+## 0,1 s (sous le seuil) ; une mesure négligeable n'est pas retenue ; une nouvelle mesure compte pour moitié.
+func _les_durees() -> void:
+	var D := preload("res://app/durees.gd")
+	var d: RefCounted = D.new()
+	_egal(d.prevoir("x", 5000), 0.0, "un geste inconnu ne prédit rien")
+	d.apprendre("x", 1.1, 10000)
+	_vrai(absf(d.prevoir("x", 10000) - 1.1) < 1e-9 and absf(d.prevoir("x", 21000) - 2.2) < 1e-9
+		and absf(d.prevoir("x", 0) - 0.1) < 1e-9, "la durée suit la taille du monde (1,1 s → 2,2 s, 0,1 s à vide)")
+	_vrai(d.doit_montrer("x", 10000) and not d.doit_montrer("x", 0), "la barre au-delà de 0,4 s seulement")
+	d.apprendre("rapide", 0.02, 10000)
+	_vrai(not d.par_unite.has("rapide"), "un geste négligeable n'est pas retenu")
+	d.apprendre("x", 0.0, 10000)
+	_vrai(absf(d.prevoir("x", 10000) - 0.55) < 1e-9, "une nouvelle mesure compte pour moitié (0,55 s)")
+	var e: RefCounted = D.new()
+	e.depuis_dictionnaire(d.vers_dictionnaire())
+	_vrai(absf(e.prevoir("x", 10000) - 0.55) < 1e-9, "relue des réglages, la table prédit la même chose")
+	e.depuis_dictionnaire({"y": "abîmé", "z": -1.0, "w": 0.001})
+	_vrai(e.par_unite.keys() == ["w"], "une entrée abîmée des réglages est écartée")
 
 
 func _vider(dossier: String) -> void:

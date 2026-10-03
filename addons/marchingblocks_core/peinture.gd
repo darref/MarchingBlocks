@@ -380,6 +380,33 @@ static func supprimer_calque(chemin: String, rang: int) -> bool:
 	return true
 
 
+## FUSIONNE un calque sur celui du dessous (3 octobre 2026) : l'image composée ne change pas. Le calque du dessous est
+## REMPLACÉ par une image NEUVE (son opacité cuite dedans, puis celui du dessus posé par-dessus à la sienne) : l'état de
+## la pile garde ses images par référence (`etat`), et l'annulation rend donc les deux calques d'avant, intacts.
+## Refusé pour le calque du bas, ou si l'un des deux est caché (on ne fusionne pas ce qu'on ne voit pas).
+static func fusionner_vers_le_bas(chemin: String, rang: int) -> bool:
+	var t := toile(chemin)
+	var cal: Array = t.get("calques", [])
+	if rang <= 0 or rang >= cal.size():
+		return false
+	var haut: Dictionary = cal[rang]
+	var bas: Dictionary = cal[rang - 1]
+	if not haut["visible"] or not bas["visible"]:
+		return false
+	var src: Image = bas["image"]
+	var tout := Rect2i(Vector2i.ZERO, src.get_size())
+	var neuve: Image = src.duplicate() if float(bas["opacite"]) >= 1.0 else _attenue(src, tout, float(bas["opacite"]))
+	if float(haut["opacite"]) >= 1.0:
+		neuve.blend_rect(haut["image"], tout, Vector2i.ZERO)
+	elif float(haut["opacite"]) > 0.0:
+		neuve.blend_rect(_attenue(haut["image"], tout, float(haut["opacite"])), tout, Vector2i.ZERO)
+	cal[rang - 1] = _calque(str(bas["nom"]), neuve)
+	cal.remove_at(rang)
+	t["actif"] = rang - 1
+	composer(chemin)
+	return true
+
+
 ## Monte (+1) ou descend (−1) un calque dans la pile ; l'actif le suit.
 static func deplacer_calque(chemin: String, rang: int, sens: int) -> bool:
 	var t := toile(chemin)
