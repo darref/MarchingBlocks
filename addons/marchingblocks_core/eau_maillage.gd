@@ -496,7 +496,8 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: A
 	# LA SOURCE (Jordan, 3 octobre 2026 : « il manque aussi la source ») : la première case d'une rivière qui coule sur la
 	# matière — l'eau n'y sort plus de nulle part, elle y SOURD (`_source`). Une rivière qui part d'un lac qui déborde
 	# n'en a pas : elle sort du lac. Une seule par case.
-	if n > 0 and cours[0]["genre"] == "coule" and occupees.has((cours[0]["case"] as Vector3i) + Vector3i.DOWN) 			and not sources.has(cours[0]["case"]):
+	if n > 0 and cours[0]["genre"] == "coule" and occupees.has((cours[0]["case"] as Vector3i) + Vector3i.DOWN) \
+			and not sources.has(cours[0]["case"]):
 		sources.append(cours[0]["case"])
 	for i in n:
 		var e: Dictionary = cours[i]

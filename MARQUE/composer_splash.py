@@ -1,7 +1,7 @@
 """LA SIGNATURE SPANNERGAMES — la même, collée de la même façon sur le splash de chaque logiciel.
 
     python composer_splash.py FOND.png SORTIE.png [--logo spannergames_detoure.png]
-                              [--nom "SpannerGames Inc."] [--coin bas-droite]
+                              [--nom "SpannerGames"] [--coin bas-droite]
 
 Chaque logiciel a son FOND ; la signature, elle, ne varie pas : le logo détouré et le nom de la
 compagnie, dans un coin, à une taille et une marge PROPORTIONNELLES à la hauteur de l'image — donc
@@ -83,7 +83,7 @@ def main():
     a.add_argument("fond")
     a.add_argument("sortie")
     a.add_argument("--logo", default=os.path.join(ICI, "spannergames_detoure.png"))
-    a.add_argument("--nom", default="SpannerGames Inc.")
+    a.add_argument("--nom", default="SpannerGames")
     a.add_argument("--coin", default="bas-droite",
                    choices=["bas-droite", "bas-gauche", "haut-droite", "haut-gauche"])
     o = a.parse_args()

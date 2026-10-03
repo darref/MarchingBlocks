@@ -51,6 +51,7 @@ func _initialize() -> void:
 	_le_materiau_voyage_jusqu_au_greffon()
 	_les_gardes_de_repli()
 	_les_pinceaux_de_sculpt()
+	_boucher_les_trous()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -898,6 +899,66 @@ func _les_pinceaux_de_sculpt() -> void:
 		att[i] = Vector3(0.1, 0, 0)
 	_vrai(_proches(g.pinceau_sculpt("grab", c, Vector3.UP, 0.3, 1.0, 1.0, false, Vector3(0.1, 0, 0)), att),
 		"grab : le centre et ses voisins suivent le glissé")
+
+
+## FILL HOLES (3 octobre 2026). Attendus écrits à la main : le cube unitaire (aucun sommet sur un plan de coupe, ±0,5) et
+## une TUILE PLATE de deux quads, x ∈ {−0,5 ; 0 ; 0,5}, z = ±0,5, à y = 0 — tout son bord est sur les plans x± et z± :
+## aucun trou.
+func _boucher_les_trous() -> void:
+	var m := _cube()
+	_egal(m.trous(), 0, "trous : le cube fermé n'en a pas")
+	m.supprimer_faces([_face_du_haut(m)])
+	_egal(m.trous(), 1, "trous : une face ôtée, un trou (aucune de ses arêtes sur un plan de coupe)")
+	var r: Dictionary = m.boucher_les_trous()
+	_vrai(int(r["interieurs"]) == 1 and m.trous() == 0 and _etanche(m) == "" and is_equal_approx(_volume(m), 1.0),
+		"un trou intérieur plan : UNE face, étanche, orientée, le volume 1 revenu (%s, %.3f)" % [_etanche(m), _volume(m)])
+	m = _cube()
+	var haut := _face_du_haut(m)
+	var voisine := -1
+	for f in m.faces.size():
+		if f != haut and m.normale(f).dot(Vector3(1, 0, 0)) > 0.9:
+			voisine = f
+	m.supprimer_faces([haut, voisine])
+	var faces_avant: int = m.faces.size()
+	r = m.boucher_les_trous()
+	_vrai(m.trous() == 0 and _etanche(m) == "" and m.faces.size() == faces_avant + 6,
+		"un rebord GAUCHE (deux faces voisines ôtées, six sommets) : un éventail de 6 triangles autour du centre, étanche")
+	# LA TUILE PLATE.
+	var t: RefCounted = ME.new()
+	for p in [Vector3(-0.5, 0, -0.5), Vector3(0, 0, -0.5), Vector3(0.5, 0, -0.5), Vector3(-0.5, 0, 0.5), Vector3(0, 0, 0.5),
+			Vector3(0.5, 0, 0.5)]:
+		t.sommets.append(p)
+	for f in [[0, 3, 4, 1], [1, 4, 5, 2]]:
+		t.faces.append(PackedInt32Array(f))
+		t.teintes.append(Color.WHITE)
+	_egal(t.trous(), 0, "la tuile plate : son bord est sur les plans de coupe, ce n'est pas un trou")
+	var sauve: RefCounted = t.copie()
+	t.supprimer_faces([1])
+	_egal(t.trous(), 1, "la moitié x > 0 ôtée : un trou, qui touche les plans z− et z+ (la bande du plan x+ est partie)")
+	r = t.boucher_les_trous()
+	_vrai(int(r["echecs"]) == 1 and t.trous() == 1, "sans point attendu, deux plans parallèles : rien n'est inventé, et c'est compté")
+	r = t.boucher_les_trous({Vector2i(0, 1): [Vector3(0.5, 0, -0.5), Vector3(0.5, 0, 0.5)]})
+	var aire := 0.0
+	for f in t.faces.size():
+		var fc: PackedInt32Array = t.faces[f]
+		for i in range(1, fc.size() - 1):
+			aire += ((t.sommets[fc[i]] - t.sommets[fc[0]]) as Vector3).cross(t.sommets[fc[i + 1]] - t.sommets[fc[0]]).length() / 2.0
+	var a_x_plus := 0
+	for p in t.sommets:
+		if is_equal_approx(p.x, 0.5):
+			a_x_plus += 1
+	_vrai(int(r["sur_coupe"]) == 1 and int(r["points"]) == 2 and t.trous() == 0 and is_equal_approx(aire, 1.0) and a_x_plus == 2,
+		"avec les deux points que la section attend sur x+ : la section recréée par (0,5 ; 0 ; ±0,5), la tuile entière revenue "
+		+ "(aire %.3f, %s)" % [aire, r])
+	var orientees := {}
+	var double := false
+	for f in t.faces:
+		for i in (f as PackedInt32Array).size():
+			var e := Vector2i(f[i], f[(i + 1) % f.size()])
+			double = double or orientees.has(e)
+			orientees[e] = true
+	_vrai(not double and t.normale(t.faces.size() - 1).dot(t.normale(0)) > 0.99,
+		"… la face neuve est tournée comme sa voisine (aucune arête parcourue deux fois dans le même sens)")
 
 
 func _vrai(v: bool, quoi: String) -> void:

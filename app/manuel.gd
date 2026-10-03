@@ -421,6 +421,12 @@ func _modeleur() -> String:
 		+ _touche("X") + " delete · " + _touche("M") + " merge at center · " + _touche("F")
 		+ " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
 	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you."))
+	l.append("[b]Fill holes[/b] closes every hole of the tile you edit ([b]Fill holes · all tiles[/b]: of the whole "
+		+ "witness), in one " + _touche("Ctrl+Z") + ". The line under the buttons counts the holes of this tile. The open "
+		+ "edges that lie ON a cut plane are not holes: they are the tile's border, closed by the next tile in the world. "
+		+ "A hole that reaches a cut plane took a piece of that border away: Fill holes rebuilds it with the points the "
+		+ "next tiles share, then joins it to the rim — so no gap opens in the world. If some border point cannot be "
+		+ "rebuilt, the report says so: close that part by hand (" + _touche("F") + " on the rim).")
 	l.append(_titre("Materials — in Witness texturing"))
 	l.append("[b]New material[/b], select faces, [b]Assign[/b]. A material has a colour, roughness, "
 		+ "metallic, an optional image, and how many cells one copy of the image covers. Images are "
@@ -576,6 +582,27 @@ func _raccourcis() -> String:
 	var l := PackedStringArray()
 	l.append(_titre("World"))
 	l.append(_table(_raccourcis_monde()))
+	l.append(_titre("The mouse wheel"))
+	l.append("[i]One rule everywhere: the wheel alone zooms — except during a gesture, where it sets that gesture's "
+		+ "size. " + _touche("Alt") + " + wheel sets the tool's main size, " + _touche("Shift") + " + wheel its second "
+		+ "one, " + _touche("Ctrl") + " + wheel the floor. A small label by the pointer tells the new value. Over the "
+		+ "side panels, the wheel only scrolls: it never changes a slider or a number.[/i]")
+	l.append(_table([
+		["Wheel", "Zoom"],
+		["Wheel while dragging a Rect or a Box", "Raise or lower its far corner: a flat Rect becomes a box"],
+		["Wheel while drawing a Room", "Floors"],
+		["Wheel while pasting", "Paste one cell higher or lower"],
+		["Ctrl + wheel", "Floor y (World, Fluids)"],
+		["Alt · Shift + wheel — Add, Dig, Select", "Brush size · brush shape"],
+		["Alt · Shift + wheel — with a selection (Select, Rect, Box)", "Widen or shrink it flat · extend it up or down "
+			+ "(empty cells included, no matter added)"],
+		["Alt · Shift + wheel — Tunnel, Well, Bridge, Stairs", "Size · Depth, Reach or Length"],
+		["Ctrl + Shift + wheel — Stairs", "Step"],
+		["Alt · Shift + wheel — Room", "Floors · up or down"],
+		["Alt + wheel — Water", "River width"],
+		["Alt · Shift + wheel — Sculpt (Geometry)", "Radius · strength"],
+		["Alt · Shift + wheel — Paint (Texturing)", "Brush size · hardness"],
+	]))
 	l.append(_titre("Witness (modeller)"))
 	l.append(_table([
 		["Tab", "Edit mode on / off"], ["1 · 2 · 3", "Vertex · edge · face"], ["Click · Shift · Alt", "Select · add · loop"],
@@ -611,11 +638,12 @@ func _raccourcis_monde() -> Array:
 	return [
 		["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["A Z E Q S D", "Fly (Navigate)"],
 		["Right drag", "Look around (Navigate)"], ["A · D · S · R · B", "Add · Dig · Select · Rect · Box"],
-		["[  ]", "Brush size"], ["PgUp · PgDn", "Floor y"],
+		["[  ]", "Brush size"], ["PgUp · PgDn · Ctrl + wheel", "Floor y"], ["F", "Frame all the matter"],
 		["Ctrl+click", "Put the grid at the height of the matter clicked"],
 		["Arrows", "Move the selection (follows the camera)"], ["Shift + ↑ ↓", "Lift / lower the selection"],
 		["Del", "Delete the selection"], ["Esc", "Clear the selection · cancel a paste"],
 		["Ctrl+C · X · V", "Copy · cut · paste"], ["Ctrl+Z · Ctrl+Y", "Undo · redo"],
-		["Middle drag", "Turn the view"], ["Shift + middle drag", "Slide the view"], ["Wheel", "Zoom"],
+		["Middle drag", "Turn the view"], ["Shift + middle drag", "Slide the view"],
+		["Wheel", "Zoom — see « The mouse wheel » below"],
 		["F1", "This guide"],
 	]

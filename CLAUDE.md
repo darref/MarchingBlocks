@@ -40,6 +40,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
+  - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
+    Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
@@ -192,7 +194,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   chez l'acheteur — un addon Godot part en source, une DLL Unity se décompile. Des greffons gratuits vont
   là où l'on cherche (Asset Library Godot, Asset Store Unity, Fab) : c'est la DÉCOUVERTE du §10. Le
   format est décrit au §4.
-- **L'ÉDITEUR EST SPANNERGAMES INC. — DÉCIDÉ (Jordan, 29 septembre 2026).** Dans les propriétés de
+- **L'ÉDITEUR EST SPANNERGAMES — DÉCIDÉ (Jordan, 29 septembre 2026), SANS « Inc. » DEPUIS LE 3 OCTOBRE 2026** (il
+  n'y a pas de société : « Inc. » annonçait une société américaine qui n'existe pas). Dans les propriétés de
   l'exe (société, copyright) et tout à droite de la barre de titre, logo DÉTOURÉ
   (`MARQUE/spannergames_detoure.png` : le fond violet opaque de `spannergames.png` ferait un carré).
 - **LE SPLASH — DÉCIDÉ (Jordan, 29 septembre 2026) : un fond par logiciel, UNE signature pour tous.**
@@ -201,7 +204,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     vrai produit (`DEV_TOOLS/rendre_splash.gd` → `MARQUE/splash_fond.png`) ; la droite a été reprise dans
     Tripo par Jordan (`MARQUE/splash_fond_tripo.png`, gardée telle quelle). ⚠ C'est une image de
     présentation : l'interdit de Tripo (§3) porte sur le TÉMOIN qu'on texture, pas sur elle.
-  - **La signature** (logo détouré et « SpannerGames Inc. », en bas à droite, sur un voile flou) est
+  - **La signature** (logo détouré et « SpannerGames », en bas à droite, sur un voile flou) est
     collée par `MARQUE/composer_splash.py`, tailles proportionnelles à la hauteur. ⚠ **CE SCRIPT SE
     COPIE TEL QUEL dans chaque logiciel de Jordan**, avec le logo détouré : le retoucher dans un seul
     projet, c'est une signature qui diverge (§6). On ne colle jamais la signature à la main, et on
@@ -3008,9 +3011,13 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
 - **LES CASES DÉCOCHÉES ÉTAIENT INVISIBLES** (vu sur la même image) : les icônes par défaut de Godot sont gris foncé sur
   fond sombre. `Palette._case` les dessine (contour clair décoché, teinte de l'atelier cochée ; ronde pour un choix
   exclusif). Fumée (+1 : une case décochée a une icône claire). Vu à l'image.
-- ⚠ **L'EXEMPLE REPRIS À L'EXPORT DU 3 OCTOBRE PORTE 89 CONTACTS DIAGONAUX** (GreyRock 28 124 cases, Grass 51 914 —
-  17 et 152 cubes rouges) : `fumee_appli` (« ses tuiles, sans un cube rouge ») le refuse, et c'est juste — un exemple
-  livré ne doit pas en montrer. À réparer dans la source (Fix diagonal contacts), puis réemballer.
+- ~~**L'EXEMPLE REPRIS À L'EXPORT DU 3 OCTOBRE PORTE 89 CONTACTS DIAGONAUX**~~ — **RÉPARÉ (Jordan, 3 octobre 2026 :
+  « répare les contacts diagonaux de l'exemple »)** par `DEV_TOOLS/reparer_diagonales_exemple.gd` (mesure seule par
+  défaut ; `--ecrire` garde l'original en `test.mbproj.avant_diagonales`) : la règle de « Fix diagonal contacts », mode
+  COMBLER, sur l'union des couches visibles — rien n'est retiré ; chaque case ajoutée va à la couche de ses voisines.
+  **MESURÉ** sur la source du soir (277 574 cases visibles) : 69 contacts par arête, 135 cases ajoutées (toutes dans
+  « Desert »), 0 contact relu sur le disque (`MB.contacts_par_arete`, hors de la règle). Réemballé (12 fichiers, 75,5 Mo) ;
+  `fumee_appli` 694 / 694. ⚠ Pas regardé à l'image : les 135 cases comblent des creux d'une case en damier.
 - **L'OCÉAN N'EST JAMAIS REFUSÉ POUR SA TAILLE — DÉCIDÉ PAR JORDAN (3 octobre 2026)** : `FL.ocean` ne rend plus
   « trop_grand » (il va par tronçons de colonne, il ne s'emballe pas) ; les LACS et les rivières gardent leur garde
   (`FL.VOLUME_MAXI`, case par case). `test_fluides` : un océan au-delà de la borne est rendu, un lac au-delà est refusé.
@@ -3022,6 +3029,81 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
   Vert : les suites Godot, le banc .NET (121 cas d'outils) et le banc C++ (clang de Unity, drapeaux d'Unreal) ; Unity
   et Unreal non relancés (une constante).
 
+
+### FILL HOLES — DEMANDÉ PAR JORDAN (3 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « il ne manquerait pas un bouton en Geometry pour boucher les trous que l'édition du witness peut créer ? », puis
+« on pourrait quand même recréer les vertices nécessaires, forcément sur le plan de coupe, et essayer de les relier en
+faces au maillage d'à côté ». Avant : F sur un rebord choisi à la main, et rien ne disait qu'il y avait un trou.
+
+- **CE QU'EST UN TROU** (`MaillageEdite.trous`, `boucher_les_trous`) : une arête ouverte HORS des plans de coupe. Celles
+  qui sont SUR un plan (x, y, z = ±0,5 dans le repère de la tuile) sont sa section, refermée par la voisine du monde.
+  **MESURÉ : les 52 tuiles saines du témoin calculé n'en ont aucun.**
+- **UN TROU INTÉRIEUR** : une face qui suit la boucle à l'envers ; plane, un polygone, sinon un éventail autour de son
+  centre (un polygone gauche se replierait). Teinte et matériau de la face qui borde le trou.
+- **UN TROU QUI TOUCHE UN PLAN** a emporté un morceau de section, entre A et B. On la RECRÉE avec les points que la
+  section partagée attend (`Sections.manquants` : ceux de la classe, orbite comprise, que cette face n'a plus), rangés le
+  long du chemin, puis une face relie ce morceau au rebord. ⚠ PAS UNE LIGNE DROITE : elle n'est que le dernier recours,
+  une autre forme ouvrirait une fente à chaque joint. Le chemin : sur le plan commun de A et B ; ou par un COIN (deux
+  plans d'axes différents, un point attendu sur les deux, sinon l'arête de case au milieu) ; ou par DEUX coins (deux
+  plans parallèles : toute la bande d'un plan arrachée). ⚠ **UN BOUT POSÉ SUR DEUX PLANS LAISSE PLUSIEURS CHEMINS**, et
+  le premier venu passait à côté (au hasard : 132 / 156) — on garde celui qui RETROUVE le plus de points attendus.
+- **L'ÉCRAN** (Geometry, section Mesh) : **Fill holes** (la tuile en édition) et **Fill holes · all tiles**, UN Ctrl+Z
+  pour toutes (`Modeleur.boucher_les_trous`, puis la complétion des sections) ; une ligne compte les trous de la tuile
+  (relue quatre fois par seconde) ; ce qui reste (des points de section non recréés) est DIT — une fente restera là.
+  Le manuel (F1) le décrit.
+- **MESURÉ** : `test_maillage_edite` 189 (+9, attendus à la main : le cube, son trou plan et son rebord gauche en
+  éventail de 6, une tuile plate dont on ôte la moitié x > 0 — sans point attendu rien n'est inventé, avec les deux du
+  plan x+ la tuile revient, aire 1) ; `test_sections` 39 (+6, sur les VRAIS joints du témoin, hors du code éprouvé : une
+  face loin des plans, au bord, au coin, toute la bande du plan x+ — 488 et 1 342 sommets de joint sans partenaire
+  ramenés à 0 —, puis **153 arrachages sur 156** au hasard refermés jusque dans le monde) ; `fumee_appli` 729 (+6 : le
+  vrai bouton après X sur une face de bord, le compteur, les joints refermés, Ctrl+Z, Ctrl+Y).
+- ⚠ **CE QUI RESTE (3 sur 156)** : deux trous d'une même tuile qui se disputent des points ; un arrachage dont le nouveau
+  rebord tombe PILE sur le plan (il n'a alors aucune arête « hors plan » : rien n'est vu comme un trou). L'écran dit les
+  points non recréés.
+- ⚠ **PAS TENU EN MAIN.** Les greffons n'ont rien à porter (c'est le modeleur, dans l'appli seule).
+
+### LA MOLETTE — DEMANDÉE PAR JORDAN (3 octobre 2026), DÉCIDÉE ET ÉCRITE LE MÊME JOUR
+
+Jordan : « une utilisation du déroulement de la molette intelligemment pensée, et probablement différente pour les
+cibles […] faire un tour d'horizon global et inventer dans tout le soft là où c'est possible et utile ». Un état des lieux
+d'abord (la molette ne faisait que zoomer, plus le cercle C et le proportionnel du modeleur), puis ses réponses.
+
+- **LA RÈGLE — DÉCIDÉE** (`Editor._molette`, relayée par `Vue.molette_contextuelle`) :
+  - la molette SEULE reste le zoom, sauf PENDANT UN GESTE, dont elle règle la dimension : la hauteur d'un glissé de Rect
+    ou de Box (un Rect à plat devient une boîte, sans changer de visée), les étages d'une salle qu'on trace, la hauteur
+    d'un collage ;
+  - ALT + molette : la grandeur principale de l'outil (taille du pinceau, d'une forme, largeur de rivière, étages de
+    Room, rayon du sculpt, taille du pinceau de peinture) ; MAJ + molette : la seconde (forme du pinceau, Depth / Reach /
+    Length, Up / Down de Room, force du sculpt, dureté de la peinture) ; CTRL + MAJ : le pas de l'escalier ;
+  - CTRL + molette : l'étage de la grille (World, Fluids) ;
+  - avec une SÉLECTION et un outil de sélection (Select, Rect, Box), elle FAÇONNE la sélection : Maj l'étend en hauteur
+    (Extend selection ↑ ↓), Alt l'élargit d'une couronne À PLAT ou retire son bord (Shrink) — cases vides comprises,
+    rien n'est posé. ⚠ **PAS « Grow »**, qui ne garde que la matière : un Rect dans l'air disparaissait (vu en fumée) ;
+  - chaque cran est dit près de la souris (`Vue.montrer_valeur`) ; une taille de pinceau (sculpt, peinture) est
+    MULTIPLIÉE par 1,15 par cran (de 1 à 200 pixels, un par cran serait trop lent) ; un réglage entier avance d'un.
+- **NON (Jordan)** : pas de fonctions nouvelles nées de la molette (tourner un collage, plusieurs coupes au loop cut,
+  plusieurs segments au biseau).
+- **LES PANNEAUX — DÉCIDÉ (Jordan : « les ScrollContainer défilent si on est dessus et qu'on molette simple, et
+  uniquement eux »)**. MESURÉ (une sonde, Godot 4.7) : un curseur survolé changeait de valeur ET laissait défiler — en
+  descendant une barre, on déréglait ce qui passait sous la souris ; un compteur qui avait le focus prenait le cran et
+  bloquait le défilement. Tout `Slider` perd sa molette (`scrollable`), tout `SpinBox` lâche le focus au premier cran
+  (`_sans_molette`, branché sur `node_added` : ce qui naît plus tard aussi).
+- **F CADRE TOUTE LA MATIÈRE** (Jordan : « pour recentrer le monde sur voir toute la matière », puis « c'était F, pas
+  . ») — World et Fluids : la boîte de toutes les cases des couches visibles, sous l'angle où l'on regarde
+  (`Vue.cadrer_toute_la_matiere`). F reste le vol au Play test et Fill dans Geometry.
+- Le manuel (F1) a sa table « The mouse wheel ».
+- **MESURÉ** : `fumee_appli` (+29, de vrais crans dans la vue et sur un curseur de la barre : zoom seul, Alt / Maj /
+  Ctrl, un Rect haussé de deux crans → 27 cases, Maj → 36, Alt → 84 (une couronne à plat, compté à la main), une salle
+  tracée avec un cran → 82 cases de coque, Room / tunnel / escalier, le collage, Fluids, F au centre de la boîte relue
+  dans les grilles, aucun curseur ni compteur qui prend la molette, sculpt × 1,15, peinture 24 → 28). **Dix mutations
+  rouges** (pas de relais, curseurs, compteurs, relâché sans la hauteur, collage, F, Ctrl, facteur, couronne verticale,
+  salle) ; ⚠ la première passe du relais n'a RIEN éprouvé (« motif absent ») : une ligne de `vue.gd` avait été écrite
+  sans ses retours à la ligne — rejouée sur le bon texte.
+- ⚠ **DES LIGNES RECOLLÉES DANS LE DÉPÔT** : un script qui écrivait du GDScript laissait « \ + retour à la ligne »
+  disparaître — la condition restait valide, sur UNE ligne avec des tabulations au milieu. Trois autres du même genre,
+  d'avant (`editor.gd`, `eau_maillage.gd`, `test_fluides.gd`), remises sur plusieurs lignes.
+- ⚠ **PAS TENU EN MAIN.** En particulier : Alt + molette sur Windows (le système ne la prend pas, mesuré nulle part).
 
 ### LE DISQUE SOLAIRE DU PLAY TEST — DEMANDÉ PAR JORDAN (3 octobre 2026), ÉCRIT LE MÊME JOUR
 
@@ -3410,5 +3492,81 @@ désormais le greffon.
     est GRATUITE uniquement (un registre de liens, elle n'encaisse rien), donc un addon payant
     passe par itch.io ou Gumroad. ⚠ **La vraie différence n'est pas la commission, c'est la
     DÉCOUVERTE** : l'Asset Store Unity prend 30 % mais met l'outil devant des gens qui le
-    cherchent ; sur itch on amène son public soi-même. **OUVERT** — le nouveau « Godot Asset
-    Store » accepte-t-il le payant ? À vérifier chez eux, pas de mémoire.
+    cherchent ; sur itch on amène son public soi-même. ~~**OUVERT** — le nouveau « Godot Asset
+    Store » accepte-t-il le payant ?~~ **RELEVÉ LE 3 OCTOBRE 2026 : PAS ENCORE** (état de mai 2026) —
+    le store officiel (store.godotengine.org) existe, s'intègre à l'éditeur dès 4.7, mais le payant
+    viendra d'abord pour des créateurs choisis, puis pour tous. Sans effet sur le greffon GRATUIT, qui
+    peut y aller dès maintenant. (Le site tiers « Godot Marketplace » ferme le 30 octobre 2026.)
+    **LA VENTE ET LA PROMOTION — RECHERCHÉ LE 3 OCTOBRE 2026, À LA DEMANDE DE JORDAN** (« ça change très
+    vite »). ⚠ **CES FAITS VIENNENT SURTOUT DE COMPARATIFS ET DE BLOGS DATÉS 2026** : à relire sur les pages
+    officielles avant d'agir, et à reprendre si ce point attend plus de quelques mois. ⚠ Le document Claude
+    « MarchingBlocks — stratégie de lancement » (§0) date du 2 octobre et n'a PAS été repris ici.
+    - **DÉCIDÉ PAR DÉLÉGATION (Jordan, 3 octobre 2026 : « décide de ce qu'on va faire, je n'y connais rien en
+      commercialisation »)** — tout ce qui suit marqué PROPOSÉ l'est désormais, et le DÉTAIL vit dans le document
+      de stratégie (https://claude.ai/artifact/94nRFCsyzdAaE5ApoMz9Y2, section « Les décisions du 3 octobre
+      2026 »), mis à jour le même jour : 39 € en accès anticipé, −20 % la semaine du lancement ; 60 € à la 1.0
+      SEULEMENT si l'outil a fait ses preuves (avis, démos changées en achats — tranché en avril 2027 sur les
+      chiffres, sinon on reste à 39 €), la 1.0 offerte aux premiers acheteurs ;
+      site + Steam le même jour ; Paddle ; clé signée nominative, hors ligne, SANS limite de machines (le
+      document disait 3) ; greffons gratuits sur les quatre boutiques ; démo ; **le splash et l'icône, issus de
+      Tripo, DÉCLARÉS sur Steam (Jordan, 3 octobre 2026 : « je déclare les images »)** ; X et Bluesky à la main, deux
+      posts par semaine ; démarchage préparé par Claude, envoyé par Jordan, cinq par semaine dès le 21 décembre ;
+      aucune publicité au lancement ; aucun outil qui poste ou répond à notre place. Le calendrier ne bouge pas.
+      Le Next Fest semble réservé aux JEUX (les règles ne parlent que de jeux) : on ne compte pas dessus.
+    - **L'ICÔNE VIENT AUSSI DE TRIPO** : avec le splash, déclarée dans le formulaire d'IA de Steam (contenu
+      pré-généré, page et marketing) — DÉCIDÉ (Jordan, 3 octobre 2026), plutôt que les refaire.
+    - ⚠ **IL N'Y A PAS DE SOCIÉTÉ (Jordan, 3 octobre 2026)** : « SpannerGames Inc. » (§0, propriétés de l'exe, barre
+      de titre) annonçait une société américaine ou canadienne qui n'existe pas. **« Inc. » RETIRÉ (Jordan, 3 octobre
+      2026)** : `export_presets.cfg` (société, copyright), la barre de titre (`editor.gd`), `composer_splash.py` (son
+      nom par défaut — ⚠ À RECOPIER dans les autres logiciels de Jordan, la signature ne doit pas diverger), et
+      `MARQUE/splash.png` recomposé (fond Tripo remis en 1920 × 1080, vu à l'image). **PROPOSÉ** : une
+      micro-entreprise au nom de Jordan, « SpannerGames » en nom commercial ; Steamworks et Paddle demandent le
+      SIRET : c'est la première étape des comptes.
+      **VENTE OU PRESTATION ? RECHERCHÉ, PAS TRANCHÉ PAR UN TEXTE.** Le BOFiP ne nomme pas les logiciels : la
+      première catégorie (203 100 € en 2026) est le commerce de « marchandises, objets, fournitures et denrées »,
+      tout le reste va à la seconde (83 600 €). Une licence n'est ni un objet ni une marchandise, et pour la TVA la
+      concession d'une licence de logiciel EST une prestation de services. Des guides disent « vente », d'autres
+      « prestation » (21,2 % de cotisations). **PROPOSÉ** : déclarer en PRESTATION DE SERVICES BIC (la lecture
+      prudente — se tromper dans l'autre sens, c'est un redressement) et poser la question écrite à l'URSSAF à la
+      création ; la différence ne compte qu'au-delà de 83 600 € par an.
+    - **DÉCIDÉ (Jordan, 3 octobre 2026) — LE LOGICIEL SE TÉLÉCHARGE SUR NOTRE SITE** : « pas de site si on y
+      télécharge pas le soft, c'est contre-productif ». **PROPOSÉ, le comment** : le paiement s'ouvre en
+      surcouche sur notre page, tenu par un *merchant of record* (vendeur légal : TVA par pays, factures,
+      fraude, remboursements) ; son webhook inscrit l'acheteur ; « My downloads » par lien magique envoyé à
+      l'e-mail (des connexions Google / Discord / GitHub en option) ; le fichier sert depuis un stockage
+      (Cloudflare R2) par lien signé de quelques minutes ; la même page porte les versions de l'accès anticipé.
+      Et une clé de licence SIGNÉE (Ed25519, clé publique dans l'exe), vérifiée HORS LIGNE. ⚠ Comme le
+      chiffrement (§0), rien de cela n'empêche de copier l'exe : ça rend l'achat honnête simple.
+    - **LE VENDEUR LÉGAL** : **Paddle**, 5 % + 0,50 $ tout compris, stable — **PROPOSÉ**. ⚠ **PAS LEMON
+      SQUEEZY** : racheté par Stripe (2024), qui ouvre en février 2026 *Stripe Managed Payments* (préversion,
+      vendeurs de l'UE acceptés, ~6,4 % + 0,30 $, 8 %+ à l'international), bâti par son équipe et annoncé comme
+      son « avenir » — y commencer, c'est s'imposer une migration. À regarder quand il sortira de préversion.
+    - **STEAM** (la page du 21 décembre, §0) : des clés Steam peuvent aller aux acheteurs directs — prix pas plus
+      bas que sur Steam, environ 5 000 clés, jamais un commerce de clés sans offre sur Steam. Les Next Fest sont en
+      février, juin, octobre (celui de février 2027 tombe APRÈS le lancement du 12 janvier : à reconsidérer).
+      ⚠ **L'IA SE DÉCLARE SUR STEAM, PAGE ET MARKETING COMPRIS** (règles du 17 janvier 2026 : les outils de
+      développement — le code écrit avec Claude — sont exemptés ; ce que le joueur VOIT ne l'est pas). **LE SPLASH
+      L'EST** : sa moitié droite a été reprise dans Tripo (§0). À déclarer, ou à refaire.
+    - **X (TWITTER)** : ⚠ **LES THREADS NE SONT PLUS LE FORMAT QUI PORTE** — l'algorithme de 2026 préfère un long
+      post unique ; un lien dans le post coûte 30 à 50 % de portée (bien plus, selon des essais) : le lien va en
+      PREMIÈRE RÉPONSE ; une réponse pèse ~150 fois un like, donc on écrit pour faire répondre. Ce qui marche pour
+      les outils de jeu : de courts GIF d'UN geste satisfaisant (une falaise peinte, une cascade qui se forme),
+      #ScreenshotSaturday, les ratés montrés. ⚠ **LES BOTS DE RÉPONSE SONT INTERDITS** (avril 2026 : réponses
+      automatiques sur mots-clés bannies, réponses par API seulement si l'on est mentionné ; 42 000 comptes
+      supprimés) — les « outils qui s'annoncent sur Twitter » pour répondre à notre place font perdre le compte.
+      Permis : programmer, rédiger avec l'IA, publier soi-même. **PROPOSÉ** : pousser de 100 à 200 $ les seuls
+      posts qui ont déjà pris seuls (« paid organic »).
+    - **DÉMARCHER AVEC CLAUDE** : des agents (Claude Code et ses « skills ») trouvent des contacts, écrivent et
+      envoient. ⚠ **EN FRANCE** : le B2B sans consentement est permis si le message touche le MÉTIER du
+      destinataire, expéditeur identifié, désinscription simple traitée sous 10 jours ; le profilage par l'IA est un
+      traitement RGPD ; **les pixels d'ouverture exigent un consentement depuis la recommandation CNIL du 12 mars
+      2026**. Les chiffres de réponse annoncés (15 à 25 %) viennent des vendeurs de ces outils. **PROPOSÉ** : Claude
+      pour PRÉPARER — la liste des chaînes YouTube Godot / Unity / Unreal, des newsletters gamedev, des studios qui
+      font du voxel ou de la tuile, un message propre à chacun — et Jordan qui ENVOIE, peu et bien, sans pixel. Un
+      envoi automatique en masse vers des créateurs, c'est le spam qui fait fermer les portes du §10.
+    - **LES CRÉATEURS** : Keymailer (55 000 créateurs inscrits, gratuit jusqu'à 10 demandes par mois) et Lurkit
+      (campagnes payées, ~89 $/mois, remise indé) — conçus pour des JEUX ; un outil de gamedev a peut-être plus à
+      gagner à écrire directement aux chaînes de tutoriels Godot / Unity / Unreal (OUVERT).
+    - **REDDIT** : r/godot accepte l'autopromotion avec mesure, r/gamedev la restreint ; l'IA pour aider à écrire
+      est admise sur le site, chaque sous-forum peut l'interdire ; la règle 90/10 (contribuer bien plus que
+      promouvoir) et dire qui l'on est.

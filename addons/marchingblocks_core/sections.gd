@@ -235,6 +235,44 @@ func completer(sauver := Callable()) -> Dictionary:
 	return {"touchees": touchees.keys(), "coupes": coupes, "echecs": echecs}
 
 
+## LES POINTS QUI MANQUENT À UNE TUILE (Jordan, 3 octobre 2026, « Fill holes ») : sur chaque face de classe de `cle`, les
+## points de sa classe (orbite comprise) qu'elle ne porte pas — dans le repère de la tuile, {Vector2i(axe, signe):
+## [Vector3]}. Ce sont ceux qu'un trou qui touche ce plan a emportés, et que le bouchage doit recréer pour que la section
+## rejoigne celle des tuiles d'en face. La même règle que `completer`, sans rien insérer.
+func manquants(cle: String) -> Dictionary:
+	indexer()
+	var racines := {}
+	for i in (bords.get(cle, {}) as Dictionary):
+		for f in bords[cle][i]:
+			if not racines.has(f["noeud"]):
+				racines[f["noeud"]] = {}
+			racines[f["noeud"]][f["q"]] = true
+	var sortie := {}
+	for k in points.size():
+		var orbite := {}
+		for canon in points[k]:
+			for h in _groupes[k]:
+				orbite[appliquer_i(h, canon)] = true
+		for n in _noeuds_de_classe[k]:
+			var p: PackedStringArray = String(n).split("|")
+			if p[0] != cle:
+				continue
+			var axe := int(p[1])
+			var signe := int(p[2])
+			var presents: Dictionary = racines.get(n, {})
+			for r in orbite:
+				if presents.has(r):
+					continue
+				var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
+				var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
+				q3[axe] = 0.5 * signe
+				var plan := Vector2i(axe, signe)
+				if not sortie.has(plan):
+					sortie[plan] = []
+				sortie[plan].append(q3)
+	return sortie
+
+
 ## Une arête dont les deux bouts sont sur le plan (axe, signe) et qui contient `p` STRICTEMENT entre eux.
 func _arete_de_bord_qui_contient(m: RefCounted, axe: int, signe: int, p: Vector3) -> Vector2i:
 	var plan := 0.5 * signe

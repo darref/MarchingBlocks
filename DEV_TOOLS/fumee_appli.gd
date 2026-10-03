@@ -472,6 +472,8 @@ func _mener() -> void:
 	await _la_barre_des_gestes(ed)
 	await _la_barre_de_droite_tient(ed)
 	await _les_teintes_des_ateliers(ed)
+	await _la_molette(ed)
+	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -1499,6 +1501,29 @@ func _les_gestes_topologiques_gardent_les_sections(ed: Control) -> void:
 	mo.operer("supprimer")
 	_vrai(ed._rapport.text.contains("changed the shape of a tile border") and ed._rapport.text.contains("gap"),
 		"supprimer une face de bord change la forme de la section : l'écran dit qu'il y aura une fente")
+	# FILL HOLES (3 octobre 2026), par le VRAI bouton : le compteur voit le trou ; le bouton le bouche, la section du bord
+	# est recréée — les vrais joints du monde se referment (attendu : `_sans_partenaire`, hors du code éprouvé) ; UN Ctrl+Z
+	# rend le trou, Ctrl+Y le rebouche.
+	var ouverts := _sans_partenaire(t)
+	ed._dire_les_trous(true)
+	_vrai(ouverts > 0 and ed._trous_texte.text == "1 hole(s) in this tile.",
+		"le compteur voit le trou (« %s », %d sommets de joint sans partenaire)" % [ed._trous_texte.text, ouverts])
+	var bouton: Button = null
+	for b in ed.find_children("*", "Button", true, false):
+		if (b as Button).text == "Fill holes":
+			bouton = b
+	_vrai(bouton != null, "le bouton « Fill holes » existe dans Geometry")
+	if bouton != null:
+		bouton.pressed.emit()
+		_vrai(mo.maillage.trous() == 0 and _sans_partenaire(t) == 0 and ed._rapport.text.contains("Fill holes")
+			and ed._rapport.text.contains("tile border"),
+			"Fill holes : plus de trou, la section rebâtie, tous les joints du monde refermés (%d)" % _sans_partenaire(t))
+		_vrai(ed._trous_texte.text == "No hole in this tile.", "… et le compteur le dit")
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		_vrai(mo.maillage.trous() == 1 and _sans_partenaire(t) == ouverts, "UN Ctrl+Z rend le trou")
+		ed._unhandled_key_input(_cle(KEY_Y, true))
+		_vrai(mo.maillage.trous() == 0 and _sans_partenaire(t) == 0, "Ctrl+Y le rebouche")
+		ed._unhandled_key_input(_cle(KEY_Z, true))
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 
 
@@ -3780,6 +3805,191 @@ func _vider_dossier(chemin: String) -> void:
 	for f in DirAccess.get_files_at(chemin):
 		DirAccess.remove_absolute(chemin.path_join(f))
 	DirAccess.remove_absolute(chemin)
+
+
+## ── LA MOLETTE DU CONTEXTE (Jordan, 3 octobre 2026) ────────────────────────────────────────────────────────────────
+## De VRAIS crans envoyés à la vue (`_gui_input`) et aux panneaux (`push_input`). ⚠ Les attendus sont écrits ICI (le pas
+## de chaque réglage, des volumes comptés à la main, la boîte de la matière relue dans les grilles), jamais lus dans
+## `_molette`.
+var _molette_finie := false
+
+
+func _cran(vue: Control, sens: int, alt := false, maj := false, ctrl := false) -> void:
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_WHEEL_UP if sens > 0 else MOUSE_BUTTON_WHEEL_DOWN
+	e.pressed = true
+	e.alt_pressed = alt
+	e.shift_pressed = maj
+	e.ctrl_pressed = ctrl
+	e.position = vue._derniere_souris if vue._derniere_souris.x >= 0.0 else vue.size * 0.5
+	vue._gui_input(e)
+
+
+func _la_molette(ed: Control) -> void:
+	var vue = ed._vue
+	var g: GridMap = vue.cases()
+	ed._aller_a("monde")
+	ed._choisir_visee("grille")
+	ed._compteur_etage.value = 0
+	ed._choisir_outil("ajouter")
+	ed._taille.value = 2
+	vue.forme = "sphere"
+	_viser_d_en_haut(vue, Vector3(301.5, 0.0, 301.5))
+	_bouge(vue, vue.size * 0.5)
+	var d0: float = vue._distance
+	_cran(vue, 1)
+	_vrai(vue._distance < d0 and int(ed._taille.value) == 2, "molette seule : la vue zoome, la taille ne bouge pas")
+	var d1: float = vue._distance
+	_cran(vue, 1, true)
+	_vrai(int(ed._taille.value) == 3 and is_equal_approx(vue._distance, d1) and vue.taille == 3,
+		"Alt + molette : la taille du pinceau 2 → 3, sans zoomer")
+	_vrai(vue.bulle_visible() == "Brush size 3", "… et la valeur est dite près de la souris (« %s »)" % vue.bulle_visible())
+	_cran(vue, -1, true)
+	_egal(int(ed._taille.value), 2, "Alt + molette vers le bas : 3 → 2")
+	_cran(vue, 1, false, true)
+	_egal(vue.forme, "cube", "Maj + molette : la forme du pinceau suivante (sphère → cube)")
+	_cran(vue, 1, false, false, true)
+	_vrai(int(ed._compteur_etage.value) == 1 and vue.etage == 1, "Ctrl + molette : l'étage de la grille 0 → 1")
+	_cran(vue, -1, false, false, true)
+	_egal(vue.etage, 0, "… et 1 → 0")
+	# UN RECT QU'ON HAUSSE PENDANT LE GLISSÉ : 3 × 3 à plat sur l'étage 0, deux crans vers le haut → 3 × 3 × 3 = 27 cases,
+	# de y = 0 à 2, rien de posé.
+	ed._choisir_outil("rect")
+	vue.vider_selection()
+	var avant: int = g.get_used_cells().size()
+	var a: Vector2 = vue._camera.unproject_position(Vector3(300.5, 0.0, 300.5))
+	var b: Vector2 = vue._camera.unproject_position(Vector3(302.5, 0.0, 302.5))
+	_souris(vue, a, MOUSE_BUTTON_LEFT, true)
+	_bouge(vue, b)
+	_cran(vue, 1)
+	_cran(vue, 1)
+	_vrai(vue.bulle_visible() == "Height +2", "pendant le glissé, la molette seule hausse le Rect (« %s »)" % vue.bulle_visible())
+	_souris(vue, b, MOUSE_BUTTON_LEFT, false)
+	_vrai(vue.selection.size() == 27 and vue.selection.has(Vector3i(300, 2, 300)) and vue.selection.has(Vector3i(302, 0, 302))
+		and not vue.selection.has(Vector3i(300, 3, 300)), "… relâché : un volume de 3 × 3 × 3 = 27 cases (%d)" % vue.selection.size())
+	_egal(g.get_used_cells().size(), avant, "… et rien n'est posé")
+	# LA SÉLECTION QU'ON FAÇONNE : Maj l'étend en hauteur (une rangée de 9 au-dessus : 36), sans rien poser ; Alt la fait
+	# grandir, puis rétrécir.
+	ed._choisir_outil("selectionner")
+	_cran(vue, 1, false, true)
+	_vrai(vue.selection.size() == 36 and vue.selection.has(Vector3i(301, 3, 301)) and g.get_used_cells().size() == avant,
+		"Select + Maj + molette : la sélection monte d'une rangée (36), rien n'est posé (%d)" % vue.selection.size())
+	_cran(vue, 1, true)
+	var grandie: int = vue.selection.size()
+	# Une couronne à plat autour du 3 × 3 : 3 × 3 + 4 côtés de 3 = 21 par rangée, sur 4 rangées.
+	_vrai(grandie == 84 and vue.selection.has(Vector3i(303, 0, 301)) and not vue.selection.has(Vector3i(303, 0, 303))
+		and g.get_used_cells().size() == avant, "Alt + molette : la sélection s'élargit d'une couronne à plat, cases vides comprises (84 : %d)" % grandie)
+	_cran(vue, -1, true)
+	_vrai(vue.selection.size() < grandie, "Alt + molette vers le bas : elle rétrécit (%d)" % vue.selection.size())
+	vue.vider_selection()
+	# LA SALLE QU'ON TRACE : 5 × 4, 2 étages, un cran vers le haut pendant le glissé → 3 étages. La coque d'un pavé de
+	# 5 × 4 × 5 moins son dedans de 3 × 2 × 3 : 100 − 18 = 82 cases (2 étages : 80 − 12 = 68).
+	ed._choisir_forme_speciale("salle")
+	ed._etages_forme.value = 2
+	a = vue._camera.unproject_position(Vector3(300.5, 0.0, 300.5))
+	b = vue._camera.unproject_position(Vector3(304.5, 0.0, 303.5))
+	_souris(vue, a, MOUSE_BUTTON_LEFT, true)
+	_bouge(vue, b)
+	_cran(vue, 1)
+	_souris(vue, b, MOUSE_BUTTON_LEFT, false)
+	_vrai(int(ed._etages_forme.value) == 3 and g.get_used_cells().size() == avant + 82,
+		"la molette pendant le tracé d'une salle : 3 étages, 82 cases de coque (%d)" % (g.get_used_cells().size() - avant))
+	ed._histoire.undo()
+	_cran(vue, -1, true)
+	_egal(int(ed._etages_forme.value), 2, "Room, Alt + molette : les étages 3 → 2")
+	_cran(vue, -1, false, true)
+	_vrai(not bool(vue.forme_speciale["vers_le_haut"]), "Room, Maj + molette vers le bas : elle descendra")
+	_cran(vue, 1, false, true)
+	_vrai(bool(vue.forme_speciale["vers_le_haut"]), "… vers le haut : elle montera")
+	# UNE FORME : Alt la taille, Maj la profondeur (Depth du tunnel).
+	ed._choisir_forme_speciale("tunnel")
+	var t0 := int(ed._taille_forme.value)
+	var l0 := int(ed._longueur_forme.value)
+	_cran(vue, 1, true)
+	_cran(vue, 1, false, true)
+	_vrai(int(ed._taille_forme.value) == t0 + 1 and int(vue.forme_speciale["taille"]) == t0 + 1
+		and int(ed._longueur_forme.value) == l0 + 1, "tunnel : Alt + molette la taille %d → %d, Maj la profondeur %d → %d"
+		% [t0, t0 + 1, l0, l0 + 1])
+	ed._choisir_forme_speciale("escalier")
+	var p0 := int(ed._pas_forme.value)
+	_cran(vue, -1 if p0 > 1 else 1, false, true, true)
+	_vrai(int(ed._pas_forme.value) != p0, "escalier : Ctrl + Maj + molette règle le pas")
+	# LE COLLAGE : un cran le monte d'une case au-dessus de la face visée.
+	ed._choisir_outil("ajouter")
+	vue.commencer_collage([Vector3i.ZERO])
+	_bouge(vue, vue.size * 0.5)
+	_cran(vue, 1)
+	_egal(vue.hauteur_collage, 1, "pendant un collage, la molette seule le monte d'une case")
+	vue.annuler_collage()
+	# FLUIDS : Alt la largeur de la rivière.
+	ed._aller_a("fluides")
+	ed._largeur_eau.value = 1
+	_cran(vue, 1, true)
+	_egal(int(ed._largeur_eau.value), 2, "Fluids, Alt + molette : la largeur de rivière 1 → 2")
+	ed._largeur_eau.value = 1
+	# F CADRE TOUTE LA MATIÈRE (Jordan : « c'était F ») : la cible au centre de la boîte des cases visibles, relue ici
+	# dans les grilles.
+	ed._aller_a("monde")
+	var lo := Vector3i(1073741824, 1073741824, 1073741824)
+	var hi := -lo
+	for i in vue.nombre_de_couches():
+		var m := vue.couche(i) as Node3D
+		if m.visible:
+			for c: Vector3i in (m.get_node("Cases") as GridMap).get_used_cells():
+				lo = Vector3i(mini(lo.x, c.x), mini(lo.y, c.y), mini(lo.z, c.z))
+				hi = Vector3i(maxi(hi.x, c.x), maxi(hi.y, c.y), maxi(hi.z, c.z))
+	ed._unhandled_key_input(_cle(KEY_F))
+	var centre := (Vector3(lo) + Vector3(hi) + Vector3.ONE) * 0.5
+	_vrai((vue._cible as Vector3).distance_to(centre) < 1e-3, "F : la vue vise le centre de toute la matière (%s)" % centre)
+	var coin: Vector2 = vue._camera.unproject_position(Vector3(lo))
+	var coin2: Vector2 = vue._camera.unproject_position(Vector3(hi) + Vector3.ONE)
+	_vrai(Rect2(Vector2.ZERO, vue.size).grow(2.0).has_point(coin) and Rect2(Vector2.ZERO, vue.size).grow(2.0).has_point(coin2),
+		"… et ses coins sont à l'écran")
+	# LES PANNEAUX : aucun curseur ni compteur ne prend la molette, seules les zones défilantes.
+	var curseurs := ed.find_children("*", "Slider", true, false)
+	_vrai(curseurs.size() > 10 and curseurs.all(func(c): return not (c as Slider).scrollable),
+		"aucun curseur des panneaux ne prend la molette (%d curseurs)" % curseurs.size())
+	var compteurs := ed.find_children("*", "SpinBox", true, false)
+	_vrai(compteurs.size() > 3 and compteurs.all(func(c): return c.has_meta("mb_sans_molette")),
+		"chaque compteur lâche le focus au premier cran (%d compteurs)" % compteurs.size())
+	# Un vrai cran sur le curseur de taille, dans la barre de droite : la valeur ne bouge pas.
+	ed._taille.value = 4
+	var sur: Vector2 = (ed._taille as Control).get_global_rect().get_center()
+	var survol := InputEventMouseMotion.new()
+	survol.position = sur
+	survol.global_position = sur
+	root.push_input(survol)
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	e.pressed = true
+	e.position = sur
+	e.global_position = sur
+	root.push_input(e)
+	await process_frame
+	_egal(int(ed._taille.value), 4, "un cran de molette SUR le curseur de taille ne le change pas")
+	# GEOMETRY : Alt le rayon du sculpt (× 1,15), Maj sa force (+ un vingtième de sa course : 0,0475).
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	ed._bouton_sculpt.button_pressed = true
+	ed._curseurs_sculpt["sculpt_rayon"].value = 0.4
+	ed._curseurs_sculpt["sculpt_force"].value = 0.5
+	_cran(vue, 1, true)
+	_cran(vue, 1, false, true)
+	_vrai(absf(mo.sculpt_rayon - 0.46) < 0.006 and absf(mo.sculpt_force - 0.55) < 0.006,
+		"sculpt : Alt + molette le rayon 0,4 → 0,46, Maj la force 0,5 → 0,55 (%.3f, %.3f)" % [mo.sculpt_rayon, mo.sculpt_force])
+	ed._bouton_sculpt.button_pressed = false
+	# TEXTURING : Alt la taille du pinceau (24 × 1,15 = 27,6 → 28 px).
+	ed._aller_a("texture")
+	ed._regler_edition(true)
+	mo.regler_pinceau(true)
+	ed._curseurs_pinceau["pinceau_taille"].value = 24
+	_cran(vue, 1, true)
+	_vrai(absf(mo.pinceau_taille - 28.0) < 0.01, "peinture : Alt + molette la taille 24 → 28 px (%.1f)" % mo.pinceau_taille)
+	mo.regler_pinceau(false)
+	ed._regler_edition(false)
+	ed._aller_a("monde")
+	_molette_finie = true
 
 
 func _souris(vue: Control, ou: Vector2, bouton: int, appuye: bool, ctrl := false, maj := false) -> void:

@@ -30,6 +30,8 @@ func _initialize() -> void:
 	_la_propagation_garde_les_joints(t, paires)
 	_plusieurs_sources_un_mouvement(t, paires)
 	_la_completion(t)
+	var t2: RefCounted = TL.depuis_le_temoin_calcule()
+	_boucher_les_trous(t2, Sections.new(t2))
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -346,6 +348,94 @@ func _arete_de_bord(s, t: RefCounted, cas: String) -> Dictionary:
 
 
 ## Les sommets posés sur le plan d'un joint du témoin qui n'ont PAS de partenaire exact dans la tuile d'en face.
+## FILL HOLES SUR LE VRAI TÉMOIN (3 octobre 2026). L'attendu ne passe ni par `boucher_les_trous` ni par `Sections` : ce
+## sont les VRAIS joints du témoin (`_sans_partenaire`), qui doivent se refermer. Des faces de la paroi arrachées — loin
+## des plans, au bord, au bord avec sa voisine, au coin, toute la bande du plan x+ —, puis 156 arrachages au hasard
+## (graine fixe) dans les 52 tuiles.
+func _boucher_les_trous(t: RefCounted, s: RefCounted) -> void:
+	var total := 0
+	for c in t.tuiles:
+		total += t.tuiles[c].trous()
+	_dire(total == 0, "trous : aucune des 52 tuiles saines n'en a (leurs bords ouverts sont tous sur les plans de coupe)")
+	var cle := "mb_plaque_b2h2_dehors"
+	var m: RefCounted = t.tuiles[cle]
+	var loin := -1
+	var bord := -1
+	var coin := -1
+	var bande: Array = []
+	for f in m.faces.size():
+		var plans := 0
+		var x_plus := false
+		for i in m.faces[f]:
+			var p: Vector3 = m.sommets[i]
+			var n := 0
+			for axe in 3:
+				if absf(absf(p[axe]) - 0.5) < 0.0005:
+					n += 1
+			plans = maxi(plans, n)
+			x_plus = x_plus or absf(p.x - 0.5) < 0.0005
+		if plans == 0 and loin < 0:
+			loin = f
+		if plans >= 1 and bord < 0:
+			bord = f
+		if plans >= 2 and coin < 0:
+			coin = f
+		if x_plus:
+			bande.append(f)
+	for essai in [["loin des plans", [loin]], ["au bord", [bord]], ["au coin", [coin]], ["la bande du plan x+", bande]]:
+		var sauve: RefCounted = m.copie()
+		m.supprimer_faces(essai[1])
+		var ouverts := _sans_partenaire(t)
+		var r: Dictionary = m.boucher_les_trous(s.manquants(cle))
+		s.completer()
+		_dire(m.trous() == 0 and _sans_partenaire(t) == 0 and (essai[0] == "loin des plans" or ouverts > 0),
+			"Fill holes, %s (%s) : plus de trou, et les vrais joints se referment (%d sommets sans partenaire → %d)"
+			% [essai[0], essai[1], ouverts, _sans_partenaire(t)])
+		t.tuiles[cle] = sauve
+		m = sauve
+		s.indexer()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261003
+	var reussis := 0
+	var essais := 0
+	for c in t.tuiles.keys():
+		for k in 3:
+			var mt: RefCounted = t.tuiles[c]
+			var sv: RefCounted = mt.copie()
+			var fs: Array = [rng.randi_range(0, mt.faces.size() - 1)]
+			for j in rng.randi_range(0, 2):
+				var v := _une_voisine(mt, fs[-1])
+				if v >= 0 and not fs.has(v):
+					fs.append(v)
+			mt.supprimer_faces(fs)
+			essais += 1
+			var r: Dictionary = mt.boucher_les_trous(s.manquants(c))
+			s.completer()
+			if mt.trous() == 0 and _sans_partenaire(t) == 0 and int(r["echecs"]) == 0:
+				reussis += 1
+			t.tuiles[c] = sv
+			s.indexer()
+	# ⚠ MESURÉ, PAS PARFAIT : 153 sur 156 (deux trous d'une tuile qui se disputent des points ; un rebord tombé pile sur
+	# un plan). L'écran dit ce qui reste ; ce seuil garde qu'on ne recule pas.
+	_dire(reussis >= 153, "Fill holes au hasard : %d / %d arrachages refermés jusque dans les joints du monde" % [reussis, essais])
+
+
+func _une_voisine(m: RefCounted, f: int) -> int:
+	var a := {}
+	for i in m.faces[f]:
+		a[i] = true
+	for g in m.faces.size():
+		if g == f:
+			continue
+		var n := 0
+		for i in m.faces[g]:
+			if a.has(i):
+				n += 1
+		if n >= 2:
+			return g
+	return -1
+
+
 func _sans_partenaire(t: RefCounted) -> int:
 	var occ := {}
 	for o in t.occurrences:

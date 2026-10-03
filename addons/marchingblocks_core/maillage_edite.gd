@@ -1657,6 +1657,305 @@ func _reboucher(avant: Dictionary) -> void:
 		_ajouter(boucle, teintes[0] if not teintes.is_empty() else Color.WHITE, mat(0) if not faces.is_empty() else -1)
 
 
+## ── LES TROUS (Jordan, 3 octobre 2026 : « un bouton en Geometry pour boucher les trous que l'édition du witness peut
+## créer », puis « recréer les vertices nécessaires sur le plan de coupe, et les relier en faces au maillage d'à côté ») ──
+##
+## Une tuile est OUVERTE PAR CONSTRUCTION sur ses plans de coupe (x, y, z = ±0,5 dans son repère) : ses arêtes ouvertes
+## qui y sont posées SONT sa section, que la voisine du monde referme. Un TROU, c'est une arête ouverte HORS d'un plan :
+##   - un trou INTÉRIEUR (sa boucle ne touche aucun plan) se bouche par une face qui suit la boucle à l'envers ;
+##   - un trou qui TOUCHE un plan de coupe a ôté un morceau de la section : son rebord arrive sur le plan en A et B. On
+##     RECRÉE la section entre A et B avec les points que la section partagée attend (`manquants`, de `Sections`), dans
+##     l'ordre le long de AB, puis une face relie ce morceau au rebord. ⚠ PAS SEULEMENT UNE LIGNE DROITE : la section
+##     est partagée avec toutes les tuiles d'en face ; une autre forme y ouvrirait une fente à chaque joint. La ligne
+##     droite n'est que ce qui reste quand aucun point n'est attendu entre A et B.
+##   - A et B sur deux plans d'axes différents (un coin arraché) : le chemin passe par l'arête de case qui les joint —
+##     un point attendu sur les deux plans s'il y en a un, sinon le point de cette arête au milieu de A et B.
+## Une face plane bouche d'un seul polygone ; un rebord gauche, d'un éventail autour de son centre (sinon le polygone se
+## replierait). La face prend la teinte et le matériau de la face qui borde le trou.
+const PLAN_EPS := 0.0005
+
+
+## Les plans de coupe sur lesquels un point est posé : [Vector2i(axe, signe)].
+static func plans_de(p: Vector3) -> Array:
+	var sortie: Array = []
+	for axe in 3:
+		for signe in [-1, 1]:
+			if absf(p[axe] - 0.5 * signe) < PLAN_EPS:
+				sortie.append(Vector2i(axe, signe))
+	return sortie
+
+
+## Les arêtes orientées ouvertes (sans jumelle) : {Vector2i(a, b): face}.
+func _aretes_ouvertes() -> Dictionary:
+	var orientees := {}
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		for k in face.size():
+			orientees[Vector2i(face[k], face[(k + 1) % face.size()])] = f
+	var ouvertes := {}
+	for e: Vector2i in orientees:
+		if not orientees.has(Vector2i(e.y, e.x)):
+			ouvertes[e] = orientees[e]
+	return ouvertes
+
+
+## Une arête ouverte posée SUR un plan de coupe (ses deux bouts sur un même plan) : c'est la section, pas un trou.
+func _sur_une_coupe(a: int, b: int) -> bool:
+	for p in plans_de(sommets[a]):
+		if p in plans_de(sommets[b]):
+			return true
+	return false
+
+
+## Les boucles d'arêtes ouvertes, chacune dans le sens de ses bords : [{"boucle": [sommets], "faces": [face de chaque
+## arête]}]. Une boucle qui ne se referme pas est comptée dans `ouvertes_seules`.
+func _boucles_ouvertes() -> Dictionary:
+	var ouvertes := _aretes_ouvertes()
+	var suivants := {}
+	for e: Vector2i in ouvertes:
+		if not suivants.has(e.x):
+			suivants[e.x] = []
+		suivants[e.x].append(e.y)
+	var vues := {}
+	var boucles: Array = []
+	var seules := 0
+	var cles: Array = ouvertes.keys()
+	cles.sort()
+	for e0: Vector2i in cles:
+		if vues.has(e0):
+			continue
+		var boucle: Array = [e0.x]
+		var fs: Array = []
+		var e := e0
+		var ok := false
+		while true:
+			vues[e] = true
+			fs.append(ouvertes[e])
+			if e.y == e0.x:
+				ok = true
+				break
+			boucle.append(e.y)
+			var suite := -1
+			for b in suivants.get(e.y, []):
+				if not vues.has(Vector2i(e.y, b)):
+					suite = b
+					break
+			if suite < 0:
+				break
+			e = Vector2i(e.y, suite)
+		if ok and boucle.size() >= 3:
+			boucles.append({"boucle": boucle, "faces": fs})
+		else:
+			seules += 1
+	return {"boucles": boucles, "ouvertes_seules": seules}
+
+
+## Combien de TROUS (des boucles qui ont au moins une arête hors des plans de coupe).
+func trous() -> int:
+	var n := 0
+	for b: Dictionary in _boucles_ouvertes()["boucles"]:
+		var bl: Array = b["boucle"]
+		for k in bl.size():
+			if not _sur_une_coupe(bl[k], bl[(k + 1) % bl.size()]):
+				n += 1
+				break
+	return n
+
+
+## Bouche les trous. `manquants` : {Vector2i(axe, signe): [Vector3]} — les points que la section partagée attend sur
+## chaque plan de cette tuile et qu'elle n'a pas (`Sections.manquants`) ; vide, chaque morceau de section est droit.
+## Rend {"interieurs", "sur_coupe", "points" (sommets de section recréés), "echecs"}.
+func boucher_les_trous(manquants: Dictionary = {}) -> Dictionary:
+	var r := {"interieurs": 0, "sur_coupe": 0, "points": 0, "echecs": 0}
+	var lu := _boucles_ouvertes()
+	r["echecs"] = int(lu["ouvertes_seules"])
+	# 1. Les morceaux : les trous intérieurs, et, dans chaque boucle de bord, chaque suite d'arêtes HORS des plans.
+	var interieurs: Array = []
+	var morceaux: Array = []   # {"suite": [A … B], "face": f, "plans": [segments]}
+	for b: Dictionary in lu["boucles"]:
+		var bl: Array = b["boucle"]
+		var n := bl.size()
+		var coupe: Array = []
+		for k in n:
+			coupe.append(_sur_une_coupe(bl[k], bl[(k + 1) % n]))
+		if not coupe.has(true):
+			interieurs.append({"boucle": bl, "face": b["faces"][0]})
+			continue
+		if not coupe.has(false):
+			continue
+		var debut := coupe.find(true)
+		var k := 0
+		while k < n:
+			var i := (debut + k) % n
+			if coupe[i]:
+				k += 1
+				continue
+			var suite: Array = [bl[i]]
+			var f: int = b["faces"][i]
+			while k < n and not coupe[(debut + k) % n]:
+				suite.append(bl[((debut + k) % n + 1) % n])
+				k += 1
+			morceaux.append({"suite": suite, "face": f})
+	# 2. Le chemin de chaque morceau, sur les plans de ses bouts : des segments [plan, P0, P1]. ⚠ UN BOUT POSÉ SUR DEUX
+	# PLANS (une arête de case) laisse plusieurs chemins possibles, et le premier venu passait à côté de la section
+	# arrachée (mesuré au hasard : 24 essais sur 156) — on garde celui qui RETROUVE le plus de points attendus ; à égalité,
+	# le plus court en segments.
+	for m: Dictionary in morceaux:
+		var pa: Vector3 = sommets[m["suite"][0]]
+		var pb: Vector3 = sommets[m["suite"][-1]]
+		var meilleure := {}
+		var score := -1
+		for route: Dictionary in _routes(pa, pb, plans_de(pa), plans_de(pb), manquants):
+			var n := _points_sur_la_route(route["segments"], manquants)
+			if n > score or (n == score and (route["segments"] as Array).size() < (meilleure["segments"] as Array).size()):
+				score = n
+				meilleure = route
+		m["segments"] = meilleure.get("segments", [])
+		m["coins"] = meilleure.get("coins", [])
+	# 3. Chaque point attendu va au segment le plus proche de son plan ; les points trop loin de tout segment restent.
+	var attribues := {}   # "morceau|segment" → [[t, point]]
+	for plan: Vector2i in manquants:
+		for q: Vector3 in manquants[plan]:
+			var meilleur := INF
+			var ou := ""
+			var t_ou := 0.0
+			for mi in morceaux.size():
+				var segs: Array = morceaux[mi].get("segments", [])
+				for si in segs.size():
+					if segs[si][0] != plan:
+						continue
+					var p0: Vector3 = segs[si][1]
+					var p1: Vector3 = segs[si][2]
+					var ab := p1 - p0
+					var l2 := maxf(ab.length_squared(), 1e-12)
+					var t := clampf((q - p0).dot(ab) / l2, 0.0, 1.0)
+					var d := q.distance_to(p0 + ab * t)
+					if t > 1e-4 and t < 1.0 - 1e-4 and d < meilleur and d < 0.25 + 0.5 * sqrt(l2):
+						meilleur = d
+						ou = "%d|%d" % [mi, si]
+						t_ou = t
+			if ou != "":
+				if not attribues.has(ou):
+					attribues[ou] = []
+				attribues[ou].append([t_ou, q])
+	# 4. Les faces.
+	for t in interieurs:
+		var bl: Array = (t["boucle"] as Array).duplicate()
+		bl.reverse()
+		_boucher(bl, t["face"])
+		r["interieurs"] += 1
+	for mi in morceaux.size():
+		var m: Dictionary = morceaux[mi]
+		var segs: Array = m.get("segments", [])
+		if segs.is_empty():
+			r["echecs"] += 1
+			continue
+		var chemin: Array = []   # A → B, sans A ni B
+		for si in segs.size():
+			var pts: Array = attribues.get("%d|%d" % [mi, si], [])
+			pts.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
+			for x in pts:
+				chemin.append(_sommet_a(x[1]))
+			if si < segs.size() - 1:
+				chemin.append(_sommet_a(m["coins"][si]))
+		r["points"] += chemin.size()
+		var poly: Array = (m["suite"] as Array).duplicate()
+		poly.reverse()   # B … A, les arêtes du rebord à l'envers
+		poly.append_array(chemin)   # puis A → B le long de la section : la nouvelle section, dans le sens du bord
+		_boucher(poly, m["face"])
+		r["sur_coupe"] += 1
+	return r
+
+
+## Les chemins possibles de A à B sur les plans de coupe : directs (un plan commun), par un coin (deux plans d'axes
+## différents), par deux coins (un plan d'entre deux plans parallèles, parmi ceux qui attendent des points).
+static func _routes(pa: Vector3, pb: Vector3, plans_a: Array, plans_b: Array, manquants: Dictionary) -> Array:
+	var routes: Array = []
+	for x in plans_a:
+		if x in plans_b:
+			routes.append({"segments": [[x, pa, pb]], "coins": []})
+	for x in plans_a:
+		for y in plans_b:
+			if x.x != y.x:
+				var e := _coin(x, y, pa, pb, manquants)
+				routes.append({"segments": [[x, pa, e], [y, e, pb]], "coins": [e]})
+	for x in plans_a:
+		for y in plans_b:
+			for z: Vector2i in manquants:
+				if z.x != x.x and z.x != y.x and z != x and z != y:
+					var e1 := _coin(x, z, pa, pb, manquants)
+					var e2 := _coin(z, y, pa, pb, manquants)
+					routes.append({"segments": [[x, pa, e1], [z, e1, e2], [y, e2, pb]], "coins": [e1, e2]})
+	return routes
+
+
+## Combien de points attendus tombent le long d'une route (sur le plan d'un segment, entre ses bouts, près de lui).
+static func _points_sur_la_route(segments: Array, manquants: Dictionary) -> int:
+	var n := 0
+	for sg in segments:
+		var p0: Vector3 = sg[1]
+		var p1: Vector3 = sg[2]
+		var ab := p1 - p0
+		var l2 := maxf(ab.length_squared(), 1e-12)
+		for q: Vector3 in manquants.get(sg[0], []):
+			var t := (q - p0).dot(ab) / l2
+			if t > -1e-4 and t < 1.0 + 1e-4 and q.distance_to(p0 + ab * clampf(t, 0.0, 1.0)) < 0.25 + 0.5 * sqrt(l2):
+				n += 1
+	return n
+
+
+## Le coin du chemin entre les plans `p1` et `p2` (d'axes différents) : sur l'arête de case qui les joint — un point
+## attendu sur les deux plans s'il y en a un (le plus proche), sinon le point de cette arête au milieu de A et B.
+static func _coin(p1: Vector2i, p2: Vector2i, pa: Vector3, pb: Vector3, manquants: Dictionary) -> Vector3:
+	var e := (pa + pb) * 0.5
+	e[p1.x] = 0.5 * p1.y
+	e[p2.x] = 0.5 * p2.y
+	var meilleur := INF
+	var choisi := e
+	for q: Vector3 in manquants.get(p1, []):
+		if p2 in plans_de(q) and q.distance_to(e) < meilleur:
+			meilleur = q.distance_to(e)
+			choisi = q
+	return choisi
+
+
+## Le sommet à cette position (un existant à 1e-5 près), ou un neuf.
+func _sommet_a(p: Vector3) -> int:
+	for i in sommets.size():
+		if sommets[i].distance_to(p) < 1e-5:
+			return i
+	sommets.append(p)
+	return sommets.size() - 1
+
+
+## Une face qui suit `poly` (déjà dans le bon sens) : un polygone s'il est plan, sinon un éventail autour de son
+## centre. Teinte et matériau de la face `f` qui borde le trou.
+func _boucher(poly: Array, f: int) -> void:
+	var c := Vector3.ZERO
+	for i in poly:
+		c += sommets[i]
+	c /= float(poly.size())
+	var n := Vector3.ZERO   # Newell
+	for k in poly.size():
+		var a: Vector3 = sommets[poly[k]]
+		var b: Vector3 = sommets[poly[(k + 1) % poly.size()]]
+		n += Vector3((a.y - b.y) * (a.z + b.z), (a.z - b.z) * (a.x + b.x), (a.x - b.x) * (a.y + b.y))
+	var plan := n.length() > 1e-9
+	if plan:
+		n = n.normalized()
+		for i in poly:
+			if absf((sommets[i] - c).dot(n)) > 1e-3:
+				plan = false
+				break
+	var teinte: Color = teintes[f] if f < teintes.size() else Color.WHITE
+	if plan:
+		_ajouter(PackedInt32Array(poly), teinte, mat(f))
+		return
+	var ic := _sommet_a(c)
+	for k in poly.size():
+		_ajouter(PackedInt32Array([ic, poly[k], poly[(k + 1) % poly.size()]]), teinte, mat(f))
+
+
 ## K — LE COUTEAU : une coupe qui suit des points posés SUR DES ARÊTES, `[{"arete": Vector2i, "t": float}…]`
 ## (t de x vers y). Deux points consécutifs doivent border une MÊME face : elle est fendue entre eux. Chaque
 ## point neuf entre aussi dans l'autre face de son arête (pas de fente en T). Rend les sommets neufs, ou []

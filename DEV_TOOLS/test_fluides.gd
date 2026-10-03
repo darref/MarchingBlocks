@@ -411,7 +411,8 @@ func _ocean_par_colonnes() -> void:
 			for f in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0), Vector3i(0, 0, 1),
 					Vector3i(0, 0, -1)]:
 				var v: Vector3i = c + f
-				if v.y > niveau or attendu.has(v) or m.has(v) or v.x < lo.x or v.y < lo.y or v.z < lo.z 						or v.x > hi.x or v.y > hi.y or v.z > hi.z:
+				if v.y > niveau or attendu.has(v) or m.has(v) or v.x < lo.x or v.y < lo.y or v.z < lo.z \
+						or v.x > hi.x or v.y > hi.y or v.z > hi.z:
 					continue
 				attendu[v] = true
 				file.append(v)
@@ -549,7 +550,8 @@ func _reprise() -> void:
 			var b: Dictionary = complet["corps"][i]
 			if is_same(a, prec["corps"][i]):
 				reprises += 1
-			if [a["genre"], a["erreur"], a["niveau"], a["fin"], _cours(a)] != [b["genre"], b["erreur"], b["niveau"], b["fin"], _cours(b)] 					or a["eau"].size() != b["eau"].size() or not b["eau"].keys().all(func(k): return a["eau"].has(k)):
+			if [a["genre"], a["erreur"], a["niveau"], a["fin"], _cours(a)] != [b["genre"], b["erreur"], b["niveau"], b["fin"], _cours(b)] \
+					or a["eau"].size() != b["eau"].size() or not b["eau"].keys().all(func(k): return a["eau"].has(k)):
 				ecarts += 1
 		if repris["ocean"].size() != complet["ocean"].size():
 			ecarts += 1

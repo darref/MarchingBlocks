@@ -171,6 +171,14 @@ var _derniere := ""
 ## Le verrou de coup : ce qu'un coup d'AJOUT a posé, que son rayon traverse (`Outils.rayon`).
 var _pose_du_coup := {}
 var _derniere_souris := Vector2(-1, -1)
+## LA MOLETTE DU CONTEXTE (Jordan, 3 octobre 2026 : « une utilisation de la molette intelligemment pensée ») — l'écran
+## la règle : f(sens: int, b: InputEventMouseButton) -> bool, vrai s'il a pris le cran. Sinon la molette zoome.
+var molette_contextuelle: Callable
+## La HAUTEUR d'un glissé de boîte ou de Rect (la molette pendant le glissé) : le second coin monte ou descend d'autant —
+## un Rect tracé à plat devient une boîte, sans changer de visée. Remise à 0 à chaque glissé.
+var hauteur_glisse := 0
+## La hauteur du COLLAGE au-dessus de la face visée (la molette pendant le collage). Remise à 0 à chaque collage.
+var hauteur_collage := 0
 ## La boîte en cours de tracé : ses deux coins, et si Maj était tenue au départ.
 var _coin_boite: Variant = null
 var _coin_fin: Variant = null
@@ -694,6 +702,13 @@ func _gui_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
+		# LA MOLETTE DU CONTEXTE (Jordan, 3 octobre 2026) : l'écran la prend d'abord — pendant un geste, ou avec Alt, Maj,
+		# Ctrl —, sinon elle zoome (`molette_contextuelle`, qui rend vrai s'il a pris le cran).
+		if b.pressed and b.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] \
+				and molette_contextuelle.is_valid() \
+				and molette_contextuelle.call(1 if b.button_index == MOUSE_BUTTON_WHEEL_UP else -1, b):
+			accept_event()
+			return
 		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_UP:
 			# Dans le témoin on modélise de PRÈS : une case entière doit pouvoir remplir l'écran.
 			_distance = maxf(1.0 if mode == "temoin" else 4.0, _distance / 1.12)
@@ -929,7 +944,7 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		if bouton == MOUSE_BUTTON_LEFT:
 			var point := point_vise(position, "ajouter")
 			if not point.is_empty():
-				colle.emit(Outils.ancre("ajouter", point))
+				colle.emit(Outils.ancre("ajouter", point) + Vector3i(0, hauteur_collage, 0))
 		annuler_collage()
 		return
 	if outil == "forme" and _est_salle():
@@ -956,6 +971,7 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		_maj_du_coup = maj
 		_coin_boite = depart["case"]
 		_coin_fin = depart["case"]
+		hauteur_glisse = 0
 		_survoler_boite(position)
 		return
 	_coup = bouton
@@ -1003,7 +1019,7 @@ func _survoler_boite(position: Vector2) -> void:
 	if not point.is_empty():
 		_coin_fin = point["case"]
 	var a: Vector3i = _coin_boite
-	var b: Vector3i = _coin_fin
+	var b: Vector3i = _fin_du_glisse()
 	var bas := Vector3i(mini(a.x, b.x), mini(a.y, b.y), mini(a.z, b.z))
 	var haut := Vector3i(maxi(a.x, b.x), maxi(a.y, b.y), maxi(a.z, b.z))
 	var taille_boite := Vector3(haut - bas + Vector3i.ONE)
@@ -1019,8 +1035,89 @@ func _volume_vise(a: Vector3i, b: Vector3i) -> Dictionary:
 	return Outils.volume_de_la_boite(a, b, creux and outil == "boite")
 
 
+## Le second coin d'un glissé de boîte ou de Rect, haussé de `hauteur_glisse`.
+func _fin_du_glisse() -> Vector3i:
+	return (_coin_fin as Vector3i) + Vector3i(0, hauteur_glisse, 0)
+
+
+## Ce que la molette règle pendant un glissé : "boite", "rect", "salle", ou "" hors d'un glissé.
+func glisse_en_cours() -> String:
+	if _coup < 0 or _coin_boite == null:
+		return ""
+	return "salle" if _est_salle() else outil
+
+
+## La molette pendant un glissé de boîte ou de Rect : son second coin monte ou descend d'une case.
+func hausser_le_glisse(sens: int) -> int:
+	hauteur_glisse = clampi(hauteur_glisse + sens, -64, 64)
+	if _derniere_souris.x >= 0.0:
+		_survoler_boite(_derniere_souris)
+	return hauteur_glisse
+
+
+## La molette pendant un collage : il monte ou descend d'une case au-dessus de la face visée.
+func hausser_le_collage(sens: int) -> int:
+	hauteur_collage = clampi(hauteur_collage + sens, -64, 64)
+	if _derniere_souris.x >= 0.0:
+		_survoler_collage(_derniere_souris)
+	return hauteur_collage
+
+
+## LA BULLE DE LA MOLETTE : la valeur qu'un cran vient de régler, près de la souris, une seconde et demie.
+var _bulle: Label
+var _bulle_jusqua := 0
+
+
+func montrer_valeur(texte: String) -> void:
+	if _bulle == null:
+		_bulle = Label.new()
+		_bulle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_bulle.add_theme_font_size_override("font_size", 15)
+		_bulle.add_theme_color_override("font_color", Color(1, 1, 1))
+		_bulle.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		_bulle.add_theme_constant_override("outline_size", 6)
+		add_child(_bulle)
+	_bulle.text = texte
+	_bulle.position = (_derniere_souris if _derniere_souris.x >= 0.0 else size * 0.5) + Vector2(18, 14)
+	_bulle.visible = true
+	_bulle_jusqua = Time.get_ticks_msec() + 1500
+	get_tree().create_timer(1.6).timeout.connect(func() -> void:
+		if _bulle != null and Time.get_ticks_msec() >= _bulle_jusqua:
+			_bulle.visible = false)
+
+
+func bulle_visible() -> String:
+	return _bulle.text if _bulle != null and _bulle.visible else ""
+
+
+## F DANS WORLD ET FLUIDS (Jordan, 3 octobre 2026 : « pour recentrer le monde sur toute la matière ») : la vue cadre la boîte de
+## toutes les cases des couches visibles, sous l'angle où l'on regarde. Rend faux s'il n'y a rien à cadrer.
+func cadrer_toute_la_matiere() -> bool:
+	var lo := Vector3i(2147483647, 2147483647, 2147483647)
+	var hi := -lo
+	var vide := true
+	for m in _couches.get_children():
+		if not (m as Node3D).visible:
+			continue
+		for c: Vector3i in (m.get_node("Cases") as GridMap).get_used_cells():
+			lo = Vector3i(mini(lo.x, c.x), mini(lo.y, c.y), mini(lo.z, c.z))
+			hi = Vector3i(maxi(hi.x, c.x), maxi(hi.y, c.y), maxi(hi.z, c.z))
+			vide = false
+	if vide:
+		return false
+	var bas := Vector3(lo)
+	var haut := Vector3(hi) + Vector3.ONE
+	_cible = (bas + haut) * 0.5
+	# La sphère qui contient la boîte, vue sous le champ de la caméra, avec un peu de marge.
+	var rayon := (haut - bas).length() * 0.5
+	var demi_champ := deg_to_rad(_camera.fov) * 0.5
+	_distance = clampf(rayon / sin(demi_champ) * 1.05, 4.0, DISTANCE_MAXI_MONDE)
+	_caler()
+	return true
+
+
 func _finir_boite(bouton: int) -> void:
-	var dedans: Dictionary = _volume_vise(_coin_boite, _coin_fin)
+	var dedans: Dictionary = _volume_vise(_coin_boite, _fin_du_glisse())
 	if dedans.is_empty():
 		boite_trop_grande.emit()
 	var nouvelle: Dictionary = selection.duplicate() if _maj_du_coup or bouton == MOUSE_BUTTON_RIGHT else {}
@@ -1246,6 +1343,7 @@ func _occupees_actives() -> Dictionary:
 ## LE COLLAGE : le presse-papiers suit la souris, contre la face visée, en vert là où il posera.
 func commencer_collage(presse_papiers: Array) -> void:
 	collage = presse_papiers
+	hauteur_collage = 0
 	rafraichir()
 
 
@@ -1260,7 +1358,7 @@ func _survoler_collage(position: Vector2) -> void:
 	if point.is_empty():
 		_apercu.visible = false
 		return
-	var ancre_: Vector3i = Outils.ancre("ajouter", point)
+	var ancre_: Vector3i = Outils.ancre("ajouter", point) + Vector3i(0, hauteur_collage, 0)
 	var ou: Array = []
 	for d in collage:
 		ou.append(ancre_ + (d as Vector3i))

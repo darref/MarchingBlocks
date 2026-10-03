@@ -327,6 +327,7 @@ func _regler_fenetre() -> void:
 
 func _process(delta: float) -> void:
 	_suivre_le_geste()
+	_dire_les_trous()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
 	Peinture.suivre_les_cartes()
 	_dire_l_etat_pbr()
@@ -382,6 +383,7 @@ func _batir() -> void:
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
+	_vue.molette_contextuelle = _molette
 	_vue.boite_trop_grande.connect(func() -> void:
 		_dire("[color=#e0603c]Box too large[/color] — more than %d cells. Draw a smaller one." \
 			% Outils.VOLUME_MAXI))
@@ -414,6 +416,8 @@ func _batir() -> void:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
+		get_tree().node_added.connect(_sans_molette)
+	_sans_molette_partout(self)
 	# LA LÉGENDE DES FORMES, en haut de la vue ENTRE les deux barres (Jordan, 29 septembre 2026).
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
@@ -567,7 +571,7 @@ func _barre_titre() -> Control:
 		logo.custom_minimum_size = Vector2(20, 20)
 		ligne.add_child(logo)
 	var editeur := Label.new()
-	editeur.text = "SpannerGames Inc."
+	editeur.text = "SpannerGames"
 	editeur.add_theme_color_override("font_color", Palette.GRIS)
 	editeur.add_theme_font_size_override("font_size", 12)
 	ligne.add_child(editeur)
@@ -1735,7 +1739,8 @@ func _recalculer_eau(avec_barre := true) -> void:
 			_materiaux_eau[preset] = EauPresets.materiau(preset)
 		# Le maillage d'une couche dont tous les corps sont repris est repris aussi : il ne lit que leurs emprises.
 		var m: ArrayMesh = null
-		if i < _maillages_eau.size() and (_maillages_eau[i][0] as Array).size() == corps.size() 				and range(corps.size()).all(func(j): return is_same(_maillages_eau[i][0][j], corps[j])):
+		if i < _maillages_eau.size() and (_maillages_eau[i][0] as Array).size() == corps.size() \
+				and range(corps.size()).all(func(j): return is_same(_maillages_eau[i][0][j], corps[j])):
 			m = _maillages_eau[i][1]
 		else:
 			m = EauMaillage.maillage(corps, _occ_eau)
@@ -2776,6 +2781,17 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: F closes it.",
 			func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
 	], 2))
+	# FILL HOLES (Jordan, 3 octobre 2026) : boucher les trous de la tuile, ou de toutes ; la section arrachée d'un bord est
+	# recréée avec les points que les tuiles d'en face partagent. Le compteur dit s'il y en a, avant que le monde le montre.
+	_trous_texte = _texte("", 11, Palette.GRIS)
+	mesh.contenu.add_child(_trous_texte)
+	mesh.contenu.add_child(_grille([
+		_bouton("Fill holes", "Closes every hole of this tile. A hole that reaches a cut plane gets its border back: the "
+			+ "points the next tiles share are rebuilt on the plane, then joined to the rim — no gap in the world.",
+			func() -> void: _boucher_les_trous(false), "remplir"),
+		_bouton("Fill holes · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
+			func() -> void: _boucher_les_trous(true), "remplir"),
+	], 2))
 
 	var vue := Section.new("View", true, Icones.icone("oeil"))
 	pile.add_child(vue)
@@ -3518,6 +3534,29 @@ func _occurrence_de_depart(t: RefCounted) -> int:
 			meilleure = c
 	var liste: Array = t.occurrences_de(meilleure)
 	return int(liste[0]) if not liste.is_empty() else 0
+
+
+var _trous_texte: Label
+var _trous_lus_a := 0
+
+
+func _boucher_les_trous(toutes: bool) -> void:
+	_regler_edition(true)
+	_modeleur.boucher_les_trous(toutes)
+	_dire_les_trous(true)
+
+
+## Le compteur de trous, sous les boutons : relu au plus quatre fois par seconde, dans Geometry, en édition.
+func _dire_les_trous(tout_de_suite := false) -> void:
+	if _trous_texte == null or _atelier != "witness" or not _vue.edition:
+		return
+	var maintenant := Time.get_ticks_msec()
+	if not tout_de_suite and maintenant - _trous_lus_a < 250:
+		return
+	_trous_lus_a = maintenant
+	var n: int = _modeleur.trous_de_la_tuile()
+	_trous_texte.text = "No hole in this tile." if n == 0 else "%d hole(s) in this tile." % n
+	_trous_texte.add_theme_color_override("font_color", Palette.GRIS if n == 0 else Color("#e0603c"))
 
 
 func _geste_modeleur(nom: String) -> void:
@@ -4965,6 +5004,142 @@ func _rangee_de_choix(boutons: Dictionary, choix: Array, action: Callable, varia
 	return ligne
 
 
+## DANS LES PANNEAUX, LA MOLETTE SEULE NE FAIT QUE DÉFILER — DÉCIDÉ (Jordan, 3 octobre 2026 : « les ScrollContainer
+## défilent si on est dessus et qu'on molette simple, et uniquement eux »). MESURÉ (sonde, Godot 4.7) : un curseur
+## (`Slider`) survolé changeait de valeur ET laissait défiler — en descendant la barre, on déréglait ce qui passait sous
+## la souris ; un compteur (`SpinBox`) qui a le focus (on vient d'y taper) prenait le cran et bloquait le défilement.
+## Le curseur perd sa molette (`scrollable`) ; le compteur lâche le focus au premier cran, qui part alors au défilement.
+func _sans_molette(n: Node) -> void:
+	if n is Slider:
+		(n as Slider).scrollable = false
+	elif n is SpinBox and not n.has_meta("mb_sans_molette"):
+		var sb := n as SpinBox
+		sb.set_meta("mb_sans_molette", true)
+		sb.gui_input.connect(func(e: InputEvent) -> void:
+			var m := e as InputEventMouseButton
+			if m != null and m.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+				sb.get_line_edit().release_focus())
+
+
+func _sans_molette_partout(n: Node) -> void:
+	_sans_molette(n)
+	for c in n.get_children():
+		_sans_molette_partout(c)
+
+
+## LA MOLETTE DU CONTEXTE — DÉCIDÉ (Jordan, 3 octobre 2026), une seule règle partout :
+##   - la molette SEULE reste le zoom, sauf PENDANT UN GESTE, dont elle règle la dimension (la hauteur d'un glissé de
+##     Rect ou de boîte, les étages d'une salle qu'on trace, la hauteur d'un collage) ;
+##   - ALT + molette : la grandeur PRINCIPALE de l'outil actif ; MAJ + molette : sa grandeur SECONDE ;
+##   - CTRL + molette : l'étage de la grille (PgUp / PgDn), là où il y a une grille.
+## Avec une SÉLECTION et un outil de sélection (Select, Rect, Box), la molette FAÇONNE la sélection : Maj l'étend en
+## hauteur (Extend selection ↑ ↓, cases vides comprises, rien n'est posé), Alt l'élargit d'une couronne à plat (cases
+## vides comprises) ou retire son bord (Shrink).
+## Chaque cran est dit près de la souris (`Vue.montrer_valeur`). Rend vrai si le cran est pris (sinon : zoom).
+func _molette(sens: int, b: InputEventMouseButton) -> bool:
+	var alt := b.alt_pressed
+	var maj := b.shift_pressed
+	var ctrl := b.ctrl_pressed or b.meta_pressed
+	if _atelier in ["monde", "fluides"]:
+		return _molette_du_monde(sens, alt, maj, ctrl)
+	if _atelier in ["witness", "texture"] and _vue.edition and (alt or maj) and not ctrl:
+		if _modeleur.sculpt and _atelier == "witness":
+			return _cran(_curseurs_sculpt.get("sculpt_rayon" if alt else "sculpt_force"), sens,
+				"Sculpt radius" if alt else "Sculpt strength", 1.15 if alt else 0.0)
+		if _modeleur.pinceau and _atelier == "texture":
+			return _cran(_curseurs_pinceau.get("pinceau_taille" if alt else "pinceau_durete"), sens,
+				"Brush size" if alt else "Brush hardness", 1.15 if alt else 0.0)
+	return false
+
+
+func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
+	if _vue.naviguer:
+		return false
+	var outil: String = _vue.outil
+	# Pendant un geste : la molette seule.
+	if not (alt or maj or ctrl):
+		if not _vue.collage.is_empty():
+			_vue.montrer_valeur("Paste height %+d" % _vue.hausser_le_collage(sens))
+			return true
+		match _vue.glisse_en_cours():
+			"boite", "rect":
+				var h: int = _vue.hausser_le_glisse(sens)
+				_vue.montrer_valeur("Height %+d" % h if h != 0 else "Flat")
+				return true
+			"salle":
+				return _cran(_etages_forme, sens, "Floors")
+		return false
+	if ctrl and maj and outil == "forme" and _vue.forme_speciale["quoi"] == "escalier":
+		return _cran(_pas_forme, sens, "Step")
+	if ctrl:
+		return _cran(_compteur_etage, sens, "Floor")
+	if outil == "eau":
+		return _cran(_largeur_eau, sens, "River width") if alt else false
+	if outil == "forme":
+		if _vue.forme_speciale["quoi"] == "salle":
+			if alt:
+				return _cran(_etages_forme, sens, "Floors")
+			_regler_le_sens_de_salle("haut" if sens > 0 else "bas")
+			_vue.montrer_valeur("Rises" if sens > 0 else "Sinks")
+			return true
+		if alt:
+			return _cran(_taille_forme, sens, "Size")
+		if _ligne_longueur.visible:
+			return _cran(_longueur_forme, sens, _etiquette_longueur.text)
+		return true
+	if not _vue.selection.is_empty() and outil in ["selectionner", "rect", "boite"]:
+		var avant: int = _vue.selection.size()
+		if maj:
+			_extruder("haut" if sens > 0 else "bas", "etendre")
+		elif sens > 0:
+			# ÉLARGIR D'UNE COURONNE, À PLAT, CASES VIDES COMPRISES — comme « Extend selection », rien n'est posé. ⚠ PAS
+			# « Grow », qui ne garde que la matière : une sélection de volume (un Rect dans l'air) disparaissait.
+			var large := {}
+			for c: Vector3i in _vue.selection:
+				large[c] = true
+				for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+					large[c + d] = true
+			_vue.regler_selection(large)
+		else:
+			_vue.regler_selection(Outils.operer_selection(_occupees(), _vue.selection, "retrecir_bord")["selection"])
+		_vue.montrer_valeur("%s — %d cells" % [("Extend ↑" if sens > 0 else "Extend ↓") if maj
+			else ("Widen" if sens > 0 else "Shrink"), _vue.selection.size()] if _vue.selection.size() != avant
+			else "Selection unchanged")
+		return true
+	if outil in ["ajouter", "creuser", "selectionner"]:
+		if alt:
+			return _cran(_taille, sens, "Brush size")
+		var formes: Array = _boutons_forme.keys()
+		var f: String = formes[posmod(formes.find(_vue.forme) + sens, formes.size())]
+		_choisir_forme(f)
+		_vue.montrer_valeur((_boutons_forme[f] as Button).text)
+		return true
+	return false
+
+
+## F (Jordan, 3 octobre 2026 : « pour recentrer le monde sur voir toute la matière », « c'était F ») : la vue cadre toute
+## la matière des couches visibles, dans World et Fluids. ⚠ F est le vol au Play test, et Fill dans Geometry : ailleurs.
+func _cadrer_tout_le_monde() -> void:
+	if not _vue.cadrer_toute_la_matiere():
+		_dire("[i]Nothing to frame:[/i] the visible layers hold no cell.")
+
+
+## Un cran de molette sur un réglage (`Range` : curseur ou compteur) : son pas s'il est entier, un vingtième de sa
+## course s'il est continu — ou, avec `facteur`, la valeur MULTIPLIÉE (une taille de pinceau, de 1 à 200 pixels : un
+## pixel par cran serait trop lent, comme le rayon du cercle C). La valeur est dite près de la souris ; le réglage fait
+## le reste (son signal, comme à la main).
+func _cran(r: Range, sens: int, nom: String, facteur := 0.0) -> bool:
+	if r == null:
+		return false
+	if facteur > 0.0:
+		r.value = clampf(r.value * pow(facteur, sens), r.min_value, r.max_value)
+	else:
+		var pas: float = r.step if r.step >= 1.0 else (r.max_value - r.min_value) / 20.0
+		r.value = clampf(r.value + sens * pas, r.min_value, r.max_value)
+	_vue.montrer_valeur("%s %s" % [nom, str(int(r.value)) if r.step >= 1.0 else "%.2f" % r.value])
+	return true
+
+
 func _choisir_forme(f: String) -> void:
 	_vue.forme = f
 	(_boutons_forme[f] as Button).button_pressed = true
@@ -6027,6 +6202,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				_compteur_etage.value += 1
 			KEY_PAGEDOWN:
 				_compteur_etage.value -= 1
+			KEY_F:
+				_cadrer_tout_le_monde()
 			_:
 				return
 		get_viewport().set_input_as_handled()
@@ -6068,6 +6245,8 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			_compteur_etage.value += 1
 		KEY_PAGEDOWN:
 			_compteur_etage.value -= 1
+		KEY_F:
+			_cadrer_tout_le_monde()
 		KEY_DELETE:
 			_operer_selection("supprimer")
 		KEY_ESCAPE:

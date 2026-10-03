@@ -1258,6 +1258,65 @@ func annuler() -> void:
 	dit.emit("[i]Cancelled.[/i]")
 
 
+## FILL HOLES (Jordan, 3 octobre 2026 : « un bouton en Geometry pour boucher les trous que l'édition du witness peut
+## créer », puis « recréer les vertices nécessaires sur le plan de coupe et les relier au maillage d'à côté ») — la tuile
+## en édition, ou `toutes`. Le cœur bouche (`MaillageEdite.boucher_les_trous`, avec les points que la section partagée
+## attend : `Sections.manquants`), puis la complétion reporte ce qui doit l'être chez les autres tuiles ; UN geste, une
+## annulation pour toutes. ⚠ CE QUI RESTE EST DIT : des points de section que le bouchage n'a pas su recréer (mesuré : 3
+## arrachages sur 156 au hasard) laisseront une fente dans le monde.
+## Rend {"bouches", "sur_coupe", "points", "restants"} (ou {} hors d'édition).
+func boucher_les_trous(toutes: bool) -> Dictionary:
+	if maillage == null or modal != "":
+		return {}
+	var cles: Array = temoin.tuiles.keys() if toutes else [cle]
+	var avant := {}
+	var bilan := {"bouches": 0, "sur_coupe": 0, "points": 0, "restants": 0}
+	for c in cles:
+		var m: RefCounted = temoin.tuiles[c]
+		if m.trous() == 0:
+			continue
+		avant[c] = m.copie()
+		var r: Dictionary = m.boucher_les_trous(sections.manquants(c) if sections != null else {})
+		bilan["bouches"] += int(r["interieurs"]) + int(r["sur_coupe"])
+		bilan["sur_coupe"] += int(r["sur_coupe"])
+		bilan["points"] += int(r["points"])
+	if avant.is_empty():
+		dit.emit("[i]No hole in %s.[/i] A hole is an open edge away from the tile's cut planes — the open edges ON them "
+			% ("any tile" if toutes else "this tile") + "are its border, closed by the next tile in the world.")
+		return bilan
+	if sections != null:
+		sections.completer(func(c: String) -> void:
+			if not avant.has(c):
+				avant[c] = temoin.tuiles[c].copie())
+		for c in avant:
+			for plan in sections.manquants(c):
+				bilan["restants"] += (sections.manquants(c)[plan] as Array).size()
+	_vider_selection()
+	var lot_avant := TL.Lot.new()
+	var lot_apres := TL.Lot.new()
+	for c in avant:
+		lot_avant.tuiles[c] = avant[c]
+		lot_apres.tuiles[c] = temoin.tuiles[c].copie()
+		if c != cle:
+			_rafraichir_tuile(c)
+	change.emit(lot_avant, lot_apres, "Fill holes")
+	redessiner()
+	var texte := "[b]Fill holes[/b] — %d hole(s) closed%s" % [bilan["bouches"], "" if int(bilan["sur_coupe"]) == 0 else
+		(", %d at a tile border: its section was rebuilt with the %d point(s) the next tiles share" % [bilan["sur_coupe"],
+		bilan["points"]])]
+	texte += ". [i]Ctrl+Z undoes it.[/i]"
+	if int(bilan["restants"]) > 0:
+		texte += ("\n[color=#e0603c]%d border point(s) could not be rebuilt[/color] — the world will show a gap there. "
+			+ "Undo, and close that part by hand (F on the rim).") % int(bilan["restants"])
+	dit.emit(texte)
+	return bilan
+
+
+## Combien de trous dans la tuile en édition (0 hors d'édition) — pour le compteur de l'écran.
+func trous_de_la_tuile() -> int:
+	return maillage.trous() if maillage != null else 0
+
+
 ## Une opération d'un coup (sans suivre la souris) : X, M, F, subdiviser, Ctrl+R au clic.
 func operer(nom: String) -> void:
 	if maillage == null or modal != "":
