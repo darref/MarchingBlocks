@@ -48,6 +48,7 @@ func _initialize() -> void:
 	_la_reconstruction_locale_rend_la_complete()
 	_un_lot_aux_memes_noms()
 	_les_couches_exclusives()
+	_les_cases_tenues()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -398,6 +399,82 @@ func _photo(g: GridMap) -> Dictionary:
 
 
 ## Un massif prêt à peindre, hors éditeur.
+## LES CASES TENUES (4 octobre 2026) : l'écran lit l'état de la couche au lieu de relire la grille (~150 ms par case
+## survolée sur l'exemple). Il doit être la grille après chaque geste, et ne jamais être rendu quand il peut mentir.
+## L'attendu est relu dans la GRILLE, pas dans l'état.
+func _les_cases_tenues() -> void:
+	print("
+── 14. les cases tenues par la couche ──")
+	var m := _massif()
+	_peindre(m, _pave(0, 5, 0, 1, 0, 5))
+	_dire(m.cases_tenues() == null, "jamais bâtie : rien n'est rendu")
+	m.reconstruire()
+	var g: GridMap = m.get_node("Cases")
+	var id: int = g.mesh_library.find_item_by_name("case")
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 1410
+	var justes := 0
+	var etages_justes := 0
+	var gardes_avant: int = m.gardes_de_compte
+	for geste in 40:
+		var changees: Array = []
+		for k in hasard.randi_range(1, 6):
+			var c := Vector3i(hasard.randi_range(-2, 7), hasard.randi_range(-1, 3), hasard.randi_range(-2, 7))
+			g.set_cell_item(c, id if g.get_cell_item(c) == GridMap.INVALID_CELL_ITEM else GridMap.INVALID_CELL_ITEM)
+			changees.append(c)
+		# Un geste sur deux comme une touche de pinceau (`sur` : l'appelant sait ce qui a changé).
+		m.reconstruire_autour(changees, geste % 2 == 1)
+		var tenues = m.cases_tenues()
+		var grille := {}
+		for c in g.get_used_cells():
+			grille[c] = true
+		if tenues != null and (tenues as Dictionary).size() == grille.size() 				and (tenues as Dictionary).keys().all(func(c): return grille.has(c)):
+			justes += 1
+		var par_etage := {}
+		for c: Vector3i in grille:
+			par_etage[c.y] = int(par_etage.get(c.y, 0)) + 1
+		var tenus = m.cases_par_etage()
+		if tenus != null and (tenus as Dictionary).size() == par_etage.size() and m.nombre_de_cases() == grille.size() 				and par_etage.keys().all(func(y): return int((tenus as Dictionary).get(y, -1)) == par_etage[y]):
+			etages_justes += 1
+	_dire(justes == 40, "après 40 gestes au hasard, l'état tenu est la grille (%d / 40)" % justes)
+	_dire(etages_justes == 40, "… le compte par étage (sans étage vide gardé) et le nombre de cases aussi (%d / 40)"
+		% etages_justes)
+	# LA TOUCHE DE PINCEAU SANS GARDE DE COMPTE (4 octobre 2026) : 20 gestes sur 40 ne relisent pas la grille, et le
+	# rendu est celui d'une reconstruction complète des mêmes cases.
+	_dire(m.gardes_de_compte - gardes_avant == 20, "« sur » : la garde de compte n'est relue que pour les 20 autres "
+		+ "gestes (%d)" % (m.gardes_de_compte - gardes_avant))
+	var temoin_complet := _massif()
+	_peindre(temoin_complet, g.get_used_cells())
+	temoin_complet.reconstruire()
+	var ecart := _grilles_identiques(m, temoin_complet)
+	_dire(ecart == "", "… et le rendu est celui d'une reconstruction complète %s" % ecart)
+	temoin_complet.queue_free()
+	# UN ÉTAGE VIDÉ PAR LA ROUTE LOCALE disparaît du compte : sinon l'étiquette dirait « painted up to y=10 ».
+	m.reconstruire()
+	var completes: int = m.reconstructions_completes
+	var seule := Vector3i(2, 10, 2)
+	g.set_cell_item(seule, id)
+	m.reconstruire_autour([seule])
+	g.set_cell_item(seule, GridMap.INVALID_CELL_ITEM)
+	m.reconstruire_autour([seule])
+	_dire(m.reconstructions_completes == completes and m.cases_par_etage() != null
+		and not (m.cases_par_etage() as Dictionary).has(10), "une case seule à l'étage 10, posée puis retirée par la "
+		+ "route locale : l'étage 10 n'est plus compté")
+	var hors := Vector3i(30, 0, 30)
+	g.set_cell_item(hors, id)
+	_dire(m.cases_tenues() == null, "une case posée par une autre route : rien n'est rendu (la grille sera relue)")
+	m.reconstruire()
+	_dire(m.cases_tenues() != null and (m.cases_tenues() as Dictionary).has(hors), "… reconstruite, elle y est")
+	m.set_meta("_a_refaire", {hors: true})
+	_dire(m.cases_tenues() == null, "une couche cachée qui attend d'être refaite : rien n'est rendu")
+	m.remove_meta("_a_refaire")
+	m.set_meta("_tout_refaire", true)
+	_dire(m.cases_tenues() == null, "… ni quand elle attend d'être refaite en entier")
+	m.remove_meta("_tout_refaire")
+	_dire(m.cases_tenues() != null, "… rendue une fois refaite")
+	m.queue_free()
+
+
 func _massif() -> Node3D:
 	var noeud: Node3D = Peint.new()
 	root.add_child(noeud)

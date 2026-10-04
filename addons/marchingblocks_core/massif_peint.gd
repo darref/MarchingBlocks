@@ -86,6 +86,8 @@ var rang := -1
 var _miennes := {}
 ## {Vector2i(x, z): combien de SES cases dans cette colonne} — tenu avec `_miennes` (`reconstruire`, `reconstruire_autour`).
 var _colonnes_miennes := {}
+## {y: combien de SES cases à cet étage} — tenu avec `_miennes` ; l'étiquette d'étage le lit (`cases_par_etage`).
+var _etages_miens := {}
 ## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) — `poids` : {clé: [base, var1, …]} (entiers, le tirage) ; `choix` :
 ## {sommet: rang de variante} (un choix posé dans World, 0 = la base). La règle : `MB.tuile_du_sommet`. Les changer
 ## demande `reconstruire()` (les poids) ou `reconstruire_sommets()` (des choix).
@@ -280,9 +282,11 @@ func reconstruire() -> Dictionary:
 	var pleines: Dictionary = union if rang >= 0 else miennes
 	_miennes = miennes
 	_colonnes_miennes = {}
+	_etages_miens = {}
 	for c: Vector3i in miennes:
 		var k2 := Vector2i(c.x, c.z)
 		_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
+		_etages_miens[c.y] = int(_etages_miens.get(c.y, 0)) + 1
 
 	var id_faute: int = -1
 	if fautes.mesh_library != null:
@@ -375,7 +379,55 @@ var _variantes_par_cle := {} # {clé: combien de variantes le lot lui donne} —
 var _compte := {}
 
 
-func reconstruire_autour(changees) -> Dictionary:
+## LES CASES DE LA COUCHE, telles que l'état les tient ({case: true}), sans les relire (4 octobre 2026 : sur la
+## couche de 491 000 cases de l'exemple, rebâtir ce dictionnaire coûtait ~150 ms à chaque case survolée par une forme
+## spéciale, et à chaque opération de sélection). ⚠ À LIRE SEULEMENT : c'est l'état de la couche. Null quand il peut
+## ne pas décrire la grille — couche cachée qui attend d'être refaite, ou un compte qui diffère (une case posée par
+## une autre route ; jamais bâti : l'état est vide) : l'appelant relit alors la grille. ⚠ Exiger `_pret` en plus était
+## une mutation ÉQUIVALENTE (mesurée) : le compte le dit déjà.
+func cases_tenues() -> Variant:
+	var cases := _cases()
+	if cases == null or has_meta("_a_refaire") or has_meta("_tout_refaire"):
+		return null
+	if cases.get_used_cells().size() != _miennes.size():
+		return null
+	return _miennes
+
+
+## {y: combien de cases à cet étage} — l'étiquette d'étage parcourait les 491 000 cases de l'exemple après chaque geste
+## (~75 ms). Sans la garde de compte (~7 ms) : une étiquette, que la reconstruction suivante remet juste. Null si l'état
+## n'est pas bâti ou attend d'être refait. À LIRE SEULEMENT.
+func cases_par_etage() -> Variant:
+	var tenus = comptes_tenus()
+	return tenus[0] if tenus != null else null
+
+
+## [{y: combien}, {Vector2i(x, z): combien}] tenus avec ses cases, SANS la garde de compte — null si l'état n'est pas
+## bâti ou attend d'être refait. À LIRE SEULEMENT. L'écran en tire la boîte du monde pour l'eau, et vérifie le total.
+func comptes_tenus() -> Variant:
+	if not _pret or has_meta("_a_refaire") or has_meta("_tout_refaire"):
+		return null
+	return [_etages_miens, _colonnes_miennes]
+
+
+## Combien de cases : l'état s'il est tenu (la liste des couches les recomptait après chaque geste), sinon la grille.
+func nombre_de_cases() -> int:
+	var cases := _cases()
+	if cases == null:
+		return 0
+	if not _pret or has_meta("_a_refaire") or has_meta("_tout_refaire"):
+		return cases.get_used_cells().size()
+	return _miennes.size()
+
+
+## `sur` : l'appelant GARANTIT que `changees` est tout ce qui a changé dans la grille depuis le dernier passage — la garde
+## de compte (`get_used_cells`, ~7 ms par couche sur les 491 000 cases de l'exemple, payée par CHAQUE couche à CHAQUE
+## touche d'un coup de pinceau : ~21 ms sur ~31) est alors sautée. Seul le coup de pinceau le passe (4 octobre 2026) ;
+## l'action suivante refait la garde.
+var gardes_de_compte := 0   # combien de fois la garde a relu la grille (pour les gardes des tests)
+
+
+func reconstruire_autour(changees, sur := false) -> Dictionary:
 	var cases := _cases()
 	var rendu := _rendu()
 	if not _pret or cases == null or rendu == null or rendu.mesh_library != lot_courant() \
@@ -396,6 +448,7 @@ func reconstruire_autour(changees) -> Dictionary:
 			if not _miennes.has(p):
 				_miennes[p] = true
 				_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
+				_etages_miens[p.y] = int(_etages_miens.get(p.y, 0)) + 1
 			if rang < 0:
 				_pleines[p] = true
 		else:
@@ -407,6 +460,11 @@ func reconstruire_autour(changees) -> Dictionary:
 					_colonnes_miennes[k2] = n
 				else:
 					_colonnes_miennes.erase(k2)
+				var e: int = int(_etages_miens.get(p.y, 0)) - 1
+				if e > 0:
+					_etages_miens[p.y] = e
+				else:
+					_etages_miens.erase(p.y)
 			if rang < 0:
 				_pleines.erase(p)
 		if _pleines.has(p):
@@ -414,8 +472,10 @@ func reconstruire_autour(changees) -> Dictionary:
 			_y_bas = mini(_y_bas, p.y)
 	# ⚠ UNE GRILLE CHANGÉE PAR UNE AUTRE ROUTE (cases posées sans reconstruction) : l'état gardé ne la décrit
 	# plus. Un compte suffit à le voir dans presque tous les cas, et coûte peu ; sinon, tout est refait.
-	if cases.get_used_cells().size() != _miennes.size():
-		return reconstruire()
+	if not sur:
+		gardes_de_compte += 1
+		if cases.get_used_cells().size() != _miennes.size():
+			return reconstruire()
 	# ⚠ CHAQUE COLONNE UNE FOIS (4 octobre 2026) : jusqu'à la plus haute case changée qui la touche. Énumérer la
 	# colonne entière pour CHAQUE case insérait des millions de doublons quand une couche entière changeait (cacher les
 	# 52 407 cases d'une couche de l'exemple : 3,6 s d'énumération seule, en local). Même ensemble de sommets.

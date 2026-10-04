@@ -1706,6 +1706,73 @@ var _eau_changees_vues := {}
 var _eau_tout_refaire := false
 
 
+## LA BOÎTE DANS LES COMPTES PAR AXE (4 octobre 2026) : une case retirée au bord de la boîte (retirer le sommet du
+## monde, l'annulation d'un ajout là) la faisait rebalayer — `FL.boite` sur les 739 483 cases de l'exemple : ~240 ms à
+## chaque fois. `_eau_par_axe` = [{x: combien}, {y: …}, {z: …}] des cases de `_occ_eau`, bâti à la PREMIÈRE case retirée
+## au bord (un balayage, comme avant), puis tenu case par case ; la boîte en est les clés extrêmes, élargies d'une case
+## (la règle de `FL.boite`). Il ne vaut que pour le dictionnaire d'où il vient (`_eau_par_axe_de`).
+var _eau_par_axe: Array = []
+var _eau_par_axe_de: Dictionary = {}
+
+
+func _compter_sur_les_axes(c: Vector3i, sens: int) -> void:
+	if not is_same(_eau_par_axe_de, _occ_eau) or _eau_par_axe.is_empty():
+		return
+	for k in 3:
+		var d: Dictionary = _eau_par_axe[k]
+		var n: int = int(d.get(c[k], 0)) + sens
+		if n > 0:
+			d[c[k]] = n
+		else:
+			d.erase(c[k])
+
+
+## Rend vrai et pose la boîte si elle a pu être relue dans les comptes (bâtis s'il le faut).
+func _boite_par_les_axes() -> bool:
+	if _occ_eau.is_empty():
+		return false
+	if not is_same(_eau_par_axe_de, _occ_eau) or _eau_par_axe.is_empty():
+		_eau_par_axe = _axes_des_couches()
+		if _eau_par_axe.is_empty():
+			_eau_par_axe = [{}, {}, {}]
+			for c: Vector3i in _occ_eau:
+				for k in 3:
+					_eau_par_axe[k][c[k]] = int(_eau_par_axe[k].get(c[k], 0)) + 1
+		_eau_par_axe_de = _occ_eau
+	var lo := Vector3i.ZERO
+	var hi := Vector3i.ZERO
+	for k in 3:
+		var cles: Array = (_eau_par_axe[k] as Dictionary).keys()
+		lo[k] = cles.min() - 1
+		hi[k] = cles.max() + 1
+	_boite_eau_cache = {"lo": lo, "hi": hi}
+	_boite_eau_de = _occ_eau
+	_boite_eau_taille = _occ_eau.size()
+	return true
+
+
+## Les comptes par axe bâtis depuis ce que CHAQUE COUCHE tient déjà (par étage, par colonne — `MassifPeint`) : quelques
+## dizaines de milliers d'entrées au lieu des 739 483 cases (bâtis case par case : ~600 ms). [] si une couche ne peut pas
+## le garantir (pas encore bâtie, en attente d'être refaite) ou si le total n'est pas celui de `_occ_eau`.
+func _axes_des_couches() -> Array:
+	var axes: Array = [{}, {}, {}]
+	var total := 0
+	for i in _vue.nombre_de_couches():
+		var tenus = _vue.couche(i).comptes_tenus()
+		if tenus == null:
+			return []
+		var etages: Dictionary = tenus[0]
+		var colonnes: Dictionary = tenus[1]
+		for y in etages:
+			axes[1][y] = int(axes[1].get(y, 0)) + int(etages[y])
+			total += int(etages[y])
+		for k2: Vector2i in colonnes:
+			var n: int = colonnes[k2]
+			axes[0][k2.x] = int(axes[0].get(k2.x, 0)) + n
+			axes[2][k2.y] = int(axes[2].get(k2.y, 0)) + n
+	return axes if total == _occ_eau.size() else []
+
+
 func _tenir_occ_eau() -> void:
 	if _occ_eau.is_empty() or _eau_cases_inconnues:
 		var occ_avant := _occ_eau
@@ -1731,17 +1798,22 @@ func _tenir_occ_eau() -> void:
 					plein = true
 					break
 			if plein:
-				_occ_eau[c] = true
+				if not _occ_eau.has(c):
+					_occ_eau[c] = true
+					_compter_sur_les_axes(c, 1)
 				lo = Vector3i(mini(lo.x, c.x - 1), mini(lo.y, c.y - 1), mini(lo.z, c.z - 1))
 				hi = Vector3i(maxi(hi.x, c.x + 1), maxi(hi.y, c.y + 1), maxi(hi.z, c.z + 1))
 			elif _occ_eau.has(c):
 				_occ_eau.erase(c)
+				_compter_sur_les_axes(c, -1)
 				if c.x <= lo.x + 1 or c.y <= lo.y + 1 or c.z <= lo.z + 1 \
 						or c.x >= hi.x - 1 or c.y >= hi.y - 1 or c.z >= hi.z - 1:
 					tenue = false
 		if tenue and not _occ_eau.is_empty():
 			_boite_eau_cache = {"lo": lo, "hi": hi}
 			_boite_eau_taille = _occ_eau.size()
+		elif _boite_par_les_axes():
+			pass   # une case retirée au bord : la boîte relue dans les comptes par axe, sans rebalayer le monde
 		else:
 			_boite_eau_taille = -1   # retouché en place : la boîte est à refaire
 	_eau_changees = {}
@@ -4307,7 +4379,7 @@ func _empreinte_pour_la_liste(chemin: String) -> String:
 
 func _etat_de(i: int) -> String:
 	var c: Dictionary = _couches[i]
-	var n: int = (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells().size()
+	var n: int = _vue.couche(i).nombre_de_cases()
 	var s := str(c.get("source", ""))
 	var etat := ""
 	if s == "":
@@ -4727,7 +4799,7 @@ func _touche(modif: Dictionary, nom: String) -> void:
 				_coup_autres[g][c][1] = vols[g][c][1]
 			(g as GridMap).set_cell_item(c, GridMap.INVALID_CELL_ITEM)
 			changees.append(c)
-	_suivre_les_cases(changees)
+	_suivre_les_cases(changees, true)   # le coup sait ce qu'il a changé : pas de garde de compte à chaque touche
 	_vue.rafraichir()
 	_noter_pour_l_eau(changees)
 	# ⚠ L'EAU SUIT EN DIRECT TANT QU'ELLE EST RAPIDE ; sur un monde où elle coûte (audit : un recalcul complet par
@@ -4865,7 +4937,9 @@ func _compter_les_cases_plus_tard() -> void:
 
 ## L'union, relue pour ces cases (la couche visible qui la porte — une seule, puisqu'elles sont exclusives), puis
 ## chaque couche autour d'elles.
-func _suivre_les_cases(cases_: Array) -> void:
+## `sur` : `cases_` est tout ce qui a changé depuis le dernier passage (un coup de pinceau) — `MassifPeint.reconstruire_autour`
+## saute sa garde de compte.
+func _suivre_les_cases(cases_: Array, sur := false) -> void:
 	for c in cases_:
 		_union.erase(c)
 		for i in _vue.nombre_de_couches():
@@ -4883,7 +4957,7 @@ func _suivre_les_cases(cases_: Array) -> void:
 				attente[c] = true
 			m.set_meta("_a_refaire", attente)
 			continue
-		m.reconstruire_autour(cases_)
+		m.reconstruire_autour(cases_, sur)
 
 
 ## L'union entière et le rang de chaque couche — quand une couche apparaît, disparaît, se cache, se montre, ou à
@@ -4935,13 +5009,11 @@ func _reconstruire(_massif: Node, touchees: Array) -> void:
 	_eau_perimee()   # la coulée suit le monde, dans les deux sens de l'historique
 
 
+## ⚠ L'ÉTAT TENU PAR LA COUCHE (`MassifPeint.cases_tenues`), À LIRE SEULEMENT — sur l'exemple, le rebâtir coûtait
+## ~150 ms à chaque opération de sélection (4 octobre 2026). Une opération qui le garde ou le passe à un autre fil le
+## copie (`_reparer_les_diagonales`).
 func _occupees() -> Dictionary:
-	var occupees := {}
-	var cases: GridMap = _vue.cases()
-	if cases != null:
-		for c in cases.get_used_cells():
-			occupees[c] = true
-	return occupees
+	return _vue._occupees_actives()
 
 
 ## Remplace toutes les cases de la couche, en UNE action annulable.
@@ -4963,7 +5035,7 @@ func _reparer_les_diagonales(creuse: bool) -> void:
 		_dire("[i]The active layer is hidden.[/i] Show it first: the fix adds or removes ITS cells.")
 		return
 	var pleines := _union.duplicate()
-	var modifiables := _occupees()
+	var modifiables := _occupees().duplicate()   # ⚠ lue sur un autre fil : pas l'état vivant de la couche
 	var figees := {}
 	for i in _vue.nombre_de_couches():
 		var m := _vue.couche(i) as Node3D
@@ -5580,12 +5652,21 @@ func _dire_l_etage() -> void:
 	var combien := 0
 	var bas := 1 << 20
 	var haut := -(1 << 20)
-	for c in _vue.cases().get_used_cells():
-		var p: Vector3i = c
-		if p.y == _vue.etage:
-			combien += 1
-		bas = mini(bas, p.y)
-		haut = maxi(haut, p.y)
+	# ⚠ LE COMPTE PAR ÉTAGE TENU PAR LA COUCHE (4 octobre 2026) : parcourir ses cases coûtait ~75 ms après chaque geste
+	# sur l'exemple. La grille n'est relue que si la couche ne peut pas le garantir.
+	var par_etage = _vue.monde().cases_par_etage()
+	if par_etage != null:
+		combien = int((par_etage as Dictionary).get(_vue.etage, 0))
+		for y in par_etage:
+			bas = mini(bas, y)
+			haut = maxi(haut, y)
+	else:
+		for c in _vue.cases().get_used_cells():
+			var p: Vector3i = c
+			if p.y == _vue.etage:
+				combien += 1
+			bas = mini(bas, p.y)
+			haut = maxi(haut, p.y)
 	_etiquette_etage.text = ("%d cell(s) here · painted from y=%d to y=%d" % [combien, bas, haut]) \
 		if bas <= haut else "nothing painted yet"
 	_selection_changee()
@@ -6271,7 +6352,10 @@ func _enregistrer(en_fond := false) -> void:
 	var travaux := _chemins_des_travaux()
 	if en_fond:
 		_dire_enregistre("en_cours")
-		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true))
+		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
+		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true),
+			true, "Saving the project")
 		return
 	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false)
 

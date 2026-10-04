@@ -15,7 +15,10 @@ extends RefCounted
 ## Fonctions PURES, sans nœud : c'est ce qui les rend gardables par `DEV_TOOLS/test_projet.gd`.
 
 const FORMAT := "marchingblocks-project"
-const VERSION := 1
+## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
+## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
+## version le lui fait refuser (« made by a newer MarchingBlocks »). La version 1 reste lue.
+const VERSION := 2
 const EXTENSION := "mbproj"
 const DOSSIER_CACHE := "user://cache"
 ## LE FORMAT DU CACHE. ⚠ 2 depuis le 29 septembre 2026 : le lot porte la PROVENANCE de chaque tuile (le
@@ -53,6 +56,11 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## UN PAR LIGNE (indenté) — 4,8 Mo, ~270 ms, et une image de ~0,9 s une seconde après chaque geste. Les cases passent
 ## par un `PackedInt32Array`, que le moteur écrit lui-même en « [x, y, z, …] » sur une ligne, à la place d'une marque
 ## dans le JSON. Même format, relu par `depuis_texte` à l'identique ; 2,5 Mo, ~100 ms.
+## ⚠ PUIS EN BINAIRE (4 octobre 2026, version 2) : sur l'exemple de 739 481 cases, `str()` des 2,2 millions de nombres
+## coûtait ~340 ms (~440 ms le texte entier), sur un autre fil qui attendait parfois 3 s de démarrer derrière les cartes
+## PBR, et ~470 ms de plus sur le fil principal à sa reprise. Les cases sont les octets du `PackedInt32Array` (x, y, z
+## à la suite, petit-boutiste) en base64, sous `cases_b64` : ~70 ms. Elles se relisent sans analyser 2,2 millions de
+## nombres JSON. `cases` (version 1, un tableau de nombres) reste lu.
 ## `c["cases"]` : un dictionnaire {case: true} ou un tableau de cases (`GridMap.get_used_cells()`).
 ## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
 static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = []) -> String:
@@ -69,9 +77,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 			plat[i + 1] = v.y
 			plat[i + 2] = v.z
 			i += 3
-		blocs.append(str(plat))
+		blocs.append("\"%s\"" % Marshalls.raw_to_base64(plat.to_byte_array()))
 		var sortie := {"nom": c["nom"], "source": c["source"],
-			"visible": c["visible"], "cases": MARQUE_CASES % (blocs.size() - 1), "temoin": str(c.get("temoin", "")),
+			"visible": c["visible"], "cases_b64": MARQUE_CASES % (blocs.size() - 1), "temoin": str(c.get("temoin", "")),
 			"id": str(c.get("id", ""))}
 		var poids: Dictionary = c.get("poids", {})
 		if not poids.is_empty():
@@ -114,6 +122,36 @@ const MARQUE_CASES := "@@marchingblocks-cells-%d@@"
 static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 	# ⚠ `JSON.new().parse` et non `JSON.parse_string` : celui-ci crie dans la console à chaque fichier
 	# abîmé, alors que le refus est déjà DIT à l'utilisateur.
+	# ⚠ LES CASES BINAIRES SONT SORTIES DU TEXTE AVANT L'ANALYSE (version 2) : l'analyseur JSON parcourt une chaîne
+	# caractère par caractère, et ~12 Mo de base64 lui coûtaient plus que les nombres de la version 1. Chaque bloc est
+	# remplacé par son rang, et rendu ensuite.
+	var blocs := PackedStringArray()
+	var marque := "\"cases_b64\":"
+	var morceaux := PackedStringArray()
+	var debut := 0     # le texte déjà recopié s'arrête ici
+	var cherche := 0   # la prochaine marque se cherche à partir d'ici
+	while true:
+		var k := texte.find(marque, cherche)
+		if k < 0:
+			break
+		var a := k + marque.length()
+		while a < texte.length() and texte[a] in [" ", "\t", "\n", "\r"]:
+			a += 1
+		cherche = a
+		if a >= texte.length() or texte[a] != "\"":
+			continue   # pas un texte : laissé à l'analyse, qui le refusera
+		a += 1
+		var b := texte.find("\"", a)
+		if b < 0:
+			break
+		morceaux.append(texte.substr(debut, a - debut))
+		morceaux.append(str(blocs.size()))
+		blocs.append(texte.substr(a, b - a))
+		debut = b
+		cherche = b
+	if not blocs.is_empty():
+		morceaux.append(texte.substr(debut))
+		texte = "".join(morceaux)
 	var json := JSON.new()
 	var brut = json.data if json.parse(texte) == OK else null
 	if not brut is Dictionary:
@@ -136,12 +174,30 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 			erreurs.append("layer %d is not an object" % i)
 			return {}
 		var plat = c.get("cases", [])
-		if not plat is Array or (plat as Array).size() % 3 != 0:
+		if c.has("cases_b64"):
+			# Version 2 : les octets d'un PackedInt32Array, en base64 (sorti du texte avant l'analyse : le JSON n'en
+			# porte que le rang). Un texte qui n'en est pas rend un tableau vide (refusé s'il ne l'était pas) ; un
+			# nombre d'entiers qui n'est pas un multiple de 3 est refusé plus bas, comme en version 1.
+			var rang_bloc = c["cases_b64"]
+			var b64: String = blocs[int(rang_bloc)] if rang_bloc is String and (rang_bloc as String).is_valid_int() 				and int(rang_bloc) < blocs.size() else ""
+			var octets := Marshalls.base64_to_raw(b64) if b64 != "" else PackedByteArray()
+			if not rang_bloc is String or (octets.is_empty() and b64 != ""):
+				erreurs.append("layer %d: cells are not x, y, z triples" % i)
+				return {}
+			plat = octets.to_int32_array()
+		elif not plat is Array:
+			plat = null
+		if plat == null or plat.size() % 3 != 0:
 			erreurs.append("layer %d: cells are not x, y, z triples" % i)
 			return {}
 		var cases := {}
-		for k in range(0, (plat as Array).size(), 3):
-			cases[Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = true
+		if plat is PackedInt32Array:
+			var entiers: PackedInt32Array = plat
+			for k in range(0, entiers.size(), 3):
+				cases[Vector3i(entiers[k], entiers[k + 1], entiers[k + 2])] = true
+		else:
+			for k in range(0, plat.size(), 3):
+				cases[Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = true
 		# ⚠ Un projet d'avant le 30 septembre 2026 n'a ni `temoin` ni `id` : aucun témoin à la couche, et un
 		# identifiant donné par l'écran à l'ouverture.
 		# Les variantes (4 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier.

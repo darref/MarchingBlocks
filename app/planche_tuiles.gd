@@ -56,15 +56,41 @@ func batir(t: RefCounted) -> void:
 
 
 ## Les photos reprises sur les tuiles du modèle — après un geste, une annulation, un rechargement.
+## ⚠ APPELÉE À CHAQUE ENREGISTREMENT DU TÉMOIN (une seconde après chaque geste du modeleur), et elle refaisait le
+## maillage des 52 tuiles et leurs 52 photos (4 octobre 2026). Désormais : rien tant que la planche n'est pas à l'écran
+## (elle se reprend en se montrant) ; seul le maillage d'une tuile dont la forme a changé est refait (`empreinte_de`) ;
+## les photos, elles, sont toutes reprises — une peinture change la texture sans toucher au maillage.
+var _a_reprendre := false
+var maillages_refaits := 0   # pour les gardes
+
+
 func rafraichir(t: RefCounted) -> void:
 	if not est_batie():
 		return
 	temoin = t
+	if not is_visible_in_tree():
+		_a_reprendre = true
+		return
+	_a_reprendre = false
 	for cle in cartes:
 		if not t.tuiles.has(cle):
 			continue
-		(cartes[cle]["tuile"] as MeshInstance3D).mesh = t.tuiles[cle].vers_array_mesh()
+		var empreinte := empreinte_de(t.tuiles[cle])
+		if empreinte != int(cartes[cle].get("empreinte", 0)):
+			cartes[cle]["empreinte"] = empreinte
+			(cartes[cle]["tuile"] as MeshInstance3D).mesh = t.tuiles[cle].vers_array_mesh()
+			maillages_refaits += 1
 		(cartes[cle]["vue"] as SubViewport).render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+## Tout ce que `vers_array_mesh` lit : l'objet, la géométrie, les teintes et matériaux par face, les UV, les matériaux.
+static func empreinte_de(m: RefCounted) -> int:
+	return hash([m.get_instance_id(), m.sommets, m.faces, m.teintes, m.mats, m.uvs, m.materiaux])
+
+
+func _notification(quoi: int) -> void:
+	if quoi == NOTIFICATION_VISIBILITY_CHANGED and _a_reprendre and is_visible_in_tree() and temoin != null:
+		rafraichir(temoin)
 
 
 func _intro() -> Control:
@@ -148,7 +174,8 @@ func _carte(cle: String, bits: int) -> Control:
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			tuile_choisie.emit(cle)
 			fond.accept_event())
-	cartes[cle] = {"fond": fond, "vue": vue, "tuile": vue.get_meta("tuile"), "copies": copies}
+	cartes[cle] = {"fond": fond, "vue": vue, "tuile": vue.get_meta("tuile"), "copies": copies,
+		"empreinte": empreinte_de(temoin.tuiles[cle])}
 	return fond
 
 

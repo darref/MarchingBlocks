@@ -84,10 +84,14 @@ func _mener() -> void:
 
 	# ── Un coup d'ajout : deux morceaux, UN Ctrl+Z ────────────────────────────────────────────────
 	ed._coup_commence()
+	var gardes_avant: int = ed._vue.monde().gardes_de_compte
 	ed._touche({"poser": {Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true}, "effacer": {}}, "Add")
 	ed._touche({"poser": {Vector3i(2, 0, 0): true}, "effacer": {}}, "Add")
 	ed._coup_fini()
 	_egal(cases.get_used_cells().size(), 3, "un coup en deux morceaux pose trois cases")
+	# ⚠ UNE TOUCHE NE RELIT PAS LA GRILLE (4 octobre 2026 : ~7 ms par couche et par touche sur l'exemple) : le coup sait
+	# ce qu'il a changé.
+	_egal(ed._vue.monde().gardes_de_compte - gardes_avant, 0, "… sans relire la grille à chaque touche (garde de compte)")
 	ed._histoire.undo()
 	_egal(cases.get_used_cells().size(), 0, "UN Ctrl+Z défait le coup entier")
 	ed._histoire.redo()
@@ -997,13 +1001,26 @@ func _la_planche_des_tuiles(ed: Control) -> void:
 		if mo.maillage.sommets[i].y < mo.maillage.sommets[bas].y:
 			bas = i
 	mo.maillage.sommets[bas] += Vector3(0, -0.4, 0)
+	var refaits: int = pl.maillages_refaits
 	leg.rafraichir_tuiles()
 	var apres: AABB = (pl.cartes[coin]["tuile"] as MeshInstance3D).mesh.get_aabb()
 	_vrai(apres.position.y < avant.position.y - 0.3, "la photo de la tuile montre la sculpture après rafraîchissement")
+	# ⚠ UNE TUILE CHANGÉE, UN MAILLAGE REFAIT (4 octobre 2026 : chaque enregistrement refaisait les 52).
+	_egal(pl.maillages_refaits - refaits, 1, "… seul le maillage de la tuile sculptée est refait")
+	leg.rafraichir_tuiles()
+	_egal(pl.maillages_refaits - refaits, 1, "… et un second rafraîchissement sans geste n'en refait aucun")
 	mo.maillage.sommets[bas] -= Vector3(0, -0.4, 0)
 	ed._regler_edition(false)
 	leg.montrer_onglet("formes")
 	_vrai(leg._defile.visible and not pl.visible, "l'onglet des formes revient")
+	# PLANCHE CACHÉE : rien n'est repris ; elle se reprend en se montrant.
+	leg.rafraichir_tuiles()
+	_vrai(pl._a_reprendre and (pl.cartes[coin]["tuile"] as MeshInstance3D).mesh.get_aabb().position.y < avant.position.y
+		- 0.3, "planche cachée : la photo attend (la sculpture rendue n'y est pas encore)")
+	leg.montrer_onglet("tuiles")
+	_vrai(not pl._a_reprendre and is_equal_approx((pl.cartes[coin]["tuile"] as MeshInstance3D).mesh.get_aabb()
+		.position.y, avant.position.y), "… et se reprend en se montrant")
+	leg.montrer_onglet("formes")
 	_planche_finie = true
 
 
@@ -2758,6 +2775,13 @@ func _les_formes_speciales(ed: Control) -> void:
 		"… et l'écran dit qu'il débouche")
 	ed._histoire.undo()
 	_egal(g.get_used_cells().size(), plein, "UN Ctrl+Z rend le mur")
+	# L'OCCUPATION DES FORMES EST L'ÉTAT DE LA COUCHE (4 octobre 2026 : la rebâtir coûtait ~150 ms par case survolée
+	# sur l'exemple) — et elle suit le Ctrl+Z. Attendu relu dans la GRILLE.
+	var occ: Dictionary = vue._occupees_actives()
+	_vrai(is_same(occ, vue.monde()._miennes) and is_same(ed._occupees(), occ),
+		"les formes et les opérations lisent l'état tenu par la couche, sans relire la grille")
+	_vrai(occ.size() == g.get_used_cells().size() and g.get_used_cells().all(func(c): return occ.has(c))
+		and occ.has(Vector3i(30, 2, 0)), "… et il est la grille, après le Ctrl+Z")
 
 	# CONNECT : une ancre sur la face ouest, Échap l'oublie, puis l'ouest et l'est.
 	ed._choisir_les_bouts("relier")
@@ -3022,7 +3046,24 @@ func _les_fluides(ed: Control) -> void:
 		"une case posée hors de la boîte : la boîte tenue s'élargit, sans recalcul (%s)" % [ed._boite_eau_cache])
 	ed._appliquer({"poser": {}, "effacer": {loin: true}}, "Dig")
 	ed._tenir_occ_eau()
-	_vrai(ed._boite_eau() == FLb.boite(ed._occ_eau), "la retirer (elle faisait le bord) : la boîte est refaite")
+	_vrai(ed._boite_eau_taille == ed._occ_eau.size() and ed._boite_eau_cache == FLb.boite(ed._occ_eau),
+		"la retirer (elle faisait le bord) : la boîte est refaite — dans les comptes par axe, sans rebalayer le monde")
+	# DEUX CASES SUR LE MÊME PLAN DU BORD (x = 95), DANS l'étendue du monde en y et en z : en retirer une ne change pas la boîte, retirer
+	# l'autre la fait rétrécir — toujours sans rebalayage (4 octobre 2026 : ~240 ms par retrait au bord sur l'exemple).
+	var milieu: Vector3i = (ed._boite_eau()["lo"] + ed._boite_eau()["hi"]) / 2
+	var bord_a := Vector3i(95, milieu.y, milieu.z)
+	var bord_b := Vector3i(95, milieu.y, milieu.z + 1)
+	ed._appliquer({"poser": {bord_a: true, bord_b: true}, "effacer": {}}, "Add")
+	ed._tenir_occ_eau()
+	var avec_les_deux: Dictionary = ed._boite_eau_cache.duplicate()
+	ed._appliquer({"poser": {}, "effacer": {bord_a: true}}, "Dig")
+	ed._tenir_occ_eau()
+	_vrai(ed._boite_eau_taille == ed._occ_eau.size() and ed._boite_eau_cache == FLb.boite(ed._occ_eau)
+		and ed._boite_eau_cache == avec_les_deux, "deux cases sur le plan du bord, une retirée : la boîte ne bouge pas")
+	ed._appliquer({"poser": {}, "effacer": {bord_b: true}}, "Dig")
+	ed._tenir_occ_eau()
+	_vrai(ed._boite_eau_taille == ed._occ_eau.size() and ed._boite_eau_cache == FLb.boite(ed._occ_eau)
+		and ed._boite_eau_cache["hi"].x < 96, "… l'autre retirée : elle rétrécit (%s)" % [ed._boite_eau_cache])
 	var dedans: Vector3i = Vector3i(58, 1, 58)
 	_vrai(ed._occ_eau.has(dedans), "une case intérieure de la cuvette existe")
 	ed._appliquer({"poser": {}, "effacer": {dedans: true}}, "Dig")

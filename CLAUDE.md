@@ -57,6 +57,21 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     écrit en entiers 64 bits — les valeurs de Python de `test_variantes` sont leurs cas) ; les porter dans `regle()`,
     `conformance.json` et `world_conformance.json` ; et dans les trois éditeurs, l'outil Variant (clic : la suivante,
     clic droit : le tirage). ⚠ Sans cela, un greffon pose la tuile de BASE partout : le monde est juste, sans variété.
+  - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
+    que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
+    leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
+    `rebuild` ; Unity `Cells` / `SetCell` / `Apply` / `CellUnderRay` ; Unreal : rien pour les Blueprints — ses
+    `UFUNCTION` sont `CallInEditor`, le reste prend des types `MBPaint::`). Ce qui manque, la MÊME dans les trois :
+    - `GetCell` / `SetCells` / `ClearCells`, `Raycast` (case ET face touchées), `TileAt(sommet)` (nom anglais,
+      quart de tour, contexte), la surface au-dessus d'un point, un événement `OnCellsChanged` (et « reconstruit »),
+      `SaveCells` / `LoadCells` d'un état modifié en jeu, à part du niveau ; côté Unreal, `BlueprintCallable` ;
+    - **la reconstruction INCRÉMENTALE en jeu** (§4, OUVERT — l'appli la fait, `MassifPeint.reconstruire_autour`) :
+      sans elle, creuser en jeu reconstruit tout le monde ; et Unity pose un GameObject par tuile (à mesurer) ;
+    - la COLLISION des tuiles posées en jeu, garantie et éprouvée dans chaque moteur ;
+    - leurs cas d'épreuve (`tools_conformance.json` ou un fichier à part), et un exemple minimal par moteur
+      (creuser au clic, un personnage posé sur la surface). Une seule règle : les noms et sens de l'API s'écrivent
+      UNE fois, comme `rules_text`, et se traduisent dans les trois langues.
+    - ⚠ **OUVERT** : ce que l'API dit de l'eau (rien tant que les greffons ne posent pas les fluides) et des variantes.
 
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
@@ -3205,6 +3220,73 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
         le reste de l'écran.
     - **SUITES** : 21 vertes après chaque point — au bout, **9 846 vérifications, 0 échec** (`fumee_appli` 800, `test_fluides` 252, `test_massif_peint` 110, `test_temoin_lie` 38). Bancs hors Godot non relancés : rien de
       ce qu'ils lisent n'a changé (`test_greffon_peinture` 255, cas d'épreuve inchangés).
+  - **ET ENCORE (4 octobre 2026, la nuit — Jordan : « exporte, et pendant que je teste continue les optis de la
+    liste »)**. L'exe a été exporté d'abord (exemple repris, 0 chaîne en clair sur 7). ⚠ **TOUT A ÉTÉ MESURÉ EN HEADLESS,
+    DANS DES COPIES À DOSSIER DE DONNÉES ISOLÉ** (`config/use_custom_user_dir`) : Jordan testait l'exe, qui partage
+    `user://reglages.cfg` avec le projet ; une sonde avec fenêtre aurait aussi chargé sa carte graphique. Sur
+    l'exemple d'aujourd'hui : **491 000 cases dans la couche active, 739 481 dans le monde**.
+    - **L'APERÇU D'UNE FORME SPÉCIALE ET DE ROOM : ~150 → ~14 ms par case survolée** (`DEV_TOOLS/banc_apercu_forme.gd`).
+      La forme elle-même coûte 0 à 1 ms ; c'était `_occupees_actives`, qui rebâtissait le dictionnaire de TOUTES les
+      cases de la couche. Les opérations de sélection (Extrude, Move, Copy, Paste, Shrink à la molette, Room from
+      selection…) passaient par le même rebâtissage (`editor._occupees`). Désormais elles lisent l'état que la couche
+      tient déjà pour sa reconstruction locale (`MassifPeint.cases_tenues` → `_miennes`), À LIRE SEULEMENT (vérifié :
+      formes, étages, outils ne modifient jamais ce qu'ils reçoivent ; la réparation des diagonales, qui part sur un
+      autre fil, en prend une copie). Null — la grille est relue — quand la couche attend d'être refaite (cachée) ou que
+      son compte diffère de la grille (les ~14 ms restants : `get_used_cells().size()`, gardé par sûreté). ⚠ Exiger en
+      plus que l'état soit bâti était une mutation ÉQUIVALENTE (le compte le dit déjà) : retirée.
+    - **APRÈS CHAQUE GESTE : l'étiquette d'étage ~75 → ~15 ms, la liste des couches ~26 → ~4 ms.** L'étiquette parcourait
+      les cases de la couche ; elle lit un compte PAR ÉTAGE tenu avec `_miennes` (`_etages_miens`, `cases_par_etage`). La
+      liste recomptait chaque grille ; elle lit `nombre_de_cases` (l'état, sinon la grille).
+    - **LA PLANCHE DES TUILES** se reprenait à CHAQUE enregistrement du témoin (une seconde après chaque geste du
+      modeleur) : les maillages des 52 tuiles refaits (~22 ms headless, plus l'envoi à la carte) et leurs 52 photos.
+      Désormais rien tant qu'elle n'est pas à l'écran (elle se reprend en se montrant), et seul le maillage d'une tuile
+      dont l'empreinte (`empreinte_de` : géométrie, teintes, matériaux, UV) a changé est refait ; les photos sont toutes
+      reprises (une peinture change la texture sans toucher au maillage). ⚠ Pas mesuré avec fenêtre.
+    - **L'ENREGISTREMENT DU PROJET — LE FORMAT PASSE EN VERSION 2.** Mesuré : la tâche d'écriture, en BASSE priorité,
+      attendait jusqu'à **3,4 s** de démarrer derrière les tâches de l'ouverture (vraisemblablement les cartes PBR) — un
+      Ctrl+S ou une fermeture l'attendaient avec elle (~3,9 s) ; son texte coûtait ~440 ms, dont ~340 pour `str()` des
+      2,2 millions de nombres ; et sa reprise bloquait ~470 ms le fil principal. Désormais : **haute priorité**, et les
+      cases en BINAIRE — `cases_b64`, les octets du `PackedInt32Array` (x, y, z, petit-boutiste) en base64 (~70 ms) —,
+      sortis du texte avant l'analyse JSON à la relecture (sinon l'analyseur parcourt 12 Mo de base64 caractère par
+      caractère, plus lent que les nombres). **Mesuré : la pire image après un enregistrement ~470 → ~8 à 28 ms, un
+      Ctrl+S ~490 à 3 900 → ~290 ms, la relecture des cases ~455 → ~390 ms.**
+      ⚠ **LA VERSION PASSE À 2, ET C'EST UNE GARDE** : un exe d'avant ne trouverait pas `cases`, ouvrirait des couches
+      VIDES et les enregistrerait ; la version le lui fait refuser. La version 1 reste lue. ⚠ Un projet enregistré par
+      cette version ne s'ouvre plus dans l'exe exporté ce soir-là. Le `.mbproj` reste du JSON lisible, sauf ses cases.
+    - **MESURÉ** : `test_massif_peint` 119 (+9 : 40 gestes au hasard — l'état tenu, le compte par étage et le nombre
+      de cases relus dans la GRILLE ; une case posée par une autre route, une couche qui attend : null ; un étage vidé
+      par la route locale) ; `test_projet` 117 (+6 : le base64 attendu calculé en PYTHON, la version 2, la version 1
+      relue, trois `cases_b64` abîmés refusés, un nom de couche qui contient la marque) ; `fumee_appli` 806 (+6 : les
+      formes et les opérations lisent l'état de la couche, qui est la grille après Ctrl+Z ; une tuile sculptée = un
+      maillage refait, aucun sans geste ; planche cachée qui attend, reprise en se montrant). **Quinze mutations** —
+      rouges : état rendu sans le compte, sans les attentes de la couche cachée, décompte par étage oublié, ajout non
+      compté, nombre faux, vue sans l'état tenu, planche qui refait tout, planche cachée reprise, pas de reprise en se
+      montrant, l'ancien `str()`, la version 1, pas d'extraction ; ⚠ **MUETTES** : « un étage vidé gardé à 0 » (le
+      test était trop étroit — aucun geste au hasard ne vidait un étage par la route locale : cas construit, rouge), et
+      deux ÉQUIVALENTES retirées du code (exiger l'état bâti ; refuser une taille non multiple de 12 octets, que le
+      contrôle des triplets refuse déjà).
+    - **LE COUP DE PINCEAU : 20 touches ~565 → ~58 ms** (`sonde_lags_edition.gd`, headless). ~21 ms des ~31 d'une touche
+      étaient la GARDE DE COMPTE de la reconstruction locale : chacune des trois couches relisait sa grille
+      (`get_used_cells().size()`, ~7 ms) pour voir une case posée « par une autre route ». Le coup sait ce qu'il a
+      changé : `reconstruire_autour(changees, sur)` la saute pour ses touches ; toute action (et l'action suivante)
+      la refait.
+    - **RETIRER UNE CASE AU BORD DE LA BOÎTE DU MONDE (le sommet, ou l'annulation d'un ajout là) : ~250 → ~5 ms**, et
+      ~50 ms la première fois. C'était l'image lente qui suivait chaque Ctrl+Z de la sonde : `FL.boite` rebalayait les
+      739 483 cases (~240 ms) pour l'eau. L'écran tient des comptes par x, y, z des cases de l'eau (`_eau_par_axe`),
+      bâtis depuis les comptes par étage et par colonne que chaque couche tient déjà (`MassifPeint.comptes_tenus`, total
+      vérifié — sinon un balayage), puis case par case ; la boîte en est les clés extrêmes, élargies d'une case.
+    - **MESURÉ, EN PLUS** : `test_massif_peint` 121 (+2 : 20 gestes « sûrs » sur 40 ne relisent pas la grille, rendu =
+      reconstruction complète) ; `fumee_appli` 809 (+3 : une touche ne relit pas la grille ; deux cases sur le plan du
+      bord, une retirée — la boîte ne bouge pas —, l'autre — elle rétrécit —, attendu `FL.boite` recalculée, sans
+      rebalayage). **Quatre mutations, toutes rouges** : le décompte par axe oublié, la boîte jamais relue dans les
+      comptes, x et z échangés, la touche qui refait la garde de compte. L'étiquette d'étage lit désormais les comptes
+      tenus SANS garde de compte (`comptes_tenus` : une étiquette, que la reconstruction suivante remet juste).
+    - **SUITES** : 21 vertes, **9 892 vérifications, 0 échec** (`fumee_appli` 809, `test_massif_peint` 121,
+      `test_projet` 117). Bancs hors Godot non relancés : rien de ce qu'ils lisent n'a changé.
+    - ⚠ **CE QUI RESTE, MESURÉ** (`sonde_lags_edition.gd` en headless) : cacher / montrer une couche ~0,7 s ; poser une
+      case ~40 ms (dont les gardes de compte de trois couches, ~21 ms : gardées pour les actions) ; Ctrl+S ~2,4 s (le
+      témoin réécrit d'office, GARDÉ) ; l'océan à l'ouverture. Pas fait : les relectures doubles de l'import et du
+      tranchage liés (gestes rares).
 
 ### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
 ### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)

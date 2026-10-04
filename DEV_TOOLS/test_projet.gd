@@ -55,11 +55,37 @@ func _initialize() -> void:
 	var bloc := Projet.couche("Bloc")
 	bloc["cases"] = [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)]
 	var texte_bloc := Projet.vers_texte([bloc], 0)
-	_vrai(texte_bloc.contains("[1, 2, 3, -4, -5, -6]"), "un tableau de cases s'écrit d'un bloc, sur une ligne")
+	# ⚠ VERSION 2 (4 octobre 2026) : en binaire. L'attendu est calculé HORS DE GODOT (Python : struct.pack('<6i', …)
+	# puis base64) — petit-boutiste, x, y, z à la suite.
+	_vrai(texte_bloc.contains('"cases_b64": "AQAAAAIAAAADAAAA/P////v////6////"'),
+		"un tableau de cases s'écrit d'un bloc, en binaire (base64 des entiers 32 bits)")
+	_egal(int((JSON.parse_string(texte_bloc) as Dictionary).get("version", 0)), 2, "… dans un projet de version 2")
 	var relu_bloc: Dictionary = Projet.depuis_texte(texte_bloc, [])
 	_egal(relu_bloc.get("couches", [{}])[0].get("cases", {}).keys(), [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)],
 		"… et se relit case pour case")
 	_vrai(not texte_bloc.contains("@@"), "… sans marque oubliée dans le fichier")
+	# UN NOM QUI CONTIENT LA MARQUE : les blocs binaires sont sortis du texte avant l'analyse — un nom de couche qui
+	# porte « "cases_b64": 17 » (écrit, échappé, dans le JSON) ne doit rien décaler.
+	var piege := Projet.couche('x "cases_b64": 17 y')
+	piege["cases"] = [Vector3i(7, 8, 9)]
+	var suite := Projet.couche("Suite")
+	suite["cases"] = [Vector3i(-1, 0, 1)]
+	var relu_piege: Dictionary = Projet.depuis_texte(Projet.vers_texte([piege, suite], 1), [])
+	_vrai(relu_piege.get("couches", []).size() == 2 and relu_piege["couches"][0]["nom"] == 'x "cases_b64": 17 y'
+		and relu_piege["couches"][0]["cases"].keys() == [Vector3i(7, 8, 9)]
+		and relu_piege["couches"][1]["cases"].keys() == [Vector3i(-1, 0, 1)],
+		"un nom de couche qui contient la marque des cases binaires ne décale rien")
+	# LA VERSION 1 RESTE LUE : les cases en tableau de nombres, comme les écrivait un exe d'avant.
+	var v1: Dictionary = Projet.depuis_texte('{"format": "marchingblocks-project", "version": 1, "couches": '
+		+ '[{"nom": "v1", "source": "witness", "cases": [1, 2, 3, -4, -5, -6]}]}', [])
+	_egal(v1.get("couches", [{}])[0].get("cases", {}).keys(), [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)],
+		"un projet de version 1 (cases en nombres) se relit case pour case")
+	for cas_b64 in [["AQAAAAIAAAADAAAABAAAAAUAAAA=", "cinq entiers, pas des triplets"], ["@@@@", "pas du base64"],
+			[17, "pas un texte"]]:
+		var eb: Array = []
+		var abime_b64 := {"format": "marchingblocks-project", "version": 2, "couches": [{"cases_b64": cas_b64[0]}]}
+		_vrai(Projet.depuis_texte(JSON.stringify(abime_b64), eb).is_empty() and not eb.is_empty(),
+			"des cases binaires abîmées refusent le fichier : %s" % cas_b64[1])
 
 	# ── 1 bis. Une couche possède SON témoin (30 septembre 2026) : son chemin et son id reviennent ────────
 	var a := Projet.couche("A", "3")

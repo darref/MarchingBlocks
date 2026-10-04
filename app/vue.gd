@@ -1429,7 +1429,14 @@ func oublier_ancre() -> void:
 	rafraichir()
 
 
+## ⚠ L'ÉTAT TENU PAR LA COUCHE (`MassifPeint.cases_tenues`), À LIRE SEULEMENT : le rebâtir coûtait ~150 ms par case
+## survolée sur l'exemple. Relu de la grille seulement quand la couche ne peut pas le garantir.
 func _occupees_actives() -> Dictionary:
+	var m := monde()
+	if m != null and m.has_method("cases_tenues"):
+		var tenues = m.cases_tenues()
+		if tenues != null:
+			return tenues
 	var occupees := {}
 	var g := cases()
 	if g != null:
