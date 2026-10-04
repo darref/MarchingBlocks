@@ -3081,11 +3081,27 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
     change aucune décision (la règle ne lit que l'index) : `MassifPeint.lot` ne change alors que le lot de la grille.
     Gardé par `test_massif_peint` (pas de reconstruction, la grille porte le lot, le monde = une reconstruction
     complète ; un lot qui a perdu une tuile reconstruit) ; mutation rouge.
-  - Ouvrir l'exemple : 16,6 → 13,1 s (les mêmes causes).
+  - **OUVRIR L'EXEMPLE : 16,6 → 8,9 s** (les mêmes causes, puis deux de plus) :
+    - **l'ouverture reconstruisait chaque couche DEUX FOIS** : seule, en recevant son lot (`_habiller_couche`), puis sur
+      l'union (`_refaire_l_union`). Pendant `_ouverture`, le lot est posé sans reconstruire
+      (`MassifPeint.reconstruire_au_lot`), et une couche sans source n'est plus reconstruite seule ;
+    - **LA RÈGLE DE POSE REMONTAIT LES COLONNES** : `MB.sous_le_ciel` coûtait 65 % de la décision d'un sommet (4,1 s sur
+      6,3, en local, sur les 263 026 sommets de la grande couche). `MB.hauts_des_colonnes` (la plus haute case de chaque
+      colonne, bâtie UNE fois par reconstruction entière, par `MB.poses` et par une grande reconstruction locale) : « une
+      case pleine de y + 2 au plafond » ⇔ « la plus haute est à y + 2 ou plus ». Et `classer`, le nom d'air libre et le
+      compte des variantes sont gardés (256 configurations ; le compte ne dépend que du lot). Une reconstruction
+      complète : ×4 à ×5. ⚠ **MÊME SORTIE, BIT POUR BIT** : `test_marching_blocks` §18 (30 mondes au hasard, chaque
+      sommet, les deux réponses exercées — mutation rouge : 2 412 écarts), et `test_greffon_peinture` recalcule les cas
+      d'épreuve des greffons avec `MB.poses` : inchangés. Les greffons gardent l'ancienne façon (même sortie) : une
+      optimisation à porter avec eux.
+  - Sur le PC, au bout de la passe : un geste ~40 ms, cacher / montrer une couche ~1,6 s, ouvrir l'exemple ~8,9 s.
   - **CE QUI RESTE, MESURÉ, PAS FAIT** : `vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
     textures en PNG, ~2,5 s en local — changer de format changerait le fichier) ; Ctrl+S ~2,3 s (il marque d'office le
     témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; cacher une couche ~2 s (la
-    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; ouvrir l'exemple ~13 s.
+    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; à l'ouverture, la liste
+    des couches charge chaque témoin pour photographier sa vignette (~1,2 s : les garder sur disque), la vérification des
+    ensembles PBR en retard redescend du GPU une texture par matériau pour 16 pixels (~1,4 s), et la première eau,
+    calculée en entier juste après (~4,4 s).
   - ⚠ **UN TEST INSTABLE, VU EN PASSANT** : `fumee_appli`, « Espace lâchée, il s'arrête vite et PLANE » a échoué une fois
     sur quatre (0,52 case de dérive pour un seuil de 0,5 : le pas de la physique suit la charge de la machine).
 
