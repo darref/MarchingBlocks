@@ -1443,8 +1443,12 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary, affectat
 	grille.free()
 	var document := GLTFDocument.new()
 	var etat := GLTFState.new()
+	# Les PNG des textures, gardés d'une écriture à l'autre (`png_en_memoire.gd`) : même fichier, ~3 s de moins.
+	var PngEnMemoire := load("res://addons/marchingblocks_core/png_en_memoire.gd")
+	var ext: GLTFDocumentExtension = PngEnMemoire.brancher(document)
 	var err: int = document.append_from_scene(racine, etat)
 	if err != OK:
+		PngEnMemoire.debrancher(ext)
 		racine.free()
 		return "append_from_scene a rendu %d" % err
 	var anciens: Array = etat.get_meshes()
@@ -1455,6 +1459,7 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary, affectat
 			continue
 		var cle: String = cle_du_noeud.get(nd.resource_name, "")
 		if cle == "":
+			PngEnMemoire.debrancher(ext)
 			racine.free()
 			return "nœud inattendu dans l'état glTF : « %s »" % nd.resource_name
 		if not indice_de_cle.has(cle):
@@ -1469,6 +1474,7 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary, affectat
 			nd.mesh = indice_de_cle[cle_du_noeud[nd.resource_name]]
 	etat.set_meshes(nouveaux)
 	err = document.write_to_filesystem(etat, chemin)
+	PngEnMemoire.debrancher(ext)
 	racine.free()
 	if err != OK:
 		return "write_to_filesystem a rendu %d pour « %s »" % [err, chemin]

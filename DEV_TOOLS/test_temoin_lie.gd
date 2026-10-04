@@ -31,6 +31,7 @@ func _initialize() -> void:
 	_le_rayon_trouve_l_occurrence(t)
 	_sculpter_une_tuile_les_change_toutes(t)
 	_l_ecriture_ne_fuit_pas(t)
+	_les_png_sont_gardes(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -47,6 +48,73 @@ func _l_ecriture_ne_fuit_pas(t: RefCounted) -> void:
 	var apres := int(Performance.get_monitor(Performance.OBJECT_ORPHAN_NODE_COUNT))
 	_dire(err == "" and apres == avant, "écrire le .glb lié ne laisse aucun nœud orphelin (%d → %d)" % [avant, apres])
 	DirAccess.remove_absolute(chemin)
+
+
+## LES PNG GARDÉS (`png_en_memoire.gd`, 4 octobre 2026 : ~3 s d'encodage à chaque écriture du `.glb` de l'exemple).
+## Attendu : l'écriture de GODOT telle quelle (`actif` faux, le format « PNG » de `GLTFDocument`), octet pour octet — en
+## mémoire, depuis le disque, et après qu'une image a changé (elle seule est réencodée).
+func _les_png_sont_gardes(t0: RefCounted) -> void:
+	var PngEnMemoire := load("res://addons/marchingblocks_core/png_en_memoire.gd")
+	var t: RefCounted = t0.copie()
+	var dossier := ProjectSettings.globalize_path("user://test_temoin_lie/png")
+	DirAccess.make_dir_recursive_absolute(dossier.path_join("cache"))
+	for nom in DirAccess.get_files_at(dossier.path_join("cache")):
+		DirAccess.remove_absolute(dossier.path_join("cache").path_join(nom))
+	var images: Array = []
+	for i in 2:
+		var img := Image.create(64, 32, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0.3 + 0.4 * i, 0.5, 0.2))
+		img.set_pixel(i, 0, Color.WHITE)
+		var png := dossier.path_join("image_%d.png" % i)
+		img.save_png(png)
+		images.append(png)
+	var k_mat: int = t.materiaux.size()
+	for i in 2:
+		t.materiaux.append({"nom": "Peint %d" % i, "couleur": Color.WHITE, "rugosite": 0.6, "metal": 0.0,
+			"texture": images[i], "echelle": 1.0, "projection": "boite"})
+	var cles: Array = t.tuiles.keys()
+	t.tuiles[cles[0]].assigner([0, 1], k_mat)
+	t.tuiles[cles[1]].assigner([0], k_mat + 1)
+	var ecrire := func(nom: String, actif: bool) -> String:
+		PngEnMemoire.actif = actif
+		var chemin := dossier.path_join(nom)
+		var err: String = t.vers_glb(chemin)
+		PngEnMemoire.actif = true
+		return FileAccess.get_md5(chemin) if err == "" else "erreur : " + err
+	var ancien_dossier: String = PngEnMemoire.dossier
+	PngEnMemoire.dossier = ""
+	PngEnMemoire.oublier()
+	var reference: String = ecrire.call("godot.glb", false)
+	var json := _json_glb(dossier.path_join("godot.glb"))
+	_dire((json.get("images", []) as Array).size() >= 2, "la référence porte les images (%d)" % (json.get("images", []) as Array).size())
+	var a: String = ecrire.call("a.glb", true)
+	var encodees_a: int = PngEnMemoire.encodees
+	var b: String = ecrire.call("b.glb", true)
+	_dire(a == reference and b == reference, "PNG gardés : le .glb est celui de Godot, octet pour octet (%s, %s, %s)" % [reference, a, b])
+	_dire(encodees_a >= 2 and PngEnMemoire.encodees == 0 and PngEnMemoire.reprises == encodees_a,
+		"… la première écriture encode (%d), la seconde n'encode rien (%d reprises)" % [encodees_a, PngEnMemoire.reprises])
+	# Sur le disque : la mémoire oubliée (une autre session), rien n'est réencodé.
+	PngEnMemoire.dossier = dossier.path_join("cache")
+	PngEnMemoire.oublier()
+	var c: String = ecrire.call("c.glb", true)
+	_dire(PngEnMemoire.encodees == encodees_a and DirAccess.get_files_at(PngEnMemoire.dossier).size() == encodees_a,
+		"… encodées sans mémoire, elles sont écrites sur le disque (%d fichiers)" % DirAccess.get_files_at(PngEnMemoire.dossier).size())
+	PngEnMemoire.oublier()
+	var d: String = ecrire.call("d.glb", true)
+	_dire(c == reference and d == reference and PngEnMemoire.encodees == 0 and PngEnMemoire.reprises == encodees_a,
+		"… relus du DISQUE dans une autre session : le même fichier, rien d'encodé (%d reprises)" % PngEnMemoire.reprises)
+	# Une image change : elle seule est réencodée, et le fichier est celui que Godot écrit pour ce nouvel état.
+	var img := Image.load_from_file(images[1])
+	img.set_pixel(5, 5, Color.BLACK)
+	var autre := dossier.path_join("image_1b.png")
+	img.save_png(autre)
+	t.materiaux[k_mat + 1]["texture"] = autre
+	var ref2: String = ecrire.call("godot2.glb", false)
+	var e: String = ecrire.call("e.glb", true)
+	_dire(ref2 != reference and e == ref2 and PngEnMemoire.encodees == 1,
+		"… une image changée : elle seule réencodée (%d), le fichier de Godot pour ce nouvel état" % PngEnMemoire.encodees)
+	PngEnMemoire.dossier = ancien_dossier
+	PngEnMemoire.oublier()
 
 
 func _dire(condition: bool, quoi: String) -> void:

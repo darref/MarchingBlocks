@@ -81,6 +81,13 @@ func _derouler() -> void:
 	t0 = Time.get_ticks_usec()
 	tt.vers_glb(_ecran._glb_du_temoin(c))
 	_trace("  vers_glb", t0)
+	# Une seconde écriture, rien de changé dans les images : les PNG gardés (`png_en_memoire.gd`, 4 octobre 2026).
+	var PngEnMemoire = load("res://addons/marchingblocks_core/png_en_memoire.gd")
+	print("    (images encodées %d, reprises %d)" % [PngEnMemoire.encodees, PngEnMemoire.reprises])
+	t0 = Time.get_ticks_usec()
+	tt.vers_glb(_ecran._glb_du_temoin(c))
+	_trace("  vers_glb, une seconde fois", t0)
+	print("    (images encodées %d, reprises %d)" % [PngEnMemoire.encodees, PngEnMemoire.reprises])
 	t0 = Time.get_ticks_usec()
 	_ecran._suivre_son_temoin(c)
 	_trace("  _suivre_son_temoin (relire + le monde reposé)", t0)

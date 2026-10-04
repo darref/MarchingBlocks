@@ -426,9 +426,16 @@ func _mener() -> void:
 
 	# ── L'export vers les moteurs refuse une couche sans tuiles ────────────────────────────────────
 	# La couche 1 n'a jamais été tranchée : exporter livrerait le repli procédural sous le nom de l'artiste.
+	# ⚠ UN RESTE D'UN PASSAGE PRÉCÉDENT (vu le 4 octobre 2026 : un `layer_2.mbset` du matin, en lecture seule — un
+	# dossier marqué pour Windows) faisait échouer « rien n'est écrit » sans que rien ne soit écrit. On juge donc ce que
+	# CET export écrit : le dossier absent, ou son `tileset.json` inchangé.
+	var mbset_refuse := ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")
+	var json_refuse := mbset_refuse.path_join("tileset.json")
+	var date_avant := FileAccess.get_modified_time(json_refuse) if FileAccess.file_exists(json_refuse) else -1
 	await ed._exporter_le_jeu(ProjectSettings.globalize_path("user://fumee"))
-	_vrai(ed._rapport.text.contains("Nothing to export") and not DirAccess.dir_exists_absolute(
-		ProjectSettings.globalize_path("user://fumee").path_join("layer_2.mbset")),
+	var rien_ecrit := not DirAccess.dir_exists_absolute(mbset_refuse) if date_avant < 0 \
+		else FileAccess.get_modified_time(json_refuse) == date_avant
+	_vrai(ed._rapport.text.contains("Nothing to export") and rien_ecrit,
 		"exporter une couche sans tuiles est refusé, et rien n'est écrit")
 
 	_les_formes_speciales(ed)
