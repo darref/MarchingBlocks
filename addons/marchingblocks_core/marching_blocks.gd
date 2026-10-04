@@ -1143,6 +1143,20 @@ static func hauts_des_colonnes(pleines: Dictionary) -> Dictionary:
 	return hauts
 
 
+## La même table, pour les seules `colonnes` (des Vector2i) : chacune balayée de `y_haut` à `y_bas`, la première case
+## pleine trouvée. ⚠ Même réponse que `hauts_des_colonnes` sur ces colonnes TANT QUE toutes les cases de `pleines`
+## sont entre `y_bas` et `y_haut`. MESURÉ (4 octobre 2026, l'exemple) : cacher une couche bâtissait la table entière
+## (739 481 cases, ~350 ms) pour en lire ~1 100 colonnes.
+static func hauts_des_colonnes_de(pleines: Dictionary, colonnes, y_bas: int, y_haut: int) -> Dictionary:
+	var hauts := {}
+	for k: Vector2i in colonnes:
+		for y in range(y_haut, y_bas - 1, -1):
+			if pleines.has(Vector3i(k.x, y, k.y)):
+				hauts[k] = y
+				break
+	return hauts
+
+
 ## Cette CASE est-elle sous de la roche ? `plafond` borne le balayage, comme pour `sous_le_ciel`.
 ##
 ## ⚠ **VOISINE DE `sous_le_ciel()`, MAIS DISTINCTE — ET IL FAUT LE DIRE, sinon on les confondra.**

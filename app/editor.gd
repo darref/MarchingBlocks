@@ -4168,9 +4168,11 @@ func _enregistrer_temoin(c: Dictionary, complet := false) -> String:
 
 ## Le `.glb` lié d'une couche réécrit depuis son témoin, et son monde rhabillé — s'il était en retard.
 func _rhabiller(c: Dictionary) -> String:
-	_empreintes_vues.clear()   # le `.glb` va être réécrit : l'étiquette de la liste relira son empreinte
 	if not c.get("_glb_perime", false) or c.get("_temoin", null) == null:
 		return ""
+	# Le `.glb` de CETTE couche va être réécrit : l'étiquette de la liste relira son empreinte (les autres, non — tout
+	# oublier faisait relire le MD5 de chaque `.glb` après chaque Ctrl+S, ~70 ms sur l'exemple).
+	_empreintes_vues.erase(_glb_du_temoin(c))
 	var raison: String = c["_temoin"].vers_glb(_glb_du_temoin(c))
 	if raison != "":
 		_dire("[color=#e0603c]The witness of « %s » could not be saved:[/color] %s" % [c["nom"], raison])
@@ -4211,9 +4213,27 @@ func _suivre_son_temoin(c: Dictionary) -> void:
 	var lot: MeshLibrary = bilan.get("lot", null)
 	if lot == null or not bilan.get("lie", false):
 		return
-	Projet.mettre_en_cache(lot, propre)
+	# ⚠ LE CACHE S'ÉCRIT PLUS TARD (`_ecrire_les_caches` : Ctrl+S, la fermeture, le changement de projet). MESURÉ (4 octobre
+	# 2026, l'exemple) : l'écrire coûtait ~270 ms à chaque passage dans World après une retouche, pour ne servir qu'à la
+	# prochaine ouverture. Le lot est marqué tout de suite de l'empreinte du `.glb` qu'il vient de lire ; un cache resté
+	# en retard (l'appli coupée) porte l'empreinte d'avant, se voit périmé et la couche se relit de son `.glb`.
+	# ⚠ PAS SUR UN AUTRE FIL : écrire un `ArrayMesh` relit ses surfaces au RenderingServer, qui ne répond qu'au fil
+	# principal — l'attendre à la fermeture serait un interblocage.
+	Projet.marquer(lot, Projet.empreinte(propre))
+	c["_cache_a_ecrire"] = {"lot": lot, "source": propre}
 	c["source"] = propre
 	_vue.couche(i).lot = lot
+
+
+## Les lots que le monde a pris de son témoin, écrits dans le cache (voir `_suivre_son_temoin`).
+func _ecrire_les_caches() -> void:
+	for c in _couches:
+		var a_ecrire = c.get("_cache_a_ecrire", null)
+		if a_ecrire == null:
+			continue
+		c.erase("_cache_a_ecrire")
+		var lot: MeshLibrary = a_ecrire["lot"]
+		Projet.mettre_en_cache(lot, a_ecrire["source"], str(lot.get_meta("empreinte", "")))
 
 
 ## Étape 3 : la couche active prend les tuiles de SON témoin. ⚠ Un témoin jamais modelé est le témoin
@@ -6476,6 +6496,7 @@ func _toujours_ecrire() -> void:
 	_enregistrer_le_temoin_modele(true)
 	for c in _couches:
 		_rhabiller(c)
+	_ecrire_les_caches()
 	_enregistrer()
 
 

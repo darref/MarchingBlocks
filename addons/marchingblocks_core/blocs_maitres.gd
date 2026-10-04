@@ -86,6 +86,7 @@ extends RefCounted
 
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
+const ImagesRelues := preload("res://addons/marchingblocks_core/images_relues.gd")
 
 ## Le côté du bloc, en cellules. ⚠ 12 et non 8 : des formes qu'on RECONNAÎT — une arche visible comme
 ## une arche, un pont, une cheminée — coûtent de la place ; en tenir moins, c'est l'optimisation que
@@ -1550,7 +1551,11 @@ static func tuiles_liees(chemin: String, erreurs: Array, remarques: Array) -> Di
 		return {}
 	var document := GLTFDocument.new()
 	var etat := GLTFState.new()
-	if document.append_from_file(chemin, etat) != OK:
+	# Les images déjà décodées sont reprises (`images_relues.gd` : ~300 ms de PNG à chaque passage dans World).
+	var images := ImagesRelues.brancher()
+	var lu := document.append_from_file(chemin, etat)
+	ImagesRelues.debrancher(images)
+	if lu != OK:
 		return {}
 	var noeuds: Array = etat.get_nodes()
 	var maillages: Array = etat.get_meshes()

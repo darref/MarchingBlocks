@@ -810,17 +810,36 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	_egal(ed._empreinte_pour_la_liste(essai_glb), "gardée", "… gardée tant que le fichier ne change pas (pas relue)")
 	FileAccess.open(essai_glb, FileAccess.WRITE).store_string("bbbbbb")
 	_egal(ed._empreinte_pour_la_liste(essai_glb), FileAccess.get_md5(essai_glb), "… relue quand le fichier change de taille")
+	# Réécrit par l'appli (`_rhabiller` d'une couche dont c'est le `.glb`) : relue — et l'empreinte d'un AUTRE `.glb`
+	# reste gardée (tout oublier faisait relire le MD5 de chaque couche après chaque Ctrl+S, ~70 ms sur l'exemple).
 	ed._empreintes_vues[essai_glb][1] = "gardée"
-	ed._rhabiller({})
+	ed._empreintes_vues["user://fumee/autre_couche.glb"] = [[0, 0], "autre gardée"]
+	ed._rhabiller({"temoin": essai_glb.get_basename() + ".mbtiles", "_glb_perime": true, "_temoin": tb.copie()})
 	_egal(ed._empreinte_pour_la_liste(essai_glb), FileAccess.get_md5(essai_glb), "… et relue après une réécriture par l'appli")
+	_egal(ed._empreintes_vues.get("user://fumee/autre_couche.glb", [null, ""])[1], "autre gardée",
+		"… celle d'une autre couche reste gardée")
+	ed._empreintes_vues.erase("user://fumee/autre_couche.glb")
 	DirAccess.remove_absolute(essai_glb)
 	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait).
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(tb.tuiles[paroi].sommets == avant_b, "(Ctrl+Z a défait le geste dans B)")
 	ed._enregistrer_le_temoin_modele()
+	DirAccess.remove_absolute(Projet.chemin_cache(glb_b))
 	var t0 := Time.get_ticks_msec()
 	ed._aller_a("monde")
 	print("   (le monde de B suit son témoin en %d ms, au passage dans World)" % (Time.get_ticks_msec() - t0))
+	# LE CACHE EST REPORTÉ (4 octobre 2026 : ~270 ms à chaque passage dans World) : pas encore écrit, mais le lot posé
+	# porte déjà l'empreinte du `.glb` relu — la liste dit « sliced » ; Ctrl+S l'écrit, à jour. Attendu : le MD5 du fichier.
+	_vrai(not FileAccess.file_exists(Projet.chemin_cache(glb_b)), "le monde suit son témoin sans écrire le cache tout de suite")
+	_egal(str(ed._vue.couche(ib).lot.get_meta("empreinte", "")), FileAccess.get_md5(glb_b),
+		"… le lot posé porte l'empreinte du .glb qu'il vient de lire")
+	_vrai(ed._etat_de(ib).contains("sliced") and not ed._etat_de(ib).contains("again"),
+		"… et la liste le dit à jour (%s)" % ed._etat_de(ib))
+	ed._enregistrer_tout()
+	var cache_b: Dictionary = Projet.lire_cache(glb_b)
+	_vrai(cache_b["a_jour"] and cache_b["lot"] != null
+		and (cache_b["lot"] as MeshLibrary).get_item_list().size() == ed._vue.couche(ib).lot.get_item_list().size(),
+		"Ctrl+S écrit le cache reporté, à jour")
 	ed._aller_a("witness")
 	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
 		"Ctrl+Z dans le témoin : le monde de B le suit aussi")

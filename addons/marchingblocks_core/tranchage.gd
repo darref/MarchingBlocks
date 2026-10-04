@@ -768,11 +768,21 @@ static func verifier_sections(pieces: Dictionary, bits_par_nom: Dictionary, rema
 		var entrees: Array = seaux[cle]
 		var reference: Dictionary = entrees[0]
 		var grille_ref: Dictionary = _grille_de_segments(reference["segments"])
+		# ⚠ UNE SECTION DÉJÀ JUGÉE NE SE REJUGE PAS (4 octobre 2026) : une tuile entre dans un seau sous plusieurs
+		# poses, et des tuiles qui partagent leur section (les sections partagées) y entrent à l'identique — mesuré
+		# sur l'exemple, 948 entrées pour 337 sections distinctes, ~200 ms à chaque relecture du témoin lié. Le même
+		# tableau donne le même écart : le résultat est repris, la sortie ne change pas.
+		var ecart_de := {reference["segments"]: 0.0}
 		for i in range(1, entrees.size()):
 			var autre: Dictionary = entrees[i]
-			var ecart: float = maxf(_ecart_vers(autre["segments"], reference["segments"], grille_ref),
-				_ecart_vers(reference["segments"], autre["segments"],
-					_grille_de_segments(autre["segments"])))
+			var ecart: float
+			if ecart_de.has(autre["segments"]):
+				ecart = ecart_de[autre["segments"]]
+			else:
+				ecart = maxf(_ecart_vers(autre["segments"], reference["segments"], grille_ref),
+					_ecart_vers(reference["segments"], autre["segments"],
+						_grille_de_segments(autre["segments"])))
+				ecart_de[autre["segments"]] = ecart
 			if ecart > ECART_DE_SECTION:
 				fautes += 1
 				if ecart > pire:

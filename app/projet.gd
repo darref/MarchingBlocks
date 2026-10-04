@@ -77,7 +77,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 			plat[i + 1] = v.y
 			plat[i + 2] = v.z
 			i += 3
-		blocs.append("\"%s\"" % Marshalls.raw_to_base64(plat.to_byte_array()))
+		# ⚠ UNE COUCHE VIDE S'ÉCRIT "" : `raw_to_base64` d'un tableau vide crie une erreur dans la console (vu le 4 octobre
+		# 2026, à chaque enregistrement d'un projet neuf) ; "" se relit en zéro case.
+		blocs.append("\"%s\"" % ("" if plat.is_empty() else Marshalls.raw_to_base64(plat.to_byte_array())))
 		var sortie := {"nom": c["nom"], "source": c["source"],
 			"visible": c["visible"], "cases_b64": MARQUE_CASES % (blocs.size() - 1), "temoin": str(c.get("temoin", "")),
 			"id": str(c.get("id", ""))}
@@ -274,12 +276,19 @@ static func chemin_cache(source: String) -> String:
 
 
 ## Met un lot tranché en cache, marqué de l'empreinte de sa source. Rend "" ou la raison d'un échec.
-static func mettre_en_cache(lot: MeshLibrary, source: String) -> String:
+## `empreinte_` : celle du fichier dont le lot a été lu, relevée à ce moment-là (un lot écrit plus tard — `marquer` —
+## garde l'empreinte de SA source, jamais celle d'un fichier réécrit depuis : un cache en retard se voit périmé).
+static func mettre_en_cache(lot: MeshLibrary, source: String, empreinte_ := "") -> String:
 	DirAccess.make_dir_recursive_absolute(DOSSIER_CACHE)
-	lot.set_meta("empreinte", empreinte(source))
-	lot.set_meta("format_du_cache", FORMAT_DU_CACHE)
+	marquer(lot, empreinte_ if empreinte_ != "" else empreinte(source))
 	var e: int = ResourceSaver.save(lot, chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
 	return "" if e == OK else "cache not written (error %d)" % e
+
+
+## Le lot marqué de l'empreinte de sa source, sans l'écrire (ce que lit l'étiquette de la liste des couches).
+static func marquer(lot: MeshLibrary, e: String) -> void:
+	lot.set_meta("empreinte", e)
+	lot.set_meta("format_du_cache", FORMAT_DU_CACHE)
 
 
 ## Le lot en cache : {"lot": MeshLibrary ou null, "a_jour": bool}.

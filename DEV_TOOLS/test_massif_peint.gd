@@ -389,6 +389,66 @@ func _les_colonnes_qui_la_regardent() -> void:
 		"retirer la case isolée du caillou : la route locale rend la complète, pour lui et pour la roche")
 	for r in couches.size():
 		couches[r][0].queue_free()
+	_la_table_des_colonnes_lues()
+
+
+## LA TABLE DES HAUTEURS DES SEULES COLONNES LUES (4 octobre 2026, la nuit) : cacher une couche de l'exemple bâtissait la
+## table de toute l'union (739 481 cases, ~350 ms) pour en lire ~1 100 colonnes. Un sommet (x, z) lit les colonnes
+## x..x+1, z..z+1, de haut en bas depuis le plafond.
+## Le monde : la roche (rang 0, 100 × 2 × 100) et UNE case flottante au plafond (y = 8) en (75, 8, 30), juste HORS des
+## colonnes changées ; l'herbe (rang 1, 75 × 1 × 75, à y = 2) qu'on cache ; une masse lointaine (rang 2, dans l'union seule) qui rend la table
+## partielle moins chère que la table entière. Le sommet (74, 1, 30) ne voit le ciel que si la colonne (75, 30) — une
+## VOISINE, à son plafond — est oubliée. Attendu : la route locale = la reconstruction complète, photo pour photo, avec un
+## lot qui a les variantes d'air libre ; et l'instrument (la branche partielle est prise).
+func _la_table_des_colonnes_lues() -> void:
+	var lot := MeshLibrary.new()
+	var source: MeshLibrary = RP.librairie()
+	var id := 0
+	for vieux in source.get_item_list():
+		var nom: String = source.get_item_name(vieux)
+		for nom_pose in [nom, MB.nom_en_contexte(nom, true)]:
+			lot.create_item(id)
+			lot.set_item_name(id, nom_pose)
+			lot.set_item_mesh(id, source.get_item_mesh(vieux))
+			id += 1
+	var roche := _massif()
+	var herbe := _massif()
+	var flottante := Vector3i(75, 8, 30)
+	var cases_r := _pave(0, 99, 0, 1, 0, 99)
+	cases_r.append(flottante)
+	var cases_h := _pave(0, 74, 2, 2, 0, 74)
+	var union := {}
+	# La masse lointaine n'est que dans l'union (rang 2) : aucune couche à reconstruire pour elle.
+	for c in _pave(300, 339, 0, 7, 0, 149):
+		union[c] = 2
+	var couches := [[roche, cases_r], [herbe, cases_h]]
+	for r in couches.size():
+		couches[r][0].lot = lot
+		_peindre(couches[r][0], couches[r][1])
+		for c in couches[r][1]:
+			union[c] = r
+	for r in couches.size():
+		couches[r][0].union = union
+		couches[r][0].rang = r
+		couches[r][0].reconstruire()
+	var completes: int = roche.reconstructions_completes
+	for c in cases_h:
+		union.erase(c)
+	roche.reconstruire_autour(cases_h)
+	var local_r := _photo(roche.get_node("Rendu"))
+	var refaits: int = roche.derniers_sommets_refaits
+	var lues := 77 * 77   # les colonnes x, z de −1 à 75 (changées −1..74, et leurs voisines +1)
+	_dire(roche.reconstructions_completes == completes and refaits > 20000 and lues * 9 < union.size(),
+		"cacher l'herbe : la roche refait %d sommets par la route locale, avec la table des colonnes lues" % refaits)
+	var d_avant: Variant = local_r.get(Vector3i(74, 1, 30), null)
+	roche.reconstruire()
+	var complet_r := _photo(roche.get_node("Rendu"))
+	_dire(d_avant != null and complet_r.get(Vector3i(74, 1, 30), null) == d_avant,
+		"… le sommet sous la case flottante voisine pose la même tuile que la reconstruction complète")
+	_dire(local_r == complet_r and local_r.size() > 0,
+		"… et toute la roche rend la reconstruction complète (%d tuiles)" % local_r.size())
+	for r in couches.size():
+		couches[r][0].queue_free()
 
 
 func _photo(g: GridMap) -> Dictionary:

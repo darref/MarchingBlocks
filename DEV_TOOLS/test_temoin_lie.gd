@@ -32,6 +32,7 @@ func _initialize() -> void:
 	_sculpter_une_tuile_les_change_toutes(t)
 	_l_ecriture_ne_fuit_pas(t)
 	_les_png_sont_gardes(t)
+	_les_images_relues(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -115,6 +116,77 @@ func _les_png_sont_gardes(t0: RefCounted) -> void:
 		"… une image changée : elle seule réencodée (%d), le fichier de Godot pour ce nouvel état" % PngEnMemoire.encodees)
 	PngEnMemoire.dossier = ancien_dossier
 	PngEnMemoire.oublier()
+
+
+## LES IMAGES RELUES (`images_relues.gd`, 4 octobre 2026 : ~300 ms de PNG décodés à chaque passage dans World). Attendu :
+## la lecture de GODOT telle quelle (`actif` faux), pixel pour pixel — à la première relecture, à la seconde (rien n'est
+## décodé), et pour un fichier dont UNE image a changé d'un pixel (même taille : elle seule est décodée).
+func _les_images_relues(t0: RefCounted) -> void:
+	var ImagesRelues := load("res://addons/marchingblocks_core/images_relues.gd")
+	var t: RefCounted = t0.copie()
+	var dossier := ProjectSettings.globalize_path("user://test_temoin_lie/relues")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var images: Array = []
+	for i in 2:
+		var img := Image.create(64, 32, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0.2 + 0.5 * i, 0.4, 0.6))
+		var png := dossier.path_join("image_%d.png" % i)
+		img.save_png(png)
+		images.append(png)
+	var k_mat: int = t.materiaux.size()
+	for i in 2:
+		t.materiaux.append({"nom": "Relu %d" % i, "couleur": Color.WHITE, "rugosite": 0.6, "metal": 0.0,
+			"texture": images[i], "echelle": 1.0, "projection": "boite"})
+	var cles: Array = t.tuiles.keys()
+	t.tuiles[cles[0]].assigner([0, 1], k_mat)
+	t.tuiles[cles[1]].assigner([0], k_mat + 1)
+	var glb := dossier.path_join("relues.glb")
+	_dire(t.vers_glb(glb) == "", "(le .glb à relire s'écrit)")
+	var pixels := func(chemin: String, actif: bool) -> Array:
+		ImagesRelues.actif = actif
+		var ext = ImagesRelues.brancher()
+		var d := GLTFDocument.new()
+		var e := GLTFState.new()
+		d.append_from_file(chemin, e)
+		ImagesRelues.debrancher(ext)
+		ImagesRelues.actif = true
+		var sortie: Array = []
+		for tex in e.get_images():
+			var im: Image = (tex as Texture2D).get_image()
+			sortie.append([im.get_format(), im.get_size(), im.get_data()])
+		return sortie
+	ImagesRelues.oublier()
+	var reference: Array = pixels.call(glb, false)
+	_dire(reference.size() >= 2, "la référence porte les images (%d)" % reference.size())
+	var a: Array = pixels.call(glb, true)
+	var decodees_a: int = ImagesRelues.decodees
+	var b: Array = pixels.call(glb, true)
+	_dire(a == reference and b == reference, "images relues : les pixels de Godot, à la première et à la seconde relecture")
+	_dire(decodees_a >= 2 and ImagesRelues.decodees == 0 and ImagesRelues.reprises == decodees_a,
+		"… la première décode (%d), la seconde ne décode rien (%d reprises)" % [decodees_a, ImagesRelues.reprises])
+	# Une image change, même taille — UNIE d'une autre couleur, pour que son PNG ait la MÊME LONGUEUR que l'ancien (une clé
+	# qui ne regarderait que la longueur s'y tromperait) : elle seule est décodée, et on lit ses pixels à elle.
+	var img := Image.create(64, 32, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.1, 0.8, 0.3))
+	# ⚠ UN AUTRE CHEMIN : la toile d'une image est partagée par son chemin (`peinture.gd`), réécrire le même fichier ne
+	# changerait pas ce que le `.glb` emporte.
+	var autre := dossier.path_join("image_1b.png")
+	img.save_png(autre)
+	t.materiaux[k_mat + 1]["texture"] = autre
+	var glb2 := dossier.path_join("relues_2.glb")
+	_dire(t.vers_glb(glb2) == "", "(le second .glb s'écrit)")
+	_dire(img.save_png_to_buffer().size() == Image.load_from_file(images[1]).save_png_to_buffer().size(),
+		"(l'image changée a un PNG de la même longueur que l'ancienne)")
+	var reference2: Array = pixels.call(glb2, false)
+	var c: Array = pixels.call(glb2, true)
+	_dire(reference2 != reference and c == reference2 and ImagesRelues.decodees == 1,
+		"… une image changée : elle seule décodée (%d), les pixels de Godot pour ce fichier" % ImagesRelues.decodees)
+	# LA RELECTURE LIÉE LES REPREND : deux `tuiles_liees` de suite, la seconde ne décode rien.
+	BM.tuiles_liees(glb2, [], [])
+	BM.tuiles_liees(glb2, [], [])
+	_dire(ImagesRelues.decodees == 0 and ImagesRelues.reprises >= 2,
+		"la relecture liée reprend les images déjà décodées (%d reprises)" % ImagesRelues.reprises)
+	ImagesRelues.oublier()
 
 
 func _dire(condition: bool, quoi: String) -> void:

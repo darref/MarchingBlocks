@@ -479,13 +479,21 @@ func reconstruire_autour(changees, sur := false) -> Dictionary:
 	# ⚠ CHAQUE COLONNE UNE FOIS (4 octobre 2026) : jusqu'à la plus haute case changée qui la touche. Énumérer la
 	# colonne entière pour CHAQUE case insérait des millions de doublons quand une couche entière changeait (cacher les
 	# 52 407 cases d'une couche de l'exemple : 3,6 s d'énumération seule, en local). Même ensemble de sommets.
-	var colonnes := {}   # Vector2i(x, z) → plus haute case changée
+	# ⚠ ET CHAQUE COLONNE CHANGÉE UNE FOIS AVANT DE L'ÉTENDRE AUX QUATRE (4 octobre 2026, la nuit) : quatre entrées par
+	# case changée coûtaient ~100 ms par couche pour les 52 407 cases d'une couche cachée. Même maximum par colonne.
+	var changees_xz := {}   # Vector2i(x, z) → plus haute case changée de cette colonne
 	for c in changees:
 		var p: Vector3i = c
-		for sx in [p.x - 1, p.x]:
-			for sz in [p.z - 1, p.z]:
+		var kc := Vector2i(p.x, p.z)
+		if p.y > int(changees_xz.get(kc, -2147483648)):
+			changees_xz[kc] = p.y
+	var colonnes := {}   # Vector2i(x, z) → plus haute case changée
+	for kc: Vector2i in changees_xz:
+		var y_c: int = changees_xz[kc]
+		for sx in [kc.x - 1, kc.x]:
+			for sz in [kc.y - 1, kc.y]:
 				var k2 := Vector2i(sx, sz)
-				colonnes[k2] = maxi(int(colonnes.get(k2, p.y)), p.y)
+				colonnes[k2] = maxi(int(colonnes.get(k2, y_c)), y_c)
 	# LA ROUTE LOCALE TANT QU'ELLE COÛTE MOINS QUE TOUT REFAIRE : le nombre de sommets à refaire contre ceux que la
 	# reconstruction complète décide (l'état gardé). Un seuil fixe en CASES (4 096) envoyait cacher une couche de
 	# l'exemple vers deux reconstructions complètes (7,3 s sur le PC).
@@ -510,8 +518,18 @@ func reconstruire_autour(changees, sur := false) -> Dictionary:
 	derniers_sommets_refaits = a_refaire
 	# Beaucoup de sommets (une couche entière cachée ou montrée) : les hauteurs des colonnes, bâties une fois, coûtent
 	# moins que de remonter les colonnes à chaque sommet (`MB.sous_le_ciel`). L'union est déjà à jour ici.
+	# ⚠ SEULEMENT LES COLONNES LUES (4 octobre 2026, la nuit) quand les balayer coûte moins que tout parcourir : un sommet
+	# (x, z) lit les colonnes x..x+1, z..z+1 ; `_y_bas` et `_plafond` bornent toutes les cases de l'union.
 	if a_refaire > 20000:
-		_hauts = MB.hauts_des_colonnes(_pleines)
+		var lues := {}
+		for k2: Vector2i in colonnes:
+			for dx in 2:
+				for dz in 2:
+					lues[Vector2i(k2.x + dx, k2.y + dz)] = true
+		if lues.size() * (_plafond - _y_bas + 1) < _pleines.size():
+			_hauts = MB.hauts_des_colonnes_de(_pleines, lues.keys(), _y_bas, _plafond)
+		else:
+			_hauts = MB.hauts_des_colonnes(_pleines)
 	for k2: Vector2i in colonnes:
 		for y in range(_y_bas - 1, int(colonnes[k2]) + 1):
 			_refaire(Vector3i(k2.x, y, k2.y))

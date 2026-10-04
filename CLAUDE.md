@@ -3287,6 +3287,56 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
       case ~40 ms (dont les gardes de compte de trois couches, ~21 ms : gardées pour les actions) ; Ctrl+S ~2,4 s (le
       témoin réécrit d'office, GARDÉ) ; l'océan à l'ouverture. Pas fait : les relectures doubles de l'import et du
       tranchage liés (gestes rares).
+  - **ET APRÈS L'EXPORT DE 22:17 (4 octobre 2026, la nuit — Jordan : « continue les optis de la liste pendant que je
+    teste »)**, mesuré en headless dans une COPIE à dossier de données isolé (`DEV_TOOLS/sonde_ctrl_s.gd`, dans la copie) :
+    - ⚠ **CTRL+S N'EST PAS LE POINT LENT QU'ON CROYAIT** : ~0,29 s une fois les cartes PBR à jour (le projet). Les ~2,5 s
+      mesurées avant venaient des cartes PBR de l'exemple fraîchement installé (générées puis écrites une fois).
+    - **LE MONDE QUI SUIT SON TÉMOIN (retour dans World après une retouche), `_suivre_son_temoin` : ~1,05 → ~0,57 s** (le
+      `.glb` écrit à part, ~0,29 s). Décomposé avant : relecture du `.glb` lié ~0,5 s (dont `append_from_file` ~0,18 —
+      ~0,36 quand la machine est chargée —, presque tout à décoder ses PNG ; `verifier_sections` ~0,22), écriture du
+      cache ~0,27, pose du lot ~0,27 (le GridMap refait ses octants : laissé). Après : relecture ~0,28, pose ~0,27.
+      ⚠ L'écriture reportée du cache se paie au Ctrl+S suivant (~0,3 s de plus, une fois).
+      - **les PNG déjà décodés sont repris** (`images_relues.gd`, une `GLTFDocumentExtension` branchée le temps de
+        `tuiles_liees`, le pendant de `png_en_memoire.gd` à la lecture) : gardés sous le MD5 de leurs octets, puis les
+        octets comparés, rendus en copie ; tout autre format laissé à Godot ; en mémoire seulement, 512 Mo au plus.
+        Banc (`banc_images_glb.gd`, dans la copie) : `append_from_file` d'un `.glb` de l'exemple 360 → 53 ms ;
+      - **le cache du lot est REPORTÉ** (`_ecrire_les_caches` : Ctrl+S, la fermeture, le changement de projet — tout
+        `_toujours_ecrire`). Le lot est marqué tout de suite de l'empreinte du `.glb` relu (`Projet.marquer`), que la
+        liste des couches lit ; `mettre_en_cache(…, empreinte_)` écrit le lot sous l'empreinte relevée À CE MOMENT : un
+        cache en retard (appli coupée) se voit périmé, la couche se relit de son `.glb`. ⚠ **PAS SUR UN AUTRE FIL** :
+        écrire un `ArrayMesh` relit ses surfaces au RenderingServer, qui ne répond qu'au fil principal — l'attendre à la
+        fermeture serait un interblocage ;
+      - **`verifier_sections` ne juge qu'une fois une même section** dans un seau (948 entrées, 337 distinctes) : ~200 ms
+        de moins, même sortie.
+    - **LA LISTE DES COUCHES APRÈS CTRL+S : ~90 → ~20 ms** — `_rhabiller` oubliait l'empreinte de TOUS les `.glb` (et
+      pour chaque couche, même pas périmée) ; il n'oublie plus que celle du `.glb` qu'il réécrit.
+    - **UN DÉFAUT DE L'EXE DE 22:17** : une couche VIDE (un projet neuf) faisait crier `raw_to_base64` à chaque
+      enregistrement (une ERREUR dans la console ; rien d'abîmé : "" se relisait en zéro case). Elle s'écrit "".
+    - **MESURÉ** : `test_projet` 121 (+4 : la couche vide sans erreur du moteur — un `Logger` (`OS.add_logger`) compte les
+      erreurs —, un lot écrit sous l'empreinte d'avant est périmé, `marquer`) ; `fumee_appli` 814 (+5 : le cache pas
+      encore écrit, le lot marqué du MD5 du `.glb`, la liste « sliced », Ctrl+S l'écrit à jour, l'empreinte d'une autre
+      couche gardée) ; `test_tranchage` 53 ; `test_temoin_lie` 46 (+8, `_les_images_relues` : les pixels de GODOT
+      (`actif` faux) à la première et à la seconde relecture, la seconde ne décode rien, une image changée — unie d'une
+      autre couleur, pour que son PNG ait la MÊME LONGUEUR — seule décodée, `tuiles_liees` qui les reprend). **Trois
+      mutations rouges** de plus pour les images : la clé par la longueur sans comparer les octets (⚠ d'abord MUETTE : les
+      PNG du test n'avaient pas la même longueur), jamais repris, la relecture liée non branchée. ⚠ « Rien n'est rendu »
+      est ÉQUIVALENTE : une image laissée vide est décodée par Godot lui-même — juste, seulement plus lent. **Six mutations rouges** (couche vide, empreinte ignorée, sections mémorisées
+      par leur taille, Ctrl+S sans les caches, lot non marqué, tout oublier). ⚠ Une première mutation des sections
+      (l'écart de la référence écrasé) était MUETTE : aucun seau des tests ne repasse par la section de référence.
+    - **CACHER / MONTRER UNE COUCHE : ~0,95 → ~0,33 s** (headless ; la couche de 52 407 cases, `sonde_couche.gd` dans la
+      copie). Décomposé : la couche 0 ~0,7 s, dont **~350 ms à bâtir la table des hauteurs de TOUTE l'union** (739 481
+      cases) pour en lire ~1 100 colonnes, et ~100 ms par couche à énumérer les colonnes (quatre entrées par case changée).
+      - **`MB.hauts_des_colonnes_de`** : la table des seules colonnes LUES (x..x+1, z..z+1 de chaque colonne refaite),
+        chacune balayée du plafond à `_y_bas` — choisie quand ce balayage coûte moins que de tout parcourir. Même réponse
+        tant que `_plafond` et `_y_bas` bornent l'union (ce que la route locale exige déjà) ;
+      - chaque colonne changée UNE fois (sa plus haute case), puis étendue aux quatre ;
+      - **mêmes bilans** sur l'exemple (pièces, fautes, air libre, au chiffre près) avant et après.
+      - Gardé par `test_massif_peint` 124 (+3, `_la_table_des_colonnes_lues` : une roche, une herbe de 75 × 75 cachée, une
+        case FLOTTANTE au plafond juste HORS des colonnes changées, une masse lointaine dans l'union — le sommet voisin
+        de la case flottante pose la tuile de la reconstruction complète, toute la roche aussi). **Trois mutations
+        rouges** (les colonnes lues sans leurs voisines, le balayage qui commence sous le plafond, la colonne prise à sa
+        première case changée). ⚠ **LES DEUX PREMIÈRES ÉTAIENT MUETTES AVANT CE CAS** : la garde des colonnes qui
+        regardent la couche ne passait jamais par la table (moins de 20 000 sommets).
 
 ### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
 ### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)

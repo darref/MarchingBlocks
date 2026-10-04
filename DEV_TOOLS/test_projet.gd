@@ -87,6 +87,17 @@ func _initialize() -> void:
 		_vrai(Projet.depuis_texte(JSON.stringify(abime_b64), eb).is_empty() and not eb.is_empty(),
 			"des cases binaires abîmées refusent le fichier : %s" % cas_b64[1])
 
+	# UNE COUCHE VIDE (un projet neuf) s'écrit sans que le moteur crie (4 octobre 2026 : `raw_to_base64` d'un tableau
+	# vide sortait une ERREUR dans la console à chaque enregistrement), et se relit en zéro case.
+	var capte := _Capte.new()
+	OS.add_logger(capte)
+	var texte_vide := Projet.vers_texte([Projet.couche("Vide")], 0)
+	OS.remove_logger(capte)
+	_egal(capte.erreurs, 0, "une couche vide s'écrit sans erreur du moteur")
+	var relu_vide: Dictionary = Projet.depuis_texte(texte_vide, [])
+	_vrai(not relu_vide.is_empty() and (relu_vide["couches"][0]["cases"] as Dictionary).is_empty(),
+		"… et se relit en zéro case")
+
 	# ── 1 bis. Une couche possède SON témoin (30 septembre 2026) : son chemin et son id reviennent ────────
 	var a := Projet.couche("A", "3")
 	a["temoin"] = "D:/projets/monde_3.mbtiles"
@@ -155,6 +166,14 @@ func _initialize() -> void:
 	ancien.set_meta("empreinte", Projet.empreinte(source))
 	ResourceSaver.save(ancien, Projet.chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
 	_vrai(not Projet.lire_cache(source)["a_jour"], "un cache d'un format plus ancien est PÉRIMÉ")
+	# UN LOT ÉCRIT PLUS TARD GARDE L'EMPREINTE DE SA SOURCE (4 octobre 2026, le cache reporté) : écrit sous une empreinte
+	# relevée avant que le fichier change, il est PÉRIMÉ — jamais marqué de l'empreinte d'aujourd'hui.
+	Projet.mettre_en_cache(lot, source, "empreinte d'un fichier d'avant")
+	_vrai(not Projet.lire_cache(source)["a_jour"], "un lot écrit sous l'empreinte d'avant est PÉRIMÉ")
+	var marque := MeshLibrary.new()
+	Projet.marquer(marque, "abc")
+	_vrai(marque.get_meta("empreinte", "") == "abc" and int(marque.get_meta("format_du_cache", 0)) == Projet.FORMAT_DU_CACHE,
+		"marquer un lot : son empreinte et le format du cache, sans l'écrire")
 	Projet.mettre_en_cache(lot, source)
 
 	# Réenregistrer le fichier change sa taille : l'empreinte doit bouger.
@@ -493,3 +512,12 @@ func _attributs(chemin: String) -> String:
 	var ligne := "".join(PackedStringArray(sortie))
 	var i := ligne.find(chemin.replace("/", "\\").substr(0, 3))
 	return ligne.substr(0, i).strip_edges() if i > 0 else ""
+
+
+## Compte les erreurs que le moteur écrit (`OS.add_logger`).
+class _Capte extends Logger:
+	var erreurs := 0
+
+	func _log_error(_function: String, _file: String, _line: int, _code: String, _rationale: String,
+			_editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
+		erreurs += 1
