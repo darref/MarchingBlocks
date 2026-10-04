@@ -70,9 +70,17 @@ const CASCADE := 1.0
 ## fines de vide là où la découpe se fait »)** : les nappes fusionnées en grands rectangles (et le large, et les bandes
 ## de rivière) posaient le coin d'un rectangle AU MILIEU du côté de son voisin. Le GPU ne garantit rien sur un tel
 ## sommet : un fil de pixels de fond passait le long de chaque côté partagé.
-static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
+## `boite` : celle du monde, si l'appelant l'a déjà (`FL.monde` la rend) — la recalculer balaie toutes les cases (~0,1 s
+## sur l'exemple, à chaque couche d'eau).
+## `memoire` : {rang du corps: [le corps, ses rectangles de nappe]}, tenue par l'appelant d'un appel à l'autre. Les
+## NAPPES d'un corps (océan, lac, lacs d'une rivière) ne lisent que des cases de son EMPRISE ; `FL.monde` ne reprend un
+## corps (le MÊME objet) que si rien n'a changé dans son emprise, ni la boîte là où il regardait — ses rectangles sont
+## donc les mêmes. ⚠ Mesuré (4 octobre 2026, l'exemple) : la nappe de l'océan coûtait ~0,6 s à chaque remaillage de sa
+## couche, pour une rivière retouchée ailleurs. Les cascades et les bandes, qui se rejoignent d'un corps à l'autre, sont
+## toujours refaites.
+static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> ArrayMesh:
 	var a := _tableaux()
-	var b := FL.boite(occupees)
+	var b: Dictionary = boite if boite != null else FL.boite(occupees)
 	var plats: Array = []
 	var vus := {}
 	var sources: Array = []
@@ -88,24 +96,24 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 			for lac in r["lacs"]:
 				dormantes.append(lac["cases"])
 	vus["dormantes"] = dormantes
-	for r in corps:
+	var garde: Dictionary = memoire if memoire != null else {}
+	var vue_memoire := {}
+	for j in corps.size():
+		var r: Variant = corps[j]
 		if r == null or r["erreur"] != "":
 			continue
-		match r["genre"]:
-			"ocean":
-				var niveau: int = r["niveau"]
-				var h := NAN
-				if not b.is_empty() and niveau > (b["hi"] as Vector3i).y:
-					h = niveau + NAPPE   # le monde est noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau
-				plats.append_array(rectangles_de_nappe(r["eau"], occupees,
-					surface_des_colonnes(r.get("colonnes", null), occupees, b, niveau), niveau, h))
-				plats.append_array(_large(b, float(niveau) + NAPPE))
-			"lac":
-				plats.append_array(rectangles_de_nappe(r["eau"], occupees, null, r["niveau"]))
-			"riviere":
-				for lac in r["lacs"]:
-					plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"]))
-				_riviere(a, r["cours"], occupees, plats, vus, sources)
+		if garde.has(j) and is_same(garde[j][0], r):
+			plats.append_array(garde[j][1])
+		else:
+			var nappes := _nappes_du_corps(r, occupees, b)
+			garde[j] = [r, nappes]
+			plats.append_array(nappes)
+		vue_memoire[j] = true
+		if r["genre"] == "riviere":
+			_riviere(a, r["cours"], occupees, plats, vus, sources)
+	for j in garde.keys():
+		if not vue_memoire.has(j):
+			garde.erase(j)
 	var remous: Array = []
 	_poser_les_lames(a, vus, remous, plats)
 	for c: Vector3i in sources:
@@ -126,6 +134,26 @@ static func maillage(corps: Array, occupees: Dictionary) -> ArrayMesh:
 	var m := ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	return m
+
+
+## Les rectangles de nappe d'un corps : l'océan (et son large), un lac, les lacs d'une rivière.
+static func _nappes_du_corps(r: Dictionary, occupees: Dictionary, b: Dictionary) -> Array:
+	var plats: Array = []
+	match r["genre"]:
+		"ocean":
+			var niveau: int = r["niveau"]
+			var h := NAN
+			if not b.is_empty() and niveau > (b["hi"] as Vector3i).y:
+				h = niveau + NAPPE   # le monde est noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau
+			plats.append_array(rectangles_de_nappe(r["eau"], occupees,
+				surface_des_colonnes(r.get("colonnes", null), occupees, b, niveau), niveau, h))
+			plats.append_array(_large(b, float(niveau) + NAPPE))
+		"lac":
+			plats.append_array(rectangles_de_nappe(r["eau"], occupees, null, r["niveau"]))
+		"riviere":
+			for lac in r["lacs"]:
+				plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"]))
+	return plats
 
 
 ## LES PLATS SANS JONCTION EN T : chaque rectangle horizontal {x0, x1, z0, z1, h, couleur} ; un sommet d'un AUTRE

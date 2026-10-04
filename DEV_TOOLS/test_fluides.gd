@@ -526,6 +526,9 @@ func _reprise() -> void:
 	hasard.seed = 1002
 	var ecarts := 0
 	var reprises := 0
+	var ecarts_maillage := 0
+	var nappes_reprises := 0
+	var memoire := {}
 	var prec := w3
 	for geste in 150:
 		avant = m.duplicate()
@@ -555,9 +558,34 @@ func _reprise() -> void:
 				ecarts += 1
 		if repris["ocean"].size() != complet["ocean"].size():
 			ecarts += 1
+		# LA MÉMOIRE DES NAPPES (`EauMaillage.maillage`, `memoire`, 4 octobre 2026) : le maillage repris, avec la boîte
+		# rendue par `FL.monde`, est celui d'un maillage complet — sommets, couleurs, indices au bit près.
+		var gardees := {}
+		for j in memoire:
+			gardees[j] = memoire[j][1]
+		var avec := EM.maillage(repris["corps"], m, repris["boite"], memoire)
+		var sans := EM.maillage(complet["corps"], m)
+		for j in gardees:
+			if memoire.has(j) and is_same(memoire[j][1], gardees[j]):
+				nappes_reprises += 1
+		if not _memes_maillages(avec, sans):
+			ecarts_maillage += 1
 		prec = repris
 	_egal(ecarts, 0, "150 gestes au hasard : le rendu repris est celui d'un calcul complet")
 	_vrai(reprises > 50, "… et la reprise a servi (%d sources reprises sur 450)" % reprises)
+	_egal(ecarts_maillage, 0, "150 gestes au hasard : le maillage avec la mémoire des nappes est celui d'un maillage complet")
+	_vrai(nappes_reprises > 50, "… et la mémoire des nappes a servi (%d nappes reprises)" % nappes_reprises)
+
+
+func _memes_maillages(a: ArrayMesh, b: ArrayMesh) -> bool:
+	if a == null or b == null:
+		return a == b
+	var ta := a.surface_get_arrays(0)
+	var tb := b.surface_get_arrays(0)
+	for k in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_COLOR, Mesh.ARRAY_TEX_UV, Mesh.ARRAY_INDEX]:
+		if ta[k] != tb[k]:
+			return false
+	return true
 
 
 func _refus() -> void:

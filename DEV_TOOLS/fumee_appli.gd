@@ -2911,6 +2911,21 @@ func _les_fluides(ed: Control) -> void:
 		"une case posée loin du lac : ni le lac ni sa nappe ne sont recalculés")
 	ed._appliquer({"poser": {}, "effacer": {Vector3i(55, 8, 55): true}}, "Dig")
 	await process_frame
+	# ⚠ UNE SOURCE EN ERREUR NE FAIT PLUS REMAILLER SA COUCHE (4 octobre 2026) : `FL.monde` la refait à chaque geste,
+	# mais elle ne dessine rien. Sur l'exemple, 7 sources refusées faisaient remailler les trois couches d'eau après
+	# CHAQUE geste (~1 s). Une source posée dans la roche du mur (refusée), puis une case loin du lac : même maillage.
+	(ed._eaux[0]["sources"] as Array).append(Vector3i(62, 2, 60))
+	ed._recalculer_eau(false)
+	_egal(ed._corps_eau[0][1]["erreur"], "dans_la_matiere", "une source dans la roche : refusée")
+	maillage_avant = ed._maillages_eau[0][1]
+	ed._appliquer({"poser": {Vector3i(55, 8, 55): true}, "effacer": {}}, "Add")
+	await process_frame
+	_vrai(is_same(ed._maillages_eau[0][1], maillage_avant),
+		"une case posée loin du lac, une source en erreur dans la couche : la nappe n'est pas remaillée")
+	ed._appliquer({"poser": {}, "effacer": {Vector3i(55, 8, 55): true}}, "Dig")
+	(ed._eaux[0]["sources"] as Array).pop_back()
+	ed._recalculer_eau(false)
+	await process_frame
 
 	# ⚠ UN COUP DE PINCEAU N'EST PAS REJOUÉ PAR L'HISTORIQUE (les cases sont posées pendant le glissé) : c'est le
 	# coup lui-même qui doit rappeler l'eau. Un coup « Dig » sur le mur : le lac redescend ; Ctrl+Z le rend.

@@ -1802,12 +1802,17 @@ func _recalculer_eau(avec_barre := true) -> void:
 		if not _materiaux_eau.has(preset):
 			_materiaux_eau[preset] = EauPresets.materiau(preset)
 		# Le maillage d'une couche dont tous les corps sont repris est repris aussi : il ne lit que leurs emprises.
+		# ⚠ UN CORPS EN ERREUR N'EST JAMAIS REPRIS PAR `FL.monde` (il est refait à chaque geste), mais il ne dessine rien :
+		# deux corps tous deux en erreur se valent. Sans cela, une seule source refusée (une seconde mer, une rivière
+		# sans issue) faisait remailler TOUTE sa couche après chaque geste — ~0,9 s sur l'exemple (4 octobre 2026).
 		var m: ArrayMesh = null
 		if i < _maillages_eau.size() and (_maillages_eau[i][0] as Array).size() == corps.size() \
-				and range(corps.size()).all(func(j): return is_same(_maillages_eau[i][0][j], corps[j])):
+				and range(corps.size()).all(func(j): return _meme_corps_dessine(_maillages_eau[i][0][j], corps[j])):
 			m = _maillages_eau[i][1]
 		else:
-			m = EauMaillage.maillage(corps, _occ_eau)
+			while _nappes_memoire.size() <= i:
+				_nappes_memoire.append({})
+			m = EauMaillage.maillage(corps, _occ_eau, w["boite"], _nappes_memoire[i])
 		maillages.append([corps, m])
 		nappes.append([m, _materiaux_eau[preset], bool(e["visible"])])
 	_maillages_eau = maillages
@@ -1818,6 +1823,17 @@ func _recalculer_eau(avec_barre := true) -> void:
 	_rafraichir_eaux()
 	if montrer:
 		_fin_attente()
+
+
+## Les rectangles de nappe de chaque corps, par couche d'eau (`EauMaillage.maillage`, `memoire`).
+var _nappes_memoire: Array = []
+
+
+## Deux corps d'eau dessinent-ils la même chose ? Le même objet (repris par `FL.monde`), ou deux erreurs (rien).
+static func _meme_corps_dessine(a: Variant, b: Variant) -> bool:
+	if is_same(a, b):
+		return true
+	return a != null and b != null and str(a["erreur"]) != "" and str(b["erreur"]) != ""
 
 
 ## Le corps d'eau qui contient la case `s`, ou une case sous elle jusqu'au sol : [couche, source], ou [].
@@ -5905,6 +5921,7 @@ func _vider_le_projet() -> void:
 	_mer_choisie = null
 	_monde_eau = {}
 	_maillages_eau = []
+	_nappes_memoire = []
 	_index_eau.clear()
 	_eau_vide = false
 	if _vue != null:
