@@ -3111,6 +3111,14 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
       de 465 × 358) ; `FL.monde` en recopiait l'eau dans un second dictionnaire pour les rivières (~2,8 s en local à
       chaque calcul complet). Il n'y a qu'un océan : son eau EST l'eau de mer, partagée (personne ne la modifie). Gardé
       par `test_fluides` (`is_same`) ; mutation rouge.
+    - **ENTRER DANS LE PLAY TEST : 22 → 1,5 s, à CHAQUE entrée** (`DEV_TOOLS/sonde_ateliers.gd`, sur le PC). Le décor
+      foulé était UNE forme de collision portant les triangles de toutes les tuiles posées : 7,9 millions sur
+      l'exemple ; la construire coûtait 16 s en local, les rassembler 0,9 s. Il est désormais EN MORCEAUX de 8 × 8
+      colonnes (`Vue.MORCEAU_DECOR`), bâtis autour du personnage : 3 × 3 à l'entrée (il doit se poser), puis, à chaque
+      image, ceux qui manquent à moins de 3 morceaux, les plus proches d'abord, dans 6 ms (au moins un par image). Les
+      triangles sont les mêmes : il foule toujours ce qu'on voit. Les images qui suivent l'entrée : < 40 ms. Gardé par
+      `fumee_appli` (un îlot lointain : son morceau n'est pas bâti à l'entrée ; porté dessus, il s'y pose à 10,75) ;
+      mutation rouge (sans la construction au fil du jeu, il tombe à travers, y = −13). Les autres ateliers : ~30 ms.
     - ⚠ **CE QUI RESTE** : l'océan lui-même (~3 s en local) inscrit ses 2,4 millions de cases une à une dans un
       dictionnaire. Le représenter par ses tronçons de colonne changerait la règle de l'eau — celle que les trois
       greffons réécriront : à décider avec eux.
