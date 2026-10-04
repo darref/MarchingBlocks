@@ -33,6 +33,17 @@ func _initialize() -> void:
 
 func _derouler() -> void:
 	await _images(30)
+	# `-- --exemple` (4 octobre 2026) : le témoin de l'EXEMPLE livré — texturé, peint, ses `.glb` de 24 Mo —, installé
+	# dans un dossier jetable, au lieu d'un projet vide sur le témoin calculé.
+	if OS.get_cmdline_user_args().has("--exemple"):
+		var Exemple = load("res://app/exemple.gd")
+		var erreurs: Array = []
+		var chemin: String = Exemple.installer(Exemple.ARCHIVE, "user://sonde_lags_appli_exemple", erreurs)
+		load("res://app/editor.gd").racine_exemple = "user://sonde_lags_appli_exemple"
+		var t0 := Time.get_ticks_usec()
+		print("exemple ouvert : %s" % [await _ecran._ouvrir(chemin)])
+		_trace("ouvrir l'exemple", t0)
+		await _images(30)
 	_ecran._aller_a("witness")
 	await _images(20)
 	await _mesurer("entrer en édition", func(): _ecran._regler_edition(true))
