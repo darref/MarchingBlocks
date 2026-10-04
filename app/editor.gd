@@ -6109,9 +6109,23 @@ static func _memes_pixels(a: Image, b: Image) -> bool:
 ## ⚠ UNE SOURCE ABSENTE SE VOIT (charte §3) : l'ancien lot s'il en reste un, en le DISANT ; sinon un lot
 ## vide, donc des cubes rouges partout — jamais le repli procédural, qui ferait croire la couche saine.
 func _habiller_couche(i: int) -> String:
+	var massif: Node = _vue.couche(i)
+	# ⚠ PENDANT L'OUVERTURE, LE LOT EST POSÉ SANS RECONSTRUIRE : `_refaire_l_union` reconstruit chaque couche visible
+	# juste après, sur l'union (et marque les cachées « à refaire en entier »). Chaque couche se reconstruisait deux fois.
+	if _ouverture:
+		massif.reconstruire_au_lot = false
+		var note: String = await _habiller_couche_(i)
+		massif.reconstruire_au_lot = true
+		return note
+	return await _habiller_couche_(i)
+
+
+func _habiller_couche_(i: int) -> String:
 	var c: Dictionary = _couches[i]
 	var massif: Node = _vue.couche(i)
 	if c["source"] == "":
+		if _ouverture:
+			return ""   # `_refaire_l_union` la reconstruira
 		# ⚠ Ses cases viennent d'être posées : sans lot à donner, rien d'autre ne la reconstruirait (le prochain
 		# geste ne reconstruit plus que ses alentours).
 		massif.reconstruire()

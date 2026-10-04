@@ -876,9 +876,10 @@ static func poses(pleines: Dictionary, cles: Dictionary) -> Array:
 		for s in sommets_de(c):
 			sommets[s] = true
 	var plafond: int = plafond_de(pleines)
+	var hauts := hauts_des_colonnes(pleines)
 	var sortie: Array = []
 	for k in sommets:
-		var d: Dictionary = pose_du_sommet(pleines, k, cles, plafond)
+		var d: Dictionary = pose_du_sommet(pleines, k, cles, plafond, hauts)
 		if not d.is_empty():
 			sortie.append(d)
 	return sortie
@@ -924,14 +925,17 @@ static func poses_en_couches(union: Dictionary, cles_par_couche: Array) -> Array
 ## reconstruire_autour`). ⚠ UNE RÈGLE, UN ENDROIT : c'est la même fonction des deux côtés.
 ## ⚠ Elle ne lit que les cases des colonnes x..x+1, z..z+1, à partir de l'étage du sommet (ses huit cases, puis
 ## le ciel au-dessus). `plafond` n'est qu'une borne : tout plafond ≥ la plus haute case rend la même réponse.
-static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictionary, plafond: int) -> Dictionary:
+## `hauts` : `hauts_des_colonnes(pleines)`, si l'appelant l'a bâtie (une reconstruction entière) — même réponse, sans
+## remonter les colonnes (voir `sous_le_ciel`).
+static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictionary, plafond: int,
+		hauts: Dictionary = {}) -> Dictionary:
 	var b: int = bits(pleines, sommet)
 	var r: Dictionary = classer(b)
 	if not r["surface"]:
 		return {}
 	var cle := ""
 	var dehors := false
-	if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond):
+	if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond, hauts):
 		var variante: String = nom_en_contexte(r["nom"], true)
 		if cles.has(variante):
 			cle = variante
@@ -1088,7 +1092,20 @@ static func tuile_du_sommet(s: Vector3i, cle: String, cles: Dictionary, poids: D
 ## ⚠ **CONTRÔLE QUI DEVAIT POUVOIR ROUGIR** : dans une salle entièrement close, la règle refuse
 ## **82 sommets sur 82**, comme l'ancienne. Une règle simplement plus laxiste aurait laissé fuir des
 ## sommets de grotte ; celle-ci n'en laisse aucun.
-static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) -> bool:
+##
+## ⚠ `hauts` (4 octobre 2026) : {Vector2i(x, z) : la plus haute case pleine de la colonne}, bâtie UNE fois par
+## `hauts_des_colonnes`. « Une case pleine dans la colonne, de y + 2 au plafond » ⇔ « la plus haute est à y + 2 ou plus »
+## — tant que `plafond` est au moins la plus haute case, ce que tout appelant garantit. MESURÉ sur l'exemple : remonter
+## les colonnes coûtait 65 % de la décision d'un sommet (4,1 s sur 6,3, en local). Vide : on remonte, comme avant.
+static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int, hauts: Dictionary = {}) -> bool:
+	if not hauts.is_empty():
+		for t in 8:
+			var base: Vector3i = sommet + COINS[t]
+			if pleines.has(base):
+				continue
+			if int(hauts.get(Vector2i(base.x, base.z), -2147483648)) >= sommet.y + 2:
+				return false
+		return true
 	for t in 8:
 		var base: Vector3i = sommet + COINS[t]
 		if pleines.has(base):
@@ -1097,6 +1114,16 @@ static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int) ->
 			if pleines.has(Vector3i(base.x, y, base.z)):
 				return false
 	return true
+
+
+## La plus haute case pleine de chaque colonne : {Vector2i(x, z) : y}. Pour `sous_le_ciel`.
+static func hauts_des_colonnes(pleines: Dictionary) -> Dictionary:
+	var hauts := {}
+	for c: Vector3i in pleines:
+		var k := Vector2i(c.x, c.z)
+		if not hauts.has(k) or int(hauts[k]) < c.y:
+			hauts[k] = c.y
+	return hauts
 
 
 ## Cette CASE est-elle sous de la roche ? `plafond` borne le balayage, comme pour `sous_le_ciel`.

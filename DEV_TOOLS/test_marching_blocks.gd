@@ -65,6 +65,7 @@ func _initialize() -> void:
 	_le_lieu_et_la_matiere_sont_deux_questions()
 	_le_flanc_d_une_falaise_est_a_l_air_libre()
 	_une_tuile_par_cle_purete_et_pose()
+	_les_hauteurs_des_colonnes()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -762,3 +763,40 @@ func _une_tuile_par_cle_purete_et_pose() -> void:
 	_dire(sol_nu == 81 and sol_dehors == 81,
 		"le dessus du sol : 81 tuiles de sol, nues (%d) puis d'air libre (%d)" % [sol_nu, sol_dehors])
 	print("   → pureté 0 / 16 / 1 / 0, et 81 sols posés sans tirage")
+
+
+## LES HAUTEURS DES COLONNES (`MB.hauts_des_colonnes`, 4 octobre 2026) : `sous_le_ciel` qui lit la plus haute case de
+## chaque colonne au lieu de la remonter doit répondre EXACTEMENT pareil. Attendu : la remontée case par case, sur
+## 30 mondes au hasard (graine fixe) troués de surplombs, d'arches et de grottes ; chaque sommet de chaque monde.
+func _les_hauteurs_des_colonnes() -> void:
+	print("\n§18. les hauteurs des colonnes rendent le même ciel")
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 20261004
+	var ecarts := 0
+	var testes := 0
+	var dehors := 0
+	for monde in 30:
+		var pleines := {}
+		for n in hasard.randi_range(20, 140):
+			var c := Vector3i(hasard.randi_range(0, 7), hasard.randi_range(-2, 9), hasard.randi_range(0, 7))
+			pleines[c] = true
+			if hasard.randf() < 0.3:   # des dalles : surplombs et plafonds
+				for d in [Vector3i(1, 0, 0), Vector3i(0, 0, 1), Vector3i(1, 0, 1)]:
+					pleines[c + d] = true
+		var plafond: int = MB.plafond_de(pleines)
+		var hauts: Dictionary = MB.hauts_des_colonnes(pleines)
+		var sommets := {}
+		for c in pleines:
+			for s in MB.sommets_de(c):
+				sommets[s] = true
+		for s in sommets:
+			testes += 1
+			var lent: bool = MB.sous_le_ciel(pleines, s, plafond)
+			if lent:
+				dehors += 1
+			if MB.sous_le_ciel(pleines, s, plafond, hauts) != lent:
+				ecarts += 1
+	_dire(ecarts == 0, "sous_le_ciel avec les hauteurs des colonnes répond comme la remontée (%d écarts sur %d sommets)"
+		% [ecarts, testes])
+	_dire(dehors > testes / 10 and dehors < testes * 9 / 10,
+		"… et les mondes exercent les deux réponses (%d sous le ciel sur %d)" % [dehors, testes])

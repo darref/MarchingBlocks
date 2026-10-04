@@ -42,6 +42,8 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 @export var lot: MeshLibrary:
 	set(valeur):
 		lot = valeur
+		if not reconstruire_au_lot:
+			return
 		# ⚠ UN LOT AUX MÊMES NOMS SOUS LES MÊMES NUMÉROS NE CHANGE AUCUNE DÉCISION (4 octobre 2026) : la règle ne lit que
 		# l'index (`MB.pose_du_sommet`, `MB.tuile_du_sommet`), jamais la forme des tuiles. Un témoin retouché donne un
 		# tel lot — ses tuiles changent de forme, pas de nom — et le monde qui le suit se reconstruisait EN ENTIER
@@ -68,6 +70,11 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 
 ## ⚠ Coupe la reconstruction automatique si elle gêne (une carte énorme, un profilage).
 @export var suivre_en_temps_reel := true
+
+## ⚠ FAUX : poser un `lot` ne reconstruit pas — l'appelant reconstruira lui-même (l'ouverture d'un projet pose le lot de
+## chaque couche, puis refait l'union et reconstruit chaque couche UNE fois ; sinon chaque couche se reconstruisait deux
+## fois, seule puis en couches — ~1,5 s de perdus sur l'exemple, 4 octobre 2026).
+var reconstruire_au_lot := true
 
 var _empreinte: int = -1
 ## LES COUCHES EXCLUSIVES (Jordan, 2 octobre 2026) — `union` : {case: rang de sa couche}, PARTAGÉE par l'écran entre
@@ -290,6 +297,9 @@ func reconstruire() -> Dictionary:
 	_etat.clear()
 	_compte = {"pieces": 0, "fautes": 0, "dehors": 0, "touches": 0, "decisions": 0}
 	_plafond = MB.plafond_de(pleines)
+	# Les hauteurs des colonnes, le temps de cette reconstruction (`MB.sous_le_ciel`) ; vidées à la fin : la route locale
+	# ne les tient pas à jour, elle remonte les colonnes.
+	_hauts = MB.hauts_des_colonnes(pleines)
 	_y_bas = 2147483647
 	for c in pleines:
 		_y_bas = mini(_y_bas, (c as Vector3i).y)
@@ -319,6 +329,7 @@ func reconstruire() -> Dictionary:
 				_etat[s] = d
 				if not (d as Dictionary).is_empty():
 					_poser(d, 1)
+	_hauts = {}
 	_compte["touches"] = _etat.size()
 	reconstructions_completes += 1
 	_pret = true
@@ -350,6 +361,7 @@ var _id_faute := -1
 var _lot_pose: MeshLibrary
 var _plafond := 0            # ≥ la plus haute case : une borne, jamais une valeur exacte (voir `pose_du_sommet`)
 var _y_bas := 0              # ≤ la plus basse case, même raison
+var _hauts := {}             # {Vector2i(x, z): plus haute case}, pendant une reconstruction entière seulement
 var _compte := {}
 
 
@@ -400,9 +412,14 @@ func reconstruire_autour(changees) -> Dictionary:
 		a_refaire += int(colonnes[k2]) - _y_bas + 2
 	if a_refaire > maxi(_etat.size(), SEUIL_LOCAL):
 		return reconstruire()
+	# Beaucoup de sommets (une couche entière cachée ou montrée) : les hauteurs des colonnes, bâties une fois, coûtent
+	# moins que de remonter les colonnes à chaque sommet (`MB.sous_le_ciel`). L'union est déjà à jour ici.
+	if a_refaire > 20000:
+		_hauts = MB.hauts_des_colonnes(_pleines)
 	for k2: Vector2i in colonnes:
 		for y in range(_y_bas - 1, int(colonnes[k2]) + 1):
 			_refaire(Vector3i(k2.x, y, k2.y))
+	_hauts = {}
 	_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
 	return _bilan()
 
@@ -456,7 +473,7 @@ func _decision(s: Vector3i) -> Variant:
 			return null
 	elif MB.bits(_pleines, s) == 0:
 		return null
-	var d: Dictionary = MB.pose_du_sommet(_pleines, s, _index, _plafond)
+	var d: Dictionary = MB.pose_du_sommet(_pleines, s, _index, _plafond, _hauts)
 	if not d.is_empty() and d["cle"] != "":
 		d["tuile"] = MB.tuile_du_sommet(s, d["cle"], _index, poids, choix)
 	return d
