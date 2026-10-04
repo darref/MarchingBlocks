@@ -3124,8 +3124,9 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
       greffons réécriront : à décider avec eux.
   - **CE QUI RESTE, MESURÉ, PAS FAIT** : ~~`vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
     textures en PNG, ~2,5 s en local — changer de format changerait le fichier)~~ — FAIT le soir, même fichier (ci-dessous) ; Ctrl+S ~2,3 s (il marque d'office le
-    témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; cacher une couche ~2 s (la
-    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; à l'ouverture, les
+    témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; ~~cacher une couche ~2 s (la
+    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons)~~ — FAIT le soir, sans
+    toucher à la règle (ci-dessous) ; à l'ouverture, les
     vignettes, la vérification des ensembles PBR et la recopie de la mer — FAITS ensuite (ci-dessous).
   - ⚠ **UN TEST INSTABLE, VU EN PASSANT** : `fumee_appli`, « Espace lâchée, il s'arrête vite et PLANE » a échoué une fois
     sur quatre (0,52 case de dérive pour un seuil de 0,5 : le pas de la physique suit la charge de la machine).
@@ -3179,6 +3180,31 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
       - ⚠ **UN TEST DE LA FUMÉE ÉCHOUAIT SUR UN RESTE** : « exporter une couche sans tuiles est refusé, et rien n'est
         écrit » trouvait un `layer_2.mbset` laissé le matin par un passage précédent (marqué en lecture seule). Il juge
         désormais ce que CET export écrit (le dossier absent, ou son `tileset.json` à la même date).
+    - **3. CACHER / MONTRER UNE COUCHE : 1,57 → 0,42 s, et 1,73 → 0,47 s** (`sonde_lags_edition.gd`, avec fenêtre).
+      MESURÉ d'abord (instrumentation provisoire) : cacher la couche aux 52 407 cases faisait refaire **192 041 sommets
+      dans CHACUNE des deux autres couches** — la couche 0 partait en reconstruction complète (1,03 s : son état, 48 546,
+      était sous le compte), la couche 2 en locale (0,44 s) — or **la couche 2 n'en possédait AUCUN, la couche 0 ~5 200**.
+      - **`MassifPeint` tient `_colonnes_miennes`** ({colonne : combien de SES cases}, avec `_miennes`), et la route
+        locale ne refait que les colonnes de sommets dont l'une des quatre colonnes lues (x..x+1, z..z+1) porte une de
+        ses cases — maintenant, ou partie dans ce geste (`parties`). Un sommet n'est à une couche que si l'une de ses huit
+        cases est à elle : la sortie est la même. Après : la couche 0 refait 26 744 sommets (~0,18 s), la couche 2 aucun.
+      - ⚠ **DEUX PISTES ESSAYÉES ET ÉCARTÉES, MESURÉES** : (1) l'ensemble EXACT des sommets que la règle peut changer
+        (les huit sommets de chaque case changée, plus ceux dont `y + 2` passe entre l'ancienne et la nouvelle plus haute
+        case de leur colonne) — 185 677 au lieu de 192 041 (la couche cachée est une nappe mince : chaque case porte ses
+        sommets), et plus lent à bâtir (2,1 s) ; rendu. (2) comparer le seuil de la route complète à l'UNION plutôt qu'à
+        l'état (en couches, la reconstruction complète relit toute l'union) : 1,6 → 1,18 s avant le filtre, mais sa
+        mutation est MUETTE après lui (la couche 0 ne refait plus que 26 744 sommets, sous son état) — retiré, faute d'un
+        cas mesuré qui le demande.
+      - gardé par `test_massif_peint` 110 (`_les_colonnes_qui_la_regardent` : roche, herbe dessus, un caillou contre
+        l'herbe avec une case ISOLÉE, une couche lointaine ; cacher l'herbe — la lointaine ne refait aucun sommet, le
+        caillou moins de 400, route locale = complète photo pour photo ; retirer la case isolée — les colonnes
+        « parties »). **Quatre mutations rouges** (sans les colonnes parties, la seule colonne du sommet, le compte non
+        tenu à l'ajout, pas de filtre). ⚠ Le test a d'abord échoué sur LUI-MÊME : la roche n'était pas refaite quand
+        l'herbe était cachée (l'écran refait toutes les couches visibles) — le code d'avant échouait pareil.
+      - Ce qui reste du geste (~0,4 s) : la couche 0 (~0,18 s, dont la table des hauteurs de toute l'union, ~0,1 s) et
+        le reste de l'écran.
+    - **SUITES** : 21 vertes après chaque point — au bout, **9 846 vérifications, 0 échec** (`fumee_appli` 800, `test_fluides` 252, `test_massif_peint` 110, `test_temoin_lie` 38). Bancs hors Godot non relancés : rien de
+      ce qu'ils lisent n'a changé (`test_greffon_peinture` 255, cas d'épreuve inchangés).
 
 ### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
 ### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)
