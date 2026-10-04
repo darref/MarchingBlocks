@@ -3045,6 +3045,49 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
   témoin ; les aperçus au survol (occupation rebâtie, MultiMesh rempli instance par instance) ; `FL.boite` recalculée
   à chaque appel ; le décor du Play test rebâti à chaque entrée ; le MD5 du `.glb` à chaque rafraîchissement des
   couches (⚠ pas de cache par date : la charte l'a déjà écarté, la date n'est précise qu'à la seconde).
+  ⚠ `FL.boite` et le MD5 de la liste : FAITS le 4 octobre 2026 (ci-dessous).
+- **LA PASSE D'OPTIMISATION DU 4 OCTOBRE 2026 — DEMANDÉE PAR JORDAN (« go pour les optimisations »), MESURÉE D'ABORD.**
+  Sur l'EXEMPLE (277 709 cases, 3 couches, 3 couches d'eau, 106 sources), sur le PC (RTX 2060, avec fenêtre, l'appli de
+  Jordan FERMÉE — la charte a déjà payé une mesure faussée par elle) : `sonde_lags_edition.gd`, puis `sonde_saccade.gd`
+  (chaque image horodatée après un geste) pour trouver la cause, puis des bancs headless (`banc_eau_maillage.gd`,
+  `banc_couches.gd`, `banc_temoin_suit.gd`, l'archive de l'exemple copiée dans `exemple/`).
+  - **UNE SACCADE D'UNE SECONDE APRÈS CHAQUE GESTE (poser, Ctrl+Z, pinceau, boîte) : ~1 050 → ~40 ms.** Ce n'était PAS
+    l'enregistrement (7 ms sur le fil principal) mais le recalcul de l'eau, différé à l'image suivante :
+    - ⚠ **7 SOURCES EN ERREUR** (une seconde mer, des rivières refusées) : `FL.monde` ne reprend jamais un corps en
+      erreur, il le refait à chaque geste — donc il n'est jamais « le même objet », et l'écran REMAILLAIT les trois
+      couches d'eau à chaque geste (880 ms pour celle aux 100 rivières). Deux corps en erreur se valent
+      (`_meme_corps_dessine` : ils ne dessinent rien). Gardé par `fumee_appli` (une source dans la roche, une case loin
+      du lac : la nappe n'est pas remaillée) ; mutation rouge ;
+    - **la nappe d'un corps repris est gardée** (`EauMaillage.maillage(…, memoire)`, une mémoire par couche d'eau) :
+      elle ne lit que des cases de son emprise, et un corps n'est repris que si rien n'y a changé. La nappe de l'océan
+      coûtait ~0,6 s à chaque remaillage. Gardé par `test_fluides` (150 gestes au hasard : maillage avec mémoire =
+      maillage complet, au bit près) ; mutation rouge (144 maillages faux) ;
+    - **la boîte du monde n'est plus rebalayée** (~70 ms par appel, une fois par `FL.monde` et une par couche d'eau) :
+      `FL.monde(…, boite_)` et `EauMaillage.maillage(…, boite)` la reçoivent, et l'écran la TIENT geste par geste
+      (`_tenir_occ_eau` : une case posée l'élargit, une case retirée au bord la fait refaire). Gardé par `fumee_appli`
+      (attendu : `FL.boite` recalculée) ; mutation rouge.
+  - **LA LISTE DES COUCHES, après chaque geste : ~114 ms de moins** — elle relisait le MD5 de chaque `.glb` (24 Mo).
+    `_empreinte_pour_la_liste` le garde tant que date et taille ne bougent pas, et toute écriture du `.glb` par l'appli
+    (`_rhabiller`, l'export du témoin) le vide. ⚠ Pour l'ÉTIQUETTE seulement : le cache de tranchage garde le MD5
+    complet. Gardé par `fumee_appli`. Activer une couche : ~125 → ~17 ms.
+  - **CACHER / MONTRER UNE COUCHE : 7,3 → 2,0 s.** Les autres couches se refaisaient en ENTIER (52 407 cases changées,
+    seuil fixe de 4 096). `reconstruire_autour` énumère chaque colonne UNE fois (avant : la colonne entière par case,
+    des millions de doublons) et prend la route locale tant qu'elle a moins de sommets à refaire que l'état n'en
+    compte. Gardé par `test_massif_peint` (une roche de 25 600 cases sous une herbe de 4 900 : route locale prise,
+    rend la complète, cachée puis remontrée) ; deux mutations rouges (le seuil fixe, la colonne prise à la dernière case
+    au lieu de la plus haute).
+  - **LE MONDE QUI SUIT SON TÉMOIN (passer de Geometry à World après une retouche) : `_suivre_son_temoin` 7,1 → 2,0 s.**
+    Poser le lot reconstruisait toute la couche (196 091 cases). Un lot aux MÊMES NOMS sous les MÊMES NUMÉROS ne
+    change aucune décision (la règle ne lit que l'index) : `MassifPeint.lot` ne change alors que le lot de la grille.
+    Gardé par `test_massif_peint` (pas de reconstruction, la grille porte le lot, le monde = une reconstruction
+    complète ; un lot qui a perdu une tuile reconstruit) ; mutation rouge.
+  - Ouvrir l'exemple : 16,6 → 13,1 s (les mêmes causes).
+  - **CE QUI RESTE, MESURÉ, PAS FAIT** : `vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
+    textures en PNG, ~2,5 s en local — changer de format changerait le fichier) ; Ctrl+S ~2,3 s (il marque d'office le
+    témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; cacher une couche ~2 s (la
+    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; ouvrir l'exemple ~13 s.
+  - ⚠ **UN TEST INSTABLE, VU EN PASSANT** : `fumee_appli`, « Espace lâchée, il s'arrête vite et PLANE » a échoué une fois
+    sur quatre (0,52 case de dérive pour un seuil de 0,5 : le pas de la physique suit la charge de la machine).
 
 ### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
 ### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)
