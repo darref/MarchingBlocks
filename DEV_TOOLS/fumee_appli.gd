@@ -2176,6 +2176,12 @@ func _play_test(ed: Control) -> void:
 	for x in range(20, 29):
 		for z in range(20, 29):
 			sol[Vector3i(x, 10, z)] = true
+	# UN ÎLOT LOIN DU DÉPART (100..102, 100..102) : son morceau du décor ne doit pas être bâti à l'entrée.
+	var ilot := {}
+	for x in range(100, 103):
+		for z in range(100, 103):
+			ilot[Vector3i(x, 10, z)] = true
+	sol.merge(ilot)
 	ed._coup_commence()
 	ed._touche({"poser": sol, "effacer": {}}, "Add")
 	ed._coup_fini()
@@ -2218,6 +2224,24 @@ func _play_test(ed: Control) -> void:
 		sommet = maxf(sommet, p.global_position.y)
 	_touche_physique(KEY_SPACE, false)
 	_vrai(sommet - y0 > 1.0, "Espace le fait sauter de plus d'une case (%.2f)" % (sommet - y0))
+	# LE DÉCOR EN MORCEAUX (4 octobre 2026 : une seule forme de 7,9 millions de triangles coûtait ~22 s à chaque
+	# entrée sur l'exemple). Le morceau de l'îlot lointain n'a pas été bâti à l'entrée ; le personnage y est porté, et
+	# il s'y pose sur la surface rendue — son morceau a été bâti au fil du jeu.
+	var morceau_ilot := Vector2i(floori(100.0 / ed._vue.MORCEAU_DECOR), floori(100.0 / ed._vue.MORCEAU_DECOR))
+	_vrai(ed._vue._morceaux_a_batir.has(morceau_ilot) and not ed._vue._morceaux_batis.has(morceau_ilot),
+		"décor : le morceau de l'îlot lointain n'est pas bâti à l'entrée")
+	var retour: Vector3 = p.global_position
+	p.global_position = Vector3(101.5, 12.0, 101.5)
+	p.velocity = Vector3.ZERO
+	for i in 90:
+		await physics_frame
+	_vrai(ed._vue._morceaux_batis.has(morceau_ilot) and p.is_on_floor() and p.global_position.y > 10.5
+		and p.global_position.y < 10.9, "… porté sur l'îlot, il s'y pose : son morceau a été bâti (y = %.2f)"
+		% p.global_position.y)
+	p.global_position = retour
+	p.velocity = Vector3.ZERO
+	for i in 30:
+		await physics_frame
 	await _le_vol(ed, p)
 	var az: float = ed._vue._azimut
 	var glisse := InputEventMouseMotion.new()
@@ -2273,6 +2297,7 @@ func _play_test(ed: Control) -> void:
 	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._vue._decor == null,
 		"Échap rend World, sans personnage ni décor")
 	_egal(ed._vue.cases().get_used_cells().size(), avant, "le Play test n'a changé aucune case")
+	ed._appliquer({"poser": {}, "effacer": ilot}, "Dig")   # l'îlot ne sert qu'ici
 	_play_test_fini = true
 
 

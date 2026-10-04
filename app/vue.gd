@@ -1614,35 +1614,39 @@ const CHUTE := 25.0
 ## Entre en Play test. Rend "" si l'on joue, sinon la raison — en anglais, l'écran l'affiche.
 func commencer_partie() -> String:
 	finir_partie()
-	var triangles := PackedVector3Array()
 	var colonnes := {}
 	_plus_bas = INF
+	# ⚠ LE DÉCOR EN MORCEAUX, BÂTIS AUTOUR DU PERSONNAGE (4 octobre 2026). Une seule forme portait les triangles de
+	# TOUTES les tuiles posées : sur l'exemple, 7,9 millions de triangles, et ~22 s à CHAQUE entrée dans le Play test
+	# (construire la forme : 16 s en local ; rassembler les triangles : 0,9 s). Les tuiles sont rangées par morceaux de
+	# `MORCEAU_DECOR` colonnes ; ceux qui entourent le départ sont bâtis tout de suite, les autres au fil du jeu, les
+	# plus proches d'abord, dans un budget par image (`_tenir_le_decor`). Les triangles sont les mêmes.
+	_morceaux_a_batir = {}
+	_morceaux_batis = {}
+	_faces_par_item = {}
 	for m in _couches.get_children():
 		if not (m as Node3D).visible:
 			continue
 		for nom in ["Rendu", "Fautes"]:
 			var g := m.get_node_or_null(nom) as GridMap
-			if g != null:
-				triangles.append_array(_triangles_poses(g))
+			if g == null or g.mesh_library == null:
+				continue
+			for c in g.get_used_cells():
+				var k := Vector2i(floori(float(c.x) / MORCEAU_DECOR), floori(float(c.z) / MORCEAU_DECOR))
+				if not _morceaux_a_batir.has(k):
+					_morceaux_a_batir[k] = []
+				(_morceaux_a_batir[k] as Array).append([g, c])
 		for c in (m.get_node("Cases") as GridMap).get_used_cells():
 			_plus_bas = minf(_plus_bas, c.y)
 			var cle := Vector2i(c.x, c.z)
 			colonnes[cle] = maxi(colonnes.get(cle, c.y), c.y)
-	if triangles.is_empty() or colonnes.is_empty():
+	if _morceaux_a_batir.is_empty() or colonnes.is_empty():
 		return "The world is empty — paint some ground in World first."
 
 	_decor = StaticBody3D.new()
 	_decor.name = "DecorDuJeu"
 	_decor.collision_layer = 2
 	_decor.collision_mask = 0
-	var forme := CollisionShape3D.new()
-	var concave := ConcavePolygonShape3D.new()
-	# ⚠ LES DEUX FACES : la découpe laisse les pièces OUVERTES sur leurs plans de coupe (charte §4), et
-	# un triangle vu de dos ne retiendrait rien.
-	concave.backface_collision = true
-	concave.set_faces(triangles)
-	forme.shape = concave
-	_decor.add_child(forme)
 	_vue.add_child(_decor)
 
 	# LE DÉPART : la colonne peinte la plus proche de ce qu'on regardait, au-dessus de sa plus haute case.
@@ -1655,6 +1659,8 @@ func commencer_partie() -> String:
 			d_min = d
 			meilleure = cle
 	_depart = Vector3(meilleure.x + 0.5, colonnes[meilleure] + 1.6, meilleure.y + 0.5)
+	# Les morceaux autour du départ, tout de suite : le personnage doit se poser.
+	_tenir_le_decor(_depart, 1, -1)
 
 	personnage = Personnage.new()
 	_vue.add_child(personnage)
@@ -1687,6 +1693,9 @@ func finir_partie() -> void:
 	if _decor != null:
 		_decor.queue_free()
 		_decor = null
+	_morceaux_a_batir = {}
+	_morceaux_batis = {}
+	_faces_par_item = {}
 	if _meteo_noeud != null:
 		_meteo_noeud.queue_free()
 		_meteo_noeud = null
@@ -1723,21 +1732,79 @@ func reapparaitre() -> void:
 ## lu une fois ; la pose (case, quart de tour, décalage d'une demi-case de `Rendu`) s'applique d'un bloc.
 static func _triangles_poses(g: GridMap) -> PackedVector3Array:
 	var sortie := PackedVector3Array()
+	var par_item := {}
+	for c in g.get_used_cells():
+		sortie.append_array(_triangles_de_la_case(g, c, par_item))
+	return sortie
+
+
+## Les triangles de la tuile posée en `c`, en espace monde. `par_item` garde les faces de chaque tuile du lot.
+static func _triangles_de_la_case(g: GridMap, c: Vector3i, par_item: Dictionary) -> PackedVector3Array:
 	var lot := g.mesh_library
 	if lot == null:
-		return sortie
-	var par_item := {}
-	var base := g.global_transform
-	for c in g.get_used_cells():
-		var id := g.get_cell_item(c)
-		if not par_item.has(id):
-			var mesh := lot.get_item_mesh(id)
-			par_item[id] = lot.get_item_mesh_transform(id) * mesh.get_faces() if mesh != null \
-				else PackedVector3Array()
-		var pose := Transform3D(g.get_basis_with_orthogonal_index(g.get_cell_item_orientation(c)),
-			g.map_to_local(c))
-		sortie.append_array((base * pose) * (par_item[id] as PackedVector3Array))
-	return sortie
+		return PackedVector3Array()
+	var id := g.get_cell_item(c)
+	if not par_item.has(id):
+		var mesh := lot.get_item_mesh(id)
+		par_item[id] = lot.get_item_mesh_transform(id) * mesh.get_faces() if mesh != null \
+			else PackedVector3Array()
+	var pose := Transform3D(g.get_basis_with_orthogonal_index(g.get_cell_item_orientation(c)),
+		g.map_to_local(c))
+	return (g.global_transform * pose) * (par_item[id] as PackedVector3Array)
+
+
+## LE DÉCOR EN MORCEAUX (voir `commencer_partie`).
+const MORCEAU_DECOR := 8
+## Les morceaux tenus autour du personnage (en morceaux, de chaque côté) : 7 × 7, ~56 cases de large.
+const RAYON_DECOR := 3
+## Le temps qu'une image peut donner à bâtir des morceaux, en millisecondes.
+const BUDGET_DECOR_MS := 6
+var _morceaux_a_batir := {}   # Vector2i → [[grille, case], …] : les tuiles de chaque morceau pas encore bâti
+var _morceaux_batis := {}     # Vector2i → true
+var _faces_par_item := {}     # GridMap → {item: faces}
+
+
+## Bâtit les morceaux du décor à moins de `rayon` morceaux de `p`, les plus proches d'abord, tant que `budget_ms`
+## n'est pas épuisé (< 0 : sans limite). Rend combien il en a bâti.
+func _tenir_le_decor(p: Vector3, rayon: int, budget_ms: int) -> int:
+	if _decor == null or _morceaux_a_batir.is_empty():
+		return 0
+	var centre := Vector2i(floori(p.x / MORCEAU_DECOR), floori(p.z / MORCEAU_DECOR))
+	var voulus: Array = []
+	for dx in range(-rayon, rayon + 1):
+		for dz in range(-rayon, rayon + 1):
+			var k := centre + Vector2i(dx, dz)
+			if _morceaux_a_batir.has(k):
+				voulus.append(k)
+	if voulus.is_empty():
+		return 0
+	voulus.sort_custom(func(a: Vector2i, b: Vector2i) -> bool:
+		return (a - centre).length_squared() < (b - centre).length_squared())
+	var debut := Time.get_ticks_msec()
+	var batis := 0
+	for k: Vector2i in voulus:
+		if budget_ms >= 0 and batis > 0 and Time.get_ticks_msec() - debut >= budget_ms:
+			break
+		var triangles := PackedVector3Array()
+		for gc in _morceaux_a_batir[k]:
+			var g: GridMap = gc[0]
+			if not _faces_par_item.has(g):
+				_faces_par_item[g] = {}
+			triangles.append_array(_triangles_de_la_case(g, gc[1], _faces_par_item[g]))
+		_morceaux_a_batir.erase(k)
+		_morceaux_batis[k] = true
+		batis += 1
+		if triangles.is_empty():
+			continue
+		var forme := CollisionShape3D.new()
+		var concave := ConcavePolygonShape3D.new()
+		# ⚠ LES DEUX FACES : la découpe laisse les pièces OUVERTES sur leurs plans de coupe (charte §4), et
+		# un triangle vu de dos ne retiendrait rien.
+		concave.backface_collision = true
+		concave.set_faces(triangles)
+		forme.shape = concave
+		_decor.add_child(forme)
+	return batis
 
 
 ## Le clavier se lit par la PLACE des touches (ZQSD / WASD, comme Navigate). ⚠ Un champ de texte qui a
@@ -1745,6 +1812,7 @@ static func _triangles_poses(g: GridMap) -> PackedVector3Array:
 func _mener_le_jeu() -> void:
 	if personnage == null:
 		return
+	_tenir_le_decor(personnage.global_position, RAYON_DECOR, BUDGET_DECOR_MS)
 	# ⚠ UN RELÂCHÉ PERDU (fenêtre qui perd la main, Alt+Tab) laisserait la souris capturée pour de bon.
 	if _souris_avant_capture != Vector2.INF and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
 			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
