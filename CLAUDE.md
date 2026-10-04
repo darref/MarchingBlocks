@@ -981,7 +981,11 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
     hors de l'exe ni sans Documents, `untitled/`, `untitled 2/` même si le dossier est vide, un ancien `untitled 3.mbproj`
     à plat non recouvert) ; `fumee_appli` 756 (+2 : `_chemin_libre` dans un dossier jetable, l'ancienne place de
     l'exemple). Trois mutations rouges (l'exe ignoré, le projet à plat, l'ancienne place oubliée — avec `_chemin_libre`
-    qui ignore la racine). ⚠ **PAS ÉPROUVÉ DANS L'EXE CHIFFRÉ**, ni « New » cliqué dans l'exe.
+    qui ignore la racine). **ÉPROUVÉ DANS L'EXE CHIFFRÉ (reconstruit le 4 octobre 2026, 11:55)**, `reglages.cfg`
+    sauvé et rendu, `test.mbproj` intact (MD5) : `--open-example` installe dans `Documents/MarchingBlocks/Example/<STAMP>/`
+    (rien de neuf dans AppData) ; lancé sans projet à rouvrir, il crée `Documents/MarchingBlocks/untitled/untitled.mbproj`
+    et le retient ; journal sans erreur. ⚠ Lancé par ssh, l'exe n'a pas de fenêtre à fermer : tué de force, donc la
+    fermeture propre n'a pas été rejouée. Ni « New » cliqué à la main.
 
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
