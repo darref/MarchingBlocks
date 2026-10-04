@@ -492,6 +492,9 @@ func _reprise() -> void:
 	var w := FL.monde(m, sources)
 	_vrai(w["corps"][0]["genre"] == "ocean" and w["corps"][1]["genre"] == "lac" and w["corps"][2]["genre"] == "riviere",
 		"reprise : une mer, un lac, une rivière")
+	# UN SEUL OCÉAN : son eau EST l'eau de mer rendue — partagée, pas recopiée (4 octobre 2026 : 2,4 millions de cases
+	# sur l'exemple, ~2,8 s de recopie). Le contenu est gardé par la suite au hasard ci-dessous.
+	_vrai(is_same(w["ocean"], w["corps"][0]["eau"]), "l'eau de mer rendue est celle de l'océan, sans copie")
 	# Peindre au-dessus de la mer, loin du lac et de la rivière : tout est repris.
 	var avant := m.duplicate()
 	m[Vector3i(1, 10, 1)] = true   # au-dessus de l'emprise du lac (ses cases vues montent à la rangée 8, + 1)

@@ -4188,6 +4188,15 @@ func _vignette_de(c: Dictionary) -> Texture2D:
 		_vignettes = Node.new()
 		_vignettes.name = "Vignettes"
 		add_child(_vignettes)
+	# ⚠ LA VIGNETTE GARDÉE SUR DISQUE (4 octobre 2026) : la fabriquer demande le témoin ENTIER (son `.mbtiles`, ses images,
+	# son assemblage) — à l'ouverture de l'exemple, ~1,2 s pour trois vignettes de 84 × 56. Un témoin pas encore chargé
+	# dont le `.mbtiles` a déjà été photographié tel quel (même empreinte) se montre sans être chargé.
+	var cle_disque := _cle_de_vignette(c)
+	if c.get("_temoin", null) == null:
+		var gardee := _vignette_en_cache(cle_disque)
+		if gardee != null:
+			c["_vignette"] = gardee
+			return gardee
 	var mesh: Mesh
 	if _origine_du_temoin(c) == "computed witness" and c.get("_temoin", null) == null:
 		if _maillage_calcule == null:
@@ -4224,7 +4233,46 @@ func _vignette_de(c: Dictionary) -> Texture2D:
 	_vignettes.add_child(vue)
 	c["_vue_vignette"] = vue
 	c["_vignette"] = vue.get_texture()
+	if cle_disque != "" and _ecran_vivant() and not _temoins_sales.has(c.get("_temoin")):
+		_garder_la_vignette.call_deferred(vue, cle_disque)
 	return c["_vignette"]
+
+
+## La clé d'une vignette sur disque : l'empreinte du `.mbtiles` du témoin, "" s'il n'en a pas (témoin calculé, ou relu
+## d'un `.glb` jamais enregistré).
+func _cle_de_vignette(c: Dictionary) -> String:
+	var chemin := str(c.get("temoin", ""))
+	if chemin == "" or not FileAccess.file_exists(chemin):
+		return ""
+	return FileAccess.get_md5(chemin)
+
+
+const DOSSIER_VIGNETTES := "user://cache/vignettes"
+
+
+static func _chemin_de_vignette(cle: String) -> String:
+	return DOSSIER_VIGNETTES.path_join(cle + ".png")
+
+
+## La vignette gardée sous cette clé, ou null.
+static func _vignette_en_cache(cle: String) -> Texture2D:
+	if cle == "" or not FileAccess.file_exists(_chemin_de_vignette(cle)):
+		return null
+	var image := Image.load_from_file(ProjectSettings.globalize_path(_chemin_de_vignette(cle)))
+	return ImageTexture.create_from_image(image) if image != null and not image.is_empty() else null
+
+
+## Une fois la vignette DESSINÉE (l'image suivante), on la garde sur disque. ⚠ Avec fenêtre seulement : sans rendu,
+## `frame_post_draw` ne vient jamais (charte, la barre de progression).
+func _garder_la_vignette(vue: SubViewport, cle: String) -> void:
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(vue):
+		return
+	var image := vue.get_texture().get_image()
+	if image == null or image.is_empty():
+		return
+	DirAccess.make_dir_recursive_absolute(DOSSIER_VIGNETTES)
+	image.save_png(_chemin_de_vignette(cle))
 
 
 func _oublier_la_vignette(c: Dictionary) -> void:
@@ -6049,7 +6097,56 @@ func _ouvrir(chemin: String) -> bool:
 ## Le monde posé d'une couche (son lot) porte-t-il les cartes des ENSEMBLES PBR de son témoin ? Vrai s'il est en
 ## retard : un matériau du témoin dont l'image a un ensemble avec une normale, et le matériau du même nom, dans le lot,
 ## sans cette normale (absente, ou une autre — les cartes déduites d'avant). Lit le `.mbtiles` sans charger le témoin.
+##
+## ⚠ SON VERDICT « À JOUR » EST GARDÉ (4 octobre 2026) : elle charge les images des ensembles et redescend du GPU une
+## texture par matériau, pour 16 pixels — ~1,4 s à CHAQUE ouverture de l'exemple, pour une migration faite une fois.
+## Sous une clé de tout ce qui pourrait la faire changer d'avis : l'empreinte du lot posé, celle du `.mbtiles`, et les
+## cartes trouvées à côté de chaque image (chemins et dates).
 func _ensembles_en_retard(c: Dictionary) -> bool:
+	var cle := _cle_des_ensembles(c)
+	var gardes := ConfigFile.new()
+	gardes.load(ENSEMBLES_A_JOUR)
+	if cle != "" and str(gardes.get_value("a_jour", str(c.get("temoin", "")).md5_text(), "")) == cle:
+		return false
+	var en_retard := _ensembles_en_retard_(c)
+	if not en_retard and cle != "":
+		gardes.set_value("a_jour", str(c.get("temoin", "")).md5_text(), cle)
+		DirAccess.make_dir_recursive_absolute(ENSEMBLES_A_JOUR.get_base_dir())
+		gardes.save(ENSEMBLES_A_JOUR)
+	return en_retard
+
+
+const ENSEMBLES_A_JOUR := "user://cache/ensembles_a_jour.cfg"
+
+
+## La clé de `_ensembles_en_retard` : "" si la couche n'a pas de témoin enregistré ou pas de lot posé.
+func _cle_des_ensembles(c: Dictionary) -> String:
+	var chemin := str(c.get("temoin", ""))
+	var i := _couches.find(c)
+	if chemin == "" or not FileAccess.file_exists(chemin) or i < 0:
+		return ""
+	var lot: MeshLibrary = _vue.couche(i).lot
+	if lot == null:
+		return ""
+	var morceaux: Array = [str(lot.get_meta("empreinte", "")), FileAccess.get_md5(chemin)]
+	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(chemin))
+	if d is Dictionary:
+		for m in (d as Dictionary).get("materiaux", []):
+			if not m is Dictionary:
+				continue
+			var image := str(m.get("texture", ""))
+			morceaux.append("%s|%s|%s" % [m.get("nom", ""), image, m.get("ensemble", true)])
+			if image == "":
+				continue
+			var f: Dictionary = Peinture.fichiers_de_l_ensemble(image)
+			for carte in f.keys():
+				var fichier := str(f[carte])
+				morceaux.append("%s=%s@%d" % [carte, fichier,
+					FileAccess.get_modified_time(fichier) if FileAccess.file_exists(fichier) else -1])
+	return "|".join(PackedStringArray(morceaux.map(func(x): return str(x)))).md5_text()
+
+
+func _ensembles_en_retard_(c: Dictionary) -> bool:
 	var chemin := str(c.get("temoin", ""))
 	if chemin == "" or not FileAccess.file_exists(chemin) or not _source_liee(c):
 		return false

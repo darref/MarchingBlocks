@@ -752,6 +752,43 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
 		"la paroi posée dans le monde de B est celle de son témoin sculpté")
 	_vrai(ed._etat_de(ib).ends_with("sliced"), "et la liste dit qu'elle est à jour (%s)" % ed._etat_de(ib))
+	# LE VERDICT DES ENSEMBLES PBR EST GARDÉ (4 octobre 2026 : ~1,4 s à chaque ouverture de l'exemple). La couche B, au
+	# témoin enregistré : une clé stable, le verdict « à jour » écrit sous elle, et une autre clé si le lot posé change.
+	var cle_ens: String = ed._cle_des_ensembles(cb)
+	_vrai(cle_ens != "" and cle_ens == ed._cle_des_ensembles(cb), "ensembles PBR : une clé, stable")
+	# ⚠ L'ENTRÉE EST EFFACÉE D'ABORD : le cache survit d'un passage à l'autre, et une valeur laissée par le précédent
+	# aurait pu passer pour celle-ci (vu en mutation).
+	var avant_gardes := ConfigFile.new()
+	avant_gardes.load(ed.ENSEMBLES_A_JOUR)
+	if avant_gardes.has_section_key("a_jour", str(cb["temoin"]).md5_text()):
+		avant_gardes.erase_section_key("a_jour", str(cb["temoin"]).md5_text())
+		avant_gardes.save(ed.ENSEMBLES_A_JOUR)
+	_vrai(not ed._ensembles_en_retard(cb), "… la couche B n'est pas en retard")
+	var gardes := ConfigFile.new()
+	gardes.load(ed.ENSEMBLES_A_JOUR)
+	_egal(str(gardes.get_value("a_jour", str(cb["temoin"]).md5_text(), "")), cle_ens, "… et ce verdict est gardé sous sa clé")
+	var lot_ens: MeshLibrary = ed._vue.couche(ib).lot
+	var empreinte_b = lot_ens.get_meta("empreinte", "")
+	lot_ens.set_meta("empreinte", "un autre lot")
+	_vrai(ed._cle_des_ensembles(cb) != cle_ens, "… un autre lot posé : une autre clé (la vérification est refaite)")
+	lot_ens.set_meta("empreinte", empreinte_b)
+	# LA VIGNETTE GARDÉE SUR DISQUE (4 octobre 2026 : à l'ouverture, chaque vignette chargeait son témoin entier) : un
+	# `.mbtiles` déjà photographié se montre par l'image gardée sous son empreinte, sans charger le témoin. Une image de
+	# 8 × 8 posée à la main dans le cache, un `.mbtiles` factice.
+	var faux_temoin := "user://fumee/vignette_factice.mbtiles"
+	FileAccess.open(faux_temoin, FileAccess.WRITE).store_string("{\"factice\": true}")
+	var petite := Image.create(8, 8, false, Image.FORMAT_RGBA8)
+	petite.fill(Color.RED)
+	DirAccess.make_dir_recursive_absolute(ed.DOSSIER_VIGNETTES)
+	var chemin_vignette: String = ed._chemin_de_vignette(FileAccess.get_md5(faux_temoin))
+	petite.save_png(chemin_vignette)
+	var couche_factice := {"nom": "factice", "temoin": faux_temoin, "source": ""}
+	var vignette: Texture2D = ed._vignette_de(couche_factice)
+	_vrai(vignette != null and vignette.get_size() == Vector2(8, 8) and not couche_factice.has("_temoin"),
+		"une vignette gardée sous l'empreinte du .mbtiles : montrée sans charger le témoin")
+	_vrai(ed._vignette_en_cache("pas_une_empreinte") == null, "… et rien sous une autre empreinte")
+	DirAccess.remove_absolute(chemin_vignette)
+	DirAccess.remove_absolute(faux_temoin)
 	# L'EMPREINTE DE LA LISTE EST GARDÉE (4 octobre 2026 : la liste relisait le MD5 de chaque `.glb` après chaque
 	# geste, ~110 ms sur l'exemple) : tant que date et taille ne bougent pas, elle n'est pas relue ; un fichier réécrit
 	# (autre taille) l'est. Attendus : `FileAccess.get_md5`, hors de la fonction éprouvée.

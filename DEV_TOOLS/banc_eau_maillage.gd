@@ -30,6 +30,33 @@ func _initialize() -> void:
 	var t := Time.get_ticks_usec()
 	var w: Dictionary = FL.monde(occ, toutes)
 	print("FL.monde complet : %d ms" % _ms(t))
+	# Chaque source seule (contre l'océan déjà calculé), les plus chères d'abord.
+	var b := FL.boite(occ)
+	var couts: Array = []
+	for i in toutes.size():
+		var s: Vector3i = toutes[i]
+		t = Time.get_ticks_usec()
+		var r: Dictionary = FL.source(occ, s, w["ocean"], FL.VOLUME_MAXI, b)
+		couts.append([_ms(t), i, r["genre"], r["erreur"], (r["eau"] as Dictionary).size(), (r["cours"] as Array).size()])
+	for i in toutes.size():
+		if not occ.has(toutes[i]) and FL.dans_le_vide(occ, toutes[i], b):
+			t = Time.get_ticks_usec()
+			var o: Dictionary = FL.source(occ, toutes[i], {}, FL.VOLUME_MAXI, b)
+			print("l'océan (source %d) seul : %d ms · %d cases d'eau · niveau %d · boîte %s" % [i, _ms(t),
+				(o["eau"] as Dictionary).size(), o["niveau"], b])
+			t = Time.get_ticks_usec()
+			var d := {}
+			for k in o["eau"]:
+				d[k] = true
+			print("   recopier son eau dans un dictionnaire : %d ms" % _ms(t))
+			break
+	couts.sort_custom(func(x, y): return x[0] > y[0])
+	var total := 0
+	for c in couts:
+		total += int(c[0])
+	print("somme des sources seules : %d ms ; les plus chères :" % total)
+	for c in couts.slice(0, 8):
+		print("   %5d ms · source %d · %s %s · %d cases d'eau · %d de cours" % c)
 	t = Time.get_ticks_usec()
 	FL.boite(occ)
 	print("FL.boite : %d ms" % _ms(t))

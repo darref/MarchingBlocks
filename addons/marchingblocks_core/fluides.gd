@@ -594,8 +594,13 @@ static func monde(occupees: Dictionary, sources: Array, maxi := VOLUME_MAXI, ava
 	if oceans_repris:
 		ocean_d = avant["ocean"]
 	else:
-		for r in corps:
-			if r != null:
+		# ⚠ UN SEUL OCÉAN (3 octobre 2026) : son eau EST l'eau de mer — partagée, jamais recopiée (4 octobre 2026 : la mer
+		# de l'exemple fait 2 376 713 cases, ~2,8 s de recopie en local à chaque calcul complet). Personne ne la modifie.
+		var portants: Array = corps.filter(func(r): return r != null and not (r["eau"] as Dictionary).is_empty())
+		if portants.size() == 1:
+			ocean_d = portants[0]["eau"]
+		else:
+			for r in portants:
 				for k in r["eau"]:
 					ocean_d[k] = true
 	for i in sources.size():
