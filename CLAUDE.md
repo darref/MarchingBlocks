@@ -3095,13 +3095,30 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
       d'épreuve des greffons avec `MB.poses` : inchangés. Les greffons gardent l'ancienne façon (même sortie) : une
       optimisation à porter avec eux.
   - Sur le PC, au bout de la passe : un geste ~40 ms, cacher / montrer une couche ~1,6 s, ouvrir l'exemple ~8,9 s.
+  - **PUIS L'OUVERTURE ENCORE (Jordan : « go pour les trois ») : 6,6 s (9,1 s la première fois), et l'eau juste après
+    4,4 → 3,3 s.**
+    - **les vignettes de la liste des couches sont gardées sur disque** (`user://cache/vignettes/<MD5 du .mbtiles>.png`,
+      capturées une image après leur rendu, avec fenêtre seulement) : un témoin pas encore chargé, déjà photographié
+      tel quel, se montre sans être chargé (~1,2 s : les trois témoins de l'exemple étaient chargés pour 84 × 56 pixels).
+      Un témoin modifié et pas encore écrit n'est pas gardé. Gardé par `fumee_appli` (une image posée à la main sous
+      l'empreinte d'un `.mbtiles` factice) ; mutation rouge ;
+    - **le verdict « à jour » de `_ensembles_en_retard` est gardé** (`user://cache/ensembles_a_jour.cfg`), sous une clé
+      de ce qui pourrait le faire changer : l'empreinte du lot posé, celle du `.mbtiles`, les cartes trouvées à côté de
+      chaque image (chemins et dates) — ~1,4 s à chaque ouverture pour une migration faite une fois. Gardé par
+      `fumee_appli` (clé stable, verdict écrit sous elle — l'entrée effacée d'abord : celle d'un passage précédent
+      passait pour neuve, vu en mutation —, un autre lot change la clé) ; mutation rouge ;
+    - **l'eau de mer n'est plus recopiée** : la mer de l'exemple fait **2 376 713 cases** (le niveau 13 dans une boîte
+      de 465 × 358) ; `FL.monde` en recopiait l'eau dans un second dictionnaire pour les rivières (~2,8 s en local à
+      chaque calcul complet). Il n'y a qu'un océan : son eau EST l'eau de mer, partagée (personne ne la modifie). Gardé
+      par `test_fluides` (`is_same`) ; mutation rouge.
+    - ⚠ **CE QUI RESTE** : l'océan lui-même (~3 s en local) inscrit ses 2,4 millions de cases une à une dans un
+      dictionnaire. Le représenter par ses tronçons de colonne changerait la règle de l'eau — celle que les trois
+      greffons réécriront : à décider avec eux.
   - **CE QUI RESTE, MESURÉ, PAS FAIT** : `vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
     textures en PNG, ~2,5 s en local — changer de format changerait le fichier) ; Ctrl+S ~2,3 s (il marque d'office le
     témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; cacher une couche ~2 s (la
-    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; à l'ouverture, la liste
-    des couches charge chaque témoin pour photographier sa vignette (~1,2 s : les garder sur disque), la vérification des
-    ensembles PBR en retard redescend du GPU une texture par matériau pour 16 pixels (~1,4 s), et la première eau,
-    calculée en entier juste après (~4,4 s).
+    décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; à l'ouverture, les
+    vignettes, la vérification des ensembles PBR et la recopie de la mer — FAITS ensuite (ci-dessous).
   - ⚠ **UN TEST INSTABLE, VU EN PASSANT** : `fumee_appli`, « Espace lâchée, il s'arrête vite et PLANE » a échoué une fois
     sur quatre (0,52 case de dérive pour un seuil de 0,5 : le pas de la physique suit la charge de la machine).
 
