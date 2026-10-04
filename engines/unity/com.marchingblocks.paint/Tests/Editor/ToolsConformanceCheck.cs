@@ -62,6 +62,13 @@ namespace MarchingBlocks.Paint.Tests
                     string want = $"{(bool)e["hit"]} {Vec(e["cell"])} {Vec(e["normal"])}";
                     return got == want ? null : $"expected {want}, got {got}";
                 }
+                case "tile_vertex":
+                {
+                    var o = Doubles(i["origin"]);
+                    var d = Doubles(i["direction"]);
+                    var got = MBTools.TileVertex(o[0], o[1], o[2], d[0], d[1], d[2], Vec(i["cell"]), Vec(i["normal"]));
+                    return got.Equals(Vec(e["vertex"])) ? null : $"expected {Vec(e["vertex"])}, got {got}";
+                }
                 case "anchor":
                 {
                     var hit = new Hit { Touched = (bool)i["hit"], Cell = Vec(i["cell"]), Normal = Vec(i["normal"]) };

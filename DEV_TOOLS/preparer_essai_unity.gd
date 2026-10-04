@@ -16,6 +16,8 @@ extends SceneTree
 ##                           Draft (sans tuiles) — le même monde que `test_greffon_peinture` ;
 ##   pbr.mbset/              le témoin lié, un matériau aux CARTES PBR DÉDUITES sur toutes ses tuiles : la normale,
 ##                           l'occlusion, le métal-rugosité et les tangentes doivent arriver (`cartes_pbr.gd`) ;
+##   varied.mbset/           le témoin et DEUX VARIANTES de la clé du sol (l'étape 8, 5 octobre 2026) ;
+##   varied_expected.json    sur un sol 6 × 6, poids [1, 2, 1] : ce que pose MarchingBlocks, la clé, ses tuiles ;
 ##   witness_world_expected.json  par couche : nom, visibilité, cases, et les poses que l'appli y fait
 ##                           (`FN.attendu`, null pour la couche sans tuiles).
 ## ⚠ L'attendu vient de la RÉFÉRENCE, pas du greffon Unity : `WitnessTests.cs` compare le greffon à lui.
@@ -55,6 +57,9 @@ func _preparer() -> void:
 	_ecrire(CIBLE.path_join("witness_geometry.json"), _coutures(pleines))
 	print("%s — %d tuiles, %d cases" % [r["dossier"], r["tuiles"], cellules.size()])
 	if not _monde(lot, pleines, comptes):
+		quit(1)
+		return
+	if not _varie(lot):
 		quit(1)
 		return
 	var faux := ProjectSettings.globalize_path("user://faux_unity.glb")
@@ -145,6 +150,47 @@ func _monde(lot: MeshLibrary, pleines: Dictionary, comptes: Dictionary) -> bool:
 	_ecrire(CIBLE.path_join("witness_world_expected.json"), attendu)
 	print("%s — %d couches, %d jeu(x) de tuiles, sans tuiles : %s" % [r["dossier"], r["couches"], r["jeux"],
 		str(r["sans_tuiles"])])
+	return true
+
+
+## LES VARIANTES (l'étape 8) : le lot du témoin plus deux variantes de la clé posée au sommet (2, 0, 2) d'un sol 6 × 6
+## (même maillage : on n'éprouve que la RÈGLE et l'outil) ; l'attendu, par la référence, avec les poids [1, 2, 1].
+func _varie(lot: MeshLibrary) -> bool:
+	const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+	var sol := {}
+	var cellules: Array = []
+	for x in 6:
+		for z in 6:
+			sol[Vector3i(x, 0, z)] = true
+			cellules.append([x, 0, z])
+	var cles := FN.tuiles_du_lot(lot)
+	var cle := ""
+	for d in MB.poses(sol, cles):
+		if d["sommet"] == Vector3i(2, 0, 2):
+			cle = d["cle"]
+	var varie := MeshLibrary.new()
+	var id := 0
+	for i in lot.get_item_list():
+		varie.create_item(id)
+		varie.set_item_name(id, lot.get_item_name(i))
+		varie.set_item_mesh(id, lot.get_item_mesh(i))
+		id += 1
+	for k in [1, 2]:
+		varie.create_item(id)
+		varie.set_item_name(id, MB.nom_de_variante(cle, k))
+		varie.set_item_mesh(id, lot.get_item_mesh(cles[cle]))
+		id += 1
+	_vider(CIBLE.path_join("varied.mbset"))
+	var r: Dictionary = FN.exporter(varie, CIBLE, "varied", "MarchingBlocks (test)")
+	if r.has("erreur") or cle == "":
+		print("✗ le jeu à variantes : %s" % r.get("erreur", "pas de clé au sommet (2, 0, 2)"))
+		return false
+	var poids := {cle: [1, 2, 1]}
+	_ecrire(CIBLE.path_join("varied_expected.json"), {"key": FN.id_de_cle(cle), "cells": cellules,
+		"weights": [1, 2, 1], "vertex": [2, 0, 2],
+		"tiles": [FN.nom_de_tuile(cle), FN.nom_de_tuile(MB.nom_de_variante(cle, 1)), FN.nom_de_tuile(MB.nom_de_variante(cle, 2))],
+		"expected": FN.attendu(sol, FN.tuiles_du_lot(varie), poids, {})})
+	print("%s — clé du sol %s, deux variantes" % [r["dossier"], FN.id_de_cle(cle)])
 	return true
 
 

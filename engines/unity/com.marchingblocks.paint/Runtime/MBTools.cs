@@ -140,6 +140,25 @@ namespace MarchingBlocks.Paint
 
         /// <summary>Where the brush stands. Add places AGAINST the face it aims at; the other tools act
         /// ON the cell. Without a hit (the floor plane), the cell itself.</summary>
+        /// <summary>The TILE under a ray that hit a cell — its vertex (tools_conformance.json, "tile_vertex").
+        /// p is where the ray meets the plane of the face it entered by (on the face's axis, exactly on the
+        /// plane); the piece of vertex v covers [v + 1/2, v + 3/2], so v = floor(p - 0.5).</summary>
+        public static Int3 TileVertex(double ox, double oy, double oz, double dx, double dy, double dz, Int3 cell, Int3 normal)
+        {
+            double len = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            double[] o = { ox, oy, oz };
+            double[] d = { dx / len, dy / len, dz / len };
+            int[] c = { cell.x, cell.y, cell.z };
+            int[] n = { normal.x, normal.y, normal.z };
+            int axis = n[0] != 0 ? 0 : (n[1] != 0 ? 1 : 2);
+            double plane = c[axis] + (n[axis] > 0 ? 1.0 : 0.0);
+            double t = (plane - o[axis]) / d[axis];
+            var p = new double[3];
+            for (int a = 0; a < 3; a++) p[a] = o[a] + d[a] * t;
+            p[axis] = plane;
+            return new Int3((int)Math.Floor(p[0] - 0.5), (int)Math.Floor(p[1] - 0.5), (int)Math.Floor(p[2] - 0.5));
+        }
+
         public static Int3 Anchor(BrushTool tool, Hit hit) =>
             tool == BrushTool.Add && hit.Touched ? hit.Cell + hit.Normal : hit.Cell;
 

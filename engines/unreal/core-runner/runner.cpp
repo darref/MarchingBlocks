@@ -147,6 +147,12 @@ namespace
 			const std::string Want = std::string(E["hit"].Bool ? "hit " : "miss ") + Show(Vec(E["cell"])) + " " + Show(Vec(E["normal"]));
 			return Got == Want ? "" : "expected " + Want + ", got " + Got;
 		}
+		if (Kind == "tile_vertex")
+		{
+			const FCell Got = Tools::TileVertex(I["origin"][0].AsReal(), I["origin"][1].AsReal(), I["origin"][2].AsReal(),
+				I["direction"][0].AsReal(), I["direction"][1].AsReal(), I["direction"][2].AsReal(), Vec(I["cell"]), Vec(I["normal"]));
+			return Got == Vec(E["vertex"]) ? "" : "expected " + Show(Vec(E["vertex"])) + ", got " + Show(Got);
+		}
 		if (Kind == "anchor")
 		{
 			EBrushTool Tool;
@@ -235,6 +241,75 @@ namespace
 		return "unknown kind " + Kind;
 	}
 
+	// A case's or a layer's variant_weights and variant_choices (x y z c, flat): the tileset rule, step 8.
+	FVariantSettings SettingsOf(const FJsonValue& C)
+	{
+		FVariantSettings S;
+		if (C.Find("variant_weights"))
+			for (const auto& Entry : C["variant_weights"].Object)
+			{
+				std::vector<int64_t> W;
+				for (const FJsonValue& X : Entry.second.Array) W.push_back(X.AsInt());
+				S.Weights[Entry.first] = W;
+			}
+		if (C.Find("variant_choices"))
+		{
+			const FJsonValue& Flat = C["variant_choices"];
+			for (size_t I = 0; I + 3 < Flat.Size(); I += 4)
+				S.Choices[FCell(static_cast<int>(Flat[I].AsInt()), static_cast<int>(Flat[I + 1].AsInt()),
+					static_cast<int>(Flat[I + 2].AsInt()))] = Flat[I + 3].AsInt();
+		}
+		return S;
+	}
+
+	std::string FirstDifference(const FJsonValue& Expected, const std::vector<FPlacement>& Got)
+	{
+		for (size_t I = 0; I < std::max(Got.size(), Expected.Size()); ++I)
+		{
+			std::string W = "nothing", G = "nothing";
+			if (I < Expected.Size())
+			{
+				const FJsonValue& E = Expected[I];
+				W = Show(Vec(E)) + " " + (E[3].IsNull() ? std::string("null") : E[3].String) + " " + std::to_string(E[4].AsInt());
+			}
+			if (I < Got.size())
+				G = Show(Got[I].Vertex) + " " + (Got[I].Tile.empty() ? std::string("null") : Got[I].Tile) + " " + std::to_string(Got[I].QuarterTurns);
+			if (W != G) return "at " + std::to_string(I) + ": expected " + W + ", got " + G;
+		}
+		return "";
+	}
+
+	// The VARIANT cases of conformance.json (step 8). They must exercise it: variants AND base tiles placed, and
+	// each case must place something else without step 8.
+	int RunVariants(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!Load(Path, Conf)) return 1;
+		int Cases = 0, Failed = 0, NeedStep8 = 0;
+		size_t Placements = 0, InVariant = 0;
+		for (const FJsonValue& C : Conf["variant_cases"].Array)
+		{
+			++Cases;
+			const std::string& Name = C["tileset"].String;
+			const FRule Rule(Conf, &Conf["tilesets"][Name], &Conf["tileset_variants"][Name]);
+			const FCellSet Set = Cells(C["cells"]);
+			const FVariantSettings Settings = SettingsOf(C);
+			const FJsonValue& Expected = C["expected"];
+			Placements += Expected.Size();
+			for (const FJsonValue& E : Expected.Array)
+				if (!E[3].IsNull() && E[3].String.find("_var") != std::string::npos) ++InVariant;
+			const std::string First = FirstDifference(Expected, Rule.Placements(Set, &Settings));
+			if (!First.empty()) { ++Failed; std::printf("  FAIL variants %s — %s\n", C["name"].String.c_str(), First.c_str()); }
+			const FRule Bare(Conf, &Conf["tilesets"][Name]);
+			if (!FirstDifference(Expected, Bare.Placements(Set)).empty()) ++NeedStep8;
+		}
+		if (Cases < 6) { ++Failed; std::printf("  FAIL conformance.json has %d variant case(s)\n", Cases); }
+		if (InVariant == 0 || InVariant >= Placements) { ++Failed; std::printf("  FAIL the variant cases must place variants AND base tiles\n"); }
+		if (NeedStep8 != Cases) { ++Failed; std::printf("  FAIL only %d of %d variant cases need step 8\n", NeedStep8, Cases); }
+		std::printf("%d variant cases, %zu placements (%zu in a variant), %d failure(s)\n", Cases, Placements, InVariant, Failed);
+		return Failed;
+	}
+
 	int RunRule(const std::string& Path)
 	{
 		FJsonValue Conf;
@@ -305,12 +380,17 @@ namespace
 			const FJsonValue& Layers = C["layers"];
 			std::vector<FCellSet> Sets;
 			std::vector<FRule> Rules;
+			std::vector<FVariantSettings> Settings;
 			Sets.reserve(Layers.Size());
 			Rules.reserve(Layers.Size());
+			Settings.reserve(Layers.Size());
 			for (const FJsonValue& L : Layers.Array)
 			{
 				Sets.push_back(Cells(L["cells"]));
-				Rules.emplace_back(Conf, &Conf["tilesets"][L["tileset"].String]);
+				const std::string& Name = L["tileset"].String;
+				Rules.emplace_back(Conf, &Conf["tilesets"][Name],
+					Conf["tileset_variants"].Find(Name.c_str()) ? &Conf["tileset_variants"][Name] : nullptr);
+				Settings.push_back(SettingsOf(L));
 			}
 			std::vector<FLayerInput> In(Layers.Size());
 			for (size_t I = 0; I < In.size(); ++I)
@@ -318,6 +398,7 @@ namespace
 				In[I].Cells = &Sets[I];
 				In[I].bVisible = Layers[I]["visible"].Bool;
 				In[I].Rule = &Rules[I];
+				In[I].Variants = &Settings[I];
 			}
 			const std::vector<std::vector<FPlacement>> Got = FRule::PlacementsLayered(In);
 			for (size_t I = 0; I < In.size(); ++I)
@@ -341,7 +422,7 @@ namespace
 				if (!In[I].bVisible) { if (Expected.Size() == 0) bHiddenEmpty = true; }
 				else
 				{
-					const std::vector<FPlacement> Alone = Rules[I].Placements(Sets[I]);
+					const std::vector<FPlacement> Alone = Rules[I].Placements(Sets[I], &Settings[I]);
 					bool bSame = Alone.size() == Got[I].size();
 					for (size_t K = 0; bSame && K < Alone.size(); ++K)
 						bSame = Alone[K].Vertex == Got[I][K].Vertex && Alone[K].Tile == Got[I][K].Tile && Alone[K].QuarterTurns == Got[I][K].QuarterTurns;
@@ -400,7 +481,7 @@ namespace
 			std::printf("  FAIL not a world conformance file this plugin reads\n");
 			return 1;
 		}
-		int Failed = 0, Cases = 0, Refused = 0, Layers = 0;
+		int Failed = 0, Cases = 0, Refused = 0, Layers = 0, WeightsRead = 0, ChoicesRead = 0;
 		size_t CellCount = 0;
 		for (const FJsonValue& C : Conf["cases"].Array)
 		{
@@ -438,10 +519,34 @@ namespace
 						CellCount += Want.size();
 						if (G.Cells != Want) Why = "layer '" + G.Name + "': cells: expected " + ShowList(Want) + ", got " + ShowList(G.Cells);
 					}
+					// Step 8: the weights as given, the choices sorted by vertex.
+					if (Why.empty())
+					{
+						const FJsonValue& EW = W["variant_weights"];
+						if (EW.Object.size() != G.Variants.Weights.size()) Why = "layer '" + G.Name + "': variant weights";
+						for (const auto& Entry : EW.Object)
+						{
+							const auto Found = G.Variants.Weights.find(Entry.first);
+							bool bSame = Found != G.Variants.Weights.end() && Found->second.size() == Entry.second.Size();
+							for (size_t K = 0; bSame && K < Entry.second.Size(); ++K) bSame = Found->second[K] == Entry.second[K].AsInt();
+							if (!bSame) Why = "layer '" + G.Name + "': the variant weights of '" + Entry.first + "'";
+							else ++WeightsRead;
+						}
+						const FJsonValue& EC = W["variant_choices"];
+						if (EC.Size() != G.ChoicesSorted.size()) Why = "layer '" + G.Name + "': variant choices";
+						else
+							for (size_t K = 0; K < EC.Size(); ++K)
+							{
+								if (!(Vec(EC[K]) == G.ChoicesSorted[K].first) || EC[K][3].AsInt() != G.ChoicesSorted[K].second)
+								{ Why = "layer '" + G.Name + "': variant choice " + std::to_string(K); break; }
+								++ChoicesRead;
+							}
+					}
 				}
 			}
 			if (!Why.empty()) { ++Failed; std::printf("  FAIL world: %s — %s\n", C["name"].String.c_str(), Why.c_str()); }
 		}
+		if (WeightsRead == 0 || ChoicesRead == 0) { ++Failed; std::printf("  FAIL the world cases read no variant weights or choices\n"); }
 		std::printf("%d world cases (%d refusals, %d layers read, %zu cells), %d failure(s)\n", Cases, Refused, Layers, CellCount, Failed);
 		return Failed;
 	}
@@ -537,6 +642,7 @@ int main(int Argc, char** Argv)
 	const std::string Dir = Argc > 1 ? Argv[1] : "../MarchingBlocksPaint/Tests";
 	int Failed = RunRule(Dir + "/conformance.json");
 	Failed += RunLayered(Dir + "/conformance.json");
+	Failed += RunVariants(Dir + "/conformance.json");
 	Failed += RunTools(Dir + "/tools_conformance.json");
 	Failed += RunWorld(Dir + "/world_conformance.json");
 	Failed += RunFrame();

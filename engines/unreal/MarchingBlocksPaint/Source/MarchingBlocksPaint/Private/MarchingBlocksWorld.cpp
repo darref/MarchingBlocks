@@ -200,6 +200,88 @@ bool AMarchingBlocksWorld::HasTileMeshes() const
 	return TileMeshes.Contains(TEXT("mb_frame"));
 }
 
+MBPaint::FVariantSettings AMarchingBlocksWorld::GetVariantSettings() const
+{
+	MBPaint::FVariantSettings S;
+	for (const TPair<FString, FMarchingBlocksVariantWeights>& Entry : VariantWeights)
+	{
+		std::vector<int64_t> W;
+		for (const int32 X : Entry.Value.Weights) W.push_back(X);
+		S.Weights[std::string(TCHAR_TO_UTF8(*Entry.Key))] = W;
+	}
+	for (const TPair<FIntVector, int32>& Entry : VariantChoices)
+		S.Choices[MBPaint::FCell(Entry.Key.X, Entry.Key.Y, Entry.Key.Z)] = Entry.Value;
+	return S;
+}
+
+void AMarchingBlocksWorld::SetVariants(const MBPaint::FVariantSettings& Settings)
+{
+	VariantWeights.Reset();
+	for (const auto& Entry : Settings.Weights)
+	{
+		FMarchingBlocksVariantWeights W;
+		for (const int64_t X : Entry.second) W.Weights.Add(static_cast<int32>(X));
+		VariantWeights.Add(FString(UTF8_TO_TCHAR(Entry.first.c_str())), W);
+	}
+	VariantChoices.Reset();
+	for (const auto& Entry : Settings.Choices)
+		VariantChoices.Add(FIntVector(Entry.first.X, Entry.first.Y, Entry.first.Z), static_cast<int32>(Entry.second));
+}
+
+bool AMarchingBlocksWorld::VariantAt(const MBPaint::FCell& Vertex, FString& OutKey, int32& OutCount, int32& OutCurrent) const
+{
+	OutCount = 0;
+	OutCurrent = 0;
+	const auto Placed = PlacedTiles.find(Vertex);
+	if (!Rule || Placed == PlacedTiles.end() || Placed->second.empty()) return false;
+	for (const auto& Entry : Rule->Tiles)
+	{
+		const auto List = Rule->Variants.find(Entry.first);
+		int32 Rank = Entry.second == Placed->second ? 0 : -1;
+		if (Rank < 0 && List != Rule->Variants.end())
+			for (size_t K = 0; K < List->second.size(); ++K)
+				if (List->second[K] == Placed->second) Rank = static_cast<int32>(K) + 1;
+		if (Rank < 0) continue;
+		OutKey = FString(UTF8_TO_TCHAR(Entry.first.c_str()));
+		OutCount = List != Rule->Variants.end() ? static_cast<int32>(List->second.size()) : 0;
+		OutCurrent = Rank;
+		return true;
+	}
+	return false;
+}
+
+bool AMarchingBlocksWorld::TileUnderRay(const FVector& WorldOrigin, const FVector& WorldDirection, MBPaint::FCell& OutVertex)
+{
+	const FVector O = LocalToFormat(GetActorTransform().InverseTransformPosition(WorldOrigin));
+	const FVector D = LocalToFormat(GetActorTransform().InverseTransformVector(WorldDirection));
+	const MBPaint::FCellSet& Here = GetCells();
+	const MBPaint::FHit Hit = MBPaint::Tools::Ray([&Here](const MBPaint::FCell& C) { return Here.count(C) > 0; },
+		O.X, O.Y, O.Z, D.X, D.Y, D.Z, 2000.0, nullptr);
+	if (!Hit.bTouched) return false;
+	OutVertex = MBPaint::Tools::TileVertex(O.X, O.Y, O.Z, D.X, D.Y, D.Z, Hit.Cell, Hit.Normal);
+	return true;
+}
+
+void AMarchingBlocksWorld::ClickVariant(const MBPaint::FCell& Vertex, bool bBackToDraw)
+{
+	FString Key;
+	int32 Count = 0, Current = 0;
+	if (!VariantAt(Vertex, Key, Count, Current)) { Status = TEXT("Variant — no tile of this layer there."); return; }
+	if (Count == 0) { Status = FString::Printf(TEXT("Variant — '%s' has no variant."), *Key); return; }
+	const FIntVector At(Vertex.X, Vertex.Y, Vertex.Z);
+	if (bBackToDraw && !VariantChoices.Contains(At)) { Status = TEXT("Variant — this tile already follows the random draw."); return; }
+	const int32 Next = (Current + 1) % (Count + 1);
+	RunTransacted(TEXT("Variant"), [&]()
+	{
+		if (bBackToDraw) VariantChoices.Remove(At);
+		else VariantChoices.Add(At, Next);
+		Rebuild();
+	});
+	Status = bBackToDraw ? FString::Printf(TEXT("Variant — '%s' is back to the random draw."), *Key)
+		: FString::Printf(TEXT("Variant — '%s': %s. Shift + click gives it back to the draw."), *Key,
+			Next == 0 ? TEXT("the base tile") : *FString::Printf(TEXT("variant %d"), Next));
+}
+
 void AMarchingBlocksWorld::Fill() { Operate(MBPaint::ESelectionOp::Fill, TEXT("Fill")); }
 void AMarchingBlocksWorld::DeleteSelected() { Operate(MBPaint::ESelectionOp::Delete, TEXT("Delete")); }
 void AMarchingBlocksWorld::ExtrudeUp() { Operate(MBPaint::ESelectionOp::ExtrudeUp, TEXT("Extrude up")); }
@@ -421,8 +503,12 @@ void AMarchingBlocksWorld::Rebuild()
 		L.Rule = WorldLayers[I] == this ? Rule.Get() : nullptr;
 		if (WorldLayers[I] == this) Mine = static_cast<size_t>(I);
 	}
+	const MBPaint::FVariantSettings Settings = GetVariantSettings();
+	In[Mine].Variants = &Settings;
+	PlacedTiles.clear();
 	for (const MBPaint::FPlacement& P : MBPaint::FRule::PlacementsLayered(In)[Mine])
 	{
+		PlacedTiles[P.Vertex] = P.Tile;
 		const FVector Centre = FormatToLocal(FVector(P.Vertex.X + Offset.X, P.Vertex.Y + Offset.Y, P.Vertex.Z + Offset.Z));
 		const TObjectPtr<UStaticMesh>* Found = P.Tile.empty() ? nullptr
 			: TileMeshes.Find(FString(UTF8_TO_TCHAR(P.Tile.c_str())).ToLower());

@@ -79,6 +79,12 @@ namespace MBPaint
 		/// Add places AGAINST the face it aims at; the other tools act ON the cell.
 		MARCHINGBLOCKSPAINT_API FCell Anchor(EBrushTool Tool, const FHit& Hit);
 
+		/// The TILE under a ray that hit a cell — its vertex (tools_conformance.json, "tile_vertex"). p is where
+		/// the ray meets the plane of the face it entered by (on the face's axis, exactly on the plane); the piece
+		/// of vertex v covers [v + 1/2, v + 3/2], so v = floor(p - 0.5).
+		MARCHINGBLOCKSPAINT_API FCell TileVertex(double Ox, double Oy, double Oz, double Dx, double Dy, double Dz,
+			const FCell& Cell, const FCell& Normal);
+
 		/// The cells of a brush, sorted. Size 1 is one cell; the radius is Size - 1. Disc: the sphere cut
 		/// by the plane across the normal (horizontal without a normal).
 		MARCHINGBLOCKSPAINT_API std::vector<FCell> Brush(const FCell& Center, const FCell& Normal, int Size, EBrushShape Shape);

@@ -52,11 +52,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
-  - **Les variantes voulues** (§3, « les variantes voulues ») : lire `variants` de `tileset.json` et
-    `variant_weights` / `variant_choices` de `world.json` (la règle : `FormatNeutre.regle_des_variantes()`, le hachage
-    écrit en entiers 64 bits — les valeurs de Python de `test_variantes` sont leurs cas) ; les porter dans `regle()`,
-    `conformance.json` et `world_conformance.json` ; et dans les trois éditeurs, l'outil Variant (clic : la suivante,
-    clic droit : le tirage). ⚠ Sans cela, un greffon pose la tuile de BASE partout : le monde est juste, sans variété.
+  - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -624,8 +620,7 @@ application à la sélection ; des poids entiers réglables par variante, 1 par 
 - **LES FORMATS** : `tileset.json` garde `tiles` = {clé: SA BASE} et ajoute `variants` = {clé: [var1, var2…]} et
   `variants_rules_text` ; `world.json` ajoute par couche `variant_weights` et `variant_choices` (`FormatMonde.
   lire_variantes`, refus d'un sommet choisi deux fois, de choix qui ne vont pas par quatre, d'un poids non entier).
-  ⚠ **PAS DANS `regle()` NI DANS LES CAS D'ÉPREUVE** : un greffon d'aujourd'hui lit le même fichier et pose la base —
-  vérifié pour Godot (`test_greffon_peinture` 255 vert sur le nouvel export). Dans la liste des greffons à faire (§0).
+  ⚠ ~~PAS DANS `regle()` NI DANS LES CAS D'ÉPREUVE~~ — **ILS Y SONT DEPUIS LE 5 OCTOBRE 2026** (ci-dessous).
 - **MESURÉ** : `test_variantes` (76 : noms ; hachage contre des valeurs calculées en PYTHON ; tirage 2:1:1 sur 6 400
   sommets à 3 points près, deux voisins identiques 0,375 du temps ± 0,04 — sans bandes ; poids nuls, négatifs,
   absents ; choix ; le peintre contre `MB.poses` + le tirage déroulé ; choix refait localement = reconstruction
@@ -645,7 +640,55 @@ application à la sélection ; des poids entiers réglables par variante, 1 par 
   sélection ; dans le témoin, seule la copie désignée la montre.
 - ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** : la lisibilité de la section, le geste de l'outil, si les poids se
   règlent bien « pour la clé pointée ». La planche des tuiles montre aussi les variantes (une carte chacune), sans test.
-  Les greffons n'ont rien de tout cela.
+- **LES VARIANTES DANS LES GREFFONS — FAITES (5 octobre 2026, Jordan : « go » pour les greffons, les variantes d'abord)** :
+  - **la règle est l'ÉTAPE 8 de `rules_text`** (`FormatNeutre.regle()`) : la couche qui POSE le sommet décide — son choix
+    s'il est dans [0, n], sinon le tirage pesé sur le hachage (64 bits). `regle_des_variantes()` et le champ
+    `variants_rules_text` sont retirés (une seule règle écrite). `FormatMonde.regle()` décrit `variant_weights` /
+    `variant_choices`, et `FormatMonde.lire` les rend (les choix triés par sommet) ou refuse le fichier.
+    ⚠ **LE HACHAGE N'EST PLUS QUE CELUI DE L'ÉTAPE 8** : le contrôle « la règle écrite ne tire plus de copie par hachage »
+    (les exemplaires) refuse désormais un hachage AVANT l'étape 8, plus le mot.
+  - **les cas** (`conformance.json`) : un jeu « varied » (« rich » + 2, 1 et 3 variantes sur les trois clés les plus posées,
+    `tileset_variants`) ; `variant_cases` (6 : tirage par défaut sur quatre mondes, coordonnées négatives comprises ;
+    des poids 2:1:1, une base NÉGATIVE à côté d'une variante, des poids tous ≤ 0 ; des choix dans la portée, hors de
+    portée, sur une clé sans variante, sur un sommet vide) — 794 poses, 174 en variante ; un cas multicouche aux poids
+    et choix différents par couche ; `world_conformance.json` : un bon monde à variantes et cinq refus de plus.
+    Chaque contrôle exige que les cas EXERCENT l'étape 8 (variantes ET bases posées ; sans l'étape 8, chaque cas pose
+    autre chose).
+  - **la tuile sous la souris** sort de l'appli (`Vue.tuile_sous`) en règle partagée : `Outils.sommet_touche` (v = ⌊p − ½⌋
+    sur la face touchée), et la sorte `tile_vertex` des cas d'outils (8 cas, 128 en tout, treize sortes).
+  - **Godot** : `MBRule.variant_tile` / `vertex_hash`, `placements(…, variants, weights, choices)` ; le chargeur prend les
+    tuiles variantes ; `MarchingBlocksWorld.variant_weights` / `variant_choices` (exportés) et `variant_at` ; l'import
+    d'un `.mbworld` les pose ; l'outil **Variant (V)** : clic = la suivante, **Maj + clic = le tirage** (le clic droit
+    appartient à la vue libre de Godot — « Shift fait l'inverse », comme les autres outils du greffon), une annulation.
+  - **Unity** : `Rule.VariantTile` / `VertexHash`, `VariantSettings`, `Placements(…, settings)` ; `MarchingBlocksWorld` :
+    `variantWeights` (inspecteur) et les choix sérialisés, `SetVariantChoice`, `VariantAt`, `TileUnderRay` ;
+    `MBWorldFile` lit les variantes, l'importeur les pose (`SetVariants`, sans reconstruire une couche inactive) ;
+    `Mode.Variant` (V, et son icône dans la rangée des outils — index 5 de la rangée, pas `Mode.Shape`).
+    ⚠ **UN DÉFAUT RÉEL TROUVÉ DANS UNITY** : deux clics dans la même image tombaient dans le même groupe d'annulation
+    (Unity groupe par événement) — un Ctrl+Z défaisait les deux. `Undo.IncrementCurrentGroup()` à chaque clic.
+  - **Unreal** : `FRule::VariantTile` / `VertexHash`, `FVariantSettings`, `FLayerInput::Variants` ; `FWorldFile` lit les
+    variantes ; `AMarchingBlocksWorld` : `VariantWeights` (Details, `FMarchingBlocksVariantWeights`), `VariantChoices`
+    sauvés avec le niveau, `ClickVariant` en UNE transaction ; `EMarchingBlocksTool::Variant` (DERNIER, rien de
+    renuméroté), V dans le mode, un bouton dans le panneau Slate. ⚠ Un local `Index` aurait masqué le membre
+    (`FCellSet Index`, C4458) : renommé avant de compiler.
+  - **MESURÉ** : `test_greffon_peinture` 282 (+27 : les cas à variantes, le multicouche à variantes, `tile_vertex`, et de
+    bout en bout — l'appli exporte un lot dont la clé du sol a deux variantes, le greffon pose sur un sol 6 × 6 avec des
+    poids ce que pose la référence, puis l'outil Variant mené par de VRAIS clics à travers une caméra : suivante,
+    suivante, Ctrl+Z, Ctrl+Y, Maj + clic, aucun autre sommet changé) ; banc .NET et banc C++ (clang de Unity, drapeaux
+    d'Unreal) : 18 + 6 + 6 cas de pose, 128 d'outils, 14 de monde, 0 échec ; **Unity 6.6 : 35 tests sur 35** (dont
+    `VariantTests` sur un `varied.mbset` écrit par `preparer_essai_unity.gd` : les poses de la référence, l'outil,
+    l'annulation, la tuile sous un rayon) ; **Unreal 5.8.3 : BuildPlugin, BUILD SUCCESSFUL, aucun avertissement**.
+  - **MUTATIONS, TOUTES ROUGES** : Godot 10 (choix ignorés, hachage sans second brassage, poids négatifs gardés, poids de
+    la première couche partout, tuiles variantes non chargées, choix du monde perdus, Maj ignorée, pas d'annulation,
+    sommet sans le demi, rang courant toujours 0) ; .NET 5 et C++ 5 (choix ignorés, poids négatifs gardés, réglages
+    de la couche 0 partout / hachage sans second brassage, sommet sans le demi, choix du monde perdus) ; Unity 3, DANS
+    Unity (un clic sans son groupe d'annulation, le monde sans ses réglages de variantes, la variante posée lue comme la base). ⚠ **« POIDS NÉGATIFS
+    GARDÉS » D'ABORD MUETTE, ET C'ÉTAIT LE CAS** : le seul poids négatif était dans une clé aux poids tous ≤ 0, où 0 et
+    la valeur absolue posent la même base — une base négative à côté d'une variante l'a fait rougir dans les trois.
+    ⚠ Une mutation Godot ne compilait plus (une boucle vidée) : récrite, elle n'éprouvait rien.
+  - ⚠ **PAS TENU EN MAIN** : ni la barre Godot dans l'éditeur, ni la Scene view d'Unity au vrai clic (le test appelle
+    `ClickVariant` avec le sommet qu'un clic trouverait), ni le mode Unreal (seul compile). Les poids se règlent dans
+    l'inspecteur / le panneau Details, sans l'interface « clé pointée » de l'appli.
 
 ### LES SECTIONS PARTAGÉES — DEMANDÉ PAR JORDAN (30 septembre 2026), ÉCRIT EN TROIS POINTS ET LA BRIDE
 

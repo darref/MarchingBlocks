@@ -15,7 +15,10 @@
 //   4. an outdoor-capable class is OUTDOOR when no empty cell among the 8 has a full cell above it,
 //      from v.y + band up to the highest full cell of the layer; outdoor tries "<id>_outdoor" first;
 //   5. each key has exactly one tile, tiles[key];
-//   6. a missing key gives an empty tile name — show an error marker, never fill in.
+//   6. a missing key gives an empty tile name — show an error marker, never fill in;
+//   7. layers: the union of the visible layers, a vertex placed by the first layer owning one of its cells;
+//   8. variants (optional): a key may have variants (the manifest's "variants"); the layer that places v
+//      picks one — its CHOICE at v if it has one, otherwise a weighted draw by a hash of v, never random.
 
 #pragma once
 
@@ -23,6 +26,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -70,6 +74,14 @@ namespace MBPaint
 
 	class FRule;
 
+	/// A layer's variant settings (the tileset rule, step 8): the weights of the draw per key — [base, variant
+	/// 1, …], a missing entry is 1, a negative one 0 — and the variant CHOSEN at a vertex (0 is the base tile).
+	struct FVariantSettings
+	{
+		std::unordered_map<std::string, std::vector<int64_t>> Weights;
+		std::unordered_map<FCell, int64_t, FCellHash> Choices;
+	};
+
 	/// One layer of a world, for FRule::PlacementsLayered (the tileset rule, step 7).
 	struct FLayerInput
 	{
@@ -78,6 +90,8 @@ namespace MBPaint
 		/// This layer's tiles — nullptr when its placements are not wanted (a layer without tiles, or another
 		/// actor's layer): its cells still count in the union, its list stays empty.
 		const FRule* Rule = nullptr;
+		/// This layer's variant weights and choices (step 8) — nullptr for none.
+		const FVariantSettings* Variants = nullptr;
 	};
 
 	class FRule
@@ -93,12 +107,22 @@ namespace MBPaint
 		/// "" when every key of Tiles names exactly one tile (one tile per key), otherwise the reason.
 		static std::string CheckTiles(const FJsonValue& Tiles);
 
-		/// Tiles: {key: tile name} — pass nullptr to use the manifest's own "tiles".
+		/// Tiles: {key: tile name} — pass nullptr to use the manifest's own "tiles". InVariants: {key: [tile
+		/// names]} — nullptr to use the manifest's own "variants" (step 8).
 		/// Call CheckManifest first: a manifest it refuses gives an empty rule.
-		explicit FRule(const FJsonValue& Manifest, const FJsonValue* Tiles = nullptr);
+		explicit FRule(const FJsonValue& Manifest, const FJsonValue* InTilesOverride = nullptr,
+			const FJsonValue* InVariants = nullptr);
 
-		/// Every placement for one layer alone, sorted by vertex.
-		std::vector<FPlacement> Placements(const FCellSet& Cells) const;
+		/// Every placement for one layer alone, sorted by vertex. InSettings: its variant weights and choices.
+		std::vector<FPlacement> Placements(const FCellSet& Cells, const FVariantSettings* InSettings = nullptr) const;
+
+		/// Step 8: the tile placed at V for Key, whose base tile is Base. Same world, same tiles: the draw is a
+		/// hash of V, never random.
+		static std::string VariantTile(const FCell& V, const std::string& Key, const std::string& Base,
+			const std::vector<std::string>* List, const FVariantSettings* InSettings);
+
+		/// The vertex hash of step 8, on 64-bit integers.
+		static int64_t VertexHash(const FCell& V);
 
 		/// Every placement of a world of LAYERS (step 7), one sorted list per layer, in the same order. The
 		/// layers are in PRIORITY order (the first is the highest): steps 1-4 read the union of the visible
@@ -109,6 +133,8 @@ namespace MBPaint
 		std::array<FCell, 8> Corners;
 		FCell PieceOffset = FCell(1, 1, 1);
 		std::unordered_map<std::string, std::string> Tiles;
+		/// {key: [variant 1, variant 2, …]} — the manifest's "variants" (step 8); empty without.
+		std::unordered_map<std::string, std::vector<std::string>> Variants;
 
 	private:
 		bool HasTile(const std::string& Key) const;

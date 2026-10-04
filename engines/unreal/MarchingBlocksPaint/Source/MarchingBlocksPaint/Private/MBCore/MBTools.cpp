@@ -71,6 +71,23 @@ namespace MBPaint
 			}
 		}
 
+		FCell TileVertex(double Ox, double Oy, double Oz, double Dx, double Dy, double Dz, const FCell& Cell, const FCell& Normal)
+		{
+			const double Len = std::sqrt(Dx * Dx + Dy * Dy + Dz * Dz);
+			const double O[3] = {Ox, Oy, Oz};
+			const double D[3] = {Dx / Len, Dy / Len, Dz / Len};
+			const int C[3] = {Cell.X, Cell.Y, Cell.Z};
+			const int N[3] = {Normal.X, Normal.Y, Normal.Z};
+			const int Axis = N[0] != 0 ? 0 : (N[1] != 0 ? 1 : 2);
+			const double Plane = static_cast<double>(C[Axis]) + (N[Axis] > 0 ? 1.0 : 0.0);
+			const double T = (Plane - O[Axis]) / D[Axis];
+			double P[3];
+			for (int A = 0; A < 3; ++A) P[A] = O[A] + D[A] * T;
+			P[Axis] = Plane;
+			return FCell(static_cast<int>(std::floor(P[0] - 0.5)), static_cast<int>(std::floor(P[1] - 0.5)),
+				static_cast<int>(std::floor(P[2] - 0.5)));
+		}
+
 		FCell Anchor(EBrushTool Tool, const FHit& Hit)
 		{
 			return Tool == EBrushTool::Add && Hit.bTouched ? Hit.Cell + Hit.Normal : Hit.Cell;

@@ -49,6 +49,19 @@ enum class EMarchingBlocksTool : uint8
 	Box,
 	/** A special shape — tunnel, well, bridge, balcony or stairs (Special Shape below). Always aimed at the matter. */
 	Shape,
+	/** VARIANT (V): click a tile — its next variant (base, 1, 2…); Shift + click gives it back to the random draw (the
+	 *  tileset rule, step 8). Always aimed at the matter. (Last, so nothing a level saved is renumbered.) */
+	Variant,
+};
+
+/** The weights of one key's variant draw: [base, variant 1, variant 2, …] (a missing entry is 1, a negative one 0). */
+USTRUCT(BlueprintType)
+struct FMarchingBlocksVariantWeights
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MarchingBlocks")
+	TArray<int32> Weights;
 };
 
 UENUM(BlueprintType)
@@ -193,6 +206,11 @@ public:
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks") void Rebuild();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks") void ClearCells();
 
+	/** VARIANTS (the tileset rule, step 8) — the weights of the random draw per key: the base tile first, then each
+	 *  variant. Same world, same tiles: the draw is a hash of the vertex, never random. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Variants")
+	TMap<FString, FMarchingBlocksVariantWeights> VariantWeights;
+
 	// ── For the editor mode and for code ──
 
 	/** The aim and the navigation switch as MBCore sees them (a legacy Navigate aim reads as Grid + navigating). */
@@ -223,6 +241,18 @@ public:
 	/** True once the frame marker 'mb_frame' was found in the Tiles Folder, i.e. tiles.glb is imported there. */
 	bool HasTileMeshes() const;
 
+	/** This layer's variant weights and choices, for the rule (step 8). */
+	MBPaint::FVariantSettings GetVariantSettings() const;
+	/** Replaces every variant weight and choice (the world import), WITHOUT rebuilding. Call Modify() first. */
+	void SetVariants(const MBPaint::FVariantSettings& Settings);
+	/** The tile this layer placed at a vertex: its key, how many variants the key has, which one is placed (0 the
+	 *  base). False when this layer placed nothing there. */
+	bool VariantAt(const MBPaint::FCell& Vertex, FString& OutKey, int32& OutCount, int32& OutCurrent) const;
+	/** The TILE under a world ray — the vertex of the piece on the face the ray meets in this layer's cells. */
+	bool TileUnderRay(const FVector& WorldOrigin, const FVector& WorldDirection, MBPaint::FCell& OutVertex);
+	/** The Variant tool's click, as one undo step: the next variant at the vertex, or (bBackToDraw) the random draw. */
+	void ClickVariant(const MBPaint::FCell& Vertex, bool bBackToDraw);
+
 	/** The ray against the MATTER (the cells, never the rendered tiles), converted into format space. */
 	MBPaint::FHit RayAgainstCells(const FVector& WorldOrigin, const FVector& WorldDirection,
 		const MBPaint::FCellSet* Ignore = nullptr);
@@ -251,6 +281,13 @@ private:
 	/** The cells, in format space. The ONLY saved truth; the set below is an index of it. */
 	UPROPERTY()
 	TArray<FIntVector> Cells;
+
+	/** The variant CHOSEN at a vertex (format space): 0 is the base tile. The Variant tool sets it. */
+	UPROPERTY()
+	TMap<FIntVector, int32> VariantChoices;
+
+	/** The tile placed at each vertex by the last Rebuild — what the Variant tool reads. */
+	std::unordered_map<MBPaint::FCell, std::string, MBPaint::FCellHash> PlacedTiles;
 
 	/** A copy of tileset.json, so the level rebuilds without the file. */
 	UPROPERTY()

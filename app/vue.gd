@@ -574,13 +574,7 @@ func tuile_sous(position: Vector2) -> Dictionary:
 	var r: Dictionary = Outils.rayon(_occupe_actif, origine, sens, PORTEE)
 	if not r["touche"]:
 		return {}
-	var c: Vector3i = r["case"]
-	var n: Vector3i = r["normale"]
-	var axe := 0 if n.x != 0 else (1 if n.y != 0 else 2)
-	var plan: float = float(c[axe]) + (1.0 if n[axe] > 0 else 0.0)
-	var p: Vector3 = origine + sens * ((plan - origine[axe]) / sens[axe])
-	p[axe] = plan
-	var sommet := Vector3i(floori(p.x - 0.5), floori(p.y - 0.5), floori(p.z - 0.5))
+	var sommet := Outils.sommet_touche(origine, sens, r["case"], r["normale"])
 	var rendu := m.get_node("Rendu") as GridMap
 	var fautes := m.get_node("Fautes") as GridMap
 	var id: int = rendu.get_cell_item(sommet)

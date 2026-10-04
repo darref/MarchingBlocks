@@ -64,6 +64,18 @@ static func ray(is_full: Callable, origin: Vector3, direction: Vector3, reach: f
 
 
 ## Where the brush stands. "add" places AGAINST the face it aims at; the other tools act ON the cell.
+## The TILE under a ray that hit a cell — its vertex (tools_conformance.json, "tile_vertex"). p is where the
+## ray meets the plane of the face it entered by (on the face's axis, exactly on the plane); the piece of
+## vertex v covers [v + 1/2, v + 3/2], so v = floor(p - 0.5).
+static func tile_vertex(origin: Vector3, direction: Vector3, cell: Vector3i, normal: Vector3i) -> Vector3i:
+	direction = direction.normalized()
+	var axis := 0 if normal.x != 0 else (1 if normal.y != 0 else 2)
+	var plane: float = float(cell[axis]) + (1.0 if normal[axis] > 0 else 0.0)
+	var p: Vector3 = origin + direction * ((plane - origin[axis]) / direction[axis])
+	p[axis] = plane
+	return Vector3i(floori(p.x - 0.5), floori(p.y - 0.5), floori(p.z - 0.5))
+
+
 static func anchor(tool: String, hit: Dictionary) -> Vector3i:
 	var c: Vector3i = hit["cell"]
 	if tool == "add" and hit["hit"]:

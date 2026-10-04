@@ -76,7 +76,9 @@ func _build() -> void:
 	for m in [["add", "Add (A)", "Adds matter. Shift digs."], ["dig", "Dig (D)", "Removes matter. Shift adds."],
 			["select", "Select (S)", "Paints the selection over the matter. Shift adds to it, Ctrl removes."],
 			["rect", "Rect (G)", "A FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."],
-			["box", "Box (B)", "A 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."]]:
+			["box", "Box (B)", "A 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."],
+			["variant", "Variant (V)", "Click a tile: its next variant (base, 1, 2…). Shift + click gives it back "
+			+ "to the random draw. Only for a tileset whose tiles have variants."]]:
 		_mode_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_mode(m[0]))
 	_hollow = _toggle(bar, "hollow", "Hollow box", "Keeps the skin of the box — a room. A box thinner than three "
 		+ "cells stays solid.", func() -> void: editor.hollow = _hollow.button_pressed)

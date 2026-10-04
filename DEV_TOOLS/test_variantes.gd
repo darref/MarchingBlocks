@@ -380,7 +380,8 @@ func _les_formats(t: RefCounted) -> void:
 	_dire(tiles.size() == bases and tiles.keys().all(func(k): return not str(k).contains("var"))
 		and tiles["slab_b2h2_outdoor"] == "slab_b2h2_outdoor",
 		"tiles ne garde que les %d bases (%d entrées) : un greffon qui ignore les variantes pose la base" % [bases, tiles.size()])
-	_dire((jeu.get("variants_rules_text", []) as Array).size() > 5, "la règle des variantes est écrite dans le manifeste")
+	_dire((jeu.get("rules_text", []) as Array).any(func(l): return str(l).begins_with("8. Variants")),
+		"la règle des variantes est l'étape 8 de rules_text")
 	# Le glTF porte les trois tuiles, nommées.
 	var gltf := GLTFDocument.new()
 	var etat := GLTFState.new()

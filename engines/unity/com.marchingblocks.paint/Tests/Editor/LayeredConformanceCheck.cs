@@ -31,6 +31,8 @@ namespace MarchingBlocks.Paint.Tests
                 var cells = new List<HashSet<Int3>>();
                 var visible = new List<bool>();
                 var rules = new List<Rule>();
+                var settings = new List<VariantSettings>();
+                var tilesetVariants = conf.TryGetValue("tileset_variants", out var tv) ? (Dictionary<string, object>)tv : null;
                 foreach (Dictionary<string, object> l in layers)
                 {
                     var set = new HashSet<Int3>();
@@ -38,9 +40,12 @@ namespace MarchingBlocks.Paint.Tests
                         set.Add(new Int3((int)MBJson.AsLong(p[0]), (int)MBJson.AsLong(p[1]), (int)MBJson.AsLong(p[2])));
                     cells.Add(set);
                     visible.Add((bool)l["visible"]);
-                    rules.Add(new Rule(conf, (Dictionary<string, object>)tilesets[(string)l["tileset"]]));
+                    string ts = (string)l["tileset"];
+                    rules.Add(new Rule(conf, (Dictionary<string, object>)tilesets[ts],
+                        tilesetVariants != null && tilesetVariants.TryGetValue(ts, out var vs) ? (Dictionary<string, object>)vs : null));
+                    settings.Add(VariantConformanceCheck.Settings(l));
                 }
-                var got = Rule.PlacementsLayered(cells, visible, rules);
+                var got = Rule.PlacementsLayered(cells, visible, rules, settings);
                 var expected = (List<object>)c["expected"];
                 for (int i = 0; i < layers.Count; i++)
                 {
@@ -57,7 +62,7 @@ namespace MarchingBlocks.Paint.Tests
                     if (!visible[i]) hiddenEmpty |= e.Count == 0;
                     else
                     {
-                        var alone = rules[i].Placements(cells[i]);
+                        var alone = rules[i].Placements(cells[i], settings[i]);
                         bool same = alone.Count == e.Count;
                         for (int k = 0; same && k < e.Count; k++) same = Show(alone[k]) == Show((List<object>)e[k]);
                         if (!same) differAlone++;

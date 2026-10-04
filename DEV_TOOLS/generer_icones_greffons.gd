@@ -28,7 +28,7 @@ const NOMS := {
 	"copy": "copier", "cut": "couper", "paste": "coller", "erase": "gomme", "layers": "couches",
 	"world": "monde",
 	"tunnel": "tunnel", "well": "puits", "bridge": "pont", "balcony": "balcon", "stairs": "escalier", "room": "salle",
-	"straight": "droit",
+	"straight": "droit", "variant": "variante",
 	"connect": "relier", "round": "profil_rond", "square": "profil_carre", "arch": "profil_arche", "rail": "garde_corps",
 }
 ## Rendues au double de leur taille d'affichage (20 px), comme dans l'appli : nettes à 200 %.

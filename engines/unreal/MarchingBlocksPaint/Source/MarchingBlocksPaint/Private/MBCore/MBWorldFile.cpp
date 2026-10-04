@@ -2,6 +2,8 @@
 
 #include "MBCore/MBWorldFile.h"
 
+#include <algorithm>
+
 #include <cmath>
 #include <limits>
 
@@ -92,6 +94,42 @@ namespace MBPaint
 				const FCell Cell(X, Y, Z);
 				if (!Seen.insert(Cell).second) return Where + "the cell " + WorldFileDetail::ShowCell(Cell) + " appears twice";
 				Layer.Cells.push_back(Cell);
+			}
+			// Step 8 (optional): integer weights per key; choices x y z c, never the same vertex twice.
+			const FJsonValue& Weights = L["variant_weights"];
+			if (!Weights.IsNull())
+			{
+				if (Weights.Type != FJsonValue::EType::Object) return Where + "variant_weights is not an object";
+				for (const auto& Entry : Weights.Object)
+				{
+					if (Entry.second.Type != FJsonValue::EType::Array) return Where + "the weights of '" + Entry.first + "' are not integers";
+					std::vector<int64_t> Ints;
+					for (const FJsonValue& W : Entry.second.Array)
+					{
+						if (!WorldFileDetail::IsWhole(W)) return Where + "the weights of '" + Entry.first + "' are not integers";
+						Ints.push_back(W.AsInt());
+					}
+					Layer.Variants.Weights[Entry.first] = Ints;
+				}
+			}
+			const FJsonValue& Choices = L["variant_choices"];
+			if (!Choices.IsNull())
+			{
+				if (Choices.Type != FJsonValue::EType::Array || Choices.Array.size() % 4 != 0)
+					return Where + "variant_choices is not a list of x y z c";
+				for (size_t I = 0; I + 3 < Choices.Array.size(); I += 4)
+				{
+					int X = 0, Y = 0, Z = 0, Pick = 0;
+					if (!WorldFileDetail::ReadCoordinate(Choices.Array[I], X) || !WorldFileDetail::ReadCoordinate(Choices.Array[I + 1], Y)
+						|| !WorldFileDetail::ReadCoordinate(Choices.Array[I + 2], Z) || !WorldFileDetail::ReadCoordinate(Choices.Array[I + 3], Pick))
+						return Where + "a variant choice is not made of integers";
+					const FCell Vertex(X, Y, Z);
+					if (!Layer.Variants.Choices.emplace(Vertex, Pick).second)
+						return Where + "the vertex " + WorldFileDetail::ShowCell(Vertex) + " is chosen twice";
+					Layer.ChoicesSorted.emplace_back(Vertex, Pick);
+				}
+				std::sort(Layer.ChoicesSorted.begin(), Layer.ChoicesSorted.end(),
+					[](const std::pair<FCell, int64_t>& A, const std::pair<FCell, int64_t>& B) { return A.first < B.first; });
 			}
 			Parsed.push_back(std::move(Layer));
 		}

@@ -43,6 +43,7 @@ func _initialize() -> void:
 	if not cas.is_empty():
 		_le_greffon_passe_les_cas(cas)
 		_le_greffon_passe_les_cas_en_couches(cas)
+		_le_greffon_passe_les_cas_a_variantes(cas)
 	_un_format_plus_recent_est_refuse()
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
@@ -71,11 +72,14 @@ func _les_noms() -> void:
 	# ⚠ UNE TUILE PAR CLÉ (charte §3, 30 septembre 2026) : ni champ `copies`, ni étape « Copy » dans la règle.
 	var regle: Dictionary = FN.regle_du_format()
 	_vrai(not regle.has("copies"), "le format ne porte plus de champ « copies »")
+	# ⚠ LE HACHAGE N'EST PLUS QUE CELUI DES VARIANTES VOULUES (l'étape 8, 5 octobre 2026) : jamais avant elle.
 	var copie := false
+	var etape_8 := false
 	for ligne in FN.regle():
-		if ligne.contains("Copy") or ligne.contains("73856093"):
+		etape_8 = etape_8 or ligne.begins_with("8. Variants")
+		if ligne.contains("Copy") or (ligne.contains("73856093") and not etape_8):
 			copie = true
-	_vrai(not copie, "la règle écrite ne tire plus de copie par hachage")
+	_vrai(not copie, "la règle écrite ne tire plus de copie par hachage (le hachage n'est que celui de l'étape 8)")
 
 
 # ── 2. Les quarts de tour — mesurés contre la base, pas recopiés ─────────────────────────────────────
@@ -331,7 +335,13 @@ func _le_greffon_passe_les_cas_en_couches(cas: Dictionary) -> void:
 			var cells := {}
 			for p in l["cells"]:
 				cells[Vector3i(int(p[0]), int(p[1]), int(p[2]))] = true
-			couches.append({"cells": cells, "tiles": cas["tilesets"][l["tileset"]], "visible": l["visible"]})
+			var choix := {}
+			for q in range(0, (l.get("variant_choices", []) as Array).size(), 4):
+				choix[Vector3i(int(l["variant_choices"][q]), int(l["variant_choices"][q + 1]),
+					int(l["variant_choices"][q + 2]))] = int(l["variant_choices"][q + 3])
+			couches.append({"cells": cells, "tiles": cas["tilesets"][l["tileset"]], "visible": l["visible"],
+				"variants": cas.get("tileset_variants", {}).get(l["tileset"], {}),
+				"weights": l.get("variant_weights", {}), "choices": choix})
 		var obtenu: Array = Rule.placements_layered(couches, cas)
 		var attendu: Array = []
 		for e in c["expected"]:
@@ -344,12 +354,48 @@ func _le_greffon_passe_les_cas_en_couches(cas: Dictionary) -> void:
 		for i in couches.size():
 			if not couches[i]["visible"]:
 				cachee_vide = cachee_vide or (attendu[i] as Array).is_empty()
-			elif Rule.placements(couches[i]["cells"], cas, couches[i]["tiles"]) != attendu[i]:
+			elif Rule.placements(couches[i]["cells"], cas, couches[i]["tiles"], couches[i]["variants"],
+					couches[i]["weights"], couches[i]["choices"]) != attendu[i]:
 				differe_seule += 1
 	_vrai(differe_seule >= 4, "les cas exercent l'union : %d couche(s) posent autre chose que seules" % differe_seule)
 	_vrai(cachee_vide, "un cas a une couche cachée, et elle ne pose rien")
 	_vrai(poses_par_cas.size() >= 2 and poses_par_cas[0] != [poses_par_cas[1][1], poses_par_cas[1][0]],
 		"inverser la priorité change les poses (la frontière change de couche)")
+
+
+# ── 4 bis. Les variantes (étape 8, portées dans les greffons le 5 octobre 2026) ─────────────────────────
+# ⚠ LES CAS EXERCENT L'ÉTAPE 8 : des variantes posées par le tirage, la base aussi, un choix suivi, des poids qui
+# changent les poses — et sans les variantes, le greffon poserait AUTRE CHOSE (sinon ces cas ne garderaient rien).
+func _le_greffon_passe_les_cas_a_variantes(cas: Dictionary) -> void:
+	var vc: Array = cas.get("variant_cases", [])
+	var variants: Dictionary = cas.get("tileset_variants", {}).get("varied", {})
+	_vrai(vc.size() >= 6 and variants.size() >= 3, "conformance.json porte les cas à variantes (%d cas, %d clés)"
+		% [vc.size(), variants.size()])
+	var en_variante := 0
+	var sans_compte := 0
+	var poses := 0
+	for c in vc:
+		var cells := {}
+		for p in c["cells"]:
+			cells[Vector3i(int(p[0]), int(p[1]), int(p[2]))] = true
+		var choix := {}
+		var plat: Array = c["variant_choices"]
+		for q in range(0, plat.size(), 4):
+			choix[Vector3i(int(plat[q]), int(plat[q + 1]), int(plat[q + 2]))] = int(plat[q + 3])
+		var tiles: Dictionary = cas["tilesets"]["varied"]
+		var obtenu: Array = Rule.placements(cells, cas, tiles, variants, c["variant_weights"], choix)
+		var attendu: Array = []
+		for e in c["expected"]:
+			attendu.append([int(e[0]), int(e[1]), int(e[2]), e[3], int(e[4])])
+			poses += 1
+			if e[3] != null and str(e[3]).contains("_var"):
+				en_variante += 1
+		_vrai(obtenu == attendu, "« %s » : le greffon pose les variantes que pose MarchingBlocks" % c["name"])
+		if Rule.placements(cells, cas, tiles) != attendu:
+			sans_compte += 1
+	print("  cas à variantes : %d cas, %d poses, %d en variante" % [vc.size(), poses, en_variante])
+	_vrai(en_variante > 0 and en_variante < poses, "les cas posent des variantes ET des bases")
+	_vrai(sans_compte == vc.size(), "sans l'étape 8, chaque cas poserait autre chose (%d sur %d)" % [sans_compte, vc.size()])
 
 
 # ── 4. Le greffon reproduit chaque cas, à 100 % ─────────────────────────────────────────────────────
@@ -476,7 +522,7 @@ func _les_cas_d_outils() -> void:
 	# ⚠ LES FORMES SPÉCIALES (1er octobre 2026) : les cas doivent exercer ce qu'ils nomment — chaque forme,
 	# droite et reliée, chaque profil, chaque refus, une marche qui débouche et une aveugle, une paroi en
 	# biais, une réparation. Sans ça, un greffon qui ignore l'un d'eux passerait.
-	_egal(sortes.size(), 12, "les cas d'outils couvrent les douze sortes de fonctions")
+	_egal(sortes.size(), 13, "les cas d'outils couvrent les treize sortes de fonctions")
 	# LA SALLE (2 octobre 2026) : montée et descendue, creusée dans la roche, réparée, bornée, et ses deux refus.
 	for s in ["up", "down", "dug", "repaired", "clamped", "too_small", "too_large"]:
 		_vrai(salles.get(s, false), "aucun cas de salle « %s »" % s)
@@ -538,6 +584,9 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 			var obtenu := [r["hit"], r["cell"], r["normal"]]
 			var voulu := [e["hit"], _vi(e["cell"]), _vi(e["normal"])]
 			return "" if obtenu == voulu else "attendu %s, rendu %s" % [voulu, obtenu]
+		"tile_vertex":
+			var t := Tools.tile_vertex(_v3(i["origin"]), _v3(i["direction"]), _vi(i["cell"]), _vi(i["normal"]))
+			return "" if t == _vi(e["vertex"]) else "attendu %s, rendu %s" % [_vi(e["vertex"]), t]
 		"anchor":
 			var a := Tools.anchor(i["tool"], {"hit": i["hit"], "cell": _vi(i["cell"]), "normal": _vi(i["normal"])})
 			return "" if a == _vi(e["anchor"]) else "attendu %s, rendu %s" % [_vi(e["anchor"]), a]
@@ -953,8 +1002,125 @@ func _de_bout_en_bout() -> void:
 		% [sortie["tuiles"], tuiles.get_used_cells().size(), ecarts])
 	_deux_couches(dossier.path_join("witness_rock.mbset/tileset.json"), comptes)
 	monde.queue_free()
+	_les_variantes_de_bout_en_bout(lot, dossier)
 	_le_monde_de_bout_en_bout(lot, pleines, attendu)
 	_fin()
+
+
+# ── LES VARIANTES DE BOUT EN BOUT (5 octobre 2026) ──────────────────────────────────────────────────
+# L'appli exporte un lot dont la clé du sol a deux variantes ; le greffon le charge et pose sur un sol 6 × 6, avec
+# des poids, exactement ce que pose la référence (`FN.attendu` avec poids) ; puis l'OUTIL VARIANT, mené par de vrais
+# clics à travers une caméra : la suivante, la suivante, Ctrl+Z, Ctrl+Y, Maj + clic (retour au tirage).
+func _les_variantes_de_bout_en_bout(lot: MeshLibrary, dossier: String) -> void:
+	var sol := {}
+	for x in 6:
+		for z in 6:
+			sol[Vector3i(x, 0, z)] = true
+	var cles := FN.tuiles_du_lot(lot)
+	var vise := Vector3i(2, 0, 2)
+	var cle_sol := ""
+	for d in MB.poses(sol, cles):
+		if d["sommet"] == vise:
+			cle_sol = d["cle"]
+	var varie := MeshLibrary.new()
+	var id := 0
+	for i in lot.get_item_list():
+		varie.create_item(id)
+		varie.set_item_name(id, lot.get_item_name(i))
+		varie.set_item_mesh(id, lot.get_item_mesh(i))
+		id += 1
+	for k in [1, 2]:
+		varie.create_item(id)
+		varie.set_item_name(id, MB.nom_de_variante(cle_sol, k))
+		varie.set_item_mesh(id, lot.get_item_mesh(cles[cle_sol]))
+		id += 1
+	var sortie: Dictionary = FN.exporter(varie, dossier, "Varied Rock", "MarchingBlocks test")
+	_vrai(not sortie.has("erreur") and cle_sol != "", "l'export à variantes échoue : %s (clé du sol %s)"
+		% [sortie.get("erreur", ""), cle_sol])
+	if sortie.has("erreur"):
+		return
+	var chemin: String = dossier.path_join("varied_rock.mbset/tileset.json")
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var monde: Node3D = World.new()
+	tenant.add_child(monde)
+	var grille := monde.get_node("Cells") as GridMap
+	for c in sol:
+		grille.set_cell_item(c, 0)
+	monde.tileset = chemin
+	var poids := {cle_sol: [1, 2, 1]}
+	monde.variant_weights = {FN.id_de_cle(cle_sol): [1, 2, 1]}
+	var tuiles := monde.get_node("Tiles") as GridMap
+	var nom_pose := func(v: Vector3i) -> String:
+		var it: int = tuiles.get_cell_item(v)
+		return tuiles.mesh_library.get_item_name(it) if it >= 0 else "∅"
+	var comptes_varies := FN.tuiles_du_lot(varie)
+	var attendu: Array = FN.attendu(sol, comptes_varies, poids, {})
+	var ecarts := 0
+	var variantes_posees := 0
+	for e in attendu:
+		var v := Vector3i(e[0], e[1], e[2])
+		if nom_pose.call(v) != e[3]:
+			ecarts += 1
+		if str(e[3]).contains("_var"):
+			variantes_posees += 1
+	_egal(monde.last_report()["error"], "", "le monde à variantes se bâtit sans erreur")
+	_egal(ecarts, 0, "le greffon pose, poids compris, les variantes que l'appli pose")
+	_vrai(variantes_posees > 0 and variantes_posees < attendu.size(), "… des variantes ET des bases (%d sur %d)"
+		% [variantes_posees, attendu.size()])
+	# L'OUTIL VARIANT, par de vrais clics : la caméra au-dessus de la case (2, 0, 2), le dessus touché en (2,5 ; 1 ; 2,5).
+	var cam := Camera3D.new()
+	root.add_child(cam)
+	cam.current = true
+	cam.look_at_from_position(Vector3(2.5, 12, 2.5), Vector3(2.5, 0, 2.5), Vector3.FORWARD)
+	var ed: Node = Editeur.new()
+	root.add_child(ed)
+	var annul := UndoRedo.new()
+	ed.undo = annul
+	ed.world = monde
+	ed.set_mode("variant")
+	var ou: Vector2 = cam.unproject_position(Vector3(2.5, 1.0, 2.5))
+	var clic := func(maj: bool) -> void:
+		for appuye in [true, false]:
+			var b := InputEventMouseButton.new()
+			b.button_index = MOUSE_BUTTON_LEFT
+			b.pressed = appuye
+			b.position = ou
+			b.shift_pressed = maj
+			ed.input(cam, b)
+	var base: String = FN.nom_de_tuile(cle_sol)
+	var noms := [base, FN.nom_de_tuile(MB.nom_de_variante(cle_sol, 1)), FN.nom_de_tuile(MB.nom_de_variante(cle_sol, 2))]
+	var avant: String = nom_pose.call(vise)
+	var rang: int = noms.find(avant)
+	clic.call(false)
+	_egal(monde.variant_choices.get(vise, -1), (rang + 1) % 3, "Variant : un clic choisit la variante suivante à ce sommet")
+	_egal(nom_pose.call(vise), noms[(rang + 1) % 3], "… et le monde la pose (%s → %s)" % [avant, nom_pose.call(vise)])
+	clic.call(false)
+	_egal(nom_pose.call(vise), noms[(rang + 2) % 3], "… un second clic, la suivante")
+	annul.undo()
+	_egal(nom_pose.call(vise), noms[(rang + 1) % 3], "Ctrl+Z rend la précédente")
+	annul.redo()
+	_egal(nom_pose.call(vise), noms[(rang + 2) % 3], "Ctrl+Y la refait")
+	clic.call(true)
+	_vrai(not monde.variant_choices.has(vise) and nom_pose.call(vise) == avant,
+		"Maj + clic : le sommet revient au tirage (%s)" % nom_pose.call(vise))
+	_egal(_poses_hors(tuiles, vise, attendu), 0, "aucun autre sommet n'a changé")
+	ed.queue_free()
+	cam.queue_free()
+	tenant.queue_free()
+
+
+## Les sommets autres que `sauf` dont la tuile posée n'est plus celle de `attendu`.
+func _poses_hors(tuiles: GridMap, sauf: Vector3i, attendu: Array) -> int:
+	var n := 0
+	for e in attendu:
+		var v := Vector3i(e[0], e[1], e[2])
+		if v == sauf:
+			continue
+		var it: int = tuiles.get_cell_item(v)
+		if (tuiles.mesh_library.get_item_name(it) if it >= 0 else "∅") != e[3]:
+			n += 1
+	return n
 
 
 # ── LE MONDE PEINT (29 septembre 2026) ──────────────────────────────────────────────────────────────

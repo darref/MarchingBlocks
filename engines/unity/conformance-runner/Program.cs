@@ -50,6 +50,11 @@ static class Program
         if (Rule.Check(conf) != "") { failed++; Console.WriteLine("  FAIL one tile per key is refused"); }
         Console.WriteLine($"{cases} cases, {placements} placements, {failed} failure(s)");
 
+        var variantFailures = VariantConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(path)), out int variantCases, out int variantPlacements);
+        foreach (var f in variantFailures) Console.WriteLine("  FAIL variants: " + f);
+        Console.WriteLine($"{variantCases} variant cases, {variantPlacements} placements, {variantFailures.Count} failure(s)");
+        failed += variantFailures.Count;
+
         var layeredFailures = LayeredConformanceCheck.Run((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(path)), out int layeredCases, out int layeredPlacements);
         foreach (var f in layeredFailures) Console.WriteLine("  FAIL layers: " + f);
         Console.WriteLine($"{layeredCases} layered cases, {layeredPlacements} placements, {layeredFailures.Count} failure(s)");

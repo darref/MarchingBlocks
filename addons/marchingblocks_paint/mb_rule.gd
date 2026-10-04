@@ -17,7 +17,9 @@ extends RefCounted
 ##   6. a missing key is returned as null — show an error marker, never fill in;
 ##   7. layers: steps 1-4 read the UNION of every visible layer of a world (a cell in two layers belongs
 ##      to the first); a vertex is placed by the first layer, in priority order, owning one of its 8 cells,
-##      with that layer's tiles.
+##      with that layer's tiles;
+##   8. variants (optional): a key may have variants (the manifest's `variants`); the layer that places v
+##      picks one — its CHOICE at v if it has one, otherwise a weighted draw by a hash of v, never random.
 
 const FORMAT := "marchingblocks-tileset"
 const SUPPORTED_VERSION := 1
@@ -38,18 +40,28 @@ static func check(manifest: Dictionary) -> String:
 	for key in manifest.get("tiles", {}):
 		if not manifest["tiles"][key] is String:
 			return "tile '%s' must be one tile name (one tile per key)" % key
+	var variants = manifest.get("variants", {})
+	if not variants is Dictionary:
+		return "variants must be an object: key -> list of tile names"
+	for key in variants:
+		if not variants[key] is Array or (variants[key] as Array).any(func(t): return not t is String):
+			return "the variants of '%s' must be a list of tile names" % key
 	return ""
 
 
 ## Every placement for a layer alone: [x, y, z, tile name or null, quarter_turns], sorted by vertex.
 ## `cells`: {Vector3i: true}. `rule`: the manifest. `tiles`: {key: tile name} (the manifest's `tiles`).
-static func placements(cells: Dictionary, rule: Dictionary, tiles: Dictionary) -> Array:
-	return placements_layered([{"cells": cells, "tiles": tiles, "visible": true}], rule)[0]
+## Step 8: `variants` {key: [tile names]} (the manifest's), `weights` {key: [int]}, `choices` {Vector3i: int}.
+static func placements(cells: Dictionary, rule: Dictionary, tiles: Dictionary, variants := {}, weights := {},
+		choices := {}) -> Array:
+	return placements_layered([{"cells": cells, "tiles": tiles, "visible": true, "variants": variants,
+		"weights": weights, "choices": choices}], rule)[0]
 
 
 ## Every placement of a world of LAYERS (step 7), one list per layer, in the same order. `layers`, in
 ## priority order (the first is the highest): [{"cells": {Vector3i: true}, "tiles": {key: name},
-## "visible": bool}]. Every layer must use a tileset made with the same rule (`rule`).
+## "visible": bool, and optionally "variants", "weights", "choices" (step 8)}]. Every layer must use a
+## tileset made with the same rule (`rule`).
 static func placements_layered(layers: Array, rule: Dictionary) -> Array:
 	var union := {}   # cell -> index of the layer that owns it
 	for i in layers.size():
@@ -100,7 +112,8 @@ static func placements_layered(layers: Array, rule: Dictionary) -> Array:
 			chosen = id
 		var tile = null
 		if chosen != "":
-			tile = str(tiles[chosen])
+			tile = variant_tile(v, chosen, str(tiles[chosen]), layers[owner].get("variants", {}),
+				layers[owner].get("weights", {}), layers[owner].get("choices", {}))
 		outs[owner].append([v.x, v.y, v.z, tile, int(entry[1])])
 	for out in outs:
 		(out as Array).sort_custom(func(a: Array, b: Array) -> bool:
@@ -110,6 +123,44 @@ static func placements_layered(layers: Array, rule: Dictionary) -> Array:
 				return a[1] < b[1]
 			return a[2] < b[2])
 	return outs
+
+
+## Step 8: the tile placed at v for `key`, whose base tile is `base`. `variants`: {key: [tile names]};
+## `weights`: {key: [base weight, variant 1, …]} (a missing entry is 1, a negative one 0); `choices`:
+## {Vector3i: int} (0 is the base). Same world, same tiles: the draw is a hash of v, never random.
+static func variant_tile(v: Vector3i, key: String, base: String, variants: Dictionary, weights: Dictionary,
+		choices: Dictionary) -> String:
+	var list: Array = variants.get(key, [])
+	var n := list.size()
+	if n == 0:
+		return base
+	if choices.has(v):
+		var c := int(choices[v])
+		if c >= 0 and c <= n:
+			return base if c == 0 else str(list[c - 1])
+	var w: Array = weights.get(key, [])
+	var ws: Array[int] = []
+	var total := 0
+	for k in n + 1:
+		var x := maxi(0, int(w[k]) if k < w.size() else 1)
+		ws.append(x)
+		total += x
+	if total <= 0:
+		return base
+	var r := vertex_hash(v) % total
+	for k in n + 1:
+		r -= ws[k]
+		if r < 0:
+			return base if k == 0 else str(list[k - 1])
+	return base
+
+
+## The vertex hash of step 8, on 64-bit integers (GDScript's int).
+static func vertex_hash(v: Vector3i) -> int:
+	var h: int = ((v.x * 73856093) ^ (v.y * 19349663) ^ (v.z * 83492791)) & 0x7FFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF
+	h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF
+	return h ^ (h >> 16)
 
 
 ## Outdoor: every EMPTY cell among the 8 around v has nothing full above the vertex's two-cell band.

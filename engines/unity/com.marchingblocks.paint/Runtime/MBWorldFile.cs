@@ -28,6 +28,10 @@ namespace MarchingBlocks.Paint
         public string Tileset;
         /// <summary>The cells, in format space, in the order world.json lists them.</summary>
         public List<Int3> Cells = new List<Int3>();
+        /// <summary>The tileset rule's step 8: the weights of the draw per key, as world.json gives them.</summary>
+        public Dictionary<string, int[]> VariantWeights = new Dictionary<string, int[]>();
+        /// <summary>The variant chosen at a vertex, sorted by vertex (x, then y, then z).</summary>
+        public List<KeyValuePair<Int3, int>> VariantChoices = new List<KeyValuePair<Int3, int>>();
     }
 
     public sealed class WorldFileResult
@@ -93,6 +97,43 @@ namespace MarchingBlocks.Paint
                     if (!seen.Add(key))
                         return Refuse($"layer '{name}': the cell ({x}, {y}, {z}) appears twice");
                     out_.Cells.Add(key);
+                }
+                // Step 8 (optional): integer weights per key; choices x y z c, never the same vertex twice.
+                if (layer.TryGetValue("variant_weights", out var vw))
+                {
+                    if (!(vw is Dictionary<string, object> weights))
+                        return Refuse($"layer '{name}': variant_weights is not an object");
+                    foreach (var kv in weights)
+                    {
+                        if (!(kv.Value is List<object> list)) return Refuse($"layer '{name}': the weights of '{kv.Key}' are not integers");
+                        var ints = new int[list.Count];
+                        for (int k = 0; k < list.Count; k++)
+                        {
+                            if (!IsInteger(list[k], out long w) || w < int.MinValue || w > int.MaxValue)
+                                return Refuse($"layer '{name}': the weights of '{kv.Key}' are not integers");
+                            ints[k] = (int)w;
+                        }
+                        out_.VariantWeights[kv.Key] = ints;
+                    }
+                }
+                if (layer.TryGetValue("variant_choices", out var vc))
+                {
+                    if (!(vc is List<object> fc) || fc.Count % 4 != 0)
+                        return Refuse($"layer '{name}': variant_choices is not a list of x y z c");
+                    var chosen = new HashSet<Int3>();
+                    for (int i = 0; i < fc.Count; i += 4)
+                    {
+                        if (!IsCoordinate(fc[i], out int x) || !IsCoordinate(fc[i + 1], out int y) || !IsCoordinate(fc[i + 2], out int z)
+                            || !IsCoordinate(fc[i + 3], out int choice))
+                            return Refuse($"layer '{name}': a variant choice is not made of integers");
+                        var vertex = new Int3(x, y, z);
+                        if (!chosen.Add(vertex))
+                            return Refuse($"layer '{name}': the vertex ({x}, {y}, {z}) is chosen twice");
+                        out_.VariantChoices.Add(new KeyValuePair<Int3, int>(vertex, choice));
+                    }
+                    out_.VariantChoices.Sort((a, b) =>
+                        a.Key.x != b.Key.x ? a.Key.x.CompareTo(b.Key.x) :
+                        a.Key.y != b.Key.y ? a.Key.y.CompareTo(b.Key.y) : a.Key.z.CompareTo(b.Key.z));
                 }
                 result.Layers.Add(out_);
             }

@@ -63,6 +63,20 @@ static func rayon(occupe: Callable, origine: Vector3, sens: Vector3, portee: flo
 	return rien
 
 
+## LA TUILE SOUS UN RAYON — son SOMMET. Le rayon touche une CASE ; la pièce du sommet `v` occupe [v + ½, v + 3/2]
+## (charte §2) : le point touché p, posé sur le plan de la face (sa coordonnée sur l'axe de la face mise EXACTEMENT sur
+## le plan), donne v = ⌊p − ½⌋. Sur l'axe de la face p est entier : le sommet trouvé chevauche les DEUX côtés de la face,
+## c'est celui dont la pièce porte cette surface. Sortie de `Vue.tuile_sous` le 5 octobre 2026 pour l'outil Variant des
+## trois greffons (une règle, un endroit, et ses cas d'épreuve).
+static func sommet_touche(origine: Vector3, sens: Vector3, case_: Vector3i, normale: Vector3i) -> Vector3i:
+	sens = sens.normalized()
+	var axe := 0 if normale.x != 0 else (1 if normale.y != 0 else 2)
+	var plan: float = float(case_[axe]) + (1.0 if normale[axe] > 0 else 0.0)
+	var p: Vector3 = origine + sens * ((plan - origine[axe]) / sens[axe])
+	p[axe] = plan
+	return Vector3i(floori(p.x - 0.5), floori(p.y - 0.5), floori(p.z - 0.5))
+
+
 ## Le point d'ANCRAGE du pinceau. `point` = {"touche", "case", "normale"} : en sculpture, ce que le
 ## rayon a touché ; sinon (grille, ou rayon perdu) la case du plan d'étage, `touche` à faux.
 ## ⚠ AJOUTER POSE CONTRE LA FACE VISÉE, les autres outils agissent SUR la case touchée.

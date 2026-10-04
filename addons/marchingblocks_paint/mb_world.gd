@@ -35,6 +35,20 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 ## The floor the Grid aim paints on, in cells (Page Up / Page Down with the MarchingBlocks toolbar).
 @export var floor_y := 0
 
+## VARIANTS (the tileset rule, step 8) — only for a tileset whose keys have variants.
+## The weights of the random draw, per key: key -> [base weight, variant 1, variant 2, …] (integers; a missing
+## entry is 1, a negative one 0). Same world, same tiles: the draw is a hash of the vertex, never random.
+@export var variant_weights: Dictionary = {}:
+	set(value):
+		variant_weights = value
+		rebuild()
+
+## The variant CHOSEN at a vertex: Vector3i -> 0 (the base tile), 1, 2… The Variant tool sets it.
+@export var variant_choices: Dictionary = {}:
+	set(value):
+		variant_choices = value
+		rebuild()
+
 var _loaded := {}
 var _fingerprint := -1
 var _last := {"tiles": 0, "missing": 0, "error": ""}
@@ -96,8 +110,11 @@ func rebuild() -> Dictionary:
 	var mine := all_layers.find(self)
 	var described: Array = []
 	for l in all_layers:
+		var own: bool = l == self
 		described.append({"cells": l.cells(), "visible": l.visible,
-			"tiles": _loaded["manifest"].get("tiles", {}) if l == self else {}})
+			"tiles": _loaded["manifest"].get("tiles", {}) if own else {},
+			"variants": _loaded["manifest"].get("variants", {}) if own else {},
+			"weights": variant_weights if own else {}, "choices": variant_choices if own else {}})
 	var orientation := []
 	for q in 4:
 		orientation.append(tiles_grid.get_orthogonal_index_from_basis(Basis(Vector3.UP, q * PI / 2.0)))
@@ -113,6 +130,26 @@ func rebuild() -> Dictionary:
 		placed += 1
 	_last = {"tiles": placed, "missing": missing, "error": ""}
 	return _last
+
+
+## The number of variants of the tile placed at vertex v (0: none, or nothing placed), and which one it is:
+## {"key", "variants", "current"} — {} when nothing of this layer is placed there.
+func variant_at(v: Vector3i) -> Dictionary:
+	if _loaded.is_empty() or _loaded.has("error"):
+		return {}
+	var tiles_grid := get_node_or_null("Tiles") as GridMap
+	if tiles_grid == null or tiles_grid.get_cell_item(v) == GridMap.INVALID_CELL_ITEM:
+		return {}
+	var placed := tiles_grid.mesh_library.get_item_name(tiles_grid.get_cell_item(v))
+	var manifest: Dictionary = _loaded["manifest"]
+	for key in manifest.get("tiles", {}):
+		var list: Array = manifest.get("variants", {}).get(key, [])
+		if str(manifest["tiles"][key]) == placed:
+			return {"key": key, "variants": list.size(), "current": 0}
+		var i := list.find(placed)
+		if i >= 0:
+			return {"key": key, "variants": list.size(), "current": i + 1}
+	return {}
 
 
 ## The painted cells, {Vector3i: true} — read from the Cells grid, the only truth.

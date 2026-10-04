@@ -270,6 +270,153 @@
     },
     {
       "expected": {
+        "vertex": [0, 0, 0]
+      },
+      "input": {
+        "cell": [0, 0, 0],
+        "direction": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "normal": [0, 1, 0],
+        "origin": [
+          0.5,
+          6.5,
+          0.5
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: straight down onto the floor"
+    },
+    {
+      "expected": {
+        "vertex": [2, 3, 2]
+      },
+      "input": {
+        "cell": [2, 3, 2],
+        "direction": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "normal": [0, 1, 0],
+        "origin": [
+          2.5,
+          9.5,
+          2.5
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: down onto the pillar top"
+    },
+    {
+      "expected": {
+        "vertex": [1, 0, 1]
+      },
+      "input": {
+        "cell": [1, 0, 1],
+        "direction": [
+          0.609375,
+          -0.46875,
+          0.53125
+        ],
+        "normal": [0, 1, 0],
+        "origin": [
+          -2.3125,
+          4.1875,
+          -1.6875
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: oblique onto the floor"
+    },
+    {
+      "expected": {
+        "vertex": [2, 2, 2]
+      },
+      "input": {
+        "cell": [2, 2, 2],
+        "direction": [
+          -0.9375,
+          0.0625,
+          0.109375
+        ],
+        "normal": [1, 0, 0],
+        "origin": [
+          6.3125,
+          2.375,
+          2.34375
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: oblique into the pillar side"
+    },
+    {
+      "expected": {
+        "vertex": [2, 0, 2]
+      },
+      "input": {
+        "cell": [2, 0, 2],
+        "direction": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "normal": [0, 1, 0],
+        "origin": [
+          2.5,
+          9.5,
+          2.5
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: the pillar ignored (the stroke lock)"
+    },
+    {
+      "expected": {
+        "vertex": [1, 0, 1]
+      },
+      "input": {
+        "cell": [2, 0, 1],
+        "direction": [
+          1.0,
+          0.0,
+          0.0
+        ],
+        "normal": [-1, 0, 0],
+        "origin": [
+          1.5,
+          0.5,
+          1.5
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: the start cell is skipped"
+    },
+    {
+      "expected": {
+        "vertex": [-5, -2, -5]
+      },
+      "input": {
+        "cell": [-4, -2, -4],
+        "direction": [
+          -0.109375,
+          -0.953125,
+          -0.0625
+        ],
+        "normal": [0, 1, 0],
+        "origin": [
+          -3.40625,
+          1.8125,
+          -3.59375
+        ]
+      },
+      "kind": "tile_vertex",
+      "name": "tile_vertex: negative coordinates"
+    },
+    {
+      "expected": {
         "anchor": [3, 1, 1]
       },
       "input": {
@@ -4331,6 +4478,7 @@
     "cells are integer [x, y, z]; cell c covers [c, c+1] on each axis. Sets are returned sorted by x, then y, then z.",
     "ray(cells, origin, direction, reach, ignore): walk the grid cell by cell (Amanatides & Woo) along the NORMALISED direction. The start cell is skipped. At each step cross the nearest cell boundary; on a tie, the lowest axis (x, then y, then z) goes first. Stop when that boundary is beyond reach. The first cell that is full and not in ignore is the hit; normal is the face it was entered by (minus the step on that axis). A zero direction never hits.",
     "anchor(tool, hit): 'add' on a hit is hit.cell + hit.normal; everything else is hit.cell.",
+    "tile_vertex(origin, direction, hit cell, hit normal): the TILE under a ray that hit a cell. Normalise the direction; let p be where the ray meets the plane of the face it entered by (on the face's axis, p is set EXACTLY to the plane: the cell coordinate, + 1 if the normal is positive). The tile's vertex is floor(p - 0.5) on each axis (the piece of vertex v covers [v + 1/2, v + 3/2]).",
     "brush(anchor, normal, size, shape): r = max(0, size - 1); every offset d in [-r, r]^3 kept by the shape — sphere: |d|^2 <= r^2; cube: all; disc: |d|^2 <= r^2 and d . n == 0, with n = (0, 1, 0) when the normal is zero.",
     "change(tool, targets, cells): 'add' sets the targets that are empty, 'dig' clears the targets that are full, 'select' changes nothing.",
     "selection(cells, selection, op) returns set, clear and the selection AFTER: delete clears the selected full cells (selection empty after); extrude_up / extrude_down set every empty cell one step up / down and the selection moves there; grow adds every full cell touching the selection by a face (plus the selected full cells); shrink keeps the selected full cells whose six neighbours are all selected; connected is every full cell joined to the selected full cells by faces; fill sets the selected empty cells and keeps the selection. A selection may hold empty cells.",

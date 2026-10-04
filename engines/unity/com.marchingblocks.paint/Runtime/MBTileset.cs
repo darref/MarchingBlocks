@@ -60,9 +60,11 @@ namespace MarchingBlocks.Paint
                 return null;
 
             var missing = new List<string>();
-            foreach (var key in set.Rule.Tiles)
+            // Every tile: the base tile of each key, then its variants (step 8).
+            var names = new List<string>(set.Rule.Tiles.Values);
+            foreach (var list in set.Rule.Variants.Values) names.AddRange(list);
+            foreach (var name in names)
             {
-                string name = key.Value;
                 if (!nodes.TryGetValue(name, out var node) || node.GetComponent<MeshFilter>() == null)
                 { missing.Add(name); continue; }
                 var r = node.GetComponent<MeshRenderer>();

@@ -112,6 +112,7 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		}
 		else
 			WithoutTiles.Add(LayerName);
+		Actor->SetVariants(Layer.Variants);   // step 8: before SetLayer, which rebuilds
 		Actor->SetLayer(TilesetFile, TilesFolder, Layer.Cells);
 		if (Layer.bHasTileset && !Actor->HasTileMeshes())
 			FoldersMissingTiles.AddUnique(FString::Printf(TEXT("%s/tiles.glb → %s"), *FPaths::GetPath(TilesetFile), *TilesFolder));

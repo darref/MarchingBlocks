@@ -48,6 +48,11 @@ static func regle() -> PackedStringArray:
 		"            its cells still travel; show that it has no tiles, never invent some)",
 		"  cells     a flat array of integers, x y z per cell, in FORMAT space: cell c covers [c, c+1],",
 		"            +Y is up. Its length is a multiple of 3. The same cell never appears twice.",
+		"  variant_weights   (optional) an object: key → an array of INTEGERS, the weights of the base tile and",
+		"                    of each variant of that key in the draw (the tileset rule, step 8)",
+		"  variant_choices   (optional) a flat array of integers, x y z c per vertex (FORMAT space, the vertex of",
+		"                    the tileset rule): at that vertex, place variant c (0 is the base tile). Its length",
+		"                    is a multiple of 4. The same vertex never appears twice.",
 		"Refuse the whole file, and say why, if any of these does not hold.",
 	])
 
@@ -159,7 +164,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	f.close()
 	var r2 := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r2 != null:
-		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_variantes()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
+		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
 			% generateur + "plugin for Godot, Unity or Unreal: Import MarchingBlocks world.\n")
 		r2.close()
 	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles,
@@ -271,20 +276,20 @@ static func lire(monde: Variant) -> Dictionary:
 				return {"error": "layer « %s »: the cell %s appears twice" % [c["name"], cle]}
 			vues[cle] = true
 			cases.append([cle.x, cle.y, cle.z])
-		sortie.append({"name": c["name"], "visible": c["visible"], "tileset": jeu, "cells": cases})
+		# Les variantes (5 octobre 2026, dans les greffons) : les poids tels quels, les choix [x, y, z, c] triés par sommet.
+		var var_lues := lire_variantes(c)
+		if var_lues.has("error"):
+			return var_lues
+		var choix: Dictionary = var_lues["choices"]
+		var sommets: Array = choix.keys()
+		sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+			return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+		var choix_lus: Array = []
+		for s in sommets:
+			choix_lus.append([s.x, s.y, s.z, int(choix[s])])
+		sortie.append({"name": c["name"], "visible": c["visible"], "tileset": jeu, "cells": cases,
+			"variant_weights": var_lues["weights"], "variant_choices": choix_lus})
 	return {"layers": sortie}
-
-
-## LES VARIANTES DANS LE MONDE (4 octobre 2026) — écrites dans le README ; ⚠ pas encore dans `regle()` ni dans les cas
-## d'épreuve des greffons (la liste des greffons à faire) : des clés en plus, que leurs lecteurs ignorent.
-static func regle_variantes() -> PackedStringArray:
-	return PackedStringArray([
-		"Each layer may also carry (optional; the tileset's README says how they are used):",
-		"  variant_weights   an object: key → an array of integers, the weights of the base tile and of each",
-		"                    variant of that key in the random draw",
-		"  variant_choices   a flat array of integers, x y z c per vertex (FORMAT space, the vertex of the tileset",
-		"                    rule): at that vertex, place variant c (0 is the base tile). Same vertex never twice.",
-	])
 
 
 ## Lit les variantes d'une couche de `world.json` : {"weights": {clé: [w]}, "choices": {Vector3i: c}} ou {"error"}.
@@ -352,6 +357,9 @@ static func cas_d_epreuve() -> Dictionary:
 					Vector3i(-7, -2, 5)])},
 			{"name": "Ice", "visible": false, "tileset": null, "cells": cases_a_plat([Vector3i(2, 0, 2)])},
 			{"name": "Empty", "visible": true, "tileset": "rock.mbset/tileset.json", "cells": []},
+			{"name": "Varied", "visible": true, "tileset": "rock.mbset/tileset.json", "cells": cases_a_plat([Vector3i(4, 0, 4)]),
+				"variant_weights": {"slab_b2h2": [2, 1, 0], "slab_b2h2_outdoor": [-1, 3]},
+				"variant_choices": [5, 0, 5, 1, -3, -1, 2, 0, 0, 0, 0, 2]},
 		]}
 	var cas: Array = [{"name": "two layers, negative cells, a hidden layer without tiles, an empty layer",
 		"world": bon}]
@@ -364,6 +372,16 @@ static func cas_d_epreuve() -> Dictionary:
 		"a fractional cell": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [0, 0.5, 0]}]},
 		"tileset neither path nor null": {"layers": [{"name": "A", "visible": true, "tileset": 3, "cells": []}]},
 		"layer without visibility": {"layers": [{"name": "A", "tileset": null, "cells": []}]},
+		"variant choices not in fours": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [],
+			"variant_choices": [0, 0, 0]}]},
+		"a vertex chosen twice": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [],
+			"variant_choices": [1, 2, 3, 1, 1, 2, 3, 0]}]},
+		"a fractional variant choice": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [],
+			"variant_choices": [1, 2, 3, 0.5]}]},
+		"variant weights not an object": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [],
+			"variant_weights": [1, 2]}]},
+		"a fractional variant weight": {"layers": [{"name": "A", "visible": true, "tileset": null, "cells": [],
+			"variant_weights": {"slab_b2h2": [1, 1.5]}}]},
 	}
 	for nom in mauvais:
 		var m: Dictionary = bon.duplicate(true)

@@ -12,6 +12,8 @@
             ],
             "name": "Rock",
             "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [],
+            "variant_weights": {},
             "visible": true
           },
           {
@@ -20,12 +22,51 @@
             ],
             "name": "Ice",
             "tileset": null,
+            "variant_choices": [],
+            "variant_weights": {},
             "visible": false
           },
           {
             "cells": [],
             "name": "Empty",
             "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [],
+            "variant_weights": {},
+            "visible": true
+          },
+          {
+            "cells": [
+              [4, 0, 4]
+            ],
+            "name": "Varied",
+            "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [
+              [
+                -3,
+                -1,
+                2,
+                0
+              ],
+              [
+                0,
+                0,
+                0,
+                2
+              ],
+              [
+                5,
+                0,
+                5,
+                1
+              ]
+            ],
+            "variant_weights": {
+              "slab_b2h2": [2, 1, 0],
+              "slab_b2h2_outdoor": [
+                -1,
+                3
+              ]
+            },
             "visible": true
           }
         ]
@@ -64,6 +105,33 @@
             "cells": [],
             "name": "Empty",
             "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [4, 0, 4],
+            "name": "Varied",
+            "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [
+              5,
+              0,
+              5,
+              1,
+              -3,
+              -1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            "variant_weights": {
+              "slab_b2h2": [2, 1, 0],
+              "slab_b2h2_outdoor": [
+                -1,
+                3
+              ]
+            },
             "visible": true
           }
         ],
@@ -110,6 +178,33 @@
             "name": "Empty",
             "tileset": "rock.mbset/tileset.json",
             "visible": true
+          },
+          {
+            "cells": [4, 0, 4],
+            "name": "Varied",
+            "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [
+              5,
+              0,
+              5,
+              1,
+              -3,
+              -1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            "variant_weights": {
+              "slab_b2h2": [2, 1, 0],
+              "slab_b2h2_outdoor": [
+                -1,
+                3
+              ]
+            },
+            "visible": true
           }
         ],
         "name": "sample",
@@ -155,6 +250,33 @@
             "name": "Empty",
             "tileset": "rock.mbset/tileset.json",
             "visible": true
+          },
+          {
+            "cells": [4, 0, 4],
+            "name": "Varied",
+            "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [
+              5,
+              0,
+              5,
+              1,
+              -3,
+              -1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            "variant_weights": {
+              "slab_b2h2": [2, 1, 0],
+              "slab_b2h2_outdoor": [
+                -1,
+                3
+              ]
+            },
+            "visible": true
           }
         ],
         "name": "sample",
@@ -199,6 +321,33 @@
             "cells": [],
             "name": "Empty",
             "tileset": "rock.mbset/tileset.json",
+            "visible": true
+          },
+          {
+            "cells": [4, 0, 4],
+            "name": "Varied",
+            "tileset": "rock.mbset/tileset.json",
+            "variant_choices": [
+              5,
+              0,
+              5,
+              1,
+              -3,
+              -1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              2
+            ],
+            "variant_weights": {
+              "slab_b2h2": [2, 1, 0],
+              "slab_b2h2_outdoor": [
+                -1,
+                3
+              ]
+            },
             "visible": true
           }
         ],
@@ -318,6 +467,133 @@
         "name": "sample",
         "version": 1
       }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "variant choices not in fours",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null,
+            "variant_choices": [0, 0, 0],
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "a vertex chosen twice",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null,
+            "variant_choices": [
+              1,
+              2,
+              3,
+              1,
+              1,
+              2,
+              3,
+              0
+            ],
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "a fractional variant choice",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null,
+            "variant_choices": [
+              1,
+              2,
+              3,
+              0.5
+            ],
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "variant weights not an object",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null,
+            "variant_weights": [
+              1,
+              2
+            ],
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
+    },
+    {
+      "expected": {
+        "error": true
+      },
+      "name": "a fractional variant weight",
+      "world": {
+        "format": "marchingblocks-world",
+        "generator": "conformance",
+        "layers": [
+          {
+            "cells": [],
+            "name": "A",
+            "tileset": null,
+            "variant_weights": {
+              "slab_b2h2": [
+                1,
+                1.5
+              ]
+            },
+            "visible": true
+          }
+        ],
+        "name": "sample",
+        "version": 1
+      }
     }
   ],
   "format": "marchingblocks-world-conformance",
@@ -333,6 +609,11 @@
     "            its cells still travel; show that it has no tiles, never invent some)",
     "  cells     a flat array of integers, x y z per cell, in FORMAT space: cell c covers [c, c+1],",
     "            +Y is up. Its length is a multiple of 3. The same cell never appears twice.",
+    "  variant_weights   (optional) an object: key → an array of INTEGERS, the weights of the base tile and",
+    "                    of each variant of that key in the draw (the tileset rule, step 8)",
+    "  variant_choices   (optional) a flat array of integers, x y z c per vertex (FORMAT space, the vertex of",
+    "                    the tileset rule): at that vertex, place variant c (0 is the base tile). Its length",
+    "                    is a multiple of 4. The same vertex never appears twice.",
     "Refuse the whole file, and say why, if any of these does not hold."
   ],
   "version": 1

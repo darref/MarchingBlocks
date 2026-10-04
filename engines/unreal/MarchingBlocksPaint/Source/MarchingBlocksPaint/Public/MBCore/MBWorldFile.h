@@ -38,6 +38,10 @@ namespace MBPaint
 		std::string Tileset;
 		/// In FORMAT space, in the order of the file.
 		std::vector<FCell> Cells;
+		/// The tileset rule's step 8: the draw's weights per key and the chosen variants (FVariantSettings).
+		FVariantSettings Variants;
+		/// The chosen variants, sorted by vertex (x, then y, then z): what the file says, in order.
+		std::vector<std::pair<FCell, int64_t>> ChoicesSorted;
 	};
 
 	class MARCHINGBLOCKSPAINT_API FWorldFile

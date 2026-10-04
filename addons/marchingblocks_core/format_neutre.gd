@@ -138,6 +138,19 @@ static func regle() -> PackedStringArray:
 		"   among the layers owning its 8 cells, the first in priority order, with ITS tiles (step 5). A",
 		"   hidden layer is not in the union and places nothing. Painting a cell in one layer removes it from",
 		"   the others of the same world.",
+		"8. Variants (optional). variants[key] lists other tiles of that key, in order: variant 1, 2, ... They",
+		"   have the same borders as tiles[key] and are placed exactly like it (step 6). After step 4 chose key",
+		"   K at vertex v (n = the number of variants of K; n = 0 places tiles[K]):",
+		"   a. If the layer that places v gives a CHOICE at v (the world's variant_choices) and 0 <= choice <= n,",
+		"      place tile number choice (0 is tiles[K], i the i-th variant).",
+		"   b. Otherwise DRAW: weights w[0..n] are that layer's variant_weights[K] (a missing entry is 1, a",
+		"      negative one 0). If they sum to 0, place tiles[K]. Else h = hash(v) mod sum, and the tile is the",
+		"      first i whose running sum of weights exceeds h.",
+		"   hash(v), on 64-bit integers, & = bitwise and, ^ = xor, >> = logical shift:",
+		"      h = ((v.x * 73856093) ^ (v.y * 19349663) ^ (v.z * 83492791)) & 0x7FFFFFFF",
+		"      h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF;  h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF",
+		"      hash = h ^ (h >> 16)",
+		"   Never draw at random at run time: the same world must give the same tiles at every rebuild.",
 		"Rebuilding after cell (x, y, z) changes: only the vertices of columns x-1..x, z-1..z at heights",
 		"   up to y can change (their bits, their context, or the layer that places them) — in every layer.",
 		"Engines with another frame must convert the cell grid with the SAME mapping their glTF importer",
@@ -147,26 +160,6 @@ static func regle() -> PackedStringArray:
 		"   (node pose included): the lengths 1, 2, 3 tell each axis apart, the shortest gives the scale.",
 		"   That linear map F is the conversion. Place a piece at F(v + piece_offset) * cell_size,",
 		"   rotated by F * R * F^-1 where R is the quarter-turn rotation. The marker is not a tile.",
-	])
-
-
-## LES VARIANTES VOULUES (4 octobre 2026), en clair — ⚠ PAS DANS `regle()` : les cas d'épreuve des trois greffons en
-## dépendent, et les greffons attendent la fin du logiciel (charte §0). Elles sont dans la liste des greffons à faire.
-## Un greffon qui ne les lit pas pose la tuile de base : le monde reste juste, sans variété.
-static func regle_des_variantes() -> PackedStringArray:
-	return PackedStringArray([
-		"Variants (optional). variants[key] lists other tiles of that key, in order: variant 1, 2, ... They have the",
-		"   same borders as tiles[key] and are placed exactly like it (step 6). After step 5 chose key K at vertex v:",
-		"   a. If the world's layer gives a CHOICE at v (variant_choices, see world.json) and 0 <= choice <= n (n = the",
-		"      number of variants of K), place tile choice (0 is tiles[K], i the i-th variant).",
-		"   b. Otherwise DRAW: weights w[0..n] are the layer's variant_weights[K] (a missing entry is 1, a negative one",
-		"      0). If they sum to 0, place tiles[K]. Else h = hash(v) mod sum, and the tile is the first i whose",
-		"      running sum of weights exceeds h.",
-		"   hash(v), on 64-bit integers, & = bitwise and, ^ = xor, >> = logical shift:",
-		"      h = ((v.x * 73856093) ^ (v.y * 19349663) ^ (v.z * 83492791)) & 0x7FFFFFFF",
-		"      h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF;  h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF",
-		"      hash = h ^ (h >> 16)",
-		"   Never draw at random at run time: the same world must give the same tiles at every rebuild.",
 	])
 
 
@@ -279,9 +272,9 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var manifeste := regle_du_format()
 	manifeste.merge({"format": FORMAT, "version": VERSION, "generator": generateur, "name": n,
 		"tiles_file": "tiles.glb", "tiles": tuiles, "missing": manquantes}, true)
+	# Les variantes (4 octobre 2026) : leur règle est l'étape 8 de `rules_text` (portée dans les greffons le 5 octobre).
 	if not variantes.is_empty():
 		manifeste["variants"] = variantes
-		manifeste["variants_rules_text"] = Array(regle_des_variantes())
 	var f := FileAccess.open(cible.path_join("tileset.json"), FileAccess.WRITE)
 	if f == null:
 		return {"erreur": "tileset.json could not be written (error %d)" % FileAccess.get_open_error()}
@@ -289,8 +282,7 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	f.close()
 	var r := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r != null:
-		r.store_string("\n".join(regle()) + ("\n\n" + "\n".join(regle_des_variantes()) if not variantes.is_empty() else "")
-			+ "\n\nOpen format — free plugins for Godot, Unity and Unreal "
+		r.store_string("\n".join(regle()) + "\n\nOpen format — free plugins for Godot, Unity and Unreal "
 			+ "read it. Made with %s.\n" % generateur)
 		r.close()
 	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes}
@@ -443,10 +435,145 @@ static func cas_d_epreuve() -> Dictionary:
 				cellules.append([c.x, c.y, c.z])
 			ecrites.append({"tileset": l["tileset"], "visible": l["visible"], "cells": cellules})
 		en_couches.append({"name": monde["name"], "layers": ecrites, "expected": attendu_en_couches(couches)})
+	# LES VARIANTES (étape 8, portées dans les greffons le 5 octobre 2026) : un jeu « varied » = « rich » + des variantes
+	# sur trois clés fréquentes ; des mondes tirés, pesés, choisis ; et un monde de deux couches aux poids différents.
+	var varie := variantes_d_epreuve(jeux["rich"])
+	tiles_json["varied"] = (tiles_json["rich"] as Dictionary).duplicate()
+	var cas_varies: Array = []
+	for v in cas_a_variantes(varie):
+		var pleines := {}
+		var cellules: Array = []
+		for c in v["cells"]:
+			pleines[c] = true
+			cellules.append([c.x, c.y, c.z])
+		cas_varies.append({"name": v["name"], "tileset": "varied", "cells": cellules,
+			"variant_weights": _poids_ecrits(v["poids"]), "variant_choices": _choix_ecrits(v["choix"]),
+			"expected": attendu(pleines, varie["cles"], v["poids"], v["choix"])})
+	var deux := couches_a_variantes(varie)
+	var ecrites_v: Array = []
+	var couches_v: Array = []
+	for l in deux["layers"]:
+		var cellules: Array = []
+		for c in l["cells"]:
+			cellules.append([c.x, c.y, c.z])
+		ecrites_v.append({"tileset": "varied", "visible": true, "cells": cellules,
+			"variant_weights": _poids_ecrits(l["poids"]), "variant_choices": _choix_ecrits(l["choix"])})
+		couches_v.append({"cells": l["cells"], "cles": varie["cles"], "visible": true, "poids": l["poids"],
+			"choix": l["choix"]})
+	en_couches.append({"name": deux["name"], "layers": ecrites_v, "expected": attendu_en_couches(couches_v)})
 	var sortie := regle_du_format()
-	sortie.merge({"format": FORMAT_EPREUVE, "version": VERSION, "tilesets": tiles_json, "cases": cas,
-		"layered_cases": en_couches}, true)
+	sortie.merge({"format": FORMAT_EPREUVE, "version": VERSION, "tilesets": tiles_json,
+		"tileset_variants": {"varied": varie["variants"]}, "cases": cas, "layered_cases": en_couches,
+		"variant_cases": cas_varies}, true)
 	return sortie
+
+
+## Le jeu « varied » des cas d'épreuve : les clés de `riche`, plus des variantes sur les trois clés les plus posées des
+## mondes d'épreuve (dans l'ordre : 2, 1 et 3 variantes). Rend {"cles": {nom interne: true}, "variants": {id de clé:
+## [noms de tuile]}, "ordre": [les trois clés internes]}.
+static func variantes_d_epreuve(riche: Dictionary) -> Dictionary:
+	var compte := {}
+	for monde in mondes_d_epreuve():
+		var pleines := {}
+		for c in monde["cells"]:
+			pleines[c] = true
+		for d in MB.poses(pleines, riche):
+			if d["cle"] != "":
+				compte[d["cle"]] = int(compte.get(d["cle"], 0)) + 1
+	var cles_triees: Array = compte.keys()
+	cles_triees.sort_custom(func(a, b): return compte[a] > compte[b] or (compte[a] == compte[b] and a < b))
+	var cles := riche.duplicate()
+	var variants := {}
+	var ordre: Array = cles_triees.slice(0, 3)
+	for i in ordre.size():
+		var n: int = [2, 1, 3][i]
+		var liste: Array = []
+		for k in range(1, n + 1):
+			cles[MB.nom_de_variante(ordre[i], k)] = true
+			liste.append(nom_de_tuile(MB.nom_de_variante(ordre[i], k)))
+		variants[id_de_cle(ordre[i])] = liste
+	return {"cles": cles, "variants": variants, "ordre": ordre}
+
+
+## Les mondes à variantes : {name, cells, poids {clé interne: [w]}, choix {sommet: c}}.
+static func cas_a_variantes(varie: Dictionary) -> Array:
+	var par_nom := {}
+	for m in mondes_d_epreuve():
+		par_nom[m["name"]] = m["cells"]
+	var ordre: Array = varie["ordre"]
+	var sortie: Array = []
+	for nom in ["flat floor 4x4", "cliff 3 high", "rough terrain 6x6", "negative coordinates"]:
+		sortie.append({"name": "%s — varied tileset, default weights" % nom, "cells": par_nom[nom], "poids": {},
+			"choix": {}})
+	# Des poids : 2:1:1 ; une base NÉGATIVE à côté d'une variante (elle compte 0 : la variante partout — une valeur absolue
+	# y mêlerait la base) ; des poids tous ≤ 0 (la base).
+	var relief: Array = par_nom["rough terrain 6x6"]
+	sortie.append({"name": "rough terrain 6x6 — weights 2:1:1, a negative base, all weights <= 0", "cells": relief,
+		"poids": {ordre[0]: [2, 1, 1], ordre[1]: [-2, 1], ordre[2]: [0, 0, -1, 0]}, "choix": {}})
+	# Des choix : 0, 1, 2 sur des sommets de la première clé, un choix hors de portée (le tirage), un choix sur une clé
+	# sans variante (la base), un choix sur un sommet qui ne pose rien (ignoré) — et des poids en plus.
+	var pleines := {}
+	for c in relief:
+		pleines[c] = true
+	var de_la_cle: Array = []
+	var de_la_seconde: Array = []
+	var sans_variante: Array = []
+	for d in MB.poses(pleines, varie["cles"]):
+		if d["cle"] == ordre[0]:
+			de_la_cle.append(d["sommet"])
+		elif d["cle"] == ordre[1]:
+			de_la_seconde.append(d["sommet"])
+		elif d["cle"] != "" and not ordre.has(d["cle"]):
+			sans_variante.append(d["sommet"])
+	var trier := func(a: Vector3i, b: Vector3i) -> bool:
+		return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z)))
+	de_la_cle.sort_custom(trier)
+	de_la_seconde.sort_custom(trier)
+	sans_variante.sort_custom(trier)
+	var choix := {}
+	for i in mini(3, de_la_cle.size()):
+		choix[de_la_cle[i]] = [1, 2, 0][i]
+	if not de_la_seconde.is_empty():
+		choix[de_la_seconde[0]] = 9
+	if not sans_variante.is_empty():
+		choix[sans_variante[0]] = 1
+	choix[Vector3i(100, 100, 100)] = 1
+	sortie.append({"name": "rough terrain 6x6 — choices (in range, out of range, on a key without variants, on "
+		+ "an empty vertex) and weights", "cells": relief, "poids": {ordre[0]: [0, 0, 5]}, "choix": choix})
+	return sortie
+
+
+## Deux couches à variantes, chacune ses poids et ses choix : la couche qui POSE un sommet décide (étape 8).
+static func couches_a_variantes(varie: Dictionary) -> Dictionary:
+	var ordre: Array = varie["ordre"]
+	var bas: Array = []
+	var haut: Array = []
+	for x in 6:
+		for z in 6:
+			bas.append(Vector3i(x, 0, z))
+			if x >= 2 and z >= 2:
+				haut.append(Vector3i(x, 1, z))
+	return {"name": "two layers with their own variant weights and choices",
+		"layers": [{"cells": haut, "poids": {ordre[0]: [0, 1, 0], ordre[2]: [1, 0, 0, 7]}, "choix": {Vector3i(3, 0, 3): 0}},
+			{"cells": bas, "poids": {ordre[0]: [0, 0, 1]}, "choix": {Vector3i(0, -1, 0): 1}}]}
+
+
+static func _poids_ecrits(poids: Dictionary) -> Dictionary:
+	var p := {}
+	for cle in poids:
+		p[id_de_cle(cle)] = poids[cle]
+	return p
+
+
+## Les choix à plat, x y z c, triés par sommet (la forme de `world.json`).
+static func _choix_ecrits(choix: Dictionary) -> Array:
+	var sommets: Array = choix.keys()
+	sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+	var plat: Array = []
+	for s in sommets:
+		plat.append_array([s.x, s.y, s.z, int(choix[s])])
+	return plat
 
 
 ## LES CAS MULTICOUCHES (couches exclusives, Jordan, 2 octobre 2026) : des mondes de plusieurs couches, chacune avec
@@ -497,7 +624,12 @@ static func attendu_en_couches(couches: Array) -> Array:
 		var o: int = d["orientation"]
 		if not quarts.has(o):
 			quarts[o] = quarts_de_tour(o)
-		sorties[int(d["couche"])].append([s.x, s.y, s.z, nom_de_tuile(d["cle"]) if d["cle"] != "" else null, quarts[o]])
+		var couche: Dictionary = couches[int(d["couche"])]
+		var tuile = null
+		if d["cle"] != "":
+			tuile = nom_de_tuile(MB.tuile_du_sommet(s, d["cle"], couche["cles"], couche.get("poids", {}),
+				couche.get("choix", {})))
+		sorties[int(d["couche"])].append([s.x, s.y, s.z, tuile, quarts[o]])
 	for l in sorties:
 		(l as Array).sort_custom(func(a: Array, b: Array) -> bool:
 			if a[0] != b[0]:
@@ -508,8 +640,9 @@ static func attendu_en_couches(couches: Array) -> Array:
 	return sorties
 
 
-## La liste attendue pour un monde et un jeu : [x, y, z, tuile ou null, quarts], triée par sommet.
-static func attendu(pleines: Dictionary, cles: Dictionary) -> Array:
+## La liste attendue pour un monde et un jeu : [x, y, z, tuile ou null, quarts], triée par sommet. `poids`, `choix` : les
+## variantes de la couche (étape 8), par `MB.tuile_du_sommet` — la règle que le peintre de l'appli applique.
+static func attendu(pleines: Dictionary, cles: Dictionary, poids: Dictionary = {}, choix: Dictionary = {}) -> Array:
 	var quarts := {}
 	var sortie: Array = []
 	for d in MB.poses(pleines, cles):
@@ -517,7 +650,10 @@ static func attendu(pleines: Dictionary, cles: Dictionary) -> Array:
 		var o: int = d["orientation"]
 		if not quarts.has(o):
 			quarts[o] = quarts_de_tour(o)
-		sortie.append([s.x, s.y, s.z, nom_de_tuile(d["cle"]) if d["cle"] != "" else null, quarts[o]])
+		var tuile = null
+		if d["cle"] != "":
+			tuile = nom_de_tuile(MB.tuile_du_sommet(s, d["cle"], cles, poids, choix))
+		sortie.append([s.x, s.y, s.z, tuile, quarts[o]])
 	sortie.sort_custom(func(a: Array, b: Array) -> bool:
 		if a[0] != b[0]:
 			return a[0] < b[0]

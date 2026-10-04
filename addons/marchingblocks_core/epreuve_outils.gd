@@ -34,6 +34,7 @@ const REGLES := [
 	"cells are integer [x, y, z]; cell c covers [c, c+1] on each axis. Sets are returned sorted by x, then y, then z.",
 	"ray(cells, origin, direction, reach, ignore): walk the grid cell by cell (Amanatides & Woo) along the NORMALISED direction. The start cell is skipped. At each step cross the nearest cell boundary; on a tie, the lowest axis (x, then y, then z) goes first. Stop when that boundary is beyond reach. The first cell that is full and not in ignore is the hit; normal is the face it was entered by (minus the step on that axis). A zero direction never hits.",
 	"anchor(tool, hit): 'add' on a hit is hit.cell + hit.normal; everything else is hit.cell.",
+	"tile_vertex(origin, direction, hit cell, hit normal): the TILE under a ray that hit a cell. Normalise the direction; let p be where the ray meets the plane of the face it entered by (on the face's axis, p is set EXACTLY to the plane: the cell coordinate, + 1 if the normal is positive). The tile's vertex is floor(p - 0.5) on each axis (the piece of vertex v covers [v + 1/2, v + 3/2]).",
 	"brush(anchor, normal, size, shape): r = max(0, size - 1); every offset d in [-r, r]^3 kept by the shape — sphere: |d|^2 <= r^2; cube: all; disc: |d|^2 <= r^2 and d . n == 0, with n = (0, 1, 0) when the normal is zero.",
 	"change(tool, targets, cells): 'add' sets the targets that are empty, 'dig' clears the targets that are full, 'select' changes nothing.",
 	"selection(cells, selection, op) returns set, clear and the selection AFTER: delete clears the selected full cells (selection empty after); extrude_up / extrude_down set every empty cell one step up / down and the selection moves there; grow adds every full cell touching the selection by a face (plus the selected full cells); shrink keeps the selected full cells whose six neighbours are all selected; connected is every full cell joined to the selected full cells by faces; fill sets the selected empty cells and keeps the selection. A selection may hold empty cells.",
@@ -134,6 +135,23 @@ static func cas_d_epreuve() -> Dictionary:
 			"input": {"cells": "world", "origin": _f(r[1]), "direction": _f(r[2]), "reach": r[3],
 				"ignore": _cases(r[4])},
 			"expected": {"hit": res["touche"], "cell": _v(res["case"]), "normal": _v(res["normale"])}})
+
+	# ── tile_vertex : la tuile sous un rayon qui touche (l'outil Variant).
+	for r in rayons:
+		if r.size() > 5:
+			continue
+		var res: Dictionary = Outils.rayon(occupe, r[1], r[2], r[3], _ensemble(r[4]))
+		if not res["touche"]:
+			continue
+		var s := Outils.sommet_touche(r[1], r[2], res["case"], res["normale"])
+		for e in [Vector3(1e-3, 0, 0), Vector3(0, 1e-3, 0), Vector3(0, 0, 1e-3), Vector3(-1e-3, -1e-3, -1e-3)]:
+			if _parallele(r[2]):
+				break
+			if Outils.sommet_touche(r[1], (r[2] as Vector3) + e, res["case"], res["normale"]) != s:
+				return {"erreur": "la tuile sous le rayon « %s » est fragile" % r[0]}
+		cas.append({"name": "tile_vertex: " + r[0], "kind": "tile_vertex",
+			"input": {"origin": _f(r[1]), "direction": _f(r[2]), "cell": _v(res["case"]), "normal": _v(res["normale"])},
+			"expected": {"vertex": _v(s)}})
 
 	# ── anchor
 	for a in [["add", "ajouter", true], ["add", "ajouter", false], ["dig", "creuser", true],

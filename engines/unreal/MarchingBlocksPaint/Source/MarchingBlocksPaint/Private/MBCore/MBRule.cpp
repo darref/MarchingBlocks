@@ -27,6 +27,17 @@ namespace MBPaint
 		if (Manifest["table"].Type != FJsonValue::EType::Array || Manifest["table"].Size() != 256)
 			return "the table must have 256 entries";
 		if (Manifest["corners"].Size() != 8) return "corners must have 8 entries";
+		if (Manifest.Find("variants"))
+		{
+			const FJsonValue& Vs = Manifest["variants"];
+			if (Vs.Type != FJsonValue::EType::Object) return "variants must be an object: key -> list of tile names";
+			for (const auto& Entry : Vs.Object)
+			{
+				if (Entry.second.Type != FJsonValue::EType::Array) return "the variants of '" + Entry.first + "' must be a list of tile names";
+				for (const FJsonValue& T : Entry.second.Array)
+					if (T.Type != FJsonValue::EType::String) return "the variants of '" + Entry.first + "' must be a list of tile names";
+			}
+		}
 		if (Manifest.Find("tiles")) return CheckTiles(Manifest["tiles"]);
 		return "";
 	}
@@ -39,7 +50,7 @@ namespace MBPaint
 		return "";
 	}
 
-	FRule::FRule(const FJsonValue& Manifest, const FJsonValue* InTiles)
+	FRule::FRule(const FJsonValue& Manifest, const FJsonValue* InTilesOverride, const FJsonValue* InVariants)
 	{
 		if (!CheckManifest(Manifest).empty()) return;
 		for (size_t T = 0; T < 8; ++T) Corners[T] = RuleDetail::ToCell(Manifest["corners"][T]);
@@ -61,13 +72,65 @@ namespace MBPaint
 		if (Context.Find("band")) Band = static_cast<int>(Context["band"].AsInt());
 		if (Context.Find("outdoor_suffix")) OutdoorSuffix = Context["outdoor_suffix"].String;
 
-		const FJsonValue& Source = InTiles ? *InTiles : Manifest["tiles"];
+		const FJsonValue& Source = InTilesOverride ? *InTilesOverride : Manifest["tiles"];
 		if (!CheckTiles(Source).empty())
 		{
 			ClassIds.clear();   // an empty rule: a refused manifest places nothing
 			return;
 		}
 		for (const auto& Entry : Source.Object) Tiles[Entry.first] = Entry.second.String;
+		const FJsonValue& VariantSource = InVariants ? *InVariants : Manifest["variants"];
+		if (VariantSource.Type == FJsonValue::EType::Object)
+			for (const auto& Entry : VariantSource.Object)
+			{
+				std::vector<std::string> List;
+				for (const FJsonValue& T : Entry.second.Array) List.push_back(T.String);
+				Variants[Entry.first] = List;
+			}
+	}
+
+	int64_t FRule::VertexHash(const FCell& V)
+	{
+		int64_t H = ((static_cast<int64_t>(V.X) * 73856093) ^ (static_cast<int64_t>(V.Y) * 19349663)
+			^ (static_cast<int64_t>(V.Z) * 83492791)) & 0x7FFFFFFF;
+		H = ((H ^ (H >> 16)) * 0x45D9F3B) & 0x7FFFFFFF;
+		H = ((H ^ (H >> 16)) * 0x45D9F3B) & 0x7FFFFFFF;
+		return H ^ (H >> 16);
+	}
+
+	std::string FRule::VariantTile(const FCell& V, const std::string& Key, const std::string& Base,
+		const std::vector<std::string>* List, const FVariantSettings* InSettings)
+	{
+		const size_t N = List != nullptr ? List->size() : 0;
+		if (N == 0) return Base;
+		if (InSettings != nullptr)
+		{
+			const auto Chosen = InSettings->Choices.find(V);
+			if (Chosen != InSettings->Choices.end() && Chosen->second >= 0 && Chosen->second <= static_cast<int64_t>(N))
+				return Chosen->second == 0 ? Base : (*List)[static_cast<size_t>(Chosen->second - 1)];
+		}
+		const std::vector<int64_t>* W = nullptr;
+		if (InSettings != nullptr)
+		{
+			const auto Found = InSettings->Weights.find(Key);
+			if (Found != InSettings->Weights.end()) W = &Found->second;
+		}
+		std::vector<int64_t> Weights(N + 1);
+		int64_t Total = 0;
+		for (size_t K = 0; K <= N; ++K)
+		{
+			const int64_t X = W != nullptr && K < W->size() ? (*W)[K] : 1;
+			Weights[K] = X > 0 ? X : 0;
+			Total += Weights[K];
+		}
+		if (Total <= 0) return Base;
+		int64_t R = VertexHash(V) % Total;
+		for (size_t K = 0; K <= N; ++K)
+		{
+			R -= Weights[K];
+			if (R < 0) return K == 0 ? Base : (*List)[K - 1];
+		}
+		return Base;
 	}
 
 	bool FRule::HasTile(const std::string& Key) const
@@ -89,11 +152,12 @@ namespace MBPaint
 		return true;
 	}
 
-	std::vector<FPlacement> FRule::Placements(const FCellSet& Cells) const
+	std::vector<FPlacement> FRule::Placements(const FCellSet& Cells, const FVariantSettings* InSettings) const
 	{
 		std::vector<FLayerInput> One(1);
 		One[0].Cells = &Cells;
 		One[0].Rule = this;
+		One[0].Variants = InSettings;
 		return PlacementsLayered(One)[0];
 	}
 
@@ -142,7 +206,12 @@ namespace MBPaint
 			FPlacement P;
 			P.Vertex = V;
 			P.QuarterTurns = Rule->TableTurns[static_cast<size_t>(Bits)];
-			if (!Chosen.empty()) P.Tile = Rule->Tiles.at(Chosen);
+			if (!Chosen.empty())
+			{
+				const auto List = Rule->Variants.find(Chosen);
+				P.Tile = VariantTile(V, Chosen, Rule->Tiles.at(Chosen), List != Rule->Variants.end() ? &List->second : nullptr,
+					Layers[Own].Variants);
+			}
 			Result[Own].push_back(std::move(P));
 		}
 		for (std::vector<FPlacement>& List : Result)

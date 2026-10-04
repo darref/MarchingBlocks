@@ -13,7 +13,9 @@ extends RefCounted
 ##   layers   in order; each has a name, visible (true/false), tileset (a tileset.json path RELATIVE to
 ##            world.json, or null: a layer without tiles — its cells still travel), and cells: a flat
 ##            array of integers, x y z per cell, in FORMAT space (cell c covers [c, c+1], +Y up). The
-##            same cell never appears twice.
+##            same cell never appears twice. Optionally variant_weights (key -> array of INTEGERS) and
+##            variant_choices (a flat array, x y z c per vertex, never the same vertex twice) — the
+##            tileset rule, step 8. `read` returns the choices as [[x, y, z, c], …] sorted by vertex.
 ##   Refuse the whole file, and say why, if any of these does not hold.
 
 const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
@@ -56,7 +58,35 @@ static func read(world: Variant) -> Dictionary:
 				return {"error": "layer '%s': the cell %s appears twice" % [layer["name"], key]}
 			seen[key] = true
 			cells.append([key.x, key.y, key.z])
-		out.append({"name": layer["name"], "visible": layer["visible"], "tileset": tileset, "cells": cells})
+		var weights_in = layer.get("variant_weights", {})
+		if not weights_in is Dictionary:
+			return {"error": "layer '%s': variant_weights is not an object" % layer["name"]}
+		var weights := {}
+		for k in weights_in:
+			var w = weights_in[k]
+			if not w is Array or (w as Array).any(func(x): return not (x is float or x is int) or int(x) != x):
+				return {"error": "layer '%s': the weights of '%s' are not integers" % [layer["name"], k]}
+			weights[str(k)] = (w as Array).map(func(x): return int(x))
+		var flat_choices = layer.get("variant_choices", [])
+		if not flat_choices is Array or (flat_choices as Array).size() % 4 != 0:
+			return {"error": "layer '%s': variant_choices is not a list of x y z c" % layer["name"]}
+		var chosen := {}
+		for i in range(0, flat_choices.size(), 4):
+			for n in [flat_choices[i], flat_choices[i + 1], flat_choices[i + 2], flat_choices[i + 3]]:
+				if not (n is float or n is int) or int(n) != n:
+					return {"error": "layer '%s': a variant choice is not made of integers" % layer["name"]}
+			var vtx := Vector3i(int(flat_choices[i]), int(flat_choices[i + 1]), int(flat_choices[i + 2]))
+			if chosen.has(vtx):
+				return {"error": "layer '%s': the vertex %s is chosen twice" % [layer["name"], vtx]}
+			chosen[vtx] = int(flat_choices[i + 3])
+		var vertices: Array = chosen.keys()
+		vertices.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+			return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+		var choices: Array = []
+		for vtx in vertices:
+			choices.append([vtx.x, vtx.y, vtx.z, chosen[vtx]])
+		out.append({"name": layer["name"], "visible": layer["visible"], "tileset": tileset, "cells": cells,
+			"variant_weights": weights, "variant_choices": choices})
 	return {"layers": out}
 
 
@@ -97,6 +127,11 @@ static func build(world_json_path: String, parent: Node) -> Dictionary:
 		var grid := node.get_node("Cells") as GridMap
 		for c in layer["cells"]:
 			grid.set_cell_item(Vector3i(int(c[0]), int(c[1]), int(c[2])), 0)
+		node.variant_weights = layer["variant_weights"]
+		var choices := {}
+		for c in layer["variant_choices"]:
+			choices[Vector3i(int(c[0]), int(c[1]), int(c[2]))] = int(c[3])
+		node.variant_choices = choices
 		nodes.append(node)
 	# The layers are ONE world: each is rebuilt once every layer holds its cells.
 	for node in nodes:

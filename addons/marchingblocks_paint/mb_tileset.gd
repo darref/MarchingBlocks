@@ -29,8 +29,14 @@ static func load_tileset(manifest_path: String) -> Dictionary:
 	var library := MeshLibrary.new()
 	var missing: Array = []
 	var next_id := 0
+	# Every tile: the base tile of each key, then its variants (step 8).
+	var all_tiles: Array = []
 	for key in manifest.get("tiles", {}):
-		var tile: String = manifest["tiles"][key]
+		all_tiles.append(str(manifest["tiles"][key]))
+	for key in manifest.get("variants", {}):
+		for t in manifest["variants"][key]:
+			all_tiles.append(str(t))
+	for tile: String in all_tiles:
 		if not meshes.has(tile):
 			missing.append(tile)
 			continue

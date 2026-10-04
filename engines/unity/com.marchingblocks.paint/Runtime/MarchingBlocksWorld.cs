@@ -31,6 +31,29 @@ namespace MarchingBlocks.Paint
         public int floor;
 
         [SerializeField, HideInInspector] List<Vector3Int> cells = new List<Vector3Int>();
+
+        /// <summary>VARIANTS (the tileset rule, step 8) — the weights of the random draw for one key:
+        /// [base, variant 1, variant 2, …] (a missing entry is 1, a negative one 0).</summary>
+        [System.Serializable]
+        public struct VariantWeight
+        {
+            public string key;
+            public int[] weights;
+        }
+
+        /// <summary>The variant CHOSEN at a vertex (format space): 0 is the base tile. The Variant tool sets it.</summary>
+        [System.Serializable]
+        public struct VariantChoice
+        {
+            public Vector3Int vertex;
+            public int choice;
+        }
+
+        [Tooltip("Variants: the weights of the random draw per key — base tile first, then each variant. Same world, same tiles: the draw is a hash of the vertex, never random.")]
+        public List<VariantWeight> variantWeights = new List<VariantWeight>();
+        [SerializeField, HideInInspector] List<VariantChoice> variantChoices = new List<VariantChoice>();
+        // The tile placed at each vertex by the last Rebuild — what the Variant tool reads.
+        [System.NonSerialized] Dictionary<Int3, string> placedTiles = new Dictionary<Int3, string>();
         // An INDEX of the list above, never a second copy of the truth: rebuilt from the list whenever
         // it may have changed behind our back (undo, a scene reload, OnValidate).
         [System.NonSerialized] HashSet<Int3> index;
@@ -151,6 +174,87 @@ namespace MarchingBlocks.Paint
 
         /// <summary>Replaces ALL the cells (format space), in one pass — a duplicate is kept once. Record the
         /// undo before calling this; call Rebuild() afterwards.</summary>
+        /// <summary>The variant settings of this layer (step 8), for the rule.</summary>
+        public VariantSettings Variants
+        {
+            get
+            {
+                var s = new VariantSettings();
+                foreach (var w in variantWeights)
+                    if (!string.IsNullOrEmpty(w.key) && w.weights != null) s.Weights[w.key] = w.weights;
+                foreach (var c in variantChoices)
+                    s.Choices[new Int3(c.vertex.x, c.vertex.y, c.vertex.z)] = c.choice;
+                return s;
+            }
+        }
+
+        /// <summary>The weights of one key's draw (null removes them). Record the undo first; rebuilds.</summary>
+        public void SetVariantWeights(string key, int[] weights)
+        {
+            variantWeights.RemoveAll(w => w.key == key);
+            if (weights != null) variantWeights.Add(new VariantWeight { key = key, weights = weights });
+            Rebuild();
+        }
+
+        /// <summary>The variant chosen at a vertex (null gives it back to the draw). Record the undo first
+        /// (Undo.RecordObject); rebuilds.</summary>
+        public void SetVariantChoice(Int3 vertex, int? choice)
+        {
+            variantChoices.RemoveAll(c => c.vertex.x == vertex.x && c.vertex.y == vertex.y && c.vertex.z == vertex.z);
+            if (choice.HasValue)
+                variantChoices.Add(new VariantChoice { vertex = new Vector3Int(vertex.x, vertex.y, vertex.z), choice = choice.Value });
+            Rebuild();
+        }
+
+        /// <summary>Replaces every variant weight and choice, WITHOUT rebuilding (the importer fills an inactive
+        /// layer; it is built when it becomes active).</summary>
+        public void SetVariants(Dictionary<string, int[]> weights, IEnumerable<KeyValuePair<Int3, int>> choices)
+        {
+            variantWeights.Clear();
+            foreach (var kv in weights) variantWeights.Add(new VariantWeight { key = kv.Key, weights = kv.Value });
+            variantChoices.Clear();
+            foreach (var kv in choices)
+                variantChoices.Add(new VariantChoice { vertex = new Vector3Int(kv.Key.x, kv.Key.y, kv.Key.z), choice = kv.Value });
+        }
+
+        /// <summary>Every chosen variant, {vertex: choice}.</summary>
+        public Dictionary<Int3, int> VariantChoices => Variants.Choices;
+
+        /// <summary>The tile this layer placed at a vertex: its key, how many variants the key has, which one is
+        /// placed (0 the base). False when this layer placed nothing there.</summary>
+        public bool VariantAt(Int3 vertex, out string key, out int count, out int current)
+        {
+            key = null; count = 0; current = 0;
+            var set = Tileset;
+            if (set == null || !placedTiles.TryGetValue(vertex, out var tile) || tile == null) return false;
+            foreach (var kv in set.Rule.Tiles)
+            {
+                var list = set.Rule.Variants.TryGetValue(kv.Key, out var l) ? l : null;
+                int i = kv.Value == tile ? 0 : (list != null ? list.IndexOf(tile) + 1 : 0);
+                if (kv.Value == tile || i > 0)
+                {
+                    key = kv.Key;
+                    count = list != null ? list.Count : 0;
+                    current = i;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>The TILE under a world-space ray — the vertex of the piece on the face the ray meets in this
+        /// layer's cells (MBTools.TileVertex) — or null when the ray meets none.</summary>
+        public Int3? TileUnderRay(Ray ray, float reach = 1000f)
+        {
+            var toFormat = FormatToWorld.inverse;
+            Vector3 o = toFormat.MultiplyPoint3x4(ray.origin);
+            Vector3 d = toFormat.MultiplyVector(ray.direction).normalized;
+            var cellsNow = Cells;
+            var hit = MBTools.Ray(cellsNow.Contains, o.x, o.y, o.z, d.x, d.y, d.z, reach);
+            if (!hit.Touched) return null;
+            return MBTools.TileVertex(o.x, o.y, o.z, d.x, d.y, d.z, hit.Cell, hit.Normal);
+        }
+
         public void SetCells(IEnumerable<Vector3Int> newCells)
         {
             cells.Clear();
@@ -241,6 +345,7 @@ namespace MarchingBlocks.Paint
             }
             LastPlaced = 0;
             LastMissing = 0;
+            placedTiles.Clear();
             var set = Tileset;
             if (set == null) return;
 
@@ -253,17 +358,20 @@ namespace MarchingBlocks.Paint
             var allCells = new List<HashSet<Int3>>();
             var visible = new List<bool>();
             var rules = new List<Rule>();
+            var variants = new List<VariantSettings>();
             foreach (var l in layers)
             {
                 allCells.Add(l.Cells);
                 visible.Add(l.isActiveAndEnabled);
                 rules.Add(l == this ? set.Rule : null);
+                variants.Add(l == this ? Variants : null);
             }
             int mine = layers.IndexOf(this);
             if (!isActiveAndEnabled) return;   // a hidden layer places nothing
             var offset = set.Rule.PieceOffset;
-            foreach (var p in Rule.PlacementsLayered(allCells, visible, rules)[mine])
+            foreach (var p in Rule.PlacementsLayered(allCells, visible, rules, variants)[mine])
             {
+                placedTiles[p.Vertex] = p.Tile;
                 // The piece of vertex v is centred at F(v + piece_offset), in container space.
                 Vector3 centre = set.Frame.MultiplyVector(new Vector3(
                     p.Vertex.x + offset.x, p.Vertex.y + offset.y, p.Vertex.z + offset.z));

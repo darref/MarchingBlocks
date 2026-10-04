@@ -30,7 +30,7 @@ namespace MarchingBlocks.Paint.EditorTools
     [CustomEditor(typeof(MarchingBlocksWorld))]
     public sealed class MarchingBlocksWorldEditor : Editor
     {
-        enum Mode { Add, Dig, Select, Rect, Box, Shape }
+        enum Mode { Add, Dig, Select, Rect, Box, Shape, Variant }
 
         static bool editing;
         static AimState aim = AimState.Start;
@@ -174,13 +174,21 @@ namespace MarchingBlocks.Paint.EditorTools
             Section("TOOL");
             using (new EditorGUILayout.HorizontalScope())
             {
-                var newMode = (Mode)Segmented((int)mode,
+                // The row of tools: Add … Box, then Variant (index 5 of the row, not Mode.Shape).
+                int shownTool = mode <= Mode.Box ? (int)mode : mode == Mode.Variant ? 5 : -1;
+                int pickedTool = Segmented(shownTool,
                     Icon("add", "Add (A) — adds matter. Shift digs."),
                     Icon("dig", "Dig (D) — removes matter. Shift adds."),
                     Icon("select", "Select (S) — paints the selection over the matter. Shift adds, Ctrl removes."),
                     Icon("rect", "Rect (G) — a FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."),
-                    Icon("box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."));
-                if (newMode != mode) { mode = newMode; CancelAll(); }
+                    Icon("box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."),
+                    Icon("variant", "Variant (V) — click a tile: its next variant (base, 1, 2…). Shift + click gives it back " +
+                        "to the random draw. Only for a tileset whose tiles have variants."));
+                if (pickedTool != shownTool && pickedTool >= 0)
+                {
+                    mode = pickedTool == 5 ? Mode.Variant : (Mode)pickedTool;
+                    CancelAll();
+                }
                 if (mode == Mode.Box)
                 {
                     GUILayout.Space(8);
@@ -411,6 +419,7 @@ namespace MarchingBlocks.Paint.EditorTools
             if (mode == Mode.Shape && special == SpecialShape.Room) { SceneRoom(e, ray, id); return; }
             if (mode == Mode.Shape) { SceneShape(e, ray, id); return; }
             if (mode == Mode.Rect || mode == Mode.Box) { SceneBox(e, ray, id); return; }
+            if (mode == Mode.Variant) { SceneVariant(e, ray, id); return; }
             SceneBrush(e, ray, id);
         }
 
@@ -772,6 +781,7 @@ namespace MarchingBlocks.Paint.EditorTools
                 case KeyCode.S: SetMode(Mode.Select); break;
                 case KeyCode.G: SetMode(Mode.Rect); break;
                 case KeyCode.B: SetMode(Mode.Box); break;
+                case KeyCode.V: SetMode(Mode.Variant); break;
                 case KeyCode.LeftBracket:
                     if (mode == Mode.Shape && special == SpecialShape.Room) roomFloors = Mathf.Max(1, roomFloors - 1);
                     else if (mode == Mode.Shape) shapeSize = Mathf.Max(1, shapeSize - 1); else brushSize = Mathf.Max(1, brushSize - 1);
@@ -798,6 +808,46 @@ namespace MarchingBlocks.Paint.EditorTools
         }
 
         void SetMode(Mode m) { mode = m; CancelAll(); }
+
+        // THE VARIANT TOOL (the tileset rule, step 8): a click on a tile shows its next variant (base → 1 → … →
+        // base); Shift + click gives it back to the random draw. The tile is found by MBTools.TileVertex, on the
+        // face the ray meets in this layer's cells. One Undo step.
+        void SceneVariant(Event e, Ray ray, int id)
+        {
+            var hit = World.RayAgainstCells(ray);
+            if (hit.Touched) DrawCells(new[] { hit.Cell }, SelectColour, 0.04f);
+            if (e.type == EventType.MouseDown && e.button == 0 && !e.alt)
+            {
+                var vertex = World.TileUnderRay(ray);
+                if (vertex.HasValue) ClickVariant(vertex.Value, e.shift);
+                else status = "Variant — point at a tile of this layer.";
+                e.Use();
+                Repaint();
+            }
+            else if (e.type == EventType.MouseMove) SceneView.RepaintAll();
+        }
+
+        void ClickVariant(Int3 vertex, bool backToDraw)
+        {
+            if (!World.VariantAt(vertex, out var key, out int count, out int current))
+            { status = "Variant — no tile of this layer there."; return; }
+            if (count == 0) { status = $"Variant — '{key}' has no variant."; return; }
+            if (backToDraw)
+            {
+                if (!World.VariantChoices.ContainsKey(vertex)) { status = "Variant — this tile already follows the random draw."; return; }
+                Undo.IncrementCurrentGroup();
+                Undo.RecordObject(World, "Variant");
+                World.SetVariantChoice(vertex, null);
+                status = $"Variant — '{key}' is back to the random draw.";
+                return;
+            }
+            int next = (current + 1) % (count + 1);
+            // ONE click, ONE undo step — even two clicks within one frame (Unity groups by event otherwise).
+            Undo.IncrementCurrentGroup();
+            Undo.RecordObject(World, "Variant");
+            World.SetVariantChoice(vertex, next);
+            status = $"Variant — '{key}': {(next == 0 ? "the base tile" : "variant " + next)}. Shift + click gives it back to the draw.";
+        }
 
         // The arrows FOLLOW THE CAMERA: "up" moves away from you along the format axis (X or Z) closest to
         // where the camera looks; Shift + up / down raise and lower.

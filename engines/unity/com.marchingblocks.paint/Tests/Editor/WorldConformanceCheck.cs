@@ -25,7 +25,7 @@ namespace MarchingBlocks.Paint.Tests
                 return failures;
             }
             int refusals = 0, good = 0;
-            bool negative = false, hidden = false, withoutTiles = false, empty = false;
+            bool negative = false, hidden = false, withoutTiles = false, empty = false, weightsRead = false, choicesRead = false;
             foreach (Dictionary<string, object> c in (List<object>)conf["cases"])
             {
                 cases++;
@@ -64,6 +64,28 @@ namespace MarchingBlocks.Paint.Tests
                             var want = new Int3((int)MBJson.AsLong(p[0]), (int)MBJson.AsLong(p[1]), (int)MBJson.AsLong(p[2]));
                             if (!want.Equals(g.Cells[k])) { failures.Add($"{where} — cell {k} is {Show(g.Cells[k])}, expected {Show(want)}"); break; }
                         }
+                    // Step 8: the weights as given, the choices sorted by vertex.
+                    var ew = (Dictionary<string, object>)e["variant_weights"];
+                    if (ew.Count != g.VariantWeights.Count) failures.Add($"{where} — {g.VariantWeights.Count} variant weight keys, expected {ew.Count}");
+                    foreach (var kv in ew)
+                    {
+                        var want = (List<object>)kv.Value;
+                        bool same = g.VariantWeights.TryGetValue(kv.Key, out var gw) && gw.Length == want.Count;
+                        for (int k = 0; same && k < want.Count; k++) same = gw[k] == MBJson.AsLong(want[k]);
+                        if (!same) failures.Add($"{where} — the variant weights of '{kv.Key}' differ");
+                        else weightsRead = true;
+                    }
+                    var ec = (List<object>)e["variant_choices"];
+                    if (ec.Count != g.VariantChoices.Count) failures.Add($"{where} — {g.VariantChoices.Count} variant choices, expected {ec.Count}");
+                    else
+                        for (int k = 0; k < ec.Count; k++)
+                        {
+                            var q = (List<object>)ec[k];
+                            var want = new Int3((int)MBJson.AsLong(q[0]), (int)MBJson.AsLong(q[1]), (int)MBJson.AsLong(q[2]));
+                            if (!want.Equals(g.VariantChoices[k].Key) || g.VariantChoices[k].Value != MBJson.AsLong(q[3]))
+                            { failures.Add($"{where} — variant choice {k} differs"); break; }
+                            choicesRead = true;
+                        }
                     // What the good case must exercise, read from the EXPECTED side, never from ours.
                     if (e["tileset"] == null) withoutTiles = true;
                     if (!(bool)e["visible"]) hidden = true;
@@ -78,6 +100,8 @@ namespace MarchingBlocks.Paint.Tests
                 failures.Add($"the world cases hold {good} good world(s) and {refusals} refusal(s): at least 1 and 6 are needed");
             if (!(negative && hidden && withoutTiles && empty))
                 failures.Add("the good world must hold a negative cell, a hidden layer, a layer without tiles and an empty layer");
+            if (!(weightsRead && choicesRead))
+                failures.Add("the good world must hold variant weights and variant choices");
 
             // PATHS ARE RELATIVE TO world.json. Written by hand, not computed by the function under test.
             Expect(failures, MBWorldFile.ResolveRelative("Assets/My World.mbworld/world.json", "rock.mbset/tileset.json"),

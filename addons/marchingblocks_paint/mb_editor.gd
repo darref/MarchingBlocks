@@ -12,6 +12,8 @@ extends Node
 ##   NAVIGATE a switch, not an aim — Space turns it on and off: the viewport flies as usual (right drag +
 ##            W A S D, Q E) and no click paints. The aim is kept, and comes back as it was.
 ##   TOOLS    add (A) · dig (D) · select (S) · rect (G) · box (B)      Shift does the opposite
+##   VARIANT  (V) click a tile: its next variant (base → 1 → … → base); Shift + click gives it back to the
+##            random draw (the tileset rule, step 8). Always aimed at the matter.
 ##   BRUSH    size 1–7 ([ and ]), sphere / cube / disc
 ##   SHAPES   tunnel · well · bridge · balcony · stairs (`mb_shapes.gd`), always aimed at the matter:
 ##            Straight is one click square out of a face; Connect is two clicks, two faces anywhere (two
@@ -27,7 +29,7 @@ const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
 const Shapes := preload("res://addons/marchingblocks_paint/mb_shapes.gd")
 
 const AIMS := ["grid", "sculpt"]
-const MODES := ["add", "dig", "select", "rect", "box", "shape"]
+const MODES := ["add", "dig", "select", "rect", "box", "shape", "variant"]
 const REACH := 2000.0
 const MAX_DRAWN := 4000
 const ADD_COLOUR := Color(0.55, 0.82, 0.45, 0.35)
@@ -212,6 +214,10 @@ func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
 	if mode == "shape":
 		_hover_shape(camera, position)
 		return
+	if mode == "variant":
+		var h := _matter_hit(camera, position)
+		_show_preview([] if h.is_empty() else [h["cell"]], SELECT_COLOUR)
+		return
 	if pasting:
 		var p := aimed(camera, position, true)
 		var cells: Array = []
@@ -278,6 +284,10 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 	if b.alt_pressed:
 		return false
+	if mode == "variant":
+		if b.pressed:
+			click_variant(camera, b.position, b.shift_pressed)
+		return true
 	if _drawing_room():
 		# The room is DRAWN like the rect: press a corner, drag, release — then it rises (or sinks), one Ctrl+Z.
 		if b.pressed:
@@ -375,6 +385,48 @@ const SHAPE_ERRORS := {
 	"too_large": "too large. Make it smaller or shorter.",
 	"unknown_shape": "unknown shape.",
 }
+
+
+## THE VARIANT TOOL (step 8): the tile under the mouse — its vertex, `Tools.tile_vertex` — shows its next
+## variant (base → 1 → … → base); `back_to_draw` (Shift) removes the choice: the tile follows the random draw
+## again. One undo step. Only a tile THIS layer placed: the ray meets this layer's cells, as the other tools do.
+func click_variant(camera: Camera3D, position: Vector2, back_to_draw := false) -> void:
+	var origin: Vector3 = world.world_to_cells(camera.project_ray_origin(position))
+	var direction: Vector3 = world.world_direction_to_cells(camera.project_ray_normal(position))
+	var cells: Dictionary = world.cells()
+	var r: Dictionary = Tools.ray(func(c: Vector3i) -> bool: return cells.has(c), origin, direction, REACH)
+	if not r["hit"]:
+		status = "Variant — point at a tile of this layer."
+		changed.emit()
+		return
+	var v := Tools.tile_vertex(origin, direction, r["cell"], r["normal"])
+	var info: Dictionary = world.variant_at(v)
+	if info.is_empty():
+		status = "Variant — no tile of this layer there."
+	elif int(info["variants"]) == 0:
+		status = "Variant — '%s' has no variant." % info["key"]
+	else:
+		var before: Dictionary = (world.variant_choices as Dictionary).duplicate()
+		var after := before.duplicate()
+		if back_to_draw:
+			if not after.has(v):
+				status = "Variant — this tile already follows the random draw."
+				changed.emit()
+				return
+			after.erase(v)
+			status = "Variant — '%s' is back to the random draw." % info["key"]
+		else:
+			after[v] = (int(info["current"]) + 1) % (int(info["variants"]) + 1)
+			status = "Variant — '%s': %s. Shift + click gives it back to the draw." % [info["key"],
+				"the base tile" if int(after[v]) == 0 else "variant %d" % int(after[v])]
+		if undo != null:
+			undo.create_action("MarchingBlocks variant")
+			undo.add_do_property(world, "variant_choices", after)
+			undo.add_undo_property(world, "variant_choices", before)
+			undo.commit_action()
+		else:
+			world.variant_choices = after
+	changed.emit()
 
 
 func _matter_hit(camera: Camera3D, position: Vector2) -> Dictionary:
@@ -603,6 +655,8 @@ func _key(camera: Camera3D, k: InputEventKey) -> bool:
 			set_mode("rect")
 		KEY_B:
 			set_mode("box")
+		KEY_V:
+			set_mode("variant")
 		KEY_TAB:
 			set_aim(AIMS[(AIMS.find(aim) + 1) % AIMS.size()])
 		KEY_SPACE:

@@ -117,6 +117,8 @@ namespace MarchingBlocks.Paint.EditorTools
                 var cells = new List<Vector3Int>(layer.Cells.Count);
                 foreach (var c in layer.Cells) cells.Add(new Vector3Int(c.x, c.y, c.z));
                 w.SetCells(cells);
+                // Step 8: the layer's variant weights and choices, as the file gives them.
+                w.SetVariants(layer.VariantWeights, layer.VariantChoices);
                 // A visible layer is built when it becomes active (OnEnable); a hidden one when it is shown.
                 go.SetActive(layer.Visible);
                 result.Layers.Add(w);

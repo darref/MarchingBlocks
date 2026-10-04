@@ -182,6 +182,12 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 		HoverShape(World, Origin, Direction);
 		return;
 	}
+	if (World->Tool == EMarchingBlocksTool::Variant)
+	{
+		const MBPaint::FHit Hit = World->RayAgainstCells(Origin, Direction);
+		if (Hit.bTouched) Preview.push_back(Hit.Cell);
+		return;
+	}
 	if (World->Tool == EMarchingBlocksTool::Rect || World->Tool == EMarchingBlocksTool::Box)
 	{
 		MBPaint::FCell Corner;
@@ -275,6 +281,14 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 			if (World->Tool == EMarchingBlocksTool::Shape)
 			{
 				ClickShape(World, Origin, Direction);
+				return true;
+			}
+			if (World->Tool == EMarchingBlocksTool::Variant)
+			{
+				MBPaint::FCell Vertex;
+				if (World->TileUnderRay(Origin, Direction, Vertex))
+					World->ClickVariant(Vertex, Viewport->KeyState(EKeys::LeftShift) || Viewport->KeyState(EKeys::RightShift));
+				else World->Status = TEXT("Variant — point at a tile of this layer.");
 				return true;
 			}
 			if (World->Tool == EMarchingBlocksTool::Rect || World->Tool == EMarchingBlocksTool::Box)
@@ -372,12 +386,13 @@ void UMarchingBlocksEdMode::SetAimState(AMarchingBlocksWorld* World, const MBPai
 bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewport* Viewport, FKey Key)
 {
 	const bool bShaping = World->Tool == EMarchingBlocksTool::Shape;
-	if (Key == EKeys::A || Key == EKeys::D || Key == EKeys::S || Key == EKeys::G || Key == EKeys::B) bHasShapeAnchor = false;
+	if (Key == EKeys::A || Key == EKeys::D || Key == EKeys::S || Key == EKeys::G || Key == EKeys::B || Key == EKeys::V) bHasShapeAnchor = false;
 	if (Key == EKeys::A) World->Tool = EMarchingBlocksTool::Add;
 	else if (Key == EKeys::D) World->Tool = EMarchingBlocksTool::Dig;
 	else if (Key == EKeys::S) World->Tool = EMarchingBlocksTool::Select;
 	else if (Key == EKeys::G) World->Tool = EMarchingBlocksTool::Rect;
 	else if (Key == EKeys::B) World->Tool = EMarchingBlocksTool::Box;
+	else if (Key == EKeys::V) World->Tool = EMarchingBlocksTool::Variant;
 	else if (Key == EKeys::Tab) SetAimState(World, MBPaint::Tools::Tab(World->GetAimState()));
 	else if (Key == EKeys::SpaceBar) SetAimState(World, MBPaint::Tools::ToggleNavigate(World->GetAimState()));
 	else if (Key == EKeys::LeftBracket && MarchingBlocksEdModeDetail::DrawingRoom(World))

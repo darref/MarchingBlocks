@@ -48,6 +48,7 @@ const STROKES := {
 	"straight": '<path d="M3.5 12h12M11.5 7.5l4.5 4.5-4.5 4.5"/><path d="M20 4v16"/>',
 	"tunnel": '<path d="M3 20.5h18M3 20.5V4.5h18v16"/><path d="M8.5 20.5v-6a3.5 3.5 0 0 1 7 0v6"/>',
 	"up": '<path d="M12 19.5v-15M5.5 11 12 4.5 18.5 11"/>',
+	"variant": '<rect x="3.5" y="8.5" width="11" height="11" rx="2"/><rect x="9.5" y="3.5" width="11" height="11" rx="2" stroke-dasharray="3 2.4"/>',
 	"well": '<path d="M2.5 9 12 4.5 21.5 9 12 13.5z"/><ellipse cx="12" cy="9" rx="3.4" ry="1.6"/><path d="M12 13.5v7M9 17.5l3 3 3-3"/>',
 	"world": '<path d="M2.5 15.5 12 20.5l9.5-5L12 10.5z"/><path d="M7 13l9.5 5M17 13l-9.5 5M12 10.5v-6M9.5 7 12 4.5 14.5 7"/>',
 }
