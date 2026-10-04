@@ -317,6 +317,77 @@ func _cacher_une_grande_couche() -> void:
 	_dire(local_r == _photo(rr), "… et elle rend la reconstruction complète (%d tuiles)" % local_r.size())
 	roche.queue_free()
 	herbe.queue_free()
+	_les_colonnes_qui_la_regardent()
+
+
+## SEULES LES COLONNES QUI LA REGARDENT (4 octobre 2026, le soir) : une couche ne refait que les sommets dont l'une des
+## quatre colonnes porte une de SES cases (ou en a perdu une dans ce geste). Sur l'exemple, cacher une couche refaisait
+## 192 041 sommets dans chacune des deux autres, l'une n'en possédant aucun. Et la reconstruction complète relisant
+## toute l'union, une petite couche prend la route locale même quand le geste dépasse son état.
+## Le monde : la roche (rang 0, 80 × 4 × 80) ; l'herbe dessus (rang 1, 70 × 1 × 70) ; un CAILLOU (rang 2) — un bloc
+## 3 × 2 × 3 contre le bord de l'herbe, et une case isolée en (76, 4, 30) ; une couche LOINTAINE (rang 3), un bloc en
+## x = 200. Attendu : chaque route locale = une reconstruction complète, photo pour photo (et l'instrument : la route
+## locale prise, le nombre de sommets refaits).
+func _les_colonnes_qui_la_regardent() -> void:
+	var roche := _massif()
+	var herbe := _massif()
+	var caillou := _massif()
+	var loin := _massif()
+	var cases_r := _pave(0, 79, 0, 3, 0, 79)
+	var cases_h := _pave(0, 69, 4, 4, 0, 69)
+	var cases_c := _pave(70, 72, 4, 5, 10, 12)
+	var isolee := Vector3i(76, 4, 30)
+	cases_c.append(isolee)
+	var cases_l := _pave(200, 202, 0, 2, 0, 2)
+	var union := {}
+	var couches := [[roche, cases_r], [herbe, cases_h], [caillou, cases_c], [loin, cases_l]]
+	for r in couches.size():
+		_peindre(couches[r][0], couches[r][1])
+		for c in couches[r][1]:
+			union[c] = r
+	for r in couches.size():
+		couches[r][0].union = union
+		couches[r][0].rang = r
+		couches[r][0].reconstruire()
+	var completes_c: int = caillou.reconstructions_completes
+	var completes_l: int = loin.reconstructions_completes
+	# Cacher l'herbe : 4 900 cases sortent de l'union — plus que l'état du caillou n'a de sommets.
+	for c in cases_h:
+		union.erase(c)
+	_dire(cases_h.size() > caillou._etat.size(), "l'herbe cachée change plus de cases (%d) que l'état du caillou (%d)"
+		% [cases_h.size(), caillou._etat.size()])
+	caillou.reconstruire_autour(cases_h)
+	var photo_c := _photo(caillou.get_node("Rendu"))
+	var refaits_c: int = caillou.derniers_sommets_refaits
+	loin.reconstruire_autour(cases_h)
+	var photo_l := _photo(loin.get_node("Rendu"))
+	_dire(caillou.reconstructions_completes == completes_c and loin.reconstructions_completes == completes_l,
+		"cacher l'herbe : le caillou et la couche lointaine prennent la route locale")
+	_dire(loin.derniers_sommets_refaits == 0 and refaits_c > 0 and refaits_c < 400,
+		"… la couche lointaine ne refait aucun sommet, le caillou seulement ceux de ses colonnes (%d)" % refaits_c)
+	# Comme l'écran : TOUTES les couches visibles se refont autour des cases cachées (la roche aussi).
+	roche.reconstruire_autour(cases_h)
+	caillou.reconstruire()
+	loin.reconstruire()
+	_dire(photo_c == _photo(caillou.get_node("Rendu")) and photo_c.size() > 0
+		and photo_l == _photo(loin.get_node("Rendu")) and photo_l.size() > 0,
+		"… et ils rendent la reconstruction complète (%d et %d tuiles)" % [photo_c.size(), photo_l.size()])
+	# Retirer la case ISOLÉE du caillou : plus aucune de ses cases dans ces colonnes, mais les sommets qu'elle posait
+	# doivent partir (les colonnes « parties »). La roche, dessous, reprend son dessus.
+	_dire(not (caillou.get_node("Rendu") as GridMap).get_used_cells().filter(
+		func(s): return s.x >= 75 and s.z >= 29 and s.z <= 31).is_empty(), "la case isolée posait des tuiles du caillou")
+	(caillou.get_node("Cases") as GridMap).set_cell_item(isolee, GridMap.INVALID_CELL_ITEM)
+	union.erase(isolee)
+	for m in [caillou, roche]:
+		m.reconstruire_autour([isolee])
+	var apres_c := _photo(caillou.get_node("Rendu"))
+	var apres_r := _photo(roche.get_node("Rendu"))
+	caillou.reconstruire()
+	roche.reconstruire()
+	_dire(apres_c == _photo(caillou.get_node("Rendu")) and apres_r == _photo(roche.get_node("Rendu")),
+		"retirer la case isolée du caillou : la route locale rend la complète, pour lui et pour la roche")
+	for r in couches.size():
+		couches[r][0].queue_free()
 
 
 func _photo(g: GridMap) -> Dictionary:

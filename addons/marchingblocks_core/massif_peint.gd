@@ -84,6 +84,8 @@ var _empreinte: int = -1
 var union := {}
 var rang := -1
 var _miennes := {}
+## {Vector2i(x, z): combien de SES cases dans cette colonne} — tenu avec `_miennes` (`reconstruire`, `reconstruire_autour`).
+var _colonnes_miennes := {}
 ## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) — `poids` : {clé: [base, var1, …]} (entiers, le tirage) ; `choix` :
 ## {sommet: rang de variante} (un choix posé dans World, 0 = la base). La règle : `MB.tuile_du_sommet`. Les changer
 ## demande `reconstruire()` (les poids) ou `reconstruire_sommets()` (des choix).
@@ -91,6 +93,8 @@ var poids := {}
 var choix := {}
 ## Combien de reconstructions COMPLÈTES ont eu lieu : le contrôle qui dit que la route locale est bien prise.
 var reconstructions_completes := 0
+## Combien de sommets la dernière route LOCALE a refaits (le contrôle qui dit que le filtre des colonnes a servi).
+var derniers_sommets_refaits := 0
 var _dernier_bilan := {"pieces": 0, "fautes": 0, "muets": 0}
 
 
@@ -275,6 +279,10 @@ func reconstruire() -> Dictionary:
 		miennes[c] = true
 	var pleines: Dictionary = union if rang >= 0 else miennes
 	_miennes = miennes
+	_colonnes_miennes = {}
+	for c: Vector3i in miennes:
+		var k2 := Vector2i(c.x, c.z)
+		_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
 
 	var id_faute: int = -1
 	if fautes.mesh_library != null:
@@ -379,14 +387,26 @@ func reconstruire_autour(changees) -> Dictionary:
 		return reconstruire()
 	# ⚠ EN COUCHES, `_pleines` EST L'UNION, tenue par l'écran : on n'y touche pas ; on tient SES cases à part. Un
 	# changement d'une AUTRE couche passe aussi par ici (ses sommets de frontière peuvent changer de propriétaire).
+	# Les colonnes où une de SES cases vient de partir : un sommet qui était à elle peut y changer.
+	var parties := {}
 	for c in changees:
 		var p: Vector3i = c
+		var k2 := Vector2i(p.x, p.z)
 		if cases.get_cell_item(p) != GridMap.INVALID_CELL_ITEM:
-			_miennes[p] = true
+			if not _miennes.has(p):
+				_miennes[p] = true
+				_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
 			if rang < 0:
 				_pleines[p] = true
 		else:
-			_miennes.erase(p)
+			if _miennes.has(p):
+				_miennes.erase(p)
+				parties[k2] = true
+				var n: int = int(_colonnes_miennes.get(k2, 0)) - 1
+				if n > 0:
+					_colonnes_miennes[k2] = n
+				else:
+					_colonnes_miennes.erase(k2)
 			if rang < 0:
 				_pleines.erase(p)
 		if _pleines.has(p):
@@ -409,11 +429,25 @@ func reconstruire_autour(changees) -> Dictionary:
 	# LA ROUTE LOCALE TANT QU'ELLE COÛTE MOINS QUE TOUT REFAIRE : le nombre de sommets à refaire contre ceux que la
 	# reconstruction complète décide (l'état gardé). Un seuil fixe en CASES (4 096) envoyait cacher une couche de
 	# l'exemple vers deux reconstructions complètes (7,3 s sur le PC).
+	# ⚠ SEULEMENT LES COLONNES QUI LA REGARDENT (4 octobre 2026, le soir) : un sommet (x, y, z) ne lit que les cases
+	# des colonnes x..x+1, z..z+1 ; il n'est à cette couche (avant comme après) que si l'une d'elles porte une de SES
+	# cases — maintenant, ou partie dans ce geste. Cacher une couche de l'exemple refaisait 192 041 sommets dans
+	# chacune des deux autres, quand l'une n'en possédait aucun et l'autre ~5 200 (~0,5 s par couche).
 	var a_refaire := 0
-	for k2 in colonnes:
+	for k2: Vector2i in colonnes.keys():
+		var regarde := false
+		for dx in 2:
+			for dz in 2:
+				var k4 := Vector2i(k2.x + dx, k2.y + dz)
+				if _colonnes_miennes.has(k4) or parties.has(k4):
+					regarde = true
+		if not regarde:
+			colonnes.erase(k2)
+			continue
 		a_refaire += int(colonnes[k2]) - _y_bas + 2
 	if a_refaire > maxi(_etat.size(), SEUIL_LOCAL):
 		return reconstruire()
+	derniers_sommets_refaits = a_refaire
 	# Beaucoup de sommets (une couche entière cachée ou montrée) : les hauteurs des colonnes, bâties une fois, coûtent
 	# moins que de remonter les colonnes à chaque sommet (`MB.sous_le_ciel`). L'union est déjà à jour ici.
 	if a_refaire > 20000:
