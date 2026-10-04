@@ -46,6 +46,7 @@ func _initialize() -> void:
 	_le_contexte_choisit_la_variante()
 	_le_peintre_pose_le_nom_nu()
 	_la_reconstruction_locale_rend_la_complete()
+	_un_lot_aux_memes_noms()
 	_les_couches_exclusives()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
@@ -732,6 +733,40 @@ func _grilles_identiques(a: Node3D, b: Node3D) -> String:
 	if ba != bb:
 		return "bilan %s contre %s" % [ba, bb]
 	return ""
+
+
+## UN LOT AUX MÊMES NOMS SOUS LES MÊMES NUMÉROS (4 octobre 2026) : le monde qui suit un témoin retouché reçoit un tel
+## lot — ses tuiles changent de forme, pas de nom. Il ne se reconstruit plus en entier, et doit rendre exactement ce
+## qu'une reconstruction complète rendrait, le lot de la grille compris. Un lot qui a perdu une tuile, lui, reconstruit.
+func _un_lot_aux_memes_noms() -> void:
+	print("\n14. un lot aux mêmes noms ne reconstruit pas le monde")
+	var cellules: Array = _pave(0, 9, 0, 0, 0, 9) + _pave(2, 4, 1, 3, 2, 4) + _pave(5, 8, 4, 4, 1, 3)
+	var source: MeshLibrary = _lot_variantes_et_trous()
+	var m := _massif()
+	_peindre(m, cellules)
+	m.lot = source
+	var reforme := MeshLibrary.new()
+	for id in source.get_item_list():
+		reforme.create_item(id)
+		reforme.set_item_name(id, source.get_item_name(id))
+		reforme.set_item_mesh(id, BoxMesh.new())   # une autre FORME, le même nom
+	var avant: int = m.reconstructions_completes
+	m.lot = reforme
+	_dire(m.reconstructions_completes == avant, "un lot aux mêmes noms : pas de reconstruction complète")
+	_dire((m.get_node("Rendu") as GridMap).mesh_library == reforme, "… la grille porte le nouveau lot")
+	var temoin := _massif()
+	_peindre(temoin, cellules)
+	temoin.lot = reforme
+	var ecart := _grilles_identiques(m, temoin)
+	_dire(ecart == "", "… et le monde est celui d'une reconstruction complète avec ce lot — %s" % ecart)
+	# Un lot qui a PERDU une tuile (un nom de moins) : les décisions changent, tout est refait.
+	var amoindri: MeshLibrary = reforme.duplicate()
+	amoindri.remove_item(amoindri.get_item_list()[0])
+	avant = m.reconstructions_completes
+	m.lot = amoindri
+	_dire(m.reconstructions_completes == avant + 1, "un lot qui a perdu une tuile : reconstruction complète")
+	m.free()
+	temoin.free()
 
 
 func _la_reconstruction_locale_rend_la_complete() -> void:

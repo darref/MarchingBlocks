@@ -42,6 +42,15 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 @export var lot: MeshLibrary:
 	set(valeur):
 		lot = valeur
+		# ⚠ UN LOT AUX MÊMES NOMS SOUS LES MÊMES NUMÉROS NE CHANGE AUCUNE DÉCISION (4 octobre 2026) : la règle ne lit que
+		# l'index (`MB.pose_du_sommet`, `MB.tuile_du_sommet`), jamais la forme des tuiles. Un témoin retouché donne un
+		# tel lot — ses tuiles changent de forme, pas de nom — et le monde qui le suit se reconstruisait EN ENTIER
+		# (~3 s sur la couche de 196 091 cases de l'exemple). On ne change alors que le lot de la grille.
+		var rendu := _rendu()
+		if _pret and rendu != null and _lot_pose != null and _index_du_lot(lot_courant()) == _index:
+			rendu.mesh_library = lot_courant()
+			_lot_pose = rendu.mesh_library
+			return
 		reconstruire()
 
 ## La palette de ce qu'on peint : une seule tuile, « case ». `palette()` en fournit une par défaut.
