@@ -157,7 +157,7 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 		for signe in [-1, 1]:
 			if absf(p[axe] - 0.5 * signe) >= EPS:
 				continue
-			var n := noeud(cle, axe, signe)
+			var n := noeud(MB.cle_de_tuile(cle), axe, signe)
 			if not _classe_de.has(n):
 				continue
 			var k: int = _classe_de[n]
@@ -189,48 +189,35 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 ## Rend {"touchees": [clés], "coupes": n, "echecs": n}.
 func completer(sauver := Callable()) -> Dictionary:
 	indexer()
-	var racines := {}   # nœud → {point racine (Vector2i): true}
-	for cle in bords:
-		for i in bords[cle]:
-			for f in bords[cle][i]:
-				if not racines.has(f["noeud"]):
-					racines[f["noeud"]] = {}
-				racines[f["noeud"]][f["q"]] = true
+	var racines := _racines()
 	var touchees := {}
 	var coupes := 0
 	var echecs := 0
 	for k in points.size():
-		var orbite := {}
-		for canon in points[k]:
-			for h in _groupes[k]:
-				orbite[appliquer_i(h, canon)] = true
+		var orbite := _orbite(k)
 		for n in _noeuds_de_classe[k]:
 			var p: PackedStringArray = String(n).split("|")
-			var cle: String = p[0]
-			if not temoin.tuiles.has(cle):
-				continue
 			var axe := int(p[1])
 			var signe := int(p[2])
-			var presents: Dictionary = racines.get(n, {})
-			for r in orbite:
-				if presents.has(r):
-					continue
-				var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
-				var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
-				q3[axe] = 0.5 * signe
-				var e: Vector2i = _arete_de_bord_qui_contient(temoin.tuiles[cle], axe, signe, q3)
-				if e.x < 0:
-					echecs += 1
-					continue
-				if not touchees.has(cle):
-					touchees[cle] = true
-					if sauver.is_valid():
-						sauver.call(cle)
-				if temoin.tuiles[cle]._inserer_sur_arete(e, q3) >= 0:
-					coupes += 1
-					presents[r] = true
-				else:
-					echecs += 1
+			for cle in _tuiles_de(p[0]):
+				var presents: Dictionary = racines.get(cle + "#" + n, {})
+				for r in orbite:
+					if presents.has(r):
+						continue
+					var q3: Vector3 = _point_de_la_face(n, axe, signe, r)
+					var e: Vector2i = _arete_de_bord_qui_contient(temoin.tuiles[cle], axe, signe, q3)
+					if e.x < 0:
+						echecs += 1
+						continue
+					if not touchees.has(cle):
+						touchees[cle] = true
+						if sauver.is_valid():
+							sauver.call(cle)
+					if temoin.tuiles[cle]._inserer_sur_arete(e, q3) >= 0:
+						coupes += 1
+						presents[r] = true
+					else:
+						echecs += 1
 	indexer()
 	return {"touchees": touchees.keys(), "coupes": coupes, "echecs": echecs}
 
@@ -241,36 +228,66 @@ func completer(sauver := Callable()) -> Dictionary:
 ## rejoigne celle des tuiles d'en face. La même règle que `completer`, sans rien insérer.
 func manquants(cle: String) -> Dictionary:
 	indexer()
-	var racines := {}
-	for i in (bords.get(cle, {}) as Dictionary):
-		for f in bords[cle][i]:
-			if not racines.has(f["noeud"]):
-				racines[f["noeud"]] = {}
-			racines[f["noeud"]][f["q"]] = true
+	var racines := _racines()
+	var modele: String = MB.cle_de_tuile(cle)
 	var sortie := {}
 	for k in points.size():
-		var orbite := {}
-		for canon in points[k]:
-			for h in _groupes[k]:
-				orbite[appliquer_i(h, canon)] = true
+		var orbite := _orbite(k)
 		for n in _noeuds_de_classe[k]:
 			var p: PackedStringArray = String(n).split("|")
-			if p[0] != cle:
+			if p[0] != modele:
 				continue
 			var axe := int(p[1])
 			var signe := int(p[2])
-			var presents: Dictionary = racines.get(n, {})
+			var presents: Dictionary = racines.get(cle + "#" + n, {})
 			for r in orbite:
 				if presents.has(r):
 					continue
-				var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
-				var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
-				q3[axe] = 0.5 * signe
 				var plan := Vector2i(axe, signe)
 				if not sortie.has(plan):
 					sortie[plan] = []
-				sortie[plan].append(q3)
+				sortie[plan].append(_point_de_la_face(n, axe, signe, r))
 	return sortie
+
+
+## ── LES VARIANTES (4 octobre 2026) : une tuile de plus pour un même nœud ─────────────────────────────────────────
+## Un nœud nomme une face de la CLÉ ; chaque tuile de cette clé (la base, ses variantes `_var<k>`) en porte une copie,
+## qui doit avoir tous les points de la classe. Les points présents se comptent donc par (tuile, nœud).
+func _tuiles_de(modele: String) -> Array:
+	var sortie: Array = []
+	for cle in temoin.tuiles:
+		if MB.cle_de_tuile(cle) == modele:
+			sortie.append(cle)
+	return sortie
+
+
+## {« tuile#nœud » : {point racine: true}} — ce que chaque face de chaque tuile porte.
+func _racines() -> Dictionary:
+	var racines := {}
+	for cle in bords:
+		for i in bords[cle]:
+			for f in bords[cle][i]:
+				var r: String = cle + "#" + f["noeud"]
+				if not racines.has(r):
+					racines[r] = {}
+				racines[r][f["q"]] = true
+	return racines
+
+
+func _orbite(k: int) -> Dictionary:
+	var orbite := {}
+	for canon in points[k]:
+		for h in _groupes[k]:
+			orbite[appliquer_i(h, canon)] = true
+	return orbite
+
+
+## Le point racine `r` de la classe, ramené sur la face (axe, signe) du nœud `n`, dans le repère de la tuile.
+func _point_de_la_face(n: String, axe: int, signe: int, r: Vector2i) -> Vector3:
+	var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
+	var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
+	q3[axe] = 0.5 * signe
+	return q3
 
 
 ## Une arête dont les deux bouts sont sur le plan (axe, signe) et qui contient `p` STRICTEMENT entre eux.
@@ -299,25 +316,16 @@ func _arete_de_bord_qui_contient(m: RefCounted, axe: int, signe: int, p: Vector3
 ## Combien de points manquent aux faces de leur classe (orbite comprise) — 0 sur un témoin complet.
 func absences() -> int:
 	indexer()
-	var racines := {}
-	for cle in bords:
-		for i in bords[cle]:
-			for f in bords[cle][i]:
-				if not racines.has(f["noeud"]):
-					racines[f["noeud"]] = {}
-				racines[f["noeud"]][f["q"]] = true
+	var racines := _racines()
 	var n_abs := 0
 	for k in points.size():
-		var orbite := {}
-		for canon in points[k]:
-			for h in _groupes[k]:
-				orbite[appliquer_i(h, canon)] = true
+		var orbite := _orbite(k)
 		for n in _noeuds_de_classe[k]:
-			if not temoin.tuiles.has(String(n).split("|")[0]):
-				continue
-			for r in orbite:
-				if not (racines.get(n, {}) as Dictionary).has(r):
-					n_abs += 1
+			for cle in _tuiles_de(String(n).split("|")[0]):
+				var presents: Dictionary = racines.get(cle + "#" + n, {})
+				for r in orbite:
+					if not presents.has(r):
+						n_abs += 1
 	return n_abs
 
 

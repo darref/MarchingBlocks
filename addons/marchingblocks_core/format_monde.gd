@@ -110,8 +110,25 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 			jeu = jeux[source]
 		else:
 			sans_tuiles.append(str(c["nom"]))
-		sorties.append({"name": str(c["nom"]), "visible": bool(c.get("visible", true)), "tileset": jeu,
-			"cells": cases_a_plat(c.get("cases", []))})
+		var sortie := {"name": str(c["nom"]), "visible": bool(c.get("visible", true)), "tileset": jeu,
+			"cells": cases_a_plat(c.get("cases", []))}
+		# LES VARIANTES VOULUES (4 octobre 2026) : les poids du tirage et les choix posés, s'il y en a.
+		var poids: Dictionary = c.get("poids", {})
+		if not poids.is_empty():
+			var p := {}
+			for cle in poids:
+				p[FN.id_de_cle(cle)] = (poids[cle] as Array).map(func(w): return int(w))
+			sortie["variant_weights"] = p
+		var choix: Dictionary = c.get("choix", {})
+		if not choix.is_empty():
+			var sommets: Array = choix.keys()
+			sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+				return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+			var plat: Array = []
+			for s in sommets:
+				plat.append_array([s.x, s.y, s.z, int(choix[s])])
+			sortie["variant_choices"] = plat
+		sorties.append(sortie)
 	var sorties_eau: Array = []
 	var noms_eau := {}
 	for e in eaux:
@@ -142,7 +159,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	f.close()
 	var r2 := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r2 != null:
-		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
+		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_variantes()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
 			% generateur + "plugin for Godot, Unity or Unreal: Import MarchingBlocks world.\n")
 		r2.close()
 	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles,
@@ -256,6 +273,46 @@ static func lire(monde: Variant) -> Dictionary:
 			cases.append([cle.x, cle.y, cle.z])
 		sortie.append({"name": c["name"], "visible": c["visible"], "tileset": jeu, "cells": cases})
 	return {"layers": sortie}
+
+
+## LES VARIANTES DANS LE MONDE (4 octobre 2026) — écrites dans le README ; ⚠ pas encore dans `regle()` ni dans les cas
+## d'épreuve des greffons (la liste des greffons à faire) : des clés en plus, que leurs lecteurs ignorent.
+static func regle_variantes() -> PackedStringArray:
+	return PackedStringArray([
+		"Each layer may also carry (optional; the tileset's README says how they are used):",
+		"  variant_weights   an object: key → an array of integers, the weights of the base tile and of each",
+		"                    variant of that key in the random draw",
+		"  variant_choices   a flat array of integers, x y z c per vertex (FORMAT space, the vertex of the tileset",
+		"                    rule): at that vertex, place variant c (0 is the base tile). Same vertex never twice.",
+	])
+
+
+## Lit les variantes d'une couche de `world.json` : {"weights": {clé: [w]}, "choices": {Vector3i: c}} ou {"error"}.
+static func lire_variantes(couche: Variant) -> Dictionary:
+	if not couche is Dictionary:
+		return {"error": "a layer is not an object"}
+	var nom := str((couche as Dictionary).get("name", "?"))
+	var w = couche.get("variant_weights", {})
+	if not w is Dictionary:
+		return {"error": "layer « %s »: variant_weights is not an object" % nom}
+	var poids := {}
+	for k in w:
+		if not w[k] is Array or (w[k] as Array).any(func(x): return not (x is float or x is int) or int(x) != x):
+			return {"error": "layer « %s »: the weights of « %s » are not integers" % [nom, k]}
+		poids[str(k)] = (w[k] as Array).map(func(x): return int(x))
+	var plat = couche.get("variant_choices", [])
+	if not plat is Array or (plat as Array).size() % 4 != 0:
+		return {"error": "layer « %s »: variant_choices is not a list of x y z c" % nom}
+	var choix := {}
+	for i in range(0, plat.size(), 4):
+		for n in [plat[i], plat[i + 1], plat[i + 2], plat[i + 3]]:
+			if not (n is float or n is int) or int(n) != n:
+				return {"error": "layer « %s »: a variant choice is not made of integers" % nom}
+		var s := Vector3i(int(plat[i]), int(plat[i + 1]), int(plat[i + 2]))
+		if choix.has(s):
+			return {"error": "layer « %s »: the vertex %s is chosen twice" % [nom, s]}
+		choix[s] = int(plat[i + 3])
+	return {"weights": poids, "choices": choix}
 
 
 ## LA LECTURE DE L'EAU, selon `regle_eau()`. Rend {"water": [{name, visible, look, mesh, sources: [[x,y,z]…]}]}

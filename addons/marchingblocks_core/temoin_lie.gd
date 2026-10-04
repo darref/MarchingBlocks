@@ -12,6 +12,7 @@ extends RefCounted
 ## ⚠ **LES OCCURRENCES NE S'ENREGISTRENT PAS** : elles se DÉDUISENT du témoin (§6), comme dans le `.glb`.
 
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const FORMAT := "marchingblocks-linked-witness"
@@ -23,9 +24,16 @@ class Lot extends RefCounted:
 	var tuiles := {}
 
 
-var tuiles := {}          # clé → MaillageEdite
+var tuiles := {}          # nom de tuile (clé, ou `<clé>_var<k>`) → MaillageEdite
 var materiaux: Array = []
-var occurrences: Array = []   # [{sommet, cle, orientation, pose: Transform3D}]
+## [{sommet, cle (la TUILE que montre l'occurrence), modele (sa clé), orientation, pose: Transform3D}]
+var occurrences: Array = []
+## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) : {sommet du témoin: k} — les occurrences qui montrent la variante k
+## de leur clé. Une variante est une tuile de plus dans `tuiles` (`<clé>_var<k>`), sculptée comme les autres : ses
+## copies sont les occurrences qui lui sont affectées, et ses bords sont ceux de sa clé (`Sections` la range dans les
+## classes de sa clé). ⚠ LE TÉMOIN MONTRE CE QUE LE MONDE MONTRERA : une variante y est posée à côté de ses voisines
+## du témoin, et c'est là qu'on juge ses raccords.
+var affectation := {}
 
 
 ## Le témoin calculé, en tuiles liées (~2 s : `BlocsMaitres.tuiles_du_temoin` ne découpe que 52 sommets).
@@ -92,6 +100,7 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 		return {"mat": connus[id], "teinte": null}
 	for cle in lu["pieces"]:
 		t.tuiles[cle] = ME.depuis(lu["pieces"][cle], 0.00001, materiau_de)
+	t.affectation = (lu.get("affectation", {}) as Dictionary).duplicate()
 	t._partager()
 	t._deduire_les_occurrences()
 	return t
@@ -172,10 +181,106 @@ func _deduire_les_occurrences() -> void:
 		if not tuiles.has(o["cle"]):
 			continue
 		var e: Dictionary = o.duplicate()
+		e["modele"] = o["cle"]
 		e["pose"] = Transform3D(grille.get_basis_with_orthogonal_index(o["orientation"]),
 			Vector3(o["sommet"]) + Vector3.ONE)
 		occurrences.append(e)
 	grille.free()
+	_reaffecter()
+
+
+## La tuile que montre chaque occurrence, d'après `affectation` ; une affectation vers une variante absente est oubliée.
+func _reaffecter() -> void:
+	var modele_de := {}
+	for o in occurrences:
+		modele_de[o["sommet"]] = o["modele"]
+	for s in affectation.keys():
+		if not modele_de.has(s) or not tuiles.has(MB.nom_de_variante(modele_de[s], int(affectation[s]))):
+			affectation.erase(s)
+	for o in occurrences:
+		o["cle"] = MB.nom_de_variante(o["modele"], int(affectation.get(o["sommet"], 0)))
+
+
+## ── LES VARIANTES : créer, affecter, supprimer — chacune rend ce qu'il faut pour l'annulation (`etat_des_variantes`).
+
+## Combien de variantes porte la clé `cle`.
+func nombre_de_variantes(cle: String) -> int:
+	return MB.nombre_de_variantes(cle, tuiles)
+
+
+## UNE VARIANTE NEUVE de la clé de l'occurrence `i`, COPIE de la tuile que cette occurrence montre, et l'occurrence
+## passe à elle. Rend son nom, ou "" (plus de place : `MB.VARIANTES_MAXI`).
+func creer_variante(i: int) -> String:
+	if i < 0 or i >= occurrences.size():
+		return ""
+	var cle: String = occurrences[i]["modele"]
+	var k: int = nombre_de_variantes(cle) + 1
+	if k > MB.VARIANTES_MAXI:
+		return ""
+	var nom: String = MB.nom_de_variante(cle, k)
+	tuiles[nom] = (tuiles[occurrences[i]["cle"]] as RefCounted).copie()
+	_partager()
+	affectation[occurrences[i]["sommet"]] = k
+	_reaffecter()
+	return nom
+
+
+## L'occurrence `i` montre la variante `k` de sa clé (0 : la base). Rend false si cette variante n'existe pas.
+func affecter(i: int, k: int) -> bool:
+	if i < 0 or i >= occurrences.size():
+		return false
+	if k > 0 and not tuiles.has(MB.nom_de_variante(occurrences[i]["modele"], k)):
+		return false
+	if k <= 0:
+		affectation.erase(occurrences[i]["sommet"])
+	else:
+		affectation[occurrences[i]["sommet"]] = k
+	_reaffecter()
+	return true
+
+
+## SUPPRIME la variante `nom` : ses occurrences reviennent à la base, et les variantes suivantes de la clé descendent
+## d'un rang (une variante 3 sans 2 ne serait jamais posée). Rend false si `nom` n'est pas une variante.
+func supprimer_variante(nom: String) -> bool:
+	var k: int = MB.rang_de_variante(nom)
+	if k == 0 or not tuiles.has(nom):
+		return false
+	var cle: String = MB.cle_de_tuile(nom)
+	var n: int = nombre_de_variantes(cle)
+	tuiles.erase(nom)
+	for j in range(k + 1, n + 1):
+		tuiles[MB.nom_de_variante(cle, j - 1)] = tuiles[MB.nom_de_variante(cle, j)]
+		tuiles.erase(MB.nom_de_variante(cle, j))
+	for o in occurrences:
+		if o["modele"] != cle or not affectation.has(o["sommet"]):
+			continue
+		var r := int(affectation[o["sommet"]])
+		if r == k:
+			affectation.erase(o["sommet"])
+		elif r > k:
+			affectation[o["sommet"]] = r - 1
+	_reaffecter()
+	return true
+
+
+## L'ÉTAT DES VARIANTES, pour l'annulation : leurs tuiles (copies) et l'affectation.
+func etat_des_variantes() -> Dictionary:
+	var t := {}
+	for nom in tuiles:
+		if MB.rang_de_variante(nom) > 0:
+			t[nom] = tuiles[nom].copie()
+	return {"tuiles": t, "affectation": affectation.duplicate()}
+
+
+func poser_etat_des_variantes(e: Dictionary) -> void:
+	for nom in tuiles.keys():
+		if MB.rang_de_variante(nom) > 0:
+			tuiles.erase(nom)
+	for nom in e["tuiles"]:
+		tuiles[nom] = (e["tuiles"][nom] as RefCounted).copie()
+	_partager()
+	affectation = (e["affectation"] as Dictionary).duplicate()
+	_reaffecter()
 
 
 ## Toutes les tuiles pointent le MÊME tableau de matériaux.
@@ -206,7 +311,8 @@ func copie() -> RefCounted:
 	for cle in tuiles:
 		t.tuiles[cle] = tuiles[cle].copie()
 	t._partager()
-	t.occurrences = occurrences
+	t.affectation = affectation.duplicate()
+	t.occurrences = occurrences.duplicate(true)
 	return t
 
 
@@ -491,7 +597,7 @@ func vers_glb(chemin: String, pour_blender := false) -> String:
 	# ce sont les maillages qui DEMANDENT les cartes (`materiau_godot`) : appelé avant eux, rien n'était à refaire
 	# (vu rougir, `test_cartes_pbr`). Les textures se mettent à jour en place, les maillages les citent déjà.
 	load("res://addons/marchingblocks_core/peinture.gd").suivre_les_cartes(true)
-	return BM.ecrire_le_temoin_lie(chemin, maillages)
+	return BM.ecrire_le_temoin_lie(chemin, maillages, affectation)
 
 
 ## Un maillage SOUDÉ : un sommet par (position, UV, couleur), surface par surface, matériau gardé.
@@ -549,7 +655,11 @@ func vers_dictionnaire() -> Dictionary:
 		var c: Color = m.get("couleur", Color.WHITE)
 		e["couleur"] = [c.r, c.g, c.b, c.a]
 		mt.append(e)
-	return {"format": FORMAT, "version": VERSION, "materiaux": mt, "tuiles": t}
+	var aff: Array = []
+	for s in affectation:
+		var v: Vector3i = s
+		aff.append_array([v.x, v.y, v.z, int(affectation[s])])
+	return {"format": FORMAT, "version": VERSION, "materiaux": mt, "tuiles": t, "affectation": aff}
 
 
 ## null si ce n'est pas un témoin lié, ou s'il vient d'une version plus récente.
@@ -567,6 +677,12 @@ static func depuis_dictionnaire(d: Dictionary) -> RefCounted:
 		if m == null:
 			return null
 		t.tuiles[cle] = m
+	# Les variantes (4 octobre 2026) : un témoin d'avant n'en a pas ; une affectation malformée refuse le fichier.
+	var aff = d.get("affectation", [])
+	if not aff is Array or (aff as Array).size() % 4 != 0:
+		return null
+	for k in range(0, (aff as Array).size(), 4):
+		t.affectation[Vector3i(int(aff[k]), int(aff[k + 1]), int(aff[k + 2]))] = int(aff[k + 3])
 	t._partager()
 	t._deduire_les_occurrences()
 	return t

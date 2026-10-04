@@ -281,6 +281,13 @@ func _outils() -> String:
 	l.append(_note("Slanted walls work: a staircase wall at 45° is read as one slanted face, and the shape "
 		+ "leaves it at 45°. Where a slanted shape would make two cells touch by an edge only — which the "
 		+ "tiles forbid — it adds the missing cells itself, and says how many."))
+	l.append(_titre("Variants"))
+	l.append("Where a tile has variants (made in Witness geometry), World mixes them by a [b]random draw[/b] — the "
+		+ "same at every rebuild, never shuffled. The [b]Variant tool[/b] (section Variants): click a tile to show its "
+		+ "next variant (base, 1, 2…), right click to give it back to the draw. [b]Weights[/b] set how often each "
+		+ "one is drawn for the tile you last pointed at (0: never). [b]On the selection[/b] picks Random, Base or a "
+		+ "variant for every tile touching the selected cells. Weights and picks belong to the layer and travel "
+		+ "in the exported world; every change is one " + _touche("Ctrl+Z") + ".")
 	l.append(_titre("Fluids"))
 	l.append("Fluids is a workshop of its own, next to World. Open it and click once: the world decides what the water becomes. In a hollow, of any "
 		+ "size, a [b]lake[/b] fills it to its brim. On a slope or a ledge, a [b]river[/b] runs down the "
@@ -433,6 +440,14 @@ func _modeleur() -> String:
 		+ "A hole that reaches a cut plane took a piece of that border away: Fill holes rebuilds it with the points the "
 		+ "next tiles share, then joins it to the rim — so no gap opens in the world. If some border point cannot be "
 		+ "rebuilt, the report says so: close that part by hand (" + _touche("F") + " on the rim).")
+	l.append(_titre("Variants"))
+	l.append("A tile that repeats a lot — a cliff, a ground, a run of corners — can have [b]variants[/b]: other "
+		+ "sculptures of the same tile. Click a copy, then [b]New variant from this copy[/b] (section Variants): that "
+		+ "copy now shows the variant, and only the copies that show it follow when you sculpt it. [b]This copy "
+		+ "shows[/b] switches any copy between the base and its variants, so you judge a variant next to its "
+		+ "real neighbours. A variant keeps the borders of its tile — move a border point and every tile follows, "
+		+ "base and variants alike — so it fits wherever the tile fits.")
+	l.append(_note("Sculpt a variant's middle freely; its borders are shared. Up to nine variants per tile."))
 	l.append(_titre("Materials — in Witness texturing"))
 	l.append("[b]New material[/b], select faces, [b]Assign[/b]. A material has a colour, roughness, "
 		+ "metallic, an optional image, and how many cells one copy of the image covers. Images are "

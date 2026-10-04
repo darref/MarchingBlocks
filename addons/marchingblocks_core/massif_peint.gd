@@ -68,6 +68,11 @@ var _empreinte: int = -1
 var union := {}
 var rang := -1
 var _miennes := {}
+## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) — `poids` : {clé: [base, var1, …]} (entiers, le tirage) ; `choix` :
+## {sommet: rang de variante} (un choix posé dans World, 0 = la base). La règle : `MB.tuile_du_sommet`. Les changer
+## demande `reconstruire()` (les poids) ou `reconstruire_sommets()` (des choix).
+var poids := {}
+var choix := {}
 ## Combien de reconstructions COMPLÈTES ont eu lieu : le contrôle qui dit que la route locale est bien prise.
 var reconstructions_completes := 0
 var _dernier_bilan := {"pieces": 0, "fautes": 0, "muets": 0}
@@ -281,6 +286,8 @@ func reconstruire() -> Dictionary:
 		_y_bas = mini(_y_bas, (c as Vector3i).y)
 	if rang < 0:
 		for d in MB.poses(pleines, index):
+			if d["cle"] != "":
+				d["tuile"] = MB.tuile_du_sommet(d["sommet"], d["cle"], index, poids, choix)
 			_etat[d["sommet"]] = d
 			_poser(d, 1)
 		# Les sommets touchés sans surface (MUETS) : présents dans l'état, vides — c'est ce qui les compte.
@@ -373,24 +380,50 @@ func reconstruire_autour(changees) -> Dictionary:
 				for y in range(_y_bas - 1, p.y + 1):
 					sommets[Vector3i(sx, y, sz)] = true
 	for k in sommets:
-		var s: Vector3i = k
-		var avant = _etat.get(s, null)
-		var apres = _decision(s)
-		if avant == apres:
-			continue
-		if avant != null:
-			_compte["touches"] -= 1
-			if not avant.is_empty():
-				_poser(avant, -1)
-		if apres == null:
-			_etat.erase(s)
-		else:
-			_etat[s] = apres
-			_compte["touches"] += 1
-			if not apres.is_empty():
-				_poser(apres, 1)
+		_refaire(k)
 	_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
 	return _bilan()
+
+
+## Refait la décision de quelques SOMMETS — un choix de variante posé ou retiré (4 octobre 2026). Les cases n'ont pas
+## changé : seule la tuile tirée peut changer. Hors d'état (jamais reconstruit, lot changé), tout est refait.
+func reconstruire_sommets(sommets) -> Dictionary:
+	var rendu := _rendu()
+	if not _pret or rendu == null or rendu.mesh_library != lot_courant() or rendu.mesh_library != _lot_pose:
+		return reconstruire()
+	for k in sommets:
+		_refaire(k)
+	return _bilan()
+
+
+func _refaire(k: Vector3i) -> void:
+	var avant = _etat.get(k, null)
+	var apres = _decision(k)
+	if avant == apres:
+		return
+	if avant != null:
+		_compte["touches"] -= 1
+		if not avant.is_empty():
+			_poser(avant, -1)
+	if apres == null:
+		_etat.erase(k)
+	else:
+		_etat[k] = apres
+		_compte["touches"] += 1
+		if not apres.is_empty():
+			_poser(apres, 1)
+
+
+## La tuile POSÉE à un sommet (son nom dans le lot), "" s'il n'y en a pas — ce que l'outil Variant de World lit.
+func tuile_posee(s: Vector3i) -> String:
+	var d: Dictionary = _etat.get(s, {}) if _etat.get(s, null) != null else {}
+	return str(d.get("tuile", d.get("cle", "")))
+
+
+## La clé posée à un sommet ("" s'il n'y en a pas).
+func cle_posee(s: Vector3i) -> String:
+	var d: Dictionary = _etat.get(s, {}) if _etat.get(s, null) != null else {}
+	return str(d.get("cle", ""))
 
 
 ## La décision d'un sommet pour CETTE couche : null s'il n'est pas à elle (aucune case, ou, en couches, une couche
@@ -401,7 +434,10 @@ func _decision(s: Vector3i) -> Variant:
 			return null
 	elif MB.bits(_pleines, s) == 0:
 		return null
-	return MB.pose_du_sommet(_pleines, s, _index, _plafond)
+	var d: Dictionary = MB.pose_du_sommet(_pleines, s, _index, _plafond)
+	if not d.is_empty() and d["cle"] != "":
+		d["tuile"] = MB.tuile_du_sommet(s, d["cle"], _index, poids, choix)
+	return d
 
 
 ## Pose (sens = 1) ou retire (sens = −1) une décision dans les grilles, et tient les comptes.
@@ -419,7 +455,7 @@ func _poser(d: Dictionary, sens: int) -> void:
 	if d["dehors"]:
 		_compte["dehors"] += sens
 	if sens > 0:
-		_rendu().set_cell_item(sommet, _index[d["cle"]], d["orientation"])
+		_rendu().set_cell_item(sommet, _index[d.get("tuile", d["cle"])], d["orientation"])
 	else:
 		_rendu().set_cell_item(sommet, GridMap.INVALID_CELL_ITEM)
 

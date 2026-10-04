@@ -35,8 +35,10 @@ const TEMOIN := "witness"
 ## témoin modélisé était UN par projet : le remodeler pour une couche changeait en silence les tuiles d'une
 ## autre au chargement suivant (sa source avait changé, donc elle était retranchée).
 ## `id` : un identifiant STABLE (le nom se change, et deux couches peuvent le porter), qui nomme ses fichiers.
+## `poids`, `choix` : les VARIANTES VOULUES dans le monde de la couche (4 octobre 2026) — {clé: [base, var1, …]} et
+## {sommet: rang} (la règle : `MB.tuile_du_sommet`). Les variantes elles-mêmes sont dans son témoin.
 static func couche(nom: String, id := "") -> Dictionary:
-	return {"nom": nom, "source": "", "visible": true, "cases": {}, "temoin": "", "id": id}
+	return {"nom": nom, "source": "", "visible": true, "cases": {}, "temoin": "", "id": id, "poids": {}, "choix": {}}
 
 
 ## UNE COUCHE D'EAU (Jordan, 1er octobre 2026) : l'eau appartient au monde entier, rangée dans ses PROPRES
@@ -68,9 +70,23 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 			plat[i + 2] = v.z
 			i += 3
 		blocs.append(str(plat))
-		sorties.append({"nom": c["nom"], "source": c["source"],
+		var sortie := {"nom": c["nom"], "source": c["source"],
 			"visible": c["visible"], "cases": MARQUE_CASES % (blocs.size() - 1), "temoin": str(c.get("temoin", "")),
-			"id": str(c.get("id", ""))})
+			"id": str(c.get("id", ""))}
+		var poids: Dictionary = c.get("poids", {})
+		if not poids.is_empty():
+			var p := {}
+			for cle in poids:
+				p[cle] = (poids[cle] as Array).map(func(w): return int(w))
+			sortie["poids"] = p
+		var choix: Dictionary = c.get("choix", {})
+		if not choix.is_empty():
+			var plat_choix: Array = []
+			for s in choix:
+				var v: Vector3i = s
+				plat_choix.append_array([v.x, v.y, v.z, int(choix[s])])
+			sortie["choix"] = plat_choix
+		sorties.append(sortie)
 	var sorties_eau: Array = []
 	for e in eaux:
 		var plat: Array = []
@@ -128,9 +144,28 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 			cases[Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = true
 		# ⚠ Un projet d'avant le 30 septembre 2026 n'a ni `temoin` ni `id` : aucun témoin à la couche, et un
 		# identifiant donné par l'écran à l'ouverture.
+		# Les variantes (4 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier.
+		var poids_lu = c.get("poids", {})
+		var poids := {}
+		if not poids_lu is Dictionary:
+			erreurs.append("layer %d: variant weights are not an object" % i)
+			return {}
+		for cle in poids_lu:
+			var w = poids_lu[cle]
+			if not w is Array or (w as Array).any(func(x): return not (x is float or x is int)):
+				erreurs.append("layer %d: the weights of « %s » are not numbers" % [i, cle])
+				return {}
+			poids[str(cle)] = (w as Array).map(func(x): return int(x))
+		var choix_lu = c.get("choix", [])
+		if not choix_lu is Array or (choix_lu as Array).size() % 4 != 0:
+			erreurs.append("layer %d: variant choices are not x, y, z, variant quadruples" % i)
+			return {}
+		var choix := {}
+		for k in range(0, (choix_lu as Array).size(), 4):
+			choix[Vector3i(int(choix_lu[k]), int(choix_lu[k + 1]), int(choix_lu[k + 2]))] = int(choix_lu[k + 3])
 		couches.append({"nom": str(c.get("nom", "Layer %d" % (i + 1))), "source": str(c.get("source", "")),
 			"visible": bool(c.get("visible", true)), "cases": cases, "temoin": str(c.get("temoin", "")),
-			"id": str(c.get("id", ""))})
+			"id": str(c.get("id", "")), "poids": poids, "choix": choix})
 	var active: int = clampi(int(brut.get("active", 0)), 0, couches.size() - 1)
 	# Les couches d'eau : un projet d'avant le 1er octobre 2026 n'en a pas.
 	var eaux: Array = []

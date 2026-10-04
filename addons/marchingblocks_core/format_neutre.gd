@@ -60,7 +60,11 @@ static func id_de_cle(cle: String) -> String:
 
 ## Le nom de la tuile d'une clé, en sortie. ⚠ UNE tuile par clé (charte §3, 30 septembre 2026) : son nom
 ## EST l'id de la clé — les « _2 », « _3 » des exemplaires ont vécu du 27 au 30 septembre.
+## ⚠ Une VARIANTE VOULUE (4 octobre 2026) garde le nom de sa clé, suivi de « _var<k> » : « slab_b2h2_outdoor_var1 ».
 static func nom_de_tuile(cle: String) -> String:
+	var k: int = MB.rang_de_variante(cle)
+	if k > 0:
+		return id_de_cle(MB.cle_de_tuile(cle)) + MB.SUFFIXE_VARIANTE + str(k)
 	return id_de_cle(cle)
 
 
@@ -146,6 +150,26 @@ static func regle() -> PackedStringArray:
 	])
 
 
+## LES VARIANTES VOULUES (4 octobre 2026), en clair — ⚠ PAS DANS `regle()` : les cas d'épreuve des trois greffons en
+## dépendent, et les greffons attendent la fin du logiciel (charte §0). Elles sont dans la liste des greffons à faire.
+## Un greffon qui ne les lit pas pose la tuile de base : le monde reste juste, sans variété.
+static func regle_des_variantes() -> PackedStringArray:
+	return PackedStringArray([
+		"Variants (optional). variants[key] lists other tiles of that key, in order: variant 1, 2, ... They have the",
+		"   same borders as tiles[key] and are placed exactly like it (step 6). After step 5 chose key K at vertex v:",
+		"   a. If the world's layer gives a CHOICE at v (variant_choices, see world.json) and 0 <= choice <= n (n = the",
+		"      number of variants of K), place tile choice (0 is tiles[K], i the i-th variant).",
+		"   b. Otherwise DRAW: weights w[0..n] are the layer's variant_weights[K] (a missing entry is 1, a negative one",
+		"      0). If they sum to 0, place tiles[K]. Else h = hash(v) mod sum, and the tile is the first i whose",
+		"      running sum of weights exceeds h.",
+		"   hash(v), on 64-bit integers, & = bitwise and, ^ = xor, >> = logical shift:",
+		"      h = ((v.x * 73856093) ^ (v.y * 19349663) ^ (v.z * 83492791)) & 0x7FFFFFFF",
+		"      h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF;  h = ((h ^ (h >> 16)) * 0x45D9F3B) & 0x7FFFFFFF",
+		"      hash = h ^ (h >> 16)",
+		"   Never draw at random at run time: the same world must give the same tiles at every rebuild.",
+	])
+
+
 ## Les champs COMMUNS au manifeste et aux cas d'épreuve : tout ce qui fait la règle, sans les tuiles.
 static func regle_du_format() -> Dictionary:
 	var coins: Array = []
@@ -189,6 +213,7 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 
 	var du_lot := tuiles_du_lot(lot)
 	var tuiles := {}
+	var variantes := {}
 	var racine := Node3D.new()
 	racine.name = "Tiles"
 	var vus := {}
@@ -202,7 +227,18 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 		inst.name = tuile
 		inst.mesh = _maillage_exportable(lot.get_item_mesh(du_lot[cle]), lot.get_item_mesh_transform(du_lot[cle]))
 		racine.add_child(inst)
-		tuiles[id_de_cle(cle)] = tuile
+		# ⚠ UNE VARIANTE N'EST PAS UNE CLÉ (4 octobre 2026) : `tiles` reste {clé: SA tuile de base} — un greffon qui ne
+		# lit pas les variantes pose la base, et le monde reste juste. Elles vont dans `variants`, dans l'ordre.
+		if MB.rang_de_variante(cle) == 0:
+			tuiles[id_de_cle(cle)] = tuile
+	for cle in du_lot:
+		var base: String = MB.cle_de_tuile(cle)
+		if MB.rang_de_variante(cle) == 0 or MB.rang_de_variante(cle) > MB.nombre_de_variantes(base, du_lot):
+			continue
+		var liste: Array = []
+		for k in range(1, MB.nombre_de_variantes(base, du_lot) + 1):
+			liste.append(nom_de_tuile(MB.nom_de_variante(base, k)))
+		variantes[id_de_cle(base)] = liste
 
 	var marqueur := MeshInstance3D.new()
 	marqueur.name = MARQUEUR
@@ -243,6 +279,9 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var manifeste := regle_du_format()
 	manifeste.merge({"format": FORMAT, "version": VERSION, "generator": generateur, "name": n,
 		"tiles_file": "tiles.glb", "tiles": tuiles, "missing": manquantes}, true)
+	if not variantes.is_empty():
+		manifeste["variants"] = variantes
+		manifeste["variants_rules_text"] = Array(regle_des_variantes())
 	var f := FileAccess.open(cible.path_join("tileset.json"), FileAccess.WRITE)
 	if f == null:
 		return {"erreur": "tileset.json could not be written (error %d)" % FileAccess.get_open_error()}
@@ -250,7 +289,8 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	f.close()
 	var r := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r != null:
-		r.store_string("\n".join(regle()) + "\n\nOpen format — free plugins for Godot, Unity and Unreal "
+		r.store_string("\n".join(regle()) + ("\n\n" + "\n".join(regle_des_variantes()) if not variantes.is_empty() else "")
+			+ "\n\nOpen format — free plugins for Godot, Unity and Unreal "
 			+ "read it. Made with %s.\n" % generateur)
 		r.close()
 	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes}
