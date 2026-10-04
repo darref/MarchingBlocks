@@ -338,6 +338,17 @@ func _ready() -> void:
 	_tuile_vue.visible = false
 	_vue.add_child(_tuile_vue)
 
+	_plan_mer = MeshInstance3D.new()
+	_plan_mer.mesh = PlaneMesh.new()
+	var mp := StandardMaterial3D.new()
+	mp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mp.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mp.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_plan_mer.material_override = mp
+	_plan_mer.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_plan_mer.visible = false
+	_vue.add_child(_plan_mer)
+
 	_camera = Camera3D.new()
 	_camera.fov = 45
 	_vue.add_child(_camera)
@@ -374,6 +385,8 @@ func montrer(quoi: String) -> void:
 		_zone_vue.visible = false
 	if _tuile_vue != null:
 		_tuile_vue.visible = false
+	if _plan_mer != null:
+		_plan_mer.visible = false
 	_tuile_dite = null
 	if _boite_vue != null:
 		_boite_vue.visible = false
@@ -1125,6 +1138,52 @@ func cadrer_toute_la_matiere() -> bool:
 	return true
 
 
+## ² DANS WORLD ET FLUIDS (Jordan, 4 octobre 2026 : « se téléporter là où le curseur pointe vers de la matière […] à une
+## distance raisonnable pour ne pas s'enfoncer dans la matière avec la caméra »). Le rayon sous la souris contre la
+## matière VISIBLE (l'occupation, comme le Ctrl+clic) ; la cible devient le point touché sur sa face, l'œil recule
+## LE LONG DU RAYON — un trajet que le rayon vient de parcourir à vide — de `RECUL_TELEPORT` cases (moins si l'on était
+## déjà plus près, jamais plus loin que l'œil d'où il est parti). ⚠ L'élévation est bornée comme celle de l'orbite :
+## l'œil peut alors quitter le rayon, donc un second rayon, de la cible vers l'œil, raccourcit le recul s'il touche.
+## Rend faux si le rayon ne touche rien (ou si la souris est hors de la vue).
+const RECUL_TELEPORT := 8.0
+const RECUL_TELEPORT_MINI := 1.5
+
+
+func teleporter_vers(position: Vector2) -> bool:
+	if not Rect2(Vector2.ZERO, size).has_point(position):
+		return false
+	var origine := _camera.project_ray_origin(position)
+	var sens := _camera.project_ray_normal(position).normalized()
+	# ⚠ PAS `PORTEE` (400) : on peut reculer jusqu'à 1 000 cases (`DISTANCE_MAXI_MONDE`), et c'est de loin qu'on saute.
+	var r: Dictionary = Outils.rayon(_occupe_visible, origine, sens, DISTANCE_MAXI_MONDE * 3.0, {})
+	if not r["touche"]:
+		return false
+	var c: Vector3i = r["case"]
+	var n: Vector3i = r["normale"]
+	var axe := 0 if n.x != 0 else (1 if n.y != 0 else 2)
+	var plan: float = float(c[axe] + (1 if n[axe] > 0 else 0))
+	var t: float = (plan - origine[axe]) / sens[axe] if absf(sens[axe]) > 1e-9 else 0.0
+	var point := origine + sens * maxf(t, 0.0)
+	var recul := clampf(minf(_distance, RECUL_TELEPORT), RECUL_TELEPORT_MINI, maxf(t, RECUL_TELEPORT_MINI))
+	_azimut = atan2(-sens.x, -sens.z)
+	_elevation = clampf(asin(clampf(-sens.y, -1.0, 1.0)), -1.4, 1.4)
+	var vers_l_oeil := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
+	# Le second rayon part juste devant la face (pas DE la case touchée, que `rayon` saute de toute façon).
+	var depart := point + Vector3(n) * 0.01
+	var retour: Dictionary = Outils.rayon(_occupe_visible, depart, vers_l_oeil, recul + 0.5, {})
+	if retour["touche"]:
+		var cr: Vector3i = retour["case"]
+		var nr: Vector3i = retour["normale"]
+		var a2 := 0 if nr.x != 0 else (1 if nr.y != 0 else 2)
+		var plan2: float = float(cr[a2] + (1 if nr[a2] > 0 else 0))
+		var t2: float = (plan2 - depart[a2]) / vers_l_oeil[a2] if absf(vers_l_oeil[a2]) > 1e-9 else 0.0
+		recul = clampf(t2 - 0.5, 0.3, recul)
+	_cible = point
+	_distance = recul
+	_caler()
+	return true
+
+
 func _finir_boite(bouton: int) -> void:
 	var dedans: Dictionary = _volume_vise(_coin_boite, _fin_du_glisse())
 	if dedans.is_empty():
@@ -1251,6 +1310,36 @@ func source_visee(position: Vector2) -> Variant:
 
 func montrer_apercu(cases_: Array, teinte: Color) -> void:
 	_remplir(_apercu, cases_, teinte)
+
+
+## L'APERÇU DE LA MER (Jordan, 4 octobre 2026) : un plan à la hauteur où la nappe se dessinerait (rangée + NAPPE),
+## sur la boîte du monde élargie de `MARGE_MER` cases — RIEN N'EST CALCULÉ, c'est ce qui le rend gratuit au survol.
+## `hauteur` null : caché. `boite` : celle de `FL.boite` ({lo, hi}, vide sans monde).
+const MARGE_MER := 24
+var _plan_mer: MeshInstance3D
+
+
+func montrer_plan_mer(hauteur: Variant, boite: Dictionary = {}, teinte: Color = TEINTE_EAU) -> void:
+	if _plan_mer == null:
+		return
+	if hauteur == null:
+		_plan_mer.visible = false
+		return
+	var lo := Vector3(-MARGE_MER, 0, -MARGE_MER)
+	var hi := Vector3(MARGE_MER, 0, MARGE_MER)
+	if not boite.is_empty():
+		lo = Vector3(boite["lo"]) - Vector3(MARGE_MER, 0, MARGE_MER)
+		hi = Vector3(boite["hi"]) + Vector3.ONE + Vector3(MARGE_MER, 0, MARGE_MER)
+	(_plan_mer.mesh as PlaneMesh).size = Vector2(hi.x - lo.x, hi.z - lo.z)
+	_plan_mer.position = Vector3((lo.x + hi.x) * 0.5, float(hauteur) + EauMaillage.NAPPE, (lo.z + hi.z) * 0.5)
+	var c := teinte
+	c.a = maxf(c.a, 0.45)
+	(_plan_mer.material_override as StandardMaterial3D).albedo_color = c
+	_plan_mer.visible = true
+
+
+func plan_mer_visible() -> Variant:
+	return _plan_mer.position.y - EauMaillage.NAPPE if _plan_mer != null and _plan_mer.visible else null
 
 
 ## Les nappes : [[maillage ou null, matériau, visible], …], une par couche d'eau, dans l'ordre.

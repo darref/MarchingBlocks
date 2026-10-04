@@ -299,8 +299,12 @@ func _outils() -> String:
 		+ _touche("Ctrl") + _touche("Z") + " included. It sees the cells of every layer, hidden ones too. "
 		+ "A right click on water removes it. Water layers are its own: [b]New[/b], [b]Delete[/b], show, hide or "
 		+ "pick each one. [b]River width[/b] (1 to 9) lays that many sources side by side, across the river's "
-		+ "first step: one click, one wide river, one " + _touche("Ctrl+Z") + ". There is only [b]one sea[/b]: a "
-		+ "click in the void at another height moves it. In the Play test, a river's current pushes you along.")
+		+ "first step: one click, one wide river, one " + _touche("Ctrl+Z") + ". There is only [b]one sea[/b], and "
+		+ "you choose its height before anything is computed: over the void, a flat plane shows where it would "
+		+ "be; a first click pins it, the mouse wheel or " + _touche("PgUp") + " / " + _touche("PgDn") + " raise or "
+		+ "lower it, and a second click or " + _touche("Enter") + " places it (a sea at another height moves the "
+		+ "one there was). A right click or " + _touche("Esc") + " cancels. In the Play test, a river's current "
+		+ "pushes you along.")
 	l.append("[b]Look[/b] sets how a water layer is drawn: [b]Stylized[/b] (flat toon colours that darken with "
 		+ "depth, a white line on the shore), [b]Clear[/b] (you see the bottom through it, bent by the waves; its "
 		+ "colour deepens with depth), [b]Reflective[/b] (dark and smooth, a mirror at grazing angles: the sky, "
@@ -661,7 +665,7 @@ func _raccourcis_monde() -> Array:
 	return [
 		["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["A Z E Q S D", "Fly (Navigate)"],
 		["Right drag", "Look around (Navigate)"], ["A · D · S · R · B", "Add · Dig · Select · Rect · Box"],
-		["[  ]", "Brush size"], ["PgUp · PgDn · Ctrl + wheel", "Floor y"], ["F", "Frame all the matter"],
+		["[  ]", "Brush size"], ["PgUp · PgDn · Ctrl + wheel", "Floor y"], ["F", "Frame all the matter"], ["² (` on QWERTY)", "Jump to the matter under the cursor"],
 		["Ctrl+click", "Put the grid at the height of the matter clicked"],
 		["Arrows", "Move the selection (follows the camera)"], ["Shift + ↑ ↓", "Lift / lower the selection"],
 		["Del", "Delete the selection"], ["Esc", "Clear the selection · cancel a paste"],

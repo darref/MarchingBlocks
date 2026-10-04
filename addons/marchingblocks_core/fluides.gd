@@ -507,17 +507,20 @@ static func _refus(r: Dictionary, erreur: String) -> Dictionary:
 ## une cascade large ; deux qui se rejoignent ne posent qu'une eau (le maillage les fusionne). Seules restent les
 ## voisines qui SONT des rivières (ni dans la matière, ni un lac, ni une mer, ni dans l'eau déjà là) ; `s` d'abord.
 ## Une source qui n'est pas une rivière ne s'élargit pas : un lac et une mer ont leur propre étendue.
-static func sources_en_largeur(occupees: Dictionary, s: Vector3i, largeur: int, eau_fixe: Dictionary = {}) -> Array:
-	var r := source(occupees, s, eau_fixe)
+static func sources_en_largeur(occupees: Dictionary, s: Vector3i, largeur: int, eau_fixe: Dictionary = {},
+		b: Dictionary = {}) -> Array:
+	if b.is_empty():
+		b = boite(occupees)
+	var r := source(occupees, s, eau_fixe, VOLUME_MAXI, b)
 	if largeur <= 1 or r["genre"] != "riviere":
 		return [s]
 	var travers := Vector3i(1, 0, 0)
 	var cours: Array = r["cours"]
 	for i in range(1, cours.size()):
 		var a: Vector3i = cours[i - 1]["case"]
-		var b: Vector3i = cours[i]["case"]
-		if a.x != b.x or a.z != b.z:
-			travers = Vector3i(0, 0, 1) if b.x != a.x else Vector3i(1, 0, 0)
+		var suite: Vector3i = cours[i]["case"]
+		if a.x != suite.x or a.z != suite.z:
+			travers = Vector3i(0, 0, 1) if suite.x != a.x else Vector3i(1, 0, 0)
 			break
 	var sortie: Array = [s]
 	var bas := -((largeur - 1) / 2)
@@ -527,7 +530,7 @@ static func sources_en_largeur(occupees: Dictionary, s: Vector3i, largeur: int, 
 		var c: Vector3i = s + travers * k
 		if occupees.has(c):
 			continue
-		var rc := source(occupees, c, eau_fixe)
+		var rc := source(occupees, c, eau_fixe, VOLUME_MAXI, b)
 		if rc["erreur"] == "" and rc["genre"] == "riviere":
 			sortie.append(c)
 	return sortie
@@ -599,7 +602,8 @@ static func monde(occupees: Dictionary, sources: Array, maxi := VOLUME_MAXI, ava
 			if r == null or r["genre"] == "ocean":
 				r = source(occupees, sources[i], ocean_d, maxi, b)
 			corps[i] = r
-	return {"corps": corps, "ocean": ocean_d, "sources": sources.duplicate()}
+	# `boite` : celle du monde, que l'appelant garde (elle coûte un balayage de toutes les cases).
+	return {"corps": corps, "ocean": ocean_d, "sources": sources.duplicate(), "boite": b}
 
 
 ## La boîte du monde a-t-elle changé LÀ OÙ la source regardait ? Chaque face (côtés, fond, dessus) qui a bougé doit

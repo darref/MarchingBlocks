@@ -262,6 +262,16 @@ var _index_eau := {}              # case de lac ou de rivière → [couche, sour
 var _eau_apres_le_coup := false   # l'eau attend la fin du coup de pinceau (monde lent)
 var _materiaux_eau := {}
 var _cle_apercu_eau := ""
+## La boîte du monde (`FL.boite`) pour `_occ_eau` : un balayage de toutes les cases (57 ms sur l'exemple) qu'appelaient
+## à chaque case survolée `dans_le_vide` et `source`. Gardée tant que `_occ_eau` est le même dictionnaire, de même taille.
+var _boite_eau_cache := {}
+var _boite_eau_de: Dictionary = {}
+var _boite_eau_taille := -1
+## LA HAUTEUR DE LA MER EN CHOIX (Jordan, 4 octobre 2026 : « un preview pour pouvoir choisir la hauteur de l'océan
+## avant de valider, et que le calcul ne se lance qu'après ») : null, ou la hauteur montrée par le plan d'aperçu.
+var _mer_choisie: Variant = null
+var _mer_case := Vector3i.ZERO   # la case cliquée : sa colonne porte la source, si elle reste dans le vide
+var _eau_barre_forcee := false   # le prochain recalcul de l'eau montre l'attente (la mer posée : tout est refait)
 var _droite_fluides: Panneau
 ## L'outil de World qu'on avait en entrant dans Fluids (`_vue.outil`, et la forme si c'en était une) : rendu en sortant.
 var _outil_avant_fluides := "ajouter"
@@ -1032,7 +1042,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	raccourcis.add_theme_constant_override("v_separation", 4)
 	for r in [["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["AZEQSD", "Fly (Navigate)"],
 			["Right drag", "Look (Navigate)"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
-			["PgUp PgDn", "Floor y"], ["Ctrl+click", "Floor y to matter"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
+			["PgUp PgDn", "Floor y"], ["Ctrl+click", "Floor y to matter"], ["²", "Jump to matter"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
 			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
 			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
 		raccourcis.add_child(_touche_clavier(r[0]))
@@ -1515,7 +1525,9 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 	_aide_eau.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_aide_eau.text = ("One click places water, and the world decides what it becomes: in a hollow, a LAKE filled "
 		+ "to its brim; on a slope or a ledge, a RIVER that runs down, falls, and fills the hollows on its way; in "
-		+ "the open air, over nothing, a SEA at that height. Right click on water removes it.\n"
+		+ "the open air, over nothing, a SEA: a plane shows its height, a first click pins it, the mouse wheel or "
+		+ "PgUp / PgDn moves it, and a second click (or Enter) places it — nothing is computed before. Right click "
+		+ "on water removes it.\n"
 		+ "Lakes, rivers and seas follow the world: dig a channel, raise a dam — the water flows again.")
 	sec.contenu.add_child(_aide_eau)
 	sec.contenu.add_child(_bouton("Leave", "Back to World and its painting tools (Esc).",
@@ -1588,7 +1600,8 @@ func _entrer_dans_les_fluides() -> void:
 		_ajouter_eau(Projet.couche_d_eau("Water 1"))
 	_vue.rafraichir()
 	_dire("[b]Fluids[/b] — click in a hollow (lake), on a slope or a ledge (river), or in the open air over "
-		+ "nothing (sea at that height). [i]Right click on water removes it. Esc to go back to World.[/i]")
+		+ "nothing (sea: choose its height, then click again). [i]Right click on water removes it. Esc to go back "
+		+ "to World.[/i]")
 
 
 ## En sortant de Fluids : l'outil de World d'avant revient, et plus rien ne pose d'eau.
@@ -1597,6 +1610,8 @@ func _sortir_des_fluides() -> void:
 		return
 	_vue.outil = _outil_avant_fluides if _outil_avant_fluides != "eau" else "ajouter"
 	_vue.oublier_ancre()
+	_annuler_la_mer(false)
+	_vue.montrer_plan_mer(null)
 	_cle_apercu_eau = ""
 	_eau_survolee(null)
 	if _vue.outil == "forme":
@@ -1643,8 +1658,22 @@ func _eau_pour_le_jeu() -> Dictionary:
 					cases[c] = preset
 	if cases.is_empty() and oceans.is_empty() and courants.is_empty():
 		return {}
-	return {"cases": cases, "oceans": oceans, "preset_ocean": preset_ocean, "boite": FL.boite(_occ_eau),
+	return {"cases": cases, "oceans": oceans, "preset_ocean": preset_ocean, "boite": _boite_eau(),
 		"courants": courants}
+
+
+## La boîte du monde pour `_occ_eau`, recalculée seulement si `_occ_eau` a changé (voir `_boite_eau_cache`).
+## ⚠ `_occ_eau` est retouché EN PLACE par `_recalculer_eau`, qui remet le cache : la taille ne garde que le reste.
+func _boite_eau() -> Dictionary:
+	if not is_same(_boite_eau_de, _occ_eau) or _boite_eau_taille != _occ_eau.size():
+		_boite_eau_cache = FL.boite(_occ_eau)
+		_boite_eau_de = _occ_eau
+		_boite_eau_taille = _occ_eau.size()
+	return _boite_eau_cache
+
+
+func _dans_le_vide(s: Vector3i) -> bool:
+	return not _occ_eau.has(s) and FL.dans_le_vide(_occ_eau, s, _boite_eau())
 
 
 ## Les cases de toutes les couches de tuiles : l'eau appartient au monde entier.
@@ -1669,6 +1698,39 @@ func _noter_pour_l_eau(cases_: Array) -> void:
 		_eau_changees[c] = true
 
 
+## LES CASES DU MONDE À JOUR POUR L'EAU, SANS RECALCULER L'EAU (4 octobre 2026). ⚠ UN CLIC SE CLASSAIT CONTRE DES CASES
+## EN RETARD : `_occ_eau` ne suivait les gestes qu'au recalcul différé, et un clic sur une colonne posée dans la même
+## image la voyait vide — la source se croyait « dans le vide » (une mer), et ne devenait la rivière voulue qu'au
+## recalcul. Le survol et le clic l'appellent ; ce qu'il applique reste noté pour la reprise (`_eau_changees_vues`).
+var _eau_changees_vues := {}
+var _eau_tout_refaire := false
+
+
+func _tenir_occ_eau() -> void:
+	if _occ_eau.is_empty() or _eau_cases_inconnues:
+		var occ_avant := _occ_eau
+		_occ_eau = _occupees_du_monde()
+		if occ_avant.is_empty():
+			_eau_tout_refaire = true
+		else:
+			_eau_changees_vues.merge(FL.changees_entre(occ_avant, _occ_eau))
+		_eau_cases_inconnues = false
+	elif not _eau_changees.is_empty():
+		for c in _eau_changees:
+			_eau_changees_vues[c] = true
+			var plein := false
+			for i in _vue.nombre_de_couches():
+				if (_vue.couche(i).get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+					plein = true
+					break
+			if plein:
+				_occ_eau[c] = true
+			else:
+				_occ_eau.erase(c)
+		_boite_eau_taille = -1   # retouché en place : la boîte est à refaire
+	_eau_changees = {}
+
+
 ## L'eau est à redéduire. ⚠ UNE FOIS PAR IMAGE au plus : un coup de pinceau touche des dizaines de cases.
 func _eau_perimee() -> void:
 	if _eau_a_refaire:
@@ -1691,7 +1753,8 @@ func _recalculer_eau(avec_barre := true) -> void:
 	if toutes.is_empty() and _eau_vide and _corps_eau.size() == _eaux.size():
 		return
 	var montrer := avec_barre and _ecran_vivant() and _coup.is_empty() \
-		and float(_durees.get("eau", 0.0)) >= SEUIL_ATTENTE
+		and (float(_durees.get("eau", 0.0)) >= SEUIL_ATTENTE or _eau_barre_forcee)
+	_eau_barre_forcee = false
 	if montrer:
 		await _attendre("Water", "lakes, rivers and seas follow the world")
 	var debut := Time.get_ticks_msec()
@@ -1701,26 +1764,18 @@ func _recalculer_eau(avec_barre := true) -> void:
 	var changees: Variant = null
 	if toutes.is_empty():
 		_occ_eau = {}
-	elif _occ_eau.is_empty() or _eau_cases_inconnues:
-		var occ_avant := _occ_eau
-		_occ_eau = _occupees_du_monde()
-		changees = FL.changees_entre(occ_avant, _occ_eau) if not occ_avant.is_empty() else null
 	else:
-		changees = _eau_changees
-		for c in _eau_changees:
-			var plein := false
-			for i in _vue.nombre_de_couches():
-				if (_vue.couche(i).get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
-					plein = true
-					break
-			if plein:
-				_occ_eau[c] = true
-			else:
-				_occ_eau.erase(c)
+		_tenir_occ_eau()
+		changees = null if _eau_tout_refaire else _eau_changees_vues
 	_eau_changees = {}
+	_eau_changees_vues = {}
+	_eau_tout_refaire = false
 	_eau_cases_inconnues = false
 	var w: Dictionary = FL.monde(_occ_eau, toutes, FL.VOLUME_MAXI, _monde_eau, changees)
 	_monde_eau = w
+	_boite_eau_cache = w["boite"]
+	_boite_eau_de = _occ_eau
+	_boite_eau_taille = _occ_eau.size()
 	_ocean_eau = w["ocean"]
 	_corps_eau.clear()
 	_index_eau.clear()
@@ -1785,27 +1840,43 @@ func _eau_sous(s: Vector3i) -> Array:
 
 
 ## L'APERÇU : ce qu'un clic poserait — ou, sur de l'eau, l'eau qu'un clic droit retirerait.
+## ⚠ **LA MER NE SE CALCULE PAS AU SURVOL (Jordan, 4 octobre 2026 : « les opérations d'eau coûtent trop cher, surtout
+## pour l'océan »)** : survoler le vide remplissait l'océan entier à chaque case visée. Le vide montre désormais un PLAN
+## à la hauteur de la mer qu'un clic poserait — rien n'est calculé —, et une mer déjà là, son plan en rouge.
 func _eau_survolee(s: Variant) -> void:
+	if _mer_choisie != null:
+		return   # le plan est épinglé : la souris ne le déplace plus (la molette, PgUp / PgDn)
 	if s == null:
 		_vue.montrer_apercu([], Vue.TEINTE_EAU)
+		_vue.montrer_plan_mer(null)
 		return
 	var cle := str(s)
 	if cle == _cle_apercu_eau:
 		return
 	_cle_apercu_eau = cle
-	if _occ_eau.is_empty():
-		_occ_eau = _occupees_du_monde()
+	_tenir_occ_eau()
 	var deja := _eau_sous(s)
 	if not deja.is_empty():
-		_vue.montrer_apercu(_cases_d_un_corps(_corps_eau[deja[0]][deja[1]]), Vue.TEINTE_CREUSER)
+		var corps: Dictionary = _corps_eau[deja[0]][deja[1]]
+		if corps["genre"] == "ocean":
+			_vue.montrer_apercu([], Vue.TEINTE_EAU)
+			_vue.montrer_plan_mer(int(corps["niveau"]), _boite_eau(), Vue.TEINTE_CREUSER)
+		else:
+			_vue.montrer_plan_mer(null)
+			_vue.montrer_apercu(_cases_d_un_corps(corps), Vue.TEINTE_CREUSER)
 		return
-	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau)
+	if _dans_le_vide(s):
+		_vue.montrer_apercu([], Vue.TEINTE_EAU)
+		_vue.montrer_plan_mer((s as Vector3i).y, _boite_eau(), Vue.TEINTE_EAU)
+		return
+	_vue.montrer_plan_mer(null)
+	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau, FL.VOLUME_MAXI, _boite_eau())
 	if r["erreur"] != "":
 		_vue.montrer_apercu([s], Vue.TEINTE_CREUSER)
 		return
 	var montrees := _cases_d_un_corps(r)
 	for c in _sources_a_poser(s).slice(1):
-		montrees.append_array(_cases_d_un_corps(FL.source(_occ_eau, c, _ocean_eau)))
+		montrees.append_array(_cases_d_un_corps(FL.source(_occ_eau, c, _ocean_eau, FL.VOLUME_MAXI, _boite_eau())))
 	_vue.montrer_apercu(montrees, Vue.TEINTE_EAU)
 
 
@@ -1813,7 +1884,7 @@ func _eau_survolee(s: Variant) -> void:
 ## (`FL.sources_en_largeur`), sans celles qui tombent dans une eau déjà là.
 func _sources_a_poser(s: Vector3i) -> Array:
 	var largeur := int(_largeur_eau.value) if _largeur_eau != null else 1
-	return FL.sources_en_largeur(_occ_eau, s, largeur, _ocean_eau).filter(
+	return FL.sources_en_largeur(_occ_eau, s, largeur, _ocean_eau, _boite_eau()).filter(
 		func(c: Vector3i) -> bool: return c == s or _eau_sous(c).is_empty())
 
 
@@ -1827,10 +1898,16 @@ func _cases_d_un_corps(r: Dictionary) -> Array:
 
 
 func _eau_cliquee(s: Variant, bouton: int) -> void:
+	# LA MER EN CHOIX : un clic gauche la pose (le calcul ne part qu'ici), un clic droit l'abandonne.
+	if _mer_choisie != null:
+		if bouton == MOUSE_BUTTON_LEFT:
+			_valider_la_mer()
+		else:
+			_annuler_la_mer()
+		return
 	if s == null:
 		return
-	if _occ_eau.is_empty():
-		_occ_eau = _occupees_du_monde()
+	_tenir_occ_eau()
 	if bouton == MOUSE_BUTTON_RIGHT:
 		var deja := _eau_sous(s)
 		if deja.is_empty():
@@ -1846,15 +1923,16 @@ func _eau_cliquee(s: Variant, bouton: int) -> void:
 		return
 	if _eaux.is_empty():
 		_ajouter_eau(Projet.couche_d_eau("Water 1"))
-	# ⚠ UN SEUL OCÉAN, À UN SEUL NIVEAU (Jordan, 3 octobre 2026) : un clic dans le vide DÉPLACE la mer à sa hauteur —
-	# les autres sources de mer, dans toutes les couches d'eau, sont retirées dans la même action (un Ctrl+Z).
-	if not _occ_eau.has(s) and FL.dans_le_vide(_occ_eau, s):
-		_poser_la_mer(s)
+	# ⚠ UN SEUL OCÉAN, À UN SEUL NIVEAU (Jordan, 3 octobre 2026) : un clic dans le vide CHOISIT la hauteur de la mer
+	# (4 octobre 2026) — le plan s'épingle, la molette et PgUp / PgDn le montent ou le descendent, et seul le second clic
+	# (ou Entrée) la pose et lance le calcul.
+	if _dans_le_vide(s):
+		_choisir_la_mer(s)
 		return
 	if not _eau_sous(s).is_empty():
 		_dire("[i]There is water here already.[/i] Right click removes it.")
 		return
-	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau)
+	var r: Dictionary = FL.source(_occ_eau, s, _ocean_eau, FL.VOLUME_MAXI, _boite_eau())
 	if r["erreur"] != "":
 		_dire("[color=#e0603c]Water[/color] — %s" % {
 			"dans_la_matiere": "this cell is inside the matter.",
@@ -1879,30 +1957,82 @@ func _sources_de_mer() -> Array:
 	for e in _eaux:
 		for i in (e["sources"] as Array).size():
 			var src: Vector3i = e["sources"][i]
-			if not _occ_eau.has(src) and FL.dans_le_vide(_occ_eau, src):
+			if _dans_le_vide(src):
 				sortie.append([e, i, src])
 	return sortie
 
 
+## LE CHOIX DE LA HAUTEUR DE LA MER : le plan s'épingle à la hauteur cliquée, rien n'est calculé.
+func _choisir_la_mer(s: Vector3i) -> void:
+	_mer_case = s
+	_mer_choisie = s.y
+	_vue.montrer_apercu([], Vue.TEINTE_EAU)
+	_montrer_la_mer_choisie()
+
+
+func _montrer_la_mer_choisie() -> void:
+	var h: int = _mer_choisie
+	_vue.montrer_plan_mer(h, _boite_eau(), Vue.TEINTE_EAU)
+	var anciennes := _sources_de_mer()
+	var ici := ""
+	if anciennes.size() == 1 and (anciennes[0][2] as Vector3i).y == h:
+		ici = " [i]The sea is already at this height.[/i]"
+	elif not anciennes.is_empty():
+		ici = " (the sea is now at height %d)" % (anciennes[0][2] as Vector3i).y
+	_dire(("[b]Sea at height %d[/b]%s — [b]mouse wheel[/b] or [b]PgUp / PgDn[/b] raises or lowers it. [b]Click[/b] or "
+		+ "[b]Enter[/b] places it (the water is computed only then); right click or Esc cancels.") % [h, ici])
+
+
+## Un cran de hauteur pendant le choix (molette, PgUp / PgDn).
+func _hausser_la_mer(sens: int) -> void:
+	_mer_choisie = clampi(int(_mer_choisie) + sens, -64, 192)
+	_vue.montrer_valeur("Sea height %d" % _mer_choisie)
+	_montrer_la_mer_choisie()
+
+
+func _annuler_la_mer(dire := true) -> void:
+	if _mer_choisie == null:
+		return
+	_mer_choisie = null
+	_cle_apercu_eau = ""
+	_vue.montrer_plan_mer(null)
+	if dire:
+		_dire("[i]Sea cancelled: nothing was placed.[/i]")
+
+
+## La mer à la hauteur choisie. Sa source est la colonne cliquée si elle reste dans le vide à cette hauteur (un surplomb
+## au-dessus d'elle ne le serait plus), sinon une colonne juste hors de la boîte du monde — vide par construction.
+func _valider_la_mer() -> void:
+	var h: int = _mer_choisie
+	_mer_choisie = null
+	_cle_apercu_eau = ""
+	_vue.montrer_plan_mer(null)
+	var s := Vector3i(_mer_case.x, h, _mer_case.z)
+	if not _dans_le_vide(s):
+		var b := _boite_eau()
+		if not b.is_empty():
+			s = Vector3i((b["lo"] as Vector3i).x - 1, h, (b["lo"] as Vector3i).z - 1)
+	_poser_la_mer(s)
+
+
 ## La mer à la hauteur de `s` : la seule. Les autres sources de mer partent dans la même action.
+## ⚠ Rien n'est calculé ici : la mer posée, `_eau_perimee` refait l'eau UNE fois, avec la barre d'attente.
 func _poser_la_mer(s: Vector3i) -> void:
 	var anciennes := _sources_de_mer()
 	if anciennes.size() == 1 and (anciennes[0][2] as Vector3i).y == s.y:
 		_dire("[i]The sea is already at height %d.[/i] Click higher or lower in the open air to move it; right click "
 			% s.y + "on it removes it.")
 		return
-	var r: Dictionary = FL.source(_occ_eau, s, {})
-	if r["erreur"] != "":
-		_dire("[color=#e0603c]Water[/color] — %s" % {"trop_grand": "too large to fill (more than %d cells)." % FL.VOLUME_MAXI
-			}.get(r["erreur"], r["erreur"]))
-		return
 	var e: Dictionary = _eaux[_eau_active]
+	_eau_barre_forcee = true
 	_histoire.create_action("Water: sea at height %d" % s.y)
 	_histoire.add_do_method(_changer_la_mer.bind(anciennes, e, s))
 	_histoire.add_undo_method(_rendre_la_mer.bind(anciennes, e))
 	_histoire.commit_action()
-	_dire(_dire_un_corps(r) + (" The sea that was at height %d is gone: [i]there is only one sea.[/i]"
-		% (anciennes[0][2] as Vector3i).y if not anciennes.is_empty() else "") + " [i]Ctrl+Z undoes it.[/i]")
+	var partie := ""
+	if not anciennes.is_empty():
+		partie = " The sea that was at height %d is gone: [i]there is only one sea.[/i]" % (anciennes[0][2] as Vector3i).y
+	_dire(_dire_un_corps({"genre": "ocean", "niveau": s.y}) + partie + " [i]Ctrl+Z undoes it.[/i]")
 
 
 func _changer_la_mer(anciennes: Array, e: Dictionary, s: Vector3i) -> void:
@@ -5070,8 +5200,11 @@ func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
 	if _vue.naviguer:
 		return false
 	var outil: String = _vue.outil
-	# Pendant un geste : la molette seule.
+	# Pendant un geste : la molette seule. Choisir la hauteur de la mer en est un.
 	if not (alt or maj or ctrl):
+		if outil == "eau" and _mer_choisie != null:
+			_hausser_la_mer(sens)
+			return true
 		if not _vue.collage.is_empty():
 			_vue.montrer_valeur("Paste height %+d" % _vue.hausser_le_collage(sens))
 			return true
@@ -5136,6 +5269,14 @@ func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
 func _cadrer_tout_le_monde() -> void:
 	if not _vue.cadrer_toute_la_matiere():
 		_dire("[i]Nothing to frame:[/i] the visible layers hold no cell.")
+
+
+## ² (Jordan, 4 octobre 2026) : la vue saute sur la matière sous la souris, l'œil à une distance raisonnable (`Vue.
+## teleporter_vers`), dans World et Fluids. Lue par sa PLACE (`physical_keycode`, la touche sous Échap) : ² sur un
+## AZERTY, ` sur un QWERTY.
+func _teleporter() -> void:
+	if not _vue.teleporter_vers(_vue.get_local_mouse_position()):
+		_dire("[i]²: no matter under the cursor — the view stays where it is.[/i]")
 
 
 ## Un cran de molette sur un réglage (`Range` : curseur ou compteur) : son pas s'il est entier, un vingtième de sa
@@ -5758,7 +5899,10 @@ func _vider_le_projet() -> void:
 	_ocean_eau = {}
 	_occ_eau = {}
 	_eau_changees = {}
+	_eau_changees_vues = {}
+	_eau_tout_refaire = false
 	_eau_cases_inconnues = false
+	_mer_choisie = null
 	_monde_eau = {}
 	_maillages_eau = []
 	_index_eau.clear()
@@ -6223,6 +6367,25 @@ func _unhandled_key_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if _atelier == "fluides":
+		# LA MER EN CHOIX : PgUp / PgDn la montent ou la descendent, Entrée la pose, Échap l'abandonne.
+		if _mer_choisie != null:
+			match k.keycode:
+				KEY_PAGEUP, KEY_UP:
+					_hausser_la_mer(1)
+				KEY_PAGEDOWN, KEY_DOWN:
+					_hausser_la_mer(-1)
+				KEY_ENTER, KEY_KP_ENTER:
+					_valider_la_mer()
+				KEY_ESCAPE:
+					_annuler_la_mer()
+				_:
+					return
+			get_viewport().set_input_as_handled()
+			return
+		if k.physical_keycode == KEY_QUOTELEFT:
+			_teleporter()
+			get_viewport().set_input_as_handled()
+			return
 		match k.keycode:
 			KEY_ESCAPE:
 				_changer_d_atelier("monde")
@@ -6241,6 +6404,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 	# ⚠ **EN NAVIGATE, LES TOUCHES DE VOL NE CHOISISSENT PAS D'OUTIL.** S et D sont aussi Select et Dig :
 	# voler vers l'arrière aurait changé d'outil en silence. On les lit par leur PLACE (`vue.gd`).
 	if _vue.naviguer and k.physical_keycode in [KEY_W, KEY_A, KEY_S, KEY_D, KEY_Q, KEY_E]:
+		get_viewport().set_input_as_handled()
+		return
+	if k.physical_keycode == KEY_QUOTELEFT:
+		_teleporter()
 		get_viewport().set_input_as_handled()
 		return
 	var fait := true

@@ -2575,6 +2575,29 @@ La demande tenait en une ligne ; **TOUTE LA FORME EST PROPOSÉE**, à valider à
   déborde jamais ». ⚠ Une cuvette posée sur le vide déborde donc par-dessus son mur : les tests qui voulaient un lac
   calme l'ont noyée dans un plateau. Gardé par `test_fluides` (déroulés à la main : l'échancrure sur le vide, la
   portée à 4 et à 5 cases, la cuvette nue) ; deux mutations rouges (jamais de débordement, portée stricte).
+- **LA MER SE CHOISIT AVANT DE SE CALCULER — DEMANDÉ PAR JORDAN (4 octobre 2026 : « les opérations d'eau coûtent trop
+  cher, surtout pour l'océan ; un preview pour choisir la hauteur avant de valider, et que le calcul ne se lance
+  qu'après »), ÉCRIT LE MÊME JOUR.** ⚠ Survoler le vide REMPLISSAIT L'OCÉAN ENTIER à chaque case visée (`FL.source`),
+  plus la boîte du monde (un balayage de toutes les cases, 57 ms sur l'exemple) à chaque `dans_le_vide` ; le clic le
+  refaisait, puis le recalcul une troisième fois.
+  - **le survol du vide montre un PLAN** (`Vue.montrer_plan_mer`, à rangée + `NAPPE`, sur la boîte du monde + 24 cases),
+    rien n'est calculé ; sur une mer déjà là, son plan en rouge (plus sa surface case par case) ;
+  - **un premier clic épingle la hauteur** (`_mer_choisie`) ; la molette seule (un geste, §5 « la molette »), PgUp / PgDn
+    ou ↑ ↓ la règlent ; **un second clic ou Entrée la pose** — seul moment où l'eau se recalcule, UNE fois, barre
+    d'attente forcée ; clic droit ou Échap l'abandonnent (Échap ne quitte pas Fluids). La source garde la colonne cliquée
+    si elle reste dans le vide à cette hauteur, sinon une colonne juste hors de la boîte ;
+  - **la boîte du monde est gardée** (`_boite_eau`, rendue par `FL.monde` sous `"boite"`) ; `sources_en_largeur` la reçoit ;
+  - ⚠ **UN DÉFAUT D'AVANT, TROUVÉ PAR LA FUMÉE** : un clic se classait contre `_occ_eau`, qui ne suivait les gestes qu'au
+    recalcul différé — un clic sur une colonne posée dans la même image la voyait vide, se croyait « dans le vide » (une
+    mer), et ne devenait la rivière voulue qu'au recalcul. Le survol et le clic tiennent les cases à jour sans
+    recalculer l'eau (`_tenir_occ_eau`), ce qu'ils appliquent reste noté pour la reprise.
+  - **MESURÉ** : `fumee_appli` (+11 : le survol pose un plan sans cases ni calcul, le clic épingle sans rien poser, deux
+    crans → 2, PgDn ×2 → 0, la souris ne déplace plus, le second clic pose et lance le calcul, clic droit et Échap
+    abandonnent, la mer déplacée, Entrée à la même hauteur dit « already ») ; `test_fluides` 244, `test_greffon_peinture`
+    255. **Cinq mutations rouges**, rejouées dans une COPIE à dossier de données isolé (une autre session travaillait
+    dans le dépôt — la première passe, dans le dépôt, partageait ses réglages et rendait des échecs étrangers) : le survol
+    qui remplit l'océan, le premier clic qui pose, la molette non branchée, le clic sur des cases en retard, PgDn ignoré.
+    ⚠ Le gain n'a pas été chronométré avec fenêtre ; **PAS TENU EN MAIN**. Le manuel (F1) le décrit.
 - **LA LENTEUR DE L'EAU — MESURÉE ET CORRIGÉE (Jordan, 2 octobre 2026 : « les algos d'eau sont beaucoup trop
   lents »).** `DEV_TOOLS/sonde_cout_eau.gd` sur `test.mbproj` (1 723 cases, une mer de 41 306 cases) : ~180 ms par
   recalcul (mer 90 ms, maillage 87 ms), refait à CHAQUE geste.
@@ -3227,6 +3250,16 @@ d'abord (la molette ne faisait que zoomer, plus le cercle C et le proportionnel 
 - **F CADRE TOUTE LA MATIÈRE** (Jordan : « pour recentrer le monde sur voir toute la matière », puis « c'était F, pas
   . ») — World et Fluids : la boîte de toutes les cases des couches visibles, sous l'angle où l'on regarde
   (`Vue.cadrer_toute_la_matiere`). F reste le vol au Play test et Fill dans Geometry.
+- **² SAUTE SUR LA MATIÈRE — DEMANDÉ PAR JORDAN ET ÉCRIT (4 octobre 2026 : « se téléporter là où le curseur pointe vers
+  de la matière, à une distance raisonnable pour ne pas s'enfoncer dans la matière avec la caméra »)** — World et Fluids,
+  la touche lue par sa PLACE (sous Échap : ² en AZERTY, ` en QWERTY). `Vue.teleporter_vers` : le rayon de la souris
+  contre l'occupation VISIBLE (portée 3 000, pas `PORTEE` : on saute de loin) ; la cible = le point touché SUR sa face ;
+  l'œil recule le long du rayon (déjà parcouru à vide) de `RECUL_TELEPORT` = 8 cases (**PROPOSÉ**), moins si l'on était
+  plus près, jamais plus loin que l'œil d'origine ; l'élévation bornée pouvant écarter l'œil du rayon, un second rayon
+  cible → œil raccourcit le recul s'il touche. Rien sous la souris : rien ne bouge, et c'est dit. Gardé par
+  `fumee_appli` (+7, attendus relus dans les grilles : cible sur une face, recul ≤ 8, aucun point plein entre cible et
+  œil, hors de la vue refusé, la touche branchée) ; trois mutations rouges (recul = distance courante, touche non
+  branchée, cible au centre de la case). ⚠ PAS TENU EN MAIN.
 - Le manuel (F1) a sa table « The mouse wheel ».
 - **MESURÉ** : `fumee_appli` (+29, de vrais crans dans la vue et sur un curseur de la barre : zoom seul, Alt / Maj /
   Ctrl, un Rect haussé de deux crans → 27 cases, Maj → 36, Alt → 84 (une couronne à plat, compté à la main), une salle

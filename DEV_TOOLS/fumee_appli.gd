@@ -2941,8 +2941,33 @@ func _les_fluides(ed: Control) -> void:
 		"sur la colonne : une rivière, de (70,4,62) vers +X, qui quitte le monde")
 
 	# L'OCÉAN : dans le vide, sur le plan de l'étage 0. La rivière, recalculée, le REJOINT.
+	# ⚠ LA MER SE CHOISIT AVANT DE SE CALCULER (Jordan, 4 octobre 2026) : survoler le vide montre un PLAN, sans rien
+	# remplir ; un premier clic l'épingle, la molette et PgUp / PgDn règlent sa hauteur ; le second clic (ou Entrée) la pose.
 	vue.regler_etage(0)
-	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(90.5, 0.0, 90.5)))
+	var vide_0 := _viser_d_en_haut(vue, Vector3(90.5, 0.0, 90.5))
+	var calculs_avant: Variant = ed._monde_eau
+	_bouge(vue, vide_0)
+	_vrai(vue.plan_mer_visible() != null and is_equal_approx(float(vue.plan_mer_visible()), 0.0)
+		and is_same(ed._monde_eau, calculs_avant) and not ed._eau_a_refaire and not vue._apercu.visible,
+		"survoler le vide : un plan à la hauteur 0, sans cases d'océan, et l'eau n'est PAS recalculée")
+	_clic_vue(vue, vide_0)
+	_vrai(ed._mer_choisie == 0 and ed._eaux[0]["sources"].size() == 2 and not ed._eau_a_refaire
+		and ed._rapport.text.contains("Sea at height 0"),
+		"un premier clic dans le vide : la hauteur s'épingle, rien n'est posé ni calculé, l'écran le dit")
+	_cran(vue, 1)
+	_cran(vue, 1)
+	_vrai(ed._mer_choisie == 2 and is_equal_approx(float(vue.plan_mer_visible()), 2.0) and not ed._eau_a_refaire,
+		"deux crans de molette : la mer en choix monte à 2 (le plan suit), sans calcul ni zoom")
+	_touche_physique(KEY_PAGEDOWN, true)
+	_touche_physique(KEY_PAGEDOWN, false)
+	_touche_physique(KEY_PAGEDOWN, true)
+	_touche_physique(KEY_PAGEDOWN, false)
+	_egal(ed._mer_choisie, 0, "PgDn deux fois : la mer en choix redescend à 0")
+	_bouge(vue, _viser_d_en_haut(vue, Vector3(62.5, 1.0, 62.5)))
+	_egal(ed._mer_choisie, 0, "la souris ne déplace plus la hauteur épinglée")
+	_clic_vue(vue, vide_0)
+	_vrai(ed._mer_choisie == null and vue.plan_mer_visible() == null and ed._eau_a_refaire,
+		"le second clic pose la mer : le plan s'en va, le calcul part (une fois)")
 	ed._recalculer_eau()
 	_egal(ed._eaux[0]["sources"].size(), 3, "dans le vide : une troisième source")
 	_vrai(ed._corps_eau[0][2]["genre"] == "ocean" and ed._corps_eau[0][2]["niveau"] == 0, "… un océan au niveau 0")
@@ -2951,19 +2976,34 @@ func _les_fluides(ed: Control) -> void:
 	ed._rafraichir_eaux()
 	_vrai((ed._liste_eaux.get_child(0).get_child(1) as Button).text.contains("1 sea, 1 lake, 1 river"),
 		"la liste des couches d'eau dit ce que porte la couche")
+	# Un choix abandonné ne pose rien : clic droit, puis Échap (qui ne quitte pas Fluids).
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(97.5, 0.0, 97.5)))
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(97.5, 0.0, 97.5)), MOUSE_BUTTON_RIGHT)
+	_vrai(ed._mer_choisie == null and ed._eaux[0]["sources"].size() == 3 and vue.plan_mer_visible() == null,
+		"un clic droit abandonne la mer en choix : rien n'est posé")
+	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(97.5, 0.0, 97.5)))
+	_touche_physique(KEY_ESCAPE, true)
+	_touche_physique(KEY_ESCAPE, false)
+	_vrai(ed._mer_choisie == null and ed._eaux[0]["sources"].size() == 3 and ed._atelier == "fluides",
+		"Échap abandonne la mer en choix, sans quitter Fluids")
 
-	# UN SEUL OCÉAN (Jordan, 3 octobre 2026) : un clic dans le vide à une autre hauteur DÉPLACE la mer — l'ancienne
-	# source part dans la même action ; un Ctrl+Z la rend. À la même hauteur, rien ne change, et l'écran le dit.
+	# UN SEUL OCÉAN (Jordan, 3 octobre 2026) : une mer posée à une autre hauteur DÉPLACE la mer — l'ancienne source part
+	# dans la même action ; un Ctrl+Z la rend. À la même hauteur, rien ne change, et l'écran le dit.
 	vue.regler_etage(1)
-	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(95.5, 1.0, 95.5)))
+	var vide_1 := _viser_d_en_haut(vue, Vector3(95.5, 1.0, 95.5))
+	_clic_vue(vue, vide_1)
+	_clic_vue(vue, vide_1)
 	ed._recalculer_eau()
 	_egal(ed._eaux[0]["sources"], [Vector3i(62, 1, 62), Vector3i(70, 4, 62), Vector3i(95, 1, 95)],
-		"un clic dans le vide plus haut : la mer y passe, l'ancienne source s'en va")
+		"une mer posée plus haut : la mer y passe, l'ancienne source s'en va")
 	_vrai(ed._corps_eau[0][2]["genre"] == "ocean" and ed._corps_eau[0][2]["niveau"] == 1
 		and ed._rapport.text.contains("only one sea"), "… une seule mer, au niveau 1, et l'écran le dit")
 	_clic_vue(vue, _viser_d_en_haut(vue, Vector3(99.5, 1.0, 99.5)))
-	_vrai(ed._eaux[0]["sources"].size() == 3 and ed._rapport.text.contains("already at height 1"),
-		"à la même hauteur : rien ne change, et l'écran le dit")
+	_vrai(ed._rapport.text.contains("already at this height"), "en choix à la même hauteur : l'écran le dit d'emblée")
+	_touche_physique(KEY_ENTER, true)
+	_touche_physique(KEY_ENTER, false)
+	_vrai(ed._mer_choisie == null and ed._eaux[0]["sources"].size() == 3
+		and ed._rapport.text.contains("already at height 1"), "Entrée à la même hauteur : rien ne change, et l'écran le dit")
 	ed._histoire.undo()
 	ed._recalculer_eau()
 	_egal(ed._eaux[0]["sources"], [Vector3i(62, 1, 62), Vector3i(70, 4, 62), Vector3i(90, 0, 90)],
@@ -4092,6 +4132,44 @@ func _la_molette(ed: Control) -> void:
 	var coin2: Vector2 = vue._camera.unproject_position(Vector3(hi) + Vector3.ONE)
 	_vrai(Rect2(Vector2.ZERO, vue.size).grow(2.0).has_point(coin) and Rect2(Vector2.ZERO, vue.size).grow(2.0).has_point(coin2),
 		"… et ses coins sont à l'écran")
+	# ² SAUTE SUR LA MATIÈRE (Jordan, 4 octobre 2026) : visée sur le dessus d'une colonne, la cible tombe SUR une face
+	# de matière, l'œil à moins de 8 cases, et rien de plein entre les deux. Attendus relus ici dans les grilles.
+	var pleines := {}
+	for i in vue.nombre_de_couches():
+		var m := vue.couche(i) as Node3D
+		if m.visible:
+			for c: Vector3i in (m.get_node("Cases") as GridMap).get_used_cells():
+				pleines[c] = true
+	var sommet_vise := Vector3i.ZERO
+	for c: Vector3i in pleines:
+		if not pleines.has(c + Vector3i.UP) and c.y >= sommet_vise.y:
+			sommet_vise = c
+	var ecran: Vector2 = vue._camera.unproject_position(Vector3(sommet_vise) + Vector3(0.5, 1.0, 0.5))
+	var cible_avant: Vector3 = vue._cible
+	_vrai(vue.teleporter_vers(ecran), "² : le rayon sous la souris touche la matière")
+	var cible_t: Vector3 = vue._cible
+	var oeil_t: Vector3 = vue._camera.global_position
+	var sur_face := false
+	for d: Vector3 in [Vector3(0.01, 0, 0), Vector3(-0.01, 0, 0), Vector3(0, 0.01, 0), Vector3(0, -0.01, 0), Vector3(0, 0, 0.01), Vector3(0, 0, -0.01)]:
+		var dedans := cible_t + d
+		var dehors := cible_t - d
+		if pleines.has(Vector3i(floori(dedans.x), floori(dedans.y), floori(dedans.z))) 				and not pleines.has(Vector3i(floori(dehors.x), floori(dehors.y), floori(dehors.z))):
+			sur_face = true
+	_vrai(sur_face and cible_t.distance_to(cible_avant) > 1.0, "… la cible est SUR une face de matière (%s)" % cible_t)
+	var recul_t := oeil_t.distance_to(cible_t)
+	_vrai(recul_t <= 8.01 and recul_t >= 0.3, "… l'œil à une distance raisonnable (%.2f case)" % recul_t)
+	var traverse := 0
+	for k in range(1, 200):
+		var q := cible_t.lerp(oeil_t, k / 200.0)
+		if pleines.has(Vector3i(floori(q.x), floori(q.y), floori(q.z))):
+			traverse += 1
+	_vrai(traverse == 0 and not pleines.has(Vector3i(floori(oeil_t.x), floori(oeil_t.y), floori(oeil_t.z))),
+		"… rien de plein entre la cible et l'œil, l'œil hors de la matière (%d points dedans)" % traverse)
+	_vrai(not vue.teleporter_vers(Vector2(-10, -10)), "² hors de la vue : rien ne bouge")
+	# La touche, par sa PLACE (sous Échap) : la vue saute, ou l'écran dit qu'il n'y avait rien sous la souris.
+	var cible_k: Vector3 = vue._cible
+	ed._unhandled_key_input(_cle(KEY_QUOTELEFT))
+	_vrai(vue._cible != cible_k or ed._rapport.text.contains("²"), "² est branchée dans World")
 	# LES PANNEAUX : aucun curseur ni compteur ne prend la molette, seules les zones défilantes.
 	var curseurs := ed.find_children("*", "Slider", true, false)
 	_vrai(curseurs.size() > 10 and curseurs.all(func(c): return not (c as Slider).scrollable),
