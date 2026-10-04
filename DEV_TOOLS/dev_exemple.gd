@@ -22,7 +22,7 @@ extends RefCounted
 ## ⚠ `exemple/FIGE` arrête tout réemballage, ici comme à l'export.
 
 const PrendreLExemple := preload("res://DEV_TOOLS/prendre_l_exemple.gd")
-const SOURCE_DEFAUT := "C:/Users/jorda/Desktop/test.mbproj"
+const SOURCE_DEFAUT := "C:/Users/jorda/Documents/MarchingBlocks/test/test.mbproj"
 const ARCHIVE := "res://exemple/exemple.zip"
 const FIGE := "res://exemple/FIGE"
 const DRAPEAU := "--dev-example"

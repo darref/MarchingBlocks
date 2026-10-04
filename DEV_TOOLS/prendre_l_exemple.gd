@@ -1,7 +1,7 @@
 extends SceneTree
 ##
 ## PRENDRE L'EXEMPLE — emballe la SOURCE de l'exemple (`dev_exemple.gd` : `~/.marchingblocks/exemple_source.txt`,
-## sinon `C:/Users/jorda/Desktop/test.mbproj`) dans
+## sinon `C:/Users/jorda/Documents/MarchingBlocks/test/test.mbproj`) dans
 ## `res://exemple/exemple.zip`, l'exemple que l'exe livre (`app/exemple.gd`). DÉCIDÉ (Jordan, 2 octobre 2026) : il
 ## suit ses modifications tant que le développement n'est pas clos, puis il est FIGÉ.
 ##
@@ -19,7 +19,7 @@ extends SceneTree
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Projet := preload("res://app/projet.gd")
 const Exemple := preload("res://app/exemple.gd")
-const SOURCE_DEFAUT := "C:/Users/jorda/Desktop/test.mbproj"
+const SOURCE_DEFAUT := "C:/Users/jorda/Documents/MarchingBlocks/test/test.mbproj"
 const SORTIE := "res://exemple/exemple.zip"
 const FIGE := "res://exemple/FIGE"
 const NOM := "example"

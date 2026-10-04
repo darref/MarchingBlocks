@@ -13,7 +13,7 @@ const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
 
 
 func _initialize() -> void:
-	var chemin := "C:/Users/jorda/Desktop/test.mbproj"
+	var chemin := "C:/Users/jorda/Documents/MarchingBlocks/test/test.mbproj"
 	var args := OS.get_cmdline_user_args()
 	if not args.is_empty():
 		chemin = args[0]

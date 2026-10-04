@@ -118,7 +118,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     pas dans le produit final d'éditer l'exemple pendant le dev et de le maintenir dans le soft ». Puis : on itère sur
     un PROJET PREUVE jusqu'à la perfection, et c'est lui qui devient l'exemple du produit.
     - **LA SOURCE** est un projet ordinaire n'importe où ; son chemin est dans `~/.marchingblocks/exemple_source.txt`
-      (HORS du dépôt, comme la clé), sinon `C:/Users/jorda/Desktop/test.mbproj`. `prendre_l_exemple.gd` lit la même
+      (HORS du dépôt, comme la clé), sinon `C:/Users/jorda/Documents/MarchingBlocks/test/test.mbproj`.
+      ⚠ **RANGÉE LE 4 OCTOBRE 2026 (Jordan : « faire le ménage sur le Bureau »)** : `test.mbproj` et ses 18 fichiers
+      (témoins, `.glb`, dossiers `_images`, sauvegardes `.avant_*`) sont passés du Bureau à
+      `Documents/MarchingBlocks/test/` ; les chemins absolus réécrits dans 7 fichiers texte (`.mbproj`, `.mbtiles`), les
+      réglages de l'appli et le pointeur aussi. Partout où la charte dit `Desktop/test.mbproj`, c'est ce projet. `prendre_l_exemple.gd` lit la même
       (`dev_exemple.gd` : `source()`).
     - **LE MODE DEV** (`DEV_TOOLS/dev_exemple.gd`, EXCLU DE L'EXPORT avec tout `DEV_TOOLS/*`) : lancé par
       **`DEV_TOOLS/editer_l_exemple.cmd`** (Godot sur les sources, `-- --dev-example`). Il ouvre la SOURCE au lancement,
