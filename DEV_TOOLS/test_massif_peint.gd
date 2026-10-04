@@ -268,6 +268,61 @@ func _les_couches_exclusives() -> void:
 	a.queue_free()
 	b.queue_free()
 	c3.queue_free()
+	_cacher_une_grande_couche()
+
+
+## CACHER UNE GRANDE COUCHE (4 octobre 2026) : plus de `SEUIL_LOCAL` cases changent d'un coup. Sur l'exemple (52 407
+## cases d'herbe sur la roche), le seuil fixe envoyait les autres couches vers la reconstruction COMPLÈTE (7,3 s). La
+## route locale est désormais prise tant qu'elle a moins de sommets à refaire que l'état — elle doit rendre la complète.
+## Une roche de 80 × 4 × 80, une herbe de 70 × 1 × 70 dessus (4 900 cases), un rocher à côté.
+func _cacher_une_grande_couche() -> void:
+	var roche := _massif()
+	var herbe := _massif()
+	var cases_r := _pave(0, 79, 0, 3, 0, 79)
+	var cases_h := _pave(0, 69, 4, 4, 0, 69)
+	_peindre(roche, cases_r)
+	_peindre(herbe, cases_h)
+	var union := {}
+	for c in cases_r:
+		union[c] = 0
+	for c in cases_h:
+		union[c] = 1
+	roche.union = union
+	roche.rang = 0
+	herbe.union = union
+	herbe.rang = 1
+	roche.reconstruire()
+	herbe.reconstruire()
+	var rr: GridMap = roche.get_node("Rendu")
+	var completes: int = roche.reconstructions_completes
+	# Cacher l'herbe : ses cases sortent de l'union, la roche se refait autour d'elles.
+	for c in cases_h:
+		union.erase(c)
+	roche.reconstruire_autour(cases_h)
+	var local_r := _photo(rr)
+	_dire(roche.reconstructions_completes == completes,
+		"cacher %d cases d'une autre couche : la route locale est prise" % cases_h.size())
+	roche.reconstruire()
+	_dire(local_r == _photo(rr) and local_r.size() > 0,
+		"… et elle rend la reconstruction complète (%d tuiles)" % local_r.size())
+	# La remontrer : la roche perd le dessus qu'elle venait de poser.
+	for c in cases_h:
+		union[c] = 1
+	completes = roche.reconstructions_completes
+	roche.reconstruire_autour(cases_h)
+	local_r = _photo(rr)
+	_dire(roche.reconstructions_completes == completes, "remontrer la couche : la route locale est prise")
+	roche.reconstruire()
+	_dire(local_r == _photo(rr), "… et elle rend la reconstruction complète (%d tuiles)" % local_r.size())
+	roche.queue_free()
+	herbe.queue_free()
+
+
+func _photo(g: GridMap) -> Dictionary:
+	var d := {}
+	for s in g.get_used_cells():
+		d[s] = [g.get_cell_item(s), g.get_cell_item_orientation(s)]
+	return d
 
 
 ## Un massif prêt à peindre, hors éditeur.

@@ -4080,6 +4080,7 @@ func _enregistrer_temoin(c: Dictionary, complet := false) -> String:
 
 ## Le `.glb` lié d'une couche réécrit depuis son témoin, et son monde rhabillé — s'il était en retard.
 func _rhabiller(c: Dictionary) -> String:
+	_empreintes_vues.clear()   # le `.glb` va être réécrit : l'étiquette de la liste relira son empreinte
 	if not c.get("_glb_perime", false) or c.get("_temoin", null) == null:
 		return ""
 	var raison: String = c["_temoin"].vers_glb(_glb_du_temoin(c))
@@ -4219,6 +4220,27 @@ func _oublier_la_vignette(c: Dictionary) -> void:
 
 
 ## L'état d'une couche, en une ligne : ses cases, et si ses tuiles viennent de son témoin tel qu'il est.
+## L'EMPREINTE D'UN `.glb`, POUR L'ÉTIQUETTE DE LA LISTE SEULEMENT — gardée tant que sa date et sa taille ne bougent pas.
+## ⚠ MESURÉ (4 octobre 2026, l'exemple, PC) : la liste se rafraîchit après chaque geste (elle recompte les cases), et
+## relisait le MD5 de chaque `.glb` (24 Mo) — ~110 ms par geste. ⚠ Le CACHE DE TRANCHAGE garde le MD5 complet
+## (`Projet.empreinte`) : une date n'est précise qu'à la seconde (§5). Ici, au pire, une étiquette en retard ; et toute
+## écriture du `.glb` par l'appli (`_rhabiller`) vide cette mémoire.
+var _empreintes_vues := {}
+
+
+func _empreinte_pour_la_liste(chemin: String) -> String:
+	if not FileAccess.file_exists(chemin):
+		return Projet.empreinte(chemin)
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	var signe := [FileAccess.get_modified_time(chemin), f.get_length() if f != null else -1]
+	var vu: Variant = _empreintes_vues.get(chemin, null)
+	if vu != null and vu[0] == signe:
+		return vu[1]
+	var e := Projet.empreinte(chemin)
+	_empreintes_vues[chemin] = [signe, e]
+	return e
+
+
 func _etat_de(i: int) -> String:
 	var c: Dictionary = _couches[i]
 	var n: int = (_vue.couche(i).get_node("Cases") as GridMap).get_used_cells().size()
@@ -4229,7 +4251,7 @@ func _etat_de(i: int) -> String:
 	elif s == _glb_du_temoin(c):
 		# L'empreinte du lot POSÉ contre celle du fichier — sans relire le cache du disque à chaque rafraîchissement.
 		var lot: MeshLibrary = _vue.couche(i).lot
-		var a_jour: bool = lot != null and str(lot.get_meta("empreinte", "")) == Projet.empreinte(s) \
+		var a_jour: bool = lot != null and str(lot.get_meta("empreinte", "")) == _empreinte_pour_la_liste(s) \
 			and not _temoins_sales.has(c.get("_temoin"))
 		etat = "sliced" if a_jour else "witness changed · slice again"
 		if c.get("_glb_perime", false):
@@ -4415,6 +4437,7 @@ func _exporter(fichier: String) -> void:
 	var c_export: Dictionary = _couches[_active]
 	var raison: String = BM.exporter_le_temoin_lie(fichier) if _origine_du_temoin(c_export) == "computed witness" \
 		else _temoin_de(c_export).vers_glb(fichier, true)   # pour Blender : soudé, sans normales
+	_empreintes_vues.clear()   # le fichier choisi peut être le `.glb` d'une couche
 	_fin_attente()
 	if raison != "":
 		_dire("[color=#e0603c]Export failed:[/color] %s" % raison)

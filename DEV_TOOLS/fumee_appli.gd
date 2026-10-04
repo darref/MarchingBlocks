@@ -752,6 +752,20 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 	_vrai(_forme_de(_tuile_du_lot(ed._vue.couche(ib).lot, paroi)) == _forme_de(tb.tuiles[paroi].vers_array_mesh(false)),
 		"la paroi posée dans le monde de B est celle de son témoin sculpté")
 	_vrai(ed._etat_de(ib).ends_with("sliced"), "et la liste dit qu'elle est à jour (%s)" % ed._etat_de(ib))
+	# L'EMPREINTE DE LA LISTE EST GARDÉE (4 octobre 2026 : la liste relisait le MD5 de chaque `.glb` après chaque
+	# geste, ~110 ms sur l'exemple) : tant que date et taille ne bougent pas, elle n'est pas relue ; un fichier réécrit
+	# (autre taille) l'est. Attendus : `FileAccess.get_md5`, hors de la fonction éprouvée.
+	var essai_glb := "user://fumee/empreinte_liste.glb"
+	FileAccess.open(essai_glb, FileAccess.WRITE).store_string("aaaa")
+	_egal(ed._empreinte_pour_la_liste(essai_glb), FileAccess.get_md5(essai_glb), "empreinte de la liste : le MD5 du fichier")
+	ed._empreintes_vues[essai_glb][1] = "gardée"
+	_egal(ed._empreinte_pour_la_liste(essai_glb), "gardée", "… gardée tant que le fichier ne change pas (pas relue)")
+	FileAccess.open(essai_glb, FileAccess.WRITE).store_string("bbbbbb")
+	_egal(ed._empreinte_pour_la_liste(essai_glb), FileAccess.get_md5(essai_glb), "… relue quand le fichier change de taille")
+	ed._empreintes_vues[essai_glb][1] = "gardée"
+	ed._rhabiller({})
+	_egal(ed._empreinte_pour_la_liste(essai_glb), FileAccess.get_md5(essai_glb), "… et relue après une réécriture par l'appli")
+	DirAccess.remove_absolute(essai_glb)
 	# ⚠ UN CTRL+Z, PAS UN SECOND « G Z 1 » : la bride peut arrêter un second geste (la face se replierait).
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(tb.tuiles[paroi].sommets == avant_b, "(Ctrl+Z a défait le geste dans B)")

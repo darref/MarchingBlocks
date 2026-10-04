@@ -329,7 +329,8 @@ func reconstruire() -> Dictionary:
 ## neutre pour la reconstruction incrémentale, charte §4). On ne refait qu'eux, avec la même fonction.
 ## ⚠ `changees` : les cases dont l'état a pu changer, DÉJÀ posées dans `Cases`. Tout autre changement de la
 ## grille doit passer par `reconstruire()` — l'état gardé ne le verrait pas.
-## ⚠ Au-delà de `SEUIL_LOCAL` cases, ou si le lot a changé, c'est la reconstruction complète.
+## ⚠ Quand il y a plus de sommets à refaire que l'état n'en compte (au moins `SEUIL_LOCAL`), ou si le lot a changé,
+## c'est la reconstruction complète.
 const SEUIL_LOCAL := 4096
 
 var _pret := false
@@ -347,7 +348,7 @@ func reconstruire_autour(changees) -> Dictionary:
 	var cases := _cases()
 	var rendu := _rendu()
 	if not _pret or cases == null or rendu == null or rendu.mesh_library != lot_courant() \
-			or rendu.mesh_library != _lot_pose or changees.size() > SEUIL_LOCAL:
+			or rendu.mesh_library != _lot_pose:
 		return reconstruire()
 	# ⚠ UNE COUCHE BÂTIE AVANT D'AVOIR REÇU SON RANG (ou une autre union) lit encore ses seules cases : son état
 	# gardé ne décrit pas le monde en couches. Vu en fumée — une couche neuve ne posait plus rien.
@@ -372,15 +373,27 @@ func reconstruire_autour(changees) -> Dictionary:
 	# plus. Un compte suffit à le voir dans presque tous les cas, et coûte peu ; sinon, tout est refait.
 	if cases.get_used_cells().size() != _miennes.size():
 		return reconstruire()
-	var sommets := {}
+	# ⚠ CHAQUE COLONNE UNE FOIS (4 octobre 2026) : jusqu'à la plus haute case changée qui la touche. Énumérer la
+	# colonne entière pour CHAQUE case insérait des millions de doublons quand une couche entière changeait (cacher les
+	# 52 407 cases d'une couche de l'exemple : 3,6 s d'énumération seule, en local). Même ensemble de sommets.
+	var colonnes := {}   # Vector2i(x, z) → plus haute case changée
 	for c in changees:
 		var p: Vector3i = c
 		for sx in [p.x - 1, p.x]:
 			for sz in [p.z - 1, p.z]:
-				for y in range(_y_bas - 1, p.y + 1):
-					sommets[Vector3i(sx, y, sz)] = true
-	for k in sommets:
-		_refaire(k)
+				var k2 := Vector2i(sx, sz)
+				colonnes[k2] = maxi(int(colonnes.get(k2, p.y)), p.y)
+	# LA ROUTE LOCALE TANT QU'ELLE COÛTE MOINS QUE TOUT REFAIRE : le nombre de sommets à refaire contre ceux que la
+	# reconstruction complète décide (l'état gardé). Un seuil fixe en CASES (4 096) envoyait cacher une couche de
+	# l'exemple vers deux reconstructions complètes (7,3 s sur le PC).
+	var a_refaire := 0
+	for k2 in colonnes:
+		a_refaire += int(colonnes[k2]) - _y_bas + 2
+	if a_refaire > maxi(_etat.size(), SEUIL_LOCAL):
+		return reconstruire()
+	for k2: Vector2i in colonnes:
+		for y in range(_y_bas - 1, int(colonnes[k2]) + 1):
+			_refaire(Vector3i(k2.x, y, k2.y))
 	_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
 	return _bilan()
 
