@@ -546,11 +546,13 @@ static func sources_en_largeur(occupees: Dictionary, s: Vector3i, largeur: int, 
 ## n'est dans l'EMPRISE (`_etendre`), sous la même boîte du monde, est REPRISE telle quelle (le même dictionnaire :
 ## l'appelant le reconnaît par `is_same`) ; une source qui n'est pas un océan exige en plus que les océans soient
 ## tous repris. Peindre une montagne au-dessus de la mer ne recalcule plus la mer. `changees` null : tout est refait.
+## `boite_` : celle des `occupees`, si l'appelant la tient déjà (l'écran la tient à jour geste par geste) — sinon elle
+## est recalculée, un balayage de toutes les cases.
 static func monde(occupees: Dictionary, sources: Array, maxi := VOLUME_MAXI, avant: Dictionary = {},
-		changees: Variant = null) -> Dictionary:
+		changees: Variant = null, boite_: Variant = null) -> Dictionary:
 	var corps: Array = []
 	corps.resize(sources.size())
-	var b := boite(occupees)
+	var b: Dictionary = boite_ if boite_ != null else boite(occupees)
 	var vieux := {}
 	if changees != null and avant.has("corps") and avant.has("sources"):
 		for i in (avant["sources"] as Array).size():

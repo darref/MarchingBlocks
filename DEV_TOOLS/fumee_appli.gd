@@ -2940,6 +2940,29 @@ func _les_fluides(ed: Control) -> void:
 	(ed._eaux[0]["sources"] as Array).pop_back()
 	ed._recalculer_eau(false)
 	await process_frame
+	# LA BOÎTE DE L'EAU SUIT LES GESTES (4 octobre 2026 : la recalculer à chaque geste coûtait ~70 ms sur l'exemple).
+	# Attendu : `FL.boite` sur les cases du monde, recalculée ici. Une case posée hors de la boîte l'élargit sans
+	# recalcul ; la retirer (au bord) la fait refaire ; retirer une case intérieure ne la change pas.
+	const FLb := preload("res://addons/marchingblocks_core/fluides.gd")
+	ed._tenir_occ_eau()
+	ed._boite_eau()
+	var loin := Vector3i(90, 3, 90)
+	ed._appliquer({"poser": {loin: true}, "effacer": {}}, "Add")
+	ed._tenir_occ_eau()
+	_vrai(ed._boite_eau_taille == ed._occ_eau.size() and ed._boite_eau_cache == FLb.boite(ed._occ_eau),
+		"une case posée hors de la boîte : la boîte tenue s'élargit, sans recalcul (%s)" % [ed._boite_eau_cache])
+	ed._appliquer({"poser": {}, "effacer": {loin: true}}, "Dig")
+	ed._tenir_occ_eau()
+	_vrai(ed._boite_eau() == FLb.boite(ed._occ_eau), "la retirer (elle faisait le bord) : la boîte est refaite")
+	var dedans: Vector3i = Vector3i(58, 1, 58)
+	_vrai(ed._occ_eau.has(dedans), "une case intérieure de la cuvette existe")
+	ed._appliquer({"poser": {}, "effacer": {dedans: true}}, "Dig")
+	ed._tenir_occ_eau()
+	_vrai(ed._boite_eau_taille == ed._occ_eau.size() and ed._boite_eau_cache == FLb.boite(ed._occ_eau),
+		"retirer une case intérieure : la boîte tenue ne change pas, sans recalcul")
+	ed._histoire.undo()
+	ed._recalculer_eau(false)
+	await process_frame
 
 	# ⚠ UN COUP DE PINCEAU N'EST PAS REJOUÉ PAR L'HISTORIQUE (les cases sont posées pendant le glissé) : c'est le
 	# coup lui-même qui doit rappeler l'eau. Un coup « Dig » sur le mur : le lac redescend ; Ctrl+Z le rend.

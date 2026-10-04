@@ -1716,6 +1716,13 @@ func _tenir_occ_eau() -> void:
 			_eau_changees_vues.merge(FL.changees_entre(occ_avant, _occ_eau))
 		_eau_cases_inconnues = false
 	elif not _eau_changees.is_empty():
+		# ⚠ LA BOÎTE SUIT LES GESTES (4 octobre 2026) : la recalculer balaie toutes les cases (~70 ms sur l'exemple, à
+		# chaque geste). Une case posée l'élargit ; une case retirée ne la change que si elle touchait son bord — alors
+		# seulement elle est refaite. Une boîte NEUVE (jamais retouchée en place : les corps d'eau gardent la leur).
+		var tenue := is_same(_boite_eau_de, _occ_eau) and _boite_eau_taille == _occ_eau.size() \
+			and not _boite_eau_cache.is_empty()
+		var lo: Vector3i = _boite_eau_cache["lo"] if tenue else Vector3i.ZERO
+		var hi: Vector3i = _boite_eau_cache["hi"] if tenue else Vector3i.ZERO
 		for c in _eau_changees:
 			_eau_changees_vues[c] = true
 			var plein := false
@@ -1725,9 +1732,18 @@ func _tenir_occ_eau() -> void:
 					break
 			if plein:
 				_occ_eau[c] = true
-			else:
+				lo = Vector3i(mini(lo.x, c.x - 1), mini(lo.y, c.y - 1), mini(lo.z, c.z - 1))
+				hi = Vector3i(maxi(hi.x, c.x + 1), maxi(hi.y, c.y + 1), maxi(hi.z, c.z + 1))
+			elif _occ_eau.has(c):
 				_occ_eau.erase(c)
-		_boite_eau_taille = -1   # retouché en place : la boîte est à refaire
+				if c.x <= lo.x + 1 or c.y <= lo.y + 1 or c.z <= lo.z + 1 \
+						or c.x >= hi.x - 1 or c.y >= hi.y - 1 or c.z >= hi.z - 1:
+					tenue = false
+		if tenue and not _occ_eau.is_empty():
+			_boite_eau_cache = {"lo": lo, "hi": hi}
+			_boite_eau_taille = _occ_eau.size()
+		else:
+			_boite_eau_taille = -1   # retouché en place : la boîte est à refaire
 	_eau_changees = {}
 
 
@@ -1771,7 +1787,7 @@ func _recalculer_eau(avec_barre := true) -> void:
 	_eau_changees_vues = {}
 	_eau_tout_refaire = false
 	_eau_cases_inconnues = false
-	var w: Dictionary = FL.monde(_occ_eau, toutes, FL.VOLUME_MAXI, _monde_eau, changees)
+	var w: Dictionary = FL.monde(_occ_eau, toutes, FL.VOLUME_MAXI, _monde_eau, changees, _boite_eau())
 	_monde_eau = w
 	_boite_eau_cache = w["boite"]
 	_boite_eau_de = _occ_eau
