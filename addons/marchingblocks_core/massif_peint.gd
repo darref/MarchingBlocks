@@ -292,6 +292,7 @@ func reconstruire() -> Dictionary:
 	# description de la règle, ici, serait celle qui divergerait des greffons (charte §6).
 	_pleines = pleines
 	_index = index
+	_variantes_par_cle = {}
 	_id_faute = id_faute
 	_lot_pose = rendu.mesh_library
 	_etat.clear()
@@ -362,6 +363,7 @@ var _lot_pose: MeshLibrary
 var _plafond := 0            # ≥ la plus haute case : une borne, jamais une valeur exacte (voir `pose_du_sommet`)
 var _y_bas := 0              # ≤ la plus basse case, même raison
 var _hauts := {}             # {Vector2i(x, z): plus haute case}, pendant une reconstruction entière seulement
+var _variantes_par_cle := {} # {clé: combien de variantes le lot lui donne} — ne dépend que de `_index`
 var _compte := {}
 
 
@@ -475,7 +477,11 @@ func _decision(s: Vector3i) -> Variant:
 		return null
 	var d: Dictionary = MB.pose_du_sommet(_pleines, s, _index, _plafond, _hauts)
 	if not d.is_empty() and d["cle"] != "":
-		d["tuile"] = MB.tuile_du_sommet(s, d["cle"], _index, poids, choix)
+		var n: int = _variantes_par_cle.get(d["cle"], -1)
+		if n < 0:
+			n = MB.nombre_de_variantes(d["cle"], _index)
+			_variantes_par_cle[d["cle"]] = n
+		d["tuile"] = MB.tuile_du_sommet(s, d["cle"], _index, poids, choix, n)
 	return d
 
 

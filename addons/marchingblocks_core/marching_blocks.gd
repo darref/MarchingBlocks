@@ -930,19 +930,35 @@ static func poses_en_couches(union: Dictionary, cles_par_couche: Array) -> Array
 static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictionary, plafond: int,
 		hauts: Dictionary = {}) -> Dictionary:
 	var b: int = bits(pleines, sommet)
-	var r: Dictionary = classer(b)
+	var r: Dictionary = _classe_des_bits(b)
 	if not r["surface"]:
 		return {}
 	var cle := ""
 	var dehors := false
-	if exterieur_possible(b) and sous_le_ciel(pleines, sommet, plafond, hauts):
-		var variante: String = nom_en_contexte(r["nom"], true)
+	if r["exterieur"] and sous_le_ciel(pleines, sommet, plafond, hauts):
+		var variante: String = r["nom_dehors"]
 		if cles.has(variante):
 			cle = variante
 			dehors = true
 	if cle == "" and cles.has(r["nom"]):
 		cle = r["nom"]
 	return {"sommet": sommet, "nom": r["nom"], "cle": cle, "orientation": r["orientation"], "dehors": dehors}
+
+
+## `classer(b)`, et ce que la pose en tire, GARDÉS pour les 256 configurations (4 octobre 2026) : `classer` bâtit un
+## dictionnaire neuf, et `pose_du_sommet` le demandait pour chaque sommet d'une reconstruction (des centaines de
+## milliers sur l'exemple). Mêmes valeurs ; on ne rend pas ce dictionnaire à l'appelant, qui pourrait le modifier.
+static var _par_bits: Array = []
+
+
+static func _classe_des_bits(b: int) -> Dictionary:
+	if _par_bits.is_empty():
+		for k in 256:
+			var r: Dictionary = classer(k)
+			r["exterieur"] = exterieur_possible(k)
+			r["nom_dehors"] = nom_en_contexte(r["nom"], true)
+			_par_bits.append(r)
+	return _par_bits[b & 0xFF]
 
 
 ## Le nom de CLASSE d'une tuile, le suffixe d'air libre retiré. ⚠ C'est par là que les contrôles existants
@@ -1012,11 +1028,12 @@ static func hachage_du_sommet(s: Vector3i) -> int:
 
 ## LA TUILE POSÉE au sommet `s` pour la clé `cle` (déjà choisie par `pose_du_sommet`) : son nom dans le lot.
 ## `cles` : les noms que le lot porte ; `poids`, `choix` : voir plus haut. Sans variante, la clé elle-même.
+## `variantes` : `nombre_de_variantes(cle, cles)`, si l'appelant le garde (il ne dépend que du lot) — sinon recalculé.
 static func tuile_du_sommet(s: Vector3i, cle: String, cles: Dictionary, poids: Dictionary = {},
-		choix: Dictionary = {}) -> String:
+		choix: Dictionary = {}, variantes := -1) -> String:
 	if cle == "":
 		return ""
-	var n := nombre_de_variantes(cle, cles)
+	var n := variantes if variantes >= 0 else nombre_de_variantes(cle, cles)
 	if n == 0:
 		return cle
 	if choix.has(s):
