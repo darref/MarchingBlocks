@@ -3122,13 +3122,63 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
     - ⚠ **CE QUI RESTE** : l'océan lui-même (~3 s en local) inscrit ses 2,4 millions de cases une à une dans un
       dictionnaire. Le représenter par ses tronçons de colonne changerait la règle de l'eau — celle que les trois
       greffons réécriront : à décider avec eux.
-  - **CE QUI RESTE, MESURÉ, PAS FAIT** : `vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
-    textures en PNG, ~2,5 s en local — changer de format changerait le fichier) ; Ctrl+S ~2,3 s (il marque d'office le
+  - **CE QUI RESTE, MESURÉ, PAS FAIT** : ~~`vers_glb` ~3,5 s sur le PC quand le monde suit son témoin (l'encodage des
+    textures en PNG, ~2,5 s en local — changer de format changerait le fichier)~~ — FAIT le soir, même fichier (ci-dessous) ; Ctrl+S ~2,3 s (il marque d'office le
     témoin en édition comme modifié et le réécrit : une ceinture de sécurité, GARDÉE) ; cacher une couche ~2 s (la
     décision de 192 041 sommets par couche, dans la règle de pose — la référence des greffons) ; à l'ouverture, les
     vignettes, la vérification des ensembles PBR et la recopie de la mer — FAITS ensuite (ci-dessous).
   - ⚠ **UN TEST INSTABLE, VU EN PASSANT** : `fumee_appli`, « Espace lâchée, il s'arrête vite et PLANE » a échoué une fois
     sur quatre (0,52 case de dérive pour un seuil de 0,5 : le pas de la physique suit la charge de la machine).
+  - **LA SUITE DE LA PASSE (4 octobre 2026, le soir, sur le PC, une session seule)** — les trois points « mesurés, pas
+    faits », dans l'ordre, chacun mesuré avant d'y toucher :
+    - **1. LES GESTES DE L'EAU SUR L'EXEMPLE : ~470 → 65 à 95 ms la pire image** (`sonde_eau_exemple.gd`, avec fenêtre :
+      poser une rivière, Ctrl+Z, Ctrl+Y, la retirer). MESURÉ d'abord (`DEV_TOOLS/banc_eau_rivieres.gd`, headless) : le
+      remaillage de la couche d'eau 0 (l'océan et 93 rivières) coûtait ~450 ms, dont **~320 ms à calculer ses 469
+      cascades** (point et normale par différences, en GDScript), ~120 ms à POSER des grilles (cascades, remous, sources)
+      sommet par sommet, ~20 ms à retirer les orphelins sur tout le maillage.
+      - **`memoire["lames"]`** : une cascade ne dépend que de ses champs une fois ses voisines connues (axe, sens, plan,
+        place, haut, pied, sol, sens du courant, ses deux bouts libres) ; sous la même clé, les mêmes grilles. Seules
+        celles de l'appel courant restent. **`memoire["sources"]`** : les grilles d'une source, par case ;
+      - **les grilles sont COMPILÉES une fois** (`_grille_compilee` : tableaux tassés, indices depuis 0, ses orphelins
+        déjà retirés) et posées par `append_array` (`_poser`). ⚠ **`_sans_orphelins` (le ménage du maillage entier) EST
+        RETIRÉ** : seules les grilles laissent des orphelins (`_quad` et l'éventail des plats emploient tous leurs
+        sommets), et une grille ne référence que ses sommets — le ménage par grille rend le même maillage ;
+      - **MESURÉ : 450 → 57 ms headless ; le maillage de l'exemple, couche par couche, IDENTIQUE au bit près à celui du
+        code d'avant** (relu par une comparaison faite une fois avec l'ancien `eau_maillage.gd`, avec et sans mémoire) ;
+      - gardé par `test_fluides` 252 (`_memoire_des_cascades` : huit sources au bord d'un plateau dont les cascades sont
+        voisines sur un même plan, un bassin au pied dont le rebord monte d'une rangée, 60 gestes au hasard — le maillage
+        avec mémoire = sans mémoire, la mémoire a servi, les bouts libres ont changé (déduits des SOURCES, pas de la
+        clé), aucun sommet sans triangle compté sur les indices). **Sept mutations rouges** (clé sans les bouts libres,
+        avec un seul, sans le sol, sans le pied, orphelins gardés, source reprise sans regarder sa case, indices non
+        décalés). ⚠ **« SANS LE SOL » D'ABORD MUETTE, PAR LE TEST** : le niveau d'eau au pied ne changeait jamais sans
+        changer le pied — il a fallu le bassin dont le rebord monte. ⚠ **ET DEUX D'ABORD FAUSSEMENT ROUGES** : le test
+        lisait la disposition de la clé (`cle[8]`) ; une clé raccourcie le faisait planter, pas mentir.
+      - ⚠ **UN DÉFAUT DU TEST, TROUVÉ EN ÉCRIVANT** : `_reprise` parcourait toutes les clés de la mémoire ; avec « lames »
+        elle s'arrêtait sur une erreur d'exécution — **en silence, la suite finissait « 0 échec »** (§6). Une SENTINELLE
+        exige désormais que `_reprise` et `_memoire_des_cascades` aillent au bout.
+      - Ce qui reste du geste (~60 ms) : les plats (~40 ms, 1 522 rectangles), les bandes, le calcul des corps.
+    - **2. ÉCRIRE LE .glb DU TÉMOIN (le monde qui suit son témoin) : 3,3 s → 0,46 s** (`sonde_lags_appli.gd -- --exemple`,
+      avec fenêtre). MESURÉ d'abord : les maillages 24 ms, `append_from_scene` 47 ms, **`write_to_filesystem` 3,2 s** —
+      l'encodage PNG de sept textures (1k et 2k) qu'une retouche de géométrie ne change pas.
+      - **`addons/marchingblocks_core/png_en_memoire.gd`** : une `GLTFDocumentExtension`, un format d'image à nous
+        (`MB_PNG`) qui fait ce que fait le PNG de Godot (`save_png_to_buffer`, « image/png », la texture qui cite son
+        image) mais retient les octets sous l'empreinte des PIXELS (MD5 des données, format, mipmaps, taille), en mémoire
+        et sur le disque (`user://cache/png/`, 512 Mo au plus, les plus anciens partent d'abord ; écrit à côté puis
+        remplacé). ⚠ **BRANCHÉE AVANT `append_from_scene`** : c'est là que Godot choisit qui sauvera les images — branchée
+        après, « Unknown image format » et un `.glb` SANS IMAGES (vu à la sonde ; l'exemple installé par la sonde en
+        gardait la trace : il a fallu effacer ce dossier jetable). ⚠ Enregistrée le temps d'une écriture seulement.
+        ⚠ Sans `_serialize_texture_json`, la texture ne citait plus son image (comparé dans le JSON, sur un cas minimal).
+      - **MESURÉ** : seconde écriture 0 image encodée, 7 reprises ; une nouvelle session (cache disque) : 0,46 s dès la
+        première. Seule une PREMIÈRE écriture d'images neuves encode (~2,9 s, comme avant).
+      - gardé par `test_temoin_lie` 38 (`_les_png_sont_gardes` : deux images posées sur des faces ; l'attendu est
+        l'écriture de GODOT telle quelle (`actif` faux) — octet pour octet en mémoire, depuis le disque dans une « autre
+        session », et après une image changée (elle seule réencodée, le fichier de Godot pour ce nouvel état)). **Six
+        mutations rouges** (clé sans les pixels, texture sans source, sans mimeType, jamais repris, disque jamais lu,
+        branchée après `append_from_scene`). Seul `ecrire_le_temoin_lie` l'emploie ; l'export vers les moteurs et le
+        `.mbworld` écrivent comme avant.
+      - ⚠ **UN TEST DE LA FUMÉE ÉCHOUAIT SUR UN RESTE** : « exporter une couche sans tuiles est refusé, et rien n'est
+        écrit » trouvait un `layer_2.mbset` laissé le matin par un passage précédent (marqué en lecture seule). Il juge
+        désormais ce que CET export écrit (le dossier absent, ou son `tileset.json` à la même date).
 
 ### LA PASSE DU 3 OCTOBRE 2026 — AVANT LE PROJET PREUVE (Jordan : « corrige tous les manquements que tu rencontres,
 ### perfectionne le soft, ensuite tu me dis quand je pars sur un projet preuve »)
