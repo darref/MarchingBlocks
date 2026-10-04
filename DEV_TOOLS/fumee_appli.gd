@@ -3656,6 +3656,22 @@ func _l_exemple_ne_s_impose_pas(ed: Control) -> void:
 	FileAccess.open(faux_exemple, FileAccess.WRITE).store_string("{}")
 	_vrai(ed.est_l_exemple(faux_exemple) and ed.est_l_exemple(ProjectSettings.globalize_path(faux_exemple))
 		and not ed.est_l_exemple(mien), "est_l_exemple : l'exemple installé l'est, le projet jetable non")
+	# L'ANCIENNE PLACE (les données de l'appli, avant le 4 octobre 2026) compte encore ; un dossier qui ne fait que
+	# COMMENCER comme celui de l'exemple, non.
+	_vrai(ed.est_l_exemple(Exemple.RACINE.path_join("v0/example.mbproj"))
+		and not ed.est_l_exemple(RACINE_EXEMPLE + "s/v0/autre.mbproj"),
+		"est_l_exemple : l'ancienne place de l'exemple l'est, un dossier voisin au nom plus long non")
+	# UN PROJET NEUF VA DANS SON DOSSIER (`Dossiers`, Jordan, 4 octobre 2026) — ici un dossier jetable à la place des
+	# Documents.
+	const Dossiers := preload("res://app/dossiers.gd")
+	var docs := "user://fumee/documents"
+	_vider_dossier(docs)
+	DirAccess.make_dir_recursive_absolute(docs)
+	Dossiers.racine_forcee = docs
+	var neuf: String = ed._chemin_libre()
+	Dossiers.racine_forcee = ""
+	_egal(neuf, docs.path_join("untitled/untitled.mbproj"), "New : le projet neuf naît dans son dossier")
+	_vider_dossier(docs)
 	var avant := FileAccess.get_file_as_string(REGLAGES)
 	var r := ConfigFile.new()
 	r.set_value("projet", "dernier", faux_exemple)

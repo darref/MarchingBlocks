@@ -348,10 +348,12 @@ func _couches() -> String:
 		+ "On first launch, MarchingBlocks gives its files their icons in Windows (.mbproj, .mbtiles, and the "
 		+ ".mbset / .mbworld folders it exports) and a [b]double-click on a .mbproj opens it[/b] — for your "
 		+ "Windows account only. Untick [b]File icons & double-click[/b] (Project) to remove it. "
-		+ "[b]New[/b] starts an empty project, [b]Open[/b] opens one, [b]Save as[/b] puts it where you want; it "
-		+ "keeps saving itself there. [b]Recent[/b], under them, reopens the last projects in one click.")
+		+ "[b]New[/b] starts an empty project in its own folder under [b]Documents/MarchingBlocks[/b] (untitled, "
+		+ "untitled 2…), its witnesses beside it; [b]Open[/b] opens one, [b]Save as[/b] puts it where you want; it "
+		+ "keeps saving itself there. [b]Recent[/b], under them, reopens the last projects in one click. "
+		+ "The cache and the settings stay out of sight, in the app data.")
 	l.append("[b]Very simple example[/b], in World, opens a small world made with MarchingBlocks: walk it in Play test, "
-		+ "open its witnesses, change anything. It lives in its own folder and keeps your changes. [b]My world[/b] "
+		+ "open its witnesses, change anything. It lives in its own folder (Documents/MarchingBlocks/Example) and keeps your changes. [b]My world[/b] "
 		+ "takes you back to yours. MarchingBlocks always starts on your world, never on the example.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "
 		+ "again on opening; if the .glb is gone, you see the last tiles sliced from it, and the report "

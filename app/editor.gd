@@ -46,6 +46,7 @@ const Icones := preload("res://app/icones.gd")
 const Manuel := preload("res://app/manuel.gd")
 const Associations := preload("res://app/associations.gd")
 const Exemple := preload("res://app/exemple.gd")
+const Dossiers := preload("res://app/dossiers.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
@@ -5660,9 +5661,9 @@ func _mon_dernier_monde() -> String:
 	return ""
 
 
-## Où l'exemple s'installe : `Exemple.RACINE`. ⚠ La fumée la détourne vers son propre dossier : elle ouvrait la copie
+## Où l'exemple s'installe : `Documents/MarchingBlocks/Example` dans l'exe, `Exemple.RACINE` ailleurs (`Dossiers`). ⚠ La fumée la détourne vers son propre dossier : elle ouvrait la copie
 ## INSTALLÉE de l'utilisateur — avec ses retouches — et l'appli la réenregistrait en fermant (2 octobre 2026).
-static var racine_exemple: String = Exemple.RACINE
+static var racine_exemple: String = Dossiers.exemple()
 
 
 ## La source de l'exemple, en mode dev seulement (`DEV_TOOLS/dev_exemple.gd`) : elle compte comme l'exemple.
@@ -5675,8 +5676,16 @@ static func est_l_exemple(chemin: String) -> bool:
 		var a := ProjectSettings.globalize_path(chemin).replace("\\", "/").simplify_path().to_lower()
 		if a == source_dev_exemple.simplify_path().to_lower():
 			return true
-	return chemin != "" and ProjectSettings.globalize_path(chemin).simplify_path().begins_with(
-		ProjectSettings.globalize_path(racine_exemple).simplify_path())
+	if chemin == "":
+		return false
+	# ⚠ ET L'ANCIENNE PLACE (`Exemple.RACINE`, dans les données de l'appli) : un exemple installé par un exe d'avant le
+	# 4 octobre 2026 reste l'exemple — sinon il serait retenu comme « ton monde » et rouvert au lancement.
+	var a := ProjectSettings.globalize_path(chemin).simplify_path()
+	for racine in [racine_exemple, Exemple.RACINE]:
+		# avec la barre : `…/Example` ne doit pas prendre un `…/Examples/` à soi
+		if a.begins_with(ProjectSettings.globalize_path(racine).simplify_path().trim_suffix("/") + "/"):
+			return true
+	return false
 
 
 ## « My world » : ton dernier monde (pas l'exemple), ou un projet neuf s'il n'y en a pas.
@@ -5716,15 +5725,14 @@ func _nouveau_projet() -> void:
 	_enregistrer()
 
 
-## Un nom de projet libre dans les données de l'appli : `untitled.mbproj`, puis `untitled 2`…
+## Un projet neuf libre, DANS SON DOSSIER, sous `Documents/MarchingBlocks` dans l'exe (`Dossiers`) : `untitled/untitled.mbproj`,
+## puis `untitled 2/…` — ses témoins s'écrivent à côté de lui, pas en vrac. Si ce dossier ne peut pas être écrit (Documents
+## en lecture seule), les données de l'appli, comme avant.
 func _chemin_libre() -> String:
-	var n := 1
-	while true:
-		var chemin := "user://untitled%s.%s" % ["" if n == 1 else " %d" % n, Projet.EXTENSION]
-		if not FileAccess.file_exists(chemin):
-			return chemin
-		n += 1
-	return ""
+	var chemin := Dossiers.projet_libre(Projet.EXTENSION)
+	if chemin == "":
+		chemin = Dossiers.projet_libre(Projet.EXTENSION, "user://")
+	return chemin
 
 
 func _vider_le_projet() -> void:
@@ -6164,7 +6172,7 @@ func _dire_le_projet() -> void:
 		return
 	_etiquette_projet.text = _projet.get_file().get_basename()
 	_etiquette_projet_chemin.text = ("Autosaved in the app data — « Save as » to keep it elsewhere."
-		if _projet.begins_with("user://") else "Autosaved · " + _projet.get_base_dir())
+		if _projet.begins_with("user://") else "Autosaved · " + _projet.get_base_dir().replace("\\", "/"))
 	# ⚠ PAS DE FENÊTRE HORS DE L'ARBRE : le dernier enregistrement, à la fermeture, arrive quand l'écran
 	# en est déjà sorti — `get_window()` rend alors `null`, et c'était l'erreur du journal.
 	if is_inside_tree():

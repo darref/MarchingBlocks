@@ -962,6 +962,27 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
     dossiers jetables, pas par le bouton d'export, qui demandait un geste) ; la case qui retire tout ; et, dans
     l'exe, les couches avec leur témoin et « ✓ Saved » / Ctrl+S.
 
+- **TES FICHIERS DANS `Documents/MarchingBlocks` — DÉCIDÉ (Jordan, 4 octobre 2026 : « que l'exe crée un dossier simple
+  dans Documents pour y mettre tous les fichiers qu'il crée automatiquement, pour rester propre »), ÉCRIT LE MÊME JOUR.**
+  Les projets « untitled » s'empilaient en vrac dans les données de l'appli (sur le PC : `untitled 2…14`, leurs `.glb`,
+  `.mbtiles`, dossiers `_images`, mêlés au cache et aux restes des suites). Choisi par Jordan entre trois portées :
+  - **ce qui est À L'UTILISATEUR va dans `Documents/MarchingBlocks/`** (`app/dossiers.gd`) : chaque projet neuf DANS
+    SON DOSSIER (`untitled/untitled.mbproj`, ses témoins à côté de lui), et l'exemple installé (`Example/`) ;
+  - ⚠ **LE CACHE, LES RÉGLAGES, LES ICÔNES RESTENT DANS LES DONNÉES DE L'APPLI** : la convention de Windows, et Documents
+    est souvent synchronisé par OneDrive (un cache de plusieurs Mo y repartirait à chaque tranchage) ;
+  - ⚠ **SEULEMENT DANS L'EXE** (`OS.has_feature("template")`) : depuis l'éditeur et les suites, `user://`, comme avant ;
+  - ⚠ **PAS RETENU** (le second choix proposé) : un projet enregistré AILLEURS (le `test.mbproj` du Bureau) sème
+    toujours ses fichiers à côté de lui (`test_layerN.*`, `_images`) — les ranger dans un sous-dossier changerait les
+    chemins enregistrés et demanderait une migration ;
+  - un exemple installé à l'ancienne place (`user://example`, un exe d'avant) reste reconnu comme l'exemple ; un dossier
+    qui ne fait que COMMENCER comme celui de l'exemple (`…/Examples/`) ne l'est plus (la comparaison prend la barre) ;
+  - les projets « untitled » déjà dans les données de l'appli ne sont pas déplacés (ils restent dans « Recent »).
+  - **MESURÉ** : `test_projet` 105 (+10, attendus à la main : Documents dans l'exe, barres de Windows redressées, rien
+    hors de l'exe ni sans Documents, `untitled/`, `untitled 2/` même si le dossier est vide, un ancien `untitled 3.mbproj`
+    à plat non recouvert) ; `fumee_appli` 756 (+2 : `_chemin_libre` dans un dossier jetable, l'ancienne place de
+    l'exemple). Trois mutations rouges (l'exe ignoré, le projet à plat, l'ancienne place oubliée — avec `_chemin_libre`
+    qui ignore la racine). ⚠ **PAS ÉPROUVÉ DANS L'EXE CHIFFRÉ**, ni « New » cliqué dans l'exe.
+
 ### Le TERRAIN monolithique et les PROPS rattachés — DÉCIDÉ (Jordan, 28 septembre 2026), PAS ÉCRIT
 
 ⚠ **REPORTÉ (Jordan, 2 octobre 2026) : abandonné pour la 0.9 / 1.0, remis à une MISE À JOUR FUTURE.** Tout ce qui

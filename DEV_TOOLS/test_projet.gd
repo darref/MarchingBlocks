@@ -12,6 +12,7 @@ extends SceneTree
 const Projet := preload("res://app/projet.gd")
 const Vue := preload("res://app/vue.gd")
 const Exemple := preload("res://app/exemple.gd")
+const Dossiers := preload("res://app/dossiers.gd")
 
 const DOSSIER := "user://test_projet"
 
@@ -155,6 +156,7 @@ func _initialize() -> void:
 	_les_variantes()
 	_le_dev_de_l_exemple()
 	_les_durees()
+	_les_dossiers()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -303,6 +305,32 @@ func _les_durees() -> void:
 	_vrai(absf(e.prevoir("x", 10000) - 0.55) < 1e-9, "relue des réglages, la table prédit la même chose")
 	e.depuis_dictionnaire({"y": "abîmé", "z": -1.0, "w": 0.001})
 	_vrai(e.par_unite.keys() == ["w"], "une entrée abîmée des réglages est écartée")
+
+
+## OÙ L'APPLI RANGE CE QU'ELLE CRÉE (Jordan, 4 octobre 2026) : dans l'exe, `Documents/MarchingBlocks`, un dossier par
+## projet neuf ; ailleurs, les données de l'appli. Attendus écrits à la main.
+func _les_dossiers() -> void:
+	_egal(Dossiers.racine_pour(true, "C:\\Users\\a\\Documents"), "C:/Users/a/Documents/MarchingBlocks",
+		"dans l'exe : Documents/MarchingBlocks, barres de Windows redressées")
+	_egal(Dossiers.racine_pour(false, "C:/Users/a/Documents"), "user://", "hors de l'exe : les données de l'appli")
+	_egal(Dossiers.racine_pour(true, ""), "user://", "sans dossier Documents : les données de l'appli")
+	_egal(Dossiers.racine(), "user://", "les suites ne tournent pas dans l'exe : jamais les Documents du développeur")
+	_egal(Dossiers.exemple(), "user://example", "hors de l'exe, l'exemple garde son ancienne place")
+	var base := DOSSIER.path_join("documents")
+	_vider(base)
+	DirAccess.make_dir_recursive_absolute(base)
+	var p1 := Dossiers.projet_libre("mbproj", base)
+	_egal(p1, base.path_join("untitled/untitled.mbproj"), "le premier projet neuf : untitled/untitled.mbproj")
+	_vrai(DirAccess.dir_exists_absolute(base.path_join("untitled")), "son dossier est créé")
+	var p2 := Dossiers.projet_libre("mbproj", base)
+	_egal(p2, base.path_join("untitled 2/untitled 2.mbproj"), "le dossier pris (même vide), le suivant : untitled 2")
+	_ecrire(base.path_join("untitled 3.mbproj"), "{}")
+	_egal(Dossiers.projet_libre("mbproj", base), base.path_join("untitled 4/untitled 4.mbproj"),
+		"un ancien projet à plat du même nom n'est pas recouvert")
+	Dossiers.racine_forcee = base
+	_egal(Dossiers.exemple(), base.path_join("Example"), "hors des données de l'appli, l'exemple va dans Example/")
+	Dossiers.racine_forcee = ""
+	_vider(base)
 
 
 func _vider(dossier: String) -> void:
