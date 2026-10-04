@@ -76,8 +76,11 @@ const CASCADE := 1.0
 ## NAPPES d'un corps (océan, lac, lacs d'une rivière) ne lisent que des cases de son EMPRISE ; `FL.monde` ne reprend un
 ## corps (le MÊME objet) que si rien n'a changé dans son emprise, ni la boîte là où il regardait — ses rectangles sont
 ## donc les mêmes. ⚠ Mesuré (4 octobre 2026, l'exemple) : la nappe de l'océan coûtait ~0,6 s à chaque remaillage de sa
-## couche, pour une rivière retouchée ailleurs. Les cascades et les bandes, qui se rejoignent d'un corps à l'autre, sont
-## toujours refaites.
+## couche, pour une rivière retouchée ailleurs. Les bandes, qui se rejoignent d'un corps à l'autre, sont toujours refaites.
+## `memoire["lames"]` : {les champs d'une cascade : ses grilles} — une cascade (sa nappe, son remous) ne dépend QUE de ses
+## champs une fois ses voisines connues (`_poser_les_lames`) ; la même clé rend les mêmes grilles. Seules celles de
+## l'appel courant restent. ⚠ Mesuré (4 octobre 2026, l'exemple) : 469 cascades, ~0,32 s des ~0,45 s d'un geste de l'eau.
+## `memoire["sources"]` : {case : les grilles compilées de sa source} (`_source` ne lit que la case).
 static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> ArrayMesh:
 	var a := _tableaux()
 	var b: Dictionary = boite if boite != null else FL.boite(occupees)
@@ -112,16 +115,31 @@ static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, 
 		if r["genre"] == "riviere":
 			_riviere(a, r["cours"], occupees, plats, vus, sources)
 	for j in garde.keys():
-		if not vue_memoire.has(j):
+		if j is int and not vue_memoire.has(j):
 			garde.erase(j)
 	var remous: Array = []
-	_poser_les_lames(a, vus, remous, plats)
+	var lames: Variant = null
+	var bouillons := {}
+	if memoire != null:
+		lames = {}
+		_poser_les_lames(a, vus, remous, plats, garde.get("lames", {}), lames)
+		garde["lames"] = lames
+	else:
+		_poser_les_lames(a, vus, remous, plats)
+	var bouillons_avant: Dictionary = garde.get("sources", {})
 	for c: Vector3i in sources:
-		remous.append_array(_source(c))
+		var gs: Variant = bouillons_avant.get(c)
+		if gs == null:
+			gs = (_source(c) as Array).map(_grille_compilee)
+		bouillons[c] = gs
+		remous.append_array(gs)
+	if memoire != null:
+		garde["sources"] = bouillons
 	_poser_les_plats(a, plats)
 	for g: Dictionary in remous:
-		_grille(a, g)
-	_sans_orphelins(a)
+		_poser(a, g)
+	# ⚠ PAS D'ORPHELIN À RETIRER ICI : seules les grilles en laissent (`_quad` et l'éventail des plats emploient tous
+	# leurs sommets), et chaque grille compilée a déjà retiré les siens (`_grille_compilee`).
 	if (a["v"] as PackedVector3Array).is_empty():
 		return null
 	var arr := []
@@ -226,36 +244,6 @@ static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
 			# Le tour est celui de `_plat` ((x0,z0) → (x1,z0) → (x1,z1)) : le produit vectoriel de (centre, k, k+1)
 			# pointe vers le BAS, à l'opposé de la normale — l'ordre que Godot veut (charte §4).
 			a["i"].append_array([base, base + 1 + k, base + 1 + (k + 1) % n])
-
-
-## Retire les sommets qu'aucun triangle n'emploie (le centre d'un disque, où tous les triangles d'un côté sont plats) :
-## l'export glTF les ôte, et le maillage relu n'aurait plus les mêmes sommets que celui qu'on dessine.
-static func _sans_orphelins(a: Dictionary) -> void:
-	var idx: PackedInt32Array = a["i"]
-	var n: int = (a["v"] as PackedVector3Array).size()
-	var neuf := PackedInt32Array()
-	neuf.resize(n)
-	neuf.fill(-1)
-	for i in idx:
-		neuf[i] = 0
-	var k := 0
-	for i in n:
-		if neuf[i] == 0:
-			neuf[i] = k
-			k += 1
-	if k == n:
-		return
-	for cle in ["v", "n", "c", "uv"]:
-		var src = a[cle]
-		var dst = src.duplicate()
-		dst.resize(k)
-		for i in n:
-			if neuf[i] >= 0:
-				dst[neuf[i]] = src[i]
-		a[cle] = dst
-	for t in idx.size():
-		idx[t] = neuf[idx[t]]
-	a["i"] = idx
 
 
 static func _k(v: float) -> int:
@@ -694,7 +682,8 @@ static func _signe(l: Dictionary) -> int:
 ## Les cascades retenues dans `vus` : chacune posée tout de suite (opaque), son remous gardé dans `remous` (transparent,
 ## posé en dernier). ⚠ **UN BOUT SANS VOISINE SUR SON PLAN S'ARRONDIT ET RENTRE DANS LA ROCHE** ; un bout qui en a une
 ## reste droit et finit sur la frontière de la case, où la voisine reprend (mêmes rangées, mêmes points).
-static func _poser_les_lames(a: Dictionary, vus: Dictionary, remous: Array, plats: Array = []) -> void:
+static func _poser_les_lames(a: Dictionary, vus: Dictionary, remous: Array, plats: Array = [],
+		avant: Dictionary = {}, apres: Variant = null) -> void:
 	for cle in vus:
 		if not cle is String or cle == "dormantes":
 			continue
@@ -704,57 +693,74 @@ static func _poser_les_lames(a: Dictionary, vus: Dictionary, remous: Array, plat
 		var cle_plan := "%d|%d|" % [l["axe"], roundi(float(l["plan"]) * 20.0)]
 		l["libre0"] = not l["droite"] and not vus.has(cle_plan + str(u_case - 1))
 		l["libre1"] = not l["droite"] and not vus.has(cle_plan + str(u_case + 1))
-		l["u0"] = float(u_case) - (DEPASSE if l["libre0"] else 0.0)
-		l["u1"] = float(u_case) + 1.0 + (DEPASSE if l["libre1"] else 0.0)
-		var us := _travers(l)
-		var haut: float = l["haut"]
-		var sol: float = l["sol"]
-		var total: float = haut - float(l["pied"])
-		var dd: Vector3i = l["d"]
-		var courant := Vector2(dd.x, dd.z)
-		var g := {"p": [], "n": [], "c": [], "uv": []}
-		for chute in _chutes(total):
-			var rp: Array = []
-			var rn: Array = []
-			var rc: Array = []
-			var ruv: Array = []
-			for u in us:
-				var p := _point_de_lame(l, u, chute)
-				var e := clampf(1.0 - (p.y - sol) / MONTEE_D_ECUME, 0.0, 1.0)
-				rp.append(p)
-				rn.append(_normale_de_lame(l, u, chute))
-				rc.append(_couleur(courant, CASCADE, e * e))
-				ruv.append(Vector2(u, p.y))
-			g["p"].append(rp)
-			g["n"].append(rn)
-			g["c"].append(rc)
-			g["uv"].append(ruv)
-		_grille(a, g)
+		# Tout ce que lit le reste de la boucle : la même clé, les mêmes grilles (des flottants comparés EXACTEMENT).
+		var signature := [l["axe"], l["sens"], l["plan"], u_case, l["haut"], l["pied"], l["sol"], l["d"], l["libre0"],
+			l["libre1"]]
+		var deja: Variant = avant.get(signature)
+		if deja == null:
+			deja = _lame_calculee(l)
+		if apres != null:
+			apres[signature] = deja
+		_poser(a, deja[0])
 		# ⚠ SON HAUT EST SUR LE BOUT DE LA BANDE qui y arrive : ses sommets y sont insérés (`_poser_les_plats`), sinon des
 		# jonctions en T — un fil de fond le long de la lèvre. Ils sont des multiples de 0,05, comme les plats.
-		plats.append({"pts": g["p"][0]})
-		# LE REMOUS : au pied, là où la nappe traverse l'eau (`sol`). Chaque point du pied s'écarte selon la normale de la
-		# nappe à cet endroit — devant au milieu, de côté sur les bouts arrondis : l'anneau fait le tour.
-		var chute_sol := clampf(haut - sol, 0.0, total)
-		var pieds: Array = []
-		var dirs: Array = []
+		plats.append({"pts": deja[1]})
+		remous.append(deja[2])
+		remous.append(deja[3])
+
+
+## Une cascade retenue `l` (libres et droite déjà décidés) : [sa nappe compilée, la rangée du haut de sa nappe, son
+## anneau d'écume compilé, ses embruns compilés] (`_grille_compilee`).
+static func _lame_calculee(l: Dictionary) -> Array:
+	var u_case: int = l["a"]
+	l["u0"] = float(u_case) - (DEPASSE if l["libre0"] else 0.0)
+	l["u1"] = float(u_case) + 1.0 + (DEPASSE if l["libre1"] else 0.0)
+	var us := _travers(l)
+	var haut: float = l["haut"]
+	var sol: float = l["sol"]
+	var total: float = haut - float(l["pied"])
+	var dd: Vector3i = l["d"]
+	var courant := Vector2(dd.x, dd.z)
+	var g := {"p": [], "n": [], "c": [], "uv": []}
+	for chute in _chutes(total):
+		var rp: Array = []
+		var rn: Array = []
+		var rc: Array = []
+		var ruv: Array = []
 		for u in us:
-			var p := _point_de_lame(l, u, chute_sol)
-			var n := _normale_de_lame(l, u, chute_sol)
-			var h := Vector3(n.x, 0.0, n.z)
-			if h.length() < 0.2:
-				h = Vector3(l["sens"], 0, 0) if int(l["axe"]) == 0 else Vector3(0, 0, l["sens"])
-			pieds.append(Vector3(p.x, sol, p.z))
-			dirs.append(h.normalized())
-		remous.append(_couronne(pieds, dirs, us, courant, sol, [0.0, 0.25, 0.55, REMOUS], [0.0, 0.0, 0.0, 0.0],
-			[1.0, 0.85, 0.45, 0.0], true))
-		# Les embruns montent DEVANT la nappe seulement : sur les bouts arrondis ils s'effacent (leur écume × le profil),
-		# sinon ils y faisaient deux ailerons durs de chaque côté (vu à l'image).
-		var profils: Array = []
-		for u in us:
-			profils.append(1.0 if l["droite"] else pow(_profil(u, l["u0"], l["u1"], l["libre0"], l["libre1"]), 3.0))
-		remous.append(_couronne(pieds, dirs, us, courant, sol, [0.06, 0.16, 0.22, 0.2], [0.0, 0.3, 0.6, EMBRUN],
-			[0.95, 0.7, 0.35, 0.0], false, profils))
+			var p := _point_de_lame(l, u, chute)
+			var e := clampf(1.0 - (p.y - sol) / MONTEE_D_ECUME, 0.0, 1.0)
+			rp.append(p)
+			rn.append(_normale_de_lame(l, u, chute))
+			rc.append(_couleur(courant, CASCADE, e * e))
+			ruv.append(Vector2(u, p.y))
+		g["p"].append(rp)
+		g["n"].append(rn)
+		g["c"].append(rc)
+		g["uv"].append(ruv)
+	# LE REMOUS : au pied, là où la nappe traverse l'eau (`sol`). Chaque point du pied s'écarte selon la normale de la
+	# nappe à cet endroit — devant au milieu, de côté sur les bouts arrondis : l'anneau fait le tour.
+	var chute_sol := clampf(haut - sol, 0.0, total)
+	var pieds: Array = []
+	var dirs: Array = []
+	for u in us:
+		var p := _point_de_lame(l, u, chute_sol)
+		var n := _normale_de_lame(l, u, chute_sol)
+		var h := Vector3(n.x, 0.0, n.z)
+		if h.length() < 0.2:
+			h = Vector3(l["sens"], 0, 0) if int(l["axe"]) == 0 else Vector3(0, 0, l["sens"])
+		pieds.append(Vector3(p.x, sol, p.z))
+		dirs.append(h.normalized())
+	var anneau := _couronne(pieds, dirs, us, courant, sol, [0.0, 0.25, 0.55, REMOUS], [0.0, 0.0, 0.0, 0.0],
+		[1.0, 0.85, 0.45, 0.0], true)
+	# Les embruns montent DEVANT la nappe seulement : sur les bouts arrondis ils s'effacent (leur écume × le profil),
+	# sinon ils y faisaient deux ailerons durs de chaque côté (vu à l'image).
+	var profils: Array = []
+	for u in us:
+		profils.append(1.0 if l["droite"] else pow(_profil(u, l["u0"], l["u1"], l["libre0"], l["libre1"]), 3.0))
+	var embruns := _couronne(pieds, dirs, us, courant, sol, [0.06, 0.16, 0.22, 0.2], [0.0, 0.3, 0.6, EMBRUN],
+		[0.95, 0.7, 0.35, 0.0], false, profils)
+	return [_grille_compilee(g), g["p"][0], _grille_compilee(anneau), _grille_compilee(embruns)]
 
 
 ## Les points en travers d'une cascade : les bouts arrondis finement, les frontières des cases, le milieu.
@@ -860,29 +866,84 @@ static func _source(c: Vector3i) -> Array:
 ## Une grille de sommets (`p`, `n`, `c`, `uv` : des rangées de même longueur) en triangles. Chaque triangle est tourné à
 ## l'endroit pour Godot d'après la normale de son premier sommet (charte §4) ; un triangle sans aire n'est pas posé.
 static func _grille(a: Dictionary, g: Dictionary) -> void:
+	_poser(a, _grille_compilee(g))
+
+
+## LA GRILLE COMPILÉE (4 octobre 2026) : {v, n, c, uv, i}, les indices comptés depuis 0. ⚠ SES SOMMETS QU'AUCUN TRIANGLE
+## N'EMPLOIE SONT RETIRÉS (le centre d'un disque, où tous les triangles d'un côté sont plats) : l'export glTF les ôte, et
+## le maillage relu n'aurait plus les mêmes sommets que celui qu'on dessine. Une grille ne référence que ses sommets :
+## les retirer ici rend exactement ce que rendait le ménage du maillage entier, pour une fraction du coût.
+## Compilée UNE fois, elle se pose autant de fois qu'on veut (`_poser`) — ce que gardent les mémoires de `maillage`.
+static func _grille_compilee(g: Dictionary) -> Dictionary:
+	var v := PackedVector3Array()
+	var ns := PackedVector3Array()
+	var cs := PackedColorArray()
+	var uvs := PackedVector2Array()
+	var idx := PackedInt32Array()
 	var p: Array = g["p"]
 	var nr := p.size()
 	if nr < 2:
-		return
+		return {"v": v, "n": ns, "c": cs, "uv": uvs, "i": idx}
 	var nc: int = (p[0] as Array).size()
-	var base: int = (a["v"] as PackedVector3Array).size()
 	for i in nr:
 		for j in nc:
-			a["v"].append(p[i][j])
-			a["n"].append(g["n"][i][j])
-			a["c"].append(g["c"][i][j])
-			a["uv"].append(g["uv"][i][j])
-	var v: PackedVector3Array = a["v"]
+			v.append(p[i][j])
+			ns.append(g["n"][i][j])
+			cs.append(g["c"][i][j])
+			uvs.append(g["uv"][i][j])
 	for i in nr - 1:
 		for j in nc - 1:
-			var k := [base + i * nc + j, base + i * nc + j + 1, base + (i + 1) * nc + j + 1, base + (i + 1) * nc + j]
+			var k := [i * nc + j, i * nc + j + 1, (i + 1) * nc + j + 1, (i + 1) * nc + j]
 			for t in [[k[0], k[1], k[2]], [k[0], k[2], k[3]]]:
 				var x: Vector3 = (v[t[1]] - v[t[0]]).cross(v[t[2]] - v[t[0]])
 				if x.length() < 1e-7:
 					continue
 				# Tourné d'après la normale de son PREMIER sommet : là où la nappe se replie (le coin du haut d'un bout
 				# libre, qui rentre dans la roche), la normale moyenne du quad le retournait.
-				if x.dot(a["n"][t[0]]) > 0.0:
-					a["i"].append_array([t[0], t[2], t[1]])
+				if x.dot(ns[t[0]]) > 0.0:
+					idx.append_array([t[0], t[2], t[1]])
 				else:
-					a["i"].append_array([t[0], t[1], t[2]])
+					idx.append_array([t[0], t[1], t[2]])
+	var n := v.size()
+	var neuf := PackedInt32Array()
+	neuf.resize(n)
+	neuf.fill(-1)
+	for i in idx:
+		neuf[i] = 0
+	var gardes := 0
+	for i in n:
+		if neuf[i] == 0:
+			neuf[i] = gardes
+			gardes += 1
+	if gardes < n:
+		var v2 := PackedVector3Array()
+		var n2 := PackedVector3Array()
+		var c2 := PackedColorArray()
+		var uv2 := PackedVector2Array()
+		for i in n:
+			if neuf[i] >= 0:
+				v2.append(v[i])
+				n2.append(ns[i])
+				c2.append(cs[i])
+				uv2.append(uvs[i])
+		for t in idx.size():
+			idx[t] = neuf[idx[t]]
+		v = v2
+		ns = n2
+		cs = c2
+		uvs = uv2
+	return {"v": v, "n": ns, "c": cs, "uv": uvs, "i": idx}
+
+
+## Pose une grille compilée dans les tableaux `a`, ses indices décalés du nombre de sommets déjà posés.
+static func _poser(a: Dictionary, g: Dictionary) -> void:
+	var base: int = (a["v"] as PackedVector3Array).size()
+	a["v"].append_array(g["v"])
+	a["n"].append_array(g["n"])
+	a["c"].append_array(g["c"])
+	a["uv"].append_array(g["uv"])
+	var idx: PackedInt32Array = (g["i"] as PackedInt32Array).duplicate()
+	if base != 0:
+		for t in idx.size():
+			idx[t] += base
+	a["i"].append_array(idx)

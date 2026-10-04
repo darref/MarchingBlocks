@@ -126,18 +126,16 @@ func _etapes(corps: Array, occ: Dictionary) -> void:
 	var t_lames := _ms(t)
 	t = Time.get_ticks_usec()
 	for c: Vector3i in sources:
-		remous.append_array(EM._source(c))
+		remous.append_array((EM._source(c) as Array).map(EM._grille_compilee))
 	var t_sources := _ms(t)
 	t = Time.get_ticks_usec()
 	EM._poser_les_plats(a, plats)
 	var t_plats := _ms(t)
 	t = Time.get_ticks_usec()
 	for g: Dictionary in remous:
-		EM._grille(a, g)
+		EM._poser(a, g)
 	var t_grilles := _ms(t)
-	t = Time.get_ticks_usec()
-	EM._sans_orphelins(a)
-	var t_orph := _ms(t)
+	var t_orph := 0   # les orphelins sont retirés grille par grille depuis le 4 octobre 2026
 	print("   boîte %d · nappes %d · rivières %d (%d cases de cours) · lames %d · sources %d · plats %d (%d) · remous %d (%d) · orphelins %d"
 		% [t_boite, t_nappes, t_rivieres, nb_cours, t_lames, t_sources, t_plats, plats.size(), t_grilles, remous.size(), t_orph])
 

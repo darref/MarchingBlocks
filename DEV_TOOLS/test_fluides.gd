@@ -16,6 +16,9 @@ const FMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 
 var _ok := 0
 var _echecs := 0
+## ⚠ UNE ERREUR D'EXÉCUTION ABANDONNE UNE FONCTION EN SILENCE (charte §6) : vu le 4 octobre 2026, `_reprise` et
+## `_memoire_des_cascades` sautées, et la suite finissait « 0 échec ». Chacune le dit en finissant.
+var _finies := {}
 
 
 func _initialize() -> void:
@@ -36,6 +39,7 @@ func _initialize() -> void:
 	_riviere_vers_l_ocean()
 	_cavite_close()
 	_reprise()
+	_memoire_des_cascades()
 	_refus()
 	_maillage()
 	_nappes_fusionnees()
@@ -44,6 +48,7 @@ func _initialize() -> void:
 	_presets()
 	_export_du_monde()
 	_cout()
+	_vrai(_finies.has("reprise") and _finies.has("cascades"), "SENTINELLE : la reprise et la mémoire des cascades vont au bout")
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	quit(1 if _echecs > 0 else 0)
 
@@ -565,7 +570,8 @@ func _reprise() -> void:
 		# rendue par `FL.monde`, est celui d'un maillage complet — sommets, couleurs, indices au bit près.
 		var gardees := {}
 		for j in memoire:
-			gardees[j] = memoire[j][1]
+			if j is int:   # « lames » et « sources » : les mémoires des cascades (`_memoire_des_cascades`)
+				gardees[j] = memoire[j][1]
 		var avec := EM.maillage(repris["corps"], m, repris["boite"], memoire)
 		var sans := EM.maillage(complet["corps"], m)
 		for j in gardees:
@@ -578,6 +584,87 @@ func _reprise() -> void:
 	_vrai(reprises > 50, "… et la reprise a servi (%d sources reprises sur 450)" % reprises)
 	_egal(ecarts_maillage, 0, "150 gestes au hasard : le maillage avec la mémoire des nappes est celui d'un maillage complet")
 	_vrai(nappes_reprises > 50, "… et la mémoire des nappes a servi (%d nappes reprises)" % nappes_reprises)
+	_finies["reprise"] = true
+
+
+## LA MÉMOIRE DES CASCADES ET DES SOURCES (`EauMaillage.maillage`, `memoire["lames"]`, `memoire["sources"]`, 4 octobre
+## 2026) : une cascade ne dépend que de ses champs ET DE SES VOISINES sur son plan (ses bouts libres). Le monde : un
+## plateau x 0..9, z 0..3, jusqu'à y = 5, posé sur un sol x 0..9, z 0..8 en y = 0 ; des rivières naissent au bord du
+## plateau, en (x, 6, 3) pour x de 1 à 8, et tombent côte à côte sur le plan z = 4 — chacune est la voisine des autres.
+## Elles tombent dans un BASSIN (x 1..8, z 4..7, un rebord en y = 1) qu'elles remplissent : la chute finit au fond, et
+## l'eau où elle tombe est la nappe du bassin. Une suite de gestes au hasard (graine fixe) ajoute ou retire des sources
+## (les bouts libres changent), des cases au fond du bassin (le pied change), et une rangée de plus au rebord (le niveau
+## du bassin monte : le `sol` des cascades change, pas leur pied). Après chaque geste, le maillage avec la mémoire doit être celui d'un
+## maillage sans mémoire, au bit près ; et AUCUN sommet sans triangle (compté ici, sur les indices) — chaque rivière
+## naît sur la matière, donc pose un disque de source dont le centre n'emploie aucun triangle.
+func _memoire_des_cascades() -> void:
+	var m := {}
+	_boite(m, Vector3i(0, 0, 0), Vector3i(9, 0, 8))
+	_boite(m, Vector3i(0, 1, 0), Vector3i(9, 5, 3))
+	_boite(m, Vector3i(0, 1, 8), Vector3i(9, 1, 8))
+	_boite(m, Vector3i(0, 1, 4), Vector3i(0, 1, 8))
+	_boite(m, Vector3i(9, 1, 4), Vector3i(9, 1, 8))
+	var rebord_haut := false
+	var candidates: Array = []
+	for x in range(1, 9):
+		candidates.append(Vector3i(x, 6, 3))
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 404
+	var actives := {Vector3i(3, 6, 3): true, Vector3i(4, 6, 3): true, Vector3i(6, 6, 3): true}
+	var memoire := {}
+	var ecarts := 0
+	var orphelins := 0
+	var reprises := 0
+	var bouts_changes := 0
+	var libres_avant := {}
+	for geste in 60:
+		for n in hasard.randi_range(1, 2):
+			var s: Vector3i = candidates[hasard.randi() % candidates.size()]
+			if actives.has(s):
+				actives.erase(s)
+			else:
+				actives[s] = true
+		if hasard.randi() % 3 == 0:
+			var c := Vector3i(hasard.randi_range(1, 8), 1, 4)
+			if m.has(c):
+				m.erase(c)
+			else:
+				m[c] = true
+		if hasard.randi() % 4 == 0:
+			rebord_haut = not rebord_haut
+			for c in [[Vector3i(0, 2, 8), Vector3i(9, 2, 8)], [Vector3i(0, 2, 4), Vector3i(0, 2, 8)], [Vector3i(9, 2, 4), Vector3i(9, 2, 8)]]:
+				_boite(m, c[0], c[1], rebord_haut)
+		var sources: Array = actives.keys()
+		sources.sort()
+		var w := FL.monde(m, sources)
+		var gardees: Array = (memoire.get("lames", {}) as Dictionary).values()
+		var avec := EM.maillage(w["corps"], m, w["boite"], memoire)
+		var sans := EM.maillage(w["corps"], m)
+		if not _memes_maillages(avec, sans):
+			ecarts += 1
+		for g in (memoire.get("lames", {}) as Dictionary).values():
+			if gardees.any(func(x): return is_same(x, g)):
+				reprises += 1
+		# Les bouts libres, déduits des SOURCES (pas de la mémoire) : la rivière née en (x, 6, 3) tombe sur le plan z = 4 à
+		# la place x ; son bout de gauche est libre si x − 1 n'a pas de source, celui de droite si x + 1 n'en a pas.
+		var libres := {}
+		for s: Vector3i in actives:
+			libres[s.x] = [not actives.has(s + Vector3i.LEFT), not actives.has(s + Vector3i.RIGHT)]
+		for x in libres:
+			if libres_avant.has(x) and libres_avant[x] != libres[x]:
+				bouts_changes += 1
+		libres_avant = libres
+		if sans != null:
+			var t: Array = sans.surface_get_arrays(0)
+			var vus := {}
+			for i in (t[Mesh.ARRAY_INDEX] as PackedInt32Array):
+				vus[i] = true
+			orphelins += (t[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() - vus.size()
+	_egal(ecarts, 0, "60 gestes de cascades voisines : le maillage avec la mémoire des cascades est celui sans mémoire")
+	_vrai(reprises > 60, "… et la mémoire des cascades a servi (%d cascades reprises)" % reprises)
+	_vrai(bouts_changes > 10, "… pendant que les bouts libres changeaient (%d fois)" % bouts_changes)
+	_egal(orphelins, 0, "… et aucun sommet n'est sans triangle (centres des disques de source retirés)")
+	_finies["cascades"] = true
 
 
 func _memes_maillages(a: ArrayMesh, b: ArrayMesh) -> bool:
