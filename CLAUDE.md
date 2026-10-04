@@ -3063,6 +3063,44 @@ faces au maillage d'à côté ». Avant : F sur un rebord choisi à la main, et 
   points non recréés.
 - ⚠ **PAS TENU EN MAIN.** Les greffons n'ont rien à porter (c'est le modeleur, dans l'appli seule).
 
+### LES GESTES QUI GARDENT LE BORD — DEMANDÉ PAR JORDAN (4 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « identifie les gestes dans la geometry qui peuvent faire des trous, et s'il y a un moyen gratuit de les éviter,
+pour utiliser très peu Fill holes », puis « go pour 1 à 4 ».
+
+- **MESURÉ AVANT** (`DEV_TOOLS/sonde_gestes_et_trous.gd`, chaque geste rejoué comme le modeleur, sur la paroi, loin du
+  bord puis au contact d'un plan de coupe) : sans risque — E de faces loin du bord, I, Ctrl+B, subdiviser, Ctrl+R, F,
+  M de sommets intérieurs (0 trou, 0 sommet de joint sans partenaire). Fautifs : **X** (un trou, et 488 à 732 sommets de
+  joint sans partenaire au bord) ; **M** au bord (1 trou ; 244 pour un sommet de bord + un intérieur, 488 pour deux de
+  bord) ; ⚠ **E D'UNE FACE DE BORD : 976 SOMMETS SANS PARTENAIRE ET 0 TROU** — Fill holes ne le voyait pas ; ⚠ **E
+  D'UNE ARÊTE À DEUX FACES : UN AILERON** (arête à trois faces, trois arêtes ouvertes) que `trous()` comptait 0 ; E d'une
+  arête de bord, 732.
+- **LES QUATRE REMÈDES** :
+  1. **M au bord** (`MaillageEdite.point_de_fusion`) : un sommet sur un plan de coupe ne le quitte pas, les autres le
+     rejoignent (« Merge at the border vertex ») ; deux sommets de bord à des places différentes : refusé et dit.
+  2. **E de faces, bord épinglé** (`extruder_faces(…, epingler)`, le modeleur l'allume) : les sommets posés sur un plan ne
+     sont ni dédoublés ni déplacés ; le dedans monte, les côtés touchant le bord deviennent des triangles. Toutes les
+     faces au bord : refusé et dit.
+  3. **E d'arêtes au rebord d'un trou seulement** (`arete_extrudable`) : ni arête à deux faces, ni arête posée sur un
+     plan ; les autres sont écartées et dites. Et **`trous()` compte les chaînes ouvertes** qui ne se referment pas
+     (l'aileron) ; Fill holes les compte en échecs.
+  4. **Dissolve, Ctrl+X** (`dissoudre_faces`, comme Blender) : les faces choisies — celles des arêtes ou des sommets
+     choisis — disparaissent et leur contour est refermé d'UNE face (un éventail s'il n'est pas plan) ; les arêtes du
+     contour posées sur un plan restent. Un anneau ou un contour qui se touche est refusé. X reste, et dit que Dissolve
+     ne troue pas.
+- **MESURÉ APRÈS** (la sonde) : les quatre, 0 trou et 0 sommet de joint sans partenaire. `test_maillage_edite` 206 (+17,
+  une tuile plate 3 × 3 écrite à la main : 17 sommets et 11 faces après E épinglé, les 12 sommets de bord à leur place,
+  sans épingler 20 ; M au centre = 1 trou (le contrôle) ; l'aileron compté ; la croix dissoute en UNE face de 12 côtés,
+  aire 1 par la triangulation du rendu, orientée ; l'anneau refusé) ; `fumee_appli` (+16 et une SENTINELLE, de vraies
+  touches sur la paroi : E 0.1, E sur une arête refusé, M, M refusé, Ctrl+X, les Ctrl+Z ; attendus par
+  `_sans_partenaire`). **Mutations** — cœur : 7 rouges (épingler ignoré, M sans refus, M jamais au bord, la coupe ignorée
+  par `arete_extrudable`, `trous()` aveugle aux chaînes, dissoudre sans refus d'anneau, dissoudre à l'envers) ; ⚠ une
+  ÉQUIVALENTE, retirée du code : ne pas poser le côté entre deux sommets épinglés (`nettoyer` ôte déjà ce côté écrasé).
+  Modeleur : 5 rouges (E de faces non épinglé, E d'arêtes sans filtre, M au centre malgré le bord, M sans refus, Ctrl+X
+  non branché).
+- ⚠ **PAS TENU EN MAIN.** ⚠ Un contour dissous CONCAVE à quatre sommets serait triangulé en éventail (`trianguler`
+  n'appelle la découpe en oreilles qu'au-delà de quatre) — défaut d'avant, F l'a aussi, pas corrigé.
+
 ### LA MOLETTE — DEMANDÉE PAR JORDAN (3 octobre 2026), DÉCIDÉE ET ÉCRITE LE MÊME JOUR
 
 Jordan : « une utilisation du déroulement de la molette intelligemment pensée, et probablement différente pour les

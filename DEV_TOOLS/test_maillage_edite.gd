@@ -52,6 +52,7 @@ func _initialize() -> void:
 	_les_gardes_de_repli()
 	_les_pinceaux_de_sculpt()
 	_boucher_les_trous()
+	_les_gestes_gardent_le_bord()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -998,3 +999,77 @@ func _les_gardes_de_repli() -> void:
 	var d := _cube()
 	d.sommets[7] = Vector3(0, 1, 1)
 	_egal(d.gardes_de_repli(range(d.faces.size())).size(), 4, "gardes : les deux faces écrasées au départ ne sont pas gardées")
+
+
+## LES GESTES GARDENT LE BORD (4 octobre 2026). Une tuile PLATE de 3 × 3 quads à y = 0, x et z dans {−0,5 ; −1/6 ; 1/6 ;
+## 0,5} : 12 sommets sur les plans de coupe, 4 dedans, aucun trou. Attendus comptés à la main.
+func _tuile_3x3() -> RefCounted:
+	var t: RefCounted = ME.new()
+	var xs := [-0.5, -1.0 / 6.0, 1.0 / 6.0, 0.5]
+	for iz in 4:
+		for ix in 4:
+			t.sommets.append(Vector3(xs[ix], 0, xs[iz]))
+	for iz in 3:
+		for ix in 3:
+			var a := iz * 4 + ix
+			t.faces.append(PackedInt32Array([a, a + 4, a + 5, a + 1]))
+			t.teintes.append(Color.WHITE)
+	return t
+
+
+func _les_gestes_gardent_le_bord() -> void:
+	var t := _tuile_3x3()
+	_egal(t.trous(), 0, "la tuile 3 × 3 : aucun trou")
+	# E épinglé sur la face du coin (sommets 0, 4, 5, 1 : seul le 5 est dedans).
+	var r: Dictionary = t.extruder_faces([0], true)
+	_vrai((r["sommets"] as Array).size() == 1 and t.sommets.size() == 17 and t.faces.size() == 11,
+		"E épinglé sur la face du coin : UN sommet dédoublé, deux côtés en triangle, rien sur les deux arêtes de bord "
+		+ "(%d sommets, %d faces)" % [t.sommets.size(), t.faces.size()])
+	t.transformer(r["sommets"], Transform3D(Basis(), Vector3(0, 0.1, 0)), t.sommets.duplicate())
+	_vrai(t.trous() == 0 and t.sommets[r["sommets"][0]].is_equal_approx(Vector3(-1.0 / 6.0, 0.1, -1.0 / 6.0)),
+		"… tiré de 0,1 : le coin dedans monte, aucun trou")
+	var bords := 0
+	for p in t.sommets:
+		if absf(p.y) < 1e-6 and (absf(absf(p.x) - 0.5) < 1e-6 or absf(absf(p.z) - 0.5) < 1e-6):
+			bords += 1
+	_egal(bords, 12, "… et les 12 sommets de bord sont restés sur leur plan, à y = 0")
+	var u := _tuile_3x3()
+	u.extruder_faces([0])
+	_egal(u.sommets.size(), 20, "sans épingler, les quatre sommets sont dédoublés (le comportement d'avant)")
+	# M au bord.
+	t = _tuile_3x3()
+	_egal(t.point_de_fusion([5, 6])["point"], null, "M de deux sommets dedans : au centre")
+	_vrai(t.point_de_fusion([1, 5])["point"] == Vector3(-1.0 / 6.0, 0, -0.5), "M d'un sommet de bord et d'un dedans : sur le bord")
+	_egal(t.point_de_fusion([1, 2])["refus"], "bord", "M de deux sommets de bord : refusé")
+	t.fusionner([5, 1], t.point_de_fusion([5, 1])["point"])
+	_vrai(t.trous() == 0 and t.sommets.size() == 15, "M sur le bord : 15 sommets, aucun trou")
+	t = _tuile_3x3()
+	t.fusionner([5, 1])
+	_vrai(t.trous() == 1, "M au centre (le geste d'avant) : un trou — le contrôle")
+	# E sur une arête.
+	t = _tuile_3x3()
+	_vrai(not t.arete_extrudable(ME.arete(5, 6)), "E : une arête à deux faces ne s'extrude pas (un aileron)")
+	_vrai(not t.arete_extrudable(ME.arete(0, 1)), "E : une arête posée sur un plan de coupe ne s'extrude pas")
+	t.supprimer_faces([4])
+	_vrai(t.arete_extrudable(ME.arete(5, 6)), "E : le rebord d'un trou s'extrude")
+	t = _tuile_3x3()
+	t.extruder_aretes([ME.arete(5, 6)])
+	_egal(t.trous(), 1, "trous() voit l'aileron (une chaîne ouverte qui ne se referme pas)")
+	# Dissoudre.
+	t = _tuile_3x3()
+	r = t.dissoudre_faces([1, 3, 4, 5, 7])
+	# L'aire par la triangulation du RENDU (la croix est concave : un éventail la compterait faux).
+	var aire := 0.0
+	for f in t.faces.size():
+		var fc: PackedInt32Array = t.faces[f]
+		for tri in t.trianguler(f):
+			aire += ((t.sommets[fc[tri[1]]] - t.sommets[fc[tri[0]]]) as Vector3).cross(
+				t.sommets[fc[tri[2]]] - t.sommets[fc[tri[0]]]).length() / 2.0
+	_vrai(r["refus"] == "" and t.faces.size() == 5 and (t.faces[(r["faces"] as Array)[0]] as PackedInt32Array).size() == 12
+		and t.sommets.size() == 16 and t.trous() == 0 and is_equal_approx(aire, 1.0),
+		"dissoudre la croix : UNE face de 12 côtés, 5 faces, aucun trou, aire 1 (%s, %d faces, aire %.3f)" % [r, t.faces.size(), aire])
+	var n: Vector3 = t.normale((r["faces"] as Array)[0])
+	_vrai(n.dot(_tuile_3x3().normale(0)) > 0.99, "… orientée comme les faces qu'elle remplace")
+	t = _tuile_3x3()
+	r = t.dissoudre_faces([0, 1, 2, 3, 5, 6, 7, 8])
+	_vrai(r["refus"] == "anneau" and t.faces.size() == 9, "dissoudre un anneau (deux contours) : refusé, rien n'a changé")

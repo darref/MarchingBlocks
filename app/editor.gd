@@ -2762,7 +2762,7 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 	var mesh := Section.new("Mesh", true, Icones.icone("couteau"))
 	pile.add_child(mesh)
 	mesh.contenu.add_child(_grille([
-		_bouton("Extrude  ·  E", "E — pull the selected faces (or edges) out; they follow the mouse.",
+		_bouton("Extrude  ·  E", "E — pull the selected faces out (their tile-border vertices stay put), or the rim of a hole; they follow the mouse.",
 			func() -> void: _geste_modeleur("E"), "extruder_haut"),
 		_bouton("Inset  ·  I", "I — a smaller copy of the selected faces inside them.",
 			func() -> void: _geste_modeleur("I"), "evider"),
@@ -2770,7 +2770,7 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			func() -> void: _geste_modeleur("loop"), "couteau"),
 		_bouton("Subdivide", "Splits each selected face into quads. Neighbours get the new points too: no gap.",
 			func() -> void: _geste_modeleur("subdiviser"), "grandir"),
-		_bouton("Merge  ·  M", "M — merge the selected vertices at their center.",
+		_bouton("Merge  ·  M", "M — merge the selected vertices at their center (on the tile-border vertex, if one of them is on a border).",
 			func() -> void: _geste_modeleur("fusionner"), "retrecir"),
 		_bouton("Fill  ·  F", "F — make a face on the selected vertices (a hole's rim).",
 			func() -> void: _geste_modeleur("remplir"), "remplir"),
@@ -2778,8 +2778,11 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 			+ "faces); the width follows the mouse or is typed.", func() -> void: _geste_modeleur("bevel"), "evider"),
 		_bouton("Knife  ·  K", "K — click points on the surface: the cut follows it across faces and tile borders; Enter cuts.",
 			func() -> void: _geste_modeleur("knife"), "couper"),
-		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: F closes it.",
-			func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
+		_bouton("Dissolve  ·  Ctrl+X", "Ctrl+X — removes the selected faces (the faces of the selected edges or vertices) "
+			+ "and closes their outline with one face: never a hole, and a tile border stays where it is.",
+			func() -> void: _geste_modeleur("dissoudre"), "poubelle"),
+		_bouton("Delete  ·  X", "X — delete the selected faces, edges or vertices. It opens a hole: Dissolve (Ctrl+X) "
+			+ "does not.", func() -> void: _geste_modeleur("supprimer"), "poubelle", Palette.DANGER),
 	], 2))
 	# FILL HOLES (Jordan, 3 octobre 2026) : boucher les trous de la tuile, ou de toutes ; la section arrachée d'un bord est
 	# recréée avec les points que les tuiles d'en face partagent. Le compteur dit s'il y en a, avant que le monde le montre.

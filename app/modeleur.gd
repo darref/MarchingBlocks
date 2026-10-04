@@ -879,13 +879,31 @@ func commencer(geste: String) -> bool:
 	match geste:
 		"E":
 			_nom_geste = "Extrude"
+			# ⚠ UNE EXTRUSION NE TOUCHE PAS AU BORD D'UNE TUILE (4 octobre 2026) : ses sommets posés sur un plan de
+			# coupe restent épinglés (faces), et une arête n'est extrudée qu'au rebord d'un trou — sinon la section
+			# partagée change de forme, et le monde s'ouvre là où Fill holes ne voit rien (`sonde_gestes_et_trous.gd`).
 			if mode_sel == "face":
-				var r: Dictionary = maillage.extruder_faces(sel_f.keys())
+				var r: Dictionary = maillage.extruder_faces(sel_f.keys(), true)
+				if (r["sommets"] as Array).is_empty():
+					maillage = _avant
+					_avant = null
+					dit.emit("[i]Every vertex of these faces is on a tile border: it stays there, so there is nothing to "
+						+ "pull out.[/i]")
+					return false
 				_normale_extrusion = r["normale"]
 				_ids = r["sommets"]
 			elif mode_sel == "arete":
+				var fpa: Dictionary = maillage.faces_par_arete()
+				var permises: Array = sel_a.keys().filter(func(e: Vector2i) -> bool: return maillage.arete_extrudable(e, fpa))
+				if permises.is_empty():
+					dit.emit("[i]Extrude on edges works only on the rim of a hole[/i] — an edge between two faces would "
+						+ "grow a fin, and a tile border edge would open a gap in the world. Select faces (3) instead.")
+					_avant = null
+					return false
+				if permises.size() < sel_a.size():
+					dit.emit("[i]%d edge(s) left out: only the rim of a hole extrudes.[/i]" % (sel_a.size() - permises.size()))
 				_normale_extrusion = Vector3.ZERO
-				_ids = maillage.extruder_aretes(sel_a.keys())
+				_ids = maillage.extruder_aretes(permises)
 			else:
 				dit.emit("[i]Extrude works on faces (3) or edges (2).[/i]")
 				_avant = null
@@ -1336,10 +1354,56 @@ func operer(nom: String) -> void:
 			_vider_selection()
 		"fusionner":
 			libelle = "Merge at center"
-			var i: int = maillage.fusionner(sommets_choisis())
+			# ⚠ M AU BORD (4 octobre 2026) : un sommet posé sur un plan de coupe ne le quitte pas — les autres le rejoignent ;
+			# deux à des places différentes, c'est refusé (la section perdrait un point que les tuiles d'en face gardent).
+			var choix := sommets_choisis()
+			var pf: Dictionary = maillage.point_de_fusion(choix)
+			if pf["refus"] != "":
+				dit.emit("[i]These vertices are on a tile border at different places[/i] — merging them would take a point "
+					+ "from the border the next tiles share, and open a gap in the world. Move them with G instead.")
+				return
+			if pf["point"] != null:
+				libelle = "Merge at the border vertex"
+			var i: int = maillage.fusionner(choix, pf["point"])
 			_vider_selection()
 			if i >= 0 and mode_sel == "sommet":
 				sel_s[i] = true
+		"dissoudre":
+			libelle = "Dissolve"
+			# Comme Blender : des faces, elles-mêmes ; des arêtes, les deux faces de chacune (elles n'en font plus qu'une) ;
+			# des sommets, les faces autour de chacun.
+			var fs: Array = []
+			match mode_sel:
+				"face":
+					fs = sel_f.keys()
+				"arete":
+					var fpa: Dictionary = maillage.faces_par_arete()
+					var d := {}
+					for e in sel_a:
+						for f in fpa.get(e, []):
+							d[f] = true
+					fs = d.keys()
+				_:
+					var d := {}
+					for f in maillage.faces.size():
+						for i in maillage.faces[f]:
+							if sel_s.has(i):
+								d[f] = true
+								break
+					fs = d.keys()
+			if fs.is_empty():
+				dit.emit("[i]Nothing selected to dissolve.[/i]")
+				return
+			var r: Dictionary = maillage.dissoudre_faces(fs)
+			if r["refus"] != "":
+				maillage = avant
+				dit.emit("[i]Dissolve needs pieces with one outline each[/i] — a ring of faces, or an outline that touches "
+					+ "itself, would cover its own hollow. Dissolve them in smaller pieces.")
+				return
+			choisir_mode("face")
+			_vider_selection()
+			for f in r["faces"]:
+				sel_f[f] = true
 		"remplir":
 			libelle = "Fill"
 			var f: int = maillage.remplir(sommets_choisis())
@@ -1912,6 +1976,9 @@ func touche(k: InputEventKey) -> bool:
 			return true
 		if k.keycode == KEY_B:
 			commencer("bevel")
+			return true
+		if k.keycode == KEY_X and geometrie:
+			operer("dissoudre")
 			return true
 		return false
 	# 1 2 3 de la RANGÉE DU HAUT, par leur place (sur un AZERTY, « 1 » est sous « & ») ; ceux du pavé

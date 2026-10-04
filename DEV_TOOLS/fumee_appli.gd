@@ -454,6 +454,7 @@ func _mener() -> void:
 	await _l_enregistrement_se_dit(ed)
 	_les_sections_dans_le_modeleur(ed)
 	_les_gestes_topologiques_gardent_les_sections(ed)
+	_vrai(_les_gestes_gardent_le_bord(ed), "SENTINELLE : la section « les gestes gardent le bord » est allée jusqu'au bout")
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
@@ -1525,6 +1526,134 @@ func _les_gestes_topologiques_gardent_les_sections(ed: Control) -> void:
 		_vrai(mo.maillage.trous() == 0 and _sans_partenaire(t) == 0, "Ctrl+Y le rebouche")
 		ed._unhandled_key_input(_cle(KEY_Z, true))
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+
+
+## LES GESTES GARDENT LE BORD (Jordan, 4 octobre 2026 : « utiliser très peu Fill holes ») — par de VRAIES touches, sur
+## la paroi : E sur une face de bord n'ouvre plus le monde (ses sommets de bord restent) ; E sur une arête à deux faces
+## est refusé ; M d'un sommet de bord et d'un intérieur fusionne SUR le sommet de bord, deux sommets de bord sont refusés ;
+## Ctrl+X dissout sans trou. Attendus hors du code éprouvé : `_sans_partenaire` (les vrais joints), les positions
+## photographiées avant le geste, `est_de_bord` des sections.
+func _les_gestes_gardent_le_bord(ed: Control) -> bool:
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var t: RefCounted = mo.temoin
+	var paroi := "mb_plaque_b2h2_dehors"
+	mo.activer(int(t.occurrences_de(paroi)[0]))
+	mo.sections.indexer()
+	var m: RefCounted = mo.maillage
+	var f_bord := -1
+	for f in m.faces.size():
+		var n := 0
+		for i in m.faces[f]:
+			if mo.sections.est_de_bord(paroi, i):
+				n += 1
+		if n >= 1 and n < (m.faces[f] as PackedInt32Array).size() and f_bord < 0:
+			f_bord = f
+	_vrai(f_bord >= 0, "bord gardé : la paroi a une face qui touche un bord sans y être entière")
+	if f_bord < 0:
+		return false
+	var depart: PackedVector3Array = m.sommets.duplicate()
+	var faces0: int = m.faces.size()
+	var de_bord: Array = []
+	var dedans: Array = []
+	for i in m.faces[f_bord]:
+		(de_bord if mo.sections.est_de_bord(paroi, i) else dedans).append(i)
+	# E 0.1 Entrée sur la face de bord.
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {f_bord: true}
+	for k in [KEY_E, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	var restes := 0
+	for i in de_bord:
+		for p in mo.maillage.sommets:
+			if p.is_equal_approx(depart[i]):
+				restes += 1
+				break
+	var n0: Vector3 = (depart[dedans[0]] as Vector3)
+	var monte := false
+	for p in mo.maillage.sommets:
+		if absf(p.distance_to(n0) - 0.1) < 1e-3:
+			monte = true
+	_vrai(mo.maillage.faces.size() > faces0 and monte and restes == de_bord.size(),
+		"E 0.1 sur une face de bord : le dedans avance de 0,1, les %d sommets de bord restent à leur place" % de_bord.size())
+	_egal(_sans_partenaire(t), 0, "E sur une face de bord : aucun sommet de joint sans partenaire (976 avant)")
+	_egal(mo.maillage.trous(), 0, "E sur une face de bord : aucun trou")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(mo.maillage.sommets == depart, "UN Ctrl+Z défait l'extrusion")
+	# E sur une arête à deux faces : un aileron, refusé.
+	m = mo.maillage
+	var fpa: Dictionary = m.faces_par_arete()
+	var e_int := Vector2i(-1, -1)
+	var e_bord := Vector2i(-1, -1)
+	for e: Vector2i in fpa:
+		var ba: bool = mo.sections.est_de_bord(paroi, e.x)
+		var bb: bool = mo.sections.est_de_bord(paroi, e.y)
+		if (fpa[e] as Array).size() == 2 and e_int.x < 0:
+			e_int = e
+		if ba and not bb and e_bord.x < 0:
+			e_bord = e
+	mo.choisir_mode("arete")
+	mo.tout_choisir(false)
+	mo.sel_a = {e_int: true}
+	ed._input(_cle(KEY_E))
+	_vrai(mo.modal == "" and mo.maillage.faces.size() == faces0 and ed._rapport.text.contains("rim of a hole"),
+		"E sur une arête entre deux faces : refusé et dit, rien n'a changé")
+	# M : un sommet de bord et un intérieur → sur le sommet de bord.
+	var vb: int = e_bord.x if mo.sections.est_de_bord(paroi, e_bord.x) else e_bord.y
+	var vi: int = e_bord.y if vb == e_bord.x else e_bord.x
+	var pb: Vector3 = depart[vb]
+	mo.choisir_mode("sommet")
+	mo.tout_choisir(false)
+	mo.sel_s = {vb: true, vi: true}
+	ed._input(_cle(KEY_M))
+	var au_bord := false
+	var interieur_parti := true
+	for p in mo.maillage.sommets:
+		au_bord = au_bord or p.is_equal_approx(pb)
+		interieur_parti = interieur_parti and not p.is_equal_approx(depart[vi])
+	_vrai(au_bord and interieur_parti and mo.maillage.sommets.size() == depart.size() - 1,
+		"M d'un sommet de bord et d'un intérieur : un seul reste, À LA PLACE du sommet de bord")
+	_egal(_sans_partenaire(t), 0, "M au bord : aucun sommet de joint sans partenaire (244 avant)")
+	_egal(mo.maillage.trous(), 0, "M au bord : aucun trou")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# M de deux sommets de bord à des places différentes : refusé.
+	var deux: Array = []
+	for i in mo.maillage.sommets.size():
+		if mo.sections.est_de_bord(paroi, i) and deux.size() < 2:
+			deux.append(i)
+	mo.sel_s = {deux[0]: true, deux[1]: true}
+	ed._input(_cle(KEY_M))
+	_vrai(mo.maillage.sommets == depart and ed._rapport.text.contains("different places"),
+		"M de deux sommets de bord : refusé et dit, rien n'a changé")
+	# Ctrl+X : dissoudre la face de bord et une voisine — pas de trou.
+	var bouton: Button = null
+	for b in ed.find_children("*", "Button", true, false):
+		if (b as Button).text.begins_with("Dissolve"):
+			bouton = b
+	_vrai(bouton != null, "le bouton « Dissolve » existe dans Geometry")
+	m = mo.maillage
+	var voisine := -1
+	for f in m.faces.size():
+		if f != f_bord and voisine < 0:
+			var communs := 0
+			for i in m.faces[f]:
+				if Array(m.faces[f_bord]).has(i):
+					communs += 1
+			if communs >= 2:
+				voisine = f
+	mo.choisir_mode("face")
+	mo.tout_choisir(false)
+	mo.sel_f = {f_bord: true, voisine: true}
+	ed._input(_cle(KEY_X, true))
+	_vrai(mo.maillage.faces.size() < faces0 and mo.maillage.trous() == 0 and _sans_partenaire(t) == 0,
+		"Ctrl+X dissout deux faces de bord : moins de faces (%d → %d), aucun trou, aucun joint ouvert"
+		% [faces0, mo.maillage.faces.size()])
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(mo.maillage.sommets == depart and mo.maillage.faces.size() == faces0, "UN Ctrl+Z rend les faces dissoutes")
+	print("  [bord gardé : %d vérifications de plus, section finie]" % 16)
+	return true
 
 
 ## LA BANDE DU BAS (Jordan, 1er octobre 2026) : l'écran a un bord en bas, et les deux panneaux s'arrêtent AU-DESSUS

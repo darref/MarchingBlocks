@@ -418,9 +418,15 @@ func _modeleur() -> String:
 	l.append(_touche("E") + " extrude (faces follow their normal) · " + _touche("I") + " inset · "
 		+ _touche("Ctrl+B") + " bevel the selected edges · " + _touche("Ctrl+R") + " loop cut · "
 		+ _touche("K") + " knife: click points on the surface — the cut follows it across faces and across tile borders, onto the next copies, so a pattern can run over the joints; " + _touche("Enter") + " cuts · "
-		+ _touche("X") + " delete · " + _touche("M") + " merge at center · " + _touche("F")
-		+ " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
-	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you."))
+		+ _touche("X") + " delete · " + _touche("Ctrl+X") + " dissolve · " + _touche("M") + " merge at center · "
+		+ _touche("F") + " fill a hole · Subdivide (button). Every gesture is one " + _touche("Ctrl+Z") + ".")
+	l.append(_note("Deleting opens a hole: you see it, and F closes it. Nothing is filled for you. [b]Dissolve[/b] removes "
+		+ "the same faces and closes their outline with one face: no hole, and a tile border stays where it is."))
+	l.append("[b]Tile borders are kept for you.[/b] Extruding faces that touch a border pulls their middle and leaves "
+		+ "the border vertices on their cut plane. Extruding edges works only on the rim of a hole (an edge between "
+		+ "two faces would grow a fin, a border edge would open the world). Merging a border vertex with others "
+		+ "merges them ON it; two border vertices at different places are not merged. That way the gestures above "
+		+ "never open the world — only Delete does, and Fill holes closes it.")
 	l.append("[b]Fill holes[/b] closes every hole of the tile you edit ([b]Fill holes · all tiles[/b]: of the whole "
 		+ "witness), in one " + _touche("Ctrl+Z") + ". The line under the buttons counts the holes of this tile. The open "
 		+ "edges that lie ON a cut plane are not holes: they are the tile's border, closed by the next tile in the world. "
@@ -609,7 +615,7 @@ func _raccourcis() -> String:
 		["A · Alt+A · B", "All · none · box"], ["Ctrl+right drag · C", "Lasso · circle"],
 		["Alt+Z", "X-ray (box, lasso and circle take what is hidden)"],
 		["G · R · S", "Move · rotate · scale"], ["X Y Z · numbers", "Lock an axis · exact value"],
-		["E · I", "Extrude · inset"], ["Ctrl+B · Ctrl+R · K", "Bevel · loop cut · knife"],
+		["E · I", "Extrude · inset"], ["Ctrl+B · Ctrl+R · K", "Bevel · loop cut · knife"], ["Ctrl+X", "Dissolve"],
 		["X · M · F", "Delete · merge · fill"], ["O", "Proportional editing"],
 		["Numpad 1 3 7 · 5 · .", "Views · ortho · frame"],
 		["U", "Unwrap the selected faces"], ["P", "Paint brush on · off (Texturing)"],

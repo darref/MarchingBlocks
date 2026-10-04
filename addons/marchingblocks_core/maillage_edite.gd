@@ -1049,7 +1049,13 @@ func voisins_des_sommets(ids: Array) -> Dictionary:
 	return sortie
 
 
-func extruder_faces(choix: Array) -> Dictionary:
+## ⚠ `epingler` (4 octobre 2026, Jordan : « utiliser très peu Fill holes ») : les sommets posés SUR un plan de coupe ne
+## sont ni dédoublés ni déplacés — le milieu de la région monte, son bord reste sur le plan. Sans lui, une face de bord
+## extrudée changeait la FORME de la section partagée : mesuré (`sonde_gestes_et_trous.gd`), 976 sommets de joint sans
+## partenaire dans le monde pour une face tirée de 0,1, et aucun « trou » dans la tuile — Fill holes ne le voyait pas.
+## Le côté entre deux sommets épinglés s'écrase (deux sommets distincts) et `nettoyer` l'ôte ; entre un épinglé et un
+## libre, c'est un triangle.
+func extruder_faces(choix: Array, epingler := false) -> Dictionary:
 	var region := {}
 	for f in choix:
 		region[f] = true
@@ -1065,6 +1071,9 @@ func extruder_faces(choix: Array) -> Dictionary:
 		nrm += normale(f)
 		for i in faces[f]:
 			if not double.has(i):
+				if epingler and not plans_de(sommets[i]).is_empty():
+					double[i] = i
+					continue
 				double[i] = sommets.size()
 				sommets.append(sommets[i])
 	var bord: Array = []
@@ -1083,7 +1092,10 @@ func extruder_faces(choix: Array) -> Dictionary:
 		faces[f] = neuve
 	for c in cotes:
 		_ajouter(c[0], c[1], c[2])
-	var nouveaux: Array = double.values()
+	var nouveaux: Array = []
+	for i in double:
+		if double[i] != i:
+			nouveaux.append(double[i])
 	var carte := nettoyer()
 	return {"sommets": _renumeroter(nouveaux, carte), "normale": nrm.normalized(),
 		"bord": bord.map(func(e): return [carte[e[0]], carte[e[1]], e[2]])}
@@ -1117,6 +1129,15 @@ func extruder_aretes(choix: Array) -> Array:
 	for n in nouvelles:
 		_ajouter(n[0], n[1], n[2])
 	return double.values()
+
+
+## E SUR UNE ARÊTE N'A DE SENS QU'AU REBORD D'UN TROU (4 octobre 2026) : une arête à deux faces lance un AILERON (une
+## arête à trois faces, trois arêtes ouvertes), une arête posée sur un plan de coupe change la section partagée (732
+## sommets de joint sans partenaire, mesuré). Seule reste une arête ouverte HORS des plans.
+func arete_extrudable(e: Vector2i, fpa: Dictionary = {}) -> bool:
+	if fpa.is_empty():
+		fpa = faces_par_arete()
+	return (fpa.get(e, []) as Array).size() == 1 and not _sur_une_coupe(e.x, e.y)
 
 
 ## I — L'INSET DE RÉGION : une extrusion SANS profondeur, dont le bord seul rentre de `epaisseur` DANS le
@@ -1195,14 +1216,15 @@ func supprimer_aretes(choix: Array) -> void:
 
 ## M — FUSIONNER AU CENTRE : les sommets choisis n'en font plus qu'un, à leur moyenne. Les faces qui
 ## s'effondrent (moins de trois sommets distincts) disparaissent. Rend le sommet restant (renuméroté).
-func fusionner(choix: Array) -> int:
+## `au` : la position du sommet restant (sinon la moyenne) — voir `point_de_fusion`.
+func fusionner(choix: Array, au: Variant = null) -> int:
 	if choix.size() < 2:
 		return choix[0] if choix.size() == 1 else -1
 	var c := Vector3.ZERO
 	for i in choix:
 		c += sommets[i]
 	var cible: int = choix[0]
-	sommets[cible] = c / float(choix.size())
+	sommets[cible] = au if au is Vector3 else c / float(choix.size())
 	var vers := {}
 	for i in choix:
 		vers[i] = cible
@@ -1213,6 +1235,89 @@ func fusionner(choix: Array) -> int:
 		faces[f] = face
 	var carte := nettoyer()
 	return carte[cible]
+
+
+## M AU BORD (4 octobre 2026) : où fusionner sans rompre la section partagée. Aucun sommet sur un plan de coupe : la
+## moyenne. Un seul (ou plusieurs à la même place) : SA position — le sommet de bord ne quitte pas son plan, les autres
+## le rejoignent. Mesuré : au centre, 1 trou et 244 sommets de joint sans partenaire ; au sommet de bord, 0 et 0. Deux
+## sommets de bord à des places différentes : la section perdrait un point que les tuiles d'en face gardent (488) —
+## refusé. Rend {"point": Vector3 ou null, "refus": ""}.
+func point_de_fusion(choix: Array) -> Dictionary:
+	var au_bord := {}
+	for i in choix:
+		if not plans_de(sommets[i]).is_empty():
+			au_bord[sommets[i].snapped(Vector3.ONE * 1e-5)] = sommets[i]
+	if au_bord.size() > 1:
+		return {"point": null, "refus": "bord"}
+	return {"point": au_bord.values()[0] if au_bord.size() == 1 else null, "refus": ""}
+
+
+## DISSOUDRE (Ctrl+X, comme Blender ; 4 octobre 2026) : les faces choisies disparaissent et leur CONTOUR est refermé
+## d'une seule face (un éventail autour du centre s'il n'est pas plan) — « X puis Fill holes » en un geste, sans jamais
+## ouvrir de trou. Les arêtes du contour posées sur un plan de coupe restent : la section ne bouge pas. Chaque morceau
+## d'un seul tenant doit avoir UN contour : un anneau (deux contours) ou un contour qui se touche lui-même est refusé —
+## le refermer recouvrirait le creux. Rend {"faces": [indices neuves], "refus": ""}.
+func dissoudre_faces(choix: Array) -> Dictionary:
+	var region := {}
+	for f in choix:
+		region[f] = true
+	if region.is_empty():
+		return {"faces": [], "refus": "vide"}
+	var orientees := {}
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		for k in face.size():
+			orientees[Vector2i(face[k], face[(k + 1) % face.size()])] = f
+	# Les morceaux d'un seul tenant (deux faces de la région qui partagent une arête).
+	var morceau := {}
+	var morceaux: Array = []
+	for f0 in region:
+		if morceau.has(f0):
+			continue
+		var pile: Array = [f0]
+		var liste: Array = []
+		morceau[f0] = morceaux.size()
+		while not pile.is_empty():
+			var f: int = pile.pop_back()
+			liste.append(f)
+			var face: PackedInt32Array = faces[f]
+			for k in face.size():
+				var g: int = orientees.get(Vector2i(face[(k + 1) % face.size()], face[k]), -1)
+				if g >= 0 and region.has(g) and not morceau.has(g):
+					morceau[g] = morceaux.size()
+					pile.append(g)
+		morceaux.append(liste)
+	var contours: Array = []
+	for liste in morceaux:
+		var suivant := {}
+		for f in liste:
+			var face: PackedInt32Array = faces[f]
+			for k in face.size():
+				var a := face[k]
+				var b := face[(k + 1) % face.size()]
+				if region.has(orientees.get(Vector2i(b, a), -1)):
+					continue
+				if suivant.has(a):
+					return {"faces": [], "refus": "touche"}
+				suivant[a] = b
+		var depart: int = suivant.keys()[0]
+		var boucle: Array = [depart]
+		var v: int = suivant[depart]
+		while v != depart and boucle.size() <= suivant.size():
+			boucle.append(v)
+			v = suivant.get(v, depart)
+		if boucle.size() != suivant.size() or boucle.size() < 3:
+			return {"faces": [], "refus": "anneau"}
+		contours.append([boucle, liste[0]])
+	var avant := faces.size()
+	for c in contours:
+		_boucher(c[0], c[1])
+	var neuves := faces.size() - avant
+	supprimer_faces(region.keys())
+	var sortie: Array = []
+	for k in neuves:
+		sortie.append(faces.size() - neuves + k)
+	return {"faces": sortie, "refus": ""}
 
 
 ## F — REMPLIR : une face neuve sur les sommets choisis. ⚠ **L'ORDRE N'EST PAS CELUI DU CLIC** : on les
@@ -1719,6 +1824,7 @@ func _boucles_ouvertes() -> Dictionary:
 	var vues := {}
 	var boucles: Array = []
 	var seules := 0
+	var seules_hors := 0
 	var cles: Array = ouvertes.keys()
 	cles.sort()
 	for e0: Vector2i in cles:
@@ -1747,13 +1853,22 @@ func _boucles_ouvertes() -> Dictionary:
 			boucles.append({"boucle": boucle, "faces": fs})
 		else:
 			seules += 1
-	return {"boucles": boucles, "ouvertes_seules": seules}
+			var hors := false
+			for k in boucle.size() - 1:
+				if not _sur_une_coupe(boucle[k], boucle[k + 1]):
+					hors = true
+			if hors or boucle.size() < 2:
+				seules_hors += 1
+	return {"boucles": boucles, "ouvertes_seules": seules, "seules_hors": seules_hors}
 
 
-## Combien de TROUS (des boucles qui ont au moins une arête hors des plans de coupe).
+## Combien de TROUS (des boucles qui ont au moins une arête hors des plans de coupe). ⚠ ET LES CHAÎNES QUI NE SE
+## REFERMENT PAS (4 octobre 2026) : un aileron (E sur une arête à deux faces) laisse trois arêtes ouvertes qui ne font
+## pas une boucle — `trous()` le comptait 0 (mesuré). Fill holes ne sait pas les boucher : il les compte en échecs.
 func trous() -> int:
-	var n := 0
-	for b: Dictionary in _boucles_ouvertes()["boucles"]:
+	var lu := _boucles_ouvertes()
+	var n: int = lu["seules_hors"]
+	for b: Dictionary in lu["boucles"]:
 		var bl: Array = b["boucle"]
 		for k in bl.size():
 			if not _sur_une_coupe(bl[k], bl[(k + 1) % bl.size()]):
