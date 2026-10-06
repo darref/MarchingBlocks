@@ -21,6 +21,7 @@ var _ok := 0
 var _echecs := 0
 var _premier := ""
 var _dossier := ""
+var _emission_au_bout := false
 
 
 func _initialize() -> void:
@@ -42,6 +43,9 @@ func _initialize() -> void:
 	_le_trajet_jusqu_au_greffon()
 	_l_albedo_du_relief()
 	_les_ensembles()
+	_l_emission()
+	# SENTINELLE : une erreur d'exécution abandonne la fonction en silence.
+	_dire(_emission_au_bout, "la section de l'émission est allée au bout")
 	Peinture.oublier()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -934,3 +938,128 @@ func _les_ensembles() -> void:
 	var sm3: StandardMaterial3D = m3.materiau_godot(0)
 	_dire(not sm3.normal_enabled and sm3.roughness_texture == null, "« ensemble » décoché : l'image seule")
 	Peinture.oublier_les_ensembles()
+
+
+## 11. L'ÉMISSION (Jordan, 6 octobre 2026 : « ajouter l'emission et l'inclure dans le PBR »). Une carte `_emission` /
+## `_emissive` à côté de l'albedo : trouvée par son nom, posée dans le matériau avec la force du matériau, partie dans le
+## .glb (emissiveTexture + KHR_materials_emissive_strength), jusqu'au lot du monde, au .mbset et au greffon Godot, et
+## revenue d'un .glb de Blender. Attendus écrits ici : les noms, les pixels posés à la main, la force 3,5.
+func _l_emission() -> void:
+	var ps := func(a: Array) -> PackedStringArray: return PackedStringArray(a)
+	var c: Dictionary = Cartes.compagnons("panel_color.png", ps.call(["panel_color.png", "panel_emission.png"]))
+	_dire(c.get("emission", "") == "panel_emission.png", "« _emission » est l'émission de l'ensemble : %s" % c)
+	c = Cartes.compagnons("Panel_BaseColor_2K.png", ps.call(["Panel_BaseColor_2K.png", "Panel_Emissive_2K.png",
+		"Panel_Normal_2K.png"]))
+	_dire(c.get("emission", "") == "Panel_Emissive_2K.png" and c.get("normale", "") == "Panel_Normal_2K.png",
+		"« _Emissive » aussi, à côté d'une normale : %s" % c)
+	var dossier := _dossier.path_join("emission")
+	DirAccess.make_dir_recursive_absolute(dossier)
+	for f in DirAccess.get_files_at(dossier):
+		DirAccess.remove_absolute(dossier.path_join(f))
+	Peinture.oublier()
+	Peinture.oublier_les_ensembles()
+	var albedo := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	albedo.fill(Color8(40, 40, 50))
+	albedo.save_png(dossier.path_join("lampe_color.png"))
+	# L'émission : noire, une bande jaune sur la rangée 3 (ce qui luit).
+	var em := Image.create(8, 8, false, Image.FORMAT_RGB8)
+	em.fill(Color8(0, 0, 0))
+	for x in 8:
+		em.set_pixel(x, 3, Color8(255, 220, 40))
+	em.save_png(dossier.path_join("lampe_emission.png"))
+	var chemin := dossier.path_join("lampe_color.png")
+	var e: Dictionary = Peinture.ensemble_de(chemin)
+	_dire(not e.is_empty() and e.get("emission") != null and e["normale"] == null and e["orm"] == null,
+		"une émission SEULE fait un ensemble, sans relief")
+	var avec := func(d: Dictionary) -> StandardMaterial3D:
+		var m: RefCounted = _cube()
+		var base := {"nom": "lampe", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+			"echelle": 1.0, "projection": "boite"}
+		base.merge(d, true)
+		m.materiaux.append(base)
+		m.assigner(range(m.faces.size()), 0)
+		return m.materiau_godot(0)
+	var sm: StandardMaterial3D = avec.call({"emission": 4.0})
+	var lue: Image = sm.emission_texture.get_image() if sm.emission_texture != null else null
+	_dire(sm.emission_enabled and lue != null and lue.get_pixel(5, 3).r8 == 255 and lue.get_pixel(5, 3).g8 == 220
+		and lue.get_pixel(5, 4).r8 == 0 and sm.emission == Color.WHITE,
+		"le matériau luit de SA carte : la bande jaune, le reste noir")
+	_dire(is_equal_approx(sm.emission_energy_multiplier, 4.0), "… à la force du matériau (4)")
+	_dire(not sm.normal_enabled and sm.roughness_texture == null, "… et sans relief inventé")
+	_dire(is_equal_approx((avec.call({}) as StandardMaterial3D).emission_energy_multiplier, 1.0),
+		"sans réglage, la force vaut 1 (celle du glTF)")
+	_dire(not (avec.call({"ensemble": false}) as StandardMaterial3D).emission_enabled,
+		"« ensemble » décoché : pas d'émission")
+	var avec_pbr: StandardMaterial3D = avec.call({"pbr": Cartes.DEFAUTS.duplicate()})
+	_dire(avec_pbr.emission_enabled and avec_pbr.normal_enabled and avec_pbr.normal_texture != null,
+		"émission seule ET cartes déduites : les deux (l'émission ne porte pas de relief)")
+	Peinture.oublier()
+
+	# Le trajet : témoin lié → .glb → lot du monde → .mbset → greffon Godot.
+	var t: RefCounted = TL.depuis_le_temoin_calcule()
+	t.materiaux.append({"nom": "lampe", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": chemin,
+		"echelle": 1.0, "projection": "boite", "emission": 3.5})
+	for cle in t.tuiles:
+		t.tuiles[cle].assigner(range(t.tuiles[cle].faces.size()), 0)
+	var glb := dossier.path_join("lampe.glb")
+	_dire(t.vers_glb(glb) == "", "le témoin qui luit s'écrit")
+	var js := _json_du_glb(glb)
+	var vu := false
+	for m in js.get("materials", []):
+		if str(m.get("name", "")) == "lampe":
+			var fort: Dictionary = (m.get("extensions", {}) as Dictionary).get("KHR_materials_emissive_strength", {})
+			vu = m.has("emissiveTexture") and is_equal_approx(float(fort.get("emissiveStrength", 0)), 3.5)
+	_dire(vu, "le .glb porte emissiveTexture et la force 3,5 (KHR_materials_emissive_strength)")
+	var bilan: Dictionary = BM.librairie_depuis_glb(glb)
+	var lot: MeshLibrary = bilan.get("lot")
+	_dire(_surfaces_qui_luisent(lot, 3.5) >= 50, "le lot du monde luit : %d surface(s) avec l'émission à 3,5"
+		% _surfaces_qui_luisent(lot, 3.5))
+	var r: Dictionary = FN.exporter(lot, dossier, "lampe", "test")
+	_dire(not r.has("erreur"), "le .mbset s'écrit (%s)" % str(r.get("erreur", "")))
+	var js2 := _json_du_glb(dossier.path_join("lampe.mbset/tiles.glb"))
+	var dans_mbset := false
+	for m in js2.get("materials", []):
+		var fort: Dictionary = (m.get("extensions", {}) as Dictionary).get("KHR_materials_emissive_strength", {})
+		if m.has("emissiveTexture") and is_equal_approx(float(fort.get("emissiveStrength", 0)), 3.5):
+			dans_mbset = true
+	_dire(dans_mbset, "tiles.glb du .mbset porte l'émission et sa force")
+	var lu_g: Dictionary = Tileset.load_tileset(dossier.path_join("lampe.mbset/tileset.json"))
+	var lib: MeshLibrary = lu_g.get("library")
+	_dire(_surfaces_qui_luisent(lib, 3.5) >= 50, "le greffon Godot les charge lumineuses : %d surface(s)"
+		% _surfaces_qui_luisent(lib, 3.5))
+
+	# Le retour de Blender : la carte revient à côté de l'albedo, la force dans le matériau.
+	var images := dossier.path_join("retour_images")
+	DirAccess.make_dir_recursive_absolute(images)
+	for f in DirAccess.get_files_at(images):
+		DirAccess.remove_absolute(images.path_join(f))
+	var relu: RefCounted = TL.depuis_glb(glb, images)
+	var m_lu: Dictionary = {}
+	if relu != null:
+		for x in relu.materiaux:
+			if str(x.get("nom", "")) == "lampe":
+				m_lu = x
+	var tex := str(m_lu.get("texture", ""))
+	var em_lue := tex.trim_suffix("_color.png") + "_emission.png"
+	var img_lue := Image.load_from_file(em_lue) if tex != "" and FileAccess.file_exists(em_lue) else null
+	_dire(img_lue != null and img_lue.get_pixel(5, 3).g8 == 220 and img_lue.get_pixel(5, 4).r8 == 0,
+		"revenue d'un .glb, l'émission est écrite à côté de l'albedo (%s)" % em_lue.get_file())
+	_dire(is_equal_approx(float(m_lu.get("emission", 0)), 3.5), "… avec sa force (3,5)")
+	_dire(Cartes.compagnons(tex, DirAccess.get_files_at(images)).has("emission"), "… et se retrouve comme un ensemble")
+	_emission_au_bout = true
+	Peinture.oublier()
+	Peinture.oublier_les_ensembles()
+
+
+func _surfaces_qui_luisent(lib: MeshLibrary, force: float) -> int:
+	var n := 0
+	if lib == null:
+		return 0
+	for id in lib.get_item_list():
+		var mesh: Mesh = lib.get_item_mesh(id)
+		for sf in mesh.get_surface_count():
+			var mat := mesh.surface_get_material(sf) as BaseMaterial3D
+			if mat != null and mat.emission_enabled and mat.emission_texture != null \
+					and is_equal_approx(mat.emission_energy_multiplier, force):
+				n += 1
+	return n

@@ -2167,6 +2167,36 @@ func _les_cartes_pbr(ed: Node, mo: Node, t: RefCounted, k: int, chemin: String) 
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	ed._case_pbr.button_pressed = false
 	ed._inscrire_les_retouches()
+	# L'ÉMISSION (Jordan, 6 octobre 2026) : une image dont l'ensemble porte une carte « _emission » montre le curseur
+	# « Emission » ; il règle la force du matériau (UNE annulation), et le matériau luit de la carte à cette force.
+	# Attendus écrits ici (5 ; 1 par défaut). Un matériau à part, qu'aucune face ne porte.
+	var dossier_em := ProjectSettings.globalize_path("user://fumee_emission")
+	DirAccess.make_dir_recursive_absolute(dossier_em)
+	var img_em := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	img_em.fill(Color8(30, 30, 30))
+	img_em.save_png(dossier_em.path_join("lampe_color.png"))
+	img_em.fill(Color8(255, 200, 0))
+	img_em.save_png(dossier_em.path_join("lampe_emission.png"))
+	Peinture.oublier_les_ensembles()
+	t.materiaux.append({"nom": "fumee_lampe", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0,
+		"texture": dossier_em.path_join("lampe_color.png"), "echelle": 1.0, "projection": "boite"})
+	var km: int = t.materiaux.size() - 1
+	_vrai(ed._ligne_emission != null and not ed._ligne_emission.visible, "sans carte d'émission, pas de curseur Emission")
+	mo.materiau_courant = km
+	ed._redire_les_materiaux()
+	_vrai(ed._ligne_emission.visible and is_equal_approx(ed._force_emission.value, 1.0),
+		"une carte « _emission » à côté de l'image montre le curseur Emission, à 1")
+	ed._force_emission.value = 5.0
+	ed._inscrire_les_retouches()
+	var lum: StandardMaterial3D = tuile.materiau_godot(km)
+	_vrai(is_equal_approx(float(t.materiaux[km].get("emission", 0)), 5.0) and lum.emission_enabled
+		and lum.emission_texture != null and is_equal_approx(lum.emission_energy_multiplier, 5.0),
+		"le curseur règle la force (5) : le matériau luit de sa carte")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(not t.materiaux[km].has("emission") and is_equal_approx(ed._force_emission.value, 1.0),
+		"UN Ctrl+Z rend la force d'avant, et le curseur le montre")
+	mo.materiau_courant = k
+	ed._redire_les_materiaux()
 	_sentinelle_pbr = true
 
 

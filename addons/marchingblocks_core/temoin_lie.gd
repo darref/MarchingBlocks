@@ -95,6 +95,9 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 				if sm.albedo_texture.get_image().save_png(png) == OK:
 					e["texture"] = png
 					_ecrire_les_cartes_du_gltf(sm, base)
+					# L'émission (6 octobre 2026) : sa carte revient à côté (`_emission`), sa force dans le matériau.
+					if sm.emission_enabled and sm.emission_texture != null:
+						e["emission"] = sm.emission_energy_multiplier
 		connus[id] = t.materiaux.size()
 		t.materiaux.append(e)
 		return {"mat": connus[id], "teinte": null}
@@ -106,9 +109,14 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 	return t
 
 
-## La normale (`<base>_normal_gl.png`, convention glTF = OpenGL) et l'ORM (`<base>_arm.png` : R occlusion, G rugosité,
-## B métal — la disposition du glTF) d'un matériau importé, s'il en porte.
+## La normale (`<base>_normal_gl.png`, convention glTF = OpenGL), l'ORM (`<base>_arm.png` : R occlusion, G rugosité,
+## B métal — la disposition du glTF) et l'émission (`<base>_emission.png`) d'un matériau importé, s'il en porte.
 static func _ecrire_les_cartes_du_gltf(sm: BaseMaterial3D, base: String) -> void:
+	if sm.emission_enabled and sm.emission_texture != null and sm.emission_texture.get_image() != null:
+		var em := sm.emission_texture.get_image().duplicate() as Image
+		if em.is_compressed():
+			em.decompress()
+		em.save_png(base + "_emission.png")
 	if sm.normal_enabled and sm.normal_texture != null and sm.normal_texture.get_image() != null:
 		var n := sm.normal_texture.get_image().duplicate() as Image
 		if n.is_compressed():

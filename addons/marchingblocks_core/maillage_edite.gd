@@ -378,7 +378,16 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 		# L'ENSEMBLE PBR DE L'IMAGE (3 octobre 2026) : les cartes faites par l'auteur de la texture, à côté d'elle
 		# (`Peinture.ensemble_de`) — elles l'emportent sur les cartes déduites, qui ne font que les deviner.
 		var ens: Dictionary = Peinture.ensemble_de(chemin) if bool(d.get("ensemble", true)) else {}
-		if not ens.is_empty() and sm.albedo_texture != null:
+		# L'ÉMISSION DE L'ENSEMBLE (6 octobre 2026) : sa couleur × la force du matériau (« emission », 1 par défaut).
+		# Le glTF la porte (emissiveTexture, et KHR_materials_emissive_strength pour la force — mesuré : Godot 4.7
+		# l'écrit et la relit), donc le monde, le Play test et les moteurs la reçoivent.
+		if not ens.is_empty() and ens.get("emission") != null and sm.albedo_texture != null:
+			sm.emission_enabled = true
+			sm.emission = Color.WHITE
+			sm.emission_texture = ens["emission"]
+			sm.emission_energy_multiplier = maxf(0.0, float(d.get("emission", 1.0)))
+		var relief_de_l_ensemble: bool = not ens.is_empty() and (ens["normale"] != null or ens["orm"] != null)
+		if relief_de_l_ensemble and sm.albedo_texture != null:
 			if ens["normale"] != null:
 				sm.normal_enabled = true
 				sm.normal_texture = ens["normale"]

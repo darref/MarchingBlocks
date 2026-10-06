@@ -3235,6 +3235,8 @@ const REGLAGES_RELIEF := [
 var _section_pbr: Control
 var _case_ensemble: CheckBox
 var _etat_ensemble: Label
+var _ligne_emission: Control
+var _force_emission: HSlider
 var _bouton_cuire: Button
 var _case_pbr: CheckBox
 var _reglages_pbr: VBoxContainer
@@ -3264,6 +3266,12 @@ func _batir_pbr(pile: VBoxContainer) -> void:
 	_etat_ensemble = _texte("", 11, Palette.GRIS)
 	_etat_ensemble.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sec.contenu.add_child(_etat_ensemble)
+	# L'ÉMISSION (Jordan, 6 octobre 2026) : une carte « _emission » (ou « _emissive ») à côté de l'image la fait luire ;
+	# sa force est un réglage du matériau, qui part dans le .glb. Au-delà de 1, le halo du Play test la fait rayonner.
+	_force_emission = _curseur(sec.contenu, "Emission", 0.0, 20.0, 0.1, "emission")
+	_force_emission.tooltip_text = ("Strength of the emission map found next to the image (rock_emission.png). "
+		+ "Above 1, the Glow of the Play test makes it shine.")
+	_ligne_emission = _force_emission.get_parent()
 	_case_pbr = CheckBox.new()
 	_case_pbr.text = "Derive PBR maps from the image"
 	_case_pbr.focus_mode = Control.FOCUS_NONE
@@ -3431,12 +3439,13 @@ func _redire_le_pbr(d: Dictionary) -> void:
 		return
 	var actif: bool = d.get("pbr") is Dictionary
 	var fichiers: Dictionary = Peinture.fichiers_de_l_ensemble(str(d.get("texture", "")))
-	var a_un_ensemble := fichiers.has("normale") or fichiers.has("rugosite") or fichiers.has("occlusion") 		or fichiers.has("orm")
+	var a_un_ensemble := fichiers.has("normale") or fichiers.has("rugosite") or fichiers.has("occlusion") 		or fichiers.has("orm") or fichiers.has("emission")
+	var relief_pris := bool(d.get("ensemble", true)) and (fichiers.has("normale") or fichiers.has("rugosite") 		or fichiers.has("occlusion") or fichiers.has("orm"))
 	var ensemble_pris := a_un_ensemble and bool(d.get("ensemble", true))
 	_case_ensemble.visible = a_un_ensemble
 	_case_ensemble.button_pressed = ensemble_pris
 	var noms := {"normale": "normal", "rugosite": "roughness", "occlusion": "occlusion", "metal": "metal",
-		"orm": "packed AO-rough-metal", "hauteur": "height (not used)"}
+		"orm": "packed AO-rough-metal", "hauteur": "height (not used)", "emission": "emission"}
 	var lus: Array = []
 	for carte in noms:
 		if fichiers.has(carte):
@@ -3444,9 +3453,12 @@ func _redire_le_pbr(d: Dictionary) -> void:
 	_etat_ensemble.visible = a_un_ensemble
 	_etat_ensemble.text = ("Texture set found: " + ", ".join(PackedStringArray(lus)) + "."
 		+ ("" if ensemble_pris else " Not used: the maps below are derived instead.")) if a_un_ensemble else ""
-	_case_pbr.disabled = ensemble_pris
+	_ligne_emission.visible = ensemble_pris and fichiers.has("emission")
+	_force_emission.value = float(d.get("emission", 1.0))
+	# Une émission SEULE ne porte pas de relief : les cartes déduites restent possibles à côté d'elle.
+	_case_pbr.disabled = relief_pris
 	_case_pbr.button_pressed = actif
-	_reglages_pbr.visible = actif and not ensemble_pris
+	_reglages_pbr.visible = actif and not relief_pris
 	var g: Dictionary = Cartes.reglages(d.get("pbr"))
 	for cle_pbr in _curseurs_pbr:
 		(_curseurs_pbr[cle_pbr] as HSlider).value = float(g[cle_pbr])
@@ -6254,13 +6266,19 @@ func _ensembles_en_retard_(c: Dictionary) -> bool:
 	var d: Variant = JSON.parse_string(FileAccess.get_file_as_string(chemin))
 	if not d is Dictionary:
 		return false
-	var voulues := {}   # nom du matériau → l'image de la normale de son ensemble
+	# nom du matériau → {"normale": image de la normale de son ensemble, "emission": celle de son émission} (celles
+	# qu'il a). L'émission (6 octobre 2026) : un monde tranché avant elle n'en porte pas.
+	var voulues := {}
 	for m in (d as Dictionary).get("materiaux", []):
 		if not m is Dictionary or not bool(m.get("ensemble", true)):
 			continue
 		var e: Dictionary = Peinture.ensemble_de(str(m.get("texture", "")))
-		if not e.is_empty() and e["normale"] != null:
-			voulues[str(m.get("nom", ""))] = (e["normale"] as ImageTexture).get_image()
+		var cartes := {}
+		for carte in ["normale", "emission"]:
+			if not e.is_empty() and e.get(carte) != null:
+				cartes[carte] = (e[carte] as ImageTexture).get_image()
+		if not cartes.is_empty():
+			voulues[str(m.get("nom", ""))] = cartes
 	if voulues.is_empty():
 		return false
 	var lot: MeshLibrary = _vue.couche(_couches.find(c)).lot
@@ -6274,9 +6292,13 @@ func _ensembles_en_retard_(c: Dictionary) -> bool:
 			var sm := mesh.surface_get_material(s) as BaseMaterial3D
 			if sm == null or not voulues.has(sm.resource_name):
 				continue
-			var lue: Image = sm.normal_texture.get_image() if sm.normal_texture != null else null
-			if lue == null or not _memes_pixels(lue, voulues[sm.resource_name]):
-				return true
+			var cartes: Dictionary = voulues[sm.resource_name]
+			for carte in cartes:
+				var tex: Texture2D = sm.normal_texture if carte == "normale" else (sm.emission_texture
+					if sm.emission_enabled else null)
+				var lue: Image = tex.get_image() if tex != null else null
+				if lue == null or not _memes_pixels(lue, cartes[carte]):
+					return true
 			voulues.erase(sm.resource_name)
 			if voulues.is_empty():
 				return false

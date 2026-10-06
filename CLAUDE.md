@@ -2125,7 +2125,7 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
       fonction anonyme du modeleur jusqu'au démontage du moteur — `fumee_appli` finissait « VERDICT : OK » puis code
       139 (vu par une autre session ; reproduit, puis disparu une fois la variable effacée dans `_exit_tree`).
     - ⚠ **CE QUI N'EST PAS FAIT** : ~~un témoin relu de BLENDER perd ses réglages PBR~~ (fait le 3 octobre 2026 : ses
-      cartes reviennent en ensemble, ses réglages par le nom du matériau) ; pas de masque métal ni d'émission (palier 2) ; la génération coûte
+      cartes reviennent en ensemble, ses réglages par le nom du matériau) ; pas de masque métal (palier 2 ; l'émission est FAITE le 6 octobre 2026, ci-dessous) ; la génération coûte
       ~1,7 s par toile de 1024² (2,7 s avec masque) — à mesurer sur 2048², avec fenêtre. **PAS TENU EN MAIN.**
     - **LES ENSEMBLES PBR — ÉCRITS (Jordan, 3 octobre 2026 : « sur les ensembles PBR appliqués aux UV d'un witness de
       test, je ne vois toujours que l'albedo, et le rendu est vraiment pauvre »).** Ses textures (HEART_WORLD :
@@ -2149,6 +2149,30 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
         copie du projet de Jordan (gazon et falaise en relief). ⚠ Pas jugé par Jordan.
       - ⚠ **VU EN PASSANT, PAS CORRIGÉ** : peindre sur une image de bibliothèque écrit ses calques et ses cartes À CÔTÉ
         D'ELLE (`D:/Spirit3D/…/cliff_rocks_01_color_1k.layers/`, `.pbr_uv/`) — hors du projet.
+    - **L'ÉMISSION — DEMANDÉE PAR JORDAN (6 octobre 2026 : « ajouter l'emission et l'inclure dans le PBR, je ne sais pas
+      pourquoi il n'y est pas déjà »), relayée par la session vidéos pour un devlog sci-fi, ÉCRITE LE MÊME JOUR.**
+      - **une carte de l'ENSEMBLE**, trouvée par son nom comme les autres (`Cartes.MOTS_CARTES["emission"]` : `emission`,
+        `emissive`, `emit`, `glow`, `illumination`, `selfillum` — `panel_color.png` à côté de `panel_emission.png`) ; le
+        noir ne luit pas, toute autre couleur luit dans sa couleur. Une émission SEULE fait un ensemble SANS relief :
+        les cartes déduites restent possibles à côté d'elle (`materiau_godot` ne laisse l'ensemble l'emporter que s'il
+        porte une normale ou un ORM).
+      - **la FORCE est un réglage du matériau** (`"emission"`, 1 par défaut, 0 à 20 : le curseur « Emission » de la
+        section PBR maps, visible quand l'ensemble a une émission ; une annulation). Au-delà de 1, le halo (seuil HDR 1)
+        la fait rayonner.
+      - ⚠ **MESURÉ AVANT D'ÉCRIRE : LE glTF DE GODOT 4.7 LA PORTE TOUT SEUL** — `emissiveTexture`, `emissiveFactor` et
+        `KHR_materials_emissive_strength`, écrits ET relus. Aucun code d'export : le .glb du témoin, le lot du monde, le
+        `.mbset` et le greffon Godot la reçoivent. Un témoin revenu de Blender l'écrit à côté de son albedo
+        (`<base>_emission.png`) et garde sa force. ⚠ La COULEUR de l'émission est la carte seule (`emission` = blanc) :
+        un `emissiveFactor` coloré venu de Blender est perdu ; pas d'émission sans image d'albedo (l'ensemble s'accroche
+        à elle). Un monde tranché avant se rhabille une fois (`_ensembles_en_retard_` compare aussi l'émission ; sans test).
+      - **MESURÉ** : `test_cartes_pbr` 97 (+19 ; noms, une bande jaune posée à la main, la force 4 puis 3,5 dans le JSON du
+        .glb, le lot du monde, tiles.glb, le greffon Godot, le retour de Blender ; une sentinelle) ; `fumee_appli` (+4, par
+        le vrai curseur : caché sans carte, à 1, 5 → le matériau luit, un Ctrl+Z). **Six mutations rouges** (le mot
+        `emissive`, la force ignorée, la carte non écrite au retour, la force non reprise, l'ensemble d'émission qui
+        écarte les cartes déduites, l'émission jamais lue). Le manuel (F1) le dit.
+      - ⚠ **LES GREFFONS N'ONT RIEN À PORTER** (une texture glTF standard), **mais rien n'a été regardé** dans Unity
+        (glTFast) ni Unreal (Interchange) — `KHR_materials_emissive_strength` y est censé être lu. ⚠ Pas vu à l'image,
+        pas tenu en main.
     **OUVERT** : le panneau 2D du patron. (Fusionner un calque sur celui du dessous : fait le 3 octobre 2026.)
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)

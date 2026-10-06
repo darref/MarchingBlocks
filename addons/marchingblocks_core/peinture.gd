@@ -795,13 +795,20 @@ static func fichiers_de_l_ensemble(chemin: String) -> Dictionary:
 	return sortie
 
 
-## Les textures de l'ensemble d'un albedo (relues une fois) : {"normale", "orm", "fichiers"} ; {} sans ensemble, ou
-## quand l'ensemble ne porte ni normale ni rugosité ni occlusion.
+## Les textures de l'ensemble d'un albedo (relues une fois) : {"normale", "orm", "emission", "fichiers"}, chacune
+## une ImageTexture ou null ; {} sans ensemble, ou quand l'ensemble ne porte ni normale ni rugosité ni occlusion ni
+## émission. ⚠ Une émission SEULE ne porte pas de relief : `normale` et `orm` y sont nulles, et les cartes déduites
+## (si le matériau les demande) restent (`MaillageEdite.materiau_godot`).
 static func ensemble_de(chemin: String) -> Dictionary:
 	if _ensembles.has(chemin):
 		return _ensembles[chemin]
 	var f := fichiers_de_l_ensemble(chemin)
 	var e := {}
+	if f.has("emission"):
+		var img := Image.load_from_file(f["emission"])
+		if img != null and not img.is_empty():
+			e = {"fichiers": f, "normale": null, "orm": null,
+				"emission": ImageTexture.create_from_image(Cartes.emission_de_l_ensemble(img))}
 	if f.has("normale") or f.has("rugosite") or f.has("occlusion") or f.has("orm"):
 		var lues := {}
 		for carte in ["normale", "rugosite", "occlusion", "metal", "orm"]:
@@ -816,7 +823,8 @@ static func ensemble_de(chemin: String) -> Dictionary:
 				taille = (lues[carte] as Image).get_size()
 				break
 		if taille != Vector2i.ZERO:
-			e = {"fichiers": f, "normale": null, "orm": null}
+			if e.is_empty():
+				e = {"fichiers": f, "normale": null, "orm": null, "emission": null}
 			if lues.has("normale"):
 				e["normale"] = ImageTexture.create_from_image(
 					Cartes.normale_de_l_ensemble(lues["normale"], taille, bool(f.get("normale_dx", false))))

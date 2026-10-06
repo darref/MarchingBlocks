@@ -510,6 +510,10 @@ func _modeleur() -> String:
 		+ "rock_roughness.png, rock_ambient_occlusion.png…) uses them as they are: they were made from the real "
 		+ "relief, and win over the derived ones. Untick [b]Use the maps found next to the image[/b] to derive "
 		+ "them instead. A witness back from Blender brings its maps the same way.")
+	l.append("[b]Emission[/b] — a map named like the image with [i]emission[/i] or [i]emissive[/i] instead of the "
+		+ "colour word (panel_color.png next to panel_emission.png) makes the material glow: black does not glow, "
+		+ "every other colour glows in that colour. The [b]Emission[/b] slider sets its strength (1 by default); above "
+		+ "1, the [b]Glow[/b] of the Play test makes it shine. It travels in the .glb (emissive texture and strength).")
 	l.append(_note("Metal is never guessed from the image: the [b]Metallic[/b] slider of the material stays in "
 		+ "charge. The maps travel in the .glb like any glTF material — Godot, Unity and Unreal read them as they are. "
 		+ "They are also written next to the image (a [i].pbr[/i] folder: normal, ORM, and a height map for your own "

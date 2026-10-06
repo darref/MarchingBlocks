@@ -317,6 +317,9 @@ const MOTS_CARTES := {
 	"metal": ["metallic", "metalness", "metal", "mtl"],
 	"orm": ["arm", "orm"],   # occlusion, rugosité, métal déjà rangés en R, G, B
 	"hauteur": ["height", "displacement", "disp", "bump"],
+	# L'ÉMISSION (Jordan, 6 octobre 2026) : ce qui luit — bandes lumineuses, écrans, voyants. Sa couleur, multipliée
+	# par la force du matériau (« emission » : 1 par défaut) ; au-delà de 1, le halo du Play test la fait rayonner.
+	"emission": ["emission", "emissive", "emit", "glow", "illumination", "selfillum", "self_illum"],
 }
 const EXTENSIONS := ["png", "jpg", "jpeg", "webp", "tga", "bmp"]
 
@@ -395,6 +398,13 @@ static func normale_de_l_ensemble(img: Image, taille: Vector2i, dx: bool) -> Ima
 		for i in range(1, d.size(), 3):
 			d[i] = 255 - d[i]
 		o = Image.create_from_data(taille.x, taille.y, false, Image.FORMAT_RGB8, d)
+	return o
+
+
+## L'émission d'un ensemble, en RGB8, à SA taille (elle ne se mêle à aucune autre carte).
+static func emission_de_l_ensemble(img: Image) -> Image:
+	var o := _a_la_taille(img, img.get_size())
+	o.convert(Image.FORMAT_RGB8)
 	return o
 
 
