@@ -44,7 +44,8 @@ func _initialize() -> void:
 	_les_cartes_pbr()
 	_la_decoupe()
 	_le_maillage_de_l_eau()
-	_dire(_sections == 9, "toutes les sections sont allées au bout (%d sur 9) — une erreur d'exécution en a arrêté une"
+	_le_monde_du_coeur()
+	_dire(_sections == 10, "toutes les sections sont allées au bout (%d sur 10) — une erreur d'exécution en a arrêté une"
 		% _sections)
 	_mesurer()
 	_fin()
@@ -596,6 +597,233 @@ func _le_maillage_de_l_eau() -> void:
 	_sections += 1
 
 
+# ── 10. le monde du cœur (mbcore::World, par MBMonde) ─────────────────────────────────────────────────
+
+## Les grilles d'une couche du monde natif, comme `_photo` les lit d'un massif.
+func _photo_grilles(rendu: GridMap, fautes: GridMap) -> String:
+	var t := PackedStringArray()
+	for paire in [["R", rendu], ["F", fautes]]:
+		var g: GridMap = paire[1]
+		var cs := g.get_used_cells()
+		cs.sort()
+		for c in cs:
+			t.append("%s%s:%d/%d" % [paire[0], c, g.get_cell_item(c), g.get_cell_item_orientation(c)])
+	return "\n".join(t)
+
+
+func _photo_massif(m: Node3D) -> String:
+	return _photo_grilles(m.get_node("Rendu"), m.get_node("Fautes"))
+
+
+## L'ATTENDU EST L'APPLI EN GDSCRIPT : trois massifs qui partagent l'union, menés comme l'écran les mène (une case
+## posée la retire des autres couches, `reconstruire_autour` de chaque couche visible ; cacher, déplacer : l'union
+## refaite et chaque couche reconstruite). Le monde natif ne reçoit que les mêmes gestes, et ses grilles ne
+## reçoivent que ses DIFFS. Après chaque geste, chaque couche doit montrer la même chose, case pour case.
+func _le_monde_du_coeur() -> void:
+	print("10. le monde du cœur (mbcore::World) : 80 gestes, l'appli en GDScript contre les diffs du natif")
+	var monde_ := _monde(500, 30, 8)
+	var cles_par: Array = [_cles(0), _cles(7), _cles(3)]
+	var lots: Array = []
+	for c in cles_par:
+		lots.append(_lot(c))
+	var couche_de := func(c: Vector3i) -> int:
+		return 2 if c.y > 5 else int(posmod(int(floor((c.x + c.z) / 5.0)), 2))
+	var parts: Array = [{}, {}, {}]
+	for c in monde_:
+		parts[couche_de.call(c)][c] = true
+	# L'appli (GDScript).
+	Natif.actif = false
+	var union := {}
+	var massifs: Array = []
+	for r in 3:
+		var m := _massif(lots[r], parts[r])
+		massifs.append(m)
+	var visibles: Array = [true, true, true]
+	var refaire_l_union := func() -> void:
+		union.clear()
+		for i in range(massifs.size() - 1, -1, -1):
+			var m: Node3D = massifs[i]
+			m.union = union
+			m.rang = i
+			if visibles[i]:
+				for c in (m.get_node("Cases") as GridMap).get_used_cells():
+					union[c] = i
+		for i in massifs.size():
+			if visibles[i]:
+				massifs[i].reconstruire()
+			else:
+				(massifs[i].get_node("Rendu") as GridMap).clear()
+				(massifs[i].get_node("Fautes") as GridMap).clear()
+	refaire_l_union.call()
+	# ⚠ DES POIDS QUI CHANGENT QUELQUE CHOSE : sur les deux clés à variantes que la couche 1 pose le plus (des clés
+	# prises au hasard dans le lot n'avaient pas de variantes, et « poids ignorés » restait muette).
+	var vues := {}
+	for v in massifs[1]._etat:
+		var d: Dictionary = massifs[1]._etat[v]
+		if not d.is_empty() and d["cle"] != "" and cles_par[1].has(MB.nom_de_variante(d["cle"], 2)):
+			vues[d["cle"]] = int(vues.get(d["cle"], 0)) + 1
+	var plus_vues: Array = vues.keys()
+	plus_vues.sort_custom(func(a, b): return vues[a] > vues[b])
+	_dire(plus_vues.size() >= 2, "la couche 1 doit poser deux clés à variantes (%d)" % plus_vues.size())
+	massifs[1].poids = {plus_vues[0]: [0, 1, 3], plus_vues[1]: [5, 0, -2]}
+	refaire_l_union.call()
+	# Le monde natif.
+	Natif.actif = true
+	var mn = MB.monde_natif()
+	_dire(mn != null, "MB.monde_natif() rend un monde (la classe MBMonde est enregistrée)")
+	if mn == null:
+		return
+	var rendus: Array = []
+	var fautes_: Array = []
+	var id_faute: int = massifs[0]._id_faute
+	for r in 3:
+		mn.ajouter_couche()
+		mn.definir_tuiles(r, cles_par[r], massifs[r].poids)
+		var g := GridMap.new()
+		g.mesh_library = lots[r]
+		var f := GridMap.new()
+		f.mesh_library = (massifs[r].get_node("Fautes") as GridMap).mesh_library
+		root.add_child(g)
+		root.add_child(f)
+		rendus.append(g)
+		fautes_.append(f)
+	for r in 3:
+		mn.appliquer(mn.poser(r, parts[r].keys()), rendus, fautes_, id_faute)
+	var photo := func() -> String:
+		var t := ""
+		for r in 3:
+			t += "couche %d\n%s\n" % [r, _photo_massif(massifs[r])]
+		return t
+	var photo_natif := func() -> String:
+		var t := ""
+		for r in 3:
+			t += "couche %d\n%s\n" % [r, _photo_grilles(rendus[r], fautes_[r])]
+		return t
+	_dire(photo.call() == photo_natif.call(), "le monde bâti : les couches du natif diffèrent de l'appli")
+	_dire(mn.nombre_de_cases(-1) == monde_.size(), "le monde natif porte toutes les cases (%d sur %d)"
+		% [mn.nombre_de_cases(-1), monde_.size()])
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6102026
+	var ecarts := 0
+	var premier := ""
+	var sortes := {}
+	var decides := 0
+	var poses_vues := 0
+	for g in 80:
+		var tirage := rng.randf()
+		var quoi := ""
+		var diff: Dictionary = {}
+		if tirage < 0.55:
+			# Un coup : des cases posées dans une couche visible, prises aux autres.
+			var r := rng.randi_range(0, 2)
+			if not visibles[r]:
+				r = visibles.find(true)
+			var cases_: Array = []
+			var p := Vector3i(rng.randi_range(-14, 14), rng.randi_range(-2, 12), rng.randi_range(-14, 14))
+			for j in rng.randi_range(1, 14):
+				cases_.append(p + Vector3i(j % 3, (j / 3) % 2, j / 6))
+			Natif.actif = false
+			for c in cases_:
+				for i in 3:
+					if i != r:
+						(massifs[i].get_node("Cases") as GridMap).set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+				var cg: GridMap = massifs[r].get_node("Cases")
+				cg.set_cell_item(c, cg.mesh_library.find_item_by_name("case"))
+				union[c] = r
+			for i in 3:
+				if visibles[i]:
+					massifs[i].reconstruire_autour(cases_)
+			Natif.actif = true
+			diff = mn.poser(r, cases_)
+			quoi = "coup dans la couche %d" % r
+		elif tirage < 0.75:
+			# Creuser : des cases retirées, de quelque couche qu'elles soient.
+			var cases_: Array = []
+			var p := Vector3i(rng.randi_range(-14, 14), rng.randi_range(-2, 8), rng.randi_range(-14, 14))
+			for j in rng.randi_range(1, 10):
+				cases_.append(p + Vector3i(j % 2, j / 4, (j / 2) % 2))
+			Natif.actif = false
+			for c in cases_:
+				for i in 3:
+					(massifs[i].get_node("Cases") as GridMap).set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+				union.erase(c)
+			for i in 3:
+				if visibles[i]:
+					massifs[i].reconstruire_autour(cases_)
+			Natif.actif = true
+			diff = mn.vider(cases_)
+			quoi = "creuser"
+		elif tirage < 0.85:
+			var r := rng.randi_range(0, 2)
+			visibles[r] = not visibles[r]
+			if visibles.find(true) < 0:
+				visibles[r] = true
+			Natif.actif = false
+			refaire_l_union.call()
+			Natif.actif = true
+			diff = mn.definir_visible(r, visibles[r])
+			quoi = "couche %d %s" % [r, "montrée" if visibles[r] else "cachée"]
+		elif tirage < 0.92:
+			# Monter une couche d'un cran (Up / Down de l'écran) : l'ordre est la priorité.
+			var r := rng.randi_range(1, 2)
+			for liste in [massifs, visibles, rendus, fautes_, lots, cles_par]:
+				var x = liste[r]
+				liste[r] = liste[r - 1]
+				liste[r - 1] = x
+			Natif.actif = false
+			refaire_l_union.call()
+			Natif.actif = true
+			diff = mn.deplacer_couche(r, r - 1)
+			quoi = "couche %d montée" % r
+		else:
+			# Un choix de variante, sur un sommet posé dont la clé en a (le rang que le tirage n'a pas donné).
+			var r := rng.randi_range(0, 2)
+			var m: Node3D = massifs[r]
+			var s = null
+			for v in m._etat:
+				var d: Dictionary = m._etat[v]
+				if not d.is_empty() and d["cle"] != "" and cles_par[r].has(MB.nom_de_variante(d["cle"], 2)) \
+						and rng.randf() < 0.05:
+					s = v
+					break
+			if s == null:
+				continue
+			var k := (MB.rang_de_variante(m.tuile_posee(s)) + 1) % 3
+			m.choix[s] = k
+			Natif.actif = false
+			m.reconstruire_sommets([s])
+			Natif.actif = true
+			diff = mn.choisir(r, s, k)
+			quoi = "choix %d en %s" % [k, s]
+		sortes[quoi.get_slice(" ", 0)] = int(sortes.get(quoi.get_slice(" ", 0), 0)) + 1
+		decides += int(mn.derniers_decides())
+		poses_vues += int(mn.nombre_de_poses())
+		mn.appliquer(diff, rendus, fautes_, id_faute)
+		if photo.call() != photo_natif.call():
+			ecarts += 1
+			if premier == "":
+				premier = "geste %d (%s)" % [g, quoi]
+	_dire(ecarts == 0, "%d geste(s) sur 80 où les diffs du natif ne rendent pas l'appli — %s" % [ecarts, premier])
+	for sorte in ["coup", "creuser", "couche", "choix"]:
+		_dire(int(sortes.get(sorte, 0)) >= 3, "les gestes doivent exercer « %s » (%s)" % [sorte, sortes])
+	var variantes := 0
+	var fautes_vues := 0
+	for r in 3:
+		for c in (rendus[r] as GridMap).get_used_cells():
+			if str(lots[r].get_item_name((rendus[r] as GridMap).get_cell_item(c))).contains("_var"):
+				variantes += 1
+		fautes_vues += (fautes_[r] as GridMap).get_used_cells().size()
+	_dire(variantes > 0 and fautes_vues > 0, "le monde doit poser des variantes et des fautes (%d, %d)" % [variantes, fautes_vues])
+	# Le diff est LOCAL : un geste décide une petite part des sommets du monde.
+	_dire(decides * 5 < poses_vues, "un geste ne doit décider qu'une part des sommets (%d sur %d)" % [decides, poses_vues])
+	for m in massifs:
+		m.free()
+	for g in rendus + fautes_:
+		g.free()
+	_sections += 1
+
+
 # ── la mesure (rien n'y est jugé) ─────────────────────────────────────────────────────────────────────
 
 func _mesurer() -> void:
@@ -622,6 +850,45 @@ func _mesurer() -> void:
 			"natif   " if natif else "GDScript", pleines.size(), (t1 - t0) / 1000, poses.size(), (t2 - t1) / 1000,
 			(o["eau"] as Dictionary).size(), (t4 - t3) / 1000])
 		m.free()
+	# Le monde du cœur : le même monde posé d'un coup, puis une case posée et retirée (le diff d'un geste),
+	# contre un massif qui refait autour d'une case (`reconstruire_autour`, natif).
+	var mn = MB.monde_natif()
+	mn.ajouter_couche()
+	mn.definir_tuiles(0, cles, {})
+	var ta := Time.get_ticks_usec()
+	mn.poser(0, pleines.keys())
+	var tb := Time.get_ticks_usec()
+	var geste := Vector3i(100, 0, 100)   # posé SUR le relief : sa colonne change de haut, le ciel des voisins aussi
+	while pleines.has(geste):
+		geste.y += 1
+	var gr := GridMap.new()
+	var gf := GridMap.new()
+	root.add_child(gr)
+	root.add_child(gf)
+	var grilles: Array = [gr]
+	var fautes_g: Array = [gf]
+	mn.remplir(0, gr, gf, 0)
+	var tc := Time.get_ticks_usec()
+	for k in 50:
+		mn.appliquer(mn.poser(0, [geste]), grilles, fautes_g, 0)
+		mn.appliquer(mn.vider([geste]), grilles, fautes_g, 0)
+	var td := Time.get_ticks_usec()
+	gr.free()
+	gf.free()
+	var m2 := _massif(_lot(cles), pleines)
+	m2.reconstruire()
+	var cg: GridMap = m2.get_node("Cases")
+	var id_case: int = cg.mesh_library.find_item_by_name("case")
+	var te := Time.get_ticks_usec()
+	for k in 50:
+		cg.set_cell_item(geste, id_case)
+		m2.reconstruire_autour([geste])
+		cg.set_cell_item(geste, GridMap.INVALID_CELL_ITEM)
+		m2.reconstruire_autour([geste])
+	var tf := Time.get_ticks_usec()
+	print("   monde du cœur : posé d'un coup %d ms (%d poses) ; un geste d’une case, diff appliqué %.3f ms (massif natif : %.3f ms)" % [
+		(tb - ta) / 1000, mn.nombre_de_poses(), (td - tc) / 100000.0, (tf - te) / 100000.0])
+	m2.free()
 	var img := _image(512, 512, 9)
 	var tri := _triangles(4, 400)
 	for natif in [false, true]:

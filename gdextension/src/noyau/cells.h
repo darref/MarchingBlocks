@@ -36,13 +36,15 @@ inline bool in_range(int32_t v) {
 	return v > -AXIS_OFFSET && v < AXIS_OFFSET - 1;
 }
 
-// An open-addressing hash map from packed keys to a 32-bit value. Linear probing, power-of-two capacity,
-// never shrinks. Removal uses backward-shift deletion, so lookups never meet tombstones.
-class CellMap {
+// An open-addressing hash map from packed keys to a value (a 32-bit int for cells, a placement for vertices).
+// Linear probing, power-of-two capacity, never shrinks. Removal uses backward-shift deletion, so lookups never
+// meet tombstones.
+template <class V>
+class KeyMap {
 public:
 	static constexpr uint64_t EMPTY = ~uint64_t(0);
 
-	CellMap() { _rehash(16); }
+	KeyMap() { _rehash(16); }
 
 	size_t size() const { return _count; }
 	bool empty() const { return _count == 0; }
@@ -63,7 +65,7 @@ public:
 	}
 
 	// The value at `key`, or `missing` when absent.
-	int32_t get(uint64_t key, int32_t missing) const {
+	V get(uint64_t key, V missing) const {
 		size_t i = _slot(key);
 		while (true) {
 			const uint64_t k = _keys[i];
@@ -72,6 +74,21 @@ public:
 			}
 			if (k == EMPTY) {
 				return missing;
+			}
+			i = (i + 1) & _mask;
+		}
+	}
+
+	// A pointer to the value at `key`, or nullptr; valid until the next insertion or removal.
+	const V *find(uint64_t key) const {
+		size_t i = _slot(key);
+		while (true) {
+			const uint64_t k = _keys[i];
+			if (k == key) {
+				return &_values[i];
+			}
+			if (k == EMPTY) {
+				return nullptr;
 			}
 			i = (i + 1) & _mask;
 		}
@@ -92,7 +109,7 @@ public:
 	}
 
 	// Sets the value; returns true when the key was new.
-	bool set(uint64_t key, int32_t value) {
+	bool set(uint64_t key, V value) {
 		if ((_count + 1) * 10 > _keys.size() * 7) {
 			_rehash(_keys.size() * 2);
 		}
@@ -114,7 +131,7 @@ public:
 	}
 
 	// Keeps the larger value (used for column tops).
-	void set_max(uint64_t key, int32_t value) {
+	void set_max(uint64_t key, V value) {
 		if ((_count + 1) * 10 > _keys.size() * 7) {
 			_rehash(_keys.size() * 2);
 		}
@@ -183,7 +200,7 @@ public:
 
 private:
 	std::vector<uint64_t> _keys;
-	std::vector<int32_t> _values;
+	std::vector<V> _values;
 	size_t _mask = 0;
 	size_t _count = 0;
 
@@ -195,11 +212,11 @@ private:
 
 	void _rehash(size_t capacity) {
 		std::vector<uint64_t> old_keys;
-		std::vector<int32_t> old_values;
+		std::vector<V> old_values;
 		old_keys.swap(_keys);
 		old_values.swap(_values);
 		_keys.assign(capacity, EMPTY);
-		_values.assign(capacity, 0);
+		_values.assign(capacity, V());
 		_mask = capacity - 1;
 		_count = 0;
 		for (size_t i = 0; i < old_keys.size(); i++) {
@@ -209,5 +226,15 @@ private:
 		}
 	}
 };
+
+using CellMap = KeyMap<int32_t>;
+
+inline Cell unpack(uint64_t k) {
+	Cell c;
+	c.x = int32_t((k >> 42) & AXIS_MASK) - AXIS_OFFSET;
+	c.y = int32_t((k >> 21) & AXIS_MASK) - AXIS_OFFSET;
+	c.z = int32_t(k & AXIS_MASK) - AXIS_OFFSET;
+	return c;
+}
 
 } // namespace mbcore

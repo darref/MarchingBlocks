@@ -968,13 +968,28 @@ static func natif() -> Variant:
 	var n = Natif.noyau()
 	if n == null or n.est_pret():
 		return n
+	n.definir_regle(table_du_coeur())
+	return n
+
+
+## La table des 256 configurations telle que le cœur natif la reçoit (il ne décide rien : il évalue CETTE table).
+static func table_du_coeur() -> Array:
 	var table: Array = []
 	for b in 256:
 		var r: Dictionary = _classe_des_bits(b)
 		table.append({"surface": r["surface"], "exterieur": r["exterieur"], "orientation": r["orientation"],
 			"nom": r["nom"], "nom_dehors": r["nom_dehors"]})
-	n.definir_regle(table)
-	return n
+	return table
+
+
+## UN MONDE DU CŒUR (`mbcore::World`, par le pont MBMonde) : les couches, leurs cases, la décision de chaque sommet,
+## et le DIFF de chaque changement — ou null sans le natif. Charte §0, « le cœur C++ », étape 3.
+static func monde_natif() -> Variant:
+	if Natif.noyau() == null or not ClassDB.class_exists("MBMonde"):
+		return null
+	var m = ClassDB.instantiate("MBMonde")
+	m.definir_regle(table_du_coeur())
+	return m
 
 
 static func _classe_des_bits(b: int) -> Dictionary:

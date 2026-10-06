@@ -40,3 +40,4 @@ gdextension/.sconsign.dblite
 gdextension/src/**/*.o
 gdextension/src/**/*.os
 gdextension/src/**/*.obj
+gdextension/tests/world_runner

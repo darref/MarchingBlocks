@@ -1,3 +1,4 @@
+#include "mb_monde.h"
 #include "mb_natif.h"
 
 #include <gdextension_interface.h>
@@ -12,6 +13,7 @@ static void initialiser(ModuleInitializationLevel niveau) {
 		return;
 	}
 	GDREGISTER_CLASS(MBNatif);
+	GDREGISTER_CLASS(MBMonde);
 }
 
 static void terminer(ModuleInitializationLevel niveau) {

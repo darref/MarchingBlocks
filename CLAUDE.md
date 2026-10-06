@@ -103,7 +103,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     partout. On n'efface un corps GDScript que le jour où le noyau a ses PROPRES cas d'épreuve (les greffons).
   - **L'ORDRE — PROPOSÉ** : (1) l'appli d'abord, par les points chauds MESURÉS, module par module, chacun gardé par le
     test différentiel — **FAIT LE 6 OCTOBRE : la règle de pose, le massif (complet et local), l'océan** ; (2) les autres
-    points chauds de l'appli — **FAIT LE 6 OCTOBRE : les cartes PBR, la découpe, les plats de l'eau** (ci-dessous) ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) ;
+    points chauds de l'appli — **FAIT LE 6 OCTOBRE : les cartes PBR, la découpe, les plats de l'eau** (ci-dessous) ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) — **LE MONDE ET SON
+    DIFF ÉCRITS LE 6 OCTOBRE, AVEC SES PROPRES CAS D'ÉPREUVE ; LE BRANCHEMENT DANS L'APPLI RESTE OUVERT** (ci-dessous) ;
     (4) les greffons, QUAND LE LOGICIEL SERA FINI (« les greffons attendent la fin du logiciel », ci-dessus) : Godot
     embarque la GDExtension, Unreal fusionne `MBCore`, Unity passe au natif ; (5) l'API de jeu par-dessus, avec ses
     cas d'épreuve communs et un exemple par moteur.
@@ -135,6 +136,53 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     ÉQUIVALENTE** : la couleur par défaut de la découpe — elle ne sort que si la source a des couleurs. **PAS PORTÉS,
     MESURÉS** : la propagation des sections (quelques ms par geste), `_nappes_du_corps` (~50 ms, seulement pour les corps
     qui changent), `maillage_moitie` (~0,25 s, une fois).
+  - **L'ÉTAPE 3 — `mbcore::World` (Jordan, 6 octobre 2026 : « go pour l'étape 3 »), ÉCRITE DANS LE NOYAU** (`gdextension/
+    src/noyau/world.*`, en anglais, sous les contraintes d'Unreal) : des COUCHES dans l'ordre de priorité (tuiles, poids,
+    choix de variantes chacune), des cases EXCLUSIVES (poser prend aux autres couches), la décision de chaque sommet sur
+    l'union des couches visibles — la règle, étapes 1 à 8. Chaque changement (poser / vider des cases, cacher, montrer,
+    déplacer, retirer une couche, un choix, des tuiles) rend un DIFF trié : les cases qui changent de main, les POSES
+    qui changent (avant, après). Ne sont refaits que les 8 sommets de chaque case changée et, quand le haut d'une
+    colonne bouge, les sommets des colonnes x−1..x, z−1..z dont `y + 2` passe entre l'ancien et le nouveau haut. Le
+    monde ne connaît aucun nom : classes, tuiles, orientations sont des entiers que le pont lui donne. Le pont Godot :
+    `MBMonde` (`MB.monde_natif()`), le diff en tableaux plats, `appliquer` le pose dans les grilles de chaque couche.
+    - ⚠ **DÉPLACER OU RETIRER UNE COUCHE** : le pont renumérote d'abord SES couches, puis applique le diff (qui ne dit
+      que ce qui est posé autrement). Écrit dans `world.h`, éprouvé par le banc.
+    - **SES PROPRES CAS D'ÉPREUVE** (`gdextension/tests/`, `./build.sh`, g++ aux drapeaux d'Unreal) — la condition que
+      la charte met pour effacer un jour un corps GDScript : les **30 cas de `conformance.json`** (18 d'une couche, 6 à
+      variantes, 6 en couches, 2 998 poses) bâtis dans un `World` ; **le chemin incrémental** sur ces mondes et six
+      mondes au hasard (~1 600 gestes : coups, creusements, vols, couches cachées / montrées / déplacées / retirées,
+      choix) — après CHAQUE geste, les poses tenues par les seuls diffs égalent ce que pose de zéro une AUTRE
+      implémentation de la règle écrite, `FRule::PlacementsLayered` du greffon Unreal ; chaque sorte de geste exercée
+      au moins six fois ; un trait ne décide qu'une petite part des sommets ; et des règles écrites à la main (un vol,
+      une couche cachée qui ne retient rien, une dalle retirée qui ouvre le ciel du sol d'en dessous). 73 vérifications.
+    - **CONTRE L'APPLI** (`test_natif` §10) : trois couches menées comme l'écran les mène, en GDScript (`MassifPeint`,
+      l'union partagée, `reconstruire_autour`, l'union refaite pour cacher ou monter une couche), et un `MBMonde` par
+      les mêmes 80 gestes ; ses grilles ne reçoivent que ses diffs ; après chaque geste, les mêmes grilles, case pour
+      case (item et orientation), variantes, poids et fautes compris. `test_natif` 143 ; les 23 suites vertes avec le
+      natif (fumée 803), `test_marching_blocks` et `test_massif_peint` aussi avec `MB_NATIF=0`.
+    - **MESURÉ** (headless) : un monde de 509 440 cases en trois couches, bâti en 0,9 s ; **un geste d'une case
+      0,015 ms** (11 sommets décidés), un de 30 cases 0,14 ms, cacher une couche 0,22 s. Dans Godot (120 821 cases), un
+      geste d'une case, diff posé dans la grille : **~0,01 ms, contre ~3 à 6 ms** pour `reconstruire_autour` natif.
+    - **MUTATIONS** : noyau 12 rouges (ciel non propagé, bande du ciel raccourcie, haut de colonne non recalculé,
+      changement de rang non vu, choix ignoré, déplacement sans renumérotation, tuiles sans nouvelle décision, poids
+      négatifs gardés, choix sans nouvelle décision, une case vidée puis reposée comptée deux fois, une couche « cachée »
+      jamais marquée comme telle, une pose vide gardée) ; pont 4 rouges (retrait oublié, retrait dans la mauvaise grille,
+      variantes non lues, poids ignorés) et deux du noyau rejouées par `test_natif`. ⚠ **DEUX D'ABORD MUETTES, PAR LE
+      TEST** : les tuiles d'une couche déjà PEINTE (le banc ne les posait qu'avant les cases) et une case vidée puis
+      reposée dans le même appel ; et **« poids ignorés » côté pont** — les poids du test tombaient sur des clés sans
+      variantes : ils portent désormais sur les deux clés à variantes que la couche pose le plus. ⚠ **DEUX
+      ÉQUIVALENTES** : la bande du ciel commencée un cran plus haut (à `lo` au lieu de `lo − 1`, ou à `_y_low` dans une
+      colonne vide) — un sommet à `y = lo − 1` a le haut de la colonne pour coin, donc soit ce coin ferme sa propre
+      case vide du bas (sa classe ne peut pas être à l'air libre), soit la colonne n'est pas sondée. La borne prudente
+      reste.
+  - **LE BRANCHEMENT DANS L'APPLI (étape 3 b) — OUVERT, VOLONTAIREMENT** : remplacer l'union `{case: rang}` de l'écran
+    et l'état de chaque `MassifPeint` par un `MBMonde` touche le CŒUR d'`editor.gd` (`_appliquer`, les vols,
+    `_suivre_les_cases`, `_refaire_l_union`, Up / Down, les choix et les poids de `variantes.gd`, l'annulation) et les
+    ~800 vérifications de `fumee_appli` qui lisent l'état des massifs — tout ce que la session du bureau écrit. Ce n'est
+    plus un aiguillage de trois lignes (la règle de cohabitation, ci-dessous). Le monde est prêt et éprouvé contre
+    l'appli ; le gain mesuré du geste (quelques ms → ~0,01 ms) ne se SENT pas dans l'appli, où le geste coûte déjà ~40 ms
+    ailleurs (§5) — son vrai prix est l'API de jeu et la reconstruction incrémentale des greffons. **PROPOSÉ** : le
+    brancher quand la session du bureau est au repos, ou avec les greffons (étape 4).
   - **LA COHABITATION AVEC LA SESSION DU BUREAU** : le cœur vit dans des fichiers NEUFS (`gdextension/`,
     `addons/marchingblocks_core/natif*`) ; un fichier GDScript existant ne reçoit que son AIGUILLAGE (trois lignes en tête
     de la fonction accélérée). Si une session change une fonction déjà portée, `test_natif.gd` rougit : on reporte le
