@@ -4332,10 +4332,13 @@ func _les_couches_exclusives(ed: Control) -> void:
 		"la dernière couche : Up actif, Down grisé")
 	var etat_a_avant := (ed._vue.couche(ia)._etat as Dictionary).size()
 	var glisses_avant: int = ed.glissements_au_monde
+	ed._transitions._a_poser_table = false
 	ed._bouton_monter_couche.pressed.emit()
 	# UP / DOWN BRANCHÉ (6 octobre 2026) : avec le cœur, le monde déplace la couche sans rien reconstruire.
 	_vrai(MB.natif() == null or ed.glissements_au_monde == glisses_avant + 1,
 		"avec le cœur, Up passe par le monde (`_renumeroter_l_union`) : %d" % (ed.glissements_au_monde - glisses_avant))
+	# Les transitions lisent les rangs : Up doit les prévenir, par les deux routes (trouvé par le devlog Transitions).
+	_vrai(ed._transitions._a_poser_table, "Up : les transitions savent que les rangs ont changé")
 	_vrai(ed._active == ia and ed._couches[ia]["nom"] == nom_b and ed._couches[ib]["nom"] == nom_a
 		and ed._vue.couche(ia).get_node("Cases") == gb, "Up : B prend la place de A, et reste active")
 	_memes_proprietaires(ed, [ia, ib], "B montée")

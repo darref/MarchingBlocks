@@ -6097,6 +6097,9 @@ func _renumeroter_l_union(lo: int, hi: int) -> void:
 	_monde_coeur.vider_attente()
 	for i in _vue.nombre_de_couches():
 		_vue.couche(i)._bilan()
+	# ⚠ LES TRANSITIONS LISENT LES RANGS (qui couvre qui, la texture des rangs) : comme `_refaire_l_union`, on les
+	# prévient. Oublié d'abord — la bande restait à l'ancienne frontière après Up (trouvé par le devlog Transitions).
+	_transitions.union_refaite()
 
 
 func _renommer_couche() -> void:
