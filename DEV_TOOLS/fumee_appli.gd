@@ -468,6 +468,8 @@ func _mener() -> void:
 	_le_manuel_dit_le_rendu(ed)
 	_les_deux_ateliers_du_temoin(ed)
 	_peindre_le_temoin(ed)
+	_l_atelier_animation(ed)
+	_vrai(_animation_finie, "SENTINELLE : l'atelier Animation est allé JUSQU'AU BOUT")
 	_sculpter_le_temoin(ed)
 	_vrai(_sculpt_fini, "le sculpt est allé JUSQU'AU BOUT")
 	_vrai(_couches_finies, "les couches et leurs témoins sont allés JUSQU'AU BOUT")
@@ -2445,6 +2447,166 @@ func _peindre_le_temoin(ed: Control) -> void:
 ## cartes partent dans le .glb du témoin. Attendus : les défauts écrits dans `cartes_pbr.gd` (recopiés ici), le fond
 ## d'avant relu octet par octet, le JSON du fichier.
 var _sentinelle_pbr := false
+
+
+
+## L'ATELIER ANIMATION (Jordan, 6 octobre 2026) — par les vrais boutons : rien tant qu'on n'ajoute pas ; « + » ajoute
+## des images neuves (copiées dans le projet) et un défilement ; « − » retire ; un Ctrl+Z par geste ; la paroi montrée
+## porte l'animé ; on peint UNE image (Frame ▶) ; le monde le reçoit animé. Attendus : les fichiers sur le disque, le
+## dictionnaire du matériau, les pixels des toiles — jamais lus dans `app/animation.gd`.
+var _animation_finie := false
+
+
+func _l_atelier_animation(ed: Control) -> void:
+	const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
+	const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+	var mo: Node3D = ed._modeleur
+	var an: RefCounted = ed._animation
+	ed._aller_a("anim")
+	_vrai(ed._droite_animation.visible and not ed._droite_texture.visible and ed._vue.edition and not mo.geometrie,
+		"Animation : sa barre de droite, le témoin en édition, sans outils de géométrie")
+	var t: RefCounted = mo.temoin
+	# Le matériau que portent les faces de la paroi (peinte par la section d'avant).
+	var paroi := "mb_plaque_b2h2_dehors"
+	var k := -1
+	for f in t.tuiles[paroi].faces.size():
+		var m: int = t.tuiles[paroi].mat(f)
+		if m >= 0 and m < t.materiaux.size() and str(t.materiaux[m].get("texture", "")) != "":
+			k = m
+	_vrai(k >= 0, "un matériau peint existe (celui de la paroi)")
+	if k < 0:
+		return
+	mo.materiau_courant = k
+	an.redire()
+	_vrai(an._corps.visible and an._pistes.get_child_count() == 1 and (an._pistes.get_child(0) as Label).text.begins_with("No track"),
+		"le matériau choisi : aucune piste, et la barre le dit")
+	var bouton := func(parent: Node, texte: String) -> Button:
+		for b in parent.find_children("*", "Button", true, false):
+			if (b as Button).text == texte:
+				return b
+		return null
+	var choisir := func(source: Array) -> void:
+		for i in an._source.item_count:
+			if an._source.get_item_metadata(i) == source:
+				an._source.select(i)
+		an._redire_les_reglages_source()
+	an._canal.select(0)
+	an._redire_les_sources()
+	choisir.call(["images", "vierges"])
+	_vrai(an._nombre.visible and not an._colonnes.visible, "« Blank frames » : seul le nombre se règle")
+	an._nombre.value = 3
+	(bouton.call(ed._droite_animation, "Add track") as Button).pressed.emit()
+	var images: Array = Anim.images_de(t.materiaux[k].get("animation"), "albedo")
+	var ecrites := images.size() == 3
+	for c in images:
+		ecrites = ecrites and FileAccess.file_exists(c) and (c as String).contains("_images/animation")
+	_vrai(ecrites, "« + » : trois images, écrites dans le dossier d'images du projet (%s)"
+		% (images[0] if not images.is_empty() else "—"))
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(t.materiaux[k].get("animation") == null, "UN Ctrl+Z retire la piste")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(Anim.images_de(t.materiaux[k].get("animation"), "albedo") == images, "Ctrl+Y la remet")
+	an._canal.select(0)
+	an._redire_les_sources()
+	var offertes: Array = []
+	for i in an._source.item_count:
+		offertes.append(an._source.get_item_metadata(i))
+	_vrai(offertes == [["defilement", ""]], "la couleur de base a ses images : on ne propose plus que le défilement (%s)" % [offertes])
+	choisir.call(["defilement", ""])
+	(bouton.call(ed._droite_animation, "Add track") as Button).pressed.emit()
+	_vrai(Anim.pistes(t.materiaux[k]["animation"]) == [["albedo", "defilement"], ["albedo", "images"]]
+		and an._pistes.get_child_count() == 2, "un défilement de plus : deux cartes")
+	var surf: Material = null
+	var mesh: Mesh = (mo._mm_de[paroi] as MultiMeshInstance3D).multimesh.mesh if mo._mm_de.has(paroi) else mo._faces_mi.mesh
+	for s in mesh.get_surface_count():
+		if mesh.surface_get_material(s) is ShaderMaterial:
+			surf = mesh.surface_get_material(s)
+	_vrai(surf != null and surf.has_meta("repli"), "la paroi montrée porte le matériau ANIMÉ")
+	var moins: Array = []
+	for b in an._pistes.get_child(0).find_children("*", "Button", true, false):
+		if (b as Button).tooltip_text.begins_with("Remove this track"):
+			moins.append(b)
+	(moins[0] as Button).pressed.emit()
+	_vrai(Anim.pistes(t.materiaux[k]["animation"]) == [["albedo", "images"]], "« − » retire le défilement")
+	an._basculer_lecture()
+	_vrai(Anim.en_pause and an._bouton_lecture.text == "Play", "Pause met tout en pause")
+	an._basculer_lecture()
+	# PEINDRE L'IMAGE 3 : Texturing, Frame ▶ ▶, un trait — l'image 3 change, l'image 1 non.
+	ed._aller_a("texture")
+	ed._bouton_pinceau.button_pressed = true
+	an.redire_la_peinture()
+	_vrai(an._rangee_peinture.visible and an._image_peinte.text == "1 / 3", "Paint montre la rangée Frame : 1 / 3")
+	an.changer_d_image(1)
+	an.changer_d_image(1)
+	_vrai(mo.image_peinte == 2 and ed._chemin_toile_courante() == images[2], "▶ ▶ : on peint l'image 3")
+	an.suivre(0.016)
+	_vrai(Anim.fige and Anim.image_forcee == 2, "l'écran montre l'image peinte, le temps figé")
+	var cam: Camera3D = mo.camera
+	var vise := {}
+	for i in t.occurrences_de(paroi):
+		var pose: Transform3D = t.occurrences[i]["pose"]
+		var tuile: RefCounted = t.tuiles[paroi]
+		for f in tuile.faces.size():
+			if tuile.mat(f) != k:
+				continue
+			var c := Vector3.ZERO
+			for j in tuile.faces[f]:
+				c += tuile.sommets[j]
+			c /= tuile.faces[f].size()
+			var monde: Vector3 = pose * c
+			if cam.is_position_behind(monde):
+				continue
+			var ecran: Vector2 = cam.unproject_position(monde)
+			if not Rect2(Vector2(40, 40), ed._vue.size - Vector2(80, 80)).has_point(ecran):
+				continue
+			var hit: Dictionary = t.rayon(cam.project_ray_origin(ecran), cam.project_ray_normal(ecran))
+			if not hit.is_empty() and int(hit["occurrence"]) == i and int(hit["face"]) == f:
+				vise = {"face": f, "ecran": ecran, "local": c}
+				break
+		if not vise.is_empty():
+			break
+	_vrai(not vise.is_empty(), "une face animée de la paroi est visible")
+	if not vise.is_empty():
+		var tuile: RefCounted = t.tuiles[paroi]
+		var px: Vector2 = Peinture.vers_pixel(Peinture.toile(images[2])["image"], tuile.uv_au_point(int(vise["face"]), vise["local"]))
+		var avant0: Color = Peinture.toile(images[0])["image"].get_pixel(int(px.x), int(px.y))
+		ed._couleur_pinceau.color = Color(0.1, 0.9, 0.2)
+		ed._couleur_pinceau.color_changed.emit(Color(0.1, 0.9, 0.2))
+		for appui in [true, false]:
+			var b := InputEventMouseButton.new()
+			b.button_index = MOUSE_BUTTON_LEFT
+			b.pressed = appui
+			b.position = vise["ecran"]
+			mo.souris_entree(b)
+		var module_peinture: GDScript = Peinture
+		var lu := func(r: int) -> Color: return module_peinture.toile(images[r])["image"].get_pixel(int(px.x), int(px.y))
+		_vrai(_proche(lu.call(2), Color(0.1, 0.9, 0.2)), "le trait peint l'image 3 (%s)" % lu.call(2))
+		_vrai(lu.call(0) == avant0, "… et pas l'image 1")
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		_vrai(not _proche(lu.call(2), Color(0.1, 0.9, 0.2)), "UN Ctrl+Z défait le trait dans l'image 3")
+		ed._unhandled_key_input(_cle(KEY_Y, true))
+	ed._bouton_pinceau.button_pressed = false
+	an.suivre(0.016)
+	_vrai(not Anim.fige and Anim.image_forcee == -1, "pinceau éteint : les images rejouent")
+	# LE MONDE : en y allant, il suit son témoin — ses tuiles portent le matériau animé.
+	ed._aller_a("monde")
+	var lot: MeshLibrary = ed._vue.couche(ed._active).lot
+	var animees := 0
+	if lot != null:
+		for id in lot.get_item_list():
+			var m: Mesh = lot.get_item_mesh(id)
+			for s in m.get_surface_count():
+				var mt: Material = m.surface_get_material(s)
+				if mt is ShaderMaterial and mt.has_meta("repli") \
+						and Anim.images_de(mt.get_meta("animation"), "albedo").size() == 3:
+					animees += 1
+	_vrai(animees >= 1, "le monde porte le matériau animé (%d surface(s))" % animees)
+	# Rien ne reste : on retire la piste (un geste), pour les sections qui suivent.
+	ed._aller_a("anim")
+	mo.materiau_courant = k
+	an.poser({})
+	_vrai(t.materiaux[k].get("animation") == null, "tout retiré : le matériau est de nouveau immobile")
+	_animation_finie = true
 
 
 func _les_cartes_pbr(ed: Node, mo: Node, t: RefCounted, k: int, chemin: String) -> void:

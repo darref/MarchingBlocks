@@ -40,6 +40,7 @@ const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Variantes := preload("res://app/variantes.gd")
 const AtelierTransitions := preload("res://app/transitions.gd")
+const AtelierAnimation := preload("res://app/animation.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
@@ -57,6 +58,7 @@ const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
 const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const EauMaillage := preload("res://addons/marchingblocks_core/eau_maillage.gd")
 const EauPresets := preload("res://addons/marchingblocks_core/eau_presets.gd")
+const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 
 ## Ce qui survit au projet lui-même : le dernier ouvert.
 const REGLAGES := "user://reglages.cfg"
@@ -212,6 +214,8 @@ var _histoire := UndoRedo.new()
 var _variantes: RefCounted = Variantes.new(self)
 ## L'ATELIER TRANSITIONS (Jordan, 6 octobre 2026) : l'état est dans le projet, la règle et le rendu dans le cœur.
 var _transitions: RefCounted = AtelierTransitions.new(self)
+## L'ATELIER ANIMATION (6 octobre 2026) : les textures animées (`app/animation.gd`).
+var _animation: RefCounted = AtelierAnimation.new(self)
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -278,6 +282,7 @@ var _mer_case := Vector3i.ZERO   # la case cliquée : sa colonne porte la source
 var _eau_barre_forcee := false   # le prochain recalcul de l'eau montre l'attente (la mer posée : tout est refait)
 var _droite_fluides: Panneau
 var _droite_transitions: Panneau
+var _droite_animation: Panneau
 ## L'outil de World qu'on avait en entrant dans Fluids (`_vue.outil`, et la forme si c'en était une) : rendu en sortant.
 var _outil_avant_fluides := "ajouter"
 var _aide_eau: Label
@@ -349,6 +354,7 @@ func _process(delta: float) -> void:
 	_dire_les_trous()
 	_dire_les_ecarts()
 	_transitions.suivre()
+	_animation.suivre(delta)
 	if _atelier == "witness":
 		_variantes.dire_temoin()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
@@ -437,9 +443,11 @@ func _batir() -> void:
 	_batir_fluides(_droite_fluides.get_meta("pile"))
 	_droite_transitions = _panneau(corps, false, LARGEUR_DROITE)
 	_transitions.batir(_droite_transitions.get_meta("pile"))
+	_droite_animation = _panneau(corps, false, LARGEUR_DROITE)
+	_animation.batir(_droite_animation.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
-			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"]]:
+			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"], [_droite_animation, "anim"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -808,6 +816,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 			+ "of the witness tiles."],
 		["transitions", "Transitions", "couches", "Where two layers meet, blend the look of one over the other. Esc "
 			+ "goes back to World."],
+		["anim", "Animation", "film", "Animated textures on the witness materials: scroll, frames (a texture video), "
+			+ "pulse — on any map, emission included."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -2846,6 +2856,8 @@ func _aller_a(atelier: String) -> void:
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
 		_entrer_dans_les_transitions()
+	if atelier == "anim":
+		_animation.entrer()
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
@@ -2884,7 +2896,8 @@ func _contexte() -> void:
 	# projections, dépliage — et la peinture à venir). Ils montrent le même témoin ; seule la main change.
 	var geometrie := _atelier == "witness"
 	var texturing := _atelier == "texture"
-	var temoin := geometrie or texturing
+	var animation := _atelier == "anim"
+	var temoin := geometrie or texturing or animation
 	var monde := _atelier == "monde"
 	var fluides := _atelier == "fluides"
 	var transitions := _atelier == "transitions"
@@ -2910,7 +2923,8 @@ func _contexte() -> void:
 	_droite_jeu.visible = jeu
 	_droite_fluides.visible = fluides
 	_droite_transitions.visible = transitions
-	_modeleur.geometrie = not texturing
+	_droite_animation.visible = animation
+	_modeleur.geometrie = not (texturing or animation)
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
 	if not geometrie and _modeleur.sculpt:
@@ -3629,6 +3643,8 @@ func _batir_peinture(pile: VBoxContainer) -> void:
 		_modeleur.bandes_de_couture = v
 		_modeleur.regler_les_bandes())
 	sec.contenu.add_child(_case_bandes)
+	# Un albedo animé par images : le pinceau peint UNE image (`app/animation.gd`).
+	sec.contenu.add_child(_animation.rangee_peinture())
 	_batir_calques(sec.contenu)
 
 
@@ -3719,7 +3735,8 @@ func _chemin_toile_courante() -> String:
 	var k: int = _modeleur.materiau_courant
 	if _modeleur.maillage == null or k < 0 or k >= _modeleur.maillage.materiaux.size():
 		return ""
-	return str(_modeleur.maillage.materiaux[k].get("texture", ""))
+	# Un albedo animé par images : la toile de l'image qu'on peint (`Modeleur.chemin_peint`).
+	return _modeleur.chemin_peint(_modeleur.maillage.materiaux[k])
 
 
 func _toile_courante() -> Dictionary:
@@ -4629,7 +4646,7 @@ func _travail_vu(oui: bool) -> void:
 		_etiquette_vue.text = "showing: the computed witness"
 		_bouton_revoir_temoin.visible = false
 	# ⚠ ON RESTE DANS PROJECT : c'est là qu'on importe, et la liste des travaux n'existe que là.
-	_aller_a(_atelier if _atelier in ["projet", "witness", "texture"] else "projet")
+	_aller_a(_atelier if _atelier in ["projet", "witness", "texture", "anim"] else "projet")
 
 
 ## LA GRILLE DES TRAVAUX — un bouton par import, celui qu'on tranchera est enfoncé.
@@ -6529,7 +6546,7 @@ func _ensembles_en_retard_(c: Dictionary) -> bool:
 		if mesh == null:
 			continue
 		for s in mesh.get_surface_count():
-			var sm := mesh.surface_get_material(s) as BaseMaterial3D
+			var sm := Anim.statique(mesh.surface_get_material(s)) as BaseMaterial3D
 			if sm == null or not voulues.has(sm.resource_name):
 				continue
 			var cartes: Dictionary = voulues[sm.resource_name]

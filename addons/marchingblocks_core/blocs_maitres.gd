@@ -87,6 +87,7 @@ extends RefCounted
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 const ImagesRelues := preload("res://addons/marchingblocks_core/images_relues.gd")
+const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 
 ## Le côté du bloc, en cellules. ⚠ 12 et non 8 : des formes qu'on RECONNAÎT — une arche visible comme
 ## une arche, un pont, une cheminée — coûtent de la place ; en tenir moins, c'est l'optimisation que
@@ -1442,6 +1443,10 @@ static func ecrire_le_temoin_lie(chemin: String, maillages: Dictionary, affectat
 		cle_du_noeud[String(mi.name)] = tuile
 		n += 1
 	grille.free()
+	# ⚠ UN SHADER NE VOYAGE PAS (6 octobre 2026) : un matériau ANIMÉ s'écrit par son statique (l'image 0, ses réglages
+	# dans les extras « mb_animation »), la relecture le rend animé (`_rendre_la_legende`).
+	for cle in maillages:
+		Anim.figer_le_maillage(maillages[cle])
 	var document := GLTFDocument.new()
 	var etat := GLTFState.new()
 	# Les PNG des textures, gardés d'une écriture à l'autre (`png_en_memoire.gd`) : même fichier, ~3 s de moins.
@@ -1723,6 +1728,8 @@ static func _rendre_la_legende(tuile: ArrayMesh) -> void:
 		# modeleur, seule la légende lit la couleur de sommet : le monde fait pareil.
 		if m != null:
 			m.vertex_color_use_as_albedo = m.resource_name == nom
+	# LES TEXTURES ANIMÉES (6 octobre 2026) : un matériau qui porte « mb_animation » dans ses extras redevient animé.
+	Anim.animer_le_maillage(tuile)
 
 
 ## La pose d'un nœud glTF dans la scène, parents compris. `poses` sert de mémoire (les parents d'abord).

@@ -550,6 +550,29 @@ func _modeleur() -> String:
 		+ "quiet along the cut planes, where any tile may meet any other. It needs the UV projection ([b]Unwrap all "
 		+ "tiles (atlas)[/b] first): with Box, the image repeats and one pixel is many places. Your paint layers stay "
 		+ "on top, and " + _touche("Ctrl+Z") + " gives the old base back.")
+	l.append(_titre("Animated textures — the Animation workspace"))
+	l.append("Pick a material of the witness, then add only the tracks you need with [b]Add track[/b] (each has its "
+		+ "[b]−[/b] to remove it). Any map can move: [b]Base colour[/b], [b]Normal[/b], [b]Roughness · metal · AO[/b] "
+		+ "and [b]Emission[/b].")
+	l.append("[b]Scroll[/b] slides the map across the faces ([b]Across[/b] and [b]Along[/b], in repeats per second): "
+		+ "lava, a waterfall on a rock, a conveyor. [b]Frames[/b] play a sequence of images, like a video: [b]from "
+		+ "image files[/b] (played in the order of their names — frame_2 before frame_10), [b]from a sheet[/b] (one "
+		+ "image cut in a grid, left to right, top to bottom), or [b]blank frames to paint[/b]. The frames are copied "
+		+ "into the project, at the size of the first. [b]Pulse[/b] makes the emission breathe between full and "
+		+ "[b]Low[/b]. Every gesture is one " + _touche("Ctrl+Z") + ".")
+	l.append("[b]Copies in sync[/b] — a tile comes back hundreds of times in a world. Ticked, every copy plays "
+		+ "together (a scroll stays continuous from tile to tile); unticked, each copy starts at its own moment, "
+		+ "drawn from its place, and the repetition shows less. [b]Playback[/b] pauses, slows down or speeds up "
+		+ "everything, and [b]Hold frame[/b] shows one frame on every Frames track.")
+	l.append("[b]Painting frames[/b] — with the base colour animated by frames, the brush of Texturing paints ONE "
+		+ "frame: [b]Frame ◀ ▶[/b] in the Paint section picks it (the witness shows it, time stopped), the copy "
+		+ "button adds the next frame from this one. Each frame has its own paint layers. The other maps are "
+		+ "imported, not painted.")
+	l.append(_note("Tiles are turned by quarter turns in the world: a scroll [b]Along[/b] (up or down on a wall, in "
+		+ "Box projection) goes the same way on every copy; a scroll [b]Across[/b] follows each copy's own turn. A "
+		+ "base colour animated by frames gets no derived PBR maps — give it Normal or ORM frames, or a texture set. "
+		+ "In the engines, the free plugins receive frame 0 and the settings (glTF extras, [i]mb_animation[/i]); "
+		+ "they will play them in a later version."))
 	l.append(_titre("View"))
 	l.append("Middle drag turns, " + _touche("Shift") + " + middle drag slides, the wheel zooms. Numpad "
 		+ _touche("1") + " front, " + _touche("3") + " right, " + _touche("7") + " top (" + _touche("Ctrl")

@@ -21,6 +21,8 @@ extends RefCounted
 ## ⚠ **UNE TEINTE PAR FACE** — la légende du témoin (six teintes, §9.5). Une face née d'une opération
 ## prend celle de la face dont elle sort.
 
+const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
+
 var sommets := PackedVector3Array()
 ## Array de PackedInt32Array.
 var faces: Array = []
@@ -274,7 +276,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 		# ⚠ **CHAQUE SURFACE PORTE SON MATÉRIAU, LA LÉGENDE COMPRISE.** Un `material_override` unique (la
 		# couleur de sommet) remplaçait ceux de TOUTES les surfaces — à l'écran comme dans le .glb : les
 		# matériaux se seraient effacés sans un mot.
-		mesh.surface_set_material(mesh.get_surface_count() - 1, materiau_godot(m) if m >= 0 else materiau_de_legende())
+		mesh.surface_set_material(mesh.get_surface_count() - 1, materiau_affiche(m) if m >= 0 else materiau_de_legende())
 	return mesh
 
 
@@ -402,7 +404,9 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 		# LES CARTES PBR DÉDUITES de l'albedo (`cartes_pbr.gd`), si le matériau les demande : normale, et l'ORM
 		# (R occlusion, G rugosité, B métal BLANC — le facteur « metal » reste seul maître). Partagées comme la toile.
-		elif d.get("pbr") is Dictionary and sm.albedo_texture != null:
+		# ⚠ UN ALBEDO ANIMÉ PAR IMAGES N'A PAS DE CARTES DÉDUITES (Jordan, 6 octobre 2026) : il faudrait les déduire de
+		# chaque image ; il n'a que celles qu'on lui donne (ensemble, ou pistes d'images sur Normal et ORM).
+		elif d.get("pbr") is Dictionary and sm.albedo_texture != null 				and Anim.images_de(d.get("animation"), "albedo").is_empty():
 			var c: Dictionary = Peinture.cartes_de(chemin, d["pbr"], str(d.get("projection", "boite")) != "uv")
 			if not c.is_empty():
 				sm.normal_enabled = true
@@ -415,14 +419,61 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 				sm.ao_enabled = true
 				sm.ao_texture = c["orm"]
 				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	_poser_l_animation(sm, d)
 	_cache_godot[cle] = sm
 	return sm
+
+
+## LES TEXTURES ANIMÉES (`animation_materiau.gd`, 6 octobre 2026) : dans le STATIQUE, l'image 0 de chaque canal animé
+## par images prend l'emplacement de ce canal (c'est ce qu'un moteur sans notre shader montrera), et les réglages
+## partent dans les `extras` du glTF (« mb_animation »).
+static func _poser_l_animation(sm: StandardMaterial3D, d: Dictionary) -> void:
+	var a: Dictionary = Anim.normaliser(d.get("animation"))
+	if a.is_empty():
+		return
+	var Peinture: Script = load("res://addons/marchingblocks_core/peinture.gd")
+	for canal in Anim.CANAUX:
+		var images: Array = Anim.images_de(a, canal)
+		if images.is_empty():
+			continue
+		var premiere: Texture2D = Peinture.texture_de(images[0])
+		if premiere == null:
+			continue
+		match canal:
+			"albedo":
+				sm.albedo_texture = premiere
+			"normale":
+				sm.normal_enabled = true
+				sm.normal_texture = premiere
+			"orm":
+				sm.roughness = 1.0
+				sm.roughness_texture = premiere
+				sm.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+				sm.metallic_texture = premiere
+				sm.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
+				sm.ao_enabled = true
+				sm.ao_texture = premiere
+				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+			"emission":
+				sm.emission_enabled = true
+				sm.emission = Color.WHITE
+				sm.emission_texture = premiere
+				sm.emission_energy_multiplier = maxf(0.0, float(d.get("emission", 1.0)))
+	sm.set_meta("extras", {"mb_animation": a})
+
+
+## Le matériau MONTRÉ (dans le modeleur, et donc dans les maillages qu'il dessine) : animé s'il porte une animation,
+## sinon le statique. ⚠ Toute écriture glTF repasse par le statique (`Anim.statique`).
+func materiau_affiche(m: int) -> Material:
+	var sm := materiau_godot(m)
+	var a: Dictionary = Anim.normaliser(materiaux[m].get("animation"))
+	return sm if a.is_empty() else Anim.materiau(sm, a)
 
 
 ## Le matériau `d` porte-t-il des cartes (une normale à lire, donc des TANGENTES à donner) : déduites, ou celles de
 ## l'ensemble PBR de son image ?
 static func a_des_cartes(d: Dictionary) -> bool:
-	if d.get("pbr") is Dictionary:
+	if d.get("pbr") is Dictionary or not Anim.images_de(d.get("animation"), "normale").is_empty():
 		return true
 	var chemin := str(d.get("texture", ""))
 	if chemin == "" or not bool(d.get("ensemble", true)):

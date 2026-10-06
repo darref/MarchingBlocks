@@ -319,7 +319,9 @@ static func _maillage_exportable(mesh: Mesh, pose: Transform3D) -> ArrayMesh:
 				arrays[Mesh.ARRAY_NORMAL] = nrm
 			arrays[Mesh.ARRAY_TANGENT] = null
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		var m: Material = mesh.surface_get_material(s)
+		# Un matériau ANIMÉ part par son statique : l'image 0, ses réglages dans les extras (« mb_animation ») — les
+		# greffons les joueront plus tard (LA LISTE DES GREFFONS À FAIRE).
+		var m: Material = load("res://addons/marchingblocks_core/animation_materiau.gd").statique_pour_l_export(mesh.surface_get_material(s))
 		if m is ShaderMaterial or m == null:
 			var standard := StandardMaterial3D.new()
 			standard.vertex_color_use_as_albedo = true

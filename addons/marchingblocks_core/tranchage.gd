@@ -335,7 +335,8 @@ static func verifier_couture_texture(pieces: Dictionary, remarques: Array, table
 	for nom in pieces:
 		var mesh: Mesh = pieces[nom]
 		for s in mesh.get_surface_count():
-			var m := mesh.surface_get_material(s) as StandardMaterial3D
+			# Un matériau animé se juge sur son statique (l'image 0 : c'est elle qu'un moteur sans notre shader montre).
+			var m := load("res://addons/marchingblocks_core/animation_materiau.gd").statique(mesh.surface_get_material(s)) as StandardMaterial3D
 			if m == null or m.albedo_texture == null:
 				continue
 			if not images.has(m.albedo_texture):

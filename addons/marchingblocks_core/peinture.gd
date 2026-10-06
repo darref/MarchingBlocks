@@ -261,6 +261,8 @@ static func montrer(chemin: String) -> void:
 	# Les cartes PBR de cette toile sont périmées : `suivre_les_cartes` les refera quand la main se sera posée.
 	t["version"] = int(t["version"]) + 1
 	t["touchee"] = Time.get_ticks_msec()
+	# Une IMAGE D'ANIMATION peinte (6 octobre 2026) : le tableau de textures qui la porte suivra à la prochaine image.
+	load("res://addons/marchingblocks_core/animation_materiau.gd").toile_changee(chemin)
 
 
 ## La pipette : la couleur au point.

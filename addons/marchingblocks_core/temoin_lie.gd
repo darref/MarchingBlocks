@@ -67,7 +67,10 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 	for teinte in RP.TEINTES:
 		legende[str(teinte["nom"])] = teinte["couleur"]
 	var connus := {}   # id d'objet du matériau → indice
-	var materiau_de := func(mat: Material) -> Dictionary:
+	var Anim: Script = load("res://addons/marchingblocks_core/animation_materiau.gd")
+	var materiau_de := func(lu_: Material) -> Dictionary:
+		# Un matériau ANIMÉ (6 octobre 2026) se relit par son statique ; son animation revient de ses extras.
+		var mat: Material = Anim.statique(lu_)
 		if mat == null:
 			return {"mat": -1, "teinte": null}
 		if legende.has(mat.resource_name):
@@ -82,6 +85,9 @@ static func depuis_glb(chemin: String, dossier_images: String, erreurs: Array = 
 			return {"mat": connus[id], "teinte": null}
 		var e := {"nom": mat.resource_name if mat.resource_name != "" else "Material %d" % (t.materiaux.size() + 1),
 			"couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": "", "echelle": 1.0, "projection": "uv"}
+		var anime: Dictionary = Anim.animation_des_extras(mat)
+		if not anime.is_empty():
+			e["animation"] = anime
 		if mat is BaseMaterial3D:
 			var sm := mat as BaseMaterial3D
 			e["couleur"] = sm.albedo_color
@@ -181,6 +187,10 @@ func reprendre_les_reglages(ancien: RefCounted) -> int:
 			m["ensemble"] = a["ensemble"]
 		if a.has("echelle"):
 			m["echelle"] = a["echelle"]
+		# L'ANIMATION (6 octobre 2026) : Blender ne rend les extras d'un matériau que si on le lui demande ; on la
+		# reprend du témoin d'avant, par le nom, quand le .glb ne l'a pas rapportée.
+		if a.get("animation") is Dictionary and not m.get("animation") is Dictionary:
+			m["animation"] = (a["animation"] as Dictionary).duplicate(true)
 		n += 1
 	return n
 

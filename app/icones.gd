@@ -18,6 +18,10 @@ const TRACES := {
 	"cube": '<path d="M12 2.5 3.5 7.2v9.6L12 21.5l8.5-4.7V7.2z"/><path d="M3.5 7.2 12 12l8.5-4.8M12 12v9.5"/>',
 	"grille": '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17" stroke-opacity="0.7"/>',
 	"monde": '<path d="M2.5 15.5 12 20.5l9.5-5L12 10.5z"/><path d="M7 13l9.5 5M17 13l-9.5 5M12 10.5v-6M9.5 7 12 4.5 14.5 7"/>',
+	# L'atelier Animation (6 octobre 2026) : une bande de film ; la pause et le retrait d'une piste.
+	"film": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 8h4M3 12h4M3 16h4M17 8h4M17 12h4M17 16h4"/><path d="M10.5 9.5v5l4-2.5z"/>',
+	"pause": '<path d="M8.5 5v14M15.5 5v14"/>',
+	"moins": '<path d="M5 12h14"/>',
 	# Le bandeau
 	"livre": '<path d="M3 4.5h6a3 3 0 0 1 3 3v13a2.2 2.2 0 0 0-2.2-2.2H3z"/><path d="M21 4.5h-6a3 3 0 0 0-3 3v13a2.2 2.2 0 0 1 2.2-2.2H21z"/>',
 	"ampoule": '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.9 10.6c.8.7 1.1 1.5 1.1 2.4h5.6c0-.9.3-1.7 1.1-2.4A6 6 0 0 0 12 3z"/>',

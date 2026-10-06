@@ -24,6 +24,7 @@ const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Sections := preload("res://addons/marchingblocks_core/sections.gd")
 const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
+const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 
 const AXES := {"x": Vector3(1, 0, 0), "y": Vector3(0, 0, -1), "z": Vector3(0, 1, 0)}
 const ORANGE := Color(1.0, 0.55, 0.1)
@@ -2549,7 +2550,7 @@ func _montrer_le_curseur(i: Dictionary) -> void:
 	var pose: Transform3D = i.get("pose", Transform3D.IDENTITY)
 	var n: Vector3 = tuile.normale(f) * 0.004
 	var m: int = tuile.mat(f)
-	var chemin: String = str(tuile.materiaux[m].get("texture", "")) if m >= 0 and m < tuile.materiaux.size() else ""
+	var chemin: String = chemin_peint(tuile.materiaux[m]) if m >= 0 and m < tuile.materiaux.size() else ""
 	var anneaux: Array = []
 	if m < 0 or m >= tuile.materiaux.size():
 		var rouge := PackedVector3Array()
@@ -2643,13 +2644,27 @@ func _toile_de(i: Dictionary) -> String:
 		dit.emit("[color=#f2ca79]This face has the legend colour[/color] — select faces and [b]Assign[/b] a "
 			+ "material first: the brush paints a material's image.")
 		return ""
-	var chemin: String = str(tuile.materiaux[m].get("texture", ""))
+	var chemin: String = chemin_peint(tuile.materiaux[m])
 	if chemin == "":
 		chemin = _preparer_la_toile(m)
 	if Peinture.toile(chemin).is_empty():
 		dit.emit("[color=#e0603c]The image of this material cannot be read[/color] (%s)." % chemin)
 		return ""
 	return chemin
+
+
+## L'IMAGE D'ANIMATION QU'ON PEINT (Jordan, 6 octobre 2026 : « oui, image par image ») : le rang dans la piste
+## d'images de la couleur de base du matériau courant. L'écran montre cette image-là (`Anim.image_forcee`).
+var image_peinte := 0
+
+
+## La toile que le pinceau peint pour un matériau : l'image `image_peinte` de son albedo animé par images, sinon son
+## image. "" sans image (une toile sera créée).
+func chemin_peint(d: Dictionary) -> String:
+	var images: Array = Anim.images_de(d.get("animation"), "albedo")
+	if not images.is_empty():
+		return images[clampi(image_peinte, 0, images.size() - 1)]
+	return str(d.get("texture", ""))
 
 
 ## Une toile neuve pour le matériau `m` : unie, de SA couleur, et le matériau passe au blanc — sinon sa couleur
@@ -2738,7 +2753,7 @@ func _tamponner_en(p: Vector2) -> void:
 	var tuile: RefCounted = i["tuile"]
 	var m: int = tuile.mat(int(i["face"]))
 	# Le trait reste sur SA toile : une face d'un autre matériau ne reçoit rien.
-	if m < 0 or m >= tuile.materiaux.size() or str(tuile.materiaux[m].get("texture", "")) != _trait["chemin"]:
+	if m < 0 or m >= tuile.materiaux.size() or chemin_peint(tuile.materiaux[m]) != _trait["chemin"]:
 		return
 	var chemin: String = _trait["chemin"]
 	var img: Image = _trait["calque"]
@@ -2776,7 +2791,7 @@ func _pipette(p: Vector2) -> void:
 	var m: int = tuile.mat(int(i["face"]))
 	if m < 0 or m >= tuile.materiaux.size():
 		return
-	var chemin: String = str(tuile.materiaux[m].get("texture", ""))
+	var chemin: String = chemin_peint(tuile.materiaux[m])
 	var c: Color = tuile.materiaux[m].get("couleur", Color.WHITE)
 	if chemin != "":
 		c = Peinture.couleur_au(chemin, tuile.uv_au_point(int(i["face"]), i["point"])) * c

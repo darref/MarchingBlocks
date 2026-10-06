@@ -57,6 +57,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
+  - **Les textures animées** (§5, « l'atelier Animation ») : lire `mb_animation` dans les `extras` du matériau glTF
+    (défilement u/v, images — ips, aller-retour —, pulsation de l'émission, synchro ou décalée par la position, la phase
+    de `phase_de`), et le shader de chaque moteur (la règle : `image_au_temps`, `pulsation_au_temps`) ; EMPORTER LES
+    IMAGES dans le `.mbset` (aujourd'hui `tiles.glb` ne porte que l'image 0 et les noms de fichiers des autres) ; leurs
+    cas d'épreuve.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -2432,6 +2437,77 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
         (glTFast) ni Unreal (Interchange) — `KHR_materials_emissive_strength` y est censé être lu. ⚠ Pas vu à l'image,
         pas tenu en main.
     **OUVERT** : le panneau 2D du patron. (Fusionner un calque sur celui du dessous : fait le 3 octobre 2026.)
+
+### L'ATELIER ANIMATION — LES TEXTURES ANIMÉES — DÉCIDÉ (Jordan, 6 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « un atelier d'animation complet avec possibilité de faire défilement, mais aussi frames (texture vidéo), pour
+du sci-fi ou du naturel, pour tout ; animation pour chaque canal PBR, dont l'émission fait maintenant partie ; une UI
+d'atelier où l'on ne crée que ce qu'on utilise, avec des + − ». Ses réponses aux trois questions posées : les images
+viennent de **SÉQUENCES ou de PLANCHES** (pas de fichier vidéo : Godot ne lit que l'Ogg Theora, le mp4 demanderait
+ffmpeg) ; on **PEINT IMAGE PAR IMAGE** ; un albedo animé par images n'a **PAS DE CARTES DÉDUITES**.
+
+- **LE CŒUR** (`addons/marchingblocks_core/animation_materiau.gd`) : un matériau du témoin porte (ou non) une clé
+  `animation` = {canal: {genre: réglages}} — canaux `albedo`, `normale`, `orm`, `emission` ; genres `defilement`
+  (u, v en répétitions par seconde), `images` (la liste des PNG, ips, aller-retour), `pulsation` (l'émission seule :
+  fréquence, minimum) ; chacun `synchro` ou décalé. `normaliser` borne et écarte ce qui est vide ou inconnu ; `ajouter`
+  refuse une piste en double, une pulsation hors de l'émission, des images sans image. **PROPOSÉ** : défilement
+  synchro par défaut (continu d'une tuile à l'autre), images et pulsation décalées ; au plus 256 images et 2²⁶ pixels
+  par piste ; 60 images/s.
+- ⚠ **UN SHADER NE VOYAGE PAS (§4) — DEUX MATÉRIAUX** : `MaillageEdite.materiau_godot` reste un `StandardMaterial3D`, l'image
+  0 de chaque canal animé posée dans son emplacement et l'animation dans la méta `extras` (`mb_animation`) — **Godot
+  écrit et relit la méta « extras » d'un matériau glTF** (lu dans `gltf_document.cpp`). `materiau_affiche` rend à l'écran
+  un `ShaderMaterial` (`Anim.materiau`) qui garde le statique en méta `repli`. **Toute écriture glTF repasse par le
+  statique** (`BM.ecrire_le_temoin_lie`, `FormatNeutre` — par `statique_pour_l_export` : les images n'y sont nommées que
+  par leur NOM, jamais par un chemin de l'auteur) ; **toute relecture refait l'animé** (`BM._rendre_la_legende`) ; **le
+  cache du lot s'écrit statique et se relit animé** (`Projet.mettre_en_cache` / `lire_cache` : sinon le shader et ses
+  tableaux partaient dans le cache, copiés). Un témoin relu de Blender garde l'animation de ses extras, sinon la reprend
+  du témoin d'avant par le nom du matériau (`reprendre_les_reglages`).
+- **LES IMAGES** : un `Texture2DArray` par piste, PARTAGÉ (le témoin et le monde lisent le même) ; une image perdue est
+  MAGENTA (§3). Importées : une séquence rangée par ordre NATUREL des noms (frame_2 avant frame_10), une planche lue de
+  gauche à droite puis de haut en bas, ou des images neuves à peindre — toutes recopiées dans
+  `<couche>_images/animation/`, à la taille de la première.
+- **LE TEMPS EST GLOBAL** (paramètres globaux de shader `mb_temps`, `mb_image`) : pause, vitesse, une image tenue pour
+  toutes les pistes. ⚠ `global_shader_parameter_get_list` est réservé à l'éditeur (une erreur dans l'appli, mesuré) : posés
+  une fois par processus. **La phase d'une copie** est tirée de la case de son origine (`phase_de`, la formule du shader
+  ligne à ligne) — jamais `randi()`.
+- **PEINDRE IMAGE PAR IMAGE** : `Modeleur.chemin_peint` — avec un albedo animé par images, le pinceau peint l'image
+  `image_peinte` (chaque image est une toile, avec ses calques et son annulation) ; la rangée **Frame ◀ ▶** (et « copier
+  l'image ») de la section Paint de Texturing la choisit ; l'écran montre cette image, le temps figé
+  (`Anim.image_forcee`, `Anim.fige`). Une toile peinte prévient les tableaux (`Peinture.montrer` → `toile_changee`), mis à
+  jour à l'image suivante (pas à chaque tampon). Seule la couleur de base se peint ; les autres canaux s'importent.
+- **L'ATELIER** (`app/animation.gd`, sur le modèle de Transitions ; `editor.gd` n'en garde que les branchements) : un
+  septième atelier, **Animation**, teinte orange (**PROPOSÉ**), qui montre le témoin de la couche active en édition, sans
+  outils de géométrie. Le matériau (le même courant que Texturing) ; **Tracks** — rien tant qu'on n'ajoute pas, une
+  rangée « Add a track » (canal, source : Scroll, Frames from image files…, Frames from a sheet…, Blank frames to paint,
+  Pulse — seulement ce que le canal n'a pas encore), une carte par piste avec son **−** et SES seuls réglages ;
+  **Playback** — Pause, Restart, Speed, Hold frame. Chaque geste est UNE annulation ; un curseur, une par rafale.
+  Le manuel (F1) a sa partie.
+- ⚠ **LES QUARTS DE TOUR** : les UV d'une tuile tournent avec elle — un défilement en v (vertical sur une paroi, en Boîte)
+  va dans le même sens sur toutes les copies, un défilement en u suit le tour de chacune. Dit à l'écran et au manuel.
+- **MESURÉ** : `test_animation` 75 (attendus déroulés à la main : l'image au temps, l'aller-retour, la pulsation ; la phase
+  recalculée par la formule écrite à nouveau ; l'ordre naturel, une planche de couleurs connues ; le statique, l'animé, ses
+  réglages ; le .glb lu dans le JSON du FICHIER ; le lot, le cache écrit statique, le `.mbset` sans chemin, le témoin relu) ;
+  **avec fenêtre, RTX 2060 Vulkan** (`DEV_TOOLS/capture_animation.gd`) : le shader compile, l'image forcée 0…3 se lit au
+  centre, la lecture passe de l'image 0 à l'image 1, le défilement déplace l'image — et un contrôle d'instrument (un
+  matériau ordinaire rouge se lit rouge) : ⚠ **LA CAPTURE A D'ABORD MENTI**, elle lisait des pixels d'une fenêtre de 320 ×
+  320 alors que le projet l'ouvre maximisée ; `fumee_appli` 901 (+23, par les vrais boutons : « + » écrit trois images
+  dans le dossier du projet, Ctrl+Z / Ctrl+Y, plus que le défilement proposé ensuite, la paroi montrée animée, « − »,
+  Pause, Frame ▶ ▶ puis un trait qui peint l'image 3 et pas l'image 1, Ctrl+Z, le monde animé). Les suites voisines
+  vertes (`test_peinture` 66, `test_cartes_pbr` 97, `test_temoin_lie` 46, `test_maillage_edite` 206, `test_projet` 131,
+  `test_blocs_maitres` 1 468, `test_greffon_peinture` 282, `test_tranchage` 53, `test_faux_artiste` 36).
+  **Mutations, toutes rouges** : cœur et shader 16 (aller-retour ignoré, phase changée, l'image 0 pas posée, pas
+  d'extras, cartes déduites gardées, .glb écrit animé, relecture statique, cache écrit animé, cache relu statique, toile qui
+  ne prévient pas, `.mbset` aux chemins absolus, témoin relu sans extras, réglages non repris, pause qui n'arrête rien ;
+  avec fenêtre : l'image forcée ignorée, le défilement ignoré) ; écran 4, par la fumée (le pinceau qui ignore les images,
+  le temps pas figé en peignant, un geste sans annulation, le maillage dessiné qui porte le statique). ⚠ **« CARTES
+  DÉDUITES GARDÉES » D'ABORD MUETTE, PAR LE TEST** : le matériau d'essai n'avait pas d'image fixe, la branche n'était
+  jamais atteinte. Mutations rejouées dans une COPIE à dossier de données isolé (deux autres sessions travaillaient dans
+  le dépôt).
+- **VU À L'IMAGE** (`DEV_TOOLS/capture_atelier_animation.gd`, dans l'appli, avec fenêtre) : l'atelier, ses quatre cartes
+  et leurs −, le damier qui défile sur les dessus du témoin, les bandes d'émission qui luisent ; dans Texturing, les
+  bandes de couture par-dessus le matériau animé.
+- ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** (la teinte, la lisibilité des cartes, le ressenti de la lecture). Les
+  greffons montrent l'image 0 : dans LA LISTE DES GREFFONS À FAIRE.
 
 ### L'appli : couches, projets, barre d'outils — DÉCIDÉ (Jordan, 27 septembre 2026)
 

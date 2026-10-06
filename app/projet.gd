@@ -15,6 +15,7 @@ extends RefCounted
 ## Fonctions PURES, sans nœud : c'est ce qui les rend gardables par `DEV_TOOLS/test_projet.gd`.
 
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
+const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 const FORMAT := "marchingblocks-project"
 ## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
 ## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
@@ -347,7 +348,15 @@ static func chemin_cache(source: String) -> String:
 static func mettre_en_cache(lot: MeshLibrary, source: String, empreinte_ := "") -> String:
 	DirAccess.make_dir_recursive_absolute(DOSSIER_CACHE)
 	marquer(lot, empreinte_ if empreinte_ != "" else empreinte(source))
+	# ⚠ UN LOT ANIMÉ S'ÉCRIT STATIQUE (6 octobre 2026) : le shader et ses tableaux d'images partiraient dans le cache
+	# (lourds, et COPIÉS — une image peinte ne s'y verrait plus). Le statique porte l'animation dans ses extras ; il
+	# redevient animé, en place, juste après, et à la relecture (`lire_cache`).
+	var anime := Anim.lot_anime(lot)
+	if anime:
+		Anim.figer_le_lot(lot)
 	var e: int = ResourceSaver.save(lot, chemin_cache(source), ResourceSaver.FLAG_COMPRESS)
+	if anime:
+		Anim.animer_le_lot(lot)
 	return "" if e == OK else "cache not written (error %d)" % e
 
 
@@ -368,6 +377,7 @@ static func lire_cache(source: String) -> Dictionary:
 	var lot := ResourceLoader.load(chemin, "", ResourceLoader.CACHE_MODE_IGNORE) as MeshLibrary
 	if lot == null:
 		return {"lot": null, "a_jour": false}
+	Anim.animer_le_lot(lot)
 	var e: String = empreinte(source)
 	return {"lot": lot, "a_jour": e != "" and str(lot.get_meta("empreinte", "")) == e
 		and int(lot.get_meta("format_du_cache", 1)) == FORMAT_DU_CACHE}
