@@ -21,6 +21,8 @@ extends RefCounted
 
 const EPS := 0.000001
 
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+
 
 ## Ce qui reste de `mesh` dans `boite`. Rend un `ArrayMesh` — vide si rien ne reste.
 ## Les normales, les UV et les COULEURS DE SOMMET sont interpolés aux coupes ; les matériaux de surface
@@ -118,7 +120,16 @@ static func trancher(mesh: Mesh, boite: AABB) -> ArrayMesh:
 		var uv_out := PackedVector2Array()
 		var c_out := PackedColorArray()
 
-		for t in range(0, indices.size() - 2, 3):
+		# LE CŒUR NATIF (`natif.gd`) : la même boucle en C++, mêmes tableaux au bit près (`test_natif.gd`).
+		var natif = Natif.noyau()
+		if natif != null:
+			var r: Array = natif.decouper(sommets, normales, uvs, couleurs, indices, boite.position,
+				boite.position + boite.size)
+			v_out = r[0]
+			n_out = r[1]
+			uv_out = r[2]
+			c_out = r[3]
+		for t in range(0, 0 if natif != null else indices.size() - 2, 3):
 			# ⚠ **REJET PAR BOÎTE AVANT DE CONSTRUIRE QUOI QUE CE SOIT — ET C'EST 99 % DU COÛT.** La boucle
 			# bâtissait TROIS dictionnaires par triangle, puis découvrait dans Sutherland-Hodgman que le
 			# triangle était à dix cases de la boîte. Mesuré : trancher la planète paysage en ses 541

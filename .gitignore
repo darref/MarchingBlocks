@@ -33,3 +33,15 @@ build/
 # L'exemple livré (`DEV_TOOLS/prendre_l_exemple.gd`) est repris du projet de Jordan à chaque export tant que le
 # développement n'est pas clos : il n'entre au dépôt qu'une fois FIGÉ (`exemple/FIGE`), avec son archive.
 exemple/exemple.zip
+
+# Le cœur natif (gdextension/) : les objets et la base de scons se refont ; les BIBLIOTHÈQUES, elles, entrent au dépôt
+# (addons/marchingblocks_core/natif/bin/) pour que l'éditeur les trouve sans construire.
+gdextension/.sconsign.dblite
+# MSVC laisse à côté de la DLL sa bibliothèque d'import et son .exp : inutiles à Godot.
+addons/marchingblocks_core/natif/bin/*.exp
+addons/marchingblocks_core/natif/bin/*.lib
+gdextension/src/**/*.obj
+gdextension/src/**/*.o
+gdextension/src/**/*.os
+gdextension/src/**/*.obj
+gdextension/tests/world_runner

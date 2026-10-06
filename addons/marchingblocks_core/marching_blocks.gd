@@ -48,6 +48,11 @@ extends RefCounted
 ## Le bit `t` désigne la cellule décalée de `COINS[t]` par rapport au sommet, avec t = x + 2y + 4z.
 ## ⚠ **Y EST LE HAUT** — et depuis qu'on est en modèle orienté, ce n'est plus une convention indifférente :
 ## c'est l'axe autour duquel le groupe tourne, et celui qui sépare le `bas` du `haut` d'une classe.
+## LE CŒUR NATIF (`natif.gd`) : quand la bibliothèque C++ est là, `poses`, `poses_en_couches`, `plafond_de`,
+## `hauts_des_colonnes` et `contacts_par_arete` la laissent calculer — même sortie, clé pour clé
+## (`DEV_TOOLS/test_natif.gd`). Leurs corps GDScript ci-dessous restent la RÉFÉRENCE et le repli.
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+
 const COINS := [
 	Vector3i(0, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 1, 0), Vector3i(1, 1, 0),
 	Vector3i(0, 0, 1), Vector3i(1, 0, 1), Vector3i(0, 1, 1), Vector3i(1, 1, 1),
@@ -871,6 +876,9 @@ static func purete(pleines: Dictionary, v: Vector3i) -> int:
 ## ⚠ La variante d'air libre d'abord, le nom nu ensuite (charte §9.4) ; une clé absente rend `cle = ""`,
 ## et c'est au peintre de poser son cube rouge.
 static func poses(pleines: Dictionary, cles: Dictionary) -> Array:
+	var natif_ = natif()
+	if natif_ != null:
+		return natif_.poses(pleines, cles)
 	var sommets := {}
 	for c in pleines:
 		for s in sommets_de(c):
@@ -905,6 +913,9 @@ static func couche_du_sommet(union: Dictionary, sommet: Vector3i) -> int:
 ## LES POSES D'UN MONDE EN COUCHES — la référence : celles de `poses(union)`, chacune avec la clé du jeu de SA couche
 ## (`cles_par_couche[rang]`) et son rang dans `"couche"`.
 static func poses_en_couches(union: Dictionary, cles_par_couche: Array) -> Array:
+	var natif_ = natif()
+	if natif_ != null:
+		return natif_.poses_en_couches(union, cles_par_couche)
 	var sommets := {}
 	for c in union:
 		for s in sommets_de(c):
@@ -949,6 +960,36 @@ static func pose_du_sommet(pleines: Dictionary, sommet: Vector3i, cles: Dictiona
 ## dictionnaire neuf, et `pose_du_sommet` le demandait pour chaque sommet d'une reconstruction (des centaines de
 ## milliers sur l'exemple). Mêmes valeurs ; on ne rend pas ce dictionnaire à l'appelant, qui pourrait le modifier.
 static var _par_bits: Array = []
+
+
+## Le cœur natif, la règle déjà donnée (la table des 256 vient d'ICI, jamais d'une seconde description) ; null
+## quand il est éteint ou absent — l'appelant prend alors le GDScript.
+static func natif() -> Variant:
+	var n = Natif.noyau()
+	if n == null or n.est_pret():
+		return n
+	n.definir_regle(table_du_coeur())
+	return n
+
+
+## La table des 256 configurations telle que le cœur natif la reçoit (il ne décide rien : il évalue CETTE table).
+static func table_du_coeur() -> Array:
+	var table: Array = []
+	for b in 256:
+		var r: Dictionary = _classe_des_bits(b)
+		table.append({"surface": r["surface"], "exterieur": r["exterieur"], "orientation": r["orientation"],
+			"nom": r["nom"], "nom_dehors": r["nom_dehors"]})
+	return table
+
+
+## UN MONDE DU CŒUR (`mbcore::World`, par le pont MBMonde) : les couches, leurs cases, la décision de chaque sommet,
+## et le DIFF de chaque changement — ou null sans le natif. Charte §0, « le cœur C++ », étape 3.
+static func monde_natif() -> Variant:
+	if Natif.noyau() == null or not ClassDB.class_exists("MBMonde"):
+		return null
+	var m = ClassDB.instantiate("MBMonde")
+	m.definir_regle(table_du_coeur())
+	return m
 
 
 static func _classe_des_bits(b: int) -> Dictionary:
@@ -1135,6 +1176,9 @@ static func sous_le_ciel(pleines: Dictionary, sommet: Vector3i, plafond: int, ha
 
 ## La plus haute case pleine de chaque colonne : {Vector2i(x, z) : y}. Pour `sous_le_ciel`.
 static func hauts_des_colonnes(pleines: Dictionary) -> Dictionary:
+	var natif_ = natif()
+	if natif_ != null:
+		return natif_.hauts_des_colonnes(pleines)
 	var hauts := {}
 	for c: Vector3i in pleines:
 		var k := Vector2i(c.x, c.z)
@@ -1208,6 +1252,9 @@ static func face_sous_le_ciel(pleines: Dictionary, case: Vector3i, direction: Ve
 ## Le plus haut `y` occupé. ⚠ DÉRIVÉ de l'occupation, jamais déclaré : un plafond écrit en dur rendrait
 ## le contexte faux dès qu'on peint plus haut que prévu.
 static func plafond_de(pleines: Dictionary) -> int:
+	var natif_ = natif()
+	if natif_ != null:
+		return natif_.plafond_de(pleines)
 	var haut := -2147483648
 	for c in pleines:
 		haut = maxi(haut, (c as Vector3i).y)
@@ -1238,6 +1285,9 @@ static func plafond_de(pleines: Dictionary) -> int:
 ## ne convergerait pas. `cote = 0` garde le comportement d'origine (le monde peint), `cote = n` se
 ## restreint à l'intérieur d'un bloc de n³.
 static func contacts_par_arete(pleines: Dictionary, cote: int = 0) -> int:
+	var natif_ = natif()
+	if natif_ != null:
+		return natif_.contacts_par_arete(pleines, cote)
 	var paires := [[0, 1], [0, 2], [1, 2]]
 	var vus := {}
 	var combien := 0

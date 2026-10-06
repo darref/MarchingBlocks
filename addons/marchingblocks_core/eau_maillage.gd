@@ -25,6 +25,7 @@ extends RefCounted
 ## rive. Elle s'avance donc dans la case pleine voisine, où la roche la cache.
 
 const FL := preload("res://addons/marchingblocks_core/fluides.gd")
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 
 const NAPPE := 0.7
 const RIVIERE := -0.15
@@ -179,6 +180,16 @@ static func _nappes_du_corps(r: Dictionary, occupees: Dictionary, b: Dictionary)
 ## autour de son centre (un polygone convexe : aucun triangle plat). Sans sommet inséré, deux triangles, comme avant.
 ## UV = (x, z) du monde, partout. Les coordonnées sont des multiples de 0,05 : comparées en vingtièmes, exactement.
 static func _poser_les_plats(a: Dictionary, plats: Array) -> void:
+	# LE CŒUR NATIF (`natif.gd`) : la même chose en C++, mêmes tableaux au bit près (`test_natif.gd`).
+	var natif = Natif.noyau()
+	if natif != null:
+		var morceaux: Array = natif.eau_poser_les_plats(plats, (a["v"] as PackedVector3Array).size())
+		a["v"].append_array(morceaux[0])
+		a["n"].append_array(morceaux[1])
+		a["c"].append_array(morceaux[2])
+		a["uv"].append_array(morceaux[3])
+		a["i"].append_array(morceaux[4])
+		return
 	var sur_z := {}   # (h, z) → [x des sommets sur cette ligne]
 	var sur_x := {}   # (h, x) → [z]
 	for r: Dictionary in plats:

@@ -17,6 +17,7 @@ const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 const PlancheTuiles := preload("res://app/planche_tuiles.gd")
@@ -96,6 +97,12 @@ func _mener() -> void:
 	_egal(cases.get_used_cells().size(), 0, "UN Ctrl+Z défait le coup entier")
 	ed._histoire.redo()
 	_egal(cases.get_used_cells().size(), 3, "Ctrl+Y le refait")
+	# ⚠ LE MONDE DU CŒUR EST BRANCHÉ (étape 3 b, 6 octobre 2026) : avec le natif, la couche est inscrite au monde partagé
+	# de l'écran, qui porte ses cases — sinon la fumée éprouverait le GDScript en croyant éprouver l'appli.
+	if MB.natif() != null:
+		var mc = ed._vue.monde().monde
+		_vrai(mc != null and mc == ed._monde_coeur and int(mc.nombre_de_cases(-1)) == 3,
+			"le monde du cœur porte les cases de l'écran (la couche lui est branchée)")
 
 	# ── La sélection et ses opérations ────────────────────────────────────────────────────────────
 	ed._vue.regler_selection({Vector3i(0, 0, 0): true, Vector3i(1, 0, 0): true})
@@ -3728,6 +3735,45 @@ func _les_couches_exclusives(ed: Control) -> void:
 	ed._refaire_l_union()
 	ed._montrer_couche(ib, true)
 	_memes_proprietaires(ed, [ia, ib], "B remontrée après l'union refaite")
+	# ⚠ UNE COUCHE CACHÉE APPREND QU'UNE AUTRE SE CACHE (6 octobre 2026, trouvé par `test_natif` §11) : B cachée, puis A
+	# cachée, puis B montrée seule — ses sommets de frontière, que A (prioritaire) posait, sont désormais à elle. Deux
+	# blocs voisins posés pour l'épreuve, puis rendus par deux Ctrl+Z. Éprouvé sur la route de chaque couche (sans le
+	# monde du cœur, qui tient l'union entière et n'a pas ce défaut), puis avec.
+	ed._activer(ia)
+	var bloc_a2 := {}
+	var bloc_b2 := {}
+	for x in 3:
+		for z in 3:
+			bloc_a2[Vector3i(300 + x, 0, z)] = true
+			bloc_b2[Vector3i(303 + x, 0, z)] = true
+	ed._appliquer({"poser": bloc_a2, "effacer": {}}, "Add")
+	ed._activer(ib)
+	ed._appliquer({"poser": bloc_b2, "effacer": {}}, "Add")
+	for avec_le_monde in [false, true]:
+		# Sans le monde : le natif éteint le temps de l'épreuve (le monde de l'écran est refait en le rallumant).
+		Natif.actif = avec_le_monde
+		ed._monde_coeur = null
+		ed._refaire_l_union()
+		_vrai((ed._vue.couche(ib).monde != null) == (avec_le_monde and Natif.disponible()),
+			"la couche est branchée au monde du cœur seulement quand on l'éprouve avec lui")
+		var etat_b_avant := (ed._vue.couche(ib)._etat as Dictionary).size()
+		ed._montrer_couche(ib, false)
+		ed._montrer_couche(ia, false)
+		ed._montrer_couche(ib, true)
+		var tenu_b := (ed._vue.couche(ib)._etat as Dictionary).duplicate(true)
+		ed._vue.couche(ib).reconstruire()
+		var quoi := "le monde du cœur" if avec_le_monde else "sans le monde"
+		_vrai(ed._vue.couche(ib)._etat == tenu_b and tenu_b.size() > etat_b_avant,
+			"%s : B montrée seule après A cachée = reconstruite en entier, et elle pose la frontière (%d > %d)"
+			% [quoi, tenu_b.size(), etat_b_avant])
+		ed._montrer_couche(ia, true)
+		for k in [ia, ib]:
+			var tenu := (ed._vue.couche(k)._etat as Dictionary).duplicate(true)
+			ed._vue.couche(k).reconstruire()
+			_vrai(ed._vue.couche(k)._etat == tenu, "%s : A remontrée, la couche %d = reconstruite en entier" % [quoi, k])
+	Natif.actif = true
+	ed._histoire.undo()
+	ed._histoire.undo()
 	ed._histoire.undo()
 	ed._histoire.undo()
 	ed._activer(ib)

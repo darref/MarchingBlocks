@@ -37,6 +37,10 @@ extends RefCounted
 
 ## Au-delà, le remplissage d'un LAC (ou du lac d'une rivière) s'arrête et la source est refusée (« trop_grand ») : il
 ## va case par case et gèlerait l'appli. ⚠ PAS L'OCÉAN (3 octobre 2026) : il n'est jamais refusé pour sa taille.
+## LE CŒUR NATIF (`natif.gd`) : `boite` et `ocean` le laissent calculer quand il est là — même sortie (même
+## ordre des tronçons, même dictionnaire). Les corps GDScript restent la référence et le repli.
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+
 const VOLUME_MAXI := 64 * 64 * 64
 ## Une rivière de plus d'étapes est refusée (« trop_long ») — une garde, pas une règle.
 const ETAPES_MAXI := 4096
@@ -55,6 +59,9 @@ const HAUT := Vector3i(0, 1, 0)
 static func boite(occupees: Dictionary) -> Dictionary:
 	if occupees.is_empty():
 		return {}
+	var natif_ = Natif.noyau()
+	if natif_ != null:
+		return natif_.boite(occupees)
 	var lo := Vector3i(2147483647, 2147483647, 2147483647)
 	var hi := Vector3i(-2147483647, -2147483647, -2147483647)
 	for c: Vector3i in occupees:
@@ -112,6 +119,9 @@ static func ocean(occupees: Dictionary, niveau: int, maxi := VOLUME_MAXI, b: Dic
 	var hi: Vector3i = b["hi"]
 	if niveau < lo.y:
 		return {"eau": eau, "colonnes": [], "erreur": ""}
+	var natif_ = Natif.noyau()
+	if natif_ != null:
+		return natif_.ocean(occupees, niveau, lo, hi)
 	var haut := mini(niveau, hi.y)
 	# Les cases pleines de chaque colonne, sous le niveau.
 	var pleins := {}

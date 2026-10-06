@@ -4931,6 +4931,15 @@ func _enregistrer_action(ch: Dictionary, nom: String, deja_fait: bool, autres: D
 ## y entrent : cacher une couche rend au monde une surface fermée sans elle.
 var _union := {}
 var _coup_autres := {}
+## LE MONDE DU CŒUR (étape 3 b, 6 octobre 2026) : partagé par toutes les couches de l'écran, il suit `_union` et pose
+## leurs tuiles (`MassifPeint.monde`). Null sans le natif : chaque couche décide alors elle-même, en GDScript.
+var _monde_coeur = null
+
+
+func _le_monde_du_coeur() -> Variant:
+	if _monde_coeur == null:
+		_monde_coeur = MB.monde_natif()
+	return _monde_coeur
 
 
 ## Ce que poser `posees` dans la couche active retire aux autres : {grille: {case: [avant, vide]}}.
@@ -4999,6 +5008,7 @@ func _refaire_l_union() -> void:
 	for i in range(_vue.nombre_de_couches() - 1, -1, -1):
 		var m := _vue.couche(i)
 		m.union = _union
+		m.monde = _le_monde_du_coeur()
 		m.rang = i
 		if (m as Node3D).visible:
 			for c in (m.get_node("Cases") as GridMap).get_used_cells():
@@ -5721,6 +5731,7 @@ func _ajouter_couche(etat: Dictionary) -> int:
 	massif.choix = (etat.get("choix", {}) as Dictionary).duplicate()
 	# La dernière de la liste : la moins prioritaire. Vide, elle ne change rien à l'union.
 	massif.union = _union
+	massif.monde = _le_monde_du_coeur()
 	massif.rang = _couches.size() - 1
 	return _couches.size() - 1
 
@@ -5852,8 +5863,18 @@ func _montrer_couche(i: int, oui: bool) -> void:
 		elif _union.get(c, -1) == i:
 			_union.erase(c)
 	for j in _vue.nombre_de_couches():
-		if j != i and (_vue.couche(j) as Node3D).visible:
+		if j == i:
+			continue
+		if (_vue.couche(j) as Node3D).visible:
 			_vue.couche(j).reconstruire_autour(siennes)
+		else:
+			# ⚠ UNE AUTRE COUCHE CACHÉE DOIT L'APPRENDRE AUSSI (6 octobre 2026, trouvé par `test_natif` §11) : ses sommets
+			# de frontière lisent l'union, qui change ici. Sans ça, montrée plus tard, elle se refaisait autour de ses
+			# seules attentes et gardait une tuile périmée (une variante d'air libre au lieu de l'intérieur).
+			var attente_j: Dictionary = _vue.couche(j).get_meta("_a_refaire", {})
+			for c in siennes:
+				attente_j[c] = true
+			_vue.couche(j).set_meta("_a_refaire", attente_j)
 	if oui:
 		var attente: Dictionary = m.get_meta("_a_refaire", {})
 		m.remove_meta("_a_refaire")
@@ -6106,6 +6127,7 @@ func _vider_le_projet() -> void:
 	_vue.vider_couches()
 	_couches.clear()
 	_union.clear()
+	_monde_coeur = null   # un projet neuf, un monde neuf : les couches d'avant n'y sont plus inscrites
 	_active = 0
 	_eaux.clear()
 	_eau_active = 0
