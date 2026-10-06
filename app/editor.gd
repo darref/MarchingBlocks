@@ -140,6 +140,7 @@ var _atelier := "witness"
 ## LES MORCEAUX DE L'ÉCRAN QUI DÉPENDENT DU CONTEXTE — tous montrés ou cachés par `_contexte()`, et
 ## nulle part ailleurs (charte §6 : une règle vit à UN endroit).
 var _section_jeu: Control
+var _taille_personnage: HSlider
 var _titre_projet: Control
 var _section_projet: Control
 var _choix_monde: VBoxContainer
@@ -838,6 +839,12 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 			func() -> void: _vue.reapparaitre(), "haut"),
 		_bouton("Leave", "Back to World (Esc).", _changer_d_atelier.bind("monde"), "croix"),
 	], 4))
+	# LA TAILLE DU PERSONNAGE (Jordan, 6 octobre 2026) : ×0,65 par défaut, pour que le monde paraisse plus grand.
+	_taille_personnage = _curseur_libre(_section_jeu.contenu, "Character size", Vue.Personnage.TAILLE_MINI,
+		Vue.Personnage.TAILLE_MAXI, 0.05, "Scales the character, its speed and the camera behind it. Smaller makes the "
+		+ "world feel bigger. The jump still clears one and a half cells. Kept for this session only.")
+	_taille_personnage.value = _vue.taille_personnage
+	_taille_personnage.value_changed.connect(func(v: float) -> void: _vue.regler_taille_personnage(v))
 
 	_titre_projet = _grand_titre("PROJECT")
 	pile.add_child(_titre_projet)
@@ -2471,6 +2478,10 @@ func _batir_attente(parent: Control) -> void:
 	_attente_barre = barre
 	_attente_note = _texte("", 11, Palette.GRIS)
 	pile.add_child(_attente_note)
+	# ⚠ IL NE PREND PAS LA SOURIS : un geste long retenu est rejoué panneau ENCORE À L'ÉCRAN (il s'en va deux images plus
+	# tard) ; un clic qui tombait sous lui — au centre de la vue — était avalé sans un mot (le second clic d'eau perdu,
+	# signalé par la session vidéos le 6 octobre 2026).
+	_sans_souris(_attente)
 	parent.add_child(_attente)
 
 
@@ -2482,6 +2493,13 @@ func _batir_attente(parent: Control) -> void:
 ##   - `etapes` = 0 : une barre qui DÉFILE, pour un travail d'un seul tenant fait sur un autre fil (`_en_fond`).
 ## ⚠ UN TRAVAIL D'UN SEUL TENANT SUR LE FIL PRINCIPAL GÈLE TOUT, BARRE COMPRISE : le panneau dit alors ce qui se
 ## passe, mais ne bouge plus jusqu'à la fin. D'où `_en_fond` pour ce qui est long et pur (le tranchage).
+func _sans_souris(c: Control) -> void:
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for e in c.get_children():
+		if e is Control:
+			_sans_souris(e)
+
+
 func _attendre(titre: String, note: String, etapes := 0) -> void:
 	_pile_attente.push_back([titre, note, etapes, 0])
 	_montrer_attente()

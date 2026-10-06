@@ -24,6 +24,16 @@ const ECHELLE := 0.62
 ## rayon. Plus petite, la tête traverserait les plafonds qu'on veut précisément éprouver.
 const RAYON := 0.19
 const HAUTEUR := 0.84
+## LA TAILLE DU PERSONNAGE (Jordan, 6 octobre 2026 : « régler le scale du stickman, et le mettre un peu plus petit,
+## ×0,65 par défaut, histoire que le monde paraisse un peu plus grand »). Un FACTEUR sur tout ce qui fait sa silhouette :
+## le modèle, la capsule, la flottaison, la vitesse de marche, de course et de nage (un petit qui court aussi vite qu'un
+## grand ne fait pas paraître le monde plus grand), et la caméra que la vue tient sur lui.
+## ⚠ **CE QUI NE SUIT PAS, PROPOSÉ** : le SAUT (1,45 case), le PAS (0,3 : les marches de l'aminci restent d'un quart de
+## case) et la sortie de l'eau — un monde en cases est fait de marches d'une case, et un petit personnage qui ne
+## pourrait plus les franchir ne jugerait plus le monde ; et le VOL, qui sert à se déplacer.
+const TAILLE_DEFAUT := 0.65
+const TAILLE_MINI := 0.4
+const TAILLE_MAXI := 1.5
 const VITESSE_MARCHE := 3.2
 const VITESSE_COURSE := 5.6
 const GRAVITE := 22.0
@@ -69,6 +79,8 @@ var vol := false
 var monter := 0.0
 ## Le cap de la caméra (radians autour de +Y) : « en avant » est l'avant de la CAMÉRA, aplati.
 var cap_camera := 0.0
+## Le facteur de taille (`TAILLE_DEFAUT`) ; à régler par `regler_taille`.
+var taille := TAILLE_DEFAUT
 
 var _modele: Node3D
 var _tete: Node3D
@@ -83,6 +95,7 @@ var _depuis_le_sol := 0.0
 var _saut_tenu := false
 var _ecrasement := 0.0
 var _cap := 0.0
+var _forme: CollisionShape3D
 
 
 func _init() -> void:
@@ -94,14 +107,51 @@ func _init() -> void:
 	# case en retrait, et l'on marcherait au-dessus du sol qu'on voit.
 	collision_layer = 0
 	collision_mask = 2
-	var forme := CollisionShape3D.new()
-	var capsule := CapsuleShape3D.new()
-	capsule.radius = RAYON
-	capsule.height = HAUTEUR
-	forme.shape = capsule
-	forme.position.y = HAUTEUR * 0.5
-	add_child(forme)
+	_forme = CollisionShape3D.new()
+	_forme.shape = CapsuleShape3D.new()
+	add_child(_forme)
 	_batir_le_modele()
+	regler_taille(taille)
+
+
+## Change la taille (bornée à `TAILLE_MINI` .. `TAILLE_MAXI`) : la capsule et le modèle tout de suite. ⚠ Les pieds
+## restent où ils sont (l'origine est aux pieds) : grandir contre un plafond le fait remonter par la physique.
+func regler_taille(t: float) -> void:
+	taille = clampf(t, TAILLE_MINI, TAILLE_MAXI)
+	var capsule := _forme.shape as CapsuleShape3D
+	capsule.radius = rayon()
+	capsule.height = HAUTEUR * taille
+	_forme.position.y = HAUTEUR * taille * 0.5
+	_modele.scale = Vector3.ONE * ECHELLE * taille
+
+
+func rayon() -> float:
+	return RAYON * taille
+
+
+func vitesse_marche() -> float:
+	return VITESSE_MARCHE * taille
+
+
+func vitesse_course() -> float:
+	return VITESSE_COURSE * taille
+
+
+func vitesse_nage() -> float:
+	return VITESSE_NAGE * taille
+
+
+func vitesse_nage_rapide() -> float:
+	return VITESSE_NAGE_RAPIDE * taille
+
+
+## Les pieds sous la nappe quand il flotte, et l'immersion à partir de laquelle il nage : à sa taille.
+func flotte() -> float:
+	return FLOTTE * taille
+
+
+func immersion() -> float:
+	return IMMERSION * taille
 
 
 # ── LE CORPS ────────────────────────────────────────────────────────────────────────────────────────
@@ -221,12 +271,14 @@ func _physics_process(dt: float) -> void:
 	# ⚠ ON SONDE LE TORSE (+0,5), ni les pieds ni le bas du corps : au fond d'un lac, les pieds sont sur le dessus VU
 	# du plancher (0,75 dans sa case), et un point à +0,2 tombe encore dans la case PLEINE du plancher — hors de
 	# l'eau pour la règle ; il marchait au fond (vu rougir dans la fumée).
-	var s: float = surface_eau.call(global_position + Vector3.UP * 0.5) if surface_eau.is_valid() else -INF
-	nage = s > global_position.y + IMMERSION
+	# ⚠ JAMAIS SOUS +0,3, quelle que soit sa taille : le dessus vu du plancher est à 0,75 dans sa case, et la sonde
+	# doit sortir de cette case pleine.
+	var s: float = surface_eau.call(global_position + Vector3.UP * maxf(0.3, 0.5 * taille)) 		if surface_eau.is_valid() else -INF
+	nage = s > global_position.y + immersion()
 	if nage:
 		_nager(voulu, s, dt)
 		return
-	var vitesse := VITESSE_COURSE if course else VITESSE_MARCHE
+	var vitesse := vitesse_course() if course else vitesse_marche()
 	# Une inertie courte : on démarre et on s'arrête vite, mais pas au pixel près.
 	var reactivite := 14.0 if is_on_floor() else 4.0
 	var pousse := Vector3.ZERO
@@ -292,9 +344,9 @@ func basculer_vol() -> void:
 ## rejoint la hauteur de flottaison — plus bas tant qu'on plonge, un peu plus haut tant qu'on tient Espace. Pas de
 ## gravité : c'est la flottaison qui tient le corps. Contre une berge, il s'y hisse (`SORTIE`).
 func _nager(voulu: Vector3, s: float, dt: float) -> void:
-	var vitesse := VITESSE_NAGE_RAPIDE if course else VITESSE_NAGE
+	var vitesse := vitesse_nage_rapide() if course else vitesse_nage()
 	var plan := Vector3(velocity.x, 0.0, velocity.z).lerp(voulu * vitesse, minf(1.0, 4.0 * dt))
-	var cible_y := s - FLOTTE
+	var cible_y := s - flotte()
 	if monter < 0.0:
 		cible_y -= PLONGEE
 	elif saut:
@@ -322,7 +374,7 @@ func _gravir(pas: Vector3, depart: Vector3, hauteur := MARCHE) -> void:
 	if test_move(t, haut):
 		return
 	t.origin += haut
-	var loin := pas.normalized() * maxf(pas.length(), RAYON * 0.6)
+	var loin := pas.normalized() * maxf(pas.length(), rayon() * 0.6)
 	if test_move(t, loin):
 		return
 	t.origin += loin
@@ -346,9 +398,10 @@ func _orienter(voulu: Vector3, dt: float) -> void:
 
 func _animer(dt: float) -> void:
 	var v := Vector2(velocity.x, velocity.z).length()
-	var allure := clampf(v / VITESSE_COURSE, 0.0, 1.0)
+	var allure := clampf(v / vitesse_course(), 0.0, 1.0)
 	var au_sol := is_on_floor()
-	_phase += dt * (2.5 + v * 3.2)
+	# Des jambes plus courtes font plus de pas pour la même vitesse : la cadence suit la taille.
+	_phase += dt * (2.5 + v * 3.2 / taille)
 	var s := sin(_phase)
 	var temps := Time.get_ticks_msec() * 0.001
 
@@ -361,7 +414,7 @@ func _animer(dt: float) -> void:
 	if nage:
 		# À LA NAGE : une brasse — les bras s'écartent et reviennent ensemble, les jambes battent à contretemps ; à
 		# l'arrêt, il fait du surplace, debout, les bras qui godillent.
-		var elan := clampf(v / VITESSE_NAGE_RAPIDE, 0.0, 1.0)
+		var elan := clampf(v / vitesse_nage_rapide(), 0.0, 1.0)
 		var brasse := sin(temps * 4.0)
 		jambe = sin(temps * 5.0) * (0.25 + 0.2 * elan)
 		bras = -0.6 * elan + brasse * 0.25
@@ -393,7 +446,7 @@ func _animer(dt: float) -> void:
 	# En vol, c'est TOUT le corps qui se couche vers l'avant avec la vitesse, pas le seul torse.
 	var couche := -0.85 * clampf(v / VITESSE_VOL_RAPIDE, 0.0, 1.0) if vol else 0.0
 	if nage:
-		couche = -1.25 * clampf(v / VITESSE_NAGE, 0.0, 1.0)   # à plat sur l'eau quand il avance
+		couche = -1.25 * clampf(v / vitesse_nage(), 0.0, 1.0)   # à plat sur l'eau quand il avance
 	_modele.rotation.x = lerpf(_modele.rotation.x, couche, minf(1.0, 6.0 * dt))
 	_hanche_g.rotation.x = lerpf(_hanche_g.rotation.x, jambe, k)
 	# En vol, les deux jambes traînent ensemble, la droite à contretemps.
@@ -411,5 +464,5 @@ func _animer(dt: float) -> void:
 	_tete.rotation.z = lerpf(_tete.rotation.z, sin(temps * 0.9) * 0.05 * (1.0 - allure), k)
 
 	_ecrasement = move_toward(_ecrasement, 0.0, dt * 1.6)
-	_modele.scale = Vector3(ECHELLE * (1.0 + _ecrasement * 0.6), ECHELLE * (1.0 - _ecrasement),
-		ECHELLE * (1.0 + _ecrasement * 0.6))
+	var e := ECHELLE * taille
+	_modele.scale = Vector3(e * (1.0 + _ecrasement * 0.6), e * (1.0 - _ecrasement), e * (1.0 + _ecrasement * 0.6))

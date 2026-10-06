@@ -2284,9 +2284,14 @@ func _play_test(ed: Control) -> void:
 	_touche_physique(KEY_W, true)
 	for i in 40:
 		await physics_frame
+	var marche := Vector2(p.velocity.x, p.velocity.z).length()
 	_touche_physique(KEY_W, false)
 	var pas := Vector2(p.global_position.x - depart.x, p.global_position.z - depart.z).length()
 	_vrai(pas > 0.8, "W (Z en AZERTY) le fait avancer (%.2f case)" % pas)
+	# LA TAILLE (Jordan, 6 octobre 2026) : ×0,65 par défaut ; il marche à 3,2 × 0,65 = 2,08 cases/s (écrit à la main).
+	_vrai(is_equal_approx(p.taille, 0.65) and is_equal_approx(ed._taille_personnage.value, 0.65),
+		"le personnage est à ×0,65 par défaut, et le curseur le dit")
+	_vrai(marche > 1.9 and marche < 2.1, "à ×0,65, il marche à 2,08 cases/s (%.2f)" % marche)
 	for i in 20:
 		await physics_frame
 	var y0: float = p.global_position.y
@@ -2345,8 +2350,8 @@ func _play_test(ed: Control) -> void:
 	# et posait l'œil sous le sol.
 	# ⚠ Et la tête n'est libre que si la sphère tient DANS la capsule : plus large, collé à une paroi,
 	# le premier lancer partirait lui aussi de la roche.
-	_vrai(ed._vue.RAYON_DU_BRAS < p.RAYON, "la sphère du bras (%.2f) est plus fine que la capsule (%.2f)"
-		% [ed._vue.RAYON_DU_BRAS, p.RAYON])
+	_vrai(ed._vue.rayon_du_bras() < p.rayon(), "la sphère du bras (%.3f) est plus fine que la capsule (%.3f)"
+		% [ed._vue.rayon_du_bras(), p.rayon()])
 	ed._vue._elevation = 0.38
 	ed._vue._cible = Vector3(p.global_position.x, 10.5, p.global_position.z)
 	ed._vue._suivre(0.001)
@@ -2360,6 +2365,25 @@ func _play_test(ed: Control) -> void:
 	molette.pressed = true
 	ed._vue._gui_input(molette)
 	_vrai(ed._vue._distance < d, "la molette rapproche la caméra")
+	# LE CURSEUR DE TAILLE, par le vrai contrôle : à ×1, la capsule fait 0,84 de haut et 0,19 de rayon, le modèle
+	# 0,62 (attendus écrits à la main), la caméra recule d'autant ; la sphère du bras reste plus fine que la capsule,
+	# le plan proche sous elle. Puis ×0,4, le plus petit.
+	var capsule: CapsuleShape3D = null
+	for c in p.get_children():
+		if c is CollisionShape3D:
+			capsule = (c as CollisionShape3D).shape as CapsuleShape3D
+	var d065: float = ed._vue._distance
+	ed._taille_personnage.value = 1.0
+	_vrai(is_equal_approx(p.taille, 1.0) and is_equal_approx(capsule.height, 0.84) and is_equal_approx(capsule.radius, 0.19)
+		and is_equal_approx(p._modele.scale.y, 0.62), "Character size ×1 : capsule 0,84 × 0,19, modèle 0,62")
+	_vrai(is_equal_approx(ed._vue._distance, d065 / 0.65), "… et la caméra recule d'autant (%.2f → %.2f)"
+		% [d065, ed._vue._distance])
+	ed._taille_personnage.value = 0.4
+	_vrai(is_equal_approx(capsule.height, 0.336) and ed._vue.rayon_du_bras() < capsule.radius
+		and ed._vue._camera.near * 1.7 < ed._vue.rayon_du_bras(),
+		"à ×0,4, la sphère du bras reste plus fine que la capsule, le plan proche sous elle")
+	ed._taille_personnage.value = 0.65
+	_vrai(is_equal_approx(capsule.height, 0.84 * 0.65), "rendu à ×0,65")
 	# ⚠ PAR LE VRAI CHEMIN DES TOUCHES, vue AU CLAVIER : c'est elle qui a la main en Play test, et une
 	# vue qui avalerait les touches priverait l'écran d'Échap. Appeler `_unhandled_key_input` en direct
 	# ne l'aurait jamais vu.
@@ -2420,11 +2444,13 @@ func _le_vol(ed: Control, p: CharacterBody3D) -> void:
 ## Rien du décor entre la TÊTE du personnage et l'œil, ni autour de l'œil. ⚠ Depuis la tête, pas depuis
 ## `_cible` : le pivot lissé peut être dans la roche, et c'est justement ce qu'on éprouve.
 func _oeil_degage(ed: Control, espace: PhysicsDirectSpaceState3D) -> bool:
-	var tete: Vector3 = ed._vue.personnage.global_position + Vector3.UP * ed._vue.CAMERA_HAUTEUR
+	var tete: Vector3 = ed._vue.personnage.global_position + Vector3.UP * ed._vue.hauteur_camera()
 	var oeil: Vector3 = ed._vue._camera.global_position
 	var boule := PhysicsShapeQueryParameters3D.new()
 	var sphere := SphereShape3D.new()
-	sphere.radius = 0.1
+	# ⚠ À L'ÉCHELLE DU PERSONNAGE (6 octobre 2026) : 0,1 pour un bras de 0,15 à la taille 1 — plus fine que le bras,
+	# plus large que le plan proche (qui suivent tous deux la taille).
+	sphere.radius = 0.1 * ed._vue.taille_personnage
 	boule.shape = sphere
 	boule.transform = Transform3D(Basis(), oeil)
 	boule.collision_mask = 2
@@ -3424,7 +3450,8 @@ func _la_meteo(ed: Control) -> void:
 
 
 ## LA NAGE AU PLAY TEST (Jordan, 1er octobre 2026), dans la cuvette d'au-dessus : nappe à 2,7 (rangée 2 + 0,7),
-## donc flottaison les pieds à 2,7 − 0,55 = 2,15 ; le fond se voit à 0,75. Attendus écrits à la main.
+## donc flottaison les pieds à 2,7 − 0,55 × 0,65 = 2,34 (la taille par défaut) ; le fond se voit à 0,75. Attendus
+## écrits à la main.
 func _la_nage(ed: Control) -> void:
 	# ⚠ LE LAC EST DE LA LAVE pour cette plongée : le voile vu de dedans est celui du liquide (2 octobre 2026).
 	var preset_avant: String = ed._eaux[0]["preset"]
@@ -3438,8 +3465,8 @@ func _la_nage(ed: Control) -> void:
 	p.global_position = Vector3(62.5, 1.6, 62.5)
 	for i in 120:
 		await physics_frame
-	_vrai(p.nage and absf(p.global_position.y - 2.15) < 0.15,
-		"tombé dans le lac, il NAGE et flotte la tête hors de l'eau (pieds à %.2f, attendu 2,15)" % p.global_position.y)
+	_vrai(p.nage and absf(p.global_position.y - 2.34) < 0.1,
+		"tombé dans le lac, il NAGE et flotte la tête hors de l'eau (pieds à %.2f, attendu 2,34)" % p.global_position.y)
 	_vrai(not p.is_on_floor(), "… sans toucher le fond")
 	# PLONGER : la touche de descente du vol (A en AZERTY, Q en QWERTY) ; sous la nappe, la caméra se voile.
 	# La caméra à hauteur de tête et tout près (la cuvette n'a que 3 cases de large : à 4 cases, elle serait
@@ -3464,11 +3491,11 @@ func _la_nage(ed: Control) -> void:
 	_vrai(voile, "sous la nappe, la caméra voit à travers le voile de l'eau")
 	_vrai(p.nage, "au fond, il nage encore (il ne marche pas sur le fond du lac)")
 	ed._vue._elevation = ed._vue.CAMERA_ELEVATION
-	ed._vue._distance = ed._vue.CAMERA_DISTANCE
+	ed._vue._distance = ed._vue.CAMERA_DISTANCE * ed._vue.taille_personnage
 	for i in 90:
 		await physics_frame
 		await process_frame
-	_vrai(absf(p.global_position.y - 2.15) < 0.15, "relâché, il remonte à la surface (%.2f)" % p.global_position.y)
+	_vrai(absf(p.global_position.y - 2.34) < 0.1, "relâché, il remonte à la surface (%.2f)" % p.global_position.y)
 	_vrai(not ed._vue._env.fog_enabled, "la tête hors de l'eau, plus de voile")
 	# NAGER plus lentement qu'on ne marche.
 	ed._vue._azimut = PI / 2   # « en avant » = −X : vers le mur ouest, à deux cases
@@ -3476,7 +3503,7 @@ func _la_nage(ed: Control) -> void:
 	for i in 20:
 		await physics_frame
 	var v := Vector2(p.velocity.x, p.velocity.z).length()
-	_vrai(v > 1.0 and v <= p.VITESSE_NAGE + 0.01, "il nage, moins vite qu'il ne marche (%.2f)" % v)
+	_vrai(v > 0.8 and v <= 2.2 * 0.65 + 0.01, "il nage à sa taille, moins vite qu'il ne marche (%.2f)" % v)
 	# SE HISSER : il nage contre le mur ouest (x = 60, dessus à 2,75) et en sort.
 	for i in 150:
 		await physics_frame
@@ -4126,6 +4153,33 @@ func _la_barre_des_gestes(ed: Control) -> void:
 	ed._durees_gestes.par_unite.clear()
 	ed._gestes_suivis = false
 	ed._appliquer({"poser": {}, "effacer": {c1: true}}, "Dig")
+	# ⚠ LE CLIC REJOUÉ L'EST PANNEAU ENCORE À L'ÉCRAN (il ne s'en va que deux images plus tard) : un panneau qui prend la
+	# souris avalait le clic retenu s'il tombait sous lui — au centre de la vue (signalé par la session vidéos, 6 octobre
+	# 2026 : le second clic d'eau ne posait rien). Un vrai clic, routé par l'interface, au centre du panneau montré.
+	var vue: Control = ed._vue
+	var nav_avant: bool = vue.naviguer
+	vue.naviguer = true   # le clic ne peint rien
+	var panneau: Array = ed._occupe("Working")
+	await process_frame
+	var recus := [0]
+	var compter := func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			recus[0] += 1
+	vue.gui_input.connect(compter)
+	var centre: Vector2 = ed._attente.get_global_rect().get_center()
+	for appui in [true, false]:
+		var m := InputEventMouseButton.new()
+		m.button_index = MOUSE_BUTTON_LEFT
+		m.position = centre
+		m.global_position = centre
+		m.pressed = appui
+		Input.parse_input_event(m)
+		Input.flush_buffered_events()
+	vue.gui_input.disconnect(compter)
+	ed._fin_occupe(panneau)
+	vue.naviguer = nav_avant
+	_vrai(vue.get_global_rect().has_point(centre) and recus[0] == 2,
+		"un clic sous le panneau d'attente arrive à la vue (%d événements sur 2) : le clic rejoué n'est pas avalé" % recus[0])
 
 
 ## « FIX DIAGONAL CONTACTS » (Jordan, 3 octobre 2026), par les VRAIS boutons, loin de tout (x = 200) : deux cases qui se

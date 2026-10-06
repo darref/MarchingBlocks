@@ -73,6 +73,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
   POUR LA 0.9 / 1.0 ET REMIS À UNE MISE À JOUR FUTURE** (§3, « le terrain monolithique et les props »).
+  ⚠ **PRÉCISÉ (Jordan, 6 octobre 2026)** : la 1.0.0, vendue au prix plein, apportera DEUX ATELIERS NEUFS — **Props**
+  (objets en tout genre, végétaux compris) et **Houses** — offerts aux acheteurs de la 0.9.0, ce qu'il faut ANNONCER dès
+  le lancement (document de stratégie). **OUVERT** : leur lien avec les props rattachés du §3.
 - **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
   projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
   continuer de faire tant que le dev n'est pas clos, figé ensuite ».
@@ -2422,6 +2425,16 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
     VRAIE tête, qui est libre par construction (sphère de 0,15 < capsule de 0,19), vers le pivot, puis
     du pivot vers l'œil. Gardé par la fumée (pivot posé DANS la dalle du sol, la sphère plus fine que la
     capsule), mutations rouges : bras lancé du pivot lissé (œil à y = 10,6 dans la dalle), rayon de 0,2.
+  - **LA TAILLE DU PERSONNAGE — DEMANDÉE PAR JORDAN (6 octobre 2026 : « régler le scale du stickman, et le mettre un
+    peu plus petit, ×0,65 par défaut, histoire que le monde paraisse un peu plus grand »), ÉCRITE LE MÊME JOUR.** Le
+    curseur « Character size » (0,4 à 1,5) de la section Play test, gardé le temps de la session. Suivent la taille :
+    le modèle, la capsule, la flottaison et l'immersion, les vitesses de marche, course et nage, la cadence des pas, et
+    la caméra (pivot, distance, sphère du bras, plan proche — le bras reste plus fin que la capsule, le plan proche sous
+    lui). ⚠ **NE SUIVENT PAS (PROPOSÉ)** : le saut (1,45 case), le pas (0,3), la sortie de l'eau, le vol — sinon un petit
+    personnage ne franchirait plus les marches d'une case. La sonde de l'eau ne descend jamais sous +0,3 (elle doit
+    sortir de la case pleine du plancher). Gardé par `fumee_appli` (821 : la vitesse de 2,08 cases/s, la capsule et le
+    modèle à ×1 et ×0,4 par le vrai curseur, la caméra qui recule d'autant ; flottaison à 2,34) ; deux mutations
+    rouges (vitesse non mise à l'échelle, curseur débranché). ⚠ Ni vu à l'image ni tenu en main.
   - **LE VOL — DEMANDÉ PAR JORDAN (1er octobre 2026), ÉCRIT LE MÊME JOUR.** **F** (ou le bouton « Fly ») bascule ;
     en vol, ni gravité ni pas : Espace ou E montent, A descend (Q / E sur un QWERTY, les touches de Navigate), Maj
     va plus vite. ⚠ **IL HEURTE TOUJOURS LE DÉCOR** (`move_and_slide`) : traverser la roche ne dirait rien du monde.
@@ -3479,6 +3492,11 @@ Gardé par `fumee_appli` (411) ; trois mutations rouges. Vu à l'image.
     retenir). ⚠ « Rejouer sans la marque » est MUETTE et ÉQUIVALENTE : le geste rejoué arrive pendant son propre
     chronométrage, donc n'est jamais retenu deux fois ; la marque reste en garde-fou. ⚠ Sans fenêtre, rien n'est appris
     ni montré (les suites ne touchent pas aux réglages). ⚠ PAS TENU EN MAIN.
+  - ⚠ **LE CLIC REJOUÉ ÉTAIT AVALÉ PAR LE PANNEAU — TROUVÉ PAR LA SESSION VIDÉOS ET CORRIGÉ (6 octobre 2026)** : le
+    second clic d'eau dans Fluids ne posait rien, sans un mot. Le geste retenu est rejoué panneau ENCORE à l'écran (il
+    s'en va deux images plus tard), et le panneau, centré, prenait la souris : un clic qui tombait sous lui était perdu.
+    Le panneau et ses enfants ignorent désormais la souris (`_sans_souris`). Gardé par `fumee_appli` (815 : un vrai clic
+    routé par l'interface au centre du panneau montré arrive à la vue) ; vu rougir sans le correctif (0 événement sur 2).
 - **« VERY SIMPLE EXAMPLE » (Jordan, 3 octobre 2026)** : le choix de World et le manuel nomment ainsi l'exemple.
 - **LA BARRE DE DROITE DÉBORDAIT À DROITE EN WORLD — MESURÉ ET CORRIGÉ (Jordan, 3 octobre 2026)**
   (`DEV_TOOLS/sonde_largeur_droite.gd`, avec fenêtre) : avec une sélection, 358 px au lieu de 308 (les deux « Extend

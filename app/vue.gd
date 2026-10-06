@@ -1608,6 +1608,29 @@ const RAYON_DU_BRAS := 0.15
 const ELEVATION_MINI := -0.35
 const ELEVATION_MAXI := 1.35
 const CAMERA_HAUTEUR := 0.6
+## LA TAILLE DU PERSONNAGE (Jordan, 6 octobre 2026), gardée le temps de la session comme la météo : la caméra la suit —
+## hauteur du pivot, distance, sphère du bras (toujours plus fine que la capsule) et plan proche (toujours sous elle).
+## ⚠ Les longueurs ci-dessus sont celles d'un personnage de taille 1.
+var taille_personnage := Personnage.TAILLE_DEFAUT
+const PLAN_PROCHE := 0.05
+
+
+func hauteur_camera() -> float:
+	return CAMERA_HAUTEUR * taille_personnage
+
+
+func rayon_du_bras() -> float:
+	return RAYON_DU_BRAS * taille_personnage
+
+
+## Règle la taille ; en jeu, tout de suite (la caméra recule ou avance d'autant).
+func regler_taille_personnage(t: float) -> void:
+	var avant := taille_personnage
+	taille_personnage = clampf(t, Personnage.TAILLE_MINI, Personnage.TAILLE_MAXI)
+	if personnage != null:
+		personnage.regler_taille(taille_personnage)
+		_distance *= taille_personnage / avant
+		_camera.near = PLAN_PROCHE * minf(1.0, taille_personnage)
 ## Sous le point le plus bas du monde, de tant de cases : on est tombé, on repart du départ.
 const CHUTE := 25.0
 
@@ -1664,13 +1687,15 @@ func commencer_partie() -> String:
 	_tenir_le_decor(_depart, 1, -1)
 
 	personnage = Personnage.new()
+	personnage.regler_taille(taille_personnage)
+	_camera.near = PLAN_PROCHE * minf(1.0, taille_personnage)
 	_vue.add_child(personnage)
 	personnage.global_position = _depart
 	personnage.surface_eau = surface_eau_au_point
 	personnage.courant_eau = courant_au_point
 	_orbite_d_avant = [_cible, _azimut, _elevation, _distance]
 	_elevation = CAMERA_ELEVATION
-	_distance = CAMERA_DISTANCE
+	_distance = CAMERA_DISTANCE * taille_personnage
 	personnage.cap_camera = _azimut
 	# Le halo des yeux violets : allumé pour le jeu seulement, il changerait le jugement des teintes.
 	_env.glow_enabled = true
@@ -1691,6 +1716,7 @@ func finir_partie() -> void:
 	if personnage != null:
 		personnage.queue_free()
 		personnage = null
+		_camera.near = PLAN_PROCHE
 	if _decor != null:
 		_decor.queue_free()
 		_decor = null
@@ -2212,7 +2238,7 @@ func surface_eau_au_point(p: Vector3) -> float:
 ## et ignorait la paroi où il commençait. On lance d'abord la sphère de la VRAIE tête (libre par
 ## construction, voir `RAYON_DU_BRAS`) vers le pivot lissé : le pivot s'arrête avant la paroi.
 func _suivre(dt: float) -> void:
-	var tete := personnage.global_position + Vector3.UP * CAMERA_HAUTEUR
+	var tete := personnage.global_position + Vector3.UP * hauteur_camera()
 	_cible = tete if dt <= 0.0 else _cible.lerp(tete, minf(1.0, 18.0 * dt))
 	var direction := Vector3(cos(_elevation) * sin(_azimut), sin(_elevation), cos(_elevation) * cos(_azimut))
 	var pivot := _cible
@@ -2233,12 +2259,12 @@ func _suivre(dt: float) -> void:
 
 
 ## La part libre (0..1) d'un déplacement de la sphère du bras contre le décor du jeu.
-static func _course_libre(espace: PhysicsDirectSpaceState3D, depuis: Vector3, deplacement: Vector3) -> float:
+func _course_libre(espace: PhysicsDirectSpaceState3D, depuis: Vector3, deplacement: Vector3) -> float:
 	if deplacement.length_squared() < 1e-10:
 		return 1.0
 	var q := PhysicsShapeQueryParameters3D.new()
 	var sphere := SphereShape3D.new()
-	sphere.radius = RAYON_DU_BRAS
+	sphere.radius = rayon_du_bras()
 	q.shape = sphere
 	q.transform = Transform3D(Basis(), depuis)
 	q.motion = deplacement
@@ -2278,7 +2304,7 @@ func _souris_du_jeu(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var b := event as InputEventMouseButton
 		if b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_distance = maxf(1.5, _distance / 1.12)
+			_distance = maxf(1.5 * taille_personnage, _distance / 1.12)
 		elif b.pressed and b.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_distance = minf(16.0, _distance * 1.12)
 		elif b.pressed:
