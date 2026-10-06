@@ -789,6 +789,50 @@ namespace
 			One.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { Same = Same && Other.placement_at(V) == P; });
 			Check(Same, "assign over another world = the world built cell by cell");
 		}
+		{
+			// move_layer is INCREMENTAL (only the vertices where the moved layer meets a layer it passes): every move
+			// of three touching blocks, up and down, by one and by two ranks, places what a world built in the new
+			// order places. Random worlds alone rarely move a layer along a shared border (an `o < hi` mutation
+			// stayed green, 6 October 2026).
+			std::vector<LayerSpec> Specs(3);
+			const char* Sets[3] = {"rich", "bare", "rich"};
+			for (int32_t L = 0; L < 3; ++L)
+			{
+				Specs[static_cast<size_t>(L)].Set = Sets[L];
+				// Disjoint blocks (a cell belongs to ONE layer): 0 at x 0..2, 1 at x 3..5 (both z 0..2), 2 at x 1..4,
+				// z -3..-1 — each block touches the two others.
+				const int32_t X0 = L == 2 ? 1 : 3 * L, X1 = L == 2 ? 5 : 3 * L + 3;
+				for (int32_t X = X0; X < X1; ++X)
+					for (int32_t Y = 0; Y < 2 + L % 2; ++Y)
+						for (int32_t Z = L == 2 ? -3 : 0; Z < (L == 2 ? 0 : 3); ++Z)
+						{
+							Cell C;
+							C.x = X;
+							C.y = Y;
+							C.z = Z;
+							Specs[static_cast<size_t>(L)].Cells.push_back(C);
+						}
+			}
+			int Moves = 0;
+			for (int32_t From = 0; From < 3; ++From)
+				for (int32_t To = 0; To < 3; ++To)
+				{
+					if (From == To) continue;
+					mbcore::World Moved = Build(R, Conf, Specs);
+					const mbcore::Delta D = Moved.move_layer(From, To);
+					std::vector<LayerSpec> Order = Specs;
+					const LayerSpec S = Order[static_cast<size_t>(From)];
+					Order.erase(Order.begin() + From);
+					Order.insert(Order.begin() + To, S);
+					const mbcore::World Fresh = Build(R, Conf, Order);
+					bool Same = Moved.placement_count() == Fresh.placement_count();
+					Fresh.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { Same = Same && Moved.placement_at(V) == P; });
+					Check(Same && !D.placements.empty(), "three touching blocks, layer " + std::to_string(From) + " moved to " +
+						std::to_string(To) + ": the world built in that order (" + std::to_string(D.placements.size()) + " changes)");
+					Moves += Same ? 1 : 0;
+				}
+			Check(Moves == 6, "the six moves of three touching blocks");
+		}
 		std::printf("3. rules written by hand\n");
 	}
 }

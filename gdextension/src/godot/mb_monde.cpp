@@ -5,6 +5,7 @@
 #include <godot_cpp/core/object.hpp>
 
 #include <string>
+#include <utility>
 #include <unordered_map>
 
 using namespace godot;
@@ -232,12 +233,32 @@ bool MBMonde::est_visible(int64_t couche) const {
 Dictionary MBMonde::deplacer_couche(int64_t de, int64_t vers) {
 	const int64_t n = _monde.layer_count();
 	if (de >= 0 && de < n && vers >= 0 && vers < n && de != vers) {
+		// BRANCHÉ (Up / Down de l'écran, 6 octobre 2026) : l'attente va d'abord chez ses propriétaires, dans l'ancienne
+		// numérotation ; puis chaque inscrit SUIT sa couche (ses grilles portent déjà ce que le monde y pose : rien à
+		// remplir), et le diff ne dit que les sommets des frontières qui changent de propriétaire.
+		vider_attente();
+		_assurer(int32_t(n));
 		auto noms = _noms_tuiles[size_t(de)];
 		_noms_tuiles.erase(_noms_tuiles.begin() + de);
 		_noms_tuiles.insert(_noms_tuiles.begin() + vers, noms);
 		Inscrit ins = _inscrits[size_t(de)];
 		_inscrits.erase(_inscrits.begin() + de);
 		_inscrits.insert(_inscrits.begin() + vers, ins);
+		// Une couche qui DORT garde la photo de ce qu'elle pose : à son nouveau rang, ses poses portent ce rang.
+		for (size_t r = 0; r < _inscrits.size(); r++) {
+			Inscrit &i = _inscrits[r];
+			if (!i.dort) {
+				continue;
+			}
+			mbcore::KeyMap<mbcore::Placement> renumerotee;
+			renumerotee.reserve(i.instantane.size());
+			i.instantane.for_each([&](uint64_t k, const mbcore::Placement &p) {
+				mbcore::Placement q = p;
+				q.layer = int32_t(r);
+				renumerotee.set(k, q);
+			});
+			i.instantane = std::move(renumerotee);
+		}
 	}
 	return _diff(_monde.move_layer(int32_t(de), int32_t(vers)));
 }

@@ -218,6 +218,25 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     `test_natif` vert (mb_natif chargé ; 120 821 cases : poses 220 ms, océan 66 ms, massif 355 ms, un geste du monde
     du cœur 0,010 ms contre 3,98 ms) ; les 22 suites vertes avec le natif (fumée 816). MSVC laisse des `.exp` / `.lib`
     à côté de la DLL : ignorés par git.
+  - **UP / DOWN OPTIMISÉ — FAIT ET MESURÉ (Jordan, 6 octobre 2026 : « Up/Down est lent, optimise-le »).** Branché, Up
+    refaisait TOUT : l'union reconstruisait chaque couche, le monde redécidait chaque sommet (`assign`), puis deux
+    couches se remplissaient. Or seul l'ORDRE change, et la décision d'un sommet ne lit l'ordre que par son propriétaire
+    (le plus petit rang parmi ses coins visibles). **Désormais** : `World::move_layer` renumérote ses cartes EN PLACE et
+    ne redécide que les sommets où la couche déplacée touche une couche qu'elle passe ; le pont (`deplacer_couche`) vide
+    d'abord l'attente, fait suivre à chaque inscrit sa couche (une couche qui dort garde sa photo, renumérotée) ; l'écran
+    (`_echanger_couches` → `_renumeroter_l_union`) ne renumérote l'union que pour les couches entre les deux rangs, sans
+    rien reconstruire — si chaque couche visible est inscrite au monde à son rang (`_toutes_au_monde`), sinon la route
+    d'avant. **MESURÉ** (Windows, headless, 120 821 cases en trois couches, `test_natif` §7) : **Up 555 → 70 ms**
+    (854 ms au relevé de la session cloud ; la route native sans monde : ~500 ms) — dont le monde 30 ms (105 ms avant
+    la renumérotation en place et la lecture unique de chaque sommet), l'union 16 ms, la pose des 4 920 sommets changés
+    10 ms. Noyau 84 (+7 : trois blocs qui se touchent, les six déplacements contre un monde bâti dans le nouvel ordre),
+    `test_natif` 158 (§11 : l'écran branché passe par cette route, ≥ 2 fois), `fumee_appli` +1 (le vrai bouton Up passe
+    par le monde) ; les 22 suites vertes avec le natif, `fumee_appli`, `test_massif_peint` et `test_marching_blocks`
+    aussi avec `MB_NATIF=0`. **MUTATIONS** : noyau 3 rouges (la borne basse, la borne haute, rien redécidé) — la borne
+    haute d'abord MUETTE : les mondes au hasard ne déplaçaient presque jamais une couche le long d'une frontière, d'où
+    les trois blocs ; écran 3 rouges (l'union non renumérotée, l'attente non posée, le rang non changé). ⚠ **DEUX
+    ÉQUIVALENTES** : parcourir les cases des AUTRES couches (un sur-ensemble, plus lent) ; ôter la vérification des
+    inscrits dans `_toutes_au_monde` — sous les routes de l'écran, toute couche visible est inscrite : une garde.
   - **LA COHABITATION AVEC LA SESSION DU BUREAU** : le cœur vit dans des fichiers NEUFS (`gdextension/`,
     `addons/marchingblocks_core/natif*`) ; un fichier GDScript existant ne reçoit que son AIGUILLAGE (trois lignes en tête
     de la fonction accélérée). Si une session change une fonction déjà portée, `test_natif.gd` rougit : on reporte le

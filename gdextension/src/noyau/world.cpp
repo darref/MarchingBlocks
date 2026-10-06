@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <utility>
 
 namespace mbcore {
 
@@ -367,11 +368,45 @@ Delta World::move_layer(int32_t from, int32_t to) {
 	std::vector<Layer> layers(static_cast<size_t>(n));
 	for (int32_t i = 0; i < n; i++) {
 		to_new[size_t(order[size_t(i)])] = i;
-		layers[size_t(i)] = _layers[size_t(order[size_t(i)])];
+		layers[size_t(i)] = std::move(_layers[size_t(order[size_t(i)])]);
 	}
-	_layers = layers;
-	reindex(_owner, _placements, to_new);
-	return rebuild();
+	_layers = std::move(layers);
+	// Renumbered IN PLACE (no layer goes): rebuilding both maps was most of the gesture.
+	_owner.for_each_value([&](uint64_t, int32_t &l) { l = to_new[size_t(l)]; });
+	_placements.for_each_value([&](uint64_t, Placement &p) { p.layer = to_new[size_t(p.layer)]; });
+	// INCREMENTAL: a vertex's decision depends on the order only through its owner, the smallest rank among its
+	// visible corners (a layer's tiles, weights and choices move with it; the sky reads the union, not the order).
+	// The only pairs whose order changes are (the moved layer, a layer ranked between `from` and `to`): a vertex can
+	// change only if one of its corners is the moved layer's AND another is one of those. Up / Down used to decide
+	// EVERY vertex again (a full rebuild).
+	const int32_t lo = from < to ? from : to;
+	const int32_t hi = from < to ? to : from;
+	CellMap todo, seen;
+	if (_visible_layer(to)) {
+		_owner.for_each([&](uint64_t k, int32_t l) {
+			if (l != to) {
+				return;
+			}
+			const Cell c = unpack(k);
+			for (int t = 0; t < 8; t++) {
+				const int32_t x = c.x - CORNERS[t][0], y = c.y - CORNERS[t][1], z = c.z - CORNERS[t][2];
+				const uint64_t v = pack(x, y, z);
+				if (!seen.set(v, 0)) {
+					continue; // each vertex read once (shared by up to 8 cells of the layer)
+				}
+				for (int s = 0; s < 8; s++) {
+					const int32_t o = _owner.get(pack(x + CORNERS[s][0], y + CORNERS[s][1], z + CORNERS[s][2]), -1);
+					if (o != to && o >= lo && o <= hi && _visible_layer(o)) {
+						todo.set(v, 0);
+						break;
+					}
+				}
+			}
+		});
+	}
+	Delta delta;
+	_redecide(todo, delta);
+	return delta;
 }
 
 Delta World::remove_layer(int32_t layer) {

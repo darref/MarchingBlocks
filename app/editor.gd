@@ -5949,12 +5949,57 @@ func _deplacer_couche(sens: int) -> void:
 
 
 func _echanger_couches(de: int, vers: int) -> void:
+	var au_monde := _toutes_au_monde(de, vers)
+	if au_monde:
+		_monde_coeur.deplacer_couche(de, vers)   # chaque inscrit suit sa couche ; le diff : les frontières seules
 	_vue.deplacer_couche(de, vers)
 	var etat: Dictionary = _couches[de]
 	_couches.remove_at(de)
 	_couches.insert(vers, etat)
-	_refaire_l_union()   # les rangs ont changé : les sommets des frontières changent de propriétaire
+	if au_monde:
+		_renumeroter_l_union(mini(de, vers), maxi(de, vers))
+	else:
+		_refaire_l_union()   # les rangs ont changé : les sommets des frontières changent de propriétaire
 	_activer(vers)
+
+
+## UP / DOWN BRANCHÉ (Jordan, 6 octobre 2026 : « Up/Down est lent, optimise-le ») : refaire l'union reconstruisait
+## chaque couche — le monde refaisait TOUT (`assign`), puis deux couches se remplissaient : 854 ms sur 120 821 cases.
+## Or seul l'ordre change : le monde déplace la couche (`World::move_layer` ne redécide que les sommets où elle touche
+## une couche qu'elle passe), ses inscrits la suivent, et ici l'union ne renumérote que les couches entre les deux rangs.
+## Seulement si chaque couche VISIBLE est inscrite au monde à son rang — une couche cachée peut ne l'être pas encore
+## (cachée dès l'ouverture : elle s'inscrira en reparaissant) —, sinon la route d'avant, qui reconstruit.
+func _toutes_au_monde(de: int, vers: int) -> bool:
+	if _monde_coeur == null or MB.natif() == null:
+		return false
+	var n: int = _monde_coeur.nombre_de_couches()
+	if n > _vue.nombre_de_couches() or maxi(de, vers) >= n:
+		return false
+	for i in _vue.nombre_de_couches():
+		var m: Node = _vue.couche(i)
+		if m.monde != _monde_coeur or m.rang != i:
+			return false
+		var qui: int = _monde_coeur.proprio(i)
+		if qui != m.get_instance_id() and not (qui == 0 and not (m as Node3D).visible):
+			return false
+	return true
+
+
+var glissements_au_monde := 0   # les Up / Down passés par cette route (`fumee_appli` exige qu'elle serve)
+
+
+func _renumeroter_l_union(lo: int, hi: int) -> void:
+	glissements_au_monde += 1
+	for i in range(lo, hi + 1):
+		var m: Node = _vue.couche(i)
+		m.rang = i
+		# Une couche cachée n'est pas dans l'union (ni dans le monde) : elle dort, et se réveillera à son nouveau rang.
+		if (m as Node3D).visible:
+			for c in (m.get_node("Cases") as GridMap).get_used_cells():
+				_union[c] = i
+	_monde_coeur.vider_attente()
+	for i in _vue.nombre_de_couches():
+		_vue.couche(i)._bilan()
 
 
 func _renommer_couche() -> void:

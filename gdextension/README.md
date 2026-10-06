@@ -126,6 +126,11 @@ couche dont l'index, les poids et les choix n'ont pas changé (`hash`) n'est pas
 ⚠ **Déplacer ou retirer une couche** : le pont renumérote d'abord SES couches (ce qui était en `from` est en `to` ;
 une couche retirée part avec ses grilles), puis applique le diff — qui ne dit que ce qui est posé autrement.
 
+**Up / Down (6 octobre 2026)** : `move_layer` ne redécide que les sommets où la couche déplacée touche une couche
+qu'elle passe (l'ordre n'entre dans la décision que par le propriétaire du sommet) ; branché, `deplacer_couche` vide
+l'attente, fait suivre chaque inscrit (et la photo d'une couche qui dort) ; l'écran ne renumérote que l'union
+(`editor._renumeroter_l_union`). 120 821 cases : Up 555 → 70 ms.
+
 ## Éteindre le natif
 
 `MB_NATIF=0` dans l'environnement (ou `Natif.actif = false` dans un script) : tout repasse par le GDScript.

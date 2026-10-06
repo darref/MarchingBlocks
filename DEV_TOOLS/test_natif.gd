@@ -859,6 +859,39 @@ class Scene:
 					continue
 				m.reconstruire_autour(cases_))
 
+	var glissements := 0   # les Up / Down passés par la route branchée (`_echanger_couches` → `_renumeroter_l_union`)
+
+	## Up / Down, comme `_echanger_couches` : la couche r passe au rang r − 1. Branchée (chaque couche visible inscrite
+	## au monde à son rang : `_toutes_au_monde`), le monde la déplace et l'union ne renumérote que ces deux rangs ;
+	## sinon l'union est refaite (et chaque couche reconstruite).
+	func monter(r: int) -> void:
+		var au_monde: bool = branche and monde != null and monde.nombre_de_couches() <= massifs.size() 			and r < monde.nombre_de_couches()
+		if au_monde:
+			for i in massifs.size():
+				var qui: int = monde.proprio(i)
+				if massifs[i].monde != monde or massifs[i].rang != i 						or (qui != massifs[i].get_instance_id() and not (qui == 0 and not visibles[i])):
+					au_monde = false
+		if au_monde:
+			appeler(func() -> void: monde.deplacer_couche(r, r - 1))
+		for liste in [massifs, visibles]:
+			var x = liste[r]
+			liste[r] = liste[r - 1]
+			liste[r - 1] = x
+		if not au_monde:
+			refaire_l_union()
+			return
+		glissements += 1
+		appeler(func() -> void:
+			for i in [r - 1, r]:
+				var m: Node = massifs[i]
+				m.rang = i
+				if visibles[i]:
+					for c in (m.get_node("Cases") as GridMap).get_used_cells():
+						union[c] = i
+			monde.vider_attente()
+			for m in massifs:
+				m._bilan())
+
 	func refaire_l_union() -> void:
 		appeler(func() -> void:
 			union.clear()
@@ -1061,11 +1094,7 @@ func _le_monde_branche() -> void:
 			# Up / Down : la couche r passe au-dessus de r − 1 (`_echanger_couches`), puis l'union est refaite.
 			var r := rng.randi_range(1, 2)
 			for sc in scenes:
-				for liste in [sc.massifs, sc.visibles]:
-					var x = liste[r]
-					liste[r] = liste[r - 1]
-					liste[r - 1] = x
-				sc.refaire_l_union()
+				sc.monter(r)
 			for liste in [lots, cles_par]:
 				var x = liste[r]
 				liste[r] = liste[r - 1]
@@ -1131,6 +1160,8 @@ func _le_monde_branche() -> void:
 	_dire(ecarts == 0, "%d geste(s) sur 160 où l'appli branchée diffère de l'appli en GDScript" % ecarts)
 	for sorte in ["coup", "deplacer", "creuser", "montrer", "monter", "choix", "poids", "lot"]:
 		_dire(int(sortes.get(sorte, 0)) >= 2, "les gestes doivent exercer « %s » (%s)" % [sorte, sortes])
+	_dire(br.glissements >= 2 and gd.glissements == 0, "Up / Down passe par la route branchée (%d fois ; %d en GDScript)"
+		% [br.glissements, gd.glissements])
 	_dire(int(br.monde.taille_attente()) == 0, "rien ne reste en attente après les gestes")
 	_dire(dormies > 10 and eveillees_cachees == 0, "une couche cachée dort dans le monde (%d fois, %d éveillée cachée)"
 		% [dormies, eveillees_cachees])
@@ -1236,10 +1267,7 @@ func _mesurer() -> void:
 		var ue := Time.get_ticks_usec()
 		sc_b.montrer(1, true)
 		var uf := Time.get_ticks_usec()
-		var x_b = sc_b.massifs[1]
-		sc_b.massifs[1] = sc_b.massifs[0]
-		sc_b.massifs[0] = x_b
-		sc_b.refaire_l_union()
+		sc_b.monter(1)
 		var ug := Time.get_ticks_usec()
 		print("   %s : 3 couches, ouverture %d ms ; un geste_b d'une case %.2f ms ; cacher %d ms, montrer %d ms ; Up %d ms" % [
 			"appli branchée au monde" if branche else "appli d'avant (natif)", (ub - ua) / 1000, (ud - uc) / 40000.0,

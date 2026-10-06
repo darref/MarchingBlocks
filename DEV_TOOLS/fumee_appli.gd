@@ -3994,7 +3994,11 @@ func _les_couches_exclusives(ed: Control) -> void:
 	_vrai(not ed._bouton_monter_couche.disabled and ed._bouton_descendre_couche.disabled,
 		"la dernière couche : Up actif, Down grisé")
 	var etat_a_avant := (ed._vue.couche(ia)._etat as Dictionary).size()
+	var glisses_avant: int = ed.glissements_au_monde
 	ed._bouton_monter_couche.pressed.emit()
+	# UP / DOWN BRANCHÉ (6 octobre 2026) : avec le cœur, le monde déplace la couche sans rien reconstruire.
+	_vrai(MB.natif() == null or ed.glissements_au_monde == glisses_avant + 1,
+		"avec le cœur, Up passe par le monde (`_renumeroter_l_union`) : %d" % (ed.glissements_au_monde - glisses_avant))
 	_vrai(ed._active == ia and ed._couches[ia]["nom"] == nom_b and ed._couches[ib]["nom"] == nom_a
 		and ed._vue.couche(ia).get_node("Cases") == gb, "Up : B prend la place de A, et reste active")
 	_memes_proprietaires(ed, [ia, ib], "B montée")

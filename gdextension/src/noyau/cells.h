@@ -198,6 +198,16 @@ public:
 		}
 	}
 
+	// The values changed in place (the keys stay): `f(key, value&)`.
+	template <typename F>
+	void for_each_value(F &&f) {
+		for (size_t i = 0; i < _keys.size(); i++) {
+			if (_keys[i] != EMPTY) {
+				f(_keys[i], _values[i]);
+			}
+		}
+	}
+
 private:
 	std::vector<uint64_t> _keys;
 	std::vector<V> _values;
