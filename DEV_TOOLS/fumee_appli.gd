@@ -488,6 +488,8 @@ func _mener() -> void:
 	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
 	_les_variantes(ed)
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
+	_les_bords_entre_couches(ed)
+	_vrai(_bords_finis, "SENTINELLE : les bords entre couches sont allés JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -508,6 +510,174 @@ func _mener() -> void:
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
+
+
+## LES BORDS ENTRE COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues, fais comme tu as dit pour les
+## éviter »). Deux couches se touchent dans le monde : une tuile de A face à une tuile de B. L'AUTORITÉ ne passe pas par
+## `sections.gd` : `_sans_partenaire_entre` pose les occurrences des deux témoins et compte, à chaque joint, les sommets de
+## l'un sans partenaire exact dans l'autre — la fente du monde à leur frontière.
+var _bords_finis := false
+
+
+func _les_bords_entre_couches(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._nouvelle_couche()
+	var ia: int = ed._active
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var ta: RefCounted = mo.temoin
+	var ib := -1
+	for i in ed._couches.size():
+		if i != ia and ed._suit_son_temoin(ed._couches[i]):
+			ib = i
+			break
+	_vrai(ib >= 0, "une autre couche suit son témoin")
+	if ib < 0:
+		return
+	var tb: RefCounted = ed._temoin_de(ed._couches[ib])
+	_vrai(mo.autres_temoins.has(tb) and not mo.autres_temoins.has(ta), "le modeleur tient le témoin de l'autre couche (et pas le sien)")
+	# Une divergence CONSTRUITE : un sommet de bord de la paroi de B déplacé dans son plan, dans B seul.
+	var paroi := "mb_plaque_b2h2_dehors"
+	var sb = preload("res://addons/marchingblocks_core/sections.gd").new(tb)
+	var i_b: int = (sb.bords[paroi] as Dictionary).keys()[0]
+	var mb: RefCounted = tb.tuiles[paroi]
+	mb.sommets[i_b] += sb.projeter(paroi, i_b, Vector3(0.04, 0.03, -0.02))
+	var fente: int = _sans_partenaire_entre(ta, tb)
+	_vrai(fente > 0, "contrôle : le bord de B tiré dans B seul ouvre la frontière A | B (%d sans partenaire)" % fente)
+	ed._ecarts_perimes = true
+	ed._ecarts_lus_a = -100000
+	ed._dire_les_ecarts()
+	_vrai(ed._bouton_caler.visible and ed._ecarts_texte.text.contains("differ"), "Geometry le dit : « %s »" % ed._ecarts_texte.text)
+	var photo_a := {}
+	for c in ta.tuiles:
+		photo_a[c] = (ta.tuiles[c].sommets as PackedVector3Array).duplicate()
+	var photo_b := {}
+	for c in tb.tuiles:
+		photo_b[c] = (tb.tuiles[c].sommets as PackedVector3Array).duplicate()
+	ed._bouton_caler.pressed.emit()
+	_egal(_sans_partenaire_entre(ta, tb), 0, "« Match other layers to this one » : la frontière A | B se referme")
+	# A peut RECEVOIR des points (les coupes que B portait sur ses bords, reportées SUR ses arêtes) : sa forme ne change
+	# pas. Ce qu'on lit : chacun de ses sommets d'avant est resté à sa place.
+	var a_bouge := 0
+	for c in ta.tuiles:
+		for j in (photo_a[c] as PackedVector3Array).size():
+			if (ta.tuiles[c].sommets[j] as Vector3).distance_to(photo_a[c][j]) > 1e-9:
+				a_bouge += 1
+				break
+	_egal(a_bouge, 0, "le témoin qu'on édite fait foi : aucun de ses sommets ne bouge")
+	_vrai(ed._temoins_sales.has(tb), "le témoin de B est à réécrire")
+	ed._ecarts_lus_a = -100000
+	ed._dire_les_ecarts()
+	_vrai(ed._ecarts_texte.text.contains("the same"), "Geometry le dit : « %s »" % ed._ecarts_texte.text)
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu := true
+	for c in tb.tuiles:
+		b_rendu = b_rendu and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu and _sans_partenaire_entre(ta, tb) == fente, "UN Ctrl+Z rend le témoin de B tel qu'il était")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_egal(_sans_partenaire_entre(ta, tb), 0, "Ctrl+Y le recale")
+	# UN GESTE SUR UN BORD DE A ENTRAÎNE B : G au clavier, comme dans `_les_sections_dans_le_modeleur`.
+	mo.activer(int(ta.occurrences_de(paroi)[0]))
+	mo.sections.indexer()
+	var i_bord := -1
+	var axe_face := -1
+	for i in (mo.sections.bords[paroi] as Dictionary):
+		if (mo.sections.bords[paroi][i] as Array).size() == 1:
+			i_bord = i
+			axe_face = mo.sections.bords[paroi][i][0]["axe"]
+			break
+	var normale_monde: Vector3 = (mo.pose.basis * _unitaire(axe_face)).abs()
+	var dans_le_plan: Key = KEY_X
+	for k in [KEY_X, KEY_Z, KEY_Y]:
+		var v: Vector3 = {KEY_X: Vector3(1, 0, 0), KEY_Z: Vector3(0, 1, 0), KEY_Y: Vector3(0, 0, 1)}[k]
+		if v.dot(normale_monde) < 0.5:
+			dans_le_plan = k
+			break
+	for c in tb.tuiles:
+		photo_b[c] = (tb.tuiles[c].sommets as PackedVector3Array).duplicate()
+	mo.choisir_mode("sommet")
+	mo.tout_choisir(false)
+	mo.sel_s = {i_bord: true}
+	for k in [KEY_G, dans_le_plan, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	var b_suit := 0
+	for c in tb.tuiles:
+		if tb.tuiles[c].sommets != photo_b[c]:
+			b_suit += 1
+	_vrai(b_suit >= 2, "G sur un bord de A : %d tuiles du témoin de B suivent" % b_suit)
+	_egal(_sans_partenaire_entre(ta, tb), 0, "et la frontière A | B reste fermée")
+	_vrai(_sans_partenaire(ta) == 0 and _sans_partenaire(tb) == 0, "A et B restent étanches")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu2 := true
+	for c in tb.tuiles:
+		b_rendu2 = b_rendu2 and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu2, "UN Ctrl+Z rend aussi les tuiles de B")
+	# Un Ctrl+Z APRÈS avoir changé de couche : le geste vise B, qu'on édite désormais.
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	ed._activer(ib)
+	_vrai(mo.temoin == tb and mo.autres_temoins.has(ta), "B active : le modeleur l'édite, et tient A parmi les autres")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu3 := true
+	for c in tb.tuiles:
+		b_rendu3 = b_rendu3 and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu3 and _sans_partenaire_entre(ta, tb) == 0, "Ctrl+Z depuis B rend les tuiles de B, qu'on édite")
+	# Ménage : les deux recalages défaits, la couche neuve supprimée.
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._activer(ia)
+	ed._supprimer_couche()
+	ed._regler_edition(false)
+	ed._minuterie_temoin.stop()
+	ed._enregistrer_le_temoin_modele()
+	_bords_finis = true
+
+
+func _sans_partenaire_entre(ta_: RefCounted, tb_: RefCounted) -> int:
+	return _sans_partenaire_de(ta_, tb_) + _sans_partenaire_de(tb_, ta_)
+
+
+func _sans_partenaire_de(ta_: RefCounted, tb_: RefCounted) -> int:
+	var occ_a := {}
+	for o in ta_.occurrences:
+		occ_a[o["sommet"]] = o
+	var occ_b := {}
+	for o in tb_.occurrences:
+		occ_b[o["sommet"]] = o
+	var n := 0
+	for s in occ_a:
+		var oa: Dictionary = occ_a[s]
+		for axe in 3:
+			for sens in [-1, 1]:
+				var e := Vector3i.ZERO
+				e[axe] = sens
+				if not occ_b.has(s + e):
+					continue
+				var ob: Dictionary = occ_b[s + e]
+				var tbm: RefCounted = tb_.tuiles[ob["cle"]]
+				# ⚠ UN PARTENAIRE À MOINS DE 10⁻⁵, PAS UN ARRONDI AU DIX-MILLIÈME : deux points à 3·10⁻⁵ tombent souvent dans le
+				# même cran, et un report posé au cran au lieu de sa position exacte passait inaperçu (mutation d'abord muette).
+				var index_b := {}
+				for j in tbm.sommets.size():
+					var pb: Vector3 = (ob["pose"] as Transform3D) * tbm.sommets[j]
+					var cb := Vector3i((pb * 1000.0).floor())
+					if not index_b.has(cb):
+						index_b[cb] = []
+					index_b[cb].append(pb)
+				var tam: RefCounted = ta_.tuiles[oa["cle"]]
+				var plan: float = float(s[axe]) + 1.0 + 0.5 * sens
+				for i in tam.sommets.size():
+					var pw: Vector3 = (oa["pose"] as Transform3D) * tam.sommets[i]
+					if absf(pw[axe] - plan) > 0.0005:
+						continue
+					var ca := Vector3i((pw * 1000.0).floor())
+					var trouve := false
+					for dx in [-1, 0, 1]:
+						for dy in [-1, 0, 1]:
+							for dz in [-1, 0, 1]:
+								for pb in index_b.get(ca + Vector3i(dx, dy, dz), []):
+									trouve = trouve or (pb as Vector3).distance_to(pw) < 1e-5
+					if not trouve:
+						n += 1
+	return n
 
 
 ## LA LÉGENDE DES FORMES (Jordan, 29 septembre 2026) : un bandeau en haut de la vue, dans Witness seul ;
@@ -726,11 +896,24 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 		and FileAccess.file_exists(ed._glb_du_temoin(cb)), "la copie a SES fichiers (%s)" % str(cb["temoin"]).get_file())
 
 	# On sculpte B : G Z 1 sur une face de sa paroi.
+	# ⚠ UNE FACE DU DEDANS (6 octobre 2026) : depuis que les couches partagent leurs BORDS, un geste sur un sommet de bord
+	# entraîne A — c'est voulu, et gardé par `_les_bords_entre_couches`. Ce qui reste vrai, et que ceci garde : sculpter le
+	# dedans d'une tuile de B ne touche ni le témoin ni le monde de A (le défaut d'avant : un témoin par PROJET).
 	var occ_b: int = tb.occurrences_de(paroi)[0]
 	mo.activer(occ_b)
 	mo.choisir_mode("face")
 	mo.tout_choisir(false)
-	mo.sel_f = {0: true}
+	mo.sections.indexer()
+	var face_dedans := -1
+	for f in tb.tuiles[paroi].faces.size():
+		var au_bord := false
+		for j in tb.tuiles[paroi].faces[f]:
+			au_bord = au_bord or mo.sections.est_de_bord(paroi, j)
+		if not au_bord:
+			face_dedans = f
+			break
+	_vrai(face_dedans >= 0, "la paroi a une face dont aucun sommet n'est sur un bord")
+	mo.sel_f = {maxi(face_dedans, 0): true}
 	var avant_b: PackedVector3Array = tb.tuiles[paroi].sommets.duplicate()
 	var avant_a: PackedVector3Array = ta.tuiles[paroi].sommets.duplicate()
 	for k in [KEY_G, KEY_Z, KEY_1, KEY_ENTER]:

@@ -837,7 +837,8 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
 
 - ⚠ **LE DÉFAUT QUI LE JUSTIFIAIT** : le témoin modélisé était UN par PROJET (`<projet>_witness.glb`). Le
   remodeler pour une couche changeait la source d'une autre, retranchée EN SILENCE au chargement suivant
-  (« source changée, on retranche »). Gardé : remodeler B laisse les OCTETS du `.glb` de A intacts.
+  (« source changée, on retranche »). Gardé : remodeler B laisse les OCTETS du `.glb` de A intacts — ⚠ **SAUF SUR UN BORD
+  depuis le 6 octobre 2026** : les couches partagent leurs bords (« les bords partagés entre couches », plus bas).
 - **UNE COUCHE = UN TÉMOIN + UN MONDE PEINT.** `projet.gd` : chaque couche a un `id` STABLE (il nomme ses
   fichiers, jamais son nom) et `temoin`, le chemin de SON `.mbtiles` ; son `.glb` lié est à côté
   (`<projet>_layer<id>.*`). Un projet d'avant se relit (ni `id` ni `temoin`), et son témoin unique
@@ -963,6 +964,80 @@ un moyen d'afficher et de choisir ces témoins / couches, car elles vont ensembl
   C7 (« le chemin enregistré ignoré ») d'abord MUETTE : pour une couche ordinaire le chemin enregistré et
   celui de l'id sont les mêmes, et le test ne relisait pas l'ancien témoin repris — ni n'y écrivait. Vu à
   l'image (`capture_modeleur_lie.gd`). ⚠ Pas tenu en main par Jordan.
+
+### LES BORDS PARTAGÉS ENTRE COUCHES — DEMANDÉ PAR JORDAN (6 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan, en discutant d'un atelier de transitions : « pas la peine de sonder, il y a des fentes, je les ai vues, fais comme
+tu as dit pour les éviter ». Les sections partagées (§3) tenaient étanche UN témoin ; depuis les couches exclusives (§5),
+une tuile de la couche A touche une tuile de la couche B, venue d'un AUTRE témoin — et rien n'obligeait leurs bords à
+coïncider. Sculpter les bords d'une couche ouvrait une fente à chaque frontière avec les autres.
+
+- **LES CLASSES NE DÉPENDENT QUE DU MODÈLE, ELLES VALENT POUR TOUS LES TÉMOINS** : `Sections.new(temoin, autres)` indexe
+  les tuiles des autres témoins sous un nom PRÉFIXÉ « @<j>/<tuile> » (`cles`, `tuile`, `temoin_de`, `nom_de`) ; celles
+  du témoin édité gardent leur nom nu. Propager, compléter (les coupes sur un bord), `manquants` (Fill holes) et
+  `absences` passent donc par tous les témoins sans autre changement.
+- **LE MODELEUR** reçoit les témoins des AUTRES couches (`regler_les_autres_temoins`, donné par l'écran à l'entrée en
+  édition, au changement de couche, à l'import d'un témoin lié — `_donner_les_autres_temoins`) : tirer un bord (G R S,
+  proportionnel, sculpt) les entraîne, une coupe sur un bord (Ctrl+R, K, subdiviser, Fill holes…) y est reportée. Ils ne
+  sont pas dessinés. ⚠ **UNE COUCHE HABILLÉE PAR UN TRAVAIL EXTERNE NON LIÉ N'EN EST PAS** (`_suit_son_temoin`) : ses
+  tuiles ne viennent pas de son témoin.
+- **L'ANNULATION** : `TL.Lot.ailleurs` = {témoin : {tuile : copie}} ; l'écran pose chaque part dans SON témoin
+  (`_remplacer_temoin`), y compris quand le témoin entraîné est devenu celui qu'on édite (on a changé de couche), et
+  marque chacun à réécrire. Leur monde suit à l'entrée dans World (`_glb_perime`), comme pour la couche active.
+- **CE QUI DIVERGE DÉJÀ** (un projet d'avant, un témoin revenu de Blender, une couche neuve sur le témoin calculé quand
+  l'active est sculptée) : la section Mesh de Geometry compte les points de bord qui manquent quelque part
+  (`Sections.absences` sur tous les témoins, relu au plus une fois par seconde après un changement), et **Match other layers
+  to this one** les cale (`Sections.conformer`, repris de `_conformer` de `DEV_TOOLS/reparer_temoins.gd`) : dans chaque
+  classe, la section du témoin ÉDITÉ fait foi ; chaque point manquant prend l'intrus le plus proche (jusqu'à 0,1 case),
+  les autres intrus glissent sur la section de référence, un manquant restant est inséré sur l'arête de bord la plus
+  proche ; puis la complétion reporte l'orbite. UNE annulation. Ce qui ne se cale pas (`sur_arete`, `non_inseres`,
+  `restants`) et les faces repliées sont DITS.
+  - ⚠ **LES DÉPLACEMENTS D'ABORD, LES INSERTIONS ENSUITE** : une garde de repli désigne ses triangles par leur rang dans la
+    face ; un point inséré les décale, et la garde criait au repli sur une face intacte (5 « replis » qu'aucun triangle
+    retourné ne confirmait).
+  - ⚠ **UN POINT REPORTÉ VA À LA POSITION EXACTE DE CELUI QUI FAIT FOI, PAS AU CRAN DE L'INDEX** (`Sections.exacts`) : un
+    sommet sculpté est entre deux crans du dix-millième ; son report posé au cran en était à 7·10⁻⁵, et la frontière ne
+    coïncidait plus (8 sommets, puis 244 avec une coupe posée entre deux crans). ⚠ **ÇA VALAIT AUSSI DANS UN SEUL TÉMOIN** :
+    la complétion posait au cran le report d'une coupe sculptée — invisible aux tests, dont les coupes tombaient au milieu
+    d'arêtes du témoin calculé.
+  - ⚠ Un sommet posé sur une ARÊTE de case n'est déplacé que si sa cible reste sur ses deux plans.
+- ⚠ **CE QUE ÇA RETIRE** : remodeler B ne laisse plus A intact quand le geste touche un BORD — c'est le but. La garde
+  d'avant (`_les_couches_et_leurs_temoins` : « le témoin de A n'a PAS bougé ») porte désormais sur une face du DEDANS.
+- **MESURÉ** : `test_sections` 51 (+12). L'AUTORITÉ NE PASSE PAS PAR `sections.gd` : `_sans_partenaire_entre(A, B)` pose les
+  occurrences des deux témoins et compte, à chaque joint, les sommets d'une tuile de A sans partenaire À MOINS DE 10⁻⁵
+  dans la tuile de B d'en face, et l'inverse. Contrôle : un bord de A tiré dans A seul (l'appli d'avant) — A étanche, la
+  frontière ouverte. Propagé à travers les témoins : B suit, frontière fermée. Une coupe sur un bord de A, posée entre
+  deux crans : reportée dans B. Deux témoins divergents (A : douze bords tirés ; B : une coupe dans une classe symétrique)
+  calés sur A : frontière fermée, A et B étanches, aucun sommet de A déplacé, rien de laissé, aucun repli, une seconde
+  passe ne fait rien. `fumee_appli` (+16, une SENTINELLE) : une couche neuve, une divergence construite dans le témoin de
+  B, la ligne qui la dit, le VRAI bouton, Ctrl+Z / Ctrl+Y ; G au clavier sur un bord de A — les tuiles de B suivent, la
+  frontière reste fermée, Ctrl+Z les rend ; un Ctrl+Z APRÈS être passé sur B (le témoin entraîné est devenu celui qu'on
+  édite).
+- **MUTATIONS, TOUTES ROUGES** (rejouées dans une copie à dossier de données isolé) : le cœur 4 — les autres témoins
+  ignorés, la référence prise à la majorité de tous (A bouge : 50 tuiles), la cible appariée au cran, le report au cran ;
+  l'écran 4 — le lot qui range tout dans le témoin édité (les tuiles « @1/… » posées DANS A), l'écran qui ignore
+  `ailleurs`, le modeleur sans les autres témoins, le bouton débranché. ⚠ **« LE REPORT AU CRAN » D'ABORD MUETTE, PAR LE
+  TEST** : l'autorité arrondissait au dix-millième (deux points à 3·10⁻⁵ tombent souvent dans le même cran) et la coupe
+  tombait juste — un partenaire à moins de 10⁻⁵, une coupe à 0,47 cran, et elle rougit. ⚠ **DEUX ÉQUIVALENTES, RETIRÉES
+  DU CODE** : glisser un intrus au cran de l'index (la position exacte rend le cran inutile) ; redonner les autres témoins
+  quand la couche active ne change pas (aucun chemin de l'appli ne change la liste des couches sans changer l'active).
+- **SUITES** (6 octobre 2026, 22 suites, 0 échec) : `test_sections` 51, `fumee_appli` 843, `test_greffon_peinture` 282, les
+  autres inchangées.
+- **LE COÛT, MESURÉ** (headless, témoin calculé) : indexer 27 ms pour un témoin, 56 pour deux, 85 pour trois (au début
+  de chaque geste, et deux fois dans une complétion) ; `absences` 44 / 104 / 167 ms — d'où la ligne de Geometry relue
+  seulement à l'entrée, au changement de couche, après « Match » et après une annulation qui touche d'autres couches,
+  jamais après chaque geste ; propager 0,2 / 0,4 / 0,6 ms. ⚠ Pas mesuré sur des témoins sculptés (plus de sommets).
+- ⚠ **PAS TENU EN MAIN, NI VU À L'IMAGE.** Les greffons n'ont rien à porter (c'est le modeleur, dans l'appli seule).
+- **LA SUITE PROPOSÉE (6 octobre 2026), PAS DÉCIDÉE : UN ATELIER « TRANSITIONS »** — discuté avec Jordan avant ceci.
+  Des tuiles de transition SCULPTÉES sont hors de portée (deux couches dans un sommet : Σ C(8,k)(2ᵏ − 2) = 6 050
+  configurations, au moins 1 513 classes sous les quarts de tour) ; la transition porterait sur le MATÉRIAU, la géométrie
+  restant celle de la couche qui pose le sommet. Une PAIRE non ordonnée par couple de couches, mais DEUX RÉGLAGES (Jordan :
+  « un désert qui empiète sur la roche n'est pas la même chose qu'une roche qui empiète sur le désert ») — A sur B, B sur
+  A, chacun ses matériaux représentants (projection boîte : un UV déplié ne se transporte pas sur une autre géométrie),
+  largeur, bruit, mélange par hauteur ; la priorité décide lequel par défaut, un pinceau de transition le choisit par
+  sommet (comme les choix de variantes). Le poids d'un sommet du maillage : l'interpolation trilinéaire des 8
+  appartenances, en temps constant. ⚠ Un shader ne voyage pas : à porter dans les trois greffons (la liste, §0).
+  **OUVERT** : un sommet à trois couches.
 
 ### L'ENREGISTREMENT QUI SE DIT, ET LES FICHIERS DANS WINDOWS — DÉCIDÉ (Jordan, 30 septembre 2026), ÉCRIT
 

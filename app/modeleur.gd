@@ -119,6 +119,10 @@ var _mm_de := {}          # clé → MultiMeshInstance3D
 ## ⚠ PAS pendant une EXTRUSION : elle crée des sommets posés sur ceux qu'elle extrude, qui n'ont pas de
 ## correspondants ; c'est une affaire de topologie, celle du point 3.
 var sections: RefCounted
+## LES TÉMOINS DES AUTRES COUCHES (6 octobre 2026 : Jordan a vu des fentes là où deux couches se touchent) : leurs tuiles
+## entrent dans les sections partagées — tirer un bord ici les entraîne, une coupe sur un bord y est reportée. L'écran
+## les donne (`regler_les_autres_temoins`) ; on ne les dessine pas, on les modifie, et l'annulation les rend.
+var autres_temoins: Array = []
 var _photo := {}             # clé → positions au début du geste (pour rejouer, et pour Échap)
 var _touchees := {}          # clé → true : les AUTRES tuiles que le geste peut toucher
 var _propages_ici: Array = []   # les sommets de la tuile en édition qui bougent par propagation
@@ -241,8 +245,32 @@ func charger_temoin(t: RefCounted, active := 0) -> void:
 		_mm_de[c] = mmi
 	occurrence = -1
 	cle = ""
-	sections = Sections.new(t)
+	sections = Sections.new(t, autres_temoins)
 	activer(clampi(active, 0, t.occurrences.size() - 1))
+
+
+func regler_les_autres_temoins(liste: Array) -> void:
+	if liste == autres_temoins:
+		return
+	autres_temoins = liste.duplicate()
+	if temoin != null and modal == "":
+		sections = Sections.new(temoin, autres_temoins)
+
+
+## Une tuile indexée par les sections : de ce témoin (nom nu) ou d'un autre (« @j/nom »).
+func _tuile_indexee(c: String) -> RefCounted:
+	return sections.tuile(c) if sections != null else temoin.tuiles[c]
+
+
+## Range une copie dans un lot d'annulation : dans `tuiles` pour ce témoin, dans `ailleurs` pour un autre.
+func _ranger(lot: TL.Lot, c: String, m: RefCounted) -> void:
+	if sections != null and Sections.est_d_un_autre_temoin(c):
+		var t: RefCounted = sections.temoin_de(c)
+		if not lot.ailleurs.has(t):
+			lot.ailleurs[t] = {}
+		lot.ailleurs[t][Sections.nom_de(c)] = m
+	else:
+		lot.tuiles[c] = m
 
 
 func _triangles_du_masque(chemin: String) -> PackedVector2Array:
@@ -406,7 +434,7 @@ func _preparer_le_geste() -> void:
 	maillage.sommets = _depart.duplicate()
 	if _sections_du_geste:
 		for c in _touchees:
-			temoin.tuiles[c].sommets = (_photo[c] as PackedVector3Array).duplicate()
+			_tuile_indexee(c).sommets = (_photo[c] as PackedVector3Array).duplicate()
 			_rafraichir_tuile(c)
 	var mobiles := {}
 	for i in _ids:
@@ -1074,7 +1102,7 @@ func _brider(faire: Callable) -> float:
 
 func _replie() -> bool:
 	for c in _gardes:
-		var m: RefCounted = maillage if c == cle else temoin.tuiles[c]
+		var m: RefCounted = maillage if c == cle else _tuile_indexee(c)
 		if m.replie(_gardes[c]):
 			return true
 	return false
@@ -1089,7 +1117,7 @@ func _preparer_les_gardes() -> void:
 		return
 	_gardes[cle] = maillage.gardes_de_repli(_faces_mobiles)
 	for c in _atteints:
-		var m: RefCounted = temoin.tuiles[c]
+		var m: RefCounted = _tuile_indexee(c)
 		var choix: Array = []
 		for f in m.faces.size():
 			for i in m.faces[f]:
@@ -1211,7 +1239,7 @@ func _completer_apres(avant_actif: RefCounted, nom: String) -> bool:
 	var copies := {}
 	var r: Dictionary = sections.completer(func(c: String) -> void:
 		if c != cle:
-			copies[c] = temoin.tuiles[c].copie())
+			copies[c] = _tuile_indexee(c).copie())
 	if int(r["echecs"]) > 0:
 		dit.emit(("[color=#e0603c]%s changed the shape of a tile border[/color] — the %d point(s) that meet it "
 			+ "in other tiles cannot follow, so the world will show a gap there. [i]Ctrl+Z undoes it; keep "
@@ -1223,8 +1251,8 @@ func _completer_apres(avant_actif: RefCounted, nom: String) -> bool:
 	avant.tuiles[cle] = avant_actif
 	apres.tuiles[cle] = maillage.copie()
 	for c in copies:
-		avant.tuiles[c] = copies[c]
-		apres.tuiles[c] = temoin.tuiles[c].copie()
+		_ranger(avant, c, copies[c])
+		_ranger(apres, c, _tuile_indexee(c).copie())
 		_rafraichir_tuile(c)
 	change.emit(avant, apres, nom)
 	return true
@@ -1237,10 +1265,10 @@ func _emettre_le_lot(avant_actif: RefCounted, nom: String) -> void:
 	avant.tuiles[cle] = avant_actif
 	apres.tuiles[cle] = maillage.copie()
 	for c in _touchees:
-		var a: RefCounted = temoin.tuiles[c].copie()
+		var a: RefCounted = _tuile_indexee(c).copie()
 		a.sommets = (_photo[c] as PackedVector3Array).duplicate()
-		avant.tuiles[c] = a
-		apres.tuiles[c] = temoin.tuiles[c].copie()
+		_ranger(avant, c, a)
+		_ranger(apres, c, _tuile_indexee(c).copie())
 	change.emit(avant, apres, nom)
 
 
@@ -1266,7 +1294,7 @@ func annuler() -> void:
 		maillage = _avant
 	if _sections_du_geste:
 		for c in _touchees:
-			temoin.tuiles[c].sommets = (_photo[c] as PackedVector3Array).duplicate()
+			_tuile_indexee(c).sommets = (_photo[c] as PackedVector3Array).duplicate()
 			_rafraichir_tuile(c)
 		_sections_du_geste = false
 	modal = ""
@@ -1305,7 +1333,7 @@ func boucher_les_trous(toutes: bool) -> Dictionary:
 	if sections != null:
 		sections.completer(func(c: String) -> void:
 			if not avant.has(c):
-				avant[c] = temoin.tuiles[c].copie())
+				avant[c] = _tuile_indexee(c).copie())
 		for c in avant:
 			for plan in sections.manquants(c):
 				bilan["restants"] += (sections.manquants(c)[plan] as Array).size()
@@ -1313,8 +1341,8 @@ func boucher_les_trous(toutes: bool) -> Dictionary:
 	var lot_avant := TL.Lot.new()
 	var lot_apres := TL.Lot.new()
 	for c in avant:
-		lot_avant.tuiles[c] = avant[c]
-		lot_apres.tuiles[c] = temoin.tuiles[c].copie()
+		_ranger(lot_avant, c, avant[c])
+		_ranger(lot_apres, c, _tuile_indexee(c).copie())
 		if c != cle:
 			_rafraichir_tuile(c)
 	change.emit(lot_avant, lot_apres, "Fill holes")
@@ -1333,6 +1361,41 @@ func boucher_les_trous(toutes: bool) -> Dictionary:
 ## Combien de trous dans la tuile en édition (0 hors d'édition) — pour le compteur de l'écran.
 func trous_de_la_tuile() -> int:
 	return maillage.trous() if maillage != null else 0
+
+
+## LES BORDS ENTRE COUCHES (6 octobre 2026) : combien de points de bord manquent à une face de leur classe, dans ce témoin
+## ET dans ceux des autres couches (`Sections.absences`). 0 : partout où deux couches se touchent, leurs tuiles se
+## raccordent. −1 : pas d'autre couche. ⚠ Il réindexe toutes les tuiles : l'écran ne le relit qu'après un changement.
+func ecarts_entre_couches() -> int:
+	if sections == null or autres_temoins.is_empty():
+		return -1
+	return sections.absences()
+
+
+## « Match borders » : les bords des AUTRES couches sont calés sur ceux de ce témoin (`Sections.conformer`), puis ce qui
+## manque encore est reporté partout. UN geste, une annulation pour toutes les tuiles touchées, de toutes les couches.
+## Rend le bilan du cœur (vide hors d'édition).
+func caler_les_autres_couches() -> Dictionary:
+	if temoin == null or sections == null or modal != "" or not _sculpt_trait.is_empty():
+		return {}
+	var avant := {}
+	var r: Dictionary = sections.conformer(func(c: String) -> void: avant[c] = _tuile_indexee(c).copie())
+	if avant.is_empty():
+		return r
+	var lot_avant := TL.Lot.new()
+	var lot_apres := TL.Lot.new()
+	for c in avant:
+		_ranger(lot_avant, c, avant[c])
+		_ranger(lot_apres, c, _tuile_indexee(c).copie())
+		if not Sections.est_d_un_autre_temoin(c):
+			(temoin.tuiles[c] as RefCounted).preparer_rayons()
+			_rafraichir_tuile(c)
+	if avant.has(cle):
+		maillage = temoin.tuiles[cle]
+		_vider_selection()
+	redessiner()
+	change.emit(lot_avant, lot_apres, "Match borders")
+	return r
 
 
 ## Une opération d'un coup (sans suivre la souris) : X, M, F, subdiviser, Ctrl+R au clic.
@@ -1644,14 +1707,14 @@ func _finir_le_couteau() -> void:
 	if sections != null:
 		var r: Dictionary = sections.completer(func(c: String) -> void:
 			if not avant.has(c):
-				avant[c] = temoin.tuiles[c].copie())
+				avant[c] = _tuile_indexee(c).copie())
 		echecs = int(r["echecs"])
 	var lot_avant := TL.Lot.new()
 	var lot_apres := TL.Lot.new()
 	for c in avant:
-		lot_avant.tuiles[c] = avant[c]
-		lot_apres.tuiles[c] = temoin.tuiles[c].copie()
-		(temoin.tuiles[c] as RefCounted).preparer_rayons()
+		_ranger(lot_avant, c, avant[c])
+		_ranger(lot_apres, c, _tuile_indexee(c).copie())
+		(_tuile_indexee(c) as RefCounted).preparer_rayons()
 		_rafraichir_tuile(c)
 	maillage = temoin.tuiles[cle]
 	redessiner()
@@ -2192,13 +2255,13 @@ func _coup_de_sculpt(p: Vector2, ctrl: bool, maj: bool) -> void:
 	for c in atteints:
 		if c == cle:
 			continue
-		autres[c] = (temoin.tuiles[c].sommets as PackedVector3Array).duplicate()
-		gardes[c] = _gardes_du_trait(c, temoin.tuiles[c], atteints[c])
+		autres[c] = (_tuile_indexee(c).sommets as PackedVector3Array).duplicate()
+		gardes[c] = _gardes_du_trait(c, _tuile_indexee(c), atteints[c])
 	var ids_du_trait := _ids
 	var appliquer := func(s: float) -> void:
 		maillage.sommets = avant_coup.duplicate()
 		for c in autres:
-			temoin.tuiles[c].sommets = (autres[c] as PackedVector3Array).duplicate()
+			_tuile_indexee(c).sommets = (autres[c] as PackedVector3Array).duplicate()
 		for j in d:
 			maillage.sommets[j] += (d[j] as Vector3) * s
 		_ids = d.keys()
@@ -2206,7 +2269,7 @@ func _coup_de_sculpt(p: Vector2, ctrl: bool, maj: bool) -> void:
 		_ids = ids_du_trait
 	var replie := func() -> bool:
 		for c in gardes:
-			var m: RefCounted = maillage if c == cle else temoin.tuiles[c]
+			var m: RefCounted = maillage if c == cle else _tuile_indexee(c)
 			if m.replie(gardes[c]):
 				return true
 		return false

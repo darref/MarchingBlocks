@@ -32,6 +32,7 @@ func _initialize() -> void:
 	_la_completion(t)
 	var t2: RefCounted = TL.depuis_le_temoin_calcule()
 	_boucher_les_trous(t2, Sections.new(t2))
+	_entre_deux_temoins(TL.depuis_le_temoin_calcule())
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -303,6 +304,160 @@ func _la_completion(t0: RefCounted) -> void:
 	var r3: Dictionary = s3.completer()
 	_dire(r3["echecs"] == 0 and _sans_partenaire(t3) == 0 and s3.absences() == 0,
 		"un vrai loop cut sur un bord, complété : %d coupe(s) reportée(s), tout joint a son partenaire" % r3["coupes"])
+
+
+## ── ENTRE DEUX COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues ») ─────────────────────────────
+## Deux couches = deux témoins ; dans le monde, une tuile de A touche une tuile de B. L'AUTORITÉ ne passe pas par
+## `sections.gd` : `_sans_partenaire_entre(A, B)` pose les occurrences des DEUX témoins (le même modèle, donc les mêmes
+## sommets), et compte, à chaque joint, les sommets d'une tuile de A sans partenaire exact dans la tuile de B d'en face —
+## et l'inverse. C'est la fente du monde à la frontière de deux couches.
+func _entre_deux_temoins(t0: RefCounted) -> void:
+	var cle := "mb_plaque_b2h2_dehors"
+	# CONTRÔLE : A sculpté sur un bord, propagé DANS A SEULEMENT (l'appli d'avant) — A reste étanche, la frontière s'ouvre.
+	var a1: RefCounted = t0.copie()
+	var b1: RefCounted = t0.copie()
+	var s1 = Sections.new(a1)
+	var i0: int = (s1.bords[cle] as Dictionary).keys()[0]
+	var d0: Vector3 = s1.projeter(cle, i0, Vector3(0.06, 0.05, -0.04))
+	s1.deplacer(s1.propager(cle, {i0: d0}))
+	var fente: int = _sans_partenaire_entre(a1, b1)
+	_dire(_sans_partenaire(a1) == 0 and fente > 0,
+		"contrôle : un bord de A tiré dans A seul — A reste étanche, la frontière A | B laisse %d sommet(s) sans partenaire" % fente)
+	_dire(Sections.new(a1, [b1]).absences() > 0, "et les sections des deux témoins, indexées ensemble, le voient")
+
+	# LA PROPAGATION entre témoins : le même geste entraîne B.
+	var a2: RefCounted = t0.copie()
+	var b2: RefCounted = t0.copie()
+	var s2 = Sections.new(a2, [b2])
+	var r2: Dictionary = s2.propager(cle, {i0: s2.projeter(cle, i0, Vector3(0.06, 0.05, -0.04))})
+	var dans_b := 0
+	for c in r2:
+		if Sections.est_d_un_autre_temoin(c):
+			dans_b += (r2[c] as Dictionary).size()
+	s2.deplacer(r2)
+	_dire(dans_b > 0 and s2.conflits == 0, "propagé à travers les témoins : %d sommet(s) de B suivent, 0 conflit" % dans_b)
+	_dire(_sans_partenaire(a2) == 0 and _sans_partenaire(b2) == 0 and _sans_partenaire_entre(a2, b2) == 0,
+		"A, B et la frontière A | B restent étanches (%d, %d, %d)" % [_sans_partenaire(a2), _sans_partenaire(b2),
+			_sans_partenaire_entre(a2, b2)])
+
+	# LA COMPLÉTION entre témoins : une coupe sur un bord de A est reportée dans B.
+	var a3: RefCounted = t0.copie()
+	var b3: RefCounted = t0.copie()
+	var s3 = Sections.new(a3, [b3])
+	var e := _arete_de_bord(s3, a3, "paroi")
+	var m3: RefCounted = a3.tuiles[e["cle"]]
+	# ⚠ ENTRE DEUX CRANS DE L'INDEX (au dix-millième, à 0,47 cran) : un report posé au cran au lieu de la position exacte
+	# en serait à 4,7·10⁻⁵, et doit se voir.
+	var pa3: Vector3 = m3.sommets[e["a"]]
+	var pb3: Vector3 = m3.sommets[e["b"]]
+	var k3: int = (pb3 - pa3).abs().max_axis_index()
+	var x3: float = pa3[k3] + 0.37 * (pb3[k3] - pa3[k3])
+	x3 = floorf(x3 * 10000.0) / 10000.0 + 0.000047
+	m3._inserer_sur_arete(Vector2i(mini(e["a"], e["b"]), maxi(e["a"], e["b"])), pa3.lerp(pb3, (x3 - pa3[k3]) / (pb3[k3] - pa3[k3])))
+	var avant3: int = _sans_partenaire_entre(a3, b3)
+	var r3: Dictionary = s3.completer()
+	_dire(avant3 > 0 and r3["echecs"] == 0 and _sans_partenaire_entre(a3, b3) == 0 and _sans_partenaire(b3) == 0,
+		"une coupe sur un bord de A (%d sans partenaire à la frontière) est reportée dans B : %d coupe(s), frontière étanche" % [avant3, r3["coupes"]])
+
+	# CALER LES BORDS : deux témoins DÉJÀ divergents (A sculpté sur ses bords, B coupé ailleurs sur les siens).
+	var a4: RefCounted = t0.copie()
+	var b4: RefCounted = t0.copie()
+	var sa = Sections.new(a4)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 610
+	var cles_a: Array = sa.bords.keys()
+	cles_a.sort()
+	for n in 12:
+		sa.indexer()
+		var c: String = cles_a[rng.randi() % cles_a.size()]
+		var ids: Array = (sa.bords[c] as Dictionary).keys()
+		var i: int = ids[rng.randi() % ids.size()]
+		var d: Vector3 = sa.projeter(c, i, Vector3(rng.randf_range(-0.05, 0.05), rng.randf_range(-0.05, 0.05), rng.randf_range(-0.05, 0.05)))
+		sa.deplacer(sa.propager(c, {i: d}))
+	var sb = Sections.new(b4)
+	var eb := _arete_de_bord(sb, b4, "symetrique")
+	var mb: RefCounted = b4.tuiles[eb["cle"]]
+	mb._inserer_sur_arete(Vector2i(mini(eb["a"], eb["b"]), maxi(eb["a"], eb["b"])), (mb.sommets[eb["a"]] + mb.sommets[eb["b"]]) * 0.5)
+	sb.completer()
+	var avant4: int = _sans_partenaire_entre(a4, b4)
+	_dire(avant4 > 0 and _sans_partenaire(a4) == 0 and _sans_partenaire(b4) == 0,
+		"deux témoins divergents, chacun étanche : %d sommet(s) sans partenaire à leur frontière" % avant4)
+	var photo_a := {}
+	for c in a4.tuiles:
+		photo_a[c] = (a4.tuiles[c].sommets as PackedVector3Array).duplicate()
+	var sauvees: Array = []
+	var s4 = Sections.new(a4, [b4])
+	var r4: Dictionary = s4.conformer(func(c: String) -> void: sauvees.append(c))
+	# A fait foi : ses sommets restent où ils étaient. Il peut RECEVOIR des points (le report des coupes de B, posés SUR
+	# ses arêtes de bord) — sa forme ne change pas.
+	var a_bouge := 0
+	for c in a4.tuiles:
+		for j in (photo_a[c] as PackedVector3Array).size():
+			if (a4.tuiles[c].sommets[j] as Vector3).distance_to(photo_a[c][j]) > 1e-9:
+				a_bouge += 1
+				break
+	_dire(_sans_partenaire_entre(a4, b4) == 0 and _sans_partenaire(b4) == 0 and _sans_partenaire(a4) == 0,
+		"calés sur A : la frontière A | B est étanche (%d), B aussi (%d) — %d déplacé(s), %d inséré(s), %d coupe(s)"
+		% [_sans_partenaire_entre(a4, b4), _sans_partenaire(b4), r4["deplaces"], r4["inseres"], r4["coupes"]])
+	_dire(int(r4["restants"]) == 0 and int(r4["sur_arete"]) == 0 and int(r4["non_inseres"]) == 0 and int(r4["replies"]) == 0,
+		"rien n'est laissé : %s" % [r4])
+	_dire(a_bouge == 0, "le témoin ÉDITÉ fait foi : aucune tuile de A n'a bougé (%d)" % a_bouge)
+	_dire(sauvees.size() == (r4["touchees"] as Array).size() and sauvees.any(func(c): return Sections.est_d_un_autre_temoin(c)),
+		"chaque tuile calée est sauvée une fois avant d'être touchée (%d)" % sauvees.size())
+	_dire(_retournes(b4) == 0, "et aucune face de B ne se replie (%d)" % _retournes(b4))
+	var r5: Dictionary = Sections.new(a4, [b4]).conformer()
+	_dire(int(r5["deplaces"]) + int(r5["inseres"]) + int(r5["coupes"]) == 0, "caler deux fois ne fait rien la seconde (%s)" % [r5])
+
+
+## Les sommets de joint sans partenaire À LA FRONTIÈRE de deux couches : la tuile de A en s, celle de B en s ± e (et
+## l'inverse). Sans `sections.gd`.
+func _sans_partenaire_entre(ta_: RefCounted, tb_: RefCounted) -> int:
+	return _sans_partenaire_de(ta_, tb_) + _sans_partenaire_de(tb_, ta_)
+
+
+func _sans_partenaire_de(ta_: RefCounted, tb_: RefCounted) -> int:
+	var occ_a := {}
+	for o in ta_.occurrences:
+		occ_a[o["sommet"]] = o
+	var occ_b := {}
+	for o in tb_.occurrences:
+		occ_b[o["sommet"]] = o
+	var n := 0
+	for s in occ_a:
+		var oa: Dictionary = occ_a[s]
+		for axe in 3:
+			for sens in [-1, 1]:
+				var e := Vector3i.ZERO
+				e[axe] = sens
+				if not occ_b.has(s + e):
+					continue
+				var ob: Dictionary = occ_b[s + e]
+				var tbm: RefCounted = tb_.tuiles[ob["cle"]]
+				# ⚠ UN PARTENAIRE À MOINS DE 10⁻⁵, PAS UN ARRONDI AU DIX-MILLIÈME : deux points à 3·10⁻⁵ tombent souvent dans le
+				# même cran, et un report posé au cran au lieu de sa position exacte passait inaperçu (mutation d'abord muette).
+				var index_b := {}
+				for j in tbm.sommets.size():
+					var pb: Vector3 = (ob["pose"] as Transform3D) * tbm.sommets[j]
+					var cb := Vector3i((pb * 1000.0).floor())
+					if not index_b.has(cb):
+						index_b[cb] = []
+					index_b[cb].append(pb)
+				var tam: RefCounted = ta_.tuiles[oa["cle"]]
+				var plan: float = float(s[axe]) + 1.0 + 0.5 * sens
+				for i in tam.sommets.size():
+					var pw: Vector3 = (oa["pose"] as Transform3D) * tam.sommets[i]
+					if absf(pw[axe] - plan) > 0.0005:
+						continue
+					var ca := Vector3i((pw * 1000.0).floor())
+					var trouve := false
+					for dx in [-1, 0, 1]:
+						for dy in [-1, 0, 1]:
+							for dz in [-1, 0, 1]:
+								for pb in index_b.get(ca + Vector3i(dx, dy, dz), []):
+									trouve = trouve or (pb as Vector3).distance_to(pw) < 1e-5
+					if not trouve:
+						n += 1
+	return n
 
 
 ## Les triangles dont la normale s'oppose à celle de leur face (Newell) : une face repliée, donc un trou.

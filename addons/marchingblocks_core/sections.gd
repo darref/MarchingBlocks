@@ -33,10 +33,21 @@ static var _groupes: Array = []   # indice → [cartes] (le groupe de symétries
 static var _noeuds_de_classe: Array = []
 
 var temoin: RefCounted
+## LES AUTRES TÉMOINS DU PROJET (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues ») : un témoin par couche,
+## et deux couches se touchent dans le monde — une tuile de A face à une tuile de B. Leurs sections doivent donc être les
+## MÊMES : les classes ne dépendent que du modèle, elles valent pour tous les témoins. Leurs tuiles entrent dans l'index
+## sous un nom PRÉFIXÉ « @<j>/<tuile> » (j ≥ 1, rang dans `autres`) ; celles de `temoin` gardent leur nom nu, et un
+## appelant qui n'édite qu'un témoin ne voit rien changer.
+var autres: Array = []
 ## classe → {point canonique (Vector2i) → [{cle, i, noeud, g}]}, g ramenant le point du sommet au canonique.
 var points: Array = []
 ## clé → {i → [{noeud, classe, canon, g, axe}]} : les faces (une, ou deux sur une arête) où le sommet est posé.
 var bords := {}
+## classe → {point racine quantifié (Vector2i) → sa position EXACTE (Vector2)}, orbite comprise : le premier sommet
+## indexé qui le porte (ceux de `temoin` d'abord). ⚠ UN POINT REPORTÉ VA À CETTE POSITION, PAS AU CRAN DE LA GRILLE : un
+## sommet sculpté est entre deux crans, et son report posé au cran en serait à 7·10⁻⁵ — assez pour qu'un joint ne
+## coïncide plus (vu en calant deux témoins, 6 octobre 2026).
+var exacts: Array = []
 ## Les sommets atteints par deux chemins qui ne s'accordent pas, au dernier `propager` (0 attendu).
 var conflits := 0
 
@@ -120,21 +131,56 @@ static func noeud(cle: String, axe: int, signe: int) -> String:
 
 # ── LES POINTS : l'index de la géométrie ──────────────────────────────────────────────────────────
 
-func _init(t: RefCounted = null) -> void:
+func _init(t: RefCounted = null, autres_temoins: Array = []) -> void:
 	_preparer()
+	autres = autres_temoins.filter(func(x): return x != null and x != t)
 	if t != null:
 		temoin = t
 		indexer()
 
 
+# ── LES TUILES DE TOUS LES TÉMOINS ────────────────────────────────────────────────────────────────
+
+## Tous les noms indexés : ceux de `temoin`, nus, puis ceux des autres témoins, préfixés.
+func cles() -> Array:
+	var sortie: Array = temoin.tuiles.keys()
+	for j in autres.size():
+		for nom in autres[j].tuiles:
+			sortie.append("@%d/%s" % [j + 1, nom])
+	return sortie
+
+
+## Le témoin d'un nom indexé (`temoin`, ou l'un des `autres`).
+func temoin_de(cle: String) -> RefCounted:
+	if not cle.begins_with("@"):
+		return temoin
+	return autres[int(cle.substr(1, cle.find("/") - 1)) - 1]
+
+
+## Le nom de la tuile DANS son témoin (le préfixe ôté).
+static func nom_de(cle: String) -> String:
+	return cle.substr(cle.find("/") + 1) if cle.begins_with("@") else cle
+
+
+static func est_d_un_autre_temoin(cle: String) -> bool:
+	return cle.begins_with("@")
+
+
+## La tuile d'un nom indexé, lue À CHAQUE FOIS dans son témoin (un geste ou une annulation y remplace des tuiles).
+func tuile(cle: String) -> RefCounted:
+	return temoin_de(cle).tuiles[nom_de(cle)]
+
+
 ## Rebâtit l'index des sommets de bord (après un changement de géométrie).
 func indexer() -> void:
 	points = []
+	exacts = []
 	for k in _groupes.size():
 		points.append({})
+		exacts.append({})
 	bords = {}
-	for cle in temoin.tuiles:
-		var m: RefCounted = temoin.tuiles[cle]
+	for cle in cles():
+		var m: RefCounted = tuile(cle)
 		var par_sommet := {}
 		for i in m.sommets.size():
 			var faces: Array = _faces_de(cle, m.sommets[i])
@@ -147,6 +193,12 @@ func indexer() -> void:
 					liste[f["canon"]] = []
 				liste[f["canon"]].append({"cle": cle, "i": i, "noeud": f["noeud"], "g": f["g"], "axe": f["axe"],
 					"rt": f["rt"]})
+				var ex: Dictionary = exacts[f["classe"]]
+				if not ex.has(f["q"]):
+					for h in _groupes[f["classe"]]:
+						var r: Vector2i = appliquer_i(h, f["q"])
+						if not ex.has(r):
+							ex[r] = appliquer(h, f["x"])
 		bords[cle] = par_sommet
 
 
@@ -157,7 +209,7 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 		for signe in [-1, 1]:
 			if absf(p[axe] - 0.5 * signe) >= EPS:
 				continue
-			var n := noeud(MB.cle_de_tuile(cle), axe, signe)
+			var n := noeud(MB.cle_de_tuile(nom_de(cle)), axe, signe)
 			if not _classe_de.has(n):
 				continue
 			var k: int = _classe_de[n]
@@ -173,7 +225,7 @@ func _faces_de(cle: String, p: Vector3) -> Array:
 			# recomposant à chaque visite — 86 ms pour 328 sommets, un G qui suivait la souris à 10 images/s.
 			var vc: Array = compose(g, _carte_de[n])
 			sortie.append({"noeud": n, "classe": k, "canon": canon, "g": g, "axe": axe, "vc": vc, "rt": inverse(vc),
-				"q": q})
+				"q": q, "x": appliquer(_carte_de[n], _dans_la_face(p, axe))})
 	return sortie
 
 
@@ -205,7 +257,7 @@ func completer(sauver := Callable()) -> Dictionary:
 					if presents.has(r):
 						continue
 					var q3: Vector3 = _point_de_la_face(n, axe, signe, r)
-					var e: Vector2i = _arete_de_bord_qui_contient(temoin.tuiles[cle], axe, signe, q3)
+					var e: Vector2i = _arete_de_bord_qui_contient(tuile(cle), axe, signe, q3)
 					if e.x < 0:
 						echecs += 1
 						continue
@@ -213,7 +265,7 @@ func completer(sauver := Callable()) -> Dictionary:
 						touchees[cle] = true
 						if sauver.is_valid():
 							sauver.call(cle)
-					if temoin.tuiles[cle]._inserer_sur_arete(e, q3) >= 0:
+					if tuile(cle)._inserer_sur_arete(e, q3) >= 0:
 						coupes += 1
 						presents[r] = true
 					else:
@@ -229,7 +281,7 @@ func completer(sauver := Callable()) -> Dictionary:
 func manquants(cle: String) -> Dictionary:
 	indexer()
 	var racines := _racines()
-	var modele: String = MB.cle_de_tuile(cle)
+	var modele: String = MB.cle_de_tuile(nom_de(cle))
 	var sortie := {}
 	for k in points.size():
 		var orbite := _orbite(k)
@@ -255,8 +307,8 @@ func manquants(cle: String) -> Dictionary:
 ## qui doit avoir tous les points de la classe. Les points présents se comptent donc par (tuile, nœud).
 func _tuiles_de(modele: String) -> Array:
 	var sortie: Array = []
-	for cle in temoin.tuiles:
-		if MB.cle_de_tuile(cle) == modele:
+	for cle in cles():
+		if MB.cle_de_tuile(nom_de(cle)) == modele:
 			sortie.append(cle)
 	return sortie
 
@@ -284,7 +336,8 @@ func _orbite(k: int) -> Dictionary:
 
 ## Le point racine `r` de la classe, ramené sur la face (axe, signe) du nœud `n`, dans le repère de la tuile.
 func _point_de_la_face(n: String, axe: int, signe: int, r: Vector2i) -> Vector3:
-	var q2: Vector2 = appliquer(inverse(_carte_de[n]), Vector2(r) / QUANTUM)
+	var x: Vector2 = (exacts[_classe_de[n]] as Dictionary).get(r, Vector2(r) / QUANTUM) if not exacts.is_empty() else Vector2(r) / QUANTUM
+	var q2: Vector2 = appliquer(inverse(_carte_de[n]), x)
 	var q3: Vector3 = _hors_de_la_face(Vector3.ZERO, axe, q2)
 	q3[axe] = 0.5 * signe
 	return q3
@@ -327,6 +380,227 @@ func absences() -> int:
 					if not presents.has(r):
 						n_abs += 1
 	return n_abs
+
+
+## ── CALER LES BORDS (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues, fais comme tu as dit pour les éviter »)
+##
+## Deux couches dont les témoins ont été sculptés chacun de leur côté n'ont plus les mêmes sections : là où le monde les
+## met face à face, une fente. La propagation empêche les écarts NOUVEAUX ; ceci rattrape ceux qui existent déjà.
+## Dans chaque classe, la section qui fait foi est celle du témoin qu'on ÉDITE (`temoin` : la plus portée parmi ses
+## faces) ; ailleurs, chaque face qui en diffère est calée dessus :
+##   1. chaque point de référence MANQUANT prend le sommet INTRUS le plus proche (par paires, de la plus courte à la plus
+##      longue, jusqu'à `RAYON_DE_CALAGE`) : les coins de la section reviennent ;
+##   2. les autres intrus GLISSENT DANS LEUR PLAN sur la section de référence (ses segments, orbite comprise) ;
+##   3. un manquant qu'aucun intrus n'a pris est inséré sur l'arête de bord la plus proche de sa face, puis posé exactement
+##      (au-delà de `RAYON_DE_CALAGE` : DIT, jamais inventé) ;
+##   puis `completer` reporte l'orbite.
+## ⚠ Un sommet posé sur une ARÊTE de case (deux plans) n'est déplacé que si sa cible reste sur ses deux plans ; sinon il
+## est compté (`sur_arete`) — il laissera une fente. ⚠ Ça défait, SUR LES BORDS SEULEMENT, la sculpture des faces calées.
+## Repris de `DEV_TOOLS/reparer_temoins.gd` (`_conformer`, la majorité d'un seul témoin) ; une face est désormais une
+## (TUILE, nœud) — un nœud nomme la face d'une CLÉ, que portent ses variantes et chaque témoin.
+## `sauver` est appelé UNE fois par tuile, AVANT sa première modification. Rend {deplaces, inseres, non_inseres,
+## sur_arete, replies, touchees: [clés], coupes, echecs, restants (les absences après coup : 0 attendu)}.
+const RAYON_DE_CALAGE := 0.1
+
+
+## ⚠ LES DÉPLACEMENTS D'ABORD, LES INSERTIONS ENSUITE : une garde de repli désigne ses triangles par leur RANG dans la
+## face ; un point inséré dans le contour les décale, et la garde crierait au repli sur une face intacte (vu : 5
+## « replis » qu'aucun triangle retourné ne confirmait). Les replis se comptent donc entre les deux.
+func conformer(sauver := Callable()) -> Dictionary:
+	var bilan := {"deplaces": 0, "inseres": 0, "non_inseres": 0, "sur_arete": 0, "replies": 0}
+	var sauvees := {}
+	var repliees := {}
+	for passe in 2:
+		indexer()
+		var avant := int(bilan["deplaces"]) + int(bilan["inseres"])
+		bilan["non_inseres"] = 0
+		bilan["sur_arete"] = 0
+		var gardes := {}
+		var a_inserer: Array = []
+		for k in points.size():
+			_caler_la_classe(k, bilan, gardes, sauvees, sauver, a_inserer)
+		for cle in gardes:
+			if tuile(cle).replie(gardes[cle]):
+				repliees[cle] = true
+		for ai in a_inserer:
+			_inserer_le_manquant(ai, bilan, sauvees, sauver)
+		if int(bilan["deplaces"]) + int(bilan["inseres"]) == avant:
+			break
+	var r := completer(func(c: String) -> void: _sauver_une_fois(c, sauvees, sauver))
+	bilan["replies"] = repliees.size()
+	bilan["touchees"] = sauvees.keys()
+	bilan["coupes"] = r["coupes"]
+	bilan["echecs"] = r["echecs"]
+	bilan["restants"] = absences()
+	return bilan
+
+
+func _sauver_une_fois(cle: String, sauvees: Dictionary, sauver: Callable) -> void:
+	if sauvees.has(cle):
+		return
+	sauvees[cle] = true
+	if sauver.is_valid():
+		sauver.call(cle)
+
+
+func _garder(cle: String, gardes: Dictionary, sauvees: Dictionary, sauver: Callable) -> void:
+	_sauver_une_fois(cle, sauvees, sauver)
+	if gardes.has(cle):
+		return
+	var m: RefCounted = tuile(cle)
+	gardes[cle] = m.gardes_de_repli(range(m.faces.size()))
+
+
+func _caler_la_classe(k: int, bilan: Dictionary, gardes: Dictionary, sauvees: Dictionary, sauver: Callable,
+		a_inserer: Array) -> void:
+	# Les faces de la classe : « tuile#nœud » → {cle, n, q: {point racine: true}, membres: [{i, q}]}.
+	var faces := {}
+	for cle in bords:
+		for i in bords[cle]:
+			for fb in bords[cle][i]:
+				if fb["classe"] != k:
+					continue
+				var f: String = cle + "#" + fb["noeud"]
+				if not faces.has(f):
+					faces[f] = {"cle": cle, "n": fb["noeud"], "q": {}, "membres": []}
+				faces[f]["q"][fb["q"]] = true
+				faces[f]["membres"].append({"i": i, "q": fb["q"]})
+	for f in faces:
+		var qs: Array = (faces[f]["q"] as Dictionary).keys()
+		qs.sort()
+		faces[f]["sig"] = str(qs)
+	# La référence : la signature la plus portée parmi les faces du témoin ÉDITÉ (de tous, s'il n'en a aucune ici).
+	var ref := ""
+	for seulement_le_mien in [true, false]:
+		var signatures := {}
+		for f in faces:
+			if seulement_le_mien and est_d_un_autre_temoin(faces[f]["cle"]):
+				continue
+			signatures[faces[f]["sig"]] = int(signatures.get(faces[f]["sig"], 0)) + 1
+		var meilleure := -1
+		var noms: Array = faces.keys()
+		noms.sort()
+		for f in noms:
+			if signatures.has(faces[f]["sig"]) and int(signatures[faces[f]["sig"]]) > meilleure:
+				meilleure = signatures[faces[f]["sig"]]
+				ref = f
+		if ref != "":
+			break
+	if ref == "":
+		return
+	var face_ref: Dictionary = faces[ref]
+	var maj := {}
+	for q in face_ref["q"]:
+		for h in _groupes[k]:
+			maj[appliquer_i(h, q)] = true
+	var p_ref: PackedStringArray = String(face_ref["n"]).split("|")
+	var m_ref: RefCounted = tuile(face_ref["cle"])
+	var axe_r := int(p_ref[1])
+	var plan_r := 0.5 * int(p_ref[2])
+	var segments: Array = []
+	for fr in m_ref.faces:
+		var face: PackedInt32Array = fr
+		for j in face.size():
+			var a: Vector3 = m_ref.sommets[face[j]]
+			var b: Vector3 = m_ref.sommets[face[(j + 1) % face.size()]]
+			if absf(a[axe_r] - plan_r) < EPS and absf(b[axe_r] - plan_r) < EPS:
+				var qa: Vector2 = appliquer(_carte_de[face_ref["n"]], _dans_la_face(a, axe_r))
+				var qb: Vector2 = appliquer(_carte_de[face_ref["n"]], _dans_la_face(b, axe_r))
+				for h in _groupes[k]:
+					segments.append([appliquer(h, qa), appliquer(h, qb)])
+	for f in faces:
+		var fd: Dictionary = faces[f]
+		var cle: String = fd["cle"]
+		var n: String = fd["n"]
+		var presents: Dictionary = fd["q"]
+		var intrus: Array = (fd["membres"] as Array).filter(func(e): return not maj.has(e["q"]))
+		var manquants: Array = maj.keys().filter(func(q): return not presents.has(q))
+		if intrus.is_empty() and manquants.is_empty():
+			continue
+		var axe := int(String(n).split("|")[1])
+		var signe := int(String(n).split("|")[2])
+		var cibles := {}   # indice dans intrus → point racine (Vector2)
+		var paires: Array = []
+		for mq in manquants:
+			for j in intrus.size():
+				paires.append([Vector2(intrus[j]["q"]).distance_to(Vector2(mq)) / QUANTUM, mq, j])
+		paires.sort_custom(func(x, y): return x[0] < y[0] or (x[0] == y[0] and str(x[1]) < str(y[1])))
+		var pris := {}
+		for pr in paires:
+			if pr[0] > RAYON_DE_CALAGE or pris.has(pr[1]) or cibles.has(pr[2]):
+				continue
+			pris[pr[1]] = true
+			cibles[pr[2]] = (exacts[k] as Dictionary).get(pr[1], Vector2(pr[1]) / QUANTUM)
+		for j in intrus.size():
+			if cibles.has(j):
+				continue
+			var q: Vector2 = Vector2(intrus[j]["q"]) / QUANTUM
+			var d_min := INF
+			for sg in segments:
+				var c: Vector2 = Geometry2D.get_closest_point_to_segment(q, sg[0], sg[1])
+				if c.distance_to(q) < d_min:
+					d_min = c.distance_to(q)
+					cibles[j] = c
+		var m: RefCounted = tuile(cle)
+		for j in cibles:
+			var e: Dictionary = intrus[j]
+			var v: Vector3 = m.sommets[e["i"]]
+			var cible: Vector3 = _hors_de_la_face(v, axe, appliquer(inverse(_carte_de[n]), cibles[j]))
+			cible[axe] = 0.5 * signe
+			if not _reste_sur_ses_plans(v, cible, axe):
+				bilan["sur_arete"] += 1
+				continue
+			if cible.distance_to(v) < 1e-6:
+				continue
+			_garder(cle, gardes, sauvees, sauver)
+			m = tuile(cle)
+			m.sommets[e["i"]] = cible
+			bilan["deplaces"] += 1
+		for mq in manquants:
+			if not pris.has(mq):
+				a_inserer.append([cle, n, axe, signe, _point_de_la_face(n, axe, signe, mq)])
+
+
+func _inserer_le_manquant(ai: Array, bilan: Dictionary, sauvees: Dictionary, sauver: Callable) -> void:
+	var cle: String = ai[0]
+	var axe: int = ai[2]
+	var signe: int = ai[3]
+	var cible3: Vector3 = ai[4]
+	var m: RefCounted = tuile(cle)
+	var meilleure := Vector2i(-1, -1)
+	var d_min := INF
+	var sur := Vector3.ZERO
+	for fr in m.faces:
+		var face: PackedInt32Array = fr
+		for j in face.size():
+			var va: Vector3 = m.sommets[face[j]]
+			var vb: Vector3 = m.sommets[face[(j + 1) % face.size()]]
+			if absf(va[axe] - 0.5 * signe) >= EPS or absf(vb[axe] - 0.5 * signe) >= EPS:
+				continue
+			var c3: Vector3 = Geometry3D.get_closest_point_to_segment(cible3, va, vb)
+			if c3.distance_to(cible3) < d_min and c3.distance_to(va) > 1e-4 and c3.distance_to(vb) > 1e-4:
+				d_min = c3.distance_to(cible3)
+				meilleure = m.arete(face[j], face[(j + 1) % face.size()])
+				sur = c3
+	if meilleure.x < 0 or d_min > RAYON_DE_CALAGE:
+		bilan["non_inseres"] += 1
+		return
+	_sauver_une_fois(cle, sauvees, sauver)
+	m = tuile(cle)
+	var neuf: int = m._inserer_sur_arete(meilleure, sur)
+	if neuf < 0:
+		bilan["non_inseres"] += 1
+		return
+	m.sommets[neuf] = cible3
+	bilan["inseres"] += 1
+
+
+## Un sommet posé sur d'autres plans de coupe que `axe` (une arête de case) ne peut aller qu'à une cible restée dessus.
+static func _reste_sur_ses_plans(v: Vector3, cible: Vector3, axe: int) -> bool:
+	for a in 3:
+		if a != axe and absf(absf(v[a]) - 0.5) < EPS and absf(cible[a] - v[a]) >= EPS:
+			return false
+	return true
 
 
 ## Le sommet `i` de la tuile `cle` est-il un sommet de bord (posé sur une face qui a une classe) ?
@@ -436,7 +710,7 @@ func _etendre(sortie: Dictionary, file: Array, faits: Dictionary) -> void:
 ## ⚠ Depuis le départ, jamais cumulé : un geste qui suit la souris rejoue à chaque mouvement.
 func deplacer(deltas: Dictionary, depart: Dictionary = {}) -> void:
 	for cle in deltas:
-		var m: RefCounted = temoin.tuiles[cle]
+		var m: RefCounted = tuile(cle)
 		var base: PackedVector3Array = depart.get(cle, m.sommets)
 		for i in deltas[cle]:
 			m.sommets[i] = base[i] + (deltas[cle][i] as Vector3)
@@ -445,8 +719,8 @@ func deplacer(deltas: Dictionary, depart: Dictionary = {}) -> void:
 ## Les positions de toutes les tuiles, pour `deplacer` (le départ d'un geste).
 func photo() -> Dictionary:
 	var sortie := {}
-	for cle in temoin.tuiles:
-		sortie[cle] = (temoin.tuiles[cle].sommets as PackedVector3Array).duplicate()
+	for cle in cles():
+		sortie[cle] = (tuile(cle).sommets as PackedVector3Array).duplicate()
 	return sortie
 
 

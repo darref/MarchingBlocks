@@ -343,6 +343,7 @@ func _regler_fenetre() -> void:
 func _process(delta: float) -> void:
 	_suivre_le_geste()
 	_dire_les_trous()
+	_dire_les_ecarts()
 	if _atelier == "witness":
 		_variantes.dire_temoin()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
@@ -3056,6 +3057,16 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Fill holes · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
 			func() -> void: _boucher_les_trous(true), "remplir"),
 	], 2))
+	# LES BORDS ENTRE COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues ») : deux couches se touchent
+	# dans le monde ; leurs témoins doivent avoir les mêmes bords. Les gestes les tiennent ensemble ; ce bouton rattrape ce
+	# qui diverge déjà (un projet d'avant, un témoin revenu de Blender, une couche neuve sur le témoin calculé).
+	_ecarts_texte = _texte("", 11, Palette.GRIS)
+	mesh.contenu.add_child(_ecarts_texte)
+	_bouton_caler = _bouton("Match other layers to this one", "The borders of the other layers' witnesses are moved onto "
+		+ "this witness's borders, so that where two layers meet in the world their tiles join without a gap. Only the "
+		+ "border vertices of the other layers move (their sculpture inside the tile stays). One Ctrl+Z.",
+		_caler_les_autres_couches, "relier")
+	mesh.contenu.add_child(_bouton_caler)
 
 	_variantes.batir_temoin(pile)
 
@@ -3785,6 +3796,7 @@ func _regler_edition(oui: bool) -> void:
 		# ⚠ LE TÉMOIN DE LA COUCHE ACTIVE (Jordan, 30 septembre 2026) : chaque couche a le sien.
 		var t: RefCounted = _temoin_de(_couches[_active])
 		_modeleur.dossier_toiles = _chemin_temoin_de(_couches[_active]).get_basename() + "_images"
+		_donner_les_autres_temoins()
 		if _modeleur.temoin != t:
 			_modeleur.charger_temoin(t, _occurrence_de_depart(t))
 			_redire_les_materiaux()
@@ -3816,6 +3828,55 @@ func _occurrence_de_depart(t: RefCounted) -> int:
 
 var _trous_texte: Label
 var _trous_lus_a := 0
+
+
+var _ecarts_texte: Label
+var _bouton_caler: Button
+## Le compte des bords entre couches est périmé. ⚠ MESURÉ (6 octobre 2026) : ~55 ms par couche (il réindexe tous les
+## témoins), 166 ms avec trois — trop pour le relire après chaque geste. Les gestes gardent les bords ensemble : il n'est
+## relu qu'à l'entrée en édition et au changement de couche (`_donner_les_autres_temoins`), après « Match », et après une
+## annulation qui a touché d'autres couches.
+var _ecarts_perimes := true
+var _ecarts_lus_a := -100000
+
+
+func _caler_les_autres_couches() -> void:
+	_regler_edition(true)
+	var r: Dictionary = _modeleur.caler_les_autres_couches()
+	_ecarts_perimes = true
+	if r.is_empty():
+		return
+	var touchees: Array = r.get("touchees", [])
+	if touchees.is_empty():
+		_dire("[i]The other layers already have the same borders as this one.[/i]")
+		return
+	var couches := {}
+	for c in touchees:
+		couches[str(c).get_slice("/", 0) if str(c).begins_with("@") else "ici"] = true
+	var reste := int(r["restants"]) + int(r["sur_arete"]) + int(r["non_inseres"])
+	_dire(("[b]Borders matched[/b] — %d vertex(es) moved, %d added, in %d tile(s) of %d other layer(s). %s[i]Ctrl+Z "
+		+ "undoes it. The world follows when you open World.[/i]") % [int(r["deplaces"]),
+		int(r["inseres"]) + int(r["coupes"]), touchees.size(), couches.size() - (1 if couches.has("ici") else 0),
+		("" if reste == 0 else "[color=#e0603c]%d border point(s) could not be matched: a gap stays there.[/color] " % reste)
+		+ ("" if int(r["replies"]) == 0 else "[color=#e0a03c]%d tile(s) got a folded face: check them.[/color] " % int(r["replies"]))])
+
+
+## Sous le bouton : les couches se raccordent-elles ? Relu après un changement, au plus une fois par seconde.
+func _dire_les_ecarts() -> void:
+	if _ecarts_texte == null or _atelier != "witness" or not _vue.edition:
+		return
+	var maintenant := Time.get_ticks_msec()
+	if not _ecarts_perimes or maintenant - _ecarts_lus_a < 1000 or _modeleur.modal != "":
+		return
+	_ecarts_perimes = false
+	_ecarts_lus_a = maintenant
+	var n: int = _modeleur.ecarts_entre_couches()
+	_ecarts_texte.visible = n >= 0
+	_bouton_caler.visible = n >= 0
+	if n < 0:
+		return
+	_ecarts_texte.text = "Borders: the same as the other layers." if n == 0 else 		"Borders: %d point(s) differ from the other layers — a gap where they meet in the world." % n
+	_ecarts_texte.add_theme_color_override("font_color", Palette.GRIS if n == 0 else Color("#e0603c"))
 
 
 func _boucher_les_trous(toutes: bool) -> void:
@@ -3880,6 +3941,9 @@ func _geste_du_modeleur(avant: RefCounted, apres: RefCounted, nom: String) -> vo
 	_histoire.add_undo_method(_remplacer_temoin.bind(t, avant))
 	_histoire.commit_action(false)
 	_temoin_modifie(t)
+	if apres is TL.Lot:
+		for t2 in (apres as TL.Lot).ailleurs:
+			_temoin_modifie(t2)
 
 
 func _remplacer_temoin(t: RefCounted, m: RefCounted) -> void:
@@ -3891,6 +3955,40 @@ func _remplacer_temoin(t: RefCounted, m: RefCounted) -> void:
 	elif m.has_meta("cle"):
 		t.poser_tuile(m.get_meta("cle"), m)
 	_temoin_modifie(t)
+	# LES TUILES DES AUTRES COUCHES que le geste a entraînées (les bords partagés, 6 octobre 2026) : chacune dans SON
+	# témoin — celui qu'on édite peut être l'un d'eux, si l'on a changé de couche depuis le geste.
+	if m is TL.Lot:
+		if not (m as TL.Lot).ailleurs.is_empty():
+			_ecarts_perimes = true
+		for t2 in (m as TL.Lot).ailleurs:
+			var tuiles: Dictionary = (m as TL.Lot).ailleurs[t2]
+			if t2 == _modeleur.temoin:
+				var l2 := TL.Lot.new()
+				l2.tuiles = tuiles
+				_modeleur.remplacer(l2)
+			else:
+				for nom in tuiles:
+					t2.poser_tuile(nom, tuiles[nom])
+			_temoin_modifie(t2)
+
+
+## LES BORDS SONT PARTAGÉS ENTRE COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues ») : deux couches
+## se touchent dans le monde, donc les sections de leurs témoins doivent être les mêmes. Le modeleur reçoit les témoins
+## des AUTRES couches qui suivent leur témoin ; une couche habillée par un travail externe non lié n'en est pas — ses
+## tuiles ne viennent pas de son témoin.
+func _donner_les_autres_temoins() -> void:
+	_ecarts_perimes = true
+	var liste: Array = []
+	for c in _couches:
+		if _couches.find(c) == _active or not _suit_son_temoin(c):
+			continue
+		liste.append(_temoin_de(c))
+	_modeleur.regler_les_autres_temoins(liste)
+
+
+func _suit_son_temoin(c: Dictionary) -> bool:
+	var s := str(c.get("source", ""))
+	return s == "" or s == Projet.TEMOIN or s == _glb_du_temoin(c)
 
 
 ## Les témoins modifiés depuis le dernier enregistrement (un par couche touchée).
@@ -4728,6 +4826,7 @@ func _trancher_travail() -> void:
 		_temoins_sales[lu] = true
 		_enregistrer_le_temoin_modele(true)
 		if _modeleur.temoin != null:
+			_donner_les_autres_temoins()
 			_modeleur.charger_temoin(lu, _occurrence_de_depart(lu))
 		var propre := _glb_du_temoin(c)
 		var bilan_lie: Dictionary = await _trancher_source(propre)
@@ -5773,6 +5872,7 @@ func _suivre_le_temoin_de_la_couche() -> void:
 			if _modeleur.modal != "":
 				_modeleur.annuler()
 			_enregistrer_le_temoin_modele()
+			_donner_les_autres_temoins()
 			_modeleur.charger_temoin(t, _occurrence_de_depart(t))
 			_redire_les_materiaux()
 	_legende_formes.reconstruire_tuiles()
