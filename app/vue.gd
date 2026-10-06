@@ -38,6 +38,9 @@ signal eau_survolee(source: Variant)
 signal eau_cliquee(source: Variant, bouton: int)
 ## L'outil Variant (4 octobre 2026) : un clic sur une tuile du monde — `info` comme `tuile_sous`.
 signal variante_cliquee(info: Dictionary, bouton: int)
+## L'atelier Transitions (6 octobre 2026) : le pinceau — le sommet de la surface visée (couches visibles), ou null ;
+## `phase` : "debut", "suite", "fin".
+signal transition_peinte(sommet: Variant, bouton: int, phase: String)
 ## Ctrl+clic en World : la case de matière touchée (couches visibles), ou `null` si le rayon ne touche rien.
 signal etage_sur_la_matiere(case: Variant)
 
@@ -565,6 +568,16 @@ func montrer_tuile(sommet: Variant) -> void:
 ## dont la pièce porte cette surface.
 ## ⚠ **ON LIT CE QUI EST POSÉ, PAS CE QUE LA RÈGLE POSERAIT** : l'item de la grille `Rendu` à ce sommet,
 ## et son nom. Recalculer la pose serait une seconde description du peintre (charte §6).
+## Le sommet de la tuile visée, quelle que soit sa couche (les couches VISIBLES) — le pinceau des transitions.
+func sommet_sous_visible(position: Vector2) -> Variant:
+	var origine: Vector3 = _camera.project_ray_origin(position)
+	var sens: Vector3 = _camera.project_ray_normal(position).normalized()
+	var r: Dictionary = Outils.rayon(_occupe_visible, origine, sens, PORTEE)
+	if not r["touche"]:
+		return null
+	return Outils.sommet_touche(origine, sens, r["case"], r["normale"])
+
+
 func tuile_sous(position: Vector2) -> Dictionary:
 	var m := monde()
 	if m == null:
@@ -749,6 +762,8 @@ func _gui_input(event: InputEvent) -> void:
 					_finir_salle()
 				elif _coin_boite != null:
 					_finir_boite(b.button_index)
+				elif outil == "transition":
+					transition_peinte.emit(null, b.button_index, "fin")
 				else:
 					coup_fini.emit()
 			accept_event()
@@ -893,7 +908,7 @@ func _survoler(position: Vector2) -> void:
 	if outil == "eau":
 		eau_survolee.emit(source_visee(position))
 		return
-	if outil == "variante":
+	if outil == "variante" or outil == "transition":
 		_apercu.visible = false
 		return
 	if point.is_empty() or cases() == null:
@@ -917,6 +932,9 @@ func _survoler(position: Vector2) -> void:
 ## Une nouvelle case sous la souris pendant un coup : on applique le geste. `_derniere` évite de
 ## rejouer la même ancre à chaque pixel.
 func _toucher(position: Vector2) -> void:
+	if outil == "transition":
+		transition_peinte.emit(sommet_sous_visible(position), _coup, "suite")
+		return
 	if _coin_boite != null:
 		if _est_salle():
 			_survoler_salle(position)
@@ -978,6 +996,10 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		return
 	if outil == "variante":
 		variante_cliquee.emit(tuile_sous(position), bouton)
+		return
+	if outil == "transition":
+		_coup = bouton
+		transition_peinte.emit(sommet_sous_visible(position), bouton, "debut")
 		return
 	if outil == "boite" or outil == "rect":
 		var depart := _coin_vise(position)

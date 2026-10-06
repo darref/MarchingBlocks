@@ -21,6 +21,8 @@ const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 const FT := preload("res://addons/marchingblocks_core/formes_du_temoin.gd")
 const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 const PlancheTuiles := preload("res://app/planche_tuiles.gd")
+const TR := preload("res://addons/marchingblocks_core/transitions.gd")
+const ATPalette := preload("res://app/palette.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 const RACINE_EXEMPLE := "user://fumee/example"
@@ -497,6 +499,8 @@ func _mener() -> void:
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
 	_les_bords_entre_couches(ed)
 	_vrai(_bords_finis, "SENTINELLE : les bords entre couches sont allés JUSQU'AU BOUT")
+	_l_atelier_transitions(ed)
+	_vrai(_transitions_finies, "SENTINELLE : l'atelier Transitions est allé JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -685,6 +689,175 @@ func _sans_partenaire_de(ta_: RefCounted, tb_: RefCounted) -> int:
 					if not trouve:
 						n += 1
 	return n
+
+
+## L'ATELIER TRANSITIONS (Jordan, 6 octobre 2026). Les attendus ne passent pas par l'atelier : les octets de la texture
+## relus à la main (rang + 1), le fichier du projet relu par `Projet.depuis_texte`, les matériaux des tuiles posées relus
+## dans le lot.
+var _transitions_finies := false
+
+
+func _l_atelier_transitions(ed: Control) -> void:
+	ed._aller_a("monde")
+	if ed._couches.size() < 2:
+		ed._nouvelle_couche()
+	ed._activer(0)
+	ed._aller_a("transitions")
+	var tr: RefCounted = ed._transitions
+	_egal(ed._atelier, "transitions", "l'atelier Transitions s'ouvre")
+	_vrai(ed._droite_transitions.visible and not ed._droite.visible and ed._section_couches.visible,
+		"sa barre de droite, et la liste des couches (son ordre dit qui couvre)")
+	_egal(ed._vue.outil, "transition", "le pinceau des transitions est l'outil de la vue")
+	var teintes: Dictionary = ATPalette.TEINTES_ATELIER
+	var autres := 0
+	for a in teintes:
+		if a != "transitions" and (teintes[a] as Color).is_equal_approx(teintes["transitions"]):
+			autres += 1
+	_vrai(teintes.has("transitions") and autres == 0, "une teinte à lui, qu'aucun autre atelier ne porte")
+	var n: int = ed._couches.size()
+	_egal(tr._liste.get_child_count(), n * (n - 1) / 2, "une ligne par paire de couches (%d couches)" % n)
+	# Deux couches qui se touchent, loin de tout : A en (60, 0, 60), B en (61, 0, 60).
+	var ida := str(ed._couches[0]["id"])
+	var idb := str(ed._couches[1]["id"])
+	var ca := Vector3i(60, 0, 60)
+	var cb := Vector3i(61, 0, 60)
+	(ed._vue.couche(0).get_node("Cases") as GridMap).set_cell_item(ca, ed._id_case())
+	(ed._vue.couche(1).get_node("Cases") as GridMap).set_cell_item(cb, ed._id_case())
+	ed._suivre_les_cases([ca, cb])
+	var cle: String = TR.cle_de_paire(ida, idb)
+	tr.paire_choisie = cle
+	tr.dire(true)
+	_vrai(not tr.actif(), "aucune paire allumée : rien n'est dessiné")
+	tr.suivre()
+	_egal(_portent_le_passage(ed, tr), 0, "… et aucun matériau ne porte le passage")
+	# La case de la paire, cochée.
+	var case_paire: CheckBox = null
+	for ligne in tr._liste.get_children():
+		var b: Button = ligne.get_child(1)
+		if b.text == "%s  ·  %s" % [tr._nom(cle.split("|")[0]), tr._nom(cle.split("|")[1])]:
+			case_paire = ligne.get_child(0)
+	_vrai(case_paire != null, "la ligne de la paire A · B")
+	case_paire.button_pressed = true
+	_vrai(tr.actif() and bool(tr.etat["paires"][cle]["actif"]), "cochée, la paire est allumée")
+	tr.suivre()
+	var lot: MeshLibrary = (ed._vue.couche(0).get_node("Rendu") as GridMap).mesh_library
+	var portent := 0
+	var surfaces := 0
+	if lot != null:
+		for id in lot.get_item_list():
+			var m: Mesh = lot.get_item_mesh(id)
+			for s in (m.get_surface_count() if m != null else 0):
+				var mat: Material = m.surface_get_material(s)
+				if mat != null:
+					surfaces += 1
+					if mat.next_pass == tr.rendu.materiau:
+						portent += 1
+	_vrai(lot != null and surfaces > 0 and portent == surfaces,
+		"allumée : chaque matériau des tuiles de A porte le passage (%d / %d)" % [portent, surfaces])
+	var d: Dictionary = tr.rendu.donnees
+	_egal([TR.rang_lu(d, ca), TR.rang_lu(d, cb)], [0, 1], "la texture : A au rang 0, B au rang 1")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(not tr.actif(), "Ctrl+Z l'éteint")
+	tr.suivre()
+	# ⚠ LU SUR LES MATÉRIAUX, PAS DANS LA LISTE DE L'ATELIER (« jamais débranché » restait muette : la liste se vidait, les
+	# matériaux gardaient le passage).
+	_egal(_portent_le_passage(ed, tr), 0, "… et retire le passage des matériaux (relu sur chaque matériau du lot)")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_vrai(tr.actif(), "Ctrl+Y la rallume")
+	tr.suivre()
+	# Une case posée ensuite suit dans la texture.
+	var cc := Vector3i(61, 1, 60)
+	(ed._vue.couche(1).get_node("Cases") as GridMap).set_cell_item(cc, ed._id_case())
+	ed._suivre_les_cases([cc])
+	tr.suivre()
+	d = tr.rendu.donnees
+	_egal(TR.rang_lu(d, cc), 1, "une case posée ensuite entre dans la texture")
+	# LE PINCEAU : « B couvre », autour du sommet de la frontière (59..60 : ses huit cases portent A et B).
+	tr.couvrant_peint = idb
+	tr.rayon = 1
+	var s0 := Vector3i(60, -1, 59)
+	tr.peindre(s0, MOUSE_BUTTON_LEFT, "debut")
+	tr.peindre(null, MOUSE_BUTTON_LEFT, "fin")
+	var peints: Dictionary = tr.etat["choix"]
+	_vrai(peints.size() > 0 and peints.values().all(func(v): return str(v) == idb), "le pinceau pose « B couvre » (%d sommet(s))" % peints.size())
+	var tous_a_la_frontiere := true
+	for s in peints:
+		var a := false
+		var b := false
+		for k in 8:
+			var c: Vector3i = s + Vector3i(k & 1, (k >> 1) & 1, (k >> 2) & 1)
+			a = a or c == ca
+			b = b or c == cb or c == cc
+		tous_a_la_frontiere = tous_a_la_frontiere and a and b
+	_vrai(tous_a_la_frontiere, "… seulement là où A et B se rencontrent")
+	d = tr.rendu.donnees
+	_egal(TR.choix_lu(d, s0), 1, "la texture porte le choix (le rang de B)")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	d = tr.rendu.donnees
+	_vrai((tr.etat["choix"] as Dictionary).is_empty() and TR.choix_lu(d, s0) == -1,
+		"UN Ctrl+Z défait le trait, dans l'état et dans la texture")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	tr.peindre(s0, MOUSE_BUTTON_RIGHT, "debut")
+	tr.peindre(null, MOUSE_BUTTON_RIGHT, "fin")
+	_vrai((tr.etat["choix"] as Dictionary).is_empty(), "le clic droit rend la priorité")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# UN RÉGLAGE, par son curseur : l'avance de « A couvre B ».
+	var curseur: HSlider = null
+	for enfant in _descendants(tr._editeur):
+		if enfant is HSlider and (enfant as HSlider).get_meta("reglage", []) == [ida, "avance"]:
+			curseur = enfant
+	_vrai(curseur != null, "le curseur « Reach » quand A couvre B")
+	curseur.value = 0.4
+	_egal(snappedf(float(tr.etat["paires"][cle]["couvre"][ida]["avance"]), 0.01), 0.4, "il règle « A couvre B »")
+	tr.suivre()
+	var img: Image = (tr.rendu.materiau.get_shader_parameter("table") as Texture2D).get_image()
+	_egal(snappedf(img.get_pixel(2 * 1, 0).b, 0.01), 0.4, "la table du shader suit (avance de 0 sur 1, texel (2, 0))")
+	# L'ENREGISTREMENT : relu par `Projet.depuis_texte`.
+	ed._enregistrer()
+	if ed._tache_ecriture >= 0:
+		WorkerThreadPool.wait_for_task_completion(ed._tache_ecriture)
+		ed._ecriture_finie("")
+		ed._tache_ecriture = -1
+	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	var rt: Dictionary = relu.get("transitions", {})
+	_vrai(bool(rt.get("paires", {}).get(cle, {}).get("actif", false)) and (rt["choix"] as Dictionary).size() == peints.size(),
+		"le projet enregistré porte la paire allumée et les choix peints")
+	# Esc ramène à World, et le pinceau s'en va.
+	ed._unhandled_key_input(_cle(KEY_ESCAPE))
+	_vrai(ed._atelier == "monde" and ed._vue.outil != "transition", "Échap ramène à World, l'outil de World revient")
+	# Ménage.
+	case_paire.button_pressed = false
+	tr.suivre()
+	(ed._vue.couche(0).get_node("Cases") as GridMap).set_cell_item(ca, -1)
+	(ed._vue.couche(1).get_node("Cases") as GridMap).set_cell_item(cb, -1)
+	(ed._vue.couche(1).get_node("Cases") as GridMap).set_cell_item(cc, -1)
+	ed._suivre_les_cases([ca, cb, cc])
+	tr.etat["choix"] = {}
+	_transitions_finies = true
+
+
+## Combien de matériaux des tuiles posées (toutes couches) portent le passage des transitions.
+func _portent_le_passage(ed: Control, tr: RefCounted) -> int:
+	var n := 0
+	for i in ed._vue.nombre_de_couches():
+		var lot: MeshLibrary = (ed._vue.couche(i).get_node("Rendu") as GridMap).mesh_library
+		if lot == null:
+			continue
+		for id in lot.get_item_list():
+			var m: Mesh = lot.get_item_mesh(id)
+			for s in (m.get_surface_count() if m != null else 0):
+				var mat: Material = m.surface_get_material(s)
+				if mat != null and mat.next_pass == tr.rendu.materiau:
+					n += 1
+	return n
+
+
+func _descendants(n: Node) -> Array:
+	var sortie: Array = []
+	for e in n.get_children():
+		sortie.append(e)
+		sortie.append_array(_descendants(e))
+	return sortie
 
 
 ## LA LÉGENDE DES FORMES (Jordan, 29 septembre 2026) : un bandeau en haut de la vue, dans Witness seul ;

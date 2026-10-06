@@ -44,6 +44,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
+  - **Les transitions entre couches** (§5, « L'atelier Transitions ») : lire la clé `transitions` d'un monde exporté (à
+    écrire d'abord dans `world.json` : paires, réglages par direction, représentants, choix peints), réécrire la règle
+    (`Transitions.melange`, ses cas d'épreuve) et le shader (texture 3D d'un octet par case, table des réglages) dans
+    chaque moteur, et le poser par-dessus les matériaux des tuiles. Un shader ne voyage pas (§4).
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
     si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
@@ -1202,7 +1206,9 @@ coïncider. Sculpter les bords d'une couche ouvrait une fente à chaque frontiè
   seulement à l'entrée, au changement de couche, après « Match » et après une annulation qui touche d'autres couches,
   jamais après chaque geste ; propager 0,2 / 0,4 / 0,6 ms. ⚠ Pas mesuré sur des témoins sculptés (plus de sommets).
 - ⚠ **PAS TENU EN MAIN, NI VU À L'IMAGE.** Les greffons n'ont rien à porter (c'est le modeleur, dans l'appli seule).
-- **LA SUITE PROPOSÉE (6 octobre 2026), PAS DÉCIDÉE : UN ATELIER « TRANSITIONS »** — discuté avec Jordan avant ceci.
+- **LA SUITE PROPOSÉE (6 octobre 2026) : UN ATELIER « TRANSITIONS »** — discuté avec Jordan avant ceci ; **DÉCIDÉ ET ÉCRIT LE
+  MÊME JOUR** (Jordan : « go pour l'atelier transitions ») : voir §5, « L'atelier Transitions ». Le texte qui suit est la
+  proposition d'alors.
   Des tuiles de transition SCULPTÉES sont hors de portée (deux couches dans un sommet : Σ C(8,k)(2ᵏ − 2) = 6 050
   configurations, au moins 1 513 classes sous les quarts de tour) ; la transition porterait sur le MATÉRIAU, la géométrie
   restant celle de la couche qui pose le sommet. Une PAIRE non ordonnée par couple de couches, mais DEUX RÉGLAGES (Jordan :
@@ -3325,6 +3331,73 @@ cerne la matière à sa hauteur jusqu'à l'horizon) ; la coulée suit le monde e
     le voile toujours celui de l'eau, les cases données au jeu sans leur preset.
   - ⚠ **PAS JUGÉ PAR JORDAN** : les couleurs, la taille des cellules de lave, l'opacité du marais ; le voile n'a été
     vu qu'en chiffres (la fumée), pas à l'image.
+
+### L'ATELIER TRANSITIONS — DÉCIDÉ (Jordan, 6 octobre 2026 : « go pour l'atelier transitions »), ÉCRIT LE MÊME JOUR
+
+Discuté d'abord (§3, « les bords partagés entre couches », la suite proposée) : Jordan voulait un atelier qui reprenne les
+paires de couches, leurs matériaux, et choisisse en temps constant l'aspect de la frontière quand les transitions sont
+activées ; puis « un désert qui empiète sur la roche n'est pas la même chose qu'une roche qui empiète sur le désert ».
+
+- **CE QUI EST DÉCIDÉ, ET POURQUOI** :
+  - **pas de tuiles de transition sculptées** : deux couches dans un sommet font 6 050 configurations, au moins 1 513
+    classes sous les quarts de tour. La transition porte sur l'ASPECT ; la géométrie reste celle de la couche qui pose
+    le sommet (les couches exclusives, inchangées) ;
+  - **une paire non ordonnée, DEUX réglages** (quand A couvre B, quand B couvre A) : Softness, Reach, Irregularity,
+    Grain, Fills hollows (`Transitions.REGLAGES`, défauts et bornes **PROPOSÉS**) ;
+  - **qui couvre** : la couche la plus haute de la liste par défaut, sauf là où le PINCEAU l'a choisi, sommet par sommet ;
+  - **un matériau représentant par couche** (PROPOSÉ : par couche, pas par paire — c'est lui qui se mêle à la surface de
+    l'autre) : par défaut le plus porté par les faces de son témoin, sinon la teinte du dessus de la légende ; projeté
+    en boîte (un UV déplié ne se transporte pas sur une autre géométrie) ;
+  - **rien n'est dessiné tant qu'aucune paire n'est allumée** : le passage n'est même pas posé.
+- **LA RÈGLE, EN TEMPS CONSTANT AU FRAGMENT** (`addons/marchingblocks_core/transitions.gd`, `melange` en GDScript pour les
+  tests, `SHADER` qui la dit à la lettre) : le shader est posé en `next_pass` sur chaque matériau des tuiles posées
+  (`app/transitions.gd`, `_brancher`, relu deux fois par seconde), il lit les HUIT cases de la tuile dans une texture 3D
+  (`transitions_rendu.gd` : un octet par case — rang + 1 en quatre bits, rang choisi au coin en quatre bits ; une
+  tranche par z ; seules les tranches touchées sont refaites). La propriétaire est le plus petit rang des huit — le
+  passage n'a rien à savoir de sa couche, un matériau partagé par deux couches marche ;
+  - la part de l'autre couche : interpolation trilinéaire de ses cases (cases vides ignorées) ;
+  - ⚠ **LE CHOIX EST UN CHAMP AUSSI** : lu au seul sommet, deux tuiles voisines liraient deux sommets et la couvrante
+    changerait d'un coup au joint. Chaque coin vote (son poids) pour la couche choisie, sinon la prioritaire ;
+  - décalage = (avance + creux·(½ − hauteur de la couverte) + bruit·(n − ½))·4·s·(1 − s) — **nul aux deux bouts** ;
+  - ⚠ **LE SOMMET EST CELUI DE LA TUILE, LU DANS `vertex()`** : déduit du point, il basculait dans la maille de la voisine
+    sur un joint ; et dans `fragment()`, la `MODEL_MATRIX` d'une MultiMesh (le GridMap) n'a pas la pose de l'instance
+    (vu : plus aucun fondu).
+- **L'ATELIER** (le septième, teinte citron **PROPOSÉE**) : la liste des couches (son ordre dit qui couvre), PAIRS OF
+  LAYERS (une case pour allumer), les deux réglages de la paire choisie, REPRESENTATIVE MATERIALS, BRUSH (« … covers » /
+  By priority, Radius et Alt + molette, clic gauche glissé, clic droit = la priorité ; une teinte jaune montre les
+  endroits peints, dans cet atelier seulement). Échap ramène à World. Chaque geste est UNE annulation ; tout est dans le
+  `.mbproj` (`transitions` : paires, représentants, choix à plat par quatre — absent s'il est vide ; abîmé, le fichier
+  est refusé). Le manuel (F1) a sa page.
+- ⚠ **CE QUE L'ŒIL VERRA** : sur la surface de la couche PROPRIÉTAIRE d'une tuile mixte, c'est son matériau NATIF qui
+  est dessous, et le représentant de l'AUTRE qui se pose dessus. Un représentant qui ne ressemble pas à ce que sa couche
+  montre fait un liseré au bout de la bande. Et sans transition, la frontière visible est à une demi-case dans la couche
+  de plus grand rang (les tuiles mixtes appartiennent à la prioritaire) — c'était déjà le cas.
+- **MESURÉ** : `test_transitions` 61 (poids à la main ; la règle — une couche seule, une paire éteinte ou décrite à moitié,
+  la propriétaire, ½ au milieu, l'avance, le pinceau, un choix d'une troisième couche, rien aux bouts même réglages au
+  maximum, le creux, les cases vides ; **la continuité jugée par son effet** : 60 mondes au hasard, en des points des
+  faces communes à deux tuiles, chaque couche a la même part des deux côtés ; la table ; la texture relue à la main ; le
+  texte du shader) ; `test_projet` (+8, l'aller-retour et deux refus) ; `fumee_appli` (+31 et une SENTINELLE : l'atelier,
+  sa barre, la ligne de la paire, cochée → chaque matériau des tuiles porte le passage, Ctrl+Z l'éteint et le retire,
+  une case posée ensuite entre dans la texture, le pinceau seulement à la frontière, dans la texture, UN Ctrl+Z, le clic
+  droit, un curseur → la table du shader, le projet relu, Échap).
+- **MUTATIONS, ROUGES** (rejouées dans une copie à dossier de données isolé) : le cœur 5 — les votes du pinceau ignorés, le
+  décalage sans 4·s·(1 − s) (128 écarts aux joints), la propriétaire au plus grand rang, les choix non écrits dans la
+  texture, la table transposée ; l'écran 7 — le passage jamais posé, les cases qui ne suivent pas, le pinceau partout,
+  l'annulation qui oublie la texture, le passage jamais retiré, le projet sans transitions, Échap ignorée. ⚠ **DEUX
+  D'ABORD MUETTES, PAR LE TEST** : la table transposée (les deux directions avaient les mêmes réglages) et « jamais retiré »
+  (la fumée comptait la liste de l'atelier, pas le `next_pass` des matériaux). ⚠ **UNE ÉQUIVALENTE, GARDÉE** : exiger les
+  deux directions dans la table — sans elle, une table à moitié écrite (que `table()` ne produit jamais) fait planter la
+  règle, qui rend {} — le même résultat, avec une erreur dans la console. ⚠ Et `test_transitions` concluait « OK » sur un
+  cœur qui ne compilait pas (une classe interne ne voit pas les fonctions statiques de son fichier) : il exige d'abord
+  que ses trois scripts se chargent, et que ses six sections aillent au bout.
+- **VU À L'IMAGE** (`DEV_TOOLS/capture_transitions.gd`, avec fenêtre, RTX 2060 Vulkan ; le témoin de B habillé d'un damier
+  bleu) : un fondu doux, continu d'une tuile à l'autre, qui suit les marches ; Reach le déplace ; peint « B couvre », le
+  bleu s'avance sur A et la teinte jaune le montre ; dans World la transition reste, la teinte s'en va. ⚠ **DE FINS
+  POINTILLÉS CLAIRS À CERTAINS JOINTS DE LA BANDE, PAS EXPLIQUÉS** (ni la poussée le long de la normale, ni le sommet lu au
+  point : essayés). ⚠ Une fausse piste notée dans le code : on a cru la carte aveugle au canal G d'une texture RG8 — la
+  capture peignait des sommets enfouis.
+- ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.** Pas mesuré sur l'exemple (la texture fait ~10 Mo, sa construction parcourt
+  l'union : ~740 000 cases). Pas exporté : dans la liste des greffons à faire (§0).
 
 ### LA BARRE DE PROGRESSION, LA BARRE DE RENDU DU PLAY TEST, UNE PASSE D'OPTIMISATION — DEMANDÉES ET ÉCRITES (Jordan, 1er octobre 2026)
 

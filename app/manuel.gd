@@ -315,6 +315,24 @@ func _outils() -> String:
 	l.append(_note("The looks are examples, not a requirement. In your engine you can assign your own water "
 		+ "shader from the plugin: it receives the same data — the flow, the kind of water (still, river, "
 		+ "waterfall) and the depth."))
+	l.append(_titre("Transitions"))
+	l.append("Where two layers meet — sand against rock, moss against stone — the [b]Transitions[/b] workshop blends "
+		+ "the look of one over the other. The tiles do not change: each one keeps the shape its layer gives it; "
+		+ "only the colours blend, in a band about one cell wide on each side of the border, continuous from tile "
+		+ "to tile. Tick a [b]pair of layers[/b] to turn its transition on; nothing is drawn while no pair is on.")
+	l.append("[b]Who covers whom[/b] is the higher layer in the layer list, by default (reorder the layers to swap "
+		+ "it). A pair has [b]two settings[/b] — when the first covers the second, and when the second covers the "
+		+ "first — because sand drifting over rock is not rock breaking through sand: [b]Softness[/b] (a sharp line "
+		+ "or a long blend), [b]Reach[/b] (how far the covering layer spreads past the middle of the border), "
+		+ "[b]Irregularity[/b] and [b]Grain[/b] (an uneven edge), [b]Fills hollows[/b] (the covering layer settles "
+		+ "first in the dark parts of the other's material: sand in the cracks).")
+	l.append("The [b]brush[/b] chooses who covers, place by place: pick « … covers » in the list, click or drag near a "
+		+ "border ([b]Radius[/b], or " + _touche("Alt") + " + wheel); a right click gives the place back to the "
+		+ "priority. Painted places show a yellow tint in this workshop only. Each layer has a [b]representative "
+		+ "material[/b] — by default the one its witness wears most — and that is what spreads over the other "
+		+ "layer's tiles; it is projected like a box, so a tileable image works best. Every change is one "
+		+ _touche("Ctrl+Z") + ", and everything is saved with the project. " + _touche("Esc") + " goes back to World.")
+	l.append(_note("Transitions are drawn by the app; the engine plugins do not have them yet."))
 	return "\n".join(l)
 
 

@@ -14,6 +14,7 @@ extends RefCounted
 ##
 ## Fonctions PURES, sans nœud : c'est ce qui les rend gardables par `DEV_TOOLS/test_projet.gd`.
 
+const TR := preload("res://addons/marchingblocks_core/transitions.gd")
 const FORMAT := "marchingblocks-project"
 ## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
 ## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
@@ -63,7 +64,9 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## nombres JSON. `cases` (version 1, un tableau de nombres) reste lu.
 ## `c["cases"]` : un dictionnaire {case: true} ou un tableau de cases (`GridMap.get_used_cells()`).
 ## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
-static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = []) -> String:
+## `transitions` (6 octobre 2026, l'atelier Transitions) : {paires: {"idA|idB": {actif, couvre: {id: réglages}}},
+## representants: {id: indice de matériau}, choix: {sommet: id de la couche qui y couvre}} — absent s'il est vide.
+static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {}) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -108,6 +111,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 	var tout := {"format": FORMAT, "version": VERSION, "active": active, "couches": sorties, "eaux": sorties_eau}
 	if not travaux.is_empty():
 		tout["travaux"] = travaux.map(func(t): return str(t))
+	var tr := transitions_vers_json(transitions)
+	if not tr.is_empty():
+		tout["transitions"] = tr
 	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
@@ -253,7 +259,67 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 		for t in liste_travaux:
 			if t is String and t != "" and not travaux.has(t):
 				travaux.append(t)
-	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux}
+	# LES TRANSITIONS (6 octobre 2026) : un projet d'avant n'en a pas ; abîmées, le fichier est refusé (des réglages perdus
+	# en silence seraient réécrits vides à l'enregistrement suivant).
+	var transitions := transitions_depuis_json(brut.get("transitions", {}), erreurs)
+	if transitions.is_empty() and not erreurs.is_empty():
+		return {}
+	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions}
+
+
+static func transitions_vides() -> Dictionary:
+	return {"paires": {}, "representants": {}, "choix": {}}
+
+
+static func transitions_vers_json(t: Dictionary) -> Dictionary:
+	if t.is_empty() or ((t.get("paires", {}) as Dictionary).is_empty() and (t.get("representants", {}) as Dictionary).is_empty()
+			and (t.get("choix", {}) as Dictionary).is_empty()):
+		return {}
+	var plat: Array = []
+	var choix: Dictionary = t.get("choix", {})
+	var sommets: Array = choix.keys()
+	sommets.sort()
+	for s in sommets:
+		var v: Vector3i = s
+		plat.append_array([v.x, v.y, v.z, int(str(choix[s]))])
+	var representants := {}
+	for id in t.get("representants", {}):
+		representants[str(id)] = int(t["representants"][id])
+	return {"paires": (t.get("paires", {}) as Dictionary).duplicate(true), "representants": representants, "choix": plat}
+
+
+## Rend l'état des transitions, ou {} avec la raison dans `erreurs`.
+static func transitions_depuis_json(brut: Variant, erreurs: Array) -> Dictionary:
+	var sortie := transitions_vides()
+	if not brut is Dictionary:
+		erreurs.append("transitions are not an object")
+		return {}
+	var paires = (brut as Dictionary).get("paires", {})
+	if not paires is Dictionary:
+		erreurs.append("transition pairs are not an object")
+		return {}
+	for cle in paires:
+		var p = paires[cle]
+		if not p is Dictionary or not (p as Dictionary).get("couvre", {}) is Dictionary or String(cle).split("|").size() != 2:
+			erreurs.append("transition pair %s is malformed" % cle)
+			return {}
+		var couvre := {}
+		for id in p["couvre"]:
+			couvre[str(id)] = TR.reglages(p["couvre"][id])
+		sortie["paires"][str(cle)] = {"actif": bool(p.get("actif", false)), "couvre": couvre}
+	var rep = (brut as Dictionary).get("representants", {})
+	if not rep is Dictionary:
+		erreurs.append("transition materials are not an object")
+		return {}
+	for id in rep:
+		sortie["representants"][str(id)] = int(rep[id])
+	var plat = (brut as Dictionary).get("choix", [])
+	if not plat is Array or (plat as Array).size() % 4 != 0:
+		erreurs.append("transition choices do not go by four")
+		return {}
+	for k in range(0, (plat as Array).size(), 4):
+		sortie["choix"][Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))] = str(int(plat[k + 3]))
+	return sortie
 
 
 ## CE QUI DIT QUE LA SOURCE A CHANGÉ. Vide si elle n'existe pas (ou pas encore).

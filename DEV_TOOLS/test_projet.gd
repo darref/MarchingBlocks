@@ -199,6 +199,7 @@ func _initialize() -> void:
 	_l_exemple()
 	_les_travaux()
 	_les_variantes()
+	_les_transitions()
 	_le_dev_de_l_exemple()
 	_les_durees()
 	_les_dossiers()
@@ -300,6 +301,38 @@ func _les_variantes() -> void:
 	var e4: Array = []
 	_vrai(Projet.depuis_texte(JSON.stringify(abime), e4).is_empty() and not e4.is_empty(),
 		"un poids qui n'est pas un nombre refuse le fichier (%s)" % [e4])
+
+
+## LES TRANSITIONS (6 octobre 2026) : paires, réglages, représentants et choix peints s'écrivent et se relisent ; un projet
+## d'avant n'en a pas (rien n'est écrit sans elles) ; abîmées, le fichier est refusé.
+func _les_transitions() -> void:
+	var c := Projet.couche("A", "1")
+	var t := {"paires": {"1|2": {"actif": true, "couvre": {"1": {"avance": 0.3}, "2": {"largeur": 0.9}}}},
+		"representants": {"2": 3}, "choix": {Vector3i(4, -5, 6): "2", Vector3i(0, 1, 0): "1"}}
+	var texte := Projet.vers_texte([c], 0, [], [], t)
+	var erreurs: Array = []
+	var relu: Dictionary = Projet.depuis_texte(texte, erreurs)
+	var tr: Dictionary = relu.get("transitions", {})
+	_vrai(erreurs.is_empty() and bool(tr.get("paires", {}).get("1|2", {}).get("actif", false)), "la paire allumée revient")
+	_egal(snappedf(float(tr["paires"]["1|2"]["couvre"]["1"]["avance"]), 0.001), 0.3, "« 1 couvre » garde son avance")
+	_egal(snappedf(float(tr["paires"]["1|2"]["couvre"]["2"]["largeur"]), 0.001), 0.9, "« 2 couvre » garde sa largeur")
+	_egal(snappedf(float(tr["paires"]["1|2"]["couvre"]["1"]["largeur"]), 0.001), 0.45, "un réglage absent prend sa valeur par défaut")
+	_egal(tr.get("representants", {}), {"2": 3}, "le matériau représentant revient")
+	_egal(tr.get("choix", {}), {Vector3i(4, -5, 6): "2", Vector3i(0, 1, 0): "1"}, "les choix peints reviennent")
+	_vrai(not Projet.vers_texte([c], 0).contains("transitions"), "sans transition, rien n'est écrit")
+	_egal(Projet.depuis_texte(Projet.vers_texte([c], 0), []).get("transitions", {}).get("choix", null), {},
+		"un projet d'avant : aucune transition")
+	var abime: Dictionary = JSON.parse_string(texte)
+	abime["couches"][0]["cases"] = []
+	abime["transitions"]["choix"] = [1, 2, 3]
+	var e2: Array = []
+	_vrai(Projet.depuis_texte(JSON.stringify(abime), e2).is_empty() and not e2.is_empty(),
+		"des choix qui ne vont pas par quatre refusent le fichier (%s)" % [e2])
+	abime["transitions"]["choix"] = []
+	abime["transitions"]["paires"] = {"sans_barre": {"actif": true, "couvre": {}}}
+	var e3: Array = []
+	_vrai(Projet.depuis_texte(JSON.stringify(abime), e3).is_empty() and not e3.is_empty(),
+		"une paire mal nommée refuse le fichier (%s)" % [e3])
 
 
 ## ÉDITER L'EXEMPLE PENDANT LE DÉV (3 octobre 2026) : la source désignée par un fichier pointeur, hors de l'export.

@@ -39,6 +39,7 @@ const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Variantes := preload("res://app/variantes.gd")
+const AtelierTransitions := preload("res://app/transitions.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
@@ -209,6 +210,8 @@ var _detachees: Array = []
 var _histoire := UndoRedo.new()
 ## LES VARIANTES VOULUES (4 octobre 2026) : leurs deux sections et leurs gestes vivent dans `variantes.gd`.
 var _variantes: RefCounted = Variantes.new(self)
+## L'ATELIER TRANSITIONS (Jordan, 6 octobre 2026) : l'état est dans le projet, la règle et le rendu dans le cœur.
+var _transitions: RefCounted = AtelierTransitions.new(self)
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -274,6 +277,7 @@ var _mer_choisie: Variant = null
 var _mer_case := Vector3i.ZERO   # la case cliquée : sa colonne porte la source, si elle reste dans le vide
 var _eau_barre_forcee := false   # le prochain recalcul de l'eau montre l'attente (la mer posée : tout est refait)
 var _droite_fluides: Panneau
+var _droite_transitions: Panneau
 ## L'outil de World qu'on avait en entrant dans Fluids (`_vue.outil`, et la forme si c'en était une) : rendu en sortant.
 var _outil_avant_fluides := "ajouter"
 var _aide_eau: Label
@@ -344,6 +348,7 @@ func _process(delta: float) -> void:
 	_suivre_le_geste()
 	_dire_les_trous()
 	_dire_les_ecarts()
+	_transitions.suivre()
 	if _atelier == "witness":
 		_variantes.dire_temoin()
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
@@ -401,6 +406,7 @@ func _batir() -> void:
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
 	_vue.variante_cliquee.connect(_variantes.cliquer)
+	_vue.transition_peinte.connect(_transitions.peindre)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
 	_vue.molette_contextuelle = _molette
 	_vue.boite_trop_grande.connect(func() -> void:
@@ -429,9 +435,11 @@ func _batir() -> void:
 	_batir_droite_jeu(_droite_jeu.get_meta("pile"))
 	_droite_fluides = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_fluides(_droite_fluides.get_meta("pile"))
+	_droite_transitions = _panneau(corps, false, LARGEUR_DROITE)
+	_transitions.batir(_droite_transitions.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
-			[_droite_fluides, "fluides"]]:
+			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -798,6 +806,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
 		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
 			+ "of the witness tiles."],
+		["transitions", "Transitions", "couches", "Where two layers meet, blend the look of one over the other. Esc "
+			+ "goes back to World."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -1610,6 +1620,37 @@ func _entrer_dans_les_fluides() -> void:
 	_dire("[b]Fluids[/b] — click in a hollow (lake), on a slope or a ledge (river), or in the open air over "
 		+ "nothing (sea: choose its height, then click again). [i]Right click on water removes it. Esc to go back "
 		+ "to World.[/i]")
+
+
+## L'ATELIER TRANSITIONS (6 octobre 2026) : l'outil « transition » (le pinceau de la vue), la barre redite.
+var _outil_avant_transitions := "ajouter"
+
+
+func _entrer_dans_les_transitions() -> void:
+	if _vue.outil != "transition":
+		_outil_avant_transitions = _vue.outil
+	_vue.outil = "transition"
+	_vue.oublier_ancre()
+	if not _vue.collage.is_empty():
+		_vue.annuler_collage()
+	_basculer_navigation(false)
+	_transitions.dire(true)
+	_vue.rafraichir()
+	_dire("[b]Transitions[/b] — tick a pair of layers to blend their border; click near a border to choose which "
+		+ "covers there, right click for the priority. [i]Esc goes back to World.[/i]")
+
+
+func _sortir_des_transitions() -> void:
+	if _vue.outil != "transition":
+		return
+	_vue.outil = _outil_avant_transitions if _outil_avant_transitions != "transition" else "ajouter"
+	_vue.oublier_ancre()
+	if _vue.outil == "forme":
+		(_boutons_forme_speciale[_vue.forme_speciale["quoi"]] as Button).set_pressed_no_signal(true)
+	elif _boutons_outil.has(_vue.outil):
+		(_boutons_outil[_vue.outil] as Button).set_pressed_no_signal(true)
+	_contexte_des_outils()
+	_vue.rafraichir()
 
 
 ## En sortant de Fluids : l'outil de World d'avant revient, et plus rien ne pose d'eau.
@@ -2590,10 +2631,10 @@ func _cle_du_geste(event: InputEvent) -> Array:
 			nom = str(sous.name)
 		return ["bouton:" + nom, nom]
 	if _vue != null and (sous == _vue or _vue.is_ancestor_of(sous)) and m.pressed:
-		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides"] else ("edition" if _modeleur.maillage != null else "vue")
+		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides", "transitions"] else ("edition" if _modeleur.maillage != null else "vue")
 		return ["vue:%s:%s:%s" % [_atelier, outil, "droit" if m.button_index == MOUSE_BUTTON_RIGHT else "gauche"],
 			{"monde": "Painting", "fluides": "Water", "witness": "Geometry", "texture": "Texturing", "jeu": "Play test",
-				"projet": "Project"}.get(_atelier, "Working")]
+				"projet": "Project", "transitions": "Transitions"}.get(_atelier, "Working")]
 	return []
 
 
@@ -2735,7 +2776,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides"]:
+	if atelier in ["monde", "jeu", "fluides", "transitions"]:
 		await _rhabiller_avec_attente(atelier == "jeu")
 	var debut := Time.get_ticks_msec()
 	if atelier == "jeu" and _atelier != "jeu" and _ecran_vivant() and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
@@ -2779,7 +2820,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides"]:
+	if atelier in ["monde", "jeu", "fluides", "transitions"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier == "jeu" and _atelier != "jeu":
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -2794,13 +2835,17 @@ func _aller_a(atelier: String) -> void:
 	# FLUIDS SE DÉSACTIVE EN SORTANT : l'outil Water ne survit pas à l'atelier (Jordan, 2 octobre 2026).
 	if atelier != "fluides":
 		_sortir_des_fluides()
+	if atelier != "transitions":
+		_sortir_des_transitions()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde", "transitions": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
+	if atelier == "transitions":
+		_entrer_dans_les_transitions()
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
@@ -2842,11 +2887,13 @@ func _contexte() -> void:
 	var temoin := geometrie or texturing
 	var monde := _atelier == "monde"
 	var fluides := _atelier == "fluides"
+	var transitions := _atelier == "transitions"
 	var jeu := _atelier == "jeu"
 	_section_jeu.visible = jeu
 	_titre_projet.visible = projet
 	_section_projet.visible = projet
-	_section_couches.visible = monde or temoin
+	# La liste des couches dans Transitions aussi : son ORDRE dit qui couvre par défaut.
+	_section_couches.visible = monde or temoin or transitions
 	_section_monde_peint.visible = monde
 	_section_choix_monde.visible = monde and Exemple.disponible()
 	_titre_aller_retour.visible = projet
@@ -2862,6 +2909,7 @@ func _contexte() -> void:
 	_droite_texture.visible = texturing
 	_droite_jeu.visible = jeu
 	_droite_fluides.visible = fluides
+	_droite_transitions.visible = transitions
 	_modeleur.geometrie = not texturing
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -5105,6 +5153,7 @@ func _suivre_les_cases(cases_: Array, sur := false) -> void:
 			if m.visible and (m.get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
 				_union[c] = i
 				break
+	_transitions.cases_changees(cases_)
 	for i in _vue.nombre_de_couches():
 		var m: Node = _vue.couche(i)
 		# ⚠ UNE COUCHE CACHÉE N'EST PAS REFAITE (on ne la voit pas) : ces cases l'attendent, elle s'en refera en
@@ -5122,6 +5171,7 @@ func _suivre_les_cases(cases_: Array, sur := false) -> void:
 ## l'ouverture. ⚠ LE DICTIONNAIRE EST VIDÉ ET REMPLI, JAMAIS REMPLACÉ : chaque couche en garde la référence.
 func _refaire_l_union() -> void:
 	_union.clear()
+	_transitions.union_refaite()
 	for i in range(_vue.nombre_de_couches() - 1, -1, -1):
 		var m := _vue.couche(i)
 		m.union = _union
@@ -5520,6 +5570,8 @@ func _molette(sens: int, b: InputEventMouseButton) -> bool:
 	var ctrl := b.ctrl_pressed or b.meta_pressed
 	if _atelier in ["monde", "fluides"]:
 		return _molette_du_monde(sens, alt, maj, ctrl)
+	if _atelier == "transitions" and alt and not ctrl and not _vue.naviguer:
+		return _cran(_transitions.curseur_rayon, sens, "Brush radius")
 	if _atelier in ["witness", "texture"] and _vue.edition and (alt or maj) and not ctrl:
 		if _modeleur.sculpt and _atelier == "witness":
 			return _cran(_curseurs_sculpt.get("sculpt_rayon" if alt else "sculpt_force"), sens,
@@ -6054,6 +6106,7 @@ func _montrer_couche(i: int, oui: bool) -> void:
 func _rafraichir_couches() -> void:
 	if _liste_couches == null:
 		return
+	_transitions.dire()   # une couche ajoutée, renommée, déplacée : les paires suivent
 	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
 	_bouton_supprimer_couche.disabled = _couches.size() <= 1
 	if _bouton_monter_couche != null:
@@ -6296,6 +6349,7 @@ func _vider_le_projet() -> void:
 	_eau_active = 0
 	_travaux.clear()
 	_travail_actif = -1
+	_transitions.vider()
 	_corps_eau.clear()
 	_ocean_eau = {}
 	_occ_eau = {}
@@ -6364,6 +6418,7 @@ func _ouvrir(chemin: String) -> bool:
 	_refaire_l_union()
 	for e in etat.get("eaux", []):
 		_ajouter_eau(e)
+	_transitions.poser_etat(etat.get("transitions", {}))
 	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
 	# en choisit un. Un fichier disparu depuis n'y revient pas.
 	for t in etat.get("travaux", []):
@@ -6577,14 +6632,15 @@ func _enregistrer(en_fond := false) -> void:
 			"poids": (_vue.couche(i).poids as Dictionary).duplicate(true), "choix": (_vue.couche(i).choix as Dictionary).duplicate()})
 	var eaux: Array = _eaux.duplicate(true)
 	var travaux := _chemins_des_travaux()
+	var transitions: Dictionary = (_transitions.etat as Dictionary).duplicate(true)
 	if en_fond:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
-		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true),
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions),
 			true, "Saving the project")
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -6604,14 +6660,15 @@ func _attendre_l_ecriture() -> void:
 
 ## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
 ## `_ecriture_finie`, sur le fil principal).
-func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool) -> void:
+func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
+		transitions: Dictionary = {}) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -6845,6 +6902,20 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
+	if _atelier == "transitions":
+		if k.physical_keycode == KEY_QUOTELEFT:
+			_teleporter()
+			get_viewport().set_input_as_handled()
+			return
+		match k.keycode:
+			KEY_ESCAPE:
+				_changer_d_atelier("monde")
+			KEY_F:
+				_cadrer_tout_le_monde()
+			_:
+				return
+		get_viewport().set_input_as_handled()
+		return
 	if _atelier == "fluides":
 		# LA MER EN CHOIX : PgUp / PgDn la montent ou la descendent, Entrée la pose, Échap l'abandonne.
 		if _mer_choisie != null:
@@ -6955,13 +7026,13 @@ func _input(event: InputEvent) -> void:
 	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides"] or k.ctrl_pressed or k.alt_pressed:
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions"] or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
-	# DANS FLUIDS, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
-	if _atelier == "fluides" and k.keycode != KEY_SPACE:
+	# DANS FLUIDS ET TRANSITIONS, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
+	if _atelier in ["fluides", "transitions"] and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

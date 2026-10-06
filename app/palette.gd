@@ -49,6 +49,7 @@ const TEINTES_ATELIER := {
 	"witness": Color("#a08cf5"),    # violet : la géométrie du témoin
 	"texture": Color("#e77fc9"),    # rose : la peinture
 	"jeu": Color("#6fcf8a"),        # vert : on joue
+	"transitions": Color("#c3d94e"), # citron : là où deux couches se rencontrent (PROPOSÉ, 6 octobre 2026)
 }
 static var _themes_atelier := {}
 
