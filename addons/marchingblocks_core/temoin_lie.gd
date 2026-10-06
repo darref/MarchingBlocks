@@ -22,6 +22,9 @@ const VERSION := 1
 ## sommet de bord entraîne ses correspondants dans d'autres tuiles). {clé: copie de MaillageEdite}.
 class Lot extends RefCounted:
 	var tuiles := {}
+	## LES TUILES DES AUTRES TÉMOINS que le geste a entraînées (les couches partagent leurs bords, 6 octobre 2026) :
+	## {témoin: {nom: copie de MaillageEdite}}. L'écran les pose dans LEUR témoin.
+	var ailleurs := {}
 
 
 var tuiles := {}          # nom de tuile (clé, ou `<clé>_var<k>`) → MaillageEdite

@@ -446,6 +446,15 @@ func _modeleur() -> String:
 		+ "A hole that reaches a cut plane took a piece of that border away: Fill holes rebuilds it with the points the "
 		+ "next tiles share, then joins it to the rim — so no gap opens in the world. If some border point cannot be "
 		+ "rebuilt, the report says so: close that part by hand (" + _touche("F") + " on the rim).")
+	l.append("[b]Borders are shared between layers.[/b] Two layers meet in the world: a tile of one stands against a tile "
+		+ "of the other. So every layer's witness keeps the same tile borders. Moving or cutting a border here moves or "
+		+ "cuts it in the other layers' witnesses too (their worlds follow when you open World), and one "
+		+ _touche("Ctrl+Z") + " undoes it everywhere. What is inside a tile stays each layer's own. A layer dressed by an "
+		+ "outside work that is not linked is left out: its tiles do not come from its witness.")
+	l.append("Borders that already differ — a project from before this, a witness back from Blender, a new layer on the "
+		+ "computed witness — are counted on the line under [b]Fill holes[/b]. [b]Match other layers to this one[/b] moves "
+		+ "the other layers' border vertices onto this witness's borders (only the borders: their sculpture inside the "
+		+ "tiles stays), in one " + _touche("Ctrl+Z") + ". What cannot be matched is said: a gap stays there.")
 	l.append(_titre("Variants"))
 	l.append("A tile that repeats a lot — a cliff, a ground, a run of corners — can have [b]variants[/b]: other "
 		+ "sculptures of the same tile. Click a copy, then [b]New variant from this copy[/b] (section Variants): that "

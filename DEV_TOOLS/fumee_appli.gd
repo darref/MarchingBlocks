@@ -495,6 +495,8 @@ func _mener() -> void:
 	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
 	_les_variantes(ed)
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
+	_les_bords_entre_couches(ed)
+	_vrai(_bords_finis, "SENTINELLE : les bords entre couches sont allés JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -515,6 +517,174 @@ func _mener() -> void:
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
+
+
+## LES BORDS ENTRE COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues, fais comme tu as dit pour les
+## éviter »). Deux couches se touchent dans le monde : une tuile de A face à une tuile de B. L'AUTORITÉ ne passe pas par
+## `sections.gd` : `_sans_partenaire_entre` pose les occurrences des deux témoins et compte, à chaque joint, les sommets de
+## l'un sans partenaire exact dans l'autre — la fente du monde à leur frontière.
+var _bords_finis := false
+
+
+func _les_bords_entre_couches(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._nouvelle_couche()
+	var ia: int = ed._active
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var ta: RefCounted = mo.temoin
+	var ib := -1
+	for i in ed._couches.size():
+		if i != ia and ed._suit_son_temoin(ed._couches[i]):
+			ib = i
+			break
+	_vrai(ib >= 0, "une autre couche suit son témoin")
+	if ib < 0:
+		return
+	var tb: RefCounted = ed._temoin_de(ed._couches[ib])
+	_vrai(mo.autres_temoins.has(tb) and not mo.autres_temoins.has(ta), "le modeleur tient le témoin de l'autre couche (et pas le sien)")
+	# Une divergence CONSTRUITE : un sommet de bord de la paroi de B déplacé dans son plan, dans B seul.
+	var paroi := "mb_plaque_b2h2_dehors"
+	var sb = preload("res://addons/marchingblocks_core/sections.gd").new(tb)
+	var i_b: int = (sb.bords[paroi] as Dictionary).keys()[0]
+	var mb: RefCounted = tb.tuiles[paroi]
+	mb.sommets[i_b] += sb.projeter(paroi, i_b, Vector3(0.04, 0.03, -0.02))
+	var fente: int = _sans_partenaire_entre(ta, tb)
+	_vrai(fente > 0, "contrôle : le bord de B tiré dans B seul ouvre la frontière A | B (%d sans partenaire)" % fente)
+	ed._ecarts_perimes = true
+	ed._ecarts_lus_a = -100000
+	ed._dire_les_ecarts()
+	_vrai(ed._bouton_caler.visible and ed._ecarts_texte.text.contains("differ"), "Geometry le dit : « %s »" % ed._ecarts_texte.text)
+	var photo_a := {}
+	for c in ta.tuiles:
+		photo_a[c] = (ta.tuiles[c].sommets as PackedVector3Array).duplicate()
+	var photo_b := {}
+	for c in tb.tuiles:
+		photo_b[c] = (tb.tuiles[c].sommets as PackedVector3Array).duplicate()
+	ed._bouton_caler.pressed.emit()
+	_egal(_sans_partenaire_entre(ta, tb), 0, "« Match other layers to this one » : la frontière A | B se referme")
+	# A peut RECEVOIR des points (les coupes que B portait sur ses bords, reportées SUR ses arêtes) : sa forme ne change
+	# pas. Ce qu'on lit : chacun de ses sommets d'avant est resté à sa place.
+	var a_bouge := 0
+	for c in ta.tuiles:
+		for j in (photo_a[c] as PackedVector3Array).size():
+			if (ta.tuiles[c].sommets[j] as Vector3).distance_to(photo_a[c][j]) > 1e-9:
+				a_bouge += 1
+				break
+	_egal(a_bouge, 0, "le témoin qu'on édite fait foi : aucun de ses sommets ne bouge")
+	_vrai(ed._temoins_sales.has(tb), "le témoin de B est à réécrire")
+	ed._ecarts_lus_a = -100000
+	ed._dire_les_ecarts()
+	_vrai(ed._ecarts_texte.text.contains("the same"), "Geometry le dit : « %s »" % ed._ecarts_texte.text)
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu := true
+	for c in tb.tuiles:
+		b_rendu = b_rendu and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu and _sans_partenaire_entre(ta, tb) == fente, "UN Ctrl+Z rend le témoin de B tel qu'il était")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	_egal(_sans_partenaire_entre(ta, tb), 0, "Ctrl+Y le recale")
+	# UN GESTE SUR UN BORD DE A ENTRAÎNE B : G au clavier, comme dans `_les_sections_dans_le_modeleur`.
+	mo.activer(int(ta.occurrences_de(paroi)[0]))
+	mo.sections.indexer()
+	var i_bord := -1
+	var axe_face := -1
+	for i in (mo.sections.bords[paroi] as Dictionary):
+		if (mo.sections.bords[paroi][i] as Array).size() == 1:
+			i_bord = i
+			axe_face = mo.sections.bords[paroi][i][0]["axe"]
+			break
+	var normale_monde: Vector3 = (mo.pose.basis * _unitaire(axe_face)).abs()
+	var dans_le_plan: Key = KEY_X
+	for k in [KEY_X, KEY_Z, KEY_Y]:
+		var v: Vector3 = {KEY_X: Vector3(1, 0, 0), KEY_Z: Vector3(0, 1, 0), KEY_Y: Vector3(0, 0, 1)}[k]
+		if v.dot(normale_monde) < 0.5:
+			dans_le_plan = k
+			break
+	for c in tb.tuiles:
+		photo_b[c] = (tb.tuiles[c].sommets as PackedVector3Array).duplicate()
+	mo.choisir_mode("sommet")
+	mo.tout_choisir(false)
+	mo.sel_s = {i_bord: true}
+	for k in [KEY_G, dans_le_plan, KEY_0, KEY_PERIOD, KEY_1, KEY_ENTER]:
+		ed._input(_cle(k))
+	var b_suit := 0
+	for c in tb.tuiles:
+		if tb.tuiles[c].sommets != photo_b[c]:
+			b_suit += 1
+	_vrai(b_suit >= 2, "G sur un bord de A : %d tuiles du témoin de B suivent" % b_suit)
+	_egal(_sans_partenaire_entre(ta, tb), 0, "et la frontière A | B reste fermée")
+	_vrai(_sans_partenaire(ta) == 0 and _sans_partenaire(tb) == 0, "A et B restent étanches")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu2 := true
+	for c in tb.tuiles:
+		b_rendu2 = b_rendu2 and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu2, "UN Ctrl+Z rend aussi les tuiles de B")
+	# Un Ctrl+Z APRÈS avoir changé de couche : le geste vise B, qu'on édite désormais.
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	ed._activer(ib)
+	_vrai(mo.temoin == tb and mo.autres_temoins.has(ta), "B active : le modeleur l'édite, et tient A parmi les autres")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var b_rendu3 := true
+	for c in tb.tuiles:
+		b_rendu3 = b_rendu3 and tb.tuiles[c].sommets == photo_b[c]
+	_vrai(b_rendu3 and _sans_partenaire_entre(ta, tb) == 0, "Ctrl+Z depuis B rend les tuiles de B, qu'on édite")
+	# Ménage : les deux recalages défaits, la couche neuve supprimée.
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._activer(ia)
+	ed._supprimer_couche()
+	ed._regler_edition(false)
+	ed._minuterie_temoin.stop()
+	ed._enregistrer_le_temoin_modele()
+	_bords_finis = true
+
+
+func _sans_partenaire_entre(ta_: RefCounted, tb_: RefCounted) -> int:
+	return _sans_partenaire_de(ta_, tb_) + _sans_partenaire_de(tb_, ta_)
+
+
+func _sans_partenaire_de(ta_: RefCounted, tb_: RefCounted) -> int:
+	var occ_a := {}
+	for o in ta_.occurrences:
+		occ_a[o["sommet"]] = o
+	var occ_b := {}
+	for o in tb_.occurrences:
+		occ_b[o["sommet"]] = o
+	var n := 0
+	for s in occ_a:
+		var oa: Dictionary = occ_a[s]
+		for axe in 3:
+			for sens in [-1, 1]:
+				var e := Vector3i.ZERO
+				e[axe] = sens
+				if not occ_b.has(s + e):
+					continue
+				var ob: Dictionary = occ_b[s + e]
+				var tbm: RefCounted = tb_.tuiles[ob["cle"]]
+				# ⚠ UN PARTENAIRE À MOINS DE 10⁻⁵, PAS UN ARRONDI AU DIX-MILLIÈME : deux points à 3·10⁻⁵ tombent souvent dans le
+				# même cran, et un report posé au cran au lieu de sa position exacte passait inaperçu (mutation d'abord muette).
+				var index_b := {}
+				for j in tbm.sommets.size():
+					var pb: Vector3 = (ob["pose"] as Transform3D) * tbm.sommets[j]
+					var cb := Vector3i((pb * 1000.0).floor())
+					if not index_b.has(cb):
+						index_b[cb] = []
+					index_b[cb].append(pb)
+				var tam: RefCounted = ta_.tuiles[oa["cle"]]
+				var plan: float = float(s[axe]) + 1.0 + 0.5 * sens
+				for i in tam.sommets.size():
+					var pw: Vector3 = (oa["pose"] as Transform3D) * tam.sommets[i]
+					if absf(pw[axe] - plan) > 0.0005:
+						continue
+					var ca := Vector3i((pw * 1000.0).floor())
+					var trouve := false
+					for dx in [-1, 0, 1]:
+						for dy in [-1, 0, 1]:
+							for dz in [-1, 0, 1]:
+								for pb in index_b.get(ca + Vector3i(dx, dy, dz), []):
+									trouve = trouve or (pb as Vector3).distance_to(pw) < 1e-5
+					if not trouve:
+						n += 1
+	return n
 
 
 ## LA LÉGENDE DES FORMES (Jordan, 29 septembre 2026) : un bandeau en haut de la vue, dans Witness seul ;
@@ -733,11 +903,24 @@ func _les_couches_et_leurs_temoins(ed: Control) -> void:
 		and FileAccess.file_exists(ed._glb_du_temoin(cb)), "la copie a SES fichiers (%s)" % str(cb["temoin"]).get_file())
 
 	# On sculpte B : G Z 1 sur une face de sa paroi.
+	# ⚠ UNE FACE DU DEDANS (6 octobre 2026) : depuis que les couches partagent leurs BORDS, un geste sur un sommet de bord
+	# entraîne A — c'est voulu, et gardé par `_les_bords_entre_couches`. Ce qui reste vrai, et que ceci garde : sculpter le
+	# dedans d'une tuile de B ne touche ni le témoin ni le monde de A (le défaut d'avant : un témoin par PROJET).
 	var occ_b: int = tb.occurrences_de(paroi)[0]
 	mo.activer(occ_b)
 	mo.choisir_mode("face")
 	mo.tout_choisir(false)
-	mo.sel_f = {0: true}
+	mo.sections.indexer()
+	var face_dedans := -1
+	for f in tb.tuiles[paroi].faces.size():
+		var au_bord := false
+		for j in tb.tuiles[paroi].faces[f]:
+			au_bord = au_bord or mo.sections.est_de_bord(paroi, j)
+		if not au_bord:
+			face_dedans = f
+			break
+	_vrai(face_dedans >= 0, "la paroi a une face dont aucun sommet n'est sur un bord")
+	mo.sel_f = {maxi(face_dedans, 0): true}
 	var avant_b: PackedVector3Array = tb.tuiles[paroi].sommets.duplicate()
 	var avant_a: PackedVector3Array = ta.tuiles[paroi].sommets.duplicate()
 	for k in [KEY_G, KEY_Z, KEY_1, KEY_ENTER]:
@@ -2291,9 +2474,14 @@ func _play_test(ed: Control) -> void:
 	_touche_physique(KEY_W, true)
 	for i in 40:
 		await physics_frame
+	var marche := Vector2(p.velocity.x, p.velocity.z).length()
 	_touche_physique(KEY_W, false)
 	var pas := Vector2(p.global_position.x - depart.x, p.global_position.z - depart.z).length()
 	_vrai(pas > 0.8, "W (Z en AZERTY) le fait avancer (%.2f case)" % pas)
+	# LA TAILLE (Jordan, 6 octobre 2026) : ×0,65 par défaut ; il marche à 3,2 × 0,65 = 2,08 cases/s (écrit à la main).
+	_vrai(is_equal_approx(p.taille, 0.65) and is_equal_approx(ed._taille_personnage.value, 0.65),
+		"le personnage est à ×0,65 par défaut, et le curseur le dit")
+	_vrai(marche > 1.9 and marche < 2.1, "à ×0,65, il marche à 2,08 cases/s (%.2f)" % marche)
 	for i in 20:
 		await physics_frame
 	var y0: float = p.global_position.y
@@ -2352,8 +2540,8 @@ func _play_test(ed: Control) -> void:
 	# et posait l'œil sous le sol.
 	# ⚠ Et la tête n'est libre que si la sphère tient DANS la capsule : plus large, collé à une paroi,
 	# le premier lancer partirait lui aussi de la roche.
-	_vrai(ed._vue.RAYON_DU_BRAS < p.RAYON, "la sphère du bras (%.2f) est plus fine que la capsule (%.2f)"
-		% [ed._vue.RAYON_DU_BRAS, p.RAYON])
+	_vrai(ed._vue.rayon_du_bras() < p.rayon(), "la sphère du bras (%.3f) est plus fine que la capsule (%.3f)"
+		% [ed._vue.rayon_du_bras(), p.rayon()])
 	ed._vue._elevation = 0.38
 	ed._vue._cible = Vector3(p.global_position.x, 10.5, p.global_position.z)
 	ed._vue._suivre(0.001)
@@ -2367,6 +2555,25 @@ func _play_test(ed: Control) -> void:
 	molette.pressed = true
 	ed._vue._gui_input(molette)
 	_vrai(ed._vue._distance < d, "la molette rapproche la caméra")
+	# LE CURSEUR DE TAILLE, par le vrai contrôle : à ×1, la capsule fait 0,84 de haut et 0,19 de rayon, le modèle
+	# 0,62 (attendus écrits à la main), la caméra recule d'autant ; la sphère du bras reste plus fine que la capsule,
+	# le plan proche sous elle. Puis ×0,4, le plus petit.
+	var capsule: CapsuleShape3D = null
+	for c in p.get_children():
+		if c is CollisionShape3D:
+			capsule = (c as CollisionShape3D).shape as CapsuleShape3D
+	var d065: float = ed._vue._distance
+	ed._taille_personnage.value = 1.0
+	_vrai(is_equal_approx(p.taille, 1.0) and is_equal_approx(capsule.height, 0.84) and is_equal_approx(capsule.radius, 0.19)
+		and is_equal_approx(p._modele.scale.y, 0.62), "Character size ×1 : capsule 0,84 × 0,19, modèle 0,62")
+	_vrai(is_equal_approx(ed._vue._distance, d065 / 0.65), "… et la caméra recule d'autant (%.2f → %.2f)"
+		% [d065, ed._vue._distance])
+	ed._taille_personnage.value = 0.4
+	_vrai(is_equal_approx(capsule.height, 0.336) and ed._vue.rayon_du_bras() < capsule.radius
+		and ed._vue._camera.near * 1.7 < ed._vue.rayon_du_bras(),
+		"à ×0,4, la sphère du bras reste plus fine que la capsule, le plan proche sous elle")
+	ed._taille_personnage.value = 0.65
+	_vrai(is_equal_approx(capsule.height, 0.84 * 0.65), "rendu à ×0,65")
 	# ⚠ PAR LE VRAI CHEMIN DES TOUCHES, vue AU CLAVIER : c'est elle qui a la main en Play test, et une
 	# vue qui avalerait les touches priverait l'écran d'Échap. Appeler `_unhandled_key_input` en direct
 	# ne l'aurait jamais vu.
@@ -2427,11 +2634,13 @@ func _le_vol(ed: Control, p: CharacterBody3D) -> void:
 ## Rien du décor entre la TÊTE du personnage et l'œil, ni autour de l'œil. ⚠ Depuis la tête, pas depuis
 ## `_cible` : le pivot lissé peut être dans la roche, et c'est justement ce qu'on éprouve.
 func _oeil_degage(ed: Control, espace: PhysicsDirectSpaceState3D) -> bool:
-	var tete: Vector3 = ed._vue.personnage.global_position + Vector3.UP * ed._vue.CAMERA_HAUTEUR
+	var tete: Vector3 = ed._vue.personnage.global_position + Vector3.UP * ed._vue.hauteur_camera()
 	var oeil: Vector3 = ed._vue._camera.global_position
 	var boule := PhysicsShapeQueryParameters3D.new()
 	var sphere := SphereShape3D.new()
-	sphere.radius = 0.1
+	# ⚠ À L'ÉCHELLE DU PERSONNAGE (6 octobre 2026) : 0,1 pour un bras de 0,15 à la taille 1 — plus fine que le bras,
+	# plus large que le plan proche (qui suivent tous deux la taille).
+	sphere.radius = 0.1 * ed._vue.taille_personnage
 	boule.shape = sphere
 	boule.transform = Transform3D(Basis(), oeil)
 	boule.collision_mask = 2
@@ -3431,7 +3640,8 @@ func _la_meteo(ed: Control) -> void:
 
 
 ## LA NAGE AU PLAY TEST (Jordan, 1er octobre 2026), dans la cuvette d'au-dessus : nappe à 2,7 (rangée 2 + 0,7),
-## donc flottaison les pieds à 2,7 − 0,55 = 2,15 ; le fond se voit à 0,75. Attendus écrits à la main.
+## donc flottaison les pieds à 2,7 − 0,55 × 0,65 = 2,34 (la taille par défaut) ; le fond se voit à 0,75. Attendus
+## écrits à la main.
 func _la_nage(ed: Control) -> void:
 	# ⚠ LE LAC EST DE LA LAVE pour cette plongée : le voile vu de dedans est celui du liquide (2 octobre 2026).
 	var preset_avant: String = ed._eaux[0]["preset"]
@@ -3445,8 +3655,8 @@ func _la_nage(ed: Control) -> void:
 	p.global_position = Vector3(62.5, 1.6, 62.5)
 	for i in 120:
 		await physics_frame
-	_vrai(p.nage and absf(p.global_position.y - 2.15) < 0.15,
-		"tombé dans le lac, il NAGE et flotte la tête hors de l'eau (pieds à %.2f, attendu 2,15)" % p.global_position.y)
+	_vrai(p.nage and absf(p.global_position.y - 2.34) < 0.1,
+		"tombé dans le lac, il NAGE et flotte la tête hors de l'eau (pieds à %.2f, attendu 2,34)" % p.global_position.y)
 	_vrai(not p.is_on_floor(), "… sans toucher le fond")
 	# PLONGER : la touche de descente du vol (A en AZERTY, Q en QWERTY) ; sous la nappe, la caméra se voile.
 	# La caméra à hauteur de tête et tout près (la cuvette n'a que 3 cases de large : à 4 cases, elle serait
@@ -3471,11 +3681,11 @@ func _la_nage(ed: Control) -> void:
 	_vrai(voile, "sous la nappe, la caméra voit à travers le voile de l'eau")
 	_vrai(p.nage, "au fond, il nage encore (il ne marche pas sur le fond du lac)")
 	ed._vue._elevation = ed._vue.CAMERA_ELEVATION
-	ed._vue._distance = ed._vue.CAMERA_DISTANCE
+	ed._vue._distance = ed._vue.CAMERA_DISTANCE * ed._vue.taille_personnage
 	for i in 90:
 		await physics_frame
 		await process_frame
-	_vrai(absf(p.global_position.y - 2.15) < 0.15, "relâché, il remonte à la surface (%.2f)" % p.global_position.y)
+	_vrai(absf(p.global_position.y - 2.34) < 0.1, "relâché, il remonte à la surface (%.2f)" % p.global_position.y)
 	_vrai(not ed._vue._env.fog_enabled, "la tête hors de l'eau, plus de voile")
 	# NAGER plus lentement qu'on ne marche.
 	ed._vue._azimut = PI / 2   # « en avant » = −X : vers le mur ouest, à deux cases
@@ -3483,7 +3693,7 @@ func _la_nage(ed: Control) -> void:
 	for i in 20:
 		await physics_frame
 	var v := Vector2(p.velocity.x, p.velocity.z).length()
-	_vrai(v > 1.0 and v <= p.VITESSE_NAGE + 0.01, "il nage, moins vite qu'il ne marche (%.2f)" % v)
+	_vrai(v > 0.8 and v <= 2.2 * 0.65 + 0.01, "il nage à sa taille, moins vite qu'il ne marche (%.2f)" % v)
 	# SE HISSER : il nage contre le mur ouest (x = 60, dessus à 2,75) et en sort.
 	for i in 150:
 		await physics_frame
@@ -4172,6 +4382,33 @@ func _la_barre_des_gestes(ed: Control) -> void:
 	ed._durees_gestes.par_unite.clear()
 	ed._gestes_suivis = false
 	ed._appliquer({"poser": {}, "effacer": {c1: true}}, "Dig")
+	# ⚠ LE CLIC REJOUÉ L'EST PANNEAU ENCORE À L'ÉCRAN (il ne s'en va que deux images plus tard) : un panneau qui prend la
+	# souris avalait le clic retenu s'il tombait sous lui — au centre de la vue (signalé par la session vidéos, 6 octobre
+	# 2026 : le second clic d'eau ne posait rien). Un vrai clic, routé par l'interface, au centre du panneau montré.
+	var vue: Control = ed._vue
+	var nav_avant: bool = vue.naviguer
+	vue.naviguer = true   # le clic ne peint rien
+	var panneau: Array = ed._occupe("Working")
+	await process_frame
+	var recus := [0]
+	var compter := func(e: InputEvent) -> void:
+		if e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			recus[0] += 1
+	vue.gui_input.connect(compter)
+	var centre: Vector2 = ed._attente.get_global_rect().get_center()
+	for appui in [true, false]:
+		var m := InputEventMouseButton.new()
+		m.button_index = MOUSE_BUTTON_LEFT
+		m.position = centre
+		m.global_position = centre
+		m.pressed = appui
+		Input.parse_input_event(m)
+		Input.flush_buffered_events()
+	vue.gui_input.disconnect(compter)
+	ed._fin_occupe(panneau)
+	vue.naviguer = nav_avant
+	_vrai(vue.get_global_rect().has_point(centre) and recus[0] == 2,
+		"un clic sous le panneau d'attente arrive à la vue (%d événements sur 2) : le clic rejoué n'est pas avalé" % recus[0])
 
 
 ## « FIX DIAGONAL CONTACTS » (Jordan, 3 octobre 2026), par les VRAIS boutons, loin de tout (x = 200) : deux cases qui se
