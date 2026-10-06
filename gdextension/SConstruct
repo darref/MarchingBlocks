@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+# MarchingBlocks — le cœur natif (GDExtension).
+#
+#   scons platform=linux   target=template_debug     (l'éditeur et les suites, sous Linux)
+#   scons platform=windows target=template_debug     (l'éditeur de Jordan)
+#   scons platform=windows target=template_release   (l'exe exporté)
+#
+# Les bibliothèques sortent dans addons/marchingblocks_core/natif/bin/, que le .gdextension désigne.
+# godot-cpp est un sous-module (gdextension/godot-cpp), épinglé : `git submodule update --init`.
+
+env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
+
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/godot/*.cpp")
+
+bin_dir = "../addons/marchingblocks_core/natif/bin/"
+library = env.SharedLibrary(
+    bin_dir + "libmb_natif{}{}".format(env["suffix"], env["SHLIBSUFFIX"]),
+    source=sources,
+)
+env.NoCache(library)
+Default(library)

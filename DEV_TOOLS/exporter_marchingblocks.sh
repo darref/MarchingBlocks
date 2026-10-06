@@ -32,6 +32,20 @@ if [ $code_exemple -ne 0 ] || [ ! -f /d/MarchingBlocks/exemple/exemple.zip ]; th
 	echo "⚠ l'exemple n'a pas pu être pris — export arrêté (voir /tmp/exemple_mb.log)."
 	exit 1
 fi
+# LE CŒUR NATIF (charte §0, « le cœur C++ ») : la DLL release doit être là, et le natif doit rendre EXACTEMENT ce que
+# rend le GDScript (une DLL en retard sur les sources ferait poser autre chose à l'exe qu'à l'éditeur).
+# ⚠ Sans elle l'exe marcherait quand même (le GDScript prend la main), mais plus lentement : on ne livre pas ça.
+DLL=/d/MarchingBlocks/addons/marchingblocks_core/natif/bin/libmb_natif.windows.template_release.x86_64.dll
+if [ ! -f "$DLL" ]; then
+	echo "⚠ $DLL absente — construire gdextension/ (voir gdextension/README.md). Export arrêté."
+	exit 1
+fi
+"$GODOT" --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/test_natif.gd > /tmp/natif_mb.log 2>&1
+if [ $? -ne 0 ]; then
+	grep -E "✗|VERDICT" /tmp/natif_mb.log | head -5
+	echo "⚠ le cœur natif ne rend pas ce que rend le GDScript — export arrêté (voir /tmp/natif_mb.log)."
+	exit 1
+fi
 export GODOT_SCRIPT_ENCRYPTION_KEY=$(tr -d '\r\n' < "$CLE")
 "$GODOT" --headless --path D:/MarchingBlocks --export-release "Windows Desktop" "$SORTIE" > /tmp/export_mb.log 2>&1
 code=$?

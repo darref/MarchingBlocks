@@ -276,17 +276,29 @@ func reconstruire() -> Dictionary:
 	if fautes.mesh_library == null:
 		fautes.mesh_library = lot_des_cases if lot_des_cases != null else palette()
 
+	# LE CŒUR NATIF (`MB.natif()`, C++) fait les mêmes comptes et les mêmes décisions, s'il est là ; le GDScript
+	# ci-dessous reste la référence et le repli (`DEV_TOOLS/test_natif.gd` compare les deux).
+	var natif = MB.natif()
 	var miennes := {}
-	for c in cases.get_used_cells():
-		miennes[c] = true
-	var pleines: Dictionary = union if rang >= 0 else miennes
-	_miennes = miennes
-	_colonnes_miennes = {}
-	_etages_miens = {}
-	for c: Vector3i in miennes:
-		var k2 := Vector2i(c.x, c.z)
-		_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
-		_etages_miens[c.y] = int(_etages_miens.get(c.y, 0)) + 1
+	var pleines: Dictionary
+	if natif != null:
+		var comptes: Array = natif.compter_cases(cases.get_used_cells())
+		miennes = comptes[0]
+		pleines = union if rang >= 0 else miennes
+		_miennes = miennes
+		_colonnes_miennes = comptes[1]
+		_etages_miens = comptes[2]
+	else:
+		for c in cases.get_used_cells():
+			miennes[c] = true
+		pleines = union if rang >= 0 else miennes
+		_miennes = miennes
+		_colonnes_miennes = {}
+		_etages_miens = {}
+		for c: Vector3i in miennes:
+			var k2 := Vector2i(c.x, c.z)
+			_colonnes_miennes[k2] = int(_colonnes_miennes.get(k2, 0)) + 1
+			_etages_miens[c.y] = int(_etages_miens.get(c.y, 0)) + 1
 
 	var id_faute: int = -1
 	if fautes.mesh_library != null:
@@ -309,6 +321,18 @@ func reconstruire() -> Dictionary:
 	_lot_pose = rendu.mesh_library
 	_etat.clear()
 	_compte = {"pieces": 0, "fautes": 0, "dehors": 0, "touches": 0, "decisions": 0}
+	if natif != null:
+		var r: Dictionary = natif.reconstruire(pleines, miennes, rang, index, poids, choix, rendu, fautes, id_faute)
+		_etat = r["etat"]
+		_compte = {"pieces": r["pieces"], "fautes": r["fautes"], "dehors": r["dehors"], "touches": r["touches"],
+			"decisions": r["decisions"]}
+		_plafond = r["plafond"]
+		_y_bas = r["y_bas"]
+		_hauts = {}
+		reconstructions_completes += 1
+		_pret = true
+		_empreinte = _empreinte_des_cases()
+		return _bilan()
 	_plafond = MB.plafond_de(pleines)
 	# Les hauteurs des colonnes, le temps de cette reconstruction (`MB.sous_le_ciel`) ; vidées à la fin : la route locale
 	# ne les tient pas à jour, elle remonte les colonnes.
@@ -520,6 +544,17 @@ func reconstruire_autour(changees, sur := false) -> Dictionary:
 	# moins que de remonter les colonnes à chaque sommet (`MB.sous_le_ciel`). L'union est déjà à jour ici.
 	# ⚠ SEULEMENT LES COLONNES LUES (4 octobre 2026, la nuit) quand les balayer coûte moins que tout parcourir : un sommet
 	# (x, z) lit les colonnes x..x+1, z..z+1 ; `_y_bas` et `_plafond` bornent toutes les cases de l'union.
+	var natif = MB.natif()
+	if natif != null:
+		# Le cœur natif choisit lui-même entre lire le Dictionary et le recopier (avec ses hauts).
+		var sommets: Array[Vector3i] = []
+		for k2: Vector2i in colonnes:
+			for y in range(_y_bas - 1, int(colonnes[k2]) + 1):
+				sommets.append(Vector3i(k2.x, y, k2.y))
+		natif.refaire(_pleines, sommets, _etat, rang, _index, poids, choix, _plafond, rendu, _fautes(), _id_faute,
+			_compte)
+		_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
+		return _bilan()
 	if a_refaire > 20000:
 		var lues := {}
 		for k2: Vector2i in colonnes:
@@ -544,6 +579,11 @@ func reconstruire_sommets(sommets) -> Dictionary:
 	var rendu := _rendu()
 	if not _pret or rendu == null or rendu.mesh_library != lot_courant() or rendu.mesh_library != _lot_pose:
 		return reconstruire()
+	var natif = MB.natif()
+	if natif != null:
+		natif.refaire(_pleines, Array(sommets), _etat, rang, _index, poids, choix, _plafond, rendu, _fautes(),
+			_id_faute, _compte)
+		return _bilan()
 	for k in sommets:
 		_refaire(k)
 	return _bilan()
@@ -651,6 +691,9 @@ func _empreinte_des_cases() -> int:
 	var cases := _cases()
 	if cases == null:
 		return 0
+	var natif = MB.natif()
+	if natif != null:
+		return natif.empreinte_des_cases(cases.get_used_cells())
 	var empreinte := 0
 	var n := 0
 	for c in cases.get_used_cells():

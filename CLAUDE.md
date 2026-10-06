@@ -69,6 +69,62 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       UNE fois, comme `rules_text`, et se traduisent dans les trois langues.
     - ⚠ **OUVERT** : ce que l'API dit de l'eau (rien tant que les greffons ne posent pas les fluides) et des variantes.
 
+- **LE CŒUR C++ — DÉCIDÉ (Jordan, 6 octobre 2026 : « le cœur en C++, l'API haut niveau pour les trois greffons, afin
+  qu'on gagne à la fois la performance du soft et des greffons, et l'API pour construire un jeu par-dessus »), PREMIÈRE
+  ÉTAPE ÉCRITE LE MÊME JOUR.** Le détail, les commandes de construction et l'état : `gdextension/README.md`.
+  - **UN SEUL CŒUR, TROIS PONTS — PROPOSÉ.** Ce qui se calcule sur des cases (la règle de pose, la reconstruction
+    INCRÉMENTALE, l'eau, puis les outils et les formes) s'écrit UNE fois en C++17 standard, sans moteur
+    (`gdextension/src/noyau/`, en ANGLAIS : il partira dans les greffons), sous les contraintes d'Unreal (ni exceptions
+    ni RTTI, masquage et rétrécissement en erreurs — celles de `core-runner`). Puis, par moteur, un PONT mince :
+    Godot — la GDExtension (l'appli ET le greffon gratuit, la même bibliothèque) ; Unreal — le module compile le
+    noyau tel quel (le `MBCore` d'aujourd'hui y FUSIONNE : une seule règle C++, pas deux) ; Unity — une bibliothèque
+    native à interface C (`extern "C"`), appelée par P/Invoke derrière la même API C#. ⚠ Pour Unity c'est un binaire
+    par plateforme (Windows, macOS, Linux, Android, iOS en statique, WebGL par emscripten) : **OUVERT, à Jordan** —
+    garder le C# actuel en repli là où il n'y a pas de binaire serait une SECONDE DESCRIPTION (§6), donc la
+    recommandation est le natif partout, construit par une CI (GitHub Actions) qui sort la matrice.
+  - **L'API DE JEU REPOSE SUR UN ÉTAT DU MONDE DANS LE CŒUR — PROPOSÉ.** `mbcore::World` : les couches, leurs cases,
+    la décision de chaque sommet ; `SetCells` rend un DIFF de poses (ajoutées, retirées, changées) que chaque pont
+    applique à sa façon (GridMap, instances d'Unreal, objets ou lots de Unity). C'est ce qui donne aux trois greffons
+    la reconstruction incrémentale qui leur manque (§4, OUVERT) — écrite une fois. `GetCell`, `Raycast`, `TileAt`,
+    `OnCellsChanged`, `SaveCells` / `LoadCells` (l'entrée « UNE API DE JEU », ci-dessus) en sont des méthodes ; les
+    noms et le sens s'écrivent UNE fois (dans le noyau, et ses cas d'épreuve), les ponts ne font que traduire.
+  - **CE QUI SE VEND NE PART PAS DANS LES GREFFONS** : le noyau partagé ne porte que ce que le format ouvert dit déjà
+    (la règle, l'eau, les outils) ; le trancheur, le témoin et le modeleur, s'ils passent en C++, vivent dans une
+    partie PRIVÉE de la GDExtension de l'appli (une seconde cible de build), jamais dans la bibliothèque des greffons.
+    ⚠ Une DLL native n'est pas dans le PCK chiffré (elle est à côté de l'exe) : du code compilé reste plus dur à lire
+    qu'un GDScript, donc c'est plutôt un gain pour l'exe — mais le rempart reste la licence (§0, le chiffrement).
+  - ⚠ **« UN EXÉCUTABLE » (§0) NE TIENT PLUS TEL QUEL — OUVERT, À JORDAN.** Godot ne sait pas embarquer une
+    bibliothèque native dans l'exe : l'export pose `libmb_natif….dll` À CÔTÉ de `MarchingBlocks.exe`. On livre donc un
+    dossier (ou un zip, ou un installeur). Sans la DLL l'exe marche quand même — le GDScript prend la main —, mais plus
+    lentement. `exporter_marchingblocks.sh` refuse désormais d'exporter sans la DLL release, ou si `test_natif` rougit.
+  - **LE GDSCRIPT RESTE LA RÉFÉRENCE ET LE REPLI.** Chaque fonction accélérée garde son corps GDScript, qui sert quand
+    la bibliothèque manque et qui est l'ATTENDU de `DEV_TOOLS/test_natif.gd` (sortie identique au caractère près,
+    l'ordre des clés compris). `Natif.actif = false` — ou `MB_NATIF=0` dans l'environnement — rend le GDScript
+    partout. On n'efface un corps GDScript que le jour où le noyau a ses PROPRES cas d'épreuve (les greffons).
+  - **L'ORDRE — PROPOSÉ** : (1) l'appli d'abord, par les points chauds MESURÉS, module par module, chacun gardé par le
+    test différentiel — **FAIT LE 6 OCTOBRE : la règle de pose, le massif (complet et local), l'océan** ; (2) les autres
+    points chauds de l'appli (la découpe, le maillage de l'eau, la propagation des sections, les cartes PBR) — mesurer
+    avant ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) ;
+    (4) les greffons, QUAND LE LOGICIEL SERA FINI (« les greffons attendent la fin du logiciel », ci-dessus) : Godot
+    embarque la GDExtension, Unreal fusionne `MBCore`, Unity passe au natif ; (5) l'API de jeu par-dessus, avec ses
+    cas d'épreuve communs et un exemple par moteur.
+  - **MESURÉ (6 octobre 2026, Linux, headless, Godot 4.7 et godot-cpp épinglé)** : `test_natif` 83 (mondes au hasard :
+    relief, falaises, grottes, dalles flottantes, contacts par une arête, coordonnées négatives ; poses avec et sans trous,
+    en couches ; le massif complet puis 120 gestes locaux, poids et choix de variantes compris ; l'océan à cinq niveaux et
+    dans une boîte élargie) ; les 22 suites vertes AVEC le natif et avec `MB_NATIF=0`, aux mêmes comptes (fumée 803).
+    Sur un monde de 120 821 cases : `MB.poses` 850 → 236 ms, l'océan 284 → 73 ms, la reconstruction complète du massif
+    1 866 → 330 ms. **Dix mutations du C++, toutes rouges** (le ciel décalé, le balayage raccourci, le hachage sans
+    second brassage, l'ordre de l'océan, les hauts mal rangés, les muets mal rangés, les poids négatifs, les étages,
+    les choix ignorés, la lecture de l'union). ⚠ **DEUX D'ABORD MUETTES, ET C'ÉTAIT LE TEST** : les choix tombaient
+    sur des sommets sans variante, et le monde était trop petit pour que la route locale lise jamais le Dictionary —
+    `routes()` exige désormais les deux chemins. ⚠ Les DLL Windows sont construites par mingw ici (seules dépendances :
+    KERNEL32, msvcrt), **jamais chargées sous Windows** ; ni l'exe exporté, ni l'éditeur de Jordan n'ont été essayés.
+  - **LA COHABITATION AVEC LA SESSION DU BUREAU** : le cœur vit dans des fichiers NEUFS (`gdextension/`,
+    `addons/marchingblocks_core/natif*`) ; un fichier GDScript existant ne reçoit que son AIGUILLAGE (trois lignes en tête
+    de la fonction accélérée). Si une session change une fonction déjà portée, `test_natif.gd` rougit : on reporte le
+    changement dans le C++, on ne fige jamais le GDScript. ⚠ **Après un `git pull`, reconstruire la bibliothèque** si
+    `gdextension/src` a changé (sinon le natif d'hier répond, et `test_natif` le dit).
+
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
