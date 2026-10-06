@@ -202,6 +202,7 @@ func _initialize() -> void:
 	_le_dev_de_l_exemple()
 	_les_durees()
 	_les_dossiers()
+	_le_feuillage()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -376,6 +377,29 @@ func _les_dossiers() -> void:
 	_egal(Dossiers.exemple(), base.path_join("Example"), "hors des données de l'appli, l'exemple va dans Example/")
 	Dossiers.racine_forcee = ""
 	_vider(base)
+
+
+## LE FEUILLAGE (6 octobre 2026) : ses modèles et ses plants voyagent dans le `.mbproj` ; un projet d'avant n'en a pas ;
+## une entrée malformée refuse le fichier entier ; un projet sans modèle n'écrit pas la clé.
+func _le_feuillage() -> void:
+	const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+	var m := FE.modele(3, "Oak", "C:/x/oak.glb")
+	m["decalage"] = -0.25
+	var pl := FE.plant(1, 3, Vector3(1.5, 2.75, -4.25), 0.5, 1.1, "sol")
+	var texte := Projet.vers_texte([Projet.couche("Rock")], 0, [], [], FE.vers_donnees([m], [pl]))
+	var relu := Projet.depuis_texte(texte, [])
+	_vrai(not relu.is_empty() and (relu["feuillage"]["modeles"] as Array).size() == 1
+		and relu["feuillage"]["modeles"][0]["chemin"] == "C:/x/oak.glb"
+		and float(relu["feuillage"]["modeles"][0]["decalage"]) == -0.25
+		and relu["feuillage"]["plants"][0]["p"] == Vector3(1.5, 2.75, -4.25), "le feuillage voyage dans le projet")
+	var sans := Projet.vers_texte([Projet.couche("Rock")], 0)
+	_vrai(not sans.contains("feuillage") and (Projet.depuis_texte(sans, [])["feuillage"]["plants"] as Array).is_empty(),
+		"sans feuillage : pas de clé, et relu vide (un projet d'avant)")
+	var abime: Dictionary = JSON.parse_string(texte)
+	abime["feuillage"]["plants"] = [9, 0, 0, 0, 0, 1, 1]
+	var e: Array = []
+	_vrai(Projet.depuis_texte(JSON.stringify(abime), e).is_empty() and not e.is_empty(),
+		"un plant d'un modèle inconnu refuse le projet entier (%s)" % ("" if e.is_empty() else e[0]))
 
 
 func _vider(dossier: String) -> void:

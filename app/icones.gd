@@ -71,6 +71,8 @@ const TRACES := {
 	"oeil": '<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
 	"oeil_ferme": '<path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7S2 12 2 12z" stroke-opacity="0.45"/><path d="M3.5 3.5l17 17"/>',
 	"plus": '<path d="M12 5v14M5 12h14"/>',
+	# L'atelier Foliage (6 octobre 2026) : un sapin sur son tronc.
+	"arbre": '<path d="M12 2.5 6.5 10h3l-4 6h13l-4-6h3z"/><path d="M12 16v5.5"/>',
 	# Le tranchage et les opérations
 	"couteau": '<path d="M19.5 3 7.5 15l2.5 2.5L21.5 6a2 2 0 0 0-2-3z"/><path d="M7.5 15l-4 4 2.5 2.5 4-4"/>',
 	"elargir": '<path d="M3 12h18M6.5 8.5 3 12l3.5 3.5M17.5 8.5 21 12l-3.5 3.5"/>',

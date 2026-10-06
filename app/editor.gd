@@ -39,6 +39,7 @@ const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
 const Section := preload("res://app/section.gd")
 const Variantes := preload("res://app/variantes.gd")
+const AtelierFeuillage := preload("res://app/atelier_feuillage.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
@@ -208,6 +209,9 @@ var _detachees: Array = []
 var _histoire := UndoRedo.new()
 ## LES VARIANTES VOULUES (4 octobre 2026) : leurs deux sections et leurs gestes vivent dans `variantes.gd`.
 var _variantes: RefCounted = Variantes.new(self)
+## L'atelier Foliage (6 octobre 2026) : tout vit dans `atelier_feuillage.gd`, ici les branchements.
+var _feuillage: RefCounted = AtelierFeuillage.new(self)
+var _droite_feuillage: Panneau
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -398,6 +402,8 @@ func _batir() -> void:
 	_vue.forme_dite.connect(_forme_dite)
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
+	_vue.feuillage_survole.connect(_feuillage.survoler)
+	_vue.feuillage_coup.connect(_feuillage.coup)
 	_vue.variante_cliquee.connect(_variantes.cliquer)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
 	_vue.molette_contextuelle = _molette
@@ -427,9 +433,12 @@ func _batir() -> void:
 	_batir_droite_jeu(_droite_jeu.get_meta("pile"))
 	_droite_fluides = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_fluides(_droite_fluides.get_meta("pile"))
+	_feuillage.brancher(_vue.feuillage)
+	_droite_feuillage = _panneau(corps, false, LARGEUR_DROITE)
+	_feuillage.batir(_droite_feuillage.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
-			[_droite_fluides, "fluides"]]:
+			[_droite_fluides, "fluides"], [_droite_feuillage, "feuillage"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -796,6 +805,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
 		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
 			+ "of the witness tiles."],
+		["feuillage", "Foliage", "arbre", "Plant trees and bushes (.glb models) in the painted world. Esc goes back to "
+			+ "World."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -2716,7 +2727,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides"]:
+	if atelier in ["monde", "jeu", "fluides", "feuillage"]:
 		await _rhabiller_avec_attente(atelier == "jeu")
 	var debut := Time.get_ticks_msec()
 	if atelier == "jeu" and _atelier != "jeu" and _ecran_vivant() and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
@@ -2760,7 +2771,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides"]:
+	if atelier in ["monde", "jeu", "fluides", "feuillage"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier == "jeu" and _atelier != "jeu":
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -2775,13 +2786,17 @@ func _aller_a(atelier: String) -> void:
 	# FLUIDS SE DÉSACTIVE EN SORTANT : l'outil Water ne survit pas à l'atelier (Jordan, 2 octobre 2026).
 	if atelier != "fluides":
 		_sortir_des_fluides()
+	if atelier != "feuillage":
+		_feuillage.sortir()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde", "feuillage": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
+	if atelier == "feuillage":
+		_feuillage.entrer()
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
@@ -2843,6 +2858,7 @@ func _contexte() -> void:
 	_droite_texture.visible = texturing
 	_droite_jeu.visible = jeu
 	_droite_fluides.visible = fluides
+	_droite_feuillage.visible = _atelier == "feuillage"
 	_modeleur.geometrie = not texturing
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -4518,6 +4534,11 @@ func _demander(quoi: String) -> void:
 		_dialogue.add_filter("*.png", "PNG image")
 		_dialogue.title = "Export the UV layout"
 		_dialogue.current_file = "uv_layout.png"
+	elif quoi == "feuillage":
+		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_dialogue.add_filter("*.glb", "glTF binary (a tree, a bush…)")
+		_dialogue.title = "Import a foliage model"
+		_dialogue.current_file = ""
 	elif quoi == "texture":
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 		_dialogue.add_filter("*.png, *.jpg, *.jpeg, *.webp", "Image")
@@ -4575,6 +4596,8 @@ func _fichier_choisi(fichier: String) -> void:
 			_inscrire_les_retouches()
 		"patron":
 			_exporter_le_patron(fichier)
+		"feuillage":
+			_feuillage.importer(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
@@ -5391,6 +5414,10 @@ func _molette(sens: int, b: InputEventMouseButton) -> bool:
 	var ctrl := b.ctrl_pressed or b.meta_pressed
 	if _atelier in ["monde", "fluides"]:
 		return _molette_du_monde(sens, alt, maj, ctrl)
+	if _atelier == "feuillage" and not _vue.naviguer:
+		if ctrl:
+			return _cran(_compteur_etage, sens, "Floor")
+		return _feuillage.molette(sens, alt, maj)
 	if _atelier in ["witness", "texture"] and _vue.edition and (alt or maj) and not ctrl:
 		if _modeleur.sculpt and _atelier == "witness":
 			return _cran(_curseurs_sculpt.get("sculpt_rayon" if alt else "sculpt_force"), sens,
@@ -6136,6 +6163,7 @@ func _vider_le_projet() -> void:
 	_eau_vide = false
 	if _vue != null:
 		_vue.poser_eaux([])
+		_feuillage.vider()
 
 
 ## Rend vrai si le projet est ouvert. ⚠ Chaque couche est habillée de son lot EN CACHE s'il est à jour,
@@ -6189,6 +6217,7 @@ func _ouvrir(chemin: String) -> bool:
 	_refaire_l_union()
 	for e in etat.get("eaux", []):
 		_ajouter_eau(e)
+	_feuillage.charger(etat.get("feuillage", {}))
 	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
 	# en choisit un. Un fichier disparu depuis n'y revient pas.
 	for t in etat.get("travaux", []):
@@ -6392,14 +6421,15 @@ func _enregistrer(en_fond := false) -> void:
 			"poids": (_vue.couche(i).poids as Dictionary).duplicate(true), "choix": (_vue.couche(i).choix as Dictionary).duplicate()})
 	var eaux: Array = _eaux.duplicate(true)
 	var travaux := _chemins_des_travaux()
+	var feuillage: Dictionary = _feuillage.vers_donnees()
 	if en_fond:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
-		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true),
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, feuillage),
 			true, "Saving the project")
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, feuillage)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -6419,14 +6449,15 @@ func _attendre_l_ecriture() -> void:
 
 ## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
 ## `_ecriture_finie`, sur le fil principal).
-func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool) -> void:
+func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
+		feuillage: Dictionary = {}) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, feuillage))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -6660,6 +6691,23 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
+	if _atelier == "feuillage":
+		if k.physical_keycode == KEY_QUOTELEFT:
+			_teleporter()
+		else:
+			match k.keycode:
+				KEY_ESCAPE:
+					_changer_d_atelier("monde")
+				KEY_PAGEUP:
+					_compteur_etage.value += 1
+				KEY_PAGEDOWN:
+					_compteur_etage.value -= 1
+				KEY_F:
+					_cadrer_tout_le_monde()
+				_:
+					return
+		get_viewport().set_input_as_handled()
+		return
 	if _atelier == "fluides":
 		# LA MER EN CHOIX : PgUp / PgDn la montent ou la descendent, Entrée la pose, Échap l'abandonne.
 		if _mer_choisie != null:
@@ -6770,13 +6818,13 @@ func _input(event: InputEvent) -> void:
 	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides"] or k.ctrl_pressed or k.alt_pressed:
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "feuillage"] or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
 	# DANS FLUIDS, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
-	if _atelier == "fluides" and k.keycode != KEY_SPACE:
+	if _atelier in ["fluides", "feuillage"] and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

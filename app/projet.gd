@@ -14,6 +14,8 @@ extends RefCounted
 ##
 ## Fonctions PURES, sans nœud : c'est ce qui les rend gardables par `DEV_TOOLS/test_projet.gd`.
 
+const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+
 const FORMAT := "marchingblocks-project"
 ## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
 ## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
@@ -63,7 +65,8 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## nombres JSON. `cases` (version 1, un tableau de nombres) reste lu.
 ## `c["cases"]` : un dictionnaire {case: true} ou un tableau de cases (`GridMap.get_used_cells()`).
 ## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
-static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = []) -> String:
+static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [],
+		feuillage: Dictionary = {}) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -108,6 +111,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 	var tout := {"format": FORMAT, "version": VERSION, "active": active, "couches": sorties, "eaux": sorties_eau}
 	if not travaux.is_empty():
 		tout["travaux"] = travaux.map(func(t): return str(t))
+	# LE FEUILLAGE (6 octobre 2026) : ses modèles et ses plants (`feuillage.gd`). Absent tant qu'il est vide.
+	if not feuillage.is_empty() and not (feuillage.get("modeles", []) as Array).is_empty():
+		tout["feuillage"] = feuillage
 	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
@@ -253,7 +259,11 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 		for t in liste_travaux:
 			if t is String and t != "" and not travaux.has(t):
 				travaux.append(t)
-	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux}
+	# Le feuillage (6 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier entier.
+	var feuillage := FE.depuis_donnees(brut.get("feuillage", null), erreurs)
+	if feuillage.is_empty():
+		return {}
+	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "feuillage": feuillage}
 
 
 ## CE QUI DIT QUE LA SOURCE A CHANGÉ. Vide si elle n'existe pas (ou pas encore).

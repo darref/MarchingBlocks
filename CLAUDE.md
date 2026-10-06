@@ -53,6 +53,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
+  - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
+    dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
+    vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -3768,6 +3771,81 @@ ciel de World sert aux reflets des métaux, un soleil y ferait des taches. Gard�
 départ, les curseurs qui le règlent sans toucher l'angle du vrai soleil, la case, World sans disque, la pluie qui le
 voile à 45 %) ; trois mutations rouges (la taille portée aussi par le vrai soleil, le disque laissé en World, la météo
 qui ne le voile pas). Photo dans `capture_meteo.gd` (« soleil_1_defaut », « soleil_2_gros »).
+
+### L'ATELIER FOLIAGE — DEMANDÉ PAR JORDAN (6 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « l'atelier Foliage (un placement dans le monde de foliages comme des arbres dont on importe le fichier 3D comme
+glb et on place dans cet atelier sur un socle qui représente le sol pour cerner à quel offset l'objet sera placé par
+rapport au sol, et ensuite prévoir toutes les règles intelligentes de placement ; l'atelier Foliage a le monde dans sa
+vue comme World mais il ne pourra que placer des foliages, n'importe où avec des modes : dans le vide, planté au sol
+voisinage libre, planté au sol débordement) », « je préfère que tu commences par l'atelier Foliage car j'ai besoin de
+faire des devlogs avec du décor d'arbres animé ». L'atelier **Props** (des objets attachés aux tuiles, emportés avec
+elles, dans une couche de la tuile qui garde l'étanchéité) est demandé ENSUITE : **OUVERT, pas commencé.**
+
+- **UN SEPTIÈME ATELIER** (teinte vert tilleul, **PROPOSÉ**), le monde dans la vue comme World ; on n'y fait QUE planter :
+  l'outil devient « feuillage » en entrant, celui de World revient en sortant (Échap, Leave, un autre atelier — comme
+  Fluids). Espace (Navigate), PgUp / PgDn (le plan de « In the air »), F, ², Ctrl+molette (l'étage) y marchent.
+  Rien dans `editor.gd` que des branchements : l'atelier vit dans `app/atelier_feuillage.gd` (comme `variantes.gd`).
+- **LA RÈGLE, DANS LE CŒUR** (`addons/marchingblocks_core/feuillage.gd`, pure, des `Callable` pour lire le monde — elle
+  partira dans les greffons). Un MODÈLE : décalage (en unités du modèle : son origine au-dessus du sol), échelle, taille
+  au hasard, EMPREINTE (rayon en cases), hauteur (le haut du modèle, mesuré), vent. Un PLANT : son point AU SOL, lacet,
+  tirage d'échelle, mode. Les trois modes (**PROPOSÉ**, le sens précis) :
+  - **In the air** : sur le plan de l'étage de la grille, n'importe où, même au-dessus du vide ; refusé seulement DANS
+    la matière ;
+  - **Planted · free** : sur le sol VU ; refusé si le sol penche plus que « Max slope » (40° par défaut), dans l'eau, si
+    l'empreinte n'est pas portée par le sol à ±0,35 case (huit points de son bord : un bord de falaise, un pied de mur),
+    si la matière l'empêche de pousser (sa hauteur, au centre et à mi-rayon), ou si l'empreinte d'un autre plant empiète ;
+  - **Planted · overflow** : sur le sol VU, la pente et l'eau seules comptent — il déborde des bords, des murs et des
+    voisins.
+  Partout : jamais deux plants au même point (0,05), et « Spacing » (une distance minimale, le pinceau). Un clic plante
+  un plant (son lacet au hasard si « Random rotation ») ; le **pinceau** (taille, « Density » = les essais par coup) tire
+  des points dans son disque, chacun posé sur le sol et vérifié — les acceptés entrent dans l'index au fur et à mesure.
+  Un coup de pinceau se repose quand la souris a parcouru 0,4 de son rayon. Le clic droit enlève (le plus proche, ou
+  tout le disque du pinceau). Chaque coup est UNE annulation.
+- ⚠ **ON PLANTE SUR CE QU'ON VOIT, PAS SUR LES CASES** : le rayon de la souris trouve la case (l'occupation, comme
+  Sculpt), puis le sol est cherché par un rayon VERTICAL contre les triangles des tuiles posées (couches visibles, rangés
+  par seaux de 4 × 4 en cache) — sur l'aminci, un quart de case sous le dessus des cases. Sans tuiles, le dessus des cases.
+  ⚠ **UN DÉFAUT TROUVÉ PAR LA FUMÉE** : la descente s'arrêtait avant le premier niveau (une borne initialisée « très
+  haut ») — aucun clic ne plantait. Gardé (mutation rouge).
+- **LE SOCLE** (`app/socle_feuillage.gd`) : un disque de pierre dont le dessus EST le sol, un plan translucide qui le
+  prolonge (on voit les racines dessous), l'anneau de l'empreinte, le modèle tel qu'il sera planté (vent compris).
+  « Ground offset » l'enfonce ou le lève ; « Sit its base on the ground » pose son point le plus bas sur le sol (c'est
+  aussi le défaut à l'import). L'empreinte par défaut : 0,35 × sa plus grande largeur (**PROPOSÉ** : deux couronnes
+  voisines se frôlent).
+- **LE VENT — DES ARBRES ANIMÉS** (`app/feuillage_vue.gd`) : un shader en espace MONDE, balancement ∝ carré de la
+  hauteur au-dessus du SOL du plant (deux rafales désaccordées, une phase par plant), plus un frisson des feuilles. Chaque
+  matériau du fichier y est repris (couleur, image, couleur de sommet, découpe ou mélange alpha, double face, rugosité,
+  métal et leurs canaux, normale). Rendu en MULTIMESH, une par partie du modèle : des milliers d'arbres, quelques appels
+  de dessin. ⚠ **Une MultiMesh n'a pas de matériau par surface** : une COPIE du maillage les porte. ⚠ **L'animation PROPRE
+  du fichier (squelette, AnimationPlayer) n'est pas jouée : OUVERT.**
+- **LE PROJET** : `"feuillage"` dans le `.mbproj` (modèles, plants à plat par sept nombres) ; absent tant qu'il n'y a pas
+  de modèle ; une entrée malformée, ou un plant d'un modèle inconnu, refuse le fichier entier. Le `.glb` est COPIÉ dans
+  `<projet>_foliage/` (le même fichier repris, un autre du même nom à côté). Le feuillage appartient au monde entier, pas
+  à une couche (**PROPOSÉ**, comme l'eau) ; il se voit dans World, Fluids, Foliage et le Play test (pas dans le témoin).
+- ⚠ **CE QUI N'EST PAS FAIT, ET L'ÉCRAN LE DIT** : un plant ne SUIT pas le sol (creuser dessous le laisse en l'air) ; pas
+  de collision au Play test (on traverse les troncs) ; pas dans le `.mbworld` ni dans les greffons (dans la liste) ; les
+  réglages d'un modèle (curseurs) ne sont pas annulables (comme le « Look » de l'eau) ; un `.gltf` (fichiers à côté) n'est
+  pas accepté, seulement le `.glb`.
+- **MESURÉ** : `test_feuillage` 70 (le sol des cases, les trois modes, les voisins, la transformation, le pinceau — paires
+  et régions recalculées sans la règle —, le fichier, le décalage dans la hauteur ; le rendu sur un ARBRE D'ESSAI écrit en
+  `.glb` par `DEV_TOOLS/arbre_d_essai.gd`, mesures écrites à la main : sa boîte, les réglages déduits, le shader des
+  feuilles en découpe double face et de l'écorce opaque, ce que chaque plant donne à la MultiMesh) ; `test_projet` 118
+  (+3) ; `fumee_appli` 846 (+34 et une SENTINELLE ; la septième teinte et sa barre comprises ; par de VRAIS clics à travers la caméra sur un plateau habillé du témoin :
+  l'import par la route du dialogue et sa copie, un plant sur la surface VUE à y = 20,75, Ctrl+Z / Ctrl+Y, refusé au
+  bord en « free » et dit, accepté en « overflow », dans le vide sur le plan de l'étage, le clic droit, un coup de
+  pinceau — jamais deux à moins de deux empreintes, tous sur le plateau, UN Ctrl+Z —, le décalage, l'enregistrement et
+  la réouverture, invisible dans le témoin, Échap). **27 MUTATIONS, TOUTES ROUGES** : le cœur 12 (pas de bord, pas de
+  dégagement, voisins sans empreintes, espacement, pente, eau, transformation et hauteur sans décalage, le pinceau qui
+  n'indexe pas, un modèle inconnu accepté, le sol des cases sans case vide au-dessus, le doublon) ; l'écran 15 (le sol
+  aux cases, la descente arrêtée, pas de copie, pas d'annulation, l'outil non rendu, le pinceau ignoré, le clic droit
+  inerte, les curseurs sans effet, le feuillage toujours visible, le relâché non relayé, le projet et l'ouverture sans
+  feuillage, le vent sans hauteur, l'alpha ignoré, pas posé sur sa base). ⚠ **« LE SOL SANS CASE VIDE AU-DESSUS »
+  D'ABORD MUETTE, PAR LE TEST** : aucun point n'était cherché depuis l'INTÉRIEUR d'une colonne — une colonne de trois
+  cases l'a fait rougir.
+- **VU À L'IMAGE** (`DEV_TOOLS/capture_feuillage.gd`, Xvfb, OpenGL) : 79 arbres plantés au pinceau en « free » sur un
+  plateau du témoin, aucun au bord ; le fantôme rouge refusé au bord ; le socle dans la barre. Les 23 suites vertes. Entre deux photos à
+  0,6 s, ~1 % des pixels de la vue changent (les couronnes bougent). ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** : la
+  force du vent, l'aspect sur de vrais arbres (feuillages en découpe alpha), le ressenti du pinceau.
 
 ### LA MÉTÉO DU PLAY TEST — DEMANDÉE PAR JORDAN (2 octobre 2026), ÉCRITE LE MÊME JOUR
 
