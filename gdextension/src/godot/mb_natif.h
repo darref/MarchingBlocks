@@ -12,6 +12,12 @@
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_vector2_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
 
 #include <vector>
 
@@ -48,6 +54,27 @@ public:
 	// fluides.gd
 	Dictionary boite(const Dictionary &occupees) const;
 	Dictionary ocean(const Dictionary &occupees, int64_t niveau, const Vector3i &lo, const Vector3i &hi) const;
+
+	// cartes_pbr.gd (src/appli/pbr.cpp) — les boucles par texel ; les Image.resize restent au GDScript.
+	PackedFloat32Array pbr_luminance(const PackedByteArray &px) const;
+	PackedFloat32Array pbr_hauteur(const PackedFloat32Array &lum, const PackedFloat32Array &b1,
+			const PackedFloat32Array &b2, const PackedFloat32Array &b3, double wf, double wm, double wl, double k) const;
+	Array pbr_depuis_la_hauteur(const PackedFloat32Array &haut, const PackedFloat32Array &c1,
+			const PackedFloat32Array &c2, int64_t w, int64_t h, bool boucle, double force, double occ, double base,
+			double variation) const;
+	PackedFloat32Array pbr_premultiplier(const PackedByteArray &src, const PackedByteArray &md) const;
+	PackedFloat32Array pbr_combler(const PackedFloat32Array &a, const PackedFloat32Array &b) const;
+	PackedByteArray pbr_finir_dilatation(const PackedByteArray &src, const PackedByteArray &md,
+			const PackedFloat32Array &p) const;
+	PackedByteArray pbr_masque(const PackedVector2Array &triangles, int64_t w, int64_t h) const;
+
+	// decoupe.gd (src/appli/decoupe.cpp) — la boucle par triangle de `Decoupe.trancher`.
+	Array decouper(const PackedVector3Array &sommets, const PackedVector3Array &normales,
+			const PackedVector2Array &uvs, const PackedColorArray &couleurs, const PackedInt32Array &indices,
+			const Vector3 &debut, const Vector3 &fin) const;
+
+	// eau_maillage.gd (src/appli/eau.cpp) — `_poser_les_plats` ; rend [v, n, c, uv, i], indices décalés de `base`.
+	Array eau_poser_les_plats(const Array &plats, int64_t base) const;
 
 protected:
 	static void _bind_methods();

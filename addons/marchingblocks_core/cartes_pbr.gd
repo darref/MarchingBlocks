@@ -21,6 +21,11 @@ extends RefCounted
 ## Les réglages par défaut. `fin`, `moyen`, `large` pèsent les trois bandes de la hauteur ; `contraste` l'étire ;
 ## `inverser` fait des sombres les hauts ; `normale` est la force de la pente ; `occlusion` celle de la cavité ;
 ## `rugosite` la base et `variation` ce que la hauteur y ajoute (les creux plus rugueux que les bosses).
+## LE CŒUR NATIF (`natif.gd`) : les boucles par texel (luminance, hauteur, normale et ORM, dilatation, masque) passent
+## en C++ quand la bibliothèque est là — mêmes octets (`DEV_TOOLS/test_natif.gd`) ; les réductions et remontées d'image
+## restent ici (`Image.resize`, déjà natif). Les corps GDScript restent la RÉFÉRENCE et le repli.
+const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+
 const DEFAUTS := {"fin": 1.0, "moyen": 0.6, "large": 0.3, "contraste": 1.5, "inverser": false,
 	"normale": 4.0, "occlusion": 1.0, "rugosite": 0.8, "variation": 0.3}
 
@@ -56,11 +61,15 @@ static func generer(albedo: Image, r: Variant = null, boucle := true, masque: Im
 	var n := w * h
 	# 1. La luminance.
 	var px := src.get_data()
+	var natif = Natif.noyau()
 	var lum := PackedFloat32Array()
-	lum.resize(n)
-	for i in n:
-		var j := i * 4
-		lum[i] = (px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114) / 255.0
+	if natif != null:
+		lum = natif.pbr_luminance(px)
+	else:
+		lum.resize(n)
+		for i in n:
+			var j := i * 4
+			lum[i] = (px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114) / 255.0
 	# 2. La hauteur : trois bandes.
 	var flous := flous_de(lum, w, h, boucle)
 	var b1: PackedFloat32Array = flous[0]
@@ -71,6 +80,8 @@ static func generer(albedo: Image, r: Variant = null, boucle := true, masque: Im
 	var wl := float(g["large"])
 	var k := float(g["contraste"]) * (-1.0 if bool(g["inverser"]) else 1.0)
 	var haut := PackedFloat32Array()
+	if natif != null:
+		return depuis_la_hauteur(natif.pbr_hauteur(lum, b1, b2, b3, wf, wm, wl, k), w, h, g, boucle)
 	haut.resize(n)
 	for i in n:
 		haut[i] = clampf(0.5 + k * (wf * (lum[i] - b1[i]) + wm * (b1[i] - b2[i]) + wl * (b2[i] - b3[i])), 0.0, 1.0)
@@ -94,7 +105,13 @@ static func depuis_la_hauteur(haut: PackedFloat32Array, w: int, h: int, r: Varia
 	hb.resize(n)
 	var c1: PackedFloat32Array = cav[0]
 	var c2: PackedFloat32Array = cav[1]
-	for y in h:
+	var natif = Natif.noyau()
+	if natif != null:
+		var cartes: Array = natif.pbr_depuis_la_hauteur(haut, c1, c2, w, h, boucle, force, occ, base, variation)
+		nrm = cartes[0]
+		orm = cartes[1]
+		hb = cartes[2]
+	for y in (0 if natif != null else h):
 		var ym := y - 1
 		var yp := y + 1
 		if boucle:
@@ -207,9 +224,13 @@ static func dilater(img: Image, masque: Image) -> Image:
 	var src := img.get_data()
 	# Niveau 0 : couleurs PRÉMULTIPLIÉES par la couverture, en flottants (RGBA = r·a, g·a, b·a, a).
 	var niveaux: Array = []
+	var natif = Natif.noyau()
 	var f := PackedFloat32Array()
-	f.resize(w * h * 4)
-	for i in w * h:
+	if natif != null:
+		f = natif.pbr_premultiplier(src, md)
+	else:
+		f.resize(w * h * 4)
+	for i in (0 if natif != null else w * h):
 		var a := md[i] / 255.0
 		f[i * 4] = src[i * 4] / 255.0 * a
 		f[i * 4 + 1] = src[i * 4 + 1] / 255.0 * a
@@ -229,7 +250,9 @@ static func dilater(img: Image, masque: Image) -> Image:
 		bas.resize(ici.get_width(), ici.get_height(), Image.INTERPOLATE_BILINEAR)
 		var a := ici.get_data().to_float32_array()
 		var b := bas.get_data().to_float32_array()
-		for i in range(0, a.size(), 4):
+		if natif != null:
+			a = natif.pbr_combler(a, b)
+		for i in range(0, 0 if natif != null else a.size(), 4):
 			var reste := 1.0 - a[i + 3]
 			if reste <= 0.0:
 				continue
@@ -239,6 +262,8 @@ static func dilater(img: Image, masque: Image) -> Image:
 			a[i + 3] += b[i + 3] * reste
 		plein = Image.create_from_data(ici.get_width(), ici.get_height(), false, Image.FORMAT_RGBAF, a.to_byte_array())
 	var p := plein.get_data().to_float32_array()
+	if natif != null:
+		return Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, natif.pbr_finir_dilatation(src, md, p))
 	var sortie := src.duplicate()
 	for i in w * h:
 		if md[i] >= 255:
@@ -259,6 +284,9 @@ static func dilater(img: Image, masque: Image) -> Image:
 static func masque_des_triangles(triangles: PackedVector2Array, taille: Vector2i) -> Image:
 	var w := taille.x
 	var h := taille.y
+	var natif = Natif.noyau()
+	if natif != null:
+		return Image.create_from_data(w, h, false, Image.FORMAT_L8, natif.pbr_masque(triangles, w, h))
 	var d := PackedByteArray()
 	d.resize(w * h)
 	for t in range(0, triangles.size() - 2, 3):

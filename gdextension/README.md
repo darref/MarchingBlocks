@@ -14,6 +14,7 @@ gdextension/
     placement.h         la règle de pose évaluée : bits, couche, ciel, hachage, tirage des variantes
     ocean.h             l'océan par tronçons de colonne
   src/godot/          le PONT vers Godot (classe MBNatif), en français : il ne part que dans l'exe
+  src/appli/          la partie PRIVÉE de l'appli (cartes PBR, découpe, eau) : jamais dans les greffons
 addons/marchingblocks_core/
   natif.gd            l'aiguillage : charge la bibliothèque, ou rend null (le GDScript prend la main)
   natif/marchingblocks_natif.gdextension
@@ -55,6 +56,15 @@ fermer l'éditeur, reconstruire, rouvrir. Sous Windows, une DLL chargée ne peut
 | `massif_peint.reconstruire_autour` / `_sommets` | `refaire`                            |
 | `massif_peint._empreinte_des_cases`             | `empreinte_des_cases`                |
 | `FL.boite`, `FL.ocean`                          | `boite`, `ocean`                     |
+| `CartesPBR.generer`, `depuis_la_hauteur` (boucles par texel) | `pbr_luminance`, `pbr_hauteur`, `pbr_depuis_la_hauteur` |
+| `CartesPBR.dilater` (boucles par texel)         | `pbr_premultiplier`, `pbr_combler`, `pbr_finir_dilatation` |
+| `CartesPBR.masque_des_triangles`                | `pbr_masque`                         |
+| `Decoupe.trancher` (la boucle par triangle)     | `decouper`                           |
+| `EauMaillage._poser_les_plats`                  | `eau_poser_les_plats`                |
+
+Étape 2 (6 octobre 2026) : les cartes PBR, la découpe et les plats de l'eau vivent dans `src/appli/`, la partie
+PRIVÉE de l'appli — le trancheur est ce qui se vend, il ne partira pas dans la bibliothèque des greffons. Les
+`Image.resize` des cartes restent au GDScript (déjà natifs dans Godot).
 
 ⚠ **Le natif ne décide rien** : la table des 256 configurations lui est donnée par `MB.natif()` depuis
 `marching_blocks.gd` ; il évalue, c'est tout. Les noms de tuiles, les orientations, le contexte d'air libre

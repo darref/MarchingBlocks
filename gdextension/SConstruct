@@ -11,7 +11,7 @@
 env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
 
 env.Append(CPPPATH=["src/"])
-sources = Glob("src/godot/*.cpp")
+sources = Glob("src/godot/*.cpp") + Glob("src/appli/*.cpp")
 
 bin_dir = "../addons/marchingblocks_core/natif/bin/"
 library = env.SharedLibrary(

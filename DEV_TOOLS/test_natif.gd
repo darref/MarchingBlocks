@@ -17,6 +17,10 @@ const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 const Peint := preload("res://addons/marchingblocks_core/massif_peint.gd")
+const CP := preload("res://addons/marchingblocks_core/cartes_pbr.gd")
+const DC := preload("res://addons/marchingblocks_core/decoupe.gd")
+const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -37,7 +41,10 @@ func _initialize() -> void:
 	_le_massif_complet_et_local()
 	_le_massif_en_couches()
 	_l_ocean()
-	_dire(_sections == 6, "toutes les sections sont allées au bout (%d sur 6) — une erreur d'exécution en a arrêté une"
+	_les_cartes_pbr()
+	_la_decoupe()
+	_le_maillage_de_l_eau()
+	_dire(_sections == 9, "toutes les sections sont allées au bout (%d sur 9) — une erreur d'exécution en a arrêté une"
 		% _sections)
 	_mesurer()
 	_fin()
@@ -384,6 +391,211 @@ func _l_ocean() -> void:
 	_sections += 1
 
 
+# ── 7. les cartes PBR (étape 2) ───────────────────────────────────────────────────────────────────────
+
+## Une image de bruit et de motifs, aux dimensions données (non carrées, impaires : les bords comptent).
+func _image(w: int, h: int, graine: int) -> Image:
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = graine
+	for y in h:
+		for x in w:
+			var v := 0.5 + 0.3 * sin(x * 0.21 + graine) * cos(y * 0.17) + rng.randf() * 0.25 - 0.1
+			img.set_pixel(x, y, Color(clampf(v, 0, 1), clampf(v * rng.randf(), 0, 1), clampf(1.0 - v, 0, 1)))
+	return img
+
+
+## Des triangles UV au hasard : petits, grands, hors de [0, 1], dégénérés, dans les deux sens.
+func _triangles(graine: int, n: int) -> PackedVector2Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = graine
+	var t := PackedVector2Array()
+	for k in n:
+		var c := Vector2(rng.randf_range(-0.1, 1.1), rng.randf_range(-0.1, 1.1))
+		var e := rng.randf_range(0.002, 0.2)
+		var a := c + Vector2(rng.randf_range(-e, e), rng.randf_range(-e, e))
+		var b := c + Vector2(rng.randf_range(-e, e), rng.randf_range(-e, e))
+		if k % 11 == 0:
+			b = c.lerp(a, 0.5)   # dégénéré
+		t.append_array([c, a, b])
+	return t
+
+
+func _octets_differents(a: Image, b: Image) -> int:
+	if a == null or b == null or a.get_size() != b.get_size() or a.get_format() != b.get_format():
+		return -1
+	var da := a.get_data()
+	var db := b.get_data()
+	var n := 0
+	for i in da.size():
+		if da[i] != db[i]:
+			n += 1
+	return n
+
+
+func _cartes_pareilles(f: Callable, quoi: String) -> void:
+	var r := _les_deux(f)
+	for nom in ["hauteur", "normale", "orm"]:
+		var e := _octets_differents(r[0][nom], r[1][nom])
+		_dire(e == 0, "%s, %s : %d octet(s) différent(s) du GDScript (−1 : taille ou format)" % [quoi, nom, e])
+
+
+func _les_cartes_pbr() -> void:
+	print("7. les cartes PBR")
+	for dims in [Vector2i(64, 64), Vector2i(97, 61), Vector2i(128, 40)]:
+		var img := _image(dims.x, dims.y, dims.x)
+		_cartes_pareilles(func(): return CP.generer(img, null, true), "generer en boucle %s" % dims)
+		_cartes_pareilles(func(): return CP.generer(img, {"inverser": true, "contraste": 2.3, "normale": 9.0,
+			"occlusion": 1.7, "rugosite": 0.4, "variation": 0.9}, false), "generer sans boucle, réglés %s" % dims)
+		var masque := CP.masque_des_triangles(_triangles(dims.y, 30), dims)
+		_cartes_pareilles(func(): return CP.generer(img, null, false, masque), "generer avec masque %s" % dims)
+	# Le masque, sur des triangles de toutes sortes.
+	for graine in 4:
+		var tri := _triangles(100 + graine, 60)
+		var r := _les_deux(func(): return CP.masque_des_triangles(tri, Vector2i(83, 71)))
+		var e := _octets_differents(r[0], r[1])
+		_dire(e == 0, "masque_des_triangles %d : %d octet(s) différent(s)" % [graine, e])
+	# ⚠ LES ÉGALITÉS EXACTES (une mutation `<= 1.0` → `< 1.0` restait muette sur des triangles au hasard) : des
+	# sommets aux demi-texels d'une image de 64 — des flottants exacts —, des centres de texels à 1,0 pile d'un bord.
+	var exacts := PackedVector2Array()
+	for k in 6:
+		var x0 := (10.5 + k * 8) / 64.0
+		exacts.append_array([Vector2(x0, 10.5 / 64.0), Vector2(x0 + 4.0 / 64.0, 10.5 / 64.0), Vector2(x0, 20.5 / 64.0)])
+	var re := _les_deux(func(): return CP.masque_des_triangles(exacts, Vector2i(64, 64)))
+	var ee := _octets_differents(re[0], re[1])
+	_dire(ee == 0, "masque_des_triangles aux égalités exactes : %d octet(s) différent(s)" % ee)
+	# La dilatation, sur un masque gris (couvertures partielles : la branche du mélange).
+	var img := _image(90, 70, 3)
+	var gris := Image.create(90, 70, false, Image.FORMAT_L8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	var partiels := 0
+	for y in 70:
+		for x in 90:
+			var v := 0.0
+			if (x / 9 + y / 7) % 3 == 0:
+				v = [1.0, rng.randf(), 0.0][rng.randi_range(0, 2)]
+			if v > 0.0 and v < 1.0:
+				partiels += 1
+			gris.set_pixel(x, y, Color(v, v, v))
+	var rd := _les_deux(func(): return CP.dilater(img, gris))
+	var ed := _octets_differents(rd[0], rd[1])
+	_dire(ed == 0 and partiels > 50, "dilater : %d octet(s) différent(s), %d texels partiels" % [ed, partiels])
+	_sections += 1
+
+
+# ── 8. la découpe (étape 2) ───────────────────────────────────────────────────────────────────────────
+
+## Un maillage de triangles au hasard, normales, UV et couleurs, indexé ou non (les deux chemins de la lecture).
+func _soupe(graine: int, indexe: bool, avec_attributs: bool) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = graine
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var uv := PackedVector2Array()
+	var c := PackedColorArray()
+	for k in 300:
+		var p := Vector3(rng.randf_range(-1, 3), rng.randf_range(-1, 3), rng.randf_range(-1, 3))
+		v.append(p)
+		n.append(Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized())
+		uv.append(Vector2(rng.randf(), rng.randf()))
+		c.append(Color(rng.randf(), rng.randf(), rng.randf()))
+	# Des sommets posés PILE sur les plans de coupe (les triangles plats de la découpe naissent là).
+	for k in 30:
+		v[k] = Vector3(float(rng.randi_range(0, 2)), v[k].y, float(rng.randi_range(0, 2)))
+	# ⚠ ET À MOINS DE 10⁻⁶ D'UN PLAN, CÔTÉ DEHORS : la tolérance `EPS` les garde (une mutation `>= 0` restait muette).
+	for k in range(30, 60):
+		var d := -4e-7 if k % 2 == 0 else 4e-7
+		v[k] = Vector3(float(rng.randi_range(0, 1)) + (d if k % 4 < 2 else -d), v[k].y, v[k].z)
+	var a := []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = v
+	if avec_attributs:
+		a[Mesh.ARRAY_NORMAL] = n
+		a[Mesh.ARRAY_TEX_UV] = uv
+		a[Mesh.ARRAY_COLOR] = c
+	if indexe:
+		var idx := PackedInt32Array()
+		for k in 900:
+			idx.append(rng.randi_range(0, 299))
+		a[Mesh.ARRAY_INDEX] = idx
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	return m
+
+
+func _tableaux_du_maillage(m: ArrayMesh) -> String:
+	var t := PackedStringArray()
+	for s in m.get_surface_count():
+		var a := m.surface_get_arrays(s)
+		for k in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_TEX_UV, Mesh.ARRAY_COLOR]:
+			t.append(var_to_str(a[k]))
+	return "\n".join(t)
+
+
+func _la_decoupe() -> void:
+	print("8. Decoupe.trancher")
+	var boites: Array = [AABB(Vector3(0, 0, 0), Vector3(1, 1, 1)), AABB(Vector3(0.5, -0.3, 1), Vector3(1.2, 2, 0.7)),
+		AABB(Vector3(-0.25, 0.4, -0.1), Vector3(2.5, 0.6, 3))]
+	var coupes := 0
+	for indexe in [true, false]:
+		for attributs in [true, false]:
+			var m := _soupe(7 + int(indexe) * 2 + int(attributs), indexe, attributs)
+			for b in boites:
+				var r := _les_deux(func(): return _tableaux_du_maillage(DC.trancher(m, b)))
+				_dire(r[0] == r[1], "trancher une soupe (indexée %s, attributs %s) par %s : le natif diffère"
+					% [indexe, attributs, b])
+				coupes += (r[0] as String).length()
+	# Le vrai bloc : les boîtes des 52 sommets du témoin, sur l'aminci.
+	var bloc := BM.maillage_moitie(0)
+	var tuiles: Dictionary = BM.tuiles_du_temoin()
+	var ecarts := 0
+	var premier := ""
+	for cle in tuiles:
+		var v: Vector3i = tuiles[cle]["sommet"]
+		var b := AABB(Vector3(v) + Vector3(0.5, 0.5, 0.5), Vector3.ONE)
+		var r := _les_deux(func(): return _tableaux_du_maillage(DC.trancher(bloc, b)))
+		if r[0] != r[1]:
+			ecarts += 1
+			if premier == "":
+				premier = cle
+	_dire(ecarts == 0, "trancher le témoin : %d tuile(s) sur %d où le natif diffère (%s)" % [ecarts, tuiles.size(), premier])
+	_dire(coupes > 1000, "les soupes doivent laisser des morceaux (%d)" % coupes)
+	_sections += 1
+
+
+# ── 9. le maillage de l'eau (étape 2) ─────────────────────────────────────────────────────────────────
+
+func _le_maillage_de_l_eau() -> void:
+	print("9. EauMaillage.maillage (les plats)")
+	var occ := {}
+	for x in 48:
+		for z in 48:
+			var h := 4 + int((sin(x * 0.19) + cos(z * 0.13)) * 3.0)
+			for y in h:
+				occ[Vector3i(x, y, z)] = true
+	# Une dalle flottante (la nappe sous un étage) et une cuvette.
+	for x in range(20, 26):
+		for z in range(20, 26):
+			occ[Vector3i(x, 12, z)] = true
+	var sources: Array = [Vector3i(-3, 3, -3)]
+	for k in 12:
+		sources.append(Vector3i(4 + (k * 13) % 40, 12, 4 + (k * 29) % 40))
+	var w: Dictionary = FL.monde(occ, sources)
+	var cascades := 0
+	for r in w["corps"]:
+		if r != null and r["erreur"] == "" and r["genre"] == "riviere":
+			cascades += 1
+	var b: Dictionary = FL.boite(occ)
+	var r2 := _les_deux(func():
+		var m: ArrayMesh = EM.maillage(w["corps"], occ, b)
+		return _tableaux_du_maillage(m) + var_to_str(m.surface_get_arrays(0)[Mesh.ARRAY_INDEX]))
+	_dire(r2[0] == r2[1], "le maillage de l'eau : le natif diffère du GDScript (%d contre %d caractères)"
+		% [(r2[0] as String).length(), (r2[1] as String).length()])
+	_dire(cascades > 0, "le monde doit porter des rivières (et leurs cascades) : %d" % cascades)
+	_sections += 1
+
+
 # ── la mesure (rien n'y est jugé) ─────────────────────────────────────────────────────────────────────
 
 func _mesurer() -> void:
@@ -410,4 +622,23 @@ func _mesurer() -> void:
 			"natif   " if natif else "GDScript", pleines.size(), (t1 - t0) / 1000, poses.size(), (t2 - t1) / 1000,
 			(o["eau"] as Dictionary).size(), (t4 - t3) / 1000])
 		m.free()
+	var img := _image(512, 512, 9)
+	var tri := _triangles(4, 400)
+	for natif in [false, true]:
+		Natif.actif = natif
+		var t0 := Time.get_ticks_usec()
+		CP.generer(img, null, true)
+		var t1 := Time.get_ticks_usec()
+		var masque := CP.masque_des_triangles(tri, Vector2i(512, 512))
+		var t2 := Time.get_ticks_usec()
+		CP.generer(img, null, false, masque)
+		var t3 := Time.get_ticks_usec()
+		var bloc := BM.maillage_moitie(0)
+		var t4 := Time.get_ticks_usec()
+		for x in 6:
+			for y in 6:
+				DC.trancher(bloc, AABB(Vector3(x + 1.5, y + 3.5, 5.5), Vector3.ONE))
+		var t5 := Time.get_ticks_usec()
+		print("   %s : cartes 512² %d ms, masque %d ms, cartes avec masque %d ms, 36 découpes %d ms" % [
+			"natif   " if natif else "GDScript", (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000, (t5 - t4) / 1000])
 	Natif.actif = true

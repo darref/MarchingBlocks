@@ -103,8 +103,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     partout. On n'efface un corps GDScript que le jour où le noyau a ses PROPRES cas d'épreuve (les greffons).
   - **L'ORDRE — PROPOSÉ** : (1) l'appli d'abord, par les points chauds MESURÉS, module par module, chacun gardé par le
     test différentiel — **FAIT LE 6 OCTOBRE : la règle de pose, le massif (complet et local), l'océan** ; (2) les autres
-    points chauds de l'appli (la découpe, le maillage de l'eau, la propagation des sections, les cartes PBR) — mesurer
-    avant ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) ;
+    points chauds de l'appli — **FAIT LE 6 OCTOBRE : les cartes PBR, la découpe, les plats de l'eau** (ci-dessous) ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) ;
     (4) les greffons, QUAND LE LOGICIEL SERA FINI (« les greffons attendent la fin du logiciel », ci-dessus) : Godot
     embarque la GDExtension, Unreal fusionne `MBCore`, Unity passe au natif ; (5) l'API de jeu par-dessus, avec ses
     cas d'épreuve communs et un exemple par moteur.
@@ -119,6 +118,23 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     sur des sommets sans variante, et le monde était trop petit pour que la route locale lise jamais le Dictionary —
     `routes()` exige désormais les deux chemins. ⚠ Les DLL Windows sont construites par mingw ici (seules dépendances :
     KERNEL32, msvcrt), **jamais chargées sous Windows** ; ni l'exe exporté, ni l'éditeur de Jordan n'ont été essayés.
+  - **L'ÉTAPE 2 — FAITE (Jordan, 6 octobre 2026 : « go pour l'étape 2, porte les autres points chauds »), MESURÉE
+    D'ABORD** (`DEV_TOOLS/banc_points_chauds.gd`, headless) : cartes PBR 1 024² 1,7 s (3,1 s avec masque, dont
+    `dilater` 1,4 s et le masque 0,45 s) ; trancher le témoin 1,5 s, dont la découpe 0,95 s et `verifier_couture`
+    0,12 s (qui découpe aussi) ; un geste d'eau à mémoire pleine 72 ms, dont `_poser_les_plats` 65 ms. **PORTÉS, dans
+    `gdextension/src/appli/`** (la partie PRIVÉE : le trancheur se vend, il n'ira pas dans les greffons) : les boucles
+    par texel des cartes PBR (luminance, hauteur, normale et ORM, dilatation, masque — les `Image.resize` restent au
+    GDScript), la boucle par triangle de `Decoupe.trancher`, `EauMaillage._poser_les_plats`. **APRÈS** : cartes 1,7 →
+    0,23 s, avec masque 3,1 → 0,33 s, `dilater` 1,4 → 0,33 s, le masque 0,45 → 0,02 s ; le témoin tranché 1,5 → 0,49 s
+    (la découpe 0,95 → 0,09 s, `verifier_couture` 0,12 → 0,01 s) ; le geste d'eau 72 → 11 ms. Sorties IDENTIQUES À
+    L'OCTET (images) et au bit près (tableaux) — `test_natif` 132 ; douze mutations rouges (Sobel sans boucle, ORM sans
+    arrondi, luminance en float, dilatation sans mélange, `combler` qui saute, normales non renormalisées, triangles
+    plats gardés, tolérance des plans, points des cascades ignorés, éventail retourné, doublons gardés, distance au
+    masque stricte). ⚠ **DEUX D'ABORD MUETTES, PAR LE TEST** : aucun centre de texel à 1,0 PILE d'un bord (des sommets aux
+    demi-texels d'une image de 64 l'ont fait rougir) ; aucun sommet à moins de 10⁻⁶ d'un plan côté dehors. ⚠ **UNE
+    ÉQUIVALENTE** : la couleur par défaut de la découpe — elle ne sort que si la source a des couleurs. **PAS PORTÉS,
+    MESURÉS** : la propagation des sections (quelques ms par geste), `_nappes_du_corps` (~50 ms, seulement pour les corps
+    qui changent), `maillage_moitie` (~0,25 s, une fois).
   - **LA COHABITATION AVEC LA SESSION DU BUREAU** : le cœur vit dans des fichiers NEUFS (`gdextension/`,
     `addons/marchingblocks_core/natif*`) ; un fichier GDScript existant ne reçoit que son AIGUILLAGE (trois lignes en tête
     de la fonction accélérée). Si une session change une fonction déjà portée, `test_natif.gd` rougit : on reporte le

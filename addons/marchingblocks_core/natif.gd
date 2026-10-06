@@ -20,10 +20,15 @@ static var _essaye := false
 
 
 ## Le cœur natif, ou null (éteint, ou bibliothèque absente). Chargé une fois.
+## ⚠ CHARGÉ SUR LE FIL PRINCIPAL SEULEMENT : les cartes PBR tournent sur un autre fil, et charger une extension depuis
+## un fil secondaire n'est pas sûr. Un fil secondaire qui arrive avant le premier chargement prend le GDScript, sans
+## rien retenir — l'appel suivant du fil principal chargera.
 static func noyau() -> Variant:
 	if not actif:
 		return null
 	if not _essaye:
+		if OS.get_thread_caller_id() != OS.get_main_thread_id():
+			return null
 		_essaye = true
 		_noyau = _charger()
 	return _noyau

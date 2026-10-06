@@ -625,5 +625,17 @@ void MBNatif::_bind_methods() {
 								 "plafond", "rendu", "fautes", "id_faute", "compte"),
 			&MBNatif::refaire);
 	ClassDB::bind_method(D_METHOD("boite", "occupees"), &MBNatif::boite);
+	ClassDB::bind_method(D_METHOD("pbr_luminance", "px"), &MBNatif::pbr_luminance);
+	ClassDB::bind_method(D_METHOD("pbr_hauteur", "lum", "b1", "b2", "b3", "wf", "wm", "wl", "k"), &MBNatif::pbr_hauteur);
+	ClassDB::bind_method(D_METHOD("pbr_depuis_la_hauteur", "haut", "c1", "c2", "w", "h", "boucle", "force", "occ",
+								 "base", "variation"),
+			&MBNatif::pbr_depuis_la_hauteur);
+	ClassDB::bind_method(D_METHOD("pbr_premultiplier", "src", "md"), &MBNatif::pbr_premultiplier);
+	ClassDB::bind_method(D_METHOD("pbr_combler", "a", "b"), &MBNatif::pbr_combler);
+	ClassDB::bind_method(D_METHOD("pbr_finir_dilatation", "src", "md", "p"), &MBNatif::pbr_finir_dilatation);
+	ClassDB::bind_method(D_METHOD("pbr_masque", "triangles", "w", "h"), &MBNatif::pbr_masque);
+	ClassDB::bind_method(D_METHOD("eau_poser_les_plats", "plats", "base"), &MBNatif::eau_poser_les_plats);
+	ClassDB::bind_method(D_METHOD("decouper", "sommets", "normales", "uvs", "couleurs", "indices", "debut", "fin"),
+			&MBNatif::decouper);
 	ClassDB::bind_method(D_METHOD("ocean", "occupees", "niveau", "lo", "hi"), &MBNatif::ocean);
 }
