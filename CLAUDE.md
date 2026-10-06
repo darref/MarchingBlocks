@@ -104,7 +104,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **L'ORDRE — PROPOSÉ** : (1) l'appli d'abord, par les points chauds MESURÉS, module par module, chacun gardé par le
     test différentiel — **FAIT LE 6 OCTOBRE : la règle de pose, le massif (complet et local), l'océan** ; (2) les autres
     points chauds de l'appli — **FAIT LE 6 OCTOBRE : les cartes PBR, la découpe, les plats de l'eau** (ci-dessous) ; (3) `mbcore::World` et son diff, d'abord dans l'appli (il y remplace les dictionnaires de cases) — **LE MONDE ET SON
-    DIFF ÉCRITS LE 6 OCTOBRE, AVEC SES PROPRES CAS D'ÉPREUVE ; LE BRANCHEMENT DANS L'APPLI RESTE OUVERT** (ci-dessous) ;
+    DIFF ÉCRITS LE 6 OCTOBRE, AVEC SES PROPRES CAS D'ÉPREUVE, ET BRANCHÉS DANS L'APPLI LE MÊME JOUR** (ci-dessous) ;
     (4) les greffons, QUAND LE LOGICIEL SERA FINI (« les greffons attendent la fin du logiciel », ci-dessus) : Godot
     embarque la GDExtension, Unreal fusionne `MBCore`, Unity passe au natif ; (5) l'API de jeu par-dessus, avec ses
     cas d'épreuve communs et un exemple par moteur.
@@ -175,14 +175,42 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       colonne vide) — un sommet à `y = lo − 1` a le haut de la colonne pour coin, donc soit ce coin ferme sa propre
       case vide du bas (sa classe ne peut pas être à l'air libre), soit la colonne n'est pas sondée. La borne prudente
       reste.
-  - **LE BRANCHEMENT DANS L'APPLI (étape 3 b) — OUVERT, VOLONTAIREMENT** : remplacer l'union `{case: rang}` de l'écran
-    et l'état de chaque `MassifPeint` par un `MBMonde` touche le CŒUR d'`editor.gd` (`_appliquer`, les vols,
-    `_suivre_les_cases`, `_refaire_l_union`, Up / Down, les choix et les poids de `variantes.gd`, l'annulation) et les
-    ~800 vérifications de `fumee_appli` qui lisent l'état des massifs — tout ce que la session du bureau écrit. Ce n'est
-    plus un aiguillage de trois lignes (la règle de cohabitation, ci-dessous). Le monde est prêt et éprouvé contre
-    l'appli ; le gain mesuré du geste (quelques ms → ~0,01 ms) ne se SENT pas dans l'appli, où le geste coûte déjà ~40 ms
-    ailleurs (§5) — son vrai prix est l'API de jeu et la reconstruction incrémentale des greffons. **PROPOSÉ** : le
-    brancher quand la session du bureau est au repos, ou avec les greffons (étape 4).
+  - **LE BRANCHEMENT DANS L'APPLI (étape 3 b) — FAIT (Jordan, 6 octobre 2026 : « go pour brancher le monde dans
+    l'appli »).** Le détail : `gdextension/README.md`.
+    - **CE QUI CHANGE** : l'écran tient UN `MBMonde` (`editor._monde_coeur`, recréé avec le projet), donné à chaque
+      couche (`MassifPeint.monde`). Une couche en couches ne décide plus ses sommets : elle s'INSCRIT au monde à son rang
+      (ses grilles, son `_etat`, son `_compte`, tenus par référence) ; le monde suit l'union de l'écran (`suivre` les
+      cases d'un geste, `resynchroniser` toute l'union, par `World::assign` au-delà d'un quart de cases différentes) ;
+      ses changements s'accumulent en ATTENTE (le premier « avant », le dernier « après ») et `vider_attente` les pose
+      dans TOUTES les couches inscrites comme le GDScript les poserait — le premier appel d'un geste pose tout. Un rang
+      qui change de propriétaire fait remplir la couche depuis le monde. Une couche CACHÉE DORT (une photo de ce
+      qu'elle pose ; au réveil, la seule différence). Une couche dont index, poids et choix n'ont pas bougé n'est pas
+      redécidée. Les sommets MUETS (à la couche, sans surface) sont tenus par le noyau (`cls` < 0). Le noyau gagne
+      `set_choices`, `assign`, les muets ; `remove_layer` est simplifié (renuméroter puis tout refaire).
+    - **LE GDSCRIPT RESTE** : `MB_NATIF=0` (ou une couche sans monde, `rang` < 0) prend la route d'avant, mot pour mot.
+    - ⚠ **UN DÉFAUT RÉEL DE L'APPLI, TROUVÉ PAR LE TEST DIFFÉRENTIEL** : `_montrer_couche` ne prévenait pas les AUTRES
+      couches cachées — montrer B pendant que A est cachée changeait des sommets de A (la frontière), que A, en
+      reparaissant, ne refaisait pas : un rendu faux jusqu'à la prochaine reconstruction complète. Le monde avait raison
+      (comparé à une reconstruction complète GDScript). Corrigé (les cases de B s'ajoutent à `_a_refaire` des autres
+      couches cachées) ; gardé par `fumee_appli` (deux blocs côte à côte, cacher B, cacher A, montrer B, montrer A :
+      l'état = une reconstruction complète, avec et sans natif) — deux rouges sans la correction.
+    - **MESURÉ** : `test_natif` 157 (§11 : l'écran mené deux fois — GDScript et branché — par 160 gestes au hasard :
+      coups, déplacements, creusements, cacher / montrer, Up / Down, choix, poids, lot ; après CHAQUE geste les mêmes
+      grilles, le même état dictionnaire pour dictionnaire, le même bilan ; des muets existent ; chaque sorte au moins
+      deux fois ; l'attente vide ; les couches cachées dorment) ; `fumee_appli` 812 ; le noyau 77 (+4 : `set_choices`,
+      `assign`, un bloc de 3³ aux 8 muets, une case vidée puis reposée) ; les 22 suites vertes avec le natif, et
+      `test_massif_peint` 124, `test_marching_blocks` 1 988 et `fumee_appli` 811 avec `MB_NATIF=0` (la garde du branchement n'y a pas lieu ; `test_natif` allume et éteint le natif lui-même).
+    - **MUTATIONS** : rouges — l'inscription jamais « changée », pas désinscrite ailleurs, l'attente sans retrait, les
+      muets non comptés, la clé d'air libre mal nommée, `suivre` qui ne vide rien, l'attente qui garde le dernier
+      « avant », la couche sans ses tuiles, sans resynchroniser, les choix hors du monde, jamais dormir.
+      ⚠ **DEUX D'ABORD MUETTES, PAR LE TEST** (`suivre` qui ne vide rien, le dernier « avant ») : aucun geste ne gardait
+      le compte des cases — le geste « déplacer » les a fait rougir. ⚠ **DEUX ÉQUIVALENTES** sous les routes de l'écran :
+      la resynchronisation au compte (l'écran tient l'union à jour avant le geste), le rang changé sans remplir (le
+      rang ne change qu'avec `_refaire_l_union`, qui reconstruit).
+    - **MESURÉ, 120 821 cases en trois couches, headless** (route native d'avant → branchée) : un geste d'une case
+      5,9 → 2,8 ms ; cacher 226 → 215 ms ; montrer 293 → 215 ms ; ouvrir 490 → 518 ms ; ⚠ **Up / Down 585 → 854 ms,
+      PLUS LENT** : tout refait par `assign`, puis deux couches remplies. Le noyau passe 37 % dans `decide`.
+    - ⚠ **PAS TENU EN MAIN** ; la DLL Windows n'a toujours pas été chargée sous Windows.
   - **LA COHABITATION AVEC LA SESSION DU BUREAU** : le cœur vit dans des fichiers NEUFS (`gdextension/`,
     `addons/marchingblocks_core/natif*`) ; un fichier GDScript existant ne reçoit que son AIGUILLAGE (trois lignes en tête
     de la fonction accélérée). Si une session change une fonction déjà portée, `test_natif.gd` rougit : on reporte le

@@ -45,7 +45,8 @@ func _initialize() -> void:
 	_la_decoupe()
 	_le_maillage_de_l_eau()
 	_le_monde_du_coeur()
-	_dire(_sections == 10, "toutes les sections sont allées au bout (%d sur 10) — une erreur d'exécution en a arrêté une"
+	_le_monde_branche()
+	_dire(_sections == 11, "toutes les sections sont allées au bout (%d sur 11) — une erreur d'exécution en a arrêté une"
 		% _sections)
 	_mesurer()
 	_fin()
@@ -824,6 +825,321 @@ func _le_monde_du_coeur() -> void:
 	_sections += 1
 
 
+# ── 11. le monde du cœur BRANCHÉ dans les couches (MassifPeint.monde) ─────────────────────────────────
+
+## Une scène comme l'écran les mène : des couches qui partagent l'union, et, si `branche`, un monde du cœur partagé.
+## Les gestes reprennent ceux de `editor.gd` (`_suivre_les_cases`, `_refaire_l_union`, `_montrer_couche`).
+class Scene:
+	var massifs: Array = []
+	var union := {}
+	var visibles: Array = []
+	var monde = null
+	var branche := false
+
+	func appeler(f: Callable) -> void:
+		Natif.actif = branche
+		f.call()
+		Natif.actif = true
+
+	func suivre(cases_: Array) -> void:
+		appeler(func() -> void:
+			for c in cases_:
+				union.erase(c)
+				for i in massifs.size():
+					if visibles[i] and (massifs[i].get_node("Cases") as GridMap).get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+						union[c] = i
+						break
+			for i in massifs.size():
+				var m: Node = massifs[i]
+				if not visibles[i]:
+					var attente: Dictionary = m.get_meta("_a_refaire", {})
+					for c in cases_:
+						attente[c] = true
+					m.set_meta("_a_refaire", attente)
+					continue
+				m.reconstruire_autour(cases_))
+
+	func refaire_l_union() -> void:
+		appeler(func() -> void:
+			union.clear()
+			for i in range(massifs.size() - 1, -1, -1):
+				var m: Node = massifs[i]
+				m.union = union
+				m.monde = monde
+				m.rang = i
+				(m as Node3D).visible = visibles[i]
+				if visibles[i]:
+					for c in (m.get_node("Cases") as GridMap).get_used_cells():
+						union[c] = i
+			for i in massifs.size():
+				var m: Node = massifs[i]
+				m.remove_meta("_a_refaire")
+				if not visibles[i]:
+					m.set_meta("_tout_refaire", true)
+					continue
+				m.remove_meta("_tout_refaire")
+				m.reconstruire())
+
+	func montrer(i: int, oui: bool) -> void:
+		visibles[i] = oui
+		appeler(func() -> void:
+			var m: Node = massifs[i]
+			(m as Node3D).visible = oui
+			var siennes: Array = (m.get_node("Cases") as GridMap).get_used_cells()
+			for c in siennes:
+				if oui:
+					union[c] = i
+				elif union.get(c, -1) == i:
+					union.erase(c)
+			for j in massifs.size():
+				if j == i:
+					continue
+				if visibles[j]:
+					massifs[j].reconstruire_autour(siennes)
+				else:
+					var attente_j: Dictionary = massifs[j].get_meta("_a_refaire", {})
+					for c in siennes:
+						attente_j[c] = true
+					massifs[j].set_meta("_a_refaire", attente_j)
+			if oui:
+				var attente: Dictionary = m.get_meta("_a_refaire", {})
+				m.remove_meta("_a_refaire")
+				if m.get_meta("_tout_refaire", false):
+					m.remove_meta("_tout_refaire")
+					m.reconstruire()
+				else:
+					m.reconstruire_autour(attente.keys()))
+
+
+func _index_de(lot: MeshLibrary) -> Dictionary:
+	var index := {}
+	for id in lot.get_item_list():
+		index[lot.get_item_name(id)] = id
+	return index
+
+
+## Ce qu'une couche VISIBLE montre et tient : ses grilles, son état (sans ordre : `==` sur les Dictionary), son bilan.
+func _ce_que_montre(m: Node3D) -> Array:
+	return [_photo_massif(m), m._etat, m.dernier_bilan()]
+
+
+func _le_monde_branche() -> void:
+	print("11. le monde du cœur BRANCHÉ dans les couches : 160 gestes, l'appli en GDScript contre l'appli branchée")
+	var monde_ := _monde(600, 30, 8)
+	var cles_par: Array = [_cles(0), _cles(7), _cles(3)]
+	var lots: Array = []
+	for c in cles_par:
+		lots.append(_lot(c))
+	var lot_autre := _lot(_cles(5))
+	var parts: Array = [{}, {}, {}]
+	for c in monde_:
+		parts[2 if c.y > 5 else int(posmod(int(floor((c.x - c.z) / 6.0)), 2))][c] = true
+	var scenes: Array = []
+	for branche in [false, true]:
+		var sc := Scene.new()
+		sc.branche = branche
+		Natif.actif = true
+		sc.monde = MB.monde_natif() if branche else null
+		for r in 3:
+			sc.massifs.append(_massif(lots[r], parts[r]))
+			sc.visibles.append(true)
+		sc.massifs[1].poids = {cles_par[1].keys()[12]: [0, 1, 3]}
+		sc.refaire_l_union()
+		scenes.append(sc)
+	var gd: Scene = scenes[0]
+	var br: Scene = scenes[1]
+	_dire(br.monde != null and br.massifs[0].monde == br.monde, "le monde est branché aux couches de la scène branchée")
+	var compare := func(quoi: String) -> String:
+		for i in 3:
+			if not gd.visibles[i]:
+				continue
+			var a := _ce_que_montre(gd.massifs[i])
+			var b := _ce_que_montre(br.massifs[i])
+			if a[0] != b[0]:
+				var la: PackedStringArray = (a[0] as String).split("\n")
+				var lb: PackedStringArray = (b[0] as String).split("\n")
+				var k := 0
+				while k < mini(la.size(), lb.size()) and la[k] == lb[k]:
+					k += 1
+				return "%s : la couche %d ne montre pas la même chose (%d contre %d lignes ; à la ligne %d : %s contre %s)" % [
+					quoi, i, la.size(), lb.size(), k, la[k] if k < la.size() else "rien", lb[k] if k < lb.size() else "rien"]
+			if a[1] != b[1]:
+				return "%s : la couche %d ne tient pas le même état (%d contre %d sommets)" % [quoi, i,
+					(a[1] as Dictionary).size(), (b[1] as Dictionary).size()]
+			if a[2] != b[2]:
+				return "%s : la couche %d, bilan %s contre %s" % [quoi, i, a[2], b[2]]
+		return ""
+	var premier: String = compare.call("le monde bâti")
+	_dire(premier == "", premier)
+	_dire(int(br.massifs[0].dernier_bilan()["muets"]) > 0, "les couches doivent tenir des sommets MUETS (%s)"
+		% br.massifs[0].dernier_bilan())
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 20261006
+	var ecarts := 0
+	var sortes := {}
+	var dormies := 0
+	var eveillees_cachees := 0
+	for g in 160:
+		var t := rng.randf()
+		var quoi := ""
+		if t < 0.4:
+			# Un coup dans une couche visible : ses cases prises aux autres (`_vols`), puis l'union suit.
+			var r := rng.randi_range(0, 2)
+			if not gd.visibles[r]:
+				continue
+			var p := Vector3i(rng.randi_range(-13, 13), rng.randi_range(-2, 11), rng.randi_range(-13, 13))
+			var cases_: Array = []
+			for j in rng.randi_range(1, 16):
+				cases_.append(p + Vector3i(j % 3, (j / 3) % 2, j / 6))
+			for sc in scenes:
+				for c in cases_:
+					for i in 3:
+						var g_: GridMap = sc.massifs[i].get_node("Cases")
+						g_.set_cell_item(c, g_.mesh_library.find_item_by_name("case") if i == r else GridMap.INVALID_CELL_ITEM)
+				sc.suivre(cases_)
+			quoi = "coup"
+		elif t < 0.52:
+			# Déplacer (Move de l'écran) : des cases d'une couche visible glissent d'un cran, dans UN geste — autant de
+			# cases parties que venues (le compte ne change pas), et des sommets qui changent deux fois avant d'être posés.
+			var r := rng.randi_range(0, 2)
+			if not gd.visibles[r]:
+				continue
+			var g0: GridMap = gd.massifs[r].get_node("Cases")
+			var a_elles: Array = g0.get_used_cells()
+			if a_elles.size() < 10:
+				continue
+			var depart: Vector3i = a_elles[rng.randi_range(0, a_elles.size() - 1)]
+			var pas: Vector3i = [Vector3i(1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, 0, -1)][rng.randi_range(0, 2)]
+			var parties: Array = []
+			for c in a_elles:
+				if (c - depart).length_squared() <= 3:
+					parties.append(c)
+			var libres := true
+			for c in parties:
+				var d: Vector3i = c + pas
+				if not parties.has(d) and gd.union.has(d):
+					libres = false
+			if not libres:
+				continue
+			# ⚠ UNE CASE N'APPARTIENT QU'À UNE COUCHE : celles d'une couche CACHÉE sous la tête sont prises (`_vols`).
+			var touchees: Array = parties.duplicate()
+			for c in parties:
+				if not touchees.has(c + pas):
+					touchees.append(c + pas)
+			for sc in scenes:
+				var g_: GridMap = sc.massifs[r].get_node("Cases")
+				var id_case := g_.mesh_library.find_item_by_name("case")
+				for c in parties:
+					g_.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+				for c in parties:
+					g_.set_cell_item(c + pas, id_case)
+					for i in 3:
+						if i != r:
+							(sc.massifs[i].get_node("Cases") as GridMap).set_cell_item(c + pas, GridMap.INVALID_CELL_ITEM)
+				sc.suivre(touchees)
+			quoi = "deplacer"
+		elif t < 0.6:
+			var p := Vector3i(rng.randi_range(-13, 13), rng.randi_range(-2, 8), rng.randi_range(-13, 13))
+			var cases_: Array = []
+			for j in rng.randi_range(1, 10):
+				cases_.append(p + Vector3i(j % 2, j / 4, (j / 2) % 2))
+			for sc in scenes:
+				for c in cases_:
+					for i in 3:
+						(sc.massifs[i].get_node("Cases") as GridMap).set_cell_item(c, GridMap.INVALID_CELL_ITEM)
+				sc.suivre(cases_)
+			quoi = "creuser"
+		elif t < 0.7:
+			var r := rng.randi_range(0, 2)
+			var oui: bool = not gd.visibles[r]
+			if not oui and gd.visibles.count(true) == 1:
+				continue
+			for sc in scenes:
+				sc.montrer(r, oui)
+			quoi = "montrer"
+		elif t < 0.77:
+			# Up / Down : la couche r passe au-dessus de r − 1 (`_echanger_couches`), puis l'union est refaite.
+			var r := rng.randi_range(1, 2)
+			for sc in scenes:
+				for liste in [sc.massifs, sc.visibles]:
+					var x = liste[r]
+					liste[r] = liste[r - 1]
+					liste[r - 1] = x
+				sc.refaire_l_union()
+			for liste in [lots, cles_par]:
+				var x = liste[r]
+				liste[r] = liste[r - 1]
+				liste[r - 1] = x
+			quoi = "monter"
+		elif t < 0.89:
+			# Un choix de variante (`reconstruire_sommets`), sur un sommet posé dont la clé en a.
+			var r := rng.randi_range(0, 2)
+			if not gd.visibles[r]:
+				continue
+			var s = null
+			for v in gd.massifs[r]._etat:
+				var d: Dictionary = gd.massifs[r]._etat[v]
+				if not d.is_empty() and d["cle"] != "" and cles_par[r].has(MB.nom_de_variante(d["cle"], 2)) \
+						and rng.randf() < 0.05:
+					s = v
+					break
+			if s == null:
+				continue
+			var k := (MB.rang_de_variante(gd.massifs[r].tuile_posee(s)) + 1) % 3
+			for sc in scenes:
+				sc.massifs[r].choix[s] = k
+				sc.appeler(func() -> void: sc.massifs[r].reconstruire_sommets([s]))
+			quoi = "choix"
+		elif t < 0.94:
+			# Des poids (`variantes.gd` : puis `reconstruire()`).
+			var r := rng.randi_range(0, 2)
+			if not gd.visibles[r]:
+				continue
+			var cle: String = cles_par[r].keys()[rng.randi_range(0, 40) * 2]
+			for sc in scenes:
+				sc.massifs[r].poids[cle] = [rng.randi_range(0, 2), 2, 1]
+			var w: Array = gd.massifs[r].poids[cle]
+			for sc in scenes:
+				sc.massifs[r].poids[cle] = w.duplicate()
+				sc.appeler(func() -> void: sc.massifs[r].reconstruire())
+			quoi = "poids"
+		else:
+			# Un autre lot (un témoin tranché autrement, d'autres noms : le setter reconstruit) ; une fois sur deux, le
+			# MÊME index sous un lot neuf (un témoin retouché : le setter ne change que la grille).
+			var r := rng.randi_range(0, 2)
+			if not gd.visibles[r]:
+				continue
+			var trous: int = [5, 11][sortes.get("lot", 0) % 2]
+			var neuf := _lot(cles_par[r]) if rng.randf() < 0.5 else _lot(_cles(trous))
+			for sc in scenes:
+				sc.appeler(func() -> void: sc.massifs[r].lot = neuf)
+			cles_par[r] = _index_de(neuf)
+			lots[r] = neuf
+			quoi = "lot"
+		sortes[quoi] = int(sortes.get(quoi, 0)) + 1
+		# Une couche cachée DORT dans le monde (ses grilles et son état gardés, la différence au réveil) : sans ça, cacher
+		# et montrer une couche coûtaient plus qu'avant le branchement (mesuré).
+		for i in 3:
+			if not br.visibles[i] and int(br.monde.proprio(i)) == br.massifs[i].get_instance_id():
+				dormies += 1 if br.monde.dort(i) else 0
+				eveillees_cachees += 0 if br.monde.dort(i) else 1
+		var e: String = compare.call("geste %d (%s)" % [g, quoi])
+		if e != "":
+			ecarts += 1
+			if ecarts == 1:
+				_dire(false, e)
+	_dire(ecarts == 0, "%d geste(s) sur 160 où l'appli branchée diffère de l'appli en GDScript" % ecarts)
+	for sorte in ["coup", "deplacer", "creuser", "montrer", "monter", "choix", "poids", "lot"]:
+		_dire(int(sortes.get(sorte, 0)) >= 2, "les gestes doivent exercer « %s » (%s)" % [sorte, sortes])
+	_dire(int(br.monde.taille_attente()) == 0, "rien ne reste en attente après les gestes")
+	_dire(dormies > 10 and eveillees_cachees == 0, "une couche cachée dort dans le monde (%d fois, %d éveillée cachée)"
+		% [dormies, eveillees_cachees])
+	for sc in scenes:
+		for m in sc.massifs:
+			m.free()
+	_sections += 1
+
+
 # ── la mesure (rien n'y est jugé) ─────────────────────────────────────────────────────────────────────
 
 func _mesurer() -> void:
@@ -889,6 +1205,47 @@ func _mesurer() -> void:
 	print("   monde du cœur : posé d'un coup %d ms (%d poses) ; un geste d’une case, diff appliqué %.3f ms (massif natif : %.3f ms)" % [
 		(tb - ta) / 1000, mn.nombre_de_poses(), (td - tc) / 100000.0, (tf - te) / 100000.0])
 	m2.free()
+	# L'APPLI BRANCHÉE (étape 3 b) contre l'appli d'avant (le natif, sans le monde) : trois couches comme l'écran les
+	# mène sur ce monde — l'ouverture (l'union refaite), un geste_b d'une case, cacher puis montrer une couche, Up.
+	var cles3: Array = [_cles(0), _cles(7), _cles(3)]
+	for branche in [false, true]:
+		var sc_b := Scene.new()
+		sc_b.branche = true   # le natif allumé dans les deux cas ; seul le monde change
+		sc_b.monde = MB.monde_natif() if branche else null
+		var parts_b: Array = [{}, {}, {}]
+		for c in pleines:
+			parts_b[2 if c.y > 3 else int((c.x / 40 + c.z / 50) % 2)][c] = true
+		for r in 3:
+			sc_b.massifs.append(_massif(_lot(cles3[r]), parts_b[r]))
+			sc_b.visibles.append(true)
+		var ua := Time.get_ticks_usec()
+		sc_b.refaire_l_union()
+		var ub := Time.get_ticks_usec()
+		var geste_b := Vector3i(100, 0, 100)
+		while pleines.has(geste_b):
+			geste_b.y += 1
+		var uc := Time.get_ticks_usec()
+		for k in 20:
+			var g0_b: GridMap = sc_b.massifs[0].get_node("Cases")
+			g0_b.set_cell_item(geste_b, g0_b.mesh_library.find_item_by_name("case"))
+			sc_b.suivre([geste_b])
+			g0_b.set_cell_item(geste_b, GridMap.INVALID_CELL_ITEM)
+			sc_b.suivre([geste_b])
+		var ud := Time.get_ticks_usec()
+		sc_b.montrer(1, false)
+		var ue := Time.get_ticks_usec()
+		sc_b.montrer(1, true)
+		var uf := Time.get_ticks_usec()
+		var x_b = sc_b.massifs[1]
+		sc_b.massifs[1] = sc_b.massifs[0]
+		sc_b.massifs[0] = x_b
+		sc_b.refaire_l_union()
+		var ug := Time.get_ticks_usec()
+		print("   %s : 3 couches, ouverture %d ms ; un geste_b d'une case %.2f ms ; cacher %d ms, montrer %d ms ; Up %d ms" % [
+			"appli branchée au monde" if branche else "appli d'avant (natif)", (ub - ua) / 1000, (ud - uc) / 40000.0,
+			(ue - ud) / 1000, (uf - ue) / 1000, (ug - uf) / 1000])
+		for m in sc_b.massifs:
+			m.free()
 	var img := _image(512, 512, 9)
 	var tri := _triangles(4, 400)
 	for natif in [false, true]:

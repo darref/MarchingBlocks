@@ -22,6 +22,7 @@
 
 #include <array>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace mbcore {
@@ -33,18 +34,23 @@ struct RuleRow {
 	int32_t turn = 0; // the orientation the caller gives this configuration
 };
 
-// What sits at a vertex. `layer` < 0: nothing. `tile` < 0 with a layer: the layer lacks the tile the rule asks
-// for — an error marker, never a fill-in (§3).
+// What sits at a vertex. `layer` < 0: nothing — no cell of the union among its eight. A vertex OWNED by a layer whose
+// configuration has no surface (`cls` < 0: all eight empty… or all full) is MUTE: it is the layer's, it places
+// nothing — the « hollow belly » rule; apps count it. `tile` < 0 on a surface: the layer lacks the tile the rule
+// asks for — an error marker, never a fill-in (§3).
 struct Placement {
 	int32_t layer = -1;
+	int32_t cls = -1;
 	int32_t tile = -1;
 	int32_t turn = 0;
 	int32_t variant = 0; // 0 for the base tile, k for variant k
 	bool outdoor = false;
 
 	bool exists() const { return layer >= 0; }
+	bool surface() const { return layer >= 0 && cls >= 0; }
 	bool operator==(const Placement &o) const {
-		return layer == o.layer && tile == o.tile && turn == o.turn && variant == o.variant && outdoor == o.outdoor;
+		return layer == o.layer && cls == o.cls && tile == o.tile && turn == o.turn && variant == o.variant &&
+				outdoor == o.outdoor;
 	}
 	bool operator!=(const Placement &o) const { return !(*this == o); }
 };
@@ -107,6 +113,13 @@ public:
 	Delta set_choice(int32_t layer, const Cell &vertex, int32_t variant);
 	int32_t choice_at(int32_t layer, const Cell &vertex) const;
 
+	// Replaces ALL the choices of a layer (vertex, variant ≥ 0) and decides again the vertices whose choice changed.
+	Delta set_choices(int32_t layer, const std::vector<std::pair<Cell, int32_t>> &choices);
+
+	// Replaces every cell of the world at once — (cell, layer), the layers must exist — and decides every vertex
+	// again: the route for loading a world, or for a change too large for the incremental route.
+	Delta assign(const std::vector<std::pair<Cell, int32_t>> &cells);
+
 	// Puts `cells` into `layer` (taken from any other layer that held them) and empties `clear` (whatever layer
 	// held them). A cell in both lists is set. Cells out of the core's range (±1 048 574) are ignored.
 	Delta set_cells(int32_t layer, const std::vector<Cell> &cells, const std::vector<Cell> &clear);
@@ -118,6 +131,7 @@ public:
 
 	// What sits at a vertex (layer < 0: nothing).
 	Placement placement_at(const Cell &vertex) const;
+	// Every vertex owned by a layer, mute ones included.
 	size_t placement_count() const { return _placements.size(); }
 
 	// Every cell (cell, layer) and every placement (vertex, placement), in storage order.

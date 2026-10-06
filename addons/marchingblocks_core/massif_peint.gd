@@ -83,6 +83,13 @@ var _empreinte: int = -1
 ## ⚠ `rang` < 0 : la couche est SEULE — l'ancienne règle, mot pour mot (ses cases seules).
 var union := {}
 var rang := -1
+## LE MONDE DU CŒUR (étape 3 b, Jordan, 6 octobre 2026 : « go pour brancher le monde dans l'appli ») — un `MBMonde`
+## (`mbcore::World`) PARTAGÉ par les couches d'un écran (`MB.monde_natif()`), ou null. Branchée, une couche en couches
+## (rang ≥ 0) ne décide plus ses sommets elle-même : elle s'INSCRIT au monde (ses grilles, `_etat`, `_compte`, tenus
+## par référence), le monde suit l'union, et ses diffs posent ce qui change dans TOUTES les couches inscrites — le
+## premier appel le fait, les suivants n'ont plus rien à poser. ⚠ Le GDScript reste la référence et le repli :
+## `MB_NATIF=0`, une couche seule (rang < 0), un écran sans monde. `DEV_TOOLS/test_natif.gd` §11 compare les deux.
+var monde = null
 var _miennes := {}
 ## {Vector2i(x, z): combien de SES cases dans cette colonne} — tenu avec `_miennes` (`reconstruire`, `reconstruire_autour`).
 var _colonnes_miennes := {}
@@ -268,8 +275,10 @@ func reconstruire() -> Dictionary:
 	var fautes := _fautes()
 	if cases == null or rendu == null or fautes == null:
 		return _dernier_bilan
-	rendu.clear()
-	fautes.clear()
+	# ⚠ BRANCHÉE AU MONDE, ses grilles et son état sont DÉJÀ tenus par les diffs : on ne les vide pas (`_au_monde_entier`).
+	if not _au_monde():
+		rendu.clear()
+		fautes.clear()
 	var courant := lot_courant()
 	if rendu.mesh_library != courant:
 		rendu.mesh_library = courant
@@ -319,6 +328,8 @@ func reconstruire() -> Dictionary:
 	_variantes_par_cle = {}
 	_id_faute = id_faute
 	_lot_pose = rendu.mesh_library
+	if _au_monde():
+		return _au_monde_entier(rendu, fautes, id_faute, index)
 	_etat.clear()
 	_compte = {"pieces": 0, "fautes": 0, "dehors": 0, "touches": 0, "decisions": 0}
 	if natif != null:
@@ -500,6 +511,8 @@ func reconstruire_autour(changees, sur := false) -> Dictionary:
 		gardes_de_compte += 1
 		if cases.get_used_cells().size() != _miennes.size():
 			return reconstruire()
+	if _au_monde():
+		return _suivre_au_monde(changees)
 	# ⚠ CHAQUE COLONNE UNE FOIS (4 octobre 2026) : jusqu'à la plus haute case changée qui la touche. Énumérer la
 	# colonne entière pour CHAQUE case insérait des millions de doublons quand une couche entière changeait (cacher les
 	# 52 407 cases d'une couche de l'exemple : 3,6 s d'énumération seule, en local). Même ensemble de sommets.
@@ -579,6 +592,12 @@ func reconstruire_sommets(sommets) -> Dictionary:
 	var rendu := _rendu()
 	if not _pret or rendu == null or rendu.mesh_library != lot_courant() or rendu.mesh_library != _lot_pose:
 		return reconstruire()
+	if _au_monde():
+		if monde.inscrire(self, rang, rendu, _fautes(), _id_faute, _etat, _compte):
+			return reconstruire()
+		monde.choisir_sommets(rang, Array(sommets), choix)
+		monde.vider_attente()
+		return _bilan()
 	var natif = MB.natif()
 	if natif != null:
 		natif.refaire(_pleines, Array(sommets), _etat, rang, _index, poids, choix, _plafond, rendu, _fautes(),
@@ -586,6 +605,45 @@ func reconstruire_sommets(sommets) -> Dictionary:
 		return _bilan()
 	for k in sommets:
 		_refaire(k)
+	return _bilan()
+
+
+func _au_monde() -> bool:
+	return monde != null and rang >= 0
+
+
+## LA RECONSTRUCTION COMPLÈTE, BRANCHÉE : le monde reprend les tuiles, les poids et les choix de la couche, et relit
+## l'union entière ; ce qui change est posé dans toutes les couches inscrites. ⚠ La couche ne se REMPLIT d'un coup que si
+## son rang vient de changer de propriétaire (les couches ont glissé, ou c'est sa première inscription) — sinon ses
+## grilles et son état, tenus par les diffs, sont déjà justes : les refaire doublait l'ouverture (mesuré).
+func _au_monde_entier(rendu: GridMap, fautes: GridMap, id_faute: int, index: Dictionary) -> Dictionary:
+	if _compte.is_empty():
+		_compte = {"pieces": 0, "fautes": 0, "dehors": 0, "touches": 0, "decisions": 0}
+	var change: bool = monde.inscrire(self, rang, rendu, fautes, id_faute, _etat, _compte)
+	monde.definir_couche(rang, index, poids, choix)
+	monde.resynchroniser(union)
+	if change:
+		monde.vider_attente_sauf(rang)   # ce que ses grilles portent n'est pas à ce rang : elle se remplit d'un coup
+		monde.remplir_couche(rang)
+	else:
+		monde.vider_attente()
+	reconstructions_completes += 1
+	_pret = true
+	_empreinte = _empreinte_des_cases()
+	return _bilan()
+
+
+## LA ROUTE DU MONDE : le monde relit l'union pour ces cases (toute l'union si son compte diffère — une couche montrée
+## dont les cases n'étaient pas dans `changees`), puis pose ce qui a changé dans toutes les couches inscrites. Un rang
+## qui change de propriétaire (les couches ont glissé) : tout est refait.
+func _suivre_au_monde(changees) -> Dictionary:
+	if monde.inscrire(self, rang, _rendu(), _fautes(), _id_faute, _etat, _compte):
+		return reconstruire()
+	monde.suivre(union, Array(changees))
+	if monde.nombre_de_cases(-1) != union.size():
+		monde.resynchroniser(union)
+	monde.vider_attente()
+	_empreinte = _empreinte_des_cases() if Engine.is_editor_hint() else _empreinte
 	return _bilan()
 
 

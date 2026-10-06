@@ -165,7 +165,7 @@ namespace
 	std::vector<std::string> LinesOfLayer(const Rules& R, const mbcore::World& W, int32_t Layer)
 	{
 		std::vector<std::pair<Cell, mbcore::Placement>> All;
-		W.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { if (P.layer == Layer) All.push_back({V, P}); });
+		W.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { if (P.layer == Layer && P.surface()) All.push_back({V, P}); });
 		std::sort(All.begin(), All.end(), [](const auto& A, const auto& B) { return Less(A.first, B.first); });
 		std::vector<std::string> L;
 		for (const auto& E : All) L.push_back(Line(R, E.first, E.second));
@@ -405,7 +405,8 @@ namespace
 		{
 			std::map<std::tuple<int32_t, int32_t, int32_t>, std::string> Out;
 			for (const auto& E : Placements)
-				Out[E.first] = std::to_string(E.second.layer) + " " +
+				if (E.second.surface())
+					Out[E.first] = std::to_string(E.second.layer) + " " +
 					(E.second.tile < 0 ? std::string("null") : R.Names[static_cast<size_t>(E.second.tile)]) + " " + std::to_string(E.second.turn);
 			return Out;
 		}
@@ -586,7 +587,7 @@ namespace
 			{
 				// A variant choice at a placed vertex (in or out of range), or removed.
 				std::vector<std::pair<Cell, mbcore::Placement>> Placed;
-				W.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { if (Coin(Rng) < 5 && Placed.size() < 40) Placed.push_back({V, P}); });
+				W.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { if (P.surface() && Coin(Rng) < 5 && Placed.size() < 40) Placed.push_back({V, P}); });
 				if (Placed.empty()) continue;
 				const auto& E = Placed[static_cast<size_t>(Coin(Rng)) % Placed.size()];
 				const int32_t Choice = Coin(Rng) % 6 - 1;
@@ -722,6 +723,72 @@ namespace
 		bool Seen = false;
 		for (const mbcore::PlacementChange& P : D5.placements) Seen = Seen || (P.vertex.x == 2 && P.vertex.y == 0 && P.vertex.z == 2);
 		Check(Seen, "and the delta says so");
+		{
+			// MUTE vertices: a 3³ block owns 8 vertices whose eight cells are all full — the layer's, no surface.
+			mbcore::World Blk;
+			Blk.set_rules(R.Rows, R.Classes);
+			Blk.set_tiles(Blk.add_layer(), KeysOf(R, Conf, "rich", {}));
+			std::vector<Cell> Block;
+			for (int32_t X = 0; X < 3; ++X)
+				for (int32_t Y = 0; Y < 3; ++Y)
+					for (int32_t Z = 0; Z < 3; ++Z)
+					{
+						Cell C;
+						C.x = X;
+						C.y = Y;
+						C.z = Z;
+						Block.push_back(C);
+					}
+			Blk.set_cells(0, Block, {});
+			int Mute = 0, Surface = 0;
+			Blk.for_each_placement([&](const Cell& V, const mbcore::Placement& P)
+			{
+				if (P.surface()) ++Surface;
+				else if (P.layer == 0 && P.tile < 0 && V.x >= 0 && V.x <= 1 && V.y >= 0 && V.y <= 1 && V.z >= 0 && V.z <= 1) ++Mute;
+			});
+			// 4³ = 64 vertices touch the block; the 2³ inside are mute, the 56 others carry a surface.
+			Check(Mute == 8 && Surface == 56 && Blk.placement_count() == 64,
+				"a 3x3x3 block: 8 mute vertices, 56 on its surface (" + std::to_string(Mute) + ", " + std::to_string(Surface) + ")");
+		}
+		{
+			// set_choices = the same choices set one by one; a choice dropped returns to the draw.
+			std::mt19937 Rng(7);
+			std::vector<LayerSpec> Specs = RandomWorld(Rng, 12);
+			mbcore::World One = Build(R, Conf, Specs);
+			mbcore::World All = Build(R, Conf, Specs);
+			std::vector<std::pair<Cell, int32_t>> Picked;
+			One.for_each_placement([&](const Cell& V, const mbcore::Placement& P)
+			{
+				if (P.surface() && P.layer == 0 && Picked.size() < 60) Picked.push_back({V, static_cast<int32_t>(Picked.size() % 4)});
+			});
+			for (const auto& E : Picked) One.set_choice(0, E.first, E.second);
+			const mbcore::Delta D = All.set_choices(0, Picked);
+			bool Same = true;
+			One.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { Same = Same && All.placement_at(V) == P; });
+			Check(Same && One.placement_count() == All.placement_count() && !D.placements.empty(),
+				"set_choices places what the same choices set one by one place (" + std::to_string(D.placements.size()) + " changes)");
+			for (size_t I = 0; I < Picked.size(); I += 2) One.set_choice(0, Picked[I].first, -1);
+			std::vector<std::pair<Cell, int32_t>> Half;
+			for (size_t I = 1; I < Picked.size(); I += 2) Half.push_back(Picked[I]);
+			All.set_choices(0, Half);
+			Same = true;
+			One.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { Same = Same && All.placement_at(V) == P; });
+			Check(Same, "set_choices without half of them: those vertices return to the draw");
+			// assign: a world built cell by cell = the same cells assigned at once, over another world.
+			mbcore::World Other = Build(R, Conf, RandomWorld(Rng, 9));
+			std::vector<std::pair<Cell, int32_t>> Cells;
+			One.for_each_cell([&](const Cell& C, int32_t L) { Cells.push_back({C, L}); });
+			for (int32_t L = 0; L < One.layer_count(); ++L)
+			{
+				while (Other.layer_count() <= L) Other.add_layer();
+				Other.set_tiles(L, KeysOf(R, Conf, Specs[static_cast<size_t>(L)].Set, Specs[static_cast<size_t>(L)].Settings));
+			}
+			for (const auto& E : Half) Other.set_choice(0, E.first, E.second);
+			Other.assign(Cells);
+			Same = Other.placement_count() == One.placement_count() && Other.cell_count() == One.cell_count();
+			One.for_each_placement([&](const Cell& V, const mbcore::Placement& P) { Same = Same && Other.placement_at(V) == P; });
+			Check(Same, "assign over another world = the world built cell by cell");
+		}
 		std::printf("3. rules written by hand\n");
 	}
 }

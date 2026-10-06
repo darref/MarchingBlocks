@@ -101,9 +101,24 @@ item de MeshLibrary et l'orientation de GridMap côté Godot ; un quart de tour 
 3. quelques règles écrites à la main (un vol, une couche cachée, une dalle retirée qui ouvre le ciel du sol).
 
 **Le pont Godot** : `MBMonde` (`src/godot/mb_monde.*`), et `MB.monde_natif()` qui en rend un, la table donnée.
-Le diff passe en tableaux plats (`"cases"` : 5 entiers par case, `"poses"` : 13 par sommet) ; `appliquer(diff,
+Le diff passe en tableaux plats (`"cases"` : 5 entiers par case, `"poses"` : 15 par sommet — x, y, z, puis couche, classe, tuile, quart, variante, air libre avant et après) ; `appliquer(diff,
 rendus, fautes, id_faute)` le pose dans les grilles de chaque couche. `DEV_TOOLS/test_natif.gd` (section 10) mène
 trois couches de l'appli en GDScript et un `MBMonde` par les mêmes gestes, et exige les mêmes grilles.
+
+**Branché dans l'appli (étape 3 b, 6 octobre 2026)** : l'écran tient UN `MBMonde` (`editor._monde_coeur`), donné à
+chaque couche (`MassifPeint.monde`). Une couche en couches ne décide plus ses sommets : elle s'INSCRIT au monde à son
+rang (ses grilles `Rendu` et `Fautes`, son `_etat` et son `_compte`, tenus par référence) ; le monde suit l'union de
+l'écran (`suivre` quelques cases, `resynchroniser` toute) et ses changements attendent en ATTENTE ; `vider_attente` les
+pose dans toutes les couches inscrites, grilles, état et comptes compris, comme le GDScript les tiendrait. Le premier
+appel d'un geste pose tout, les suivants n'ont plus rien à faire. Un rang qui change de propriétaire (les couches ont
+glissé) fait REMPLIR la couche depuis le monde (`remplir_couche`). Un sommet MUET (à la couche, sans surface) est tenu
+par le monde (`cls` < 0) : l'état des couches le compte, comme avant.
+Une couche CACHÉE (son nœud invisible) DORT : le monde garde une photo de ce qu'elle pose et ne touche plus à ses
+grilles ; quand elle reparaît, elle ne reçoit que la différence entre la photo et ce que le monde pose alors. Une
+couche dont l'index, les poids et les choix n'ont pas changé (`hash`) n'est pas redécidée. `resynchroniser` passe par
+`World::assign` (tout refait d'un coup) quand plus d'un quart des cases diffèrent.
+`MB_NATIF=0` rend le GDScript partout ; `DEV_TOOLS/test_natif.gd` §11 mène les deux appli côte à côte (160 gestes) ;
+`DEV_TOOLS/sonde_monde_branche.gd` chronomètre cacher / montrer une couche et vérifie le réveil.
 
 ⚠ **Déplacer ou retirer une couche** : le pont renumérote d'abord SES couches (ce qui était en `from` est en `to` ;
 une couche retirée part avec ses grilles), puis applique le diff — qui ne dit que ce qui est posé autrement.

@@ -31,12 +31,22 @@ inline bool cell_ok(const Cell &c) {
 Placement World::decide(int32_t x, int32_t y, int32_t z) const {
 	Placement p;
 	const Union u{ this };
-	const int32_t owner = vertex_layer(u, x, y, z);
+	// The eight cells read ONCE: their bits and the smallest rank (`vertex_bits` and `vertex_layer` in one pass).
+	int32_t owner = -1;
+	int bits = 0;
+	for (int t = 0; t < 8; t++) {
+		const int32_t l = _owner.get(pack(x + CORNERS[t][0], y + CORNERS[t][1], z + CORNERS[t][2]), -1);
+		if (l >= 0 && _layers[size_t(l)].visible) {
+			bits |= 1 << t;
+			owner = owner < 0 || l < owner ? l : owner;
+		}
+	}
 	if (owner < 0) {
 		return p;
 	}
-	const RuleRow &row = _rows[size_t(vertex_bits(u, x, y, z))];
+	const RuleRow &row = _rows[size_t(bits)];
 	if (row.cls < 0) {
+		p.layer = owner; // mute: the layer's, without a surface
 		return p;
 	}
 	const Layer &layer = _layers[size_t(owner)];
@@ -52,6 +62,7 @@ Placement World::decide(int32_t x, int32_t y, int32_t z) const {
 		key = &layer.keys[base];
 	}
 	p.layer = owner;
+	p.cls = row.cls;
 	p.turn = row.turn;
 	p.outdoor = outdoor;
 	if (key == nullptr) {
@@ -391,6 +402,66 @@ Delta World::set_choice(int32_t layer, const Cell &vertex, int32_t variant) {
 	CellMap todo;
 	todo.set(k, 0);
 	_redecide(todo, delta);
+	return delta;
+}
+
+Delta World::set_choices(int32_t layer, const std::vector<std::pair<Cell, int32_t>> &choices) {
+	Delta delta;
+	if (layer < 0 || size_t(layer) >= _layers.size()) {
+		return delta;
+	}
+	CellMap &mine = _layers[size_t(layer)].choices;
+	CellMap fresh;
+	fresh.reserve(choices.size());
+	CellMap todo;
+	for (const auto &c : choices) {
+		if (!cell_ok(c.first) || c.second < 0) {
+			continue;
+		}
+		const uint64_t k = pack(c.first.x, c.first.y, c.first.z);
+		fresh.set(k, c.second);
+		if (mine.get(k, -1) != c.second) {
+			todo.set(k, 0);
+		}
+	}
+	mine.for_each([&](uint64_t k, int32_t) {
+		if (!fresh.has(k)) {
+			todo.set(k, 0);
+		}
+	});
+	mine = fresh;
+	_redecide(todo, delta);
+	return delta;
+}
+
+Delta World::assign(const std::vector<std::pair<Cell, int32_t>> &cells) {
+	Delta delta;
+	CellMap fresh;
+	fresh.reserve(cells.size());
+	for (const auto &c : cells) {
+		if (cell_ok(c.first) && c.second >= 0 && size_t(c.second) < _layers.size()) {
+			fresh.set(pack(c.first.x, c.first.y, c.first.z), c.second);
+		}
+	}
+	_owner.for_each([&](uint64_t k, int32_t l) {
+		const int32_t now = fresh.get(k, -1);
+		if (now != l) {
+			delta.cells.push_back(CellChange{ unpack(k), l, now });
+		}
+	});
+	fresh.for_each([&](uint64_t k, int32_t l) {
+		if (!_owner.has(k)) {
+			delta.cells.push_back(CellChange{ unpack(k), -1, l });
+		}
+	});
+	for (Layer &l : _layers) {
+		l.cells = 0;
+	}
+	fresh.for_each([&](uint64_t, int32_t l) { _layers[size_t(l)].cells++; });
+	_owner = fresh;
+	Delta decided = rebuild();
+	delta.placements = decided.placements;
+	_sort(delta);
 	return delta;
 }
 
