@@ -503,6 +503,8 @@ func _mener() -> void:
 	_vrai(_bords_finis, "SENTINELLE : les bords entre couches sont allés JUSQU'AU BOUT")
 	_l_atelier_transitions(ed)
 	_vrai(_transitions_finies, "SENTINELLE : l'atelier Transitions est allé JUSQU'AU BOUT")
+	await _le_feuillage(ed)
+	_vrai(_feuillage_fini, "le feuillage est allé JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -4570,9 +4572,9 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 	_vrai(rouge.r > rouge.g + 0.3 and rouge.r > rouge.b + 0.3, "World est ROUGE (%s)" % rouge.to_html(false))
 	_vrai(bleu.b > bleu.r + 0.3 and bleu.b > bleu.g, "Fluids est BLEU (%s)" % bleu.to_html(false))
 	var vues := {}
-	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu"]:
+	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu", "feuillage"]:
 		vues[Palette.teinte(a).to_html(false)] = true
-	_egal(vues.size(), 6, "six ateliers, six teintes différentes")
+	_egal(vues.size(), 7, "sept ateliers, sept teintes différentes")
 	# CE QUI NAÎT PLUS TARD dans une barre (une liste rebâtie) prend sa teinte ; dans la barre de gauche, l'olive reste.
 	var tard := Label.new()
 	tard.add_theme_color_override("font_color", Palette.OLIVE)
@@ -4587,7 +4589,7 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 	gauche.queue_free()
 	_vrai(not vues.has(Palette.OLIVE.to_html(false)), "aucun atelier n'a l'olive de l'écran")
 	for b in [[ed._droite, "monde"], [ed._droite_temoin, "witness"], [ed._droite_texture, "texture"],
-			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"]]:
+			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"], [ed._droite_feuillage, "feuillage"]]:
 		var barre: Control = b[0]
 		var a: Color = Palette.teinte(b[1])
 		var enfonce := barre.get_theme_stylebox("pressed", "Button") as StyleBoxFlat
@@ -5428,3 +5430,142 @@ func _les_variantes(ed: Control) -> void:
 	ed._enregistrer_le_temoin_modele(true)
 	ed._enregistrer()
 	_variantes_finies = true
+
+
+## L'ATELIER FOLIAGE (Jordan, 6 octobre 2026) — mené par de VRAIS clics à travers la caméra, sur un plateau peint et
+## habillé du témoin (l'aminci : son sol VU est un quart de case sous le dessus des cases). L'arbre d'essai est écrit par
+## `arbre_d_essai.gd` : ses mesures (bas −0,3, haut 2,3) sont les attendus, écrits à la main là-bas.
+## ⚠ CE QUI EST ATTENDU NE PASSE PAS PAR LA RÈGLE : le sol vu à 0,75 (mesuré par le Play test sur le même lot), les
+## distances entre plants recalculées ici, le plateau et ses bords écrits ici.
+var _feuillage_fini := false
+
+
+func _le_feuillage(ed: Control) -> void:
+	const Arbre := preload("res://DEV_TOOLS/arbre_d_essai.gd")
+	const FeuillageVue := preload("res://app/feuillage_vue.gd")
+	var af: RefCounted = ed._feuillage
+	ed._aller_a("monde")
+	var sol := {}
+	for x in range(300, 308):
+		for z in range(300, 308):
+			sol[Vector3i(x, 20, z)] = true
+	ed._coup_commence()
+	ed._touche({"poser": sol, "effacer": {}}, "Add")
+	ed._coup_fini()
+	ed._vue.monde().lot = BM.librairie()["lot"]
+	ed._aller_a("feuillage")
+	_vrai(ed._atelier == "feuillage" and ed._vue.outil == "feuillage" and ed._vue.mode == "monde",
+		"Foliage : le monde dans la vue, l'outil du feuillage")
+	_vrai(ed._droite_feuillage.visible and not ed._droite.visible and not ed._droite_fluides.visible,
+		"Foliage : sa barre de droite, et pas celles de World ni de Fluids")
+	_vrai(ed._vue.feuillage.visible, "le feuillage se dessine dans Foliage")
+	# L'import, par la route du dialogue.
+	var glb := "user://fumee/arbre_d_essai.glb"
+	_vrai(Arbre.ecrire(glb) == "", "l'arbre d'essai s'écrit")
+	ed._action_fichier = "feuillage"
+	ed._fichier_choisi(glb)
+	_egal(af.modeles.size(), 1, "« Import .glb… » : un modèle")
+	if af.modeles.is_empty():
+		return
+	var m: Dictionary = af.modeles[0]
+	var dossier: String = ed._projet.get_basename() + "_foliage"
+	_vrai(str(m["chemin"]).begins_with(dossier) and FileAccess.file_exists(m["chemin"]),
+		"le .glb est COPIÉ dans le projet (%s)" % m["chemin"])
+	_vrai(absf(float(m["decalage"]) - 0.3) < 1e-3 and absf(float(m["hauteur"]) - Arbre.HAUT) < 1e-3,
+		"posé sur sa base par défaut : décalage 0,3 (son bas à −0,3), haut 2,3")
+	_vrai(af.socle.modele == m and af.reglage_modele.visible, "le socle montre le modèle")
+	ed._histoire.undo()
+	_egal(af.modeles.size(), 0, "Ctrl+Z défait l'import")
+	ed._histoire.redo()
+	_egal(af.modeles.size(), 1, "Ctrl+Y le refait")
+	m = af.modeles[0]
+	(af.curseurs["echelle_alea"] as HSlider).value = 0.0
+	_vrai(float(m["echelle_alea"]) == 0.0, "le curseur « Random size » règle le modèle")
+	var r: float = float(m["rayon"]) * float(m["echelle"])
+	# Un clic au milieu du plateau, visé d'en haut sur le dessus des cases (y = 21).
+	var ou: Vector2 = _viser_d_en_haut(ed._vue, Vector3(303.5, 21, 303.5))
+	_clic_vue(ed._vue, ou)
+	_egal(af.plants.size(), 1, "un clic plante un arbre")
+	if af.plants.is_empty():
+		return
+	var p: Vector3 = af.plants[0]["p"]
+	_vrai(absf(p.x - 303.5) < 0.05 and absf(p.z - 303.5) < 0.05 and p.y > 20.7 and p.y < 20.8,
+		"… là où l'on a cliqué, sur la surface VUE des tuiles (y = %.3f, un quart sous le dessus des cases)" % p.y)
+	_egal(ed._vue.feuillage.nombre_dessine(m["id"]), 1, "il est dessiné")
+	var mat = ed._vue.feuillage.multimeshes(m["id"])[0].multimesh.mesh.surface_get_material(0)
+	_vrai(mat is ShaderMaterial and (mat as ShaderMaterial).shader.code.contains("INSTANCE_CUSTOM"),
+		"il bouge dans le vent (le matériau du vent)")
+	ed._histoire.undo()
+	_vrai(af.plants.is_empty() and ed._vue.feuillage.nombre_dessine(m["id"]) == 0, "Ctrl+Z l'enlève")
+	ed._histoire.redo()
+	_vrai(af.plants.size() == 1 and ed._vue.feuillage.nombre_dessine(m["id"]) == 1, "Ctrl+Y le replante")
+	# Au bord du plateau : refusé en voisinage libre, accepté en débordement.
+	var bord: Vector2 = _viser_d_en_haut(ed._vue, Vector3(300.4, 21, 305.5))
+	_clic_vue(ed._vue, bord)
+	_vrai(af.plants.size() == 1 and ed._rapport.text.contains("Not planted"),
+		"au bord, « Planted · free » refuse (l'empreinte déborde) et le dit")
+	(af._boutons_mode["sol_debord"] as Button).pressed.emit()
+	_clic_vue(ed._vue, bord)
+	_egal(af.plants.size(), 2, "au même bord, « Planted · overflow » plante")
+	# Dans le vide.
+	(af._boutons_mode["air"] as Button).pressed.emit()
+	ed._vue.regler_etage(25)
+	var air: Vector2 = _viser_d_en_haut(ed._vue, Vector3(320.5, 25, 320.5))
+	_clic_vue(ed._vue, air)
+	_vrai(af.plants.size() == 3 and (af.plants[2]["p"] as Vector3).distance_to(Vector3(320.5, 25, 320.5)) < 0.05
+		and af.plants[2]["mode"] == "air", "« In the air » plante sur le plan de l'étage, au-dessus du vide")
+	ed._vue.regler_etage(0)
+	# Le clic droit enlève le premier.
+	(af._boutons_mode["sol_libre"] as Button).pressed.emit()
+	ou = _viser_d_en_haut(ed._vue, Vector3(303.5, 21, 303.5))
+	_clic_vue(ed._vue, ou, MOUSE_BUTTON_RIGHT)
+	_vrai(af.plants.size() == 2 and not af.plants.any(func(pl): return (pl["p"] as Vector3).distance_to(p) < 0.01),
+		"le clic droit enlève le plant visé")
+	# Le pinceau, voisinage libre : des plants, jamais deux à moins de deux empreintes, tous sur le plateau.
+	(af._boutons_outil["pinceau"] as Button).pressed.emit()
+	(af.curseurs["pinceau_rayon"] as HSlider).value = 3.0
+	(af.curseurs["pinceau_essais"] as HSlider).value = 40.0
+	var avant: int = af.plants.size()
+	_viser_d_en_haut(ed._vue, Vector3(303.5, 21, 303.5))
+	_clic_vue(ed._vue, ou)
+	var neufs: Array = af.plants.slice(avant)
+	_vrai(neufs.size() >= 4, "un coup de pinceau plante (%d)" % neufs.size())
+	var trop_pres := 0
+	var hors := 0
+	for i in neufs.size():
+		var a: Vector3 = neufs[i]["p"]
+		if a.x < 300.0 or a.x > 308.0 or a.z < 300.0 or a.z > 308.0 or a.y < 20.7 or a.y > 20.8:
+			hors += 1
+		for j in range(i + 1, neufs.size()):
+			var b: Vector3 = neufs[j]["p"]
+			if Vector2(a.x - b.x, a.z - b.z).length() < 2.0 * r - 1e-4:
+				trop_pres += 1
+	_vrai(trop_pres == 0 and hors == 0, "… jamais deux à moins de deux empreintes (%d), tous sur le plateau (%d)"
+		% [trop_pres, hors])
+	ed._histoire.undo()
+	_egal(af.plants.size(), avant, "UN Ctrl+Z défait tout le coup de pinceau")
+	ed._histoire.redo()
+	(af._boutons_outil["un"] as Button).pressed.emit()
+	# Le décalage sur le socle.
+	(af.curseurs["decalage"] as HSlider).value = -0.2
+	_vrai(is_equal_approx(float(m["decalage"]), -0.2), "le curseur « Ground offset » enfonce le modèle")
+	# L'enregistrement, puis la réouverture.
+	var compte: int = af.plants.size()
+	ed._enregistrer()
+	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	_vrai(not relu.is_empty() and (relu["feuillage"]["plants"] as Array).size() == compte
+		and (relu["feuillage"]["modeles"] as Array).size() == 1
+		and is_equal_approx(float(relu["feuillage"]["modeles"][0]["decalage"]), -0.2),
+		"le projet enregistre le feuillage (%d plants, le modèle et son décalage)" % compte)
+	await ed._ouvrir(ed._projet)
+	_vrai(af.plants.size() == compte and af.modeles.size() == 1
+		and ed._vue.feuillage.nombre_dessine(af.modeles[0]["id"]) == compte, "rouvert : les plants reviennent, dessinés")
+	# Ailleurs que dans le monde, on ne les voit pas ; Échap rend World et son outil.
+	ed._aller_a("witness")
+	_vrai(not ed._vue.feuillage.visible, "le témoin ne montre pas le feuillage")
+	ed._aller_a("feuillage")
+	_vrai(ed._vue.feuillage.visible and ed._vue.outil == "feuillage", "de retour dans Foliage")
+	ed._unhandled_key_input(_cle(KEY_ESCAPE))
+	_vrai(ed._atelier == "monde" and ed._vue.outil != "feuillage" and ed._vue.feuillage.visible,
+		"Échap rend World, son outil, et le feuillage reste visible dans le monde")
+	_feuillage_fini = true

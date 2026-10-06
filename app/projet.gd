@@ -16,6 +16,8 @@ extends RefCounted
 
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
+const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+
 const FORMAT := "marchingblocks-project"
 ## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
 ## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
@@ -67,7 +69,8 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
 ## `transitions` (6 octobre 2026, l'atelier Transitions) : {paires: {"idA|idB": {actif, couvre: {id: réglages}}},
 ## representants: {id: indice de matériau}, choix: {sommet: id de la couche qui y couvre}} — absent s'il est vide.
-static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {}) -> String:
+static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {},
+		feuillage: Dictionary = {}) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -115,6 +118,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 	var tr := transitions_vers_json(transitions)
 	if not tr.is_empty():
 		tout["transitions"] = tr
+	# LE FEUILLAGE (6 octobre 2026) : ses modèles et ses plants (`feuillage.gd`). Absent tant qu'il est vide.
+	if not feuillage.is_empty() and not (feuillage.get("modeles", []) as Array).is_empty():
+		tout["feuillage"] = feuillage
 	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
@@ -265,7 +271,12 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 	var transitions := transitions_depuis_json(brut.get("transitions", {}), erreurs)
 	if transitions.is_empty() and not erreurs.is_empty():
 		return {}
-	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions}
+	# Le feuillage (6 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier entier.
+	var feuillage := FE.depuis_donnees(brut.get("feuillage", null), erreurs)
+	if feuillage.is_empty():
+		return {}
+	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions,
+		"feuillage": feuillage}
 
 
 static func transitions_vides() -> Dictionary:

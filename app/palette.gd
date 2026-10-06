@@ -51,6 +51,7 @@ const TEINTES_ATELIER := {
 	"jeu": Color("#6fcf8a"),        # vert : on joue
 	"transitions": Color("#c3d94e"), # citron : là où deux couches se rencontrent (PROPOSÉ, 6 octobre 2026)
 	"anim": Color("#f39a4b"),       # orange : les textures animées (PROPOSÉ, 6 octobre 2026)
+	"feuillage": Color("#a6e03c"),  # vert tilleul : les arbres (PROPOSÉ, 6 octobre 2026)
 }
 static var _themes_atelier := {}
 

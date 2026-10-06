@@ -43,6 +43,9 @@ signal variante_cliquee(info: Dictionary, bouton: int)
 signal transition_peinte(sommet: Variant, bouton: int, phase: String)
 ## Ctrl+clic en World : la case de matière touchée (couches visibles), ou `null` si le rayon ne touche rien.
 signal etage_sur_la_matiere(case: Variant)
+## L'atelier Foliage (6 octobre 2026) : la souris survole, ou un coup (phase 0 appui, 1 glissé, 2 relâché).
+signal feuillage_survole(position: Vector2)
+signal feuillage_coup(position: Vector2, bouton: int, phase: int)
 
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
@@ -52,6 +55,7 @@ const EauMaillage := preload("res://addons/marchingblocks_core/eau_maillage.gd")
 const EauPresets := preload("res://addons/marchingblocks_core/eau_presets.gd")
 const Personnage := preload("res://app/personnage.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
+const FeuillageVue := preload("res://app/feuillage_vue.gd")
 
 ## Jusqu'où porte le rayon de sculpture, en cases.
 const PORTEE := 400.0
@@ -203,6 +207,8 @@ var _plus_bas := 0.0
 var _orbite_d_avant: Array = []
 ## La longueur actuelle du bras-ressort (≤ `_distance`).
 var _bras := 0.0
+## Le feuillage posé dans le monde (l'atelier Foliage) : montré dans World, Fluids, Foliage et le Play test.
+var feuillage: FeuillageVue
 
 
 func _ready() -> void:
@@ -300,6 +306,9 @@ func _ready() -> void:
 	_eaux = Node3D.new()
 	_eaux.name = "Eaux"
 	_vue.add_child(_eaux)
+	feuillage = FeuillageVue.new()
+	feuillage.name = "Feuillage"
+	_vue.add_child(feuillage)
 
 	_grille = MeshInstance3D.new()
 	_grille.mesh = _maillage_grille()
@@ -381,6 +390,7 @@ func montrer(quoi: String) -> void:
 	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
 	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_eaux.visible = quoi == "monde" or quoi == "jeu"
+	feuillage.visible = quoi == "monde" or quoi == "jeu"
 	_grille.visible = quoi == "monde"
 	_apercu.visible = false
 	_grille_locale.visible = false
@@ -453,6 +463,11 @@ func montrer_maillage(mesh: Mesh, surcharge: Material) -> void:
 
 
 ## La couche ACTIVE — celle que le pinceau touche.
+## La caméra de la vue (l'atelier Foliage tire ses rayons).
+func camera() -> Camera3D:
+	return _camera
+
+
 func monde() -> Node:
 	return couche(_active)
 
@@ -758,7 +773,9 @@ func _gui_input(event: InputEvent) -> void:
 			elif not b.pressed and b.button_index == _coup:
 				_coup = -1
 				_pose_du_coup = {}
-				if _coin_boite != null and _est_salle():
+				if outil == "feuillage":
+					feuillage_coup.emit(b.position, b.button_index, 2)
+				elif _coin_boite != null and _est_salle():
 					_finir_salle()
 				elif _coin_boite != null:
 					_finir_boite(b.button_index)
@@ -893,6 +910,10 @@ func _survoler(position: Vector2) -> void:
 		# ⚠ Calée sur les LIGNES de la grille, pas sur le centre de la case : la case `p` occupe
 		# `[p, p+1]`, donc son coin est en `p` et ses lignes tombent sur des entiers.
 		_grille_locale.position = Vector3(plan.x, etage + 0.002, plan.z)
+	if outil == "feuillage":
+		_apercu.visible = false
+		feuillage_survole.emit(position)
+		return
 	if not collage.is_empty():
 		_survoler_collage(position)
 		return
@@ -934,6 +955,10 @@ func _survoler(position: Vector2) -> void:
 func _toucher(position: Vector2) -> void:
 	if outil == "transition":
 		transition_peinte.emit(sommet_sous_visible(position), _coup, "suite")
+		return
+	if outil == "feuillage":
+		feuillage_coup.emit(position, _coup, 1)
+		_survoler(position)
 		return
 	if _coin_boite != null:
 		if _est_salle():
@@ -993,6 +1018,10 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 		return
 	if outil == "eau":
 		eau_cliquee.emit(source_visee(position), bouton)
+		return
+	if outil == "feuillage":
+		_coup = bouton
+		feuillage_coup.emit(position, bouton, 0)
 		return
 	if outil == "variante":
 		variante_cliquee.emit(tuile_sous(position), bouton)

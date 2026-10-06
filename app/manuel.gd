@@ -333,6 +333,23 @@ func _outils() -> String:
 		+ "layer's tiles; it is projected like a box, so a tileable image works best. Every change is one "
 		+ _touche("Ctrl+Z") + ", and everything is saved with the project. " + _touche("Esc") + " goes back to World.")
 	l.append(_note("Transitions are drawn by the app; the engine plugins do not have them yet."))
+	l.append(_titre("Foliage"))
+	l.append("Foliage is a workshop of its own: the painted world in the view, and nothing to do but plant trees, "
+		+ "bushes, grass. [b]Import .glb…[/b] brings a 3D model (it is copied into the project). On the "
+		+ "[b]pedestal[/b] its top is the ground: [b]Ground offset[/b] raises or sinks the model (sink the roots), "
+		+ "[b]Sit its base on the ground[/b] puts its lowest point on it. [b]Scale[/b] and [b]Random size[/b] set its "
+		+ "size, [b]Footprint[/b] the ring it keeps clear, [b]Wind[/b] how much it sways.")
+	l.append("Three ways to plant. [b]In the air[/b]: anywhere, on the plane of the grid floor (" + _touche("PgUp")
+		+ " / " + _touche("PgDn") + "), even over nothing. [b]Planted · free[/b]: on the ground you SEE (the tiles, "
+		+ "not the cells), with room around it — refused on a slope steeper than [b]Max slope[/b], in the water, at "
+		+ "an edge or against a wall (its footprint must stand on the ground), under an overhang, or on another "
+		+ "plant's footprint; a green ghost says yes, a red one no. [b]Planted · overflow[/b]: on the ground, free "
+		+ "to overflow edges, walls and other plants. [b]One per click[/b] or the [b]Brush[/b] ("
+		+ _touche("Alt") + " + wheel: its size, " + _touche("Shift") + " + wheel: its [b]Density[/b]); "
+		+ "[b]Spacing[/b] keeps plants apart in every mode. A right click removes; a stroke is one "
+		+ _touche("Ctrl+Z") + ". " + _touche("Esc") + " goes back to World.")
+	l.append(_note("A plant does not follow the ground if you dig under it later. Foliage is not in the exported "
+		+ "world (.mbworld) yet, and the engine plugins do not plant it yet."))
 	return "\n".join(l)
 
 
