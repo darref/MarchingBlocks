@@ -16,6 +16,7 @@ USAGE (Python 3, `pip install cryptography`) :
   python DEV_TOOLS/licence_signer.py signer --nom "Jane Doe" --email jane@example.com [--id COMMANDE]
                                                                  une clé ; notée dans licences_emises.csv (à côté)
   python DEV_TOOLS/licence_signer.py verifier "MBK1.xxxx.yyyy"  dit ce que la clé porte, et si elle est bonne
+  python DEV_TOOLS/licence_signer.py essai                      une clé « Export check » (non notée) pour l'export
   python DEV_TOOLS/licence_signer.py vecteurs FICHIER.json      des vecteurs d'essai (clés JETABLES) pour test_vente
 
 LE FORMAT (le même dans `app/licence.gd` — et, un jour, dans la fonction du site qui signe après Paddle) :
@@ -117,6 +118,11 @@ def signer(a):
     print(cle)
 
 
+def essai(_):
+    """Une clé d'essai au nom « Export check », NON notée dans le registre : l'export la fait vérifier par l'exe livré."""
+    print(signer_avec(lire_la_privee(), "Export check", "", "essai-export", datetime.date.today().isoformat()))
+
+
 def verifier(a):
     privee = lire_la_privee()
     charge, bonne = lire_la_cle(a.cle, privee.public_key())
@@ -161,6 +167,7 @@ def main():
     s.add_argument("--email", required=True)
     s.add_argument("--id", default="")
     s.set_defaults(f=signer)
+    sp.add_parser("essai").set_defaults(f=essai)
     v = sp.add_parser("verifier")
     v.add_argument("cle")
     v.set_defaults(f=verifier)

@@ -110,6 +110,7 @@ func _montrer_la_cle(changer: bool) -> void:
 	saisie_cle.text = ""
 	erreur_cle.text = ""
 	dialogue_cle.popup_centered()
+	saisie_cle.grab_focus.call_deferred()   # on colle tout de suite (Ctrl+V), sans viser le champ
 
 
 ## « Activate » : la clé collée, lue ; bonne, elle est retenue et le dialogue se ferme.

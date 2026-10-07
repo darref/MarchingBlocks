@@ -333,6 +333,11 @@ func _notification(quoi: int) -> void:
 
 
 func _ready() -> void:
+	# LA SONDE DE L'EXPORT (`exporter_marchingblocks.sh`) : l'exe dit s'il a chargé sa DLL, et laquelle de ses éditions il
+	# est, puis s'arrête — RIEN d'autre (ni contrat, ni projet, ni registre). Elle ne débloque rien.
+	if OS.get_cmdline_user_args().has("--mb-sonde"):
+		await _sonder()
+		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_brancher_le_dev()
 	_regler_fenetre()
@@ -357,6 +362,22 @@ func _ready() -> void:
 	if Edition.est_demo():
 		_dire(Demo.MESSAGE)
 	_inscrire_les_fichiers()
+
+
+func _sonder() -> void:
+	const Licence := preload("res://app/licence.gd")
+	const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+	print("MB-SONDE natif=%d licence=%d edition=%s version=%s" % [int(Natif.disponible()),
+		int(Licence.verificateur() != null), Edition.nom(), ProjectSettings.get_setting("application/config/version", "")])
+	# `--mb-cle=<clé>` : la clé est-elle bonne POUR CET EXE (sa clé publique livrée) ? L'export y passe une clé signée à
+	# l'instant par la clé privée de Jordan — la chaîne entière, de l'outil de signature à l'exe chiffré.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--mb-cle="):
+			var r: Dictionary = Licence.lire(a.trim_prefix("--mb-cle="))
+			print("MB-SONDE-CLE %s" % (("ok nom=" + str(r["nom"])) if r["ok"] else ("refusee " + str(r["raison"]))))
+	# Le temps que l'export voie la DLL dans les modules du processus.
+	await get_tree().create_timer(3.0).timeout
+	get_tree().quit()
 
 
 ## ⚠ LA FENÊTRE S'OUVRE MAXIMISÉE (Jordan, 27 septembre 2026 : « on a besoin de place ») — fenêtrée,

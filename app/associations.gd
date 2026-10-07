@@ -147,7 +147,12 @@ static func _ecrire_utf16(chemin: String, texte: String) -> bool:
 
 
 ## LE DOSSIER DES ICÔNES, dans les données de l'appli.
+## ⚠ INSTALLÉE PAR L'INSTALLEUR, ses icônes sont à côté de l'exe (`{app}\icones`, que le registre désigne) : l'appli
+## ne s'y inscrit pas elle-même, et les dossiers exportés (.mbset, .mbworld) prennent celles-là.
 static func dossier_des_icones() -> String:
+	var exe := OS.get_executable_path()
+	if OS.has_feature("template") and installe_par_l_installeur(exe):
+		return exe.get_base_dir().path_join("icones")
 	return OS.get_user_data_dir().path_join("icones")
 
 

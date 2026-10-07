@@ -59,6 +59,10 @@ func _initialize() -> void:
 
 
 func _mener() -> void:
+	# ⚠ LE DOSSIER JETABLE REPART VIDE : un essai d'avant (une mutation qui a écrit dans `dehors`) faussait les suivants
+	# — vu le 7 octobre 2026, trois mutations « rouges » pour la mauvaise raison.
+	Demo._effacer(ProjectSettings.globalize_path(JETABLES))
+	Demo.vider_le_bac()
 	_v = Licence.verificateur()
 	_vrai(_v != null, "la bibliothèque native porte MBLicence (sinon, rien d'autre de la clé n'est éprouvé)")
 	if _v != null:
@@ -142,6 +146,17 @@ func _ed25519() -> void:
 	_vrai(not _v.verifier(String(e0["publique"]).hex_decode(), String(e0["message"]).hex_decode(), s_mall),
 		"S + L (signature malléable) est refusée")
 	_vrai(not _v.verifier(PackedByteArray([1, 2, 3]), PackedByteArray(), PackedByteArray()), "des tailles fausses rendent faux")
+	# ⚠ UNE BONNE SIGNATURE SUIVIE D'UN OCTET DE TROP, une clé de 33 octets : refusées (sans la garde des tailles, le
+	# natif lirait les 64 / 32 premiers et dirait oui — d'abord muette avec des tableaux vides, 7 octobre 2026).
+	var p0: PackedByteArray = String(e0["publique"]).hex_decode()
+	var m0: PackedByteArray = String(e0["message"]).hex_decode()
+	var s0: PackedByteArray = String(e0["signature"]).hex_decode()
+	var s_long := s0.duplicate()
+	s_long.append(0)
+	var p_long := p0.duplicate()
+	p_long.append(0)
+	_vrai(_v.verifier(p0, m0, s0) and not _v.verifier(p0, m0, s_long) and not _v.verifier(p_long, m0, s0),
+		"une signature de 65 octets, une clé de 33 : refusées")
 	_vrai(_v.signer(PackedByteArray([1]), PackedByteArray()).is_empty() and _v.publique_de(PackedByteArray()).is_empty(),
 		"une graine qui n'a pas 32 octets ne signe rien")
 
@@ -319,9 +334,13 @@ func _demo() -> void:
 		"… la casse de Windows ne compte pas")
 	DirAccess.make_dir_recursive_absolute(Demo.BAC + "/a/b")
 	var f := FileAccess.open(Demo.BAC + "/a/b/x.txt", FileAccess.WRITE)
+	_vrai(f != null, "un fichier s'écrit dans le bac")
+	if f == null:
+		return
 	f.store_string("x")
 	f.close()
 	FileAccess.set_hidden_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a/b/x.txt"), true)
+	FileAccess.set_read_only_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a/b/x.txt"), true)
 	FileAccess.set_read_only_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a"), true)
 	Demo.vider_le_bac()
 	_vrai(not DirAccess.dir_exists_absolute(Demo.BAC + "/a") and DirAccess.dir_exists_absolute(Demo.BAC),
