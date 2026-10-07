@@ -985,6 +985,9 @@ func _l_emission() -> void:
 		and lue.get_pixel(5, 4).r8 == 0 and sm.emission == Color.WHITE,
 		"le matériau luit de SA carte : la bande jaune, le reste noir")
 	_dire(is_equal_approx(sm.emission_energy_multiplier, 4.0), "… à la force du matériau (4)")
+	# ⚠ En ADD (le défaut de Godot), la couleur blanche s'ajoutait à la carte : le témoin luisait blanc uni.
+	_dire(sm.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY,
+		"… la couleur MULTIPLIE la carte (glTF), elle ne s'y ajoute pas — sinon le noir luit blanc")
 	_dire(not sm.normal_enabled and sm.roughness_texture == null, "… et sans relief inventé")
 	_dire(is_equal_approx((avec.call({}) as StandardMaterial3D).emission_energy_multiplier, 1.0),
 		"sans réglage, la force vaut 1 (celle du glTF)")
@@ -1060,6 +1063,6 @@ func _surfaces_qui_luisent(lib: MeshLibrary, force: float) -> int:
 		for sf in mesh.get_surface_count():
 			var mat := mesh.surface_get_material(sf) as BaseMaterial3D
 			if mat != null and mat.emission_enabled and mat.emission_texture != null \
-					and is_equal_approx(mat.emission_energy_multiplier, force):
+					and is_equal_approx(mat.emission_energy_multiplier, force) 					and (mat.emission_operator == BaseMaterial3D.EMISSION_OP_MULTIPLY or mat.emission == Color.BLACK):
 				n += 1
 	return n

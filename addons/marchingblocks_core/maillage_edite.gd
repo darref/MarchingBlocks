@@ -385,6 +385,10 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 		# l'écrit et la relit), donc le monde, le Play test et les moteurs la reçoivent.
 		if not ens.is_empty() and ens.get("emission") != null and sm.albedo_texture != null:
 			sm.emission_enabled = true
+			# ⚠ MULTIPLY, PAS LE « ADD » PAR DÉFAUT DE GODOT : en ADD, la couleur blanche S'AJOUTE à la carte et tout le
+			# matériau luit blanc uni (vu dans le témoin par le tournage du devlog Animation, 6 octobre 2026). MULTIPLY est
+			# la règle du glTF (emissiveFactor × emissiveTexture) : c'est ainsi que le monde, relu du .glb, la montrait.
+			sm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 			sm.emission = Color.WHITE
 			sm.emission_texture = ens["emission"]
 			sm.emission_energy_multiplier = maxf(0.0, float(d.get("emission", 1.0)))
@@ -456,6 +460,7 @@ static func _poser_l_animation(sm: StandardMaterial3D, d: Dictionary) -> void:
 				sm.ao_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
 			"emission":
 				sm.emission_enabled = true
+				sm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY  # pas ADD : voir `materiau_godot`
 				sm.emission = Color.WHITE
 				sm.emission_texture = premiere
 				sm.emission_energy_multiplier = maxf(0.0, float(d.get("emission", 1.0)))
