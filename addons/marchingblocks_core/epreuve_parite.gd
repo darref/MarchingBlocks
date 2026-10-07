@@ -13,6 +13,8 @@ extends RefCounted
 ##                                  pose, le vent par plant et le balancement, le sol des cases, la lecture de `foliage`
 ##   water_conformance.json         `Fluides.monde` (la règle de l'eau), `sources_en_largeur`, la surface et la profondeur,
 ##                                  la lecture de `water`
+##   water_mesh_conformance.json    `EauMaillage.maillage` (la NAPPE recalculée, 7 octobre 2026) : des corps d'eau donnés
+##                                  (au format des `water_world`), le maillage en ENSEMBLE CANONIQUE de triangles
 ##   editing_conformance.json       `Etages.extruder` (poser / étendre / décaler × haut / bas / face), `retrecir_bord`,
 ##                                  `elargir_a_plat`, le pinceau Select (cases vides), `FS.salle_depuis`
 ##
@@ -33,11 +35,13 @@ const Outils := preload("res://addons/marchingblocks_core/outils.gd")
 const Etages := preload("res://addons/marchingblocks_core/etages.gd")
 const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
+const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
 
 const VERSION := 1
 ## Le nom de chaque fichier, par sujet.
 const FICHIERS := {"transitions": "transitions_conformance.json", "animation": "animation_conformance.json",
-	"foliage": "foliage_conformance.json", "water": "water_conformance.json", "editing": "editing_conformance.json"}
+	"foliage": "foliage_conformance.json", "water": "water_conformance.json", "editing": "editing_conformance.json",
+	"water_mesh": "water_mesh_conformance.json"}
 
 const COMMUN := [
 	"Every case: {name, kind, input, expected}. Integers are exact. Floats: compare with an absolute tolerance of 1e-6",
@@ -53,6 +57,7 @@ static func cas_d_epreuve() -> Dictionary:
 	sortie["foliage"] = _feuillage()
 	sortie["water"] = _eau()
 	sortie["editing"] = _edition()
+	sortie["water_mesh"] = _maillage_eau()
 	for k in sortie:
 		if (sortie[k] as Dictionary).has("erreur"):
 			return {"erreur": "%s : %s" % [k, sortie[k]["erreur"]]}
@@ -814,6 +819,286 @@ static func _lectures_eau() -> Array:
 			"expected": {"error": true} if lu.has("error") else lu["water"]})
 	return sortie
 
+
+# ══ LE MAILLAGE DE L'EAU — la nappe recalculée (7 octobre 2026) ══════════════════════════════════════════
+# Ce que `EauMaillage.maillage` rend pour des corps d'eau DONNÉS (au format des `water_world`, relus par JSON comme un
+# greffon les lit) : un ENSEMBLE CANONIQUE de triangles — chacun dans le sens du format (glTF : anti-horaire vu de
+# l'avant), ses trois coins tournés pour que le plus petit soit le premier, la liste triée. Un greffon compare SANS
+# l'ordre des triangles ni celui des sommets, et à une tolérance près (les flottants 32 bits de Godot ; voir
+# `_regle_du_maillage`). Pourquoi un ensemble de triangles et pas des invariants : PARITE.md §12 et la charte.
+
+const GENRES_MAILLAGE_EN := {0.0: "still", 0.5: "river", 0.75: "foam", 1.0: "fall"}
+const TOLERANCES_MAILLAGE := {"position": 1e-4, "normal": 1e-3, "color": 1e-4, "uv": 1e-4, "area": 1e-3}
+
+
+## Les mondes du maillage : ceux de la règle, plus une dalle sur un pilier (l'étage flottant), une falaise au-dessus
+## d'un bassin (une cascade de quatre cases qui le remplit) et le monde vide.
+static func _mondes_maillage() -> Dictionary:
+	var m := _mondes_eau()
+	var dalle := {}
+	for c in _boite(Vector3i(0, 3, 0), Vector3i(4, 3, 4)) + _boite(Vector3i(2, 0, 2), Vector3i(2, 2, 2)):
+		dalle[c] = true
+	m["a slab on a pillar"] = dalle
+	# La falaise (x ≤ 2, dessus en y = 4), au pied un bassin d'une case de profondeur (x 3..5, z 0..2, en y = 1), cerné
+	# d'un rebord : la rivière part de (2, 5, 1) — le bassin de `test_fluides`.
+	var bassin := {}
+	for c in _boite(Vector3i(-4, 0, -3), Vector3i(7, 0, 5)) + _boite(Vector3i(-4, 1, -3), Vector3i(2, 4, 5)) \
+			+ _boite(Vector3i(3, 1, -1), Vector3i(6, 1, 3)):
+		bassin[c] = true
+	for c in _boite(Vector3i(3, 1, 0), Vector3i(5, 1, 2)):
+		bassin.erase(c)
+	m["a cliff above a basin"] = bassin
+	m["an empty world"] = {}
+	return m
+
+
+## Un corps relu depuis l'anglais (`_corps_en`) : ce qu'un greffon a en main. Ni `colonnes` ni `emprise` — le maillage
+## relit alors la surface de la mer dans son eau (`surface_dessinee`), ce que `test_parite` vérifie égal.
+static func corps_depuis_en(b: Dictionary) -> Dictionary:
+	var en_cases := func(l: Array) -> Dictionary:
+		var d := {}
+		for c in l:
+			d[Vector3i(int(c[0]), int(c[1]), int(c[2]))] = true
+		return d
+	var lacs: Array = []
+	for l in b["lakes"]:
+		lacs.append({"niveau": int(l["level"]), "cases": en_cases.call(l["cells"])})
+	var cours: Array = []
+	for e in b["course"]:
+		var g: String = _inverse(COURS_EN, e[3])
+		var d := {"case": Vector3i(int(e[0]), int(e[1]), int(e[2])), "genre": g}
+		if g == "lac":
+			d["lac"] = int(e[4])
+		cours.append(d)
+	return {"genre": _inverse(GENRES_EAU_EN, b["kind"]), "erreur": _inverse(ERREURS_EAU_EN, b["error"]),
+		"niveau": int(b["level"]), "eau": en_cases.call(b["water"]), "lacs": lacs, "cours": cours,
+		"fin": _inverse(FINS_EN, b["end"])}
+
+
+static func _inverse(d: Dictionary, v: String) -> String:
+	for k in d:
+		if d[k] == v:
+			return k
+	return ""
+
+
+## Arrondi au millionième (le bruit des flottants 32 bits de Godot disparaît : 0,699999988 → 0,7), sans −0.
+static func _r6(x: float) -> float:
+	return roundf(x * 1e6) / 1e6 + 0.0
+
+
+## L'ENSEMBLE CANONIQUE des triangles d'un maillage d'eau (null : aucun). Chaque triangle : 36 nombres, trois coins de
+## [px, py, pz, nx, ny, nz, r, g, b, a, u, v], dans le sens du FORMAT (anti-horaire vu de l'avant, comme le `.glb` :
+## (B − A) × (C − A) du côté de la normale) — l'ordre de Godot (horaire) est retourné ; le coin le plus petit
+## (lexicographique) d'abord, sans changer le sens ; les triangles triés.
+## ⚠ DEPUIS LES TABLEAUX (`EM.tableaux_du_maillage`), PAS DEPUIS L'ArrayMesh : celui-ci range les couleurs sur 8 bits et
+## les normales en octaèdre (mesuré : 0,5 relu 0,498039, une normale (0, 1, 0) relue avec z = −1,5e−5).
+static func triangles_canoniques(a: Dictionary) -> Array:
+	var v: PackedVector3Array = a["v"]
+	var n: PackedVector3Array = a["n"]
+	var c: PackedColorArray = a["c"]
+	var uv: PackedVector2Array = a["uv"]
+	var idx: PackedInt32Array = a["i"]
+	var coins: Array = []
+	for k in v.size():
+		coins.append([_r6(v[k].x), _r6(v[k].y), _r6(v[k].z), _r6(n[k].x), _r6(n[k].y), _r6(n[k].z), _r6(c[k].r),
+			_r6(c[k].g), _r6(c[k].b), _r6(c[k].a), _r6(uv[k].x), _r6(uv[k].y)])
+	var tris: Array = []
+	for t in range(0, idx.size(), 3):
+		var tri: Array = [coins[idx[t]], coins[idx[t + 2]], coins[idx[t + 1]]]
+		var premier := 0
+		for r in [1, 2]:
+			if _avant(tri[r], tri[premier]):
+				premier = r
+		tris.append(tri[premier] + tri[(premier + 1) % 3] + tri[(premier + 2) % 3])
+	tris.sort_custom(_avant)
+	return tris
+
+
+## LE MÊME ENSEMBLE, RANGÉ SANS REDITE (le fichier passait 1,6 Mo en triangles à 36 nombres) : les coins distincts triés,
+## et chaque triangle en trois indices, le plus petit d'abord sans changer le sens, triés. Déplié — vertices[i] pour
+## chaque indice —, c'est exactement la liste de `triangles_canoniques`, à l'ordre près.
+static func triangles_indexes(tris: Array) -> Dictionary:
+	var coins := {}
+	for t: Array in tris:
+		for k in 3:
+			coins[t.slice(12 * k, 12 * k + 12)] = true
+	var liste: Array = coins.keys()
+	liste.sort_custom(_avant)
+	var rang := {}
+	for i in liste.size():
+		rang[liste[i]] = i
+	var tri_i: Array = []
+	for t: Array in tris:
+		var r: Array = [rang[t.slice(0, 12)], rang[t.slice(12, 24)], rang[t.slice(24, 36)]]
+		var p := 0
+		for k in [1, 2]:
+			if int(r[k]) < int(r[p]):
+				p = k
+		tri_i.append([r[p], r[(p + 1) % 3], r[(p + 2) % 3]])
+	tri_i.sort_custom(_avant)
+	return {"vertices": liste, "triangles": tri_i}
+
+
+static func _avant(a: Array, b: Array) -> bool:
+	for k in mini(a.size(), b.size()):
+		if a[k] != b[k]:
+			return a[k] < b[k]
+	return a.size() < b.size()
+
+
+## Le résumé par genre (b du premier coin) : nombre de triangles et aire — un diagnostic avant l'appariement.
+static func resume_des_triangles(tris: Array) -> Dictionary:
+	var r := {}
+	for g in GENRES_MAILLAGE_EN.values():
+		r[g] = {"triangles": 0, "area": 0.0}
+	for t: Array in tris:
+		var g: String = GENRES_MAILLAGE_EN.get(float(t[8]), "?")
+		if not r.has(g):
+			r[g] = {"triangles": 0, "area": 0.0}
+		var a := Vector3(t[0], t[1], t[2])
+		var x := (Vector3(t[12], t[13], t[14]) - a).cross(Vector3(t[24], t[25], t[26]) - a)
+		r[g]["triangles"] += 1
+		r[g]["area"] += 0.5 * x.length()
+	for g in r:
+		r[g]["area"] = roundf(float(r[g]["area"]) * 1000.0) / 1000.0
+	return r
+
+
+static func _maillage_eau() -> Dictionary:
+	var mondes := _mondes_maillage()
+	var esc: Dictionary = mondes["stairs"]
+	# [nom, monde, sources (toutes les couches), les corps de LA couche maillée (indices) ou null : tous]
+	var essais := [
+		["a calm lake in a crater", "crater in a plain", [Vector3i(6, 3, 6)], null],
+		["a lake that overflows into a river", "crater near the edge", [Vector3i(2, 2, 6)], null],
+		["a river down the stairs: bands, three waterfalls, a spring", "stairs", [Vector3i(0, 3, 1)], null],
+		["a river three cells wide down the stairs (river_width 3)", "stairs",
+			FL.sources_en_largeur(esc, Vector3i(0, 3, 1), 3), null],
+		["a sea around an island", "island", [Vector3i(-1, 2, -1)], null],
+		["one sea only: the second source draws nothing", "island", [Vector3i(-1, 2, -1), Vector3i(9, 1, 9)], null],
+		["a river joins the sea, in the sea's layer", "island", [Vector3i(-1, 2, -1), Vector3i(4, 4, 4)], null],
+		["the same river in a layer of its own", "island", [Vector3i(-1, 2, -1), Vector3i(4, 4, 4)], [1]],
+		["the sea under a floating slab", "a slab on a pillar", [Vector3i(10, 2, 10)], null],
+		["a lake under the ceiling of a closed cave", "closed cave", [Vector3i(2, 2, 2)], null],
+		["a waterfall into a basin it fills", "a cliff above a basin", [Vector3i(2, 5, 1)], null],
+		["a sea above the whole world", "island", [Vector3i(-1, 6, -1)], null],
+		["a sea in an empty world: one plane", "an empty world", [Vector3i(0, 0, 0)], null],
+		["a refused source draws nothing", "stairs", [Vector3i(0, 1, 1)], null],
+	]
+	var cas: Array = []
+	for e in essais:
+		var occ: Dictionary = mondes[e[1]]
+		var w := FL.monde(occ, e[2])
+		var corps: Array = w["corps"]
+		if e[3] != null:
+			corps = (e[3] as Array).map(func(i: int) -> Dictionary: return corps[i])
+		# Les corps passent par l'anglais et le JSON, comme chez un greffon ; le maillage part de CE qu'il lit.
+		var en: Array = JSON.parse_string(JSON.stringify(corps.map(func(r: Dictionary) -> Dictionary: return _corps_en(r))))
+		var relus: Array = en.map(func(b: Dictionary) -> Dictionary: return corps_depuis_en(b))
+		var tris := triangles_canoniques(EM.tableaux_du_maillage(relus, occ, FL.boite(occ)))
+		var ix := triangles_indexes(tris)
+		cas.append({"name": "mesh: " + e[0], "kind": "water_mesh", "input": {"world": e[1], "bodies": en},
+			"expected": {"summary": resume_des_triangles(tris), "vertices": ix["vertices"], "triangles": ix["triangles"]}})
+	var mondes_en := {}
+	for k in mondes:
+		mondes_en[k] = _cases(mondes[k])
+	return {"format": "marchingblocks-water-mesh-conformance", "version": VERSION,
+		"rules_text": COMMUN + _regle_du_maillage() + [
+			"CASES — water_mesh {world (a key of worlds), bodies (ONE water layer: water_world bodies, in order)} →",
+			"{summary {still | river | foam | fall: {triangles, area}}, vertices, triangles}. vertices: distinct corners",
+			"[px, py, pz, nx, ny, nz, r, g, b, a, u, v] (COLOR_0 is r g b a, TEXCOORD_0 is u v); triangles: [i, j, k]",
+			"into vertices — only a compact storage: unfold each into its three corners and compare TRIANGLES, listed",
+			"COUNTER-CLOCKWISE seen from the front (glTF; (B - A) x (C - A) is on the side of the normals) — Godot's",
+			"ArrayMesh lists them clockwise: reverse. The expected values are rounded to 1e-6.",
+			"COMPARE AS A BAG, NOT AS A LIST: same number of triangles; every expected triangle matched to a DISTINCT",
+			"triangle of yours equal under one of its three ROTATIONS (A B C, B C A, C A B — never a reflection: the",
+			"winding is part of the contract), corner by corner within tolerances: position and uv 1e-4, normal 1e-3,",
+			"color 1e-4 (bucket your triangles by their centroid rounded to 0.01 and search the 27 neighbouring",
+			"buckets). The summary (kind = b of the first corner; area within 1e-3 + 1e-6 x area) is a diagnosis: when",
+			"it differs, the bag will too. Compare the arrays you COMPUTE, before the engine stores them: nothing is",
+			"quantized here (Godot's ArrayMesh keeps colours in 8 bits and normals octahedral; the .glb colours are in",
+			"1/255)."],
+		"constants": {"surface": EM.NAPPE, "river": EM.RIVIERE, "overlap": EM.DEBORD, "sheet": EM.LAME, "arc": EM.ARC,
+			"flare": EM.EVASE, "flare_max": EM.EVASE_MAXI, "into_rock": EM.DANS_LA_ROCHE, "rounding": EM.ARRONDI,
+			"overhang": EM.DEPASSE, "churn": EM.REMOUS, "spray": EM.EMBRUN, "foam_rise": EM.MONTEE_D_ECUME,
+			"horizon": EM.LARGE, "spring": EM.SOURCE, "spring_dome": EM.SOURCE_DOME},
+		"tolerances": TOLERANCES_MAILLAGE, "worlds": mondes_en, "cases": cas}
+
+
+## LE MAILLEUR, résumé ligne à ligne (la référence est `eau_maillage.gd` ; les cas tranchent).
+static func _regle_du_maillage() -> Array:
+	return [
+		"THE WATER MESH (eau_maillage.gd is the reference, read it line by line; these cases are the arbiter). One mesh",
+		"  per WATER LAYER, from its bodies (water_world, in order) and the full cells of EVERY tile layer; BOX = the box",
+		"  of the full cells grown by 1 (empty world: no box). A body with an error draws nothing; no triangle at all is",
+		"  an empty mesh. Floats: computed in DOUBLE, vertices stored in 32-bit floats (Godot's Vector3, Color).",
+		"  color(flow f, kind k, a) = (f.x * 0.5 + 0.5, f.z * 0.5 + 0.5, k, clamp(a, 0, 1)); kinds: still 0, river 0.5,",
+		"  foam 0.75, fall 1. Constants: see constants (surface 0.7, river -0.15, overlap 0.45, ...).",
+		"DORMANT waters: the sea's cells, a lake's cells, each lake of each river (cells), in body order.",
+		"FLAT RECTANGLES {x0, x1, z0, z1, h, color}, body by body:",
+		"  sea: SHEET(water, level, h forced to level + 0.7 when the box exists and level > box.hi.y), then the HORIZON",
+		"    at level + 0.7, color(0, still, 1): no box → [-2000, 2000] x [-2000, 2000]; else with the box lo..hi:",
+		"    x [-2000, 2000] z [-2000, lo.z]; x [-2000, 2000] z [hi.z + 1, 2000]; x [-2000, lo.x] z [lo.z, hi.z + 1];",
+		"    x [hi.x + 1, 2000] z [lo.z, hi.z + 1].   lake: SHEET(water, level).   river: SHEET(cells, level) of each of",
+		"    its lakes, then its BANDS and WATERFALLS (below).",
+		"  SHEET(W, L): the drawn surface S = cells of W whose cell above is neither in W nor full, PLUS cells of W at",
+		"    y = L whose cell above is full (water under a floating storey or a ceiling). depth p = cells of W from the",
+		"    cell down to the floor (included), -1 without a floor; color(0, still, p < 0 ? 1 : p / 8). Overlaps: xm =",
+		"    0.45 if (x-1, y, z) is full else 0; xp, zm, zp likewise for x+1, z-1, z+1. Sort S by (y, z, x). ROWS: a cell",
+		"    extends the current row if same y and z, row end == x, row xp == 0 and cell xm == 0, same zm, zp, color",
+		"    (then row end = x + 1, row xp = cell xp); else it starts a row {y, z, start x, end x + 1, xm, xp, zm, zp,",
+		"    color}. RECTANGLES, rows in order: x0 = start - xm, x1 = end + xp; if an OPEN rectangle has the key (y, z,",
+		"    x0, x1, color), it is closed and grows z1 = z + 1 + zp; else a new one {x0, x1, z - zm, z + 1 + zp, h = y +",
+		"    0.7 or the forced h, color}. If the row's zp == 0, the rectangle is open under the key (y, z + 1, x0, x1,",
+		"    color).",
+		"  RIVER (rivers of the layer share one SEEN set and one SPRINGS list): SPRING at course[0]'s cell if it is a",
+		"    flow cell on a full cell, not already a spring. BAND for each course cell c that is not a lake entry, has a",
+		"    full cell below and is not SEEN (then it is): flow d = (next cell - c) if next is a horizontal neighbour,",
+		"    else (c - previous) if horizontal, else 0; rectangle [c.x - xm, c.x + 1 + xp] x [c.z - zm, c.z + 1 + zp],",
+		"    overlaps as in SHEET at c's row, h = c.y - 0.15, color(d, river, 0.05). WATERFALL for each run of fall",
+		"    entries i..j-1: lip = course[i-1] (c + up if i = 0); d = lip - course[i-2] if i >= 2 and horizontal, else",
+		"    the first f of +x, -x, +z, -z with (course[i] - f) full, else 0; bottom = course[j-1]. top = lip.y - 0.15;",
+		"    foot = bottom.y - 0.3; ground = bottom.y - 0.15 if bottom + down is full else foot; the FIRST dormant water",
+		"    holding bottom: h = its highest cell above bottom (contiguous), ground = h.y + 0.7, foot = min(foot, ground",
+		"    - 0.15). PLANE: axis x if d.x != 0 else z; sense = d.x or d.z; along = lip.z (axis x) or lip.x; d = 0:",
+		"    axis z, sense 1, along = lip.x, plane = lip.z + 0.5; else plane = lip.x (axis x) or lip.z, + 1 when sense",
+		"    < 0. Waterfalls with the same (axis, round(plane * 20), along) are ONE: top = max, foot = min, ground = min.",
+		"  WATERFALL SHEET (after all rivers): straight = (d = 0); free0 = not straight and no waterfall at along - 1 on",
+		"    the same plane; free1 likewise at along + 1. u0 = along - (0.1 if free0), u1 = along + 1 + (0.1 if free1).",
+		"    ACROSS: u0 + f if free0 and u1 - f if free1 for f in 0, 0.05, 0.1, 0.2, 0.3, 0.35, plus along, along + 0.5,",
+		"    along + 1; sorted; kept within [u0 - 0.001, u1 + 0.001]; one within 0.005 of the previous kept is dropped.",
+		"    DROPS (total = top - foot): 0, 0.02, 0.06, 0.12, 0.2, 0.3, 0.42, 0.55, 0.7 those < total - 0.01; then 1.2,",
+		"    1.7, ... while < total - 0.2; then total. out(h) = 0.35 sqrt(clamp(h / 0.7, 0, 1)) + min(0.04 max(h - 0.7,",
+		"    0), 0.2). profile(u) = 1, and if free0 and u < u0 + 0.35: t = clamp((u - u0) / 0.35, 0, 1), min with",
+		"    sqrt(1 - (1 - t)^2); free1 likewise with (u1 - u). POINT(u, h): r = straight ? 0 : profile(u); s = plane +",
+		"    (straight ? 0 : lerp(-0.4 clamp(h / 0.15, 0, 1), out(h), r)) * sense; y = top - h; axis x: (s, y, u),",
+		"    axis z: (u, y, s). NORMAL(u, h): tu = POINT(u + 0.01, h) - POINT(u - 0.01, h), th = POINT(u, h + 0.01) -",
+		"    POINT(u, max(h - 0.01, 0)) (points as 32-bit vectors), n = (th x tu) * (axis x ? -sense : sense);",
+		"    |n| < 1e-9 → (sense, 0, 0) axis x or (0, 0, sense) axis z; else normalized. GRID rows = drops, columns =",
+		"    across: POINT, NORMAL, color(d, fall, e^2) with e = clamp(1 - (y - ground) / 1.3, 0, 1), uv (u, y). The top",
+		"    row's points are T-JUNCTION POINTS for the flats (below).",
+		"  FOAM of a waterfall: hg = clamp(top - ground, 0, total); per column u: p = POINT(u, hg), n = NORMAL(u, hg),",
+		"    dir = (n.x, 0, n.z), if |dir| < 0.2 → (sense, 0, 0) or (0, 0, sense); dir normalized; foot = (p.x, ground,",
+		"    p.z). CROWN(offsets, rises, foams, flat, weights): row k, column i: foot + dir * offset_k + (0, rise_k +",
+		"    (flat ? 0.02 : 0), 0); normal flat ? up : dir; color(d, foam, foam_k * weight_i); uv flat ? (u, ground -",
+		"    1.5 offset_k) : (u, y). RING = CROWN(0 0.25 0.55 0.85, 0 0 0 0, 1 0.85 0.45 0, flat, 1). SPRAY = CROWN(0.06",
+		"    0.16 0.22 0.2, 0 0.3 0.6 0.9, 0.95 0.7 0.35 0, standing, straight ? 1 : profile(u)^3).",
+		"  SPRING at cell c: centre (c.x + 0.5, c.y - 0.15, c.z + 0.5), 17 columns i = 0..16, angle = 2 pi (i mod 16) /",
+		"    16, dir (cos, 0, sin). DISC rows radius 0 0.2 0.42 0.7, lift 0.08 0.056 0.024 0.02, foam 1 0.95 0.6 0:",
+		"    centre + dir r + (0, lift, 0), normal up, color(0, foam, f), uv (angle * 0.6, centre.y - 1.5 r). VEIL rows",
+		"    radius 0.12 0.2 0.24, lift 0.02 0.18 0.34, foam 0.8 0.45 0: normal dir, uv (angle * 0.6, centre.y + lift).",
+		"  GRID → TRIANGLES: each quad (i, j): k0 (i, j), k1 (i, j+1), k2 (i+1, j+1), k3 (i+1, j); triangles (k0, k1, k2)",
+		"    and (k0, k2, k3); x = (B - A) x (C - A); dropped if |x| < 1e-7; else listed so that its cross product is on",
+		"    the side of the normal of its FIRST corner (k0): (A, B, C) if x . n(k0) > 0, else (A, C, B).",
+		"  FLATS → TRIANGLES (no T-junction): coordinates compared in TWENTIETHS (round(v * 20)). Every rectangle's four",
+		"    corners and every T-junction point are registered on their lines (h, z) → x and (h, x) → z. For each",
+		"    rectangle, its OUTLINE: (x0, z0), the registered x strictly between x0 and x1 on (h, z0) ascending, (x1,",
+		"    z0), the z strictly between on (h, x1) ascending, (x1, z1), on (h, z1) descending, (x0, z1), on (h, x0)",
+		"    descending. 4 points: triangles (P0, P2, P1) and (P0, P3, P2). More: a FAN from the centre C: (C, P(k+1),",
+		"    P(k)) for every k (cyclic). Normal up, uv (x, z), the rectangle's color. Draw order (not compared, it",
+		"    matters for transparency): waterfall sheets, flats, then the foam (rings, sprays, springs) LAST.",
+	]
 
 # ══ ÉDITION — les demandes du 3 octobre, Extrude / Shrink, la molette ════════════════════════════════════
 
