@@ -29,6 +29,8 @@ namespace MarchingBlocks.Paint.EditorTools
             public List<string> WithoutTiles = new List<string>();
             /// <summary>Layers whose tileset.json or tiles file was not found (or not imported) in Assets.</summary>
             public List<string> Missing = new List<string>();
+            /// <summary>What else the user must be told (a transition image not found, an ignored key…).</summary>
+            public List<string> Warnings = new List<string>();
 
             /// <summary>What the user must be told, or "" when every layer has its tiles.</summary>
             public string Warning
@@ -41,6 +43,7 @@ namespace MarchingBlocks.Paint.EditorTools
                     if (Missing.Count > 0)
                         parts.Add("tiles not found: " + string.Join("; ", Missing)
                             + ". Copy the whole .mbworld folder into Assets, with a glTF importer (glTFast) installed");
+                    parts.AddRange(Warnings);
                     return string.Join(". ", parts);
                 }
             }
@@ -112,6 +115,8 @@ namespace MarchingBlocks.Paint.EditorTools
                         string tilesPath = MBWorldFile.TilesPath(tilesetPath, w.tileset.text);
                         w.tiles = AssetDatabase.LoadAssetAtPath<GameObject>(tilesPath);
                         if (w.tiles == null) result.Missing.Add($"{layer.Name} ({tilesPath})");
+                        // ANIMATED TEXTURES: the animated copies of the tileset's materials (one set per tileset folder).
+                        else w.animatedMaterials = MBLitMaterials.BuildAnimated(tilesPath, w.tiles, result.Warnings);
                     }
                 }
                 var cells = new List<Vector3Int>(layer.Cells.Count);
@@ -123,6 +128,125 @@ namespace MarchingBlocks.Paint.EditorTools
                 go.SetActive(layer.Visible);
                 result.Layers.Add(w);
             }
+            // TRANSITIONS (optional): how the layers blend where they meet — a component on the root, which dresses the
+            // tiles of its children.
+            var decoded = MBJson.Parse(text);
+            var transitions = MBTransitions.Read(decoded);
+            if (!transitions.Ok) result.Warnings.Add("transitions ignored: " + transitions.Error);
+            else if (transitions.Pairs.Count > 0)
+            {
+                var t = root.AddComponent<MarchingBlocksTransitions>();
+                t.overlayShader = Shader.Find("MarchingBlocks/Transition Overlay");
+                foreach (var p in transitions.Pairs)
+                    t.pairs.Add(new MarchingBlocksTransitions.Pair
+                    {
+                        a = p.A, b = p.B, active = p.Active,
+                        aCoversB = MarchingBlocksTransitions.Settings.From(p.ACoversB),
+                        bCoversA = MarchingBlocksTransitions.Settings.From(p.BCoversA),
+                    });
+                foreach (var rep in transitions.Representatives)
+                {
+                    Texture2D image = null;
+                    if (rep.Image != null)
+                    {
+                        string imagePath = MBWorldFile.ResolveRelative(worldJsonAssetPath, rep.Image);
+                        image = AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
+                        if (image == null) result.Warnings.Add($"transition image not found: {imagePath}");
+                    }
+                    t.representatives.Add(new MarchingBlocksTransitions.Representative
+                    {
+                        image = image,
+                        color = new Color((float)rep.Color[0], (float)rep.Color[1], (float)rep.Color[2], (float)rep.Color[3]),
+                        scale = (float)rep.Scale, roughness = (float)rep.Roughness,
+                    });
+                }
+                foreach (var c in transitions.Choices)
+                    t.choices.Add(new MarchingBlocksTransitions.Choice { vertex = new Vector3Int(c.Key.x, c.Key.y, c.Key.z), layer = c.Value });
+                t.DressAll();
+            }
+            string worldFolder = Path.GetDirectoryName(worldJsonAssetPath).Replace("\\", "/");
+            string generated = worldFolder + "/" + MBLitMaterials.GeneratedFolder;
+            MarchingBlocksWorld frameFrom = null;
+            foreach (var l in result.Layers) if (l.tileset != null && l.tiles != null) { frameFrom = l; break; }
+
+            // FOLIAGE (optional): the plants, on a child of the root — their models as the importer made them, their
+            // materials copied with the wind on.
+            var foliage = MBFoliage.Read(decoded);
+            if (!foliage.Ok) result.Warnings.Add("foliage ignored: " + foliage.Error);
+            else if (foliage.Plants.Count > 0 || foliage.Models.Count > 0)
+            {
+                var go = new GameObject("Foliage");
+                go.transform.SetParent(root.transform, false);
+                go.SetActive(false);
+                var f = go.AddComponent<MarchingBlocksFoliage>();
+                f.frameFrom = frameFrom;
+                foreach (var m in foliage.Models)
+                {
+                    GameObject prefab = null;
+                    var sources = new List<Material>();
+                    var winds = new List<Material>();
+                    if (m.Mesh == null) result.Warnings.Add($"the foliage model '{m.Name}' has no mesh (missing when the world was exported)");
+                    else
+                    {
+                        string meshPath = MBWorldFile.ResolveRelative(worldJsonAssetPath, m.Mesh);
+                        prefab = AssetDatabase.LoadAssetAtPath<GameObject>(meshPath);
+                        if (prefab == null) result.Warnings.Add($"foliage model not found: {meshPath}");
+                        else
+                            foreach (var r in prefab.GetComponentsInChildren<Renderer>(true))
+                                foreach (var mat in r.sharedMaterials)
+                                    if (mat != null && !sources.Contains(mat))
+                                    {
+                                        sources.Add(mat);
+                                        winds.Add(MBLitMaterials.WindCopy(mat, generated));
+                                    }
+                    }
+                    f.models.Add(new MarchingBlocksFoliage.Model
+                    {
+                        id = m.Id, name = m.Name, prefab = prefab, groundOffset = (float)m.GroundOffset, scale = (float)m.Scale,
+                        scaleRandom = (float)m.ScaleRandom, footprint = (float)m.Footprint, height = (float)m.Height,
+                        wind = (float)m.Wind, sources = sources, windMaterials = winds,
+                    });
+                }
+                foreach (var p in foliage.Plants)
+                    f.plants.Add(new MarchingBlocksFoliage.Plant
+                    {
+                        model = p.Model, point = new Vector3((float)p.X, (float)p.Y, (float)p.Z), yaw = (float)p.Yaw,
+                        scale = (float)p.Scale, planted = p.Planted,
+                    });
+                go.SetActive(true);
+            }
+
+            // WATER (optional): each baked sheet with the look the author suggested (an example material).
+            var water = MBWater.Read(decoded);
+            if (!water.Ok) result.Warnings.Add("water ignored: " + water.Error);
+            else if (water.Layers.Count > 0)
+            {
+                var go = new GameObject("Water");
+                go.transform.SetParent(root.transform, false);
+                go.SetActive(false);
+                var wc = go.AddComponent<MarchingBlocksWater>();
+                wc.frameFrom = frameFrom;
+                foreach (var l in water.Layers)
+                {
+                    GameObject sheet = null;
+                    if (l.Mesh != null)
+                    {
+                        string sheetPath = MBWorldFile.ResolveRelative(worldJsonAssetPath, l.Mesh);
+                        sheet = AssetDatabase.LoadAssetAtPath<GameObject>(sheetPath);
+                        if (sheet == null) result.Warnings.Add($"water sheet not found: {sheetPath}");
+                    }
+                    var sources = new List<Vector3Int>();
+                    foreach (var c in l.Sources) sources.Add(new Vector3Int(c.x, c.y, c.z));
+                    wc.layers.Add(new MarchingBlocksWater.Layer
+                    {
+                        name = l.Name, visible = l.Visible, look = l.Look, sheet = sheet,
+                        material = MBWaterLooks.Material(l.Look, generated), sources = sources,
+                    });
+                }
+                go.SetActive(true);
+            }
+            AssetDatabase.SaveAssets();
+
             // ONE undo step: registering the root takes its whole hierarchy with it.
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
