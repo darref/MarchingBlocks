@@ -449,8 +449,7 @@ func monde() -> Dictionary:
 	return {
 		"plein": func(c: Vector3i) -> bool: return e._vue._occupe_visible(c),
 		"sol": _sol,
-		"eau": func(p: Vector3) -> bool: return not e._eau_sous(Vector3i(floori(p.x), floori(p.y + 0.2),
-			floori(p.z))).is_empty(),
+		"eau": func(p: Vector3) -> bool: return not e._eau_sous(FE.case_d_eau(p)).is_empty(),
 	}
 
 

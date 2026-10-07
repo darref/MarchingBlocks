@@ -46,6 +46,32 @@ const BORNES := {"largeur": [0.05, 1.0], "avance": [-0.5, 0.5], "bruit": [0.0, 1
 	"creux": [0.0, 1.0]}
 
 
+## LES NOMS QUI PARTENT (`world.json`, les cas d'épreuve des greffons — charte §7, en anglais) : ceux de l'écran
+## (Softness, Reach, Irregularity, Grain, Fills hollows). La traduction vit ICI ET NULLE PART AILLEURS (parité des
+## greffons, 7 octobre 2026).
+const NOMS_EN := {"largeur": "softness", "avance": "reach", "bruit": "irregularity", "grain": "grain",
+	"creux": "fills_hollows"}
+
+
+## Des réglages bornés, sous leurs noms anglais.
+static func reglages_en(r: Variant) -> Dictionary:
+	var fr := reglages(r)
+	var sortie := {}
+	for k in NOMS_EN:
+		sortie[NOMS_EN[k]] = fr[k]
+	return sortie
+
+
+## Des réglages lus sous leurs noms anglais (absent : le défaut ; hors bornes : borné), rendus sous les noms du cœur.
+static func reglages_depuis_en(r: Variant) -> Dictionary:
+	var d: Dictionary = r if r is Dictionary else {}
+	var fr := {}
+	for k in NOMS_EN:
+		if d.has(NOMS_EN[k]):
+			fr[k] = d[NOMS_EN[k]]
+	return reglages(fr)
+
+
 ## La clé d'une paire de couches (leurs `id`, dans l'ordre croissant) : une paire n'a pas de sens.
 static func cle_de_paire(a: String, b: String) -> String:
 	return "%s|%s" % [a, b] if int(a) < int(b) or (int(a) == int(b) and a < b) else "%s|%s" % [b, a]

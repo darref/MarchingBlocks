@@ -3,7 +3,9 @@ extends SceneTree
 ## ÉCRIT LES CAS D'ÉPREUVE à côté de chaque greffon :
 ##   - ceux de la RÈGLE DE POSE (`FormatNeutre.cas_d_epreuve()`) → `conformance.json`, les trois greffons ;
 ##   - ceux des OUTILS D'ÉDITION (`EpreuveOutils.cas_d_epreuve()`) → `tools_conformance.json`, les trois
-##     greffons (Godot depuis le 28 septembre 2026).
+##     greffons (Godot depuis le 28 septembre 2026) ;
+##   - ceux de la PARITÉ DES GREFFONS (`EpreuveParite.cas_d_epreuve()`, 7 octobre 2026) → cinq fichiers de plus, les
+##     trois greffons : `transitions_`, `animation_`, `foliage_`, `water_`, `editing_conformance.json`.
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/generer_cas_d_epreuve.gd
@@ -14,6 +16,14 @@ extends SceneTree
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const EO := preload("res://addons/marchingblocks_core/epreuve_outils.gd")
 const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
+const EP := preload("res://addons/marchingblocks_core/epreuve_parite.gd")
+## ⚠ LES DOSSIERS DES TROIS GREFFONS (les cinq fichiers de la parité y vont tous ; Unity veut un `.meta` à GUID STABLE à
+## côté de chacun — écrits une fois, commités).
+const DOSSIERS := [
+	"res://addons/marchingblocks_paint",
+	"res://engines/unity/com.marchingblocks.paint/Tests",
+	"res://engines/unreal/MarchingBlocksPaint/Tests",
+]
 ## ⚠ UN SEUL FICHIER, LIVRÉ À CHAQUE GREFFON : tous doivent passer les MÊMES cas.
 const CIBLES := [
 	"res://addons/marchingblocks_paint/conformance.json",
@@ -42,6 +52,13 @@ func _initialize() -> void:
 	_ecrire(FN.cas_d_epreuve(), CIBLES)
 	_ecrire(outils, CIBLES_OUTILS)
 	_ecrire(FM.cas_d_epreuve(), CIBLES_MONDE)
+	var parite: Dictionary = EP.cas_d_epreuve()
+	if parite.has("erreur"):
+		printerr(parite["erreur"])
+		quit(1)
+		return
+	for sujet in EP.FICHIERS:
+		_ecrire(parite[sujet], DOSSIERS.map(func(d: String) -> String: return d.path_join(EP.FICHIERS[sujet])))
 	quit(0)
 
 

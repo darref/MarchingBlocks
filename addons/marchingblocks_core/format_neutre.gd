@@ -210,6 +210,8 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var racine := Node3D.new()
 	racine.name = "Tiles"
 	var vus := {}
+	# Les images des textures animées qui partent avec le jeu : {chemin source: chemin relatif au .mbset}.
+	var emportees := {}
 	for cle in du_lot:
 		var tuile := nom_de_tuile(cle)
 		if vus.has(tuile):
@@ -218,7 +220,8 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 		vus[tuile] = true
 		var inst := MeshInstance3D.new()
 		inst.name = tuile
-		inst.mesh = _maillage_exportable(lot.get_item_mesh(du_lot[cle]), lot.get_item_mesh_transform(du_lot[cle]))
+		inst.mesh = _maillage_exportable(lot.get_item_mesh(du_lot[cle]), lot.get_item_mesh_transform(du_lot[cle]),
+			emportees)
 		racine.add_child(inst)
 		# ⚠ UNE VARIANTE N'EST PAS UNE CLÉ (4 octobre 2026) : `tiles` reste {clé: SA tuile de base} — un greffon qui ne
 		# lit pas les variantes pose la base, et le monde reste juste. Elles vont dans `variants`, dans l'ordre.
@@ -259,6 +262,16 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	racine.free()
 	if err != OK:
 		return {"erreur": "tiles.glb could not be written (error %d)" % err}
+	# ⚠ LES IMAGES DES TEXTURES ANIMÉES PARTENT AVEC LE JEU (parité des greffons, 7 octobre 2026) : recopiées sous le
+	# chemin relatif que les extras nomment. Une image introuvable chez l'auteur est DITE (et le greffon la montrera
+	# magenta, charte §3) — jamais remplacée en silence.
+	var images_manquantes: Array = []
+	if not emportees.is_empty():
+		DirAccess.make_dir_recursive_absolute(cible.path_join(
+			load("res://addons/marchingblocks_core/animation_materiau.gd").DOSSIER_EMPORTE))
+		for source in emportees:
+			if not FileAccess.file_exists(source) or DirAccess.copy_absolute(source, cible.path_join(emportees[source])) != OK:
+				images_manquantes.append(str(source).get_file())
 
 	var manquantes: Array = []
 	for c in MB.pieces_a_sculpter():
@@ -282,10 +295,12 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	f.close()
 	var r := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r != null:
-		r.store_string("\n".join(regle()) + "\n\nOpen format — free plugins for Godot, Unity and Unreal "
-			+ "read it. Made with %s.\n" % generateur)
+		r.store_string("\n".join(regle()) + "\n\n"
+			+ "\n".join(load("res://addons/marchingblocks_core/animation_materiau.gd").regle_animation())
+			+ "\n\nOpen format — free plugins for Godot, Unity and Unreal read it. Made with %s.\n" % generateur)
 		r.close()
-	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes}
+	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes,
+		"images": emportees.size(), "images_manquantes": images_manquantes}
 
 
 ## Le tétraèdre du repère témoin : quatre sommets, quatre faces, et rien d'autre — un importeur qui
@@ -303,7 +318,7 @@ static func maillage_du_marqueur() -> ArrayMesh:
 	return m
 
 
-static func _maillage_exportable(mesh: Mesh, pose: Transform3D) -> ArrayMesh:
+static func _maillage_exportable(mesh: Mesh, pose: Transform3D, emportees: Dictionary = {}) -> ArrayMesh:
 	var sortie := ArrayMesh.new()
 	for s in mesh.get_surface_count():
 		var arrays: Array = mesh.surface_get_arrays(s)
@@ -319,9 +334,10 @@ static func _maillage_exportable(mesh: Mesh, pose: Transform3D) -> ArrayMesh:
 				arrays[Mesh.ARRAY_NORMAL] = nrm
 			arrays[Mesh.ARRAY_TANGENT] = null
 		sortie.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-		# Un matériau ANIMÉ part par son statique : l'image 0, ses réglages dans les extras (« mb_animation ») — les
-		# greffons les joueront plus tard (LA LISTE DES GREFFONS À FAIRE).
-		var m: Material = load("res://addons/marchingblocks_core/animation_materiau.gd").statique_pour_l_export(mesh.surface_get_material(s))
+		# Un matériau ANIMÉ part par son statique : l'image 0, ses réglages dans les extras (« mb_animation », au format qui
+		# part : `Anim.vers_format`), ses images nommées relativement au .mbset (`emportees`, recopiées par `exporter`).
+		var m: Material = load("res://addons/marchingblocks_core/animation_materiau.gd").statique_pour_l_export(
+			mesh.surface_get_material(s), emportees)
 		if m is ShaderMaterial or m == null:
 			var standard := StandardMaterial3D.new()
 			standard.vertex_color_use_as_albedo = true

@@ -13,8 +13,8 @@ extends Node3D
 
 const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
 
-## La direction du vent, dans le plan (PROPOSÉ).
-const SENS_DU_VENT := Vector2(1.0, 0.35)
+## La direction du vent, dans le plan (PROPOSÉ) — dans le cœur (`FE.SENS_DU_VENT`) : les greffons la reprennent.
+const SENS_DU_VENT := FE.SENS_DU_VENT
 
 ## Le cache des modèles chargés : chemin → {"parties": [[Mesh, Transform3D, [Material, …]], …], "aabb", "erreur",
 ## "date"} — relu si le fichier a changé.
@@ -142,6 +142,7 @@ uniform float force_normale = 1.0;
 uniform float seuil_alpha = 0.5;
 uniform vec2 sens_vent = vec2(1.0, 0.35);
 
+// LE BALANCEMENT (`FE.balancement`, ligne à ligne).
 void vertex() {
 	float haut = INSTANCE_CUSTOM.y;
 	if (haut > 0.0) {
@@ -304,9 +305,7 @@ static func instances(m: Dictionary, plants: Array, pose_partie: Transform3D) ->
 	var vent: Array = []
 	for pl in plants:
 		poses.append(FE.transformation(m, pl) * pose_partie)
-		var p: Vector3 = pl["p"]
-		vent.append(Color(p.y, FE.hauteur_au_dessus_du_sol(m, pl), fposmod(p.x * 0.37 + p.z * 0.71, TAU),
-			float(m["vent"])))
+		vent.append(FE.vent_du_plant(m, pl))
 	return [poses, vent]
 
 

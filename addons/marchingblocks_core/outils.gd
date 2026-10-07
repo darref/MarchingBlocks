@@ -222,6 +222,34 @@ static func operer_selection(occupees: Dictionary, selection: Dictionary, quoi: 
 
 ## LE VOLUME D'UNE BOÎTE — TOUTES les cases entre deux coins, bornes comprises, pleines ou vides.
 ##
+## ÉLARGIR D'UNE COURONNE, À PLAT, CASES VIDES COMPRISES (Alt + molette vers le haut sur une sélection, §5 « la
+## molette ») : la sélection plus ses quatre voisines horizontales de chaque case. ⚠ PAS « Grow », qui ne garde que la
+## matière : une sélection de volume (un Rect dans l'air) disparaissait. Sortie de `editor.gd` pour être la règle des
+## greffons (7 octobre 2026). Rien n'est posé.
+static func elargir_a_plat(selection: Dictionary) -> Dictionary:
+	var large := {}
+	for c: Vector3i in selection:
+		large[c] = true
+		for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+			large[c + d] = true
+	return large
+
+
+## LE PINCEAU SELECT sur ses cases `cibles` : elles entrent dans la sélection — les seules PLEINES, ou toutes avec
+## « Select empty cells too » (`vides`, demandé par Jordan le 3 octobre 2026) ; `retirer` (le geste inverse) les en ôte,
+## pleines ou vides. ⚠ EN PLACE (un coup de pinceau touche quelques cases d'une sélection qui peut en tenir des milliers :
+## la recopier à chaque case serait quadratique) ; rend la même sélection. Sortie de `vue.gd` pour être la règle des
+## greffons (7 octobre 2026).
+static func selectionner_au_pinceau(selection: Dictionary, cibles: Array, occupe: Callable, vides: bool,
+		retirer := false) -> Dictionary:
+	for c in cibles:
+		if retirer:
+			selection.erase(c)
+		elif vides or occupe.call(c):
+			selection[c] = true
+	return selection
+
+
 ## ⚠ **C'EST CE QUI DISTINGUE UNE BOÎTE D'UN PINCEAU DE SÉLECTION**, et ce qui rend `remplir` possible :
 ## on désigne un VOLUME à bâtir, pas une matière à reprendre. `dans_la_boite` (qui ne rend que la
 ## matière) reste pour qui veut l'autre question.

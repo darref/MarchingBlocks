@@ -450,6 +450,54 @@ static func room(cells: Dictionary, a: Vector3i, b: Vector3i, floors: int, up: b
 	return r
 
 
+## ROOM FROM SELECTION: the FOOTPRINT is the selection seen from above (x, z); the base is its lowest y when rising,
+## its highest when sinking. Inside = footprint cells whose four horizontal neighbours are in the footprint (none:
+## too_small; an empty selection: empty). The floor and the ceiling cover the whole footprint, the walls are its edge,
+## the inside is dug out. Repaired like an add shape. Returns {set, clear, error, repaired, box: [lo, hi] or []}.
+static func room_from_selection(cells: Dictionary, selection: Dictionary, floors: int, up: bool) -> Dictionary:
+	var r := {"set": {}, "clear": {}, "error": "", "repaired": 0, "box": []}
+	if selection.is_empty():
+		r["error"] = "empty"
+		return r
+	var footprint := {}
+	var base := 0
+	var first := true
+	for c: Vector3i in selection:
+		footprint[Vector2i(c.x, c.z)] = true
+		if first or (c.y < base if up else c.y > base):
+			base = c.y
+			first = false
+	var inside := {}
+	for p: Vector2i in footprint:
+		if footprint.has(p + Vector2i(1, 0)) and footprint.has(p + Vector2i(-1, 0)) \
+				and footprint.has(p + Vector2i(0, 1)) and footprint.has(p + Vector2i(0, -1)):
+			inside[p] = true
+	if inside.is_empty():
+		r["error"] = "too_small"
+		return r
+	var e := clampi(floors, 1, ROOM_FLOORS_MAX)
+	var y0 := base if up else base - e - 1
+	var y1 := y0 + e + 1
+	if footprint.size() * (e + 2) > VOLUME_MAX:
+		r["error"] = "too_large"
+		return r
+	var lo := Vector3i(2147483647, y0, 2147483647)
+	var hi := Vector3i(-2147483647, y1, -2147483647)
+	for p: Vector2i in footprint:
+		lo = Vector3i(mini(lo.x, p.x), y0, mini(lo.z, p.y))
+		hi = Vector3i(maxi(hi.x, p.x), y1, maxi(hi.z, p.y))
+		for y in range(y0, y1 + 1):
+			var c := Vector3i(p.x, y, p.y)
+			if y == y0 or y == y1 or not inside.has(p):
+				if not cells.has(c):
+					r["set"][c] = true
+			elif cells.has(c):
+				r["clear"][c] = true
+	r["repaired"] = _repair(cells, r["set"], r["clear"], false)
+	r["box"] = [lo, hi]
+	return r
+
+
 static func _repair(cells: Dictionary, to_set: Dictionary, to_clear: Dictionary, dig: bool) -> int:
 	var full := func(c: Vector3i) -> bool:
 		return to_set.has(c) or (cells.has(c) and not to_clear.has(c))

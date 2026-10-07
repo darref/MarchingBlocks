@@ -36,6 +36,8 @@ var _size: HSlider
 var _size_value: Label
 var _shape_buttons := {}
 var _hollow: Button
+var _select_empty: Button
+var _extrude_bar: HBoxContainer
 var _special_buttons := {}
 var _shape_bar: HBoxContainer
 var _ends_buttons := {}
@@ -82,6 +84,9 @@ func _build() -> void:
 		_mode_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_mode(m[0]))
 	_hollow = _toggle(bar, "hollow", "Hollow box", "Keeps the skin of the box — a room. A box thinner than three "
 		+ "cells stays solid.", func() -> void: editor.hollow = _hollow.button_pressed)
+	_select_empty = _toggle(bar, "box", "Select empty cells too", "The Select brush also takes the AIR: paint the "
+		+ "outline of a room flat on the floor grid (Disc brush), then Extend selection up and Fill — or Room from "
+		+ "selection.", func() -> void: editor.select_empty = _select_empty.button_pressed)
 	# The special shapes: tools of their own, always aimed at the matter.
 	_gap(bar)
 	for m in [["tunnel", "Tunnel", "Digs into a WALL, square to it: one click goes through to the next cave (or Length "
@@ -193,20 +198,25 @@ func _build() -> void:
 	for o in [["fill", "fill", "Fill", "Fills every selected cell with matter. Draw a Rect or a Box, then Fill it."],
 			["delete", "delete", "Delete (Del)", "Removes the selected matter."],
 			["clear", "", "Clear (Esc)", "Forgets the selection. No cell changes."],
-			["extrude_up", "extrude_up", "Extrude up", "Adds the layer above; the selection AND the floor follow it."],
-			["extrude_down", "extrude_down", "Extrude down", "Adds the layer below; the selection and the floor follow it."],
 			["grow", "grow", "Grow", "Selects the matter touching the selection by a face."],
-			["shrink", "shrink", "Shrink", "Drops the selected cells that touch an unselected one."],
+			["shrink", "shrink_edge", "Shrink (Alt + wheel down)", "Drops the EDGE of the selection: a rectangle loses its "
+				+ "rim, a line its ends, a block its skin. Alt + wheel up widens it, a flat ring at a time."],
 			["connected", "connected", "Connected", "Selects all the matter linked to the selection by faces."]]:
 		var op: String = o[1]
 		var b := _button(_selection_bar, o[0], o[2], o[3], func() -> void:
 			if op == "":
 				editor.clear_selection()
+			elif op == "shrink_edge":
+				editor.shrink_selection()
 			else:
 				editor.operate(op))
 		if o[0] == "delete":
 			b.add_theme_color_override("icon_normal_color", RED)
 			b.add_theme_color_override("icon_hover_color", RED.lightened(0.2))
+	_button(_selection_bar, "room", "Room from selection", "Turns the selection, seen from above, into a room: its "
+		+ "outline becomes the walls, the whole footprint the floor and the ceiling, the inside is dug out. Floors and "
+		+ "Up / Down are the Room shape's. Paint the footprint flat with Select (Select empty cells too), then press this.",
+		func() -> void: editor.room_from_selection())
 	var move := _menu(_selection_bar, "move", "Move — the arrow keys move the selection too (they follow the "
 		+ "camera; Shift + up / down lift).")
 	var moves := [["−X", Vector3i(-1, 0, 0)], ["+X", Vector3i(1, 0, 0)], ["−Y", Vector3i(0, -1, 0)],
@@ -217,6 +227,20 @@ func _build() -> void:
 	_button(_selection_bar, "copy", "Copy (Ctrl+C)", "Copies the selected matter.", func() -> void:
 		editor.copy_selection())
 	_button(_selection_bar, "cut", "Cut (Ctrl+X)", "Copies, then deletes.", func() -> void: editor.cut_selection())
+	# EXTRUDE, once: up, down, facing — on the selection, or on the floor's matter when nothing is selected.
+	_extrude_bar = HBoxContainer.new()
+	_extrude_bar.add_theme_constant_override("separation", 2)
+	bar.add_child(_extrude_bar)
+	_gap(_extrude_bar)
+	var modes := (" Click: adds matter, the selection and the floor follow — click again to keep going. Shift + click: "
+		+ "extends the selection that way, no matter added (Extend selection; Shift + wheel too). Alt + click: moves "
+		+ "the selection, no matter added. On the selection, or on the matter of the floor when nothing is selected.")
+	for e in [["extrude_up", "up", "Extrude up", "One cell higher."],
+			["extrude_down", "down", "Extrude down", "One cell lower."],
+			["move", "facing", "Extrude facing", "One cell away from the matter behind the cells — a wall thickens "
+				+ "toward the air, a cave ceiling comes down."]]:
+		var direction: String = e[1]
+		_button(_extrude_bar, e[0], e[2], e[3] + modes, func() -> void: editor.extrude(direction))
 	# Paste stays while the clipboard holds something, selection or not.
 	_paste = _button(bar, "paste", "Paste (Ctrl+V)", "The copy follows the mouse; click to place it, Esc cancels.",
 		func() -> void: editor.start_paste())
@@ -344,6 +368,8 @@ func refresh() -> void:
 	_hollow.set_pressed_no_signal(editor.hollow)
 	# Only what the current tool uses, as in the tool: Hollow for the Box, the brush for Add · Dig · Select.
 	_hollow.visible = editor.mode == "box"
+	_select_empty.visible = editor.mode == "select"
+	_select_empty.set_pressed_no_signal(editor.select_empty)
 	var shaping: bool = editor.mode == "shape"
 	for sp in _special_buttons:
 		(_special_buttons[sp] as Button).set_pressed_no_signal(shaping and sp == editor.special)
@@ -376,6 +402,7 @@ func refresh() -> void:
 		_floor.set_value_no_signal(editor.world.floor_y)
 	var n: int = editor.selection.size()
 	_selection_bar.visible = n > 0
+	_extrude_bar.visible = n > 0 or editor.mode in ["select", "rect", "box"]
 	_selected.text = "%d selected" % n
 	_paste.visible = not editor.clipboard.is_empty()
 	_status.text = editor.status

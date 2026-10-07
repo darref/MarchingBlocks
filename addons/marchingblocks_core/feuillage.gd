@@ -202,34 +202,95 @@ static func planter(m: Dictionary, p: Vector3, normale: Vector3, mode: String, m
 static func semer(m: Dictionary, centre: Vector3, rayon: float, essais: int, mode: String, monde: Dictionary,
 		ix: Dictionary, modeles: Dictionary, rng: RandomNumberGenerator, espacement := 0.0, lacet_alea := true,
 		pente_maxi := PENTE_MAXI) -> Dictionary:
-	var plants: Array = []
-	var refus := {}
+	var sortie := {"plants": [], "refus": {}}
+	var tirage := func() -> Dictionary: return tirer(m, rng, lacet_alea)
 	for i in essais:
 		var a := rng.randf() * TAU
 		var d := sqrt(rng.randf()) * rayon
-		var x := centre.x + cos(a) * d
-		var z := centre.z + sin(a) * d
-		var p := Vector3(x, centre.y, z)
-		var n := Vector3.UP
-		if mode != "air":
-			var g = (monde["sol"] as Callable).call(x, z, centre.y)
-			if g == null:
-				refus["pas_de_sol"] = int(refus.get("pas_de_sol", 0)) + 1
-				continue
-			p.y = float(g["y"])
-			n = g["normale"]
-		var r := planter(m, p, n, mode, monde, ix, modeles, rng, espacement, lacet_alea, pente_maxi)
-		if r["plant"] == null:
-			refus[r["raison"]] = int(refus.get(r["raison"], 0)) + 1
-			continue
-		plants.append(r["plant"])
-		indexer(ix, r["plant"], modeles)
-	return {"plants": plants, "refus": refus}
+		_semer_un(m, centre.x + cos(a) * d, centre.z + sin(a) * d, centre.y, tirage, mode, monde, ix, modeles,
+			espacement, pente_maxi, sortie)
+	return sortie
+
+
+## LE PINCEAU, SANS LE HASARD — ses candidats donnés : [[x, z, lacet, échelle], …], dans l'ordre. C'est le corps de
+## `semer` (le même `_semer_un`) : les cas d'épreuve des greffons l'emploient, parce qu'aucun moteur ne reproduit le
+## générateur de Godot (parité des greffons, 7 octobre 2026). Rend {"plants", "refus"} comme `semer`.
+static func semer_candidats(m: Dictionary, y_haut: float, candidats: Array, mode: String, monde: Dictionary,
+		ix: Dictionary, modeles: Dictionary, espacement := 0.0, pente_maxi := PENTE_MAXI) -> Dictionary:
+	var sortie := {"plants": [], "refus": {}}
+	for c in candidats:
+		var tirage := func() -> Dictionary: return {"lacet": float(c[2]), "echelle": float(c[3])}
+		_semer_un(m, float(c[0]), float(c[1]), y_haut, tirage, mode, monde, ix, modeles, espacement, pente_maxi, sortie)
+	return sortie
+
+
+## Un candidat du pinceau au point (x, z) : posé sur le sol cherché sous `y_haut` (ou sur le plan `y_haut` en « air »),
+## tiré (`tirage`, APRÈS le sol : l'ordre des tirages du générateur), vérifié, et indexé s'il est accepté.
+static func _semer_un(m: Dictionary, x: float, z: float, y_haut: float, tirage: Callable, mode: String,
+		monde: Dictionary, ix: Dictionary, modeles: Dictionary, espacement: float, pente_maxi: float,
+		sortie: Dictionary) -> void:
+	var refus: Dictionary = sortie["refus"]
+	var p := Vector3(x, y_haut, z)
+	var n := Vector3.UP
+	if mode != "air":
+		var g = (monde["sol"] as Callable).call(x, z, y_haut)
+		if g == null:
+			refus["pas_de_sol"] = int(refus.get("pas_de_sol", 0)) + 1
+			return
+		p.y = float(g["y"])
+		n = g["normale"]
+	var t: Dictionary = tirage.call()
+	var pl := plant(-1, int(m["id"]), p, t["lacet"], t["echelle"], mode)
+	var raison := verifier(m, pl, n, mode, monde, ix, modeles, espacement, pente_maxi)
+	if raison != "":
+		refus[raison] = int(refus.get(raison, 0)) + 1
+		return
+	(sortie["plants"] as Array).append(pl)
+	indexer(ix, pl, modeles)
 
 
 ## Les plants à effacer : ceux dont le point est à moins de `rayon` de `p`.
 static func a_effacer(ix: Dictionary, p: Vector3, rayon: float) -> Array:
 	return proches(ix, p, rayon).filter(func(pl): return ((pl["p"] as Vector3) - p).length() <= rayon + 0.5)
+
+
+## L'EAU AU POINT q, telle que l'atelier la lit (`verifier` demande `eau(p + 0,1 vers le haut)`) : la case
+## (⌊q.x⌋, ⌊q.y + ECART_EAU⌋, ⌊q.z⌋) porte-t-elle de l'eau ? Sortie de l'écran pour les greffons (7 octobre 2026).
+const ECART_EAU := 0.2
+
+
+static func case_d_eau(q: Vector3) -> Vector3i:
+	return Vector3i(floori(q.x), floori(q.y + ECART_EAU), floori(q.z))
+
+
+# ── LE VENT — les données de chaque plant (le rendu est un shader : `app/feuillage_vue.gd`, réécrit par chaque moteur) ──
+
+## La direction du vent, dans le plan x z (PROPOSÉ).
+const SENS_DU_VENT := Vector2(1.0, 0.35)
+
+
+## CE QUE CHAQUE PLANT DONNE AU SHADER DU VENT : (sol — le y du plant —, hauteur au-dessus du sol, phase, amplitude du
+## modèle). La phase vient de la POSITION (deux arbres voisins ne se balancent pas ensemble ; jamais `randi()`).
+## Sortie de `feuillage_vue.gd` pour être la règle des greffons (7 octobre 2026).
+static func vent_du_plant(m: Dictionary, pl: Dictionary) -> Color:
+	var p: Vector3 = pl["p"]
+	return Color(p.y, hauteur_au_dessus_du_sol(m, pl), fposmod(p.x * 0.37 + p.z * 0.71, TAU), float(m["vent"]))
+
+
+## LE BALANCEMENT d'un sommet (en espace MONDE, sa normale aussi) au temps t — le `vertex()` du shader du vent
+## (`feuillage_vue.gd`), ligne à ligne : penché sous le vent ∝ carré de la hauteur relative, deux rafales, plus le
+## frisson des feuilles le long de la normale. Rend le sommet déplacé. Une hauteur nulle : immobile.
+static func balancement(sommet: Vector3, normale: Vector3, vent: Color, t: float, sens := SENS_DU_VENT) -> Vector3:
+	var haut := vent.g
+	if haut <= 0.0:
+		return sommet
+	var h := clampf((sommet.y - vent.r) / haut, 0.0, 1.0)
+	var phase := vent.b
+	var ampleur := vent.a * haut * 0.05
+	var b := 0.35 + 0.6 * sin(t * 1.1 + phase) + 0.3 * sin(t * 2.3 + phase * 1.7)
+	var s := sens.normalized() * b * ampleur * h * h
+	var v := sommet + Vector3(s.x, 0.0, s.y)
+	return v + normale * sin(t * 7.0 + v.dot(Vector3(2.1, 1.7, 2.9))) * 0.015 * vent.a * h
 
 
 ## LE SOL DES CASES — la surface quand on n'a pas de tuiles (les tests, un monde sans lot) : le dessus de la plus haute
