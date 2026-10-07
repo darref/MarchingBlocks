@@ -52,8 +52,12 @@ enum class EMarchingBlocksTool : uint8
 	/** A special shape — tunnel, well, bridge, balcony or stairs (Special Shape below). Always aimed at the matter. */
 	Shape,
 	/** VARIANT (V): click a tile — its next variant (base, 1, 2…); Shift + click gives it back to the random draw (the
-	 *  tileset rule, step 8). Always aimed at the matter. (Last, so nothing a level saved is renumbered.) */
+	 *  tileset rule, step 8). Always aimed at the matter. */
 	Variant,
+	/** FOLIAGE: plants the current model of this world's MarchingBlocks Foliage — click one plant, Ctrl + click a dab of
+	 *  its brush, Shift + click erases around the point. Its mode, spacing and brush are on the Foliage actor. (Last, so
+	 *  nothing a level saved is renumbered.) */
+	Foliage,
 };
 
 /** The weights of one key's variant draw: [base, variant 1, variant 2, …] (a missing entry is 1, a negative one 0). */

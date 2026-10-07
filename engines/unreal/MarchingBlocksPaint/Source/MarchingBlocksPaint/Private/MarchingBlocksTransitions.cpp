@@ -11,6 +11,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/Texture2D.h"
 #include "Engine/Texture2DArray.h"
+#include "TextureResource.h"
 #include "Engine/VolumeTexture.h"
 #include "EngineUtils.h"
 #include "MarchingBlocksWorld.h"

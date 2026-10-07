@@ -262,6 +262,8 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("select", LOCTEXT("Select", "Select (S) — paints the selection over the matter. Shift adds, Ctrl removes."), EMarchingBlocksTool::Select)]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("rect", LOCTEXT("Rect", "Rect (G) — a FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."), EMarchingBlocksTool::Rect)]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("box", LOCTEXT("Box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."), EMarchingBlocksTool::Box)]
+				+ SHorizontalBox::Slot().AutoWidth()[TextButton(LOCTEXT("FoliageTool", "Plant"), LOCTEXT("FoliageToolTip", "Foliage — click plants the current model of this world's MarchingBlocks Foliage, Ctrl + click a dab of its brush, Shift + click erases around the point. Mode, spacing, brush: on the Foliage actor."),
+					[World]() { if (AMarchingBlocksWorld* W = World()) { W->Tool = EMarchingBlocksTool::Foliage; W->bPasting = false; } })]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("variant", LOCTEXT("Variant", "Variant (V) — click a tile: its next variant (base, 1, 2…). Shift + click gives it back to the random draw. Only for a tileset whose tiles have variants."), EMarchingBlocksTool::Variant)]
 				+ SHorizontalBox::Slot().AutoWidth()[Gap()]
 				+ SHorizontalBox::Slot().AutoWidth()

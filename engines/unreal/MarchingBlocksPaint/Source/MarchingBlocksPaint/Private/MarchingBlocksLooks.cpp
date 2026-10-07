@@ -5,6 +5,7 @@
 #include "Engine/Texture.h"
 #include "Engine/Texture2D.h"
 #include "Engine/Texture2DArray.h"
+#include "TextureResource.h"
 #include "IImageWrapper.h"
 #include "IImageWrapperModule.h"
 #include "Materials/MaterialInstanceDynamic.h"

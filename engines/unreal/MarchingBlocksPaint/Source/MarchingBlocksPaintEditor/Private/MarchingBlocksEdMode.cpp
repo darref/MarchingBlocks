@@ -7,6 +7,7 @@
 #include "Engine/Engine.h"
 #include "Engine/Selection.h"
 #include "Editor.h"
+#include "MarchingBlocksFoliage.h"
 #include "MarchingBlocksWorld.h"
 #include "SceneManagement.h"
 #include "SceneView.h"
@@ -182,6 +183,7 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 		HoverShape(World, Origin, Direction);
 		return;
 	}
+	if (World->Tool == EMarchingBlocksTool::Foliage) return;
 	if (World->Tool == EMarchingBlocksTool::Variant)
 	{
 		const MBPaint::FHit Hit = World->RayAgainstCells(Origin, Direction);
@@ -283,6 +285,17 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				ClickShape(World, Origin, Direction);
 				return true;
 			}
+			if (World->Tool == EMarchingBlocksTool::Foliage)
+			{
+				// The rule is MBCore's (MBFoliage): the Foliage actor of this world plants, sows or erases.
+				AMarchingBlocksFoliage* F = AMarchingBlocksFoliage::Find(World->GetWorld(), World->WorldName);
+				if (!F) World->Status = TEXT("Foliage — this world has no MarchingBlocks Foliage actor (the world import makes one; or place one and set its World Name).");
+				else if (bShift) F->EraseAt(Origin, Direction);
+				else if (bControl) F->SowAt(Origin, Direction);
+				else F->PlantAt(Origin, Direction);
+				if (F) World->Status = F->Status;
+				return true;
+			}
 			if (World->Tool == EMarchingBlocksTool::Variant)
 			{
 				MBPaint::FCell Vertex;
@@ -320,7 +333,7 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				ApplyRoom(World, BoxStart, BoxEnd);
 				return true;
 			}
-			if (World->Tool == EMarchingBlocksTool::Shape) return true;
+			if (World->Tool == EMarchingBlocksTool::Shape || World->Tool == EMarchingBlocksTool::Foliage) return true;
 			if (bBoxing)
 			{
 				const MBPaint::FCellSet Volume = MBPaint::Tools::Box(BoxStart, BoxEnd, World->bHollowBox && World->Tool == EMarchingBlocksTool::Box);

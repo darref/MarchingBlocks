@@ -53,9 +53,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
     - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; la nappe se dit périmée quand on peint. ⚠ La NAPPE n'est pas recalculée (le mailleur n'a pas de cas). Voir « Le greffon Godot à parité ».
+    - ✓ **Unreal — PARTIEL (7 octobre 2026)** : lecture de `water` (acteur MarchingBlocks Water par couche), la nappe cuite et les SIX presets réécrits en HLSL (`Tools/build_materials.py`), le matériau de l'artiste, la règle des cases (`MBWater`, 25/25 ; la mer est `noyau/ocean.h` lui-même). Vu à l'image (six presets). ⚠ La NAPPE n'est pas recalculée ; « réfléchissant » sans la marche en espace écran de l'appli ; « stylisé » montre un aplat sombre près de l'île. Voir « Le greffon Unreal à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - ✓ **Godot — FAIT sauf F (7 octobre 2026)** : la règle de l'appli dans `mb_editor.gd` (`wheel`), éprouvée par de vrais événements. ⚠ F : la caméra de la vue 3D appartient à l'éditeur de Godot (pas d'API pour la poser).
+    - ✓ **Unreal — FAIT sauf « près de la souris » (7 octobre 2026)** : la règle de l'appli (`UMarchingBlocksEdMode::Wheel`), seule elle reste au moteur ; F cadre la matière des couches visibles. ⚠ Le cran se dit dans le panneau et en haut de la vue (dessiner près de la souris demande l'interface de gizmo d'Unreal). Jamais tenue souris en main.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les transitions entre couches** (§5, « L'atelier Transitions ») : lire la clé `transitions` d'un monde exporté (à
@@ -63,16 +65,19 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     (`Transitions.melange`, ses cas d'épreuve) et le shader (texture 3D d'un octet par case, table des réglages) dans
     chaque moteur, et le poser par-dessus les matériaux des tuiles. Un shader ne voyage pas (§4).
     - ✓ **Godot — FAIT (7 octobre 2026)** : lecture, règle (93/93 cas), le shader de l'appli en `next_pass` sur les matériaux des tuiles, qui suit les cases peintes. Vu à l'image.
+    - ✓ **Unreal — FAIT (7 octobre 2026)** : lecture, règle (93/93), Overlay Material `M_MB_Transition` sur les instances (mesuré : il se dessine), texture 3D d'un octet par case, sommet de la tuile par instance. Vu à l'image.
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
     si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
     « Room from selection » (`FS.salle_depuis`, réécrite en C# et en C++, avec ses cas).
     - ✓ **Godot — FAIT (7 octobre 2026)** : « Select empty cells too », Extend selection (Maj + clic / Maj + molette), Room from selection. La largeur d'une rivière : la règle et ses cas seulement (le greffon ne pose pas d'eau).
+    - ✓ **Unreal — FAIT (7 octobre 2026)** : « Select empty cells too », Extend selection (Maj + clic, Maj + molette), Room from selection ; largeur d'une rivière : règle et cas seulement (le greffon ne pose pas d'eau).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
     - ✓ **Godot — FAIT (7 octobre 2026)** : Extrude ↑ ↓ face (Maj étend, Alt décale), Shrink du bord ; les anciens Extrude ↑ ↓ et Shrink quittent sa barre (leurs fonctions restent pour `tools_conformance.json`).
+    - ✓ **Unreal — FAIT (7 octobre 2026)** : Extrude haut / bas / face (Maj étend, Alt décale), Shrink du bord, Widen ; les anciens ExtrudeUp / Down et Shrink de `MBTools` restent pour `tools_conformance.json`.
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
   - **Les textures animées** (§5, « l'atelier Animation ») : lire `mb_animation` dans les `extras` du matériau glTF
     (défilement u/v, images — ips, aller-retour —, pulsation de l'émission, synchro ou décalée par la position, la phase
@@ -80,10 +85,12 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     IMAGES dans le `.mbset` (aujourd'hui `tiles.glb` ne porte que l'image 0 et les noms de fichiers des autres) ; leurs
     cas d'épreuve.
     - ✓ **Godot — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `.glb` (repli : la méta `extras`), le shader de l'appli (copie générée, phase en espace du format), 43/43 cas. Vu à l'image.
+    - ✓ **Unreal — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `tiles.glb` (gardé dans le niveau, images en PNG), `M_MB_Animated` (images, défilement, pulsation), phase par instance calculée sur le CPU (précision mixte de la règle). Vu à l'image (deux instants).
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
     - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas). ⚠ Pas d'outil pour PLANTER dans l'éditeur de Godot. Vu à l'image.
+    - ✓ **Unreal — FAIT (7 octobre 2026)** : lecture, pose (`FFrame::Turn`), vent `M_MB_Wind` (World Position Offset, données par instance), plantation dans le mode (clic, pinceau Ctrl, effacer Maj) avec la règle `MBFoliage` (59/59) et le sol par rayon contre les tuiles. Vu à l'image (vent). ⚠ Plantation jamais tenue souris en main.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -745,6 +752,62 @@ part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
   au moins leurs tableaux d'images). À regarder pour Unity et Unreal (lots d'appels de dessin).
 - ⚠ **PAS TENU EN MAIN** : le greffon dans l'éditeur de Godot lui-même (souris, molette réelle sous Windows, Alt +
   molette) — tout ce qu'il relaie est éprouvé par événements, l'aiguillage de l'éditeur ne se teste pas en headless.
+
+### LE GREFFON UNREAL À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-unreal`, sur le contrat ci-dessus)
+
+Le greffon gratuit (`engines/unreal/MarchingBlocksPaint/`) porte la liste des greffons (cochée, §0). **Il ne charge rien
+du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore` (ni exceptions ni RTTI), depuis `rules_text`.
+
+- **LES RÈGLES — MESURÉ : 282 CAS SUR 282** (`core-runner/parity.cpp`, qui lit les cinq fichiers ; une sorte inconnue
+  rougit ; limites et constantes vérifiées) : `MBEditing` (Extrude × 3 × 3, ShrinkEdge, WidenFlat, SelectBrush) et
+  `Shapes::RoomFromSelection` 62/62 ; `MBAnimation` 43/43 (avec la lecture du JSON d'un `.glb`) ; `MBFoliage` 59/59 ;
+  `MBTransitions` 93/93 ; `MBWater` 25/25 — la règle de `fluides.gd` ligne à ligne, **la mer étant `noyau/ocean.h`
+  lui-même** : copie conforme dans `Private/MBCore/Noyau/`, le banc rougit si elle diffère d'un octet (pas de troisième
+  copie écrite à la main). Plus `FFrame::Turn` (un lacet quelconque, éprouvé contre `QuarterTurn`). Les anciens cas
+  (1 624 poses, 128 d'outils, 14 de monde, repère, visée) toujours verts.
+- **LE BANC TOURNE SOUS MSVC** (`cl /std:c++17 /EHs-c- /GR- /W4 /WX`, masquage et rétrécissement en erreurs) : ni g++ ni
+  clang ne sont nécessaires ; `build.sh` liste les nouveaux fichiers.
+- **MUTATIONS — 33, 31 ROUGES, 2 MUETTES** : édition 5 (Facing départagé au dernier sens, poser sans sélection qui en fait
+  une, Shrink sur tout bord ouvert, Select sans les vides, base de la salle toujours la plus basse), animation 6
+  (aller-retour non replié, phase toute en double, défilement sans 7 × phase, pulsation hors émission, version plus
+  récente acceptée…), feuillage 6, transitions 6 (décalage sans 1 − s, départage au dernier coin, choix ignorés, choix
+  dans le quartet bas, paire a = b, couche au-delà de la 15e), eau 9 (ordre des voisins horizontaux, tas pris par le haut,
+  plusieurs mers, débord sans portée, dessus de la boîte en horizon, profondeur sans fond, source fractionnaire, chute
+  sortant au bas + 1, copie de `ocean.h` périmée). ⚠ **MUETTES, PAR LES CAS** : « phase sans + 0,5 » (toutes les
+  origines des cas étaient entières — la branche Unity ajoute une origine non entière) ; « voisins bas et haut échangés »
+  dans le creux (aucun cas ne départage cet ordre — à ajouter aux cas de l'eau).
+- **UNE RÈGLE AMBIGUË, TRANCHÉE SUR MAIN** : `phase_de` rangeait le vecteur intermédiaire dans un `Vector3` (32 bits)
+  alors que le texte disait « double » — le banc C++ l'a vu (7 cas rouges). Corrigé sur main par le texte (précision
+  mixte écrite) ; `Animation::PhaseOf` la suit.
+- **UN BUG D'AVANT, TROUVÉ À L'IMPORT** : `Rebuild` parcourait `PlacementsLayered(In)[Mine]` dans un range-for — une
+  référence dans un temporaire détruit avant la boucle. L'import d'un monde à tuiles plantait (allocation de 20 Po) :
+  jamais mené avant avec des tuiles dans l'éditeur.
+- **LA COUCHE UNREAL** : l'acteur du monde (Extrude, Widen, Shrink du bord, Room from selection, Select des vides ;
+  données PAR INSTANCE — sommet de la tuile et phase — ; matériaux animés) ; trois acteurs neufs, faits par l'import du
+  monde dans la même annulation : **MarchingBlocks Water** (nappe cuite et preset, cases recalculées), **Transitions**
+  (Overlay Material), **Foliage** (ISM, vent, plantation). Le mode : la molette, F, la hauteur du collage, l'outil Plant.
+  Un fichier dont `water`, `transitions` ou `foliage` brisent la règle est refusé en entier.
+- **LES MATÉRIAUX SONT ÉCRITS PAR UN SCRIPT** (`Tools/build_materials.py`, MaterialEditingLibrary + nœuds Custom HLSL),
+  livrés dans `Content/Materials` (9 assets binaires : `M_MB_Animated`, `M_MB_Transition`, `M_MB_Wind`, six
+  `M_MB_Water_*`). La conversion monde → format passe par les paramètres `MB_ToFormat0..2` / `MB_ToWorld0..2`.
+- **MESURÉ (§9 de PARITE.md)** : l'**Overlay Material se dessine sur une InstancedStaticMeshComponent** ; les **données
+  par instance** (PerInstanceCustomData) se lisent dans le passage overlay et dans le World Position Offset ; on n'a donc
+  jamais eu à lire la position d'une instance dans un matériau. `UVolumeTexture::CreateTransient` (PF_G8) et
+  `UTexture2DArray::CreateTransient` marchent. Interchange nomme les paramètres du matériau glTF `BaseColorTexture`,
+  `MetallicFactor`, `RoughnessFactor` (parent `MI_Default_Opaque`).
+- **VU À L'IMAGE** (projet d'essai `C:\mbu`, rendu hors écran SceneCapture2D, monde fait d'exports réels : l'île de
+  `test_fluides` et sa nappe, `rock.mbset`, `lava.mbset` aux images remplacées par quatre rayures distinctes, l'arbre de
+  `test_parite` — un cube) : la bande de transition irrégulière entre roche et lave, dessus et flancs ; les tuiles de
+  lave qui changent d'image à 0,3 s d'écart, chacune à sa phase ; le cube qui se balance (haut mobile, pied fixe) ; les
+  six presets d'eau, distincts. ⚠ « stylisé » : un aplat sombre près de l'île (profondeur lue), à reprendre ; « réfléchissant »
+  sans la marche en espace écran de l'appli (les reflets d'Unreal à la place). Captures : le dossier `captures/` du
+  scratchpad de la session (non versionné).
+- **CONSTRUIT** : `RunUAT BuildPlugin` (UE 5.8.3, Win64) **BUILD SUCCESSFUL, aucun avertissement**, les 9 matériaux empaquetés ⚠ un premier passage a échoué là où la construction du projet passait : sans « unity build », `TextureResource.h` manquait (`FTexture2DMipMap`) ; le projet d'essai se construit par
+  `Build.bat UnrealEditor … -Project=C:\mbu\mbu.uproject` (chemin court : 260 caractères).
+- ⚠ **PAS TENU EN MAIN** : aucun clic, aucune molette, aucune plantation à la souris dans l'éditeur ; tout a été mené par
+  script (import, rendu). ⚠ **NON FAIT** : la nappe d'eau recalculée (pas de cas), le texte du cran « près de la souris »,
+  les icônes « Facing » / « Widen » / « Plant » (boutons texte : le générateur d'icônes écrit les trois greffons à la fois,
+  `elargir` / `extruder_face` / `arbre` y sont à ajouter quand les branches se rejoignent), un jeu empaqueté.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
