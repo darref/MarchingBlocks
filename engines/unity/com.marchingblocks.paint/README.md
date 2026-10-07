@@ -99,8 +99,10 @@ A world exported by MarchingBlocks 0.9 may also carry — and Import World sets 
 - **Water**: the sheet MarchingBlocks baked for each water layer (`water/<name>.glb`), with one of six looks
   (`MarchingBlocks/Water`: stylized, clear, reflective, lava, swamp, acid) — EXAMPLES, not an obligation: every vertex
   of the sheet carries the data (flow, kind, depth or foam in its colour), any water shader of yours can read it.
-  When you paint, the water CELLS are deduced again (shown as gizmos when the Water object is selected); the sheet
-  itself is not rebuilt — export the world again from MarchingBlocks.
+  When you paint, the water is deduced again and its SHEET REBUILT — the same triangles MarchingBlocks bakes: never
+  during a stroke (the inspector says the sheet is stale), half a second after the gesture, on a worker thread, and
+  only what the gesture reached is computed again. **Rebuild water** (the inspector) is always there; the automatic
+  follow turns itself off when a rebuild takes more than a second, until the button is fast again.
 
 **Render pipelines**: the shaders have a URP and a Built-in version. HDRP is not supported.
 
@@ -114,7 +116,7 @@ grid with exactly the same mapping. Nothing is assumed.
 
 The placement rule is written in `tileset.json` (`rules_text`), the tools in `Tests/tools_conformance.json`
 (`rules_text`), the world file in `Tests/world_conformance.json` (`rule`); the editing tools, animated textures,
-transitions, foliage and water in `Tests/editing_`, `animation_`, `transitions_`, `foliage_` and
-`water_conformance.json`. All of them hold reference cases computed by the MarchingBlocks tool itself and shared with
+transitions, foliage, water and its sheet in `Tests/editing_`, `animation_`, `transitions_`, `foliage_`, `water_`
+and `water_mesh_conformance.json`. All of them hold reference cases computed by the MarchingBlocks tool itself and shared with
 the other plugins; `Tests/Editor/` runs them in the Test Runner (list `com.marchingblocks.paint` under
 `testables` in your project manifest).

@@ -81,22 +81,6 @@ namespace MarchingBlocksToolkitDetail
 
 	TSharedRef<SWidget> Gap() { return SNew(SBox).WidthOverride(8.f); }
 
-	/** A small text button, for the operations the icon set does not draw yet (Facing, Widen). */
-	TSharedRef<SWidget> TextButton(const FText& Label, const FText& Tip, TFunction<void()> Act)
-	{
-		return SNew(SBox).Padding(FMargin(0.f, 0.f, 2.f, 0.f))
-		[
-			SNew(SButton)
-			.ButtonStyle(FAppStyle::Get(), "SimpleButton")
-			.ToolTipText(Tip)
-			.ContentPadding(FMargin(5.f, 3.f))
-			.OnClicked_Lambda([Act]() { Act(); return FReply::Handled(); })
-			[
-				SNew(STextBlock).Text(Label).Font(FAppStyle::GetFontStyle("SmallFontBold"))
-			]
-		];
-	}
-
 	/** Extrude's mode from the keys held while clicking: Shift extends the selection, Alt shifts it, nothing places. */
 	MBPaint::EExtrudeMode ExtrudeModeFromKeys()
 	{
@@ -263,8 +247,7 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("select", LOCTEXT("Select", "Select (S) — paints the selection over the matter. Shift adds, Ctrl removes."), EMarchingBlocksTool::Select)]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("rect", LOCTEXT("Rect", "Rect (G) — a FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."), EMarchingBlocksTool::Rect)]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("box", LOCTEXT("Box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."), EMarchingBlocksTool::Box)]
-				+ SHorizontalBox::Slot().AutoWidth()[TextButton(LOCTEXT("FoliageTool", "Plant"), LOCTEXT("FoliageToolTip", "Foliage — click plants the current model of this world's MarchingBlocks Foliage, Ctrl + click a dab of its brush, Shift + click erases around the point. Mode, spacing, brush: on the Foliage actor."),
-					[World]() { if (AMarchingBlocksWorld* W = World()) { W->Tool = EMarchingBlocksTool::Foliage; W->bPasting = false; } })]
+				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("plant", LOCTEXT("FoliageToolTip", "Plant — click plants the current model of this world's MarchingBlocks Foliage, Ctrl + click a dab of its brush, Shift + click erases around the point. Mode, spacing, brush: on the Foliage actor."), EMarchingBlocksTool::Foliage)]
 				+ SHorizontalBox::Slot().AutoWidth()[ToolToggle("variant", LOCTEXT("Variant", "Variant (V) — click a tile: its next variant (base, 1, 2…). Shift + click gives it back to the random draw. Only for a tileset whose tiles have variants."), EMarchingBlocksTool::Variant)]
 				+ SHorizontalBox::Slot().AutoWidth()[Gap()]
 				+ SHorizontalBox::Slot().AutoWidth()
@@ -488,8 +471,7 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				SNew(SWrapBox).UseAllottedSize(true)
 				+ SWrapBox::Slot()[ExtrudeOp("extrude_up", LOCTEXT("ExtrudeUp", "Extrude up — places a cell above every selected (or this floor's) full cell; the selection and the floor follow. Shift + click: Extend selection up (Shift + wheel too). Alt + click: shifts the selection up."), MBPaint::EExtrudeDirection::Up)]
 				+ SWrapBox::Slot()[ExtrudeOp("extrude_down", LOCTEXT("ExtrudeDown", "Extrude down — places a cell below; the selection and the floor follow. Shift + click: Extend selection down. Alt + click: shifts the selection down."), MBPaint::EExtrudeDirection::Down)]
-				+ SWrapBox::Slot()[TextButton(LOCTEXT("Facing", "Facing"), LOCTEXT("FacingTip", "Extrude facing — towards where most selected cells face (air in front, matter behind): a wall thickens, a ceiling comes down. Shift + click extends, Alt + click shifts."),
-					[World]() { if (AMarchingBlocksWorld* W = World()) W->Extrude(MBPaint::EExtrudeDirection::Facing, ExtrudeModeFromKeys()); })]
+				+ SWrapBox::Slot()[ExtrudeOp("facing", LOCTEXT("FacingTip", "Extrude facing — towards where most selected cells face (air in front, matter behind): a wall thickens, a ceiling comes down. Shift + click extends, Alt + click shifts."), MBPaint::EExtrudeDirection::Facing)]
 			]
 
 			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("FloorTitle", "FLOOR · PgUp PgDn · Ctrl + wheel"))]
@@ -541,8 +523,7 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 					+ SWrapBox::Slot()[Gap()]
 					+ SWrapBox::Slot()[Op("grow", LOCTEXT("Grow", "Grow — selects the matter touching the selection by a face."), &AMarchingBlocksWorld::Grow)]
 					+ SWrapBox::Slot()[Op("shrink", LOCTEXT("Shrink", "Shrink — the selection loses its edge: a rectangle its rim, a line its ends, a cube its skin (Alt + wheel down)."), &AMarchingBlocksWorld::Shrink)]
-					+ SWrapBox::Slot()[TextButton(LOCTEXT("Widen", "Widen"), LOCTEXT("WidenTip", "Widen — the selection plus its four horizontal neighbours, empty cells included. Nothing is placed (Alt + wheel up)."),
-						[World]() { if (AMarchingBlocksWorld* W = World()) W->Widen(); })]
+					+ SWrapBox::Slot()[Op("widen", LOCTEXT("WidenTip", "Widen — the selection plus its four horizontal neighbours, empty cells included. Nothing is placed (Alt + wheel up)."), &AMarchingBlocksWorld::Widen)]
 					+ SWrapBox::Slot()[Op("connected", LOCTEXT("Connected", "Connected — selects all the matter linked to the selection by faces."), &AMarchingBlocksWorld::SelectConnected)]
 					+ SWrapBox::Slot()[Gap()]
 					+ SWrapBox::Slot()[Op("room", LOCTEXT("RoomFromSelection", "Room from selection — a hollow room on the selection seen from above, Floors high (the Room shape's settings), rising from its lowest cells or sinking under its highest."), &AMarchingBlocksWorld::RoomFromSelection)]

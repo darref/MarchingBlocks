@@ -30,6 +30,11 @@
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/TransitionsConformanceCheck.cs" Link="TransitionsConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/FoliageConformanceCheck.cs" Link="FoliageConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterConformanceCheck.cs" Link="WaterConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBWaterMesh.cs" Link="MBWaterMesh.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterMeshConformanceCheck.cs" Link="WaterMeshConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterIncrementalCheck.cs" Link="WaterIncrementalCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBWaterFollow.cs" Link="MBWaterFollow.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterFollowCheck.cs" Link="WaterFollowCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Runtime/MBWheel.cs" Link="MBWheel.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WheelCheck.cs" Link="WheelCheck.cs" />
   </ItemGroup>

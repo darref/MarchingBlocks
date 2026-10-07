@@ -53,11 +53,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
-    - **Unity : PARTIEL (7 octobre 2026)** — nappe cuite et six aspects sur le contrat, cases d'eau recalculées ; la nappe ne se recalcule pas, l'eau ne se pose pas dans l'éditeur. Voir « Le greffon Unity à parité ».
+    - ✓ **Unity — FAIT SAUF LA POSE (7 octobre 2026)** — nappe cuite et six aspects sur le contrat, cases d'eau recalculées, et **la NAPPE RECALCULÉE quand on peint** (`MBWaterMesh`, 14/14 cas ; après le geste, sur un fil, avec la reprise ; « Rebuild water ») ; ⚠ l'eau ne se POSE toujours pas dans l'éditeur (pas d'outil de source). Voir « Le greffon Unity à parité » et « L'eau recalculée dans Unity ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - **Unity : FAIT (7 octobre 2026)** — l'aiguillage (`MBWheel`) et ses effets ; jamais tenu souris en main.
-    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; la nappe se dit périmée quand on peint. ⚠ La NAPPE n'est pas recalculée (le mailleur n'a pas de cas). Voir « Le greffon Godot à parité ».
+    - ✓ **Godot — FAIT (7 octobre 2026, branche `eau-godot`)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; **la NAPPE RECALCULÉE** (`mb_water_mesh.gd`, 14/14 cas en sac de triangles), la reprise portée, recalcul différé sur un fil à part, « Rebuild water », coupure au-delà d'1 s ; = la nappe cuite de l'exemple exporté. Vu à l'image (six presets). Voir « L'eau recalculée dans le greffon Godot ».
     - ✓ **Unreal — PARTIEL (7 octobre 2026)** : lecture de `water` (acteur MarchingBlocks Water par couche), la nappe cuite et les SIX presets réécrits en HLSL (`Tools/build_materials.py`), le matériau de l'artiste, la règle des cases (`MBWater`, 25/25 ; la mer est `noyau/ocean.h` lui-même). Vu à l'image (six presets). ⚠ La NAPPE n'est pas recalculée ; « réfléchissant » sans la marche en espace écran de l'appli ; « stylisé » montre un aplat sombre près de l'île. Voir « Le greffon Unreal à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
@@ -96,13 +96,13 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
-    - **Unity : PARTIEL (7 octobre 2026)** — pose et vent faits (vus à l'image) ; la règle de plantation portée ; AUCUN pinceau de feuillage dans l'éditeur.
+    - ✓ **Unity : FAIT (7 octobre 2026, branche `finitions-greffons`)** — pose et vent (vus à l'image), la règle de plantation, et l'outil Plant de l'inspecteur (`MBPlanting.cs` : le modèle, les trois modes, clic / Ctrl pinceau / Maj effacer, un Ctrl+Z par trait). Voir « Le greffon Unity à parité ».
     - ✓ **Godot — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `.glb` (repli : la méta `extras`), le shader de l'appli (copie générée, phase en espace du format), 43/43 cas. Vu à l'image.
     - ✓ **Unreal — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `tiles.glb` (gardé dans le niveau, images en PNG), `M_MB_Animated` (images, défilement, pulsation), phase par instance calculée sur le CPU (précision mixte de la règle). Vu à l'image (deux instants).
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
-    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas). ⚠ Pas d'outil pour PLANTER dans l'éditeur de Godot. Vu à l'image.
+    - ✓ **Godot — FAIT (7 octobre 2026, branche `finitions-greffons`)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas), et l'outil Plant de la barre (`mb_planting.gd` : le modèle, les trois modes, clic / Ctrl pinceau / Maj effacer, un Ctrl+Z par trait, le sol par rayon contre les tuiles posées). Vu à l'image.
     - ✓ **Unreal — FAIT (7 octobre 2026)** : lecture, pose (`FFrame::Turn`), vent `M_MB_Wind` (World Position Offset, données par instance), plantation dans le mode (clic, pinceau Ctrl, effacer Maj) avec la règle `MBFoliage` (59/59) et le sol par rayon contre les tuiles. Vu à l'image (vent). ⚠ Plantation jamais tenue souris en main.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
@@ -755,6 +755,58 @@ cas. La spécification pour les trois agents moteurs : **`engines/PARITE.md` §1
 - ⚠ **VU EN PASSANT** : l'exemple livré a 739 481 cases et une mer de 354 159 cases (`sonde_eau_exemple.gd` disait 2,4 millions le 4 octobre :
   OUVERT — l'exemple a changé, ou la mer était comptée autrement ; non vérifié).
 
+### L'EAU RECALCULÉE DANS LE GREFFON GODOT — FAIT LE 7 OCTOBRE 2026 (branche `eau-godot`, sur le contrat ci-dessus)
+
+La dernière entrée de la parité pour Godot. Le greffon ne charge toujours RIEN du cœur : le mailleur est réécrit en
+anglais depuis `eau_maillage.gd` (`addons/marchingblocks_paint/mb_water_mesh.gd`), la reprise de `fluides.gd` portée
+dans `mb_water.gd`, le branchement dans `mb_water_node.gd`.
+
+- **LES 14 CAS — MESURÉ : 14 SUR 14** (`test_greffon_peinture` : `water_mesh` passe de `PARITE_A_VENIR` à `PARITE`, 298 cas
+  communs en tout) ; l'appariement en sac écrit DEPUIS `rules_text` (`DEV_TOOLS/eau_sac.gd`, pas copié de `test_parite`) et
+  éprouvé avant d'être cru (vrai mélangé / tourné / bruité ; faux sur un coin à 2e−4, un triangle retourné, un doublé, des
+  couleurs sur 8 bits). Passés d'un coup : le portage est ligne à ligne (32 bits là où le cœur range en 32 bits —
+  `_chutes` en `PackedFloat32Array`, les points en `Vector3`).
+- **LA REPRISE, PORTÉE** : `Water.world(cells, sources, max, before, changed, box)` (emprise, `_box_compatible`, la mer
+  reprise d'abord) ; « une couche dont tous les corps sont repris garde sa nappe » ; la mémoire des nappes par corps, des
+  cascades et des sources. **Incrémental = entier, MESURÉ** : 68 gestes (64 au hasard, graine fixe, 4 imposés) sur sept
+  mondes — mêmes corps, même sac par couche, même boîte, même empreinte.
+- **LE BRANCHEMENT (DÉCIDÉ par la coordination)** : la première couche d'eau mène pour toutes ; pendant un geste (bouton
+  de souris tenu) rien ne part et la nappe se dit périmée (avertissement de l'inspecteur) ; après 0,5 s de calme, calcul
+  sur `WorkerThreadPool` à partir d'une COPIE (`get_used_cells` de chaque couche, copie native), nappes échangées sur le
+  fil principal ; bouton « Rebuild water » (`@export_tool_button`) toujours là ; `auto_limit` (1 s) : une reprise plus
+  lente COUPE le suivi jusqu'au bouton (un bouton rapide le rétablit). `follow_cells` (les cubes bleus) est retiré.
+- **CE QU'UN GESTE COÛTE, C'EST CE QU'IL CHANGE** (MESURÉ au premier essai : 1,6 à 2 s par geste, dont ~1 s de différence
+  de cases et ~1 s d'empreinte triée sur 739 481 cases) : une couche dont `get_used_cells` est le même tableau est sautée ;
+  sinon on ne compare que le MILIEU des deux tableaux (une GridMap liste ses cases dans l'ordre d'insertion) ; la boîte et
+  l'empreinte (désormais une SOMME de hachages, sans ordre) suivent les cases changées. ⚠ L'empreinte a changé de
+  formule : un monde importé avant se dit périmé une fois (un calcul entier, sur le fil).
+- **LES TEMPS, MESURÉS sur l'exemple** (`DEV_TOOLS/banc_eau_greffon.gd` ; 739 481 cases, 3 couches de tuiles, 106 sources,
+  mer de 354 159 cases ; machine partagée, ×2 d'une passe à l'autre) : **tout refaire 3,0 à 8,9 s** ; **un geste avec la
+  reprise 0,04 à 0,35 s** (près d'une rivière 0,17 s, loin de l'eau 0,08 s, 84 à 99 sources reprises) ; un geste qui
+  touche la mer ou le bord de la boîte (une case au fond) refait la mer : 2,1 à 4,2 s — le suivi s'y coupe, comme décidé.
+  Chaque geste mesuré = le calcul entier.
+- **LE BOUT EN BOUT** : dans `test_greffon_peinture`, l'appli exporte l'île (mer et rivière, deux couches) avec ses nappes
+  cuites, le greffon l'importe et refait : chaque nappe = le `.glb` relu (couleurs à 1/255) ; puis le branchement mené
+  pas à pas (geste, délai, souris tenue, fil, échange, coupure, bouton). Sur l'EXEMPLE (le banc) : les trois nappes
+  refaites = celles du cœur (au millionième) ET les `.glb` cuits par `FormatMonde.exporter` (66 151, 5 073, 72 triangles).
+- **VU À L'IMAGE** (`DEV_TOOLS/capture_eau_greffon.gd`, avec fenêtre : deux SubViewport, même caméra, même instant ; cuite
+  à gauche, refaite à droite) : le bassin (écart maximal 1/255), l'île (moins de 0,05 % des valeurs à plus de 8/255), une
+  cascade de l'exemple (moins de 0,4 %), sous les SIX presets — indiscernables à l'œil ; l'écart restant est celui du
+  `.glb` (couleurs sur 8 bits) et de l'ordre des triangles transparents.
+- **MUTATIONS — 23, 23 ROUGES** (mailleur 13, reprise 3, nœud 7). ⚠ **CINQ ÉTAIENT D'ABORD MUETTES** : « une couche gardée
+  si UN corps est repris », « l'emprise oublie la coulée à plat », « une case retirée au bord ne rebalaye pas la boîte »
+  — rouges depuis des gestes imposés (une couche à deux corps, un détour hors de la boîte, une case posée haut puis ôtée)
+  et la boîte comparée à chaque geste ; et **deux que LES 14 CAS COMMUNS NE VOIENT PAS** : « deux cascades jointes gardent
+  la lèvre la plus BASSE » et « deux bandes sur une même case » — mesuré aussi dans le CŒUR (`MB_NATIF=0`, la même
+  mutation dans `eau_maillage.gd` : `test_parite` 279/0, le fichier livré inchangé). Aucun cas n'a deux rivières au même
+  endroit : **ce que disait le contrat (« 16 sur 16 rouges sans régénérer ») est faux pour ces deux-là.** Gardé dans
+  `test_greffon_peinture` contre le cœur (une falaise percée d'une galerie, deux rivières sur la même face) ;
+  **OUVERT : un cas commun à ajouter dans `epreuve_parite.gd`** (régénérer touche les trois greffons).
+- ⚠ **PAS TENU EN MAIN** : dans l'éditeur de Godot lui-même (vraie souris, inspecteur, bouton cliqué) — le branchement est
+  mené par `tick(now, stroke)` ; et la détection d'un changement lit l'empreinte que chaque couche prend à sa
+  reconstruction (`live_update`, `apply_cells`) : une couche sans `live_update` ne fait pas suivre l'eau (ni ses tuiles).
+  ⚠ Le greffon reconstruit encore TOUTES les tuiles à chaque geste (§4, OUVERT) : sur l'exemple, c'est lui le goulot, plus l'eau.
+
 ### LE GREFFON UNITY À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-unity`), PARTIEL SUR L'EAU ET LE PINCEAU DE FEUILLAGE
 
 La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fait dans Unity, mesuré, et ce qui ne l'est pas.
@@ -806,7 +858,7 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   - **Eau** : `MarchingBlocksWater` montre la nappe CUITE ; les six aspects (`MarchingBlocks/Water`) réécrits sur le
     CONTRAT. ⚠ **PARTIEL, DIT** : la profondeur vient du contrat (COLOR_0 a), pas du tampon de profondeur ; ni réfraction
     ni reflet du relief en espace écran ; le fond se voit par transparence. Les CASES d'eau sont recalculées quand on
-    peint (`MBWater.World`, gizmos) ; la NAPPE ne l'est pas (`eau_maillage.gd` n'a pas de cas, PARITE §2).
+    peint (`MBWater.World`, gizmos) ; la NAPPE l'est depuis le 7 octobre au soir (« L'eau recalculée dans Unity », ci-dessous).
   - **MESURÉ** : glTFast retourne v (v' = 1 − v, lu sur la nappe : 1,85 → −0,85) ; les shaders reviennent aux UV glTF.
   - ⚠ **LE PREMIER RENDU D'UNE CAPTURE URP EST FAUX** (des tuiles avec le matériau de l'autre couche, une plaque
     différente à chaque passage), les suivants justes : un rendu à blanc précède chaque capture.
@@ -815,17 +867,77 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   selection, « Select empty cells too », F, et la molette (seule : le zoom d'Unity ; Maj + molette lue AUSSI en
   défilement horizontal, ce que Windows en fait). Les anciens Extrude ↑ ↓ et Shrink ne sont plus dans l'interface Unity
   (leurs sortes restent dans `tools_conformance.json` tant que les TROIS greffons n'ont pas migré, PARITE §6). Les
-  nouveaux boutons sont en TEXTE (Facing, Widen) : leurs icônes ne sont pas dans `generer_icones_greffons.gd`, qui
-  écrit les trois greffons à la fois — à ajouter quand les trois branches seront fusionnées.
+  nouveaux boutons ~~sont en TEXTE (Facing, Widen)~~ — **leurs icônes sont faites** (finitions, ci-dessous).
 - **UNITY 6.6 : 51 TESTS SUR 51 EN BUILT-IN, 51 SUR 51 EN URP** (dont `ParityWorldTests`, 10, sur le monde écrit par
   `DEV_TOOLS/preparer_parite_unity.gd` : Rock et Sand qui se mêlent, Lava animée, un lac, cinq arbres). **Mutations dans
   Unity : 9, toutes rouges** (réglages non déclarés, phase jamais posée, plants sans le repère, molette seule volée,
   Extrude sans groupe d'annulation, Select qui prend les vides, fondu qui ne dessine rien, vent immobile, images hors
   du temps). **Captures regardées** (`ParityCaptures`, `-executeMethod ParityCaptures.CaptureAll -mbOut <dossier>`) :
   vue d'ensemble, bordure, lave à deux instants, lac, les six aspects d'eau — en Built-in et en URP.
-- **CE QUI N'EST PAS FAIT** : le PINCEAU DE FEUILLAGE dans l'éditeur Unity (la règle `check` / `brush` est portée et
-  passe ses cas ; aucun outil ne plante) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
+- **CE QUI N'EST PAS FAIT** : ~~le PINCEAU DE FEUILLAGE dans l'éditeur Unity~~ (**FAIT**, finitions, ci-dessous) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
   outil) ; recalculer la nappe ; HDRP ; Alt + molette sous Windows et tout ce qui est souris en main — jamais tenu.
+### L'EAU RECALCULÉE DANS UNITY — FAITE LE 7 OCTOBRE 2026 (branche `eau-unity`, PARITE §12 ; la dernière entrée de la parité)
+
+- **LE MAILLEUR, EN C# PUR — FAIT, MESURÉ** : `Runtime/MBWaterMesh.cs`, `eau_maillage.gd` (`tableaux_du_maillage`) ligne à
+  ligne, calcul en double, rangement en 32 bits comme Godot (points, couleurs, `_chutes` en `PackedFloat32Array`,
+  différences des normales). Sortie en espace du FORMAT, sens glTF. **14 cas sur 14 du premier coup** (banc
+  `WaterMeshConformanceCheck` : appariement en sac, seaux par centre, rotations, ni réflexion ni doublon ; les tolérances
+  et les 16 constantes du fichier relues et comparées ; l'appariement lui-même éprouvé sur le bassin : mélangé / tourné /
+  bruité vrai, coin à 2e−4 / triangle retourné / doublé / couleurs 8 bits faux ; une sorte inconnue rougit ; un échec dit
+  le triangle le plus proche et son écart par attribut).
+- **MUTATIONS DU MAILLEUR : 24, 22 ROUGES PAR LES CAS, 2 MUETTES — ET UN TROU DU CONTRAT, MESURÉ** : « la lèvre la plus basse
+  gardée » (fusion de deux cascades d'un même lieu) et « deux bandes sur une case » restent vertes sur les 14 cas. SONDÉ :
+  une exception posée dans ces deux branches laisse les 14 cas verts — **aucun cas ne fusionne deux cascades ni ne voit deux
+  fois une case de bande** (aucun cas n'a deux rivières sur une même case). Le greffon Godot l'a mesuré de son côté
+  (« L'eau recalculée dans le greffon Godot ») : PARITE §12 se trompait en les disant gardées par les cas — OUVERT, à
+  trancher dans `epreuve_parite.gd` (un cas à deux rivières sur les mêmes cases, dont l'une sort
+  d'un tunnel sous la cascade de l'autre), PAS dans le greffon. En attendant, le greffon Unity les garde par le monde
+  exporté ci-dessous (4 + 5 cases vues deux fois, 1 fusion, comptées par le préparateur) : **les deux deviennent ROUGES**.
+- **LA REPRISE, PORTÉE** (`MBWater.World(cells, sources, before, changed)`) : l'EMPRISE de chaque source (`_etendre` :
+  coulées à plat, creux, débord, chutes, élargie d'une case ; la mer : la boîte jusqu'à niveau + 1), la boîte vue
+  (`_boite_compatible`), « la mer reprise, sinon rien d'autre », un seul océan partagé ; `MBWaterMesh` garde les nappes
+  par corps (même OBJET), les cascades par leur signature, les sources par case (`memoire`). **Banc « incrémental =
+  entier » (`WaterIncrementalCheck`, 6 020 gestes)** : SCRIPTÉS sur des mondes faits pour (un cratère profond dont le
+  rebord est au-dessus de la source, un trou à côté du chemin d'une rivière sur un plateau, un conduit LOIN d'une rivière
+  qui rend sa mare marine ou non, une rivière sur trois qui s'arrête, un bassin rehaussé sous sa cascade), SYSTÉMATIQUES
+  (chaque case au contact de l'eau basculée puis remise) et AU HASARD ; règle, mer et nappe comparées au calcul entier.
+  ⚠ **LE PREMIER BANC (gestes au hasard seuls) LAISSAIT MUETTES 6 MUTATIONS SUR 10** : il ne touchait presque jamais le bord
+  d'une emprise. ⚠ **Deux « mutations » de la mémoire des cascades n'éprouvaient RIEN** (champ retiré d'`Equals` mais pas
+  du hachage : la recherche ratait, on recalculait) — refaites sur les deux. **Mutations de la reprise : 10, 9 ROUGES, 1
+  ÉQUIVALENTE** (l'emprise de la mer jusqu'à niveau au lieu de niveau + 1 : relue de son eau, la nappe d'une mer ne lit
+  pas la rangée du dessus — `surface_dessinee` reprend les cases du niveau sous un plafond ; raisonné, gardé pour la
+  fidélité à `fluides.gd`).
+- **LE BRANCHEMENT (la décision de coordination)** : `MBWaterFollow` (C# pur, 16 vérifications) — jamais pendant un geste
+  (`GUIUtility.hotControl` tenu : la nappe se dit PÉRIMÉE), 0,5 s de calme, une `Task` .NET sur une COPIE des cases (la
+  nappe échangée sur le fil principal), un résultat dépassé par un nouveau geste n'est PAS posé, le suivi se COUPE au-delà
+  d'1 s (temps compté jusqu'aux maillages posés) jusqu'au bouton **Rebuild water** (inspecteur `MarchingBlocksWaterEditor`,
+  ou `RebuildWater()`), qui le réarme s'il est rapide. La nappe refaite est un `Mesh` en espace de l'IMPORTEUR (repère
+  mesuré : glTFast X → −X, v retourné, sens inversé par le miroir) : posée exactement comme la cuite, mêmes matériaux.
+  Jusqu'au premier recalcul, la nappe cuite se montre.
+- **LE CONTRÔLE DE BOUT EN BOUT** : `DEV_TOOLS/preparer_eau_unity.gd` exporte un monde (mer et large, dalle sur la mer,
+  tunnel sous une cascade, lac profond, trois rivières dans un escalier ; trois couches d'eau, 2 103 triangles) ; Unity
+  recalcule depuis les sources = **la nappe cuite telle que glTFast l'a lue**, en sac, en espace du format. ⚠ **MESURÉ : les
+  couleurs du .glb sont TRONQUÉES, pas arrondies** (écart 2,8e−3, plus qu'un demi-pas de 1/255) : tolérance 1/255. Le banc
+  .NET relit aussi les triangles de la référence de ce monde (hors git, sauté s'il manque).
+- **LES TEMPS, MESURÉS** (C#, l'exemple livré : 739 481 cases, 106 sources, mer de 354 159 cases ; `dotnet run -c Release --
+  --water-timing <vidage>`) : **tout refaire 0,40 s** (règle 92 ms, nappes 309 ms dont la mer 267 ms pour 72 triangles)
+  contre 5,1–6,7 s en GDScript ; **un geste près d'une rivière, avec la reprise : 13 ms** (84 sources reprises sur 106) ;
+  loin de l'eau : 4 ms ; copie des cases 8 ms, leur comparaison (sur le fil) 107 ms. Dans Unity (monde exporté) : bouton
+  4–10 ms ; un trait sur l'escalier : 15 ms dont 0,2–3 ms sur le fil principal pour partir. La coupure d'1 s ne devrait
+  donc pas tomber sur l'exemple — non vu dans Unity (l'exemple n'y a pas été importé).
+- **UNITY 6.6 : 65 TESTS SUR 65 EN BUILT-IN ET EN URP, APRÈS LA FUSION DE `main`** (58 avant elle) (dont `WaterRebuildTests`, 4 : bout en bout, le trait qui périme puis
+  se recalcule hors du fil, le résultat dépassé non posé, la coupure et le bouton ; et dans le paquet la reprise et
+  `MBWaterFollow`). ⚠ **Les trois tests À L'IMAGE du monde de la parité rendent du NOIR avec `-nographics`** (0,00 par
+  pixel) : les lancer SANS ce drapeau (le README du projet d'essai le dit à tort). **Mutations dans Unity : 6, toutes
+  rouges** (v non retourné, sens non inversé par le miroir, geste tenu ignoré, sans la reprise au bouton, sans la reprise
+  sur le fil, nappe dépassée posée quand même), avec une passe de RÉFÉRENCE verte — qui a d'abord rougi : le geste de mon
+  test était dans l'emprise de la mer (niveau + 1), la reprise avait raison.
+- **VU À L'IMAGE** (`WaterCaptures.CaptureAll`, Built-in et URP) : nappe cuite et nappe refaite sous les six aspects, la
+  cascade fusionnée, l'escalier, le lac, la mer sous la dalle — **indiscernables** (0,00 à 0,25 d'écart moyen par pixel, des
+  bords de 8 bits). URP : un projet hors dépôt, `D:/MB_wt_eau_unity_urp` (comme `D:/MB_wt_unity_urp`).
+- **CE QUI N'EST PAS FAIT** : poser une source d'eau dans l'éditeur Unity ; tenir le pinceau en main (la reprise et le fil
+  sont menés par les tests, jamais à la souris).
+
 ### LE GREFFON GODOT À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-godot`, sur le contrat ci-dessus)
 
 Le greffon gratuit (`addons/marchingblocks_paint/`) porte la liste des greffons, entrée par entrée (cochées dans la
@@ -873,8 +985,7 @@ part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
   `Vector3` arrondit pareil. Deux voies : dire l'arrondi 32 bits dans le texte, ou calculer `phase_de` en double (les
   cas changent). Aucune ne change le rendu de l'appli (son shader calcule à part).
 - ⚠ **CE QUI RESTE, ET POURQUOI** : F (cadrer toute la matière) — la caméra de la vue 3D appartient à l'éditeur de Godot,
-  sans API pour la poser (son F à lui centre la sélection) ; PLANTER dans l'éditeur — pas d'outil (la règle et le pinceau
-  sont là et éprouvés ; le sol devrait se chercher contre les tuiles posées) ; la NAPPE d'eau recalculée — attend les cas
+  sans API pour la poser (son F à lui centre la sélection) ; ~~PLANTER dans l'éditeur~~ (**FAIT**, finitions, ci-dessous) ; la NAPPE d'eau recalculée — attend les cas
   du mailleur (PARITE §2) ; le bruit des transitions — un par direction dans le shader, un seul dans les cas (PARITE §4,
   le greffon suit le shader) ; le vent d'un monde TOURNÉ tourne avec lui (exact pour un monde déplacé et mis à
   l'échelle).
@@ -939,8 +1050,67 @@ du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore`
   `Build.bat UnrealEditor … -Project=C:\mbu\mbu.uproject` (chemin court : 260 caractères).
 - ⚠ **PAS TENU EN MAIN** : aucun clic, aucune molette, aucune plantation à la souris dans l'éditeur ; tout a été mené par
   script (import, rendu). ⚠ **NON FAIT** : la nappe d'eau recalculée (pas de cas), le texte du cran « près de la souris »,
-  les icônes « Facing » / « Widen » / « Plant » (boutons texte : le générateur d'icônes écrit les trois greffons à la fois,
-  `elargir` / `extruder_face` / `arbre` y sont à ajouter quand les branches se rejoignent), un jeu empaqueté.
+  ~~les icônes « Facing » / « Widen » / « Plant »~~ (**FAITES**, finitions, ci-dessous), un jeu empaqueté.
+
+### LES FINITIONS DES GREFFONS — FAIT LE 7 OCTOBRE 2026 (branche `finitions-greffons`) : LES ICÔNES, LE PINCEAU DE PLANTATION
+
+Les deux trous de la parité hors de l'eau (l'eau : une autre branche, pas touchée ici).
+
+- **LES ICÔNES — FAIT, VU À L'IMAGE.** `generer_icones_greffons.gd` écrit trois icônes de plus dans les TROIS greffons à
+  la fois, depuis celles de l'appli : `facing` (`extruder_face`), `widen` (`elargir`), `plant` (`arbre`) — 48 icônes ; les
+  45 d'avant inchangées octet pour octet. Branchées : Godot (Extrude facing, qui empruntait `move` ; Widen, qui n'avait
+  PAS de bouton — Alt + molette seulement ; l'outil Plant et sa barre), Unity (Facing, Widen, l'outil Plant), Unreal
+  (`ExtrudeOp("facing")`, `Op("widen")`, `ToolToggle("plant")` : l'outil Plant devient une bascule comme les autres ;
+  `TextButton` retiré, plus d'appelant). Plus aucun bouton neuf en texte (les −X … +Z de Move de Unity et d'Unreal sont
+  d'avant : des libellés d'axes). **Garde** (`test_greffon_peinture`) : chaque source demande les trois noms, aucune ne
+  garde `GUIContent("Facing" | "Widen" | "Plant")`, `TextButton(` ni le `move` de Facing.
+- **LE PINCEAU DE PLANTATION, GODOT — FAIT.** `mb_planting.gd` (nouveau) donne à la règle `mb_foliage.gd` le monde du
+  greffon : les cases de toutes les couches visibles, l'eau (les cases que déduisent les nœuds MarchingBlocksWater), et le
+  SOL — un rayon vertical contre les triangles des tuiles posées (index par colonne, une fois par trait), le sol des cases
+  à défaut ; puis les trois gestes (un plant, un coup de pinceau — les essais tirés dans le disque dans l'ordre de l'appli —,
+  effacer). `mb_editor.gd` : l'outil « plant » — clic : un plant ; Ctrl + clic (et glisser, un coup tous les 0,4 rayon) :
+  le pinceau ; Maj + clic (et glisser) : effacer ; **UN Ctrl+Z par trait** (la propriété `plants` du nœud) ; Alt + molette
+  la taille du pinceau, Maj + molette la densité (Ctrl reste l'étage). La barre : l'icône Plant parmi les outils, et sa
+  barre — le MODÈLE (un menu des modèles du feuillage du monde, le courant coché, « Random rotation »), les trois modes
+  (`up` dans l'air, `plant` libre, `widen` débordement), Brush · Density · Spacing · Slope. ⚠ Le nœud du feuillage doit
+  rester où l'import l'a mis (son espace EST celui du format) ; Maj, pas le clic droit de l'appli (le clic droit vole la
+  vue de Godot) — comme Unreal.
+- **LE PINCEAU DE PLANTATION, UNITY — FAIT.** `Editor/MBPlanting.cs` (le même partage : `Asked` — cases, eau, sol par rayon
+  vertical contre les maillages des tuiles posées, Möller–Trumbore —, `AimedPoint`, `PlantAt`, `SowAt`, `EraseAt`) ;
+  l'inspecteur : l'icône Plant au bout de la rangée TOOL, la section PLANT (le modèle en liste, les trois modes en icônes,
+  Brush size, Density, Spacing, Max slope, Random rotation) ; la vue : clic / Ctrl / Maj comme Godot et Unreal,
+  `Undo.RecordObject` du feuillage, un groupe d'annulation par trait, le feuillage redessiné après un Ctrl+Z ; Alt / Maj
+  + molette sur le pinceau (avant `MBWheel`, qui n'a pas bougé : le banc .NET non plus).
+- **MESURÉ** : `test_greffon_peinture` 353 → **416** (le pinceau de plantation dans la vue, 44 vérifications, par de VRAIS
+  clics à travers une caméra sur le monde complet exporté par l'appli — un plant sur la surface VUE à 1,75 et non sur les
+  cases à 2, là où l'on a cliqué, Ctrl+Z / Ctrl+Y, refusé au bord en « free » et dit, accepté en « overflow », refusé dans
+  le lac du cratère, sur un plant, dans la matière en l'air, accepté en l'air au-dessus du vide, le modèle choisi, un trait
+  de pinceau de deux coups sans empiètement et UN Ctrl+Z, l'effacement exact et rendu, la molette, la barre et son menu,
+  un monde sans feuillage dit ; plus la garde des icônes) ; **Unity 6.6 : 58 tests sur 58** (51 + `PlantToolTests` 7, sur le
+  monde de la parité importé par glTFast, mêmes épreuves) ; banc .NET inchangé et vert ; les 28 suites Godot vertes (`fumee_appli` 937 :
+  rouge une fois sur « Espace lâchée, il PLANE » pendant qu'un build Unreal chargeait la machine — le vol du Play test,
+  hors du greffon —, verte relancée seule).
+- **MUTATIONS — GODOT 12, TOUTES ROUGES** : le sol aux cases, l'eau jamais vue, le décalage de la grille des tuiles oublié,
+  le point visé au centre de sa case, l'effacement sans rayon, le trait sans annulation, le glissé sans second coup, le
+  modèle choisi ignoré, Maj sans effacer, le mode toujours libre, le menu des modèles inerte, la molette laissée à
+  l'éditeur. ⚠ **« LE POINT VISÉ AU CENTRE DE SA CASE » D'ABORD MUETTE, PAR LE TEST** : tous les clics étaient en x,5 — le
+  premier clic est désormais hors du centre. **UNITY 8, TOUTES ROUGES** (`PlantToolTests`) : le sol aux cases, l'eau
+  jamais vue, le point visé au centre de sa case, l'effacement sans rayon, le trait sans regroupement d'annulation, le
+  glissé sans second coup, le modèle choisi ignoré, la molette laissée à Unity. ⚠ **« LE TRAIT SANS REGROUPEMENT » D'ABORD
+  MUETTE** : Unity ouvre un groupe d'annulation à chaque événement GUI, le test n'en ouvrait pas entre deux coups — il le
+  fait désormais.
+  ⚠ **UN ÉVÉNEMENT DE LA VUE FABRIQUÉ HORS D'UNE PASSE GUI SE LIT « Ignore »** dans Unity (son `rawType` reste MouseDown) :
+  `ScenePlant` n'y voyait rien. Les tests mènent ce qu'il appelle (`StartPlant`, `PlantDrag`, `EndPlant`), comme
+  `ShapeEditorTests` mène `ClickShape`.
+- **VU À L'IMAGE** : la barre de Godot en quatre états (`ART/barre_greffon.png`, refaite : Add, Box, une sélection — Widen,
+  Extrude facing —, l'outil Plant et sa barre ; les quatre nombres d'abord muets, nommés dans leur boîte depuis) ;
+  l'inspecteur de Unity, AVEC fenêtre (`PanelCapture.Capture`, nouveau : l'icône Plant dans TOOL,
+  Facing dans EXTRUDE, Widen dans SELECTION, la section PLANT et son modèle « Tree ») ; les icônes d'Unreal sur une planche (`Resources/Icons`, même trait que les
+  autres). ⚠ **Le panneau d'Unreal n'a pas été vu** (aucune capture de Slate hors éditeur ouvert) : ce qui y est changé (trois noms d'icônes, la bascule Plant) est gardé par le texte des sources, et
+  **`RunUAT BuildPlugin` (UE 5.8.3, Win64) : BUILD SUCCESSFUL, aucun avertissement**, les 48 icônes empaquetées.
+- ⚠ **PAS TENU EN MAIN** : aucun des trois pinceaux à la souris dans un vrai éditeur ; le sol cherché sur de vrais arbres
+  importés par l'artiste ; la performance d'un trait sur un très grand monde (l'eau et l'index des tuiles sont recalculés
+  une fois par trait, en GDScript pour Godot).
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 

@@ -57,6 +57,13 @@ var _paste: Button
 var _floor: SpinBox
 var _status: Label
 var _counts: Label
+var _plant_bar: HBoxContainer
+var _plant_model: MenuButton
+var _plant_modes := {}
+var _plant_radius: SpinBox
+var _plant_tries: SpinBox
+var _plant_spacing: SpinBox
+var _plant_slope: SpinBox
 var _refreshing := false
 
 
@@ -80,7 +87,9 @@ func _build() -> void:
 			["rect", "Rect (G)", "A FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."],
 			["box", "Box (B)", "A 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."],
 			["variant", "Variant (V)", "Click a tile: its next variant (base, 1, 2…). Shift + click gives it back "
-			+ "to the random draw. Only for a tileset whose tiles have variants."]]:
+			+ "to the random draw. Only for a tileset whose tiles have variants."],
+			["plant", "Plant", "Plants the models of this world's MarchingBlocksFoliage: a click plants one, Ctrl + click "
+			+ "(and drag) a dab of the brush, Shift + click (and drag) erases within the brush. Ctrl+Z undoes a stroke."]]:
 		_mode_buttons[m[0]] = _toggle(bar, m[0], m[1], m[2], func() -> void: editor.set_mode(m[0]))
 	_hollow = _toggle(bar, "hollow", "Hollow box", "Keeps the skin of the box — a room. A box thinner than three "
 		+ "cells stays solid.", func() -> void: editor.hollow = _hollow.button_pressed)
@@ -169,6 +178,7 @@ func _build() -> void:
 		_shape_buttons[s] = _toggle(_brush, s, s.capitalize(), shape_tips[i], func() -> void:
 			editor.shape = s
 			refresh())
+	_build_plant_bar(bar)
 	_gap(bar)
 	var floor_icon := TextureRect.new()
 	floor_icon.texture = Icons.icon("floor", _icon_px())
@@ -201,6 +211,8 @@ func _build() -> void:
 			["grow", "grow", "Grow", "Selects the matter touching the selection by a face."],
 			["shrink", "shrink_edge", "Shrink (Alt + wheel down)", "Drops the EDGE of the selection: a rectangle loses its "
 				+ "rim, a line its ends, a block its skin. Alt + wheel up widens it, a flat ring at a time."],
+			["widen", "widen", "Widen (Alt + wheel up)", "Adds the four neighbours in the plane of every selected cell, "
+				+ "empty ones included. Nothing is set."],
 			["connected", "connected", "Connected", "Selects all the matter linked to the selection by faces."]]:
 		var op: String = o[1]
 		var b := _button(_selection_bar, o[0], o[2], o[3], func() -> void:
@@ -208,6 +220,8 @@ func _build() -> void:
 				editor.clear_selection()
 			elif op == "shrink_edge":
 				editor.shrink_selection()
+			elif op == "widen":
+				editor.widen_selection()
 			else:
 				editor.operate(op))
 		if o[0] == "delete":
@@ -237,7 +251,7 @@ func _build() -> void:
 		+ "the selection, no matter added. On the selection, or on the matter of the floor when nothing is selected.")
 	for e in [["extrude_up", "up", "Extrude up", "One cell higher."],
 			["extrude_down", "down", "Extrude down", "One cell lower."],
-			["move", "facing", "Extrude facing", "One cell away from the matter behind the cells — a wall thickens "
+			["facing", "facing", "Extrude facing", "One cell away from the matter behind the cells — a wall thickens "
 				+ "toward the air, a cave ceiling comes down."]]:
 		var direction: String = e[1]
 		_button(_extrude_bar, e[0], e[2], e[3] + modes, func() -> void: editor.extrude(direction))
@@ -296,6 +310,80 @@ func _button(parent: Control, icon: String, title: String, tip: String, act: Cal
 	b.pressed.connect(act)
 	parent.add_child(b)
 	return b
+
+
+## THE PLANT TOOL's settings, only while it is the tool: the model (and the random yaw), the placing mode, the brush,
+## the spacing, the steepest ground.
+func _build_plant_bar(bar: Control) -> void:
+	_plant_bar = HBoxContainer.new()
+	_plant_bar.add_theme_constant_override("separation", 2)
+	bar.add_child(_plant_bar)
+	_gap(_plant_bar)
+	_plant_model = _menu(_plant_bar, "plant", "The model a click or the brush plants — the models of this world's "
+		+ "MarchingBlocksFoliage (imported with the world, or set in its inspector).")
+	_plant_model.about_to_popup.connect(_fill_plant_models)
+	_plant_model.get_popup().id_pressed.connect(func(id: int) -> void:
+		if id == -2:
+			editor.plant_random_yaw = not editor.plant_random_yaw
+		else:
+			editor.plant_model = id
+		editor.changed.emit())
+	for m in [["air", "up", "In the air", "Anywhere: on the plane of the floor (Page Up / Page Down), even over nothing."],
+			["free", "plant", "Planted · free", "On the ground you see, with room around it: refused on a slope, in the "
+			+ "water, at an edge, under an overhang, or on another plant's footprint."],
+			["overflow", "widen", "Planted · overflow", "On the ground you see, overflowing edges, walls and other plants "
+			+ "as it likes. Only the spacing keeps plants apart."]]:
+		var placing: String = m[0]
+		_plant_modes[placing] = _toggle(_plant_bar, m[1], m[2], m[3], func() -> void:
+			editor.plant_mode = placing
+			editor.changed.emit())
+	_plant_radius = _float_spin(_plant_bar, 0.5, 32.0, 0.5, "Brush size: the radius of a dab and of the eraser, in "
+		+ "cells (Alt + wheel).", func(v: float) -> void: editor.plant_radius = v)
+	_plant_tries = _float_spin(_plant_bar, 1, 200, 1, "Density: how many spots each dab tries (Shift + wheel).",
+		func(v: float) -> void: editor.plant_tries = int(v))
+	_plant_spacing = _float_spin(_plant_bar, 0.0, 20.0, 0.05, "Spacing: no two plants closer than this, in cells — "
+		+ "in every mode.", func(v: float) -> void: editor.plant_spacing = v)
+	_plant_slope = _float_spin(_plant_bar, 0.0, 90.0, 1.0, "Max slope: the planted modes refuse a ground steeper than "
+		+ "this, in degrees.", func(v: float) -> void: editor.plant_slope = v)
+	# Named in the box itself: four bare numbers side by side read as nothing (seen on ART/barre_greffon.png).
+	_plant_radius.prefix = "Brush"
+	_plant_tries.prefix = "Density"
+	_plant_spacing.prefix = "Spacing"
+	_plant_slope.prefix = "Slope"
+	_plant_slope.suffix = "°"
+	for sb in [_plant_radius, _plant_tries, _plant_spacing, _plant_slope]:
+		(sb as SpinBox).custom_minimum_size = Vector2(112, 0) * _scale()
+
+## The models of the world's foliage, the current one checked, and the random yaw.
+func _fill_plant_models() -> void:
+	var popup := _plant_model.get_popup()
+	popup.clear()
+	var f: Node = editor.foliage() if editor.world != null else null
+	if f == null:
+		popup.add_item("No MarchingBlocksFoliage in this world", -3)
+		popup.set_item_disabled(0, true)
+	else:
+		var current: int = editor.current_plant_model()
+		for m in f.models:
+			popup.add_radio_check_item(str(m.get("name", "model %d" % int(m["id"]))), int(m["id"]))
+			popup.set_item_checked(popup.item_count - 1, int(m["id"]) == current)
+	popup.add_separator()
+	popup.add_check_item("Random rotation", -2)
+	popup.set_item_checked(popup.item_count - 1, editor.plant_random_yaw)
+
+
+func _float_spin(parent: Control, low: float, high: float, step: float, tip: String, act: Callable) -> SpinBox:
+	var sb := SpinBox.new()
+	sb.min_value = low
+	sb.max_value = high
+	sb.step = step
+	sb.select_all_on_focus = true
+	sb.tooltip_text = tip
+	sb.value_changed.connect(func(v: float) -> void:
+		if not _refreshing:
+			act.call(v))
+	parent.add_child(sb)
+	return sb
 
 
 func _plate(colour: Color) -> StyleBoxFlat:
@@ -394,6 +482,20 @@ func refresh() -> void:
 	_rail.visible = editor.special in ["bridge", "balcony", "stairs"]
 	_rail.set_pressed_no_signal(editor.rail)
 	_brush.visible = editor.mode in ["add", "dig", "select"]
+	_plant_bar.visible = editor.mode == "plant"
+	for m in _plant_modes:
+		(_plant_modes[m] as Button).set_pressed_no_signal(m == editor.plant_mode)
+	_plant_radius.set_value_no_signal(editor.plant_radius)
+	_plant_tries.set_value_no_signal(editor.plant_tries)
+	_plant_spacing.set_value_no_signal(editor.plant_spacing)
+	_plant_slope.set_value_no_signal(editor.plant_slope)
+	var f: Node = editor.foliage() if editor.world != null and editor.mode == "plant" else null
+	var model_name := ""
+	if f != null:
+		for m in f.models:
+			if int(m["id"]) == editor.current_plant_model():
+				model_name = str(m.get("name", ""))
+	_plant_model.text = model_name
 	_size.set_value_no_signal(editor.brush_size)
 	_size_value.text = str(editor.brush_size)
 	for s in _shape_buttons:

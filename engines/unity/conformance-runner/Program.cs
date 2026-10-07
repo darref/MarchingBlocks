@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using MarchingBlocks.Paint;
 using MarchingBlocks.Paint.Tests;
 
@@ -11,6 +12,7 @@ static class Program
 {
     static int Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--water-timing") return WaterTiming(args[1]);
         string path = args.Length > 0 ? args[0] : "../com.marchingblocks.paint/Tests/conformance.json";
         var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(path));
         var tilesets = (Dictionary<string, object>)conf["tilesets"];
@@ -72,7 +74,7 @@ static class Program
         Console.WriteLine($"{worldCases} world cases, {worldFailures.Count} failure(s)");
         failed += worldFailures.Count;
 
-        // THE PARITY FILES (engines/PARITE.md): five files, read IN ADDITION — the three above never change.
+        // THE PARITY FILES (engines/PARITE.md): six files, read IN ADDITION — the three above never change.
         string tests = Path.GetDirectoryName(Path.GetFullPath(path));
         foreach (var (file, run) in Parity)
         {
@@ -82,6 +84,30 @@ static class Program
             Console.WriteLine($"{parityCases} cases of {file}, {parityFailures.Count} failure(s)");
             failed += parityFailures.Count;
         }
+
+        // THE REPRISE (engines/PARITE.md §12, 3): incremental == whole, on random gestures over the mesh file's worlds.
+        var meshConf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(Path.Combine(tests, "water_mesh_conformance.json")));
+        var incFailures = WaterIncrementalCheck.Run(meshConf, 150, 2026, out int incChecks, out string incStats);
+        foreach (var f in incFailures) Console.WriteLine("  FAIL water reprise: " + f);
+        Console.WriteLine($"{incChecks} water gestures, incremental == whole ({incStats}), {incFailures.Count} failure(s)");
+        failed += incFailures.Count;
+
+        // THE EXPORTED WORLD (hors git, DEV_TOOLS/preparer_eau_unity.gd): the rule and the mesher against MarchingBlocks' sheets.
+        string exported = Path.GetFullPath(Path.Combine(tests, "../../test-project/Assets/water_world_expected.json"));
+        if (File.Exists(exported))
+        {
+            var exFailures = WaterMeshConformanceCheck.RunExportedWorld((Dictionary<string, object>)MBJson.Parse(File.ReadAllText(exported)),
+                out int exLayers, out int exTriangles);
+            foreach (var f in exFailures) Console.WriteLine("  FAIL exported water world: " + f);
+            Console.WriteLine($"{exLayers} water layers of the exported world ({exTriangles} triangles), {exFailures.Count} failure(s)");
+            failed += exFailures.Count;
+        }
+        else Console.WriteLine("(no exported water world: run DEV_TOOLS/preparer_eau_unity.gd to check it)");
+
+        var followFailures = WaterFollowCheck.Run(out int followChecks);
+        foreach (var f in followFailures) Console.WriteLine("  FAIL water follow: " + f);
+        Console.WriteLine($"{followChecks} water follow checks, {followFailures.Count} failure(s)");
+        failed += followFailures.Count;
 
         var wheelFailures = WheelCheck.Run(out int wheelChecks);
         foreach (var f in wheelFailures) Console.WriteLine("  FAIL wheel: " + f);
@@ -105,6 +131,7 @@ static class Program
         ("transitions_conformance.json", TransitionsConformanceCheck.Run),
         ("foliage_conformance.json", FoliageConformanceCheck.Run),
         ("water_conformance.json", WaterConformanceCheck.Run),
+        ("water_mesh_conformance.json", WaterMeshConformanceCheck.Run),
     };
 
     static string Show(List<object> e) =>
@@ -112,4 +139,94 @@ static class Program
 
     static string Show(Placement p) =>
         $"[{p.Vertex.x},{p.Vertex.y},{p.Vertex.z},{p.Tile ?? "null"},{p.QuarterTurns}]";
+
+    // ── THE TIMES OF THE WATER IN C# (engines/PARITE.md §12, the budget), on the example dumped by preparer_eau_unity.gd ──
+
+    static int WaterTiming(string file)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var conf = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(file));
+        var flat = (List<object>)conf["cells"];
+        var cells = new HashSet<Int3>();
+        for (int i = 0; i < flat.Count; i += 3)
+            cells.Add(new Int3((int)MBJson.AsLong(flat[i]), (int)MBJson.AsLong(flat[i + 1]), (int)MBJson.AsLong(flat[i + 2])));
+        var all = new List<Int3>();
+        var owner = new List<int>();
+        var layers = (List<object>)conf["layers"];
+        for (int l = 0; l < layers.Count; l++)
+        {
+            var s = (List<object>)((Dictionary<string, object>)layers[l])["sources"];
+            for (int i = 0; i < s.Count; i += 3)
+            {
+                all.Add(new Int3((int)MBJson.AsLong(s[i]), (int)MBJson.AsLong(s[i + 1]), (int)MBJson.AsLong(s[i + 2])));
+                owner.Add(l);
+            }
+        }
+        Console.WriteLine($"example: {cells.Count} full cells, {layers.Count} water layers, {all.Count} sources (read in {sw.ElapsedMilliseconds} ms)");
+        double Best(Func<double> f) { double b = double.MaxValue; for (int k = 0; k < 3; k++) b = Math.Min(b, f()); return b; }
+        double Ms(Action a) { var t = System.Diagnostics.Stopwatch.StartNew(); a(); return t.Elapsed.TotalMilliseconds; }
+        WaterWorld w = null;
+        double rule = Best(() => Ms(() => w = MBWater.World(cells, all)));
+        Console.WriteLine($"RULE, whole (MBWater.World): {rule:F0} ms · sea {w.Sea.Count} cells");
+        List<WaterBody> Bodies(WaterWorld ww, int l) { var o = new List<WaterBody>(); for (int k = 0; k < all.Count; k++) if (owner[k] == l) o.Add(ww.Bodies[k]); return o; }
+        double sheets = 0;
+        var memories = new List<WaterMeshMemory>();
+        for (int l = 0; l < layers.Count; l++)
+        {
+            WaterSheetArrays a = null;
+            var bodies = Bodies(w, l);
+            double t = Best(() => Ms(() => a = MBWaterMesh.Arrays(bodies, cells, w.Box, null)));
+            sheets += t;
+            var kinds = new Dictionary<string, int>();
+            foreach (var b in bodies) { string k = b.Error != "" ? "refused" : b.Kind; kinds[k] = (kinds.TryGetValue(k, out var n) ? n : 0) + 1; }
+            var m = new WaterMeshMemory();
+            MBWaterMesh.Arrays(bodies, cells, w.Box, m);
+            memories.Add(m);
+            Console.WriteLine($"  SHEET layer {l} ({string.Join(", ", kinds.Select(kv => kv.Key + " " + kv.Value))}): {t:F0} ms · {a.TriangleCount} triangles");
+        }
+        Console.WriteLine($"SHEETS, whole, every layer: {sheets:F0} ms");
+        Console.WriteLine($"EVERYTHING AGAIN (rule + sheets): {rule + sheets:F0} ms");
+        HashSet<Int3> copy = null;
+        Console.WriteLine($"a copy of the cells (what the editor hands to its thread): {Best(() => Ms(() => copy = new HashSet<Int3>(cells))):F0} ms");
+        Console.WriteLine($"the changed cells, by comparing two copies: {Best(() => Ms(() => MBWater.ChangedBetween(cells, copy))):F0} ms");
+        // A GESTURE, with the reprise: a cell set beside a river, then a cell set far from any water (above the top).
+        var near = new Int3(0, 0, 0);
+        bool found = false;
+        foreach (var b in w.Bodies)
+        {
+            if (found || b.Error != "" || b.Kind != "river" || b.Course.Count == 0) continue;
+            var c0 = b.Course[b.Course.Count / 2].Cell;
+            foreach (var d in new[] { new Int3(1, 0, 0), new Int3(-1, 0, 0), new Int3(0, 0, 1), new Int3(0, 0, -1) })
+                if (!cells.Contains(c0 + d) && !w.Sea.Contains(c0 + d)) { near = c0 + d; found = true; break; }
+        }
+        var top = new Int3(0, int.MinValue, 0);
+        foreach (var c in cells) if (c.y > top.y) top = c;
+        foreach (var (what, at) in new[] { ("a cell set beside a river", near), ("a cell set far from the water (on the summit)", top + new Int3(0, 1, 0)) })
+        {
+            var mems = new List<WaterMeshMemory>();
+            for (int l = 0; l < layers.Count; l++) { var m = new WaterMeshMemory(); MBWaterMesh.Arrays(Bodies(w, l), cells, w.Box, m); mems.Add(m); }
+            cells.Add(at);
+            var changed = new HashSet<Int3> { at };
+            WaterWorld w2 = null;
+            double r2 = Ms(() => w2 = MBWater.World(cells, all, w, changed));
+            int taken = 0;
+            for (int k = 0; k < all.Count; k++) if (ReferenceEquals(w2.Bodies[k], w.Bodies[k])) taken++;
+            double s2 = Ms(() =>
+            {
+                for (int l = 0; l < layers.Count; l++)
+                {
+                    var b1 = Bodies(w, l);
+                    var b2 = Bodies(w2, l);
+                    bool same = true;
+                    for (int k = 0; k < b1.Count; k++)
+                        if (!ReferenceEquals(b1[k], b2[k]) && !(b1[k].Error != "" && b2[k].Error != "")) same = false;
+                    if (same) continue;   // a layer whose bodies are all taken again keeps its sheet
+                    MBWaterMesh.Arrays(b2, cells, w2.Box, mems[l]);
+                }
+            });
+            Console.WriteLine($"GESTURE — {what} {at}: rule {r2:F0} ms ({taken} of {all.Count} sources taken again), sheets {s2:F0} ms, total {r2 + s2:F0} ms");
+            cells.Remove(at);
+        }
+        return 0;
+    }
 }
