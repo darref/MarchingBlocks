@@ -753,8 +753,11 @@
     "    + phase))), multiplying the emission.",
     "  The UVs of a tile turn with it: a v scroll stays vertical on every copy, a u scroll follows each copy's turn.",
     "CASES — frame {count, fps, ping_pong, t, phase} → the frame index; pulse {frequency, minimum, t, phase} → the",
-    "emission factor; phase {origin} → the phase (computed in DOUBLE precision: a 32-bit shader gives another",
-    "phase for the same tile — compare on the CPU, or accept the difference on the GPU); scroll {u, v, t, synced,",
+    "emission factor; phase {origin} → the phase, with this EXACT mixed precision (the reference keeps its vectors",
+    "in 32-bit floats): p = floor(origin + 0.5); a_i = fract(p_i * 0.3183099 + k_i) in double (k = 0.71, 0.113,",
+    "0.419); f_i = (float32) a_i; q_i = (float32)(f_i * 17); phase = fract(q.x * q.y * q.z * (q.x + q.y + q.z)) in",
+    "double. A full 32-bit shader gives another phase for the same tile — compare on the CPU, or accept the",
+    "difference on the GPU); scroll {u, v, t, synced,",
     "phase} → the UV offset [du, dv]; read: mb_animation in, the normalized animation out ({} = no animation)."
   ],
   "version": 1
