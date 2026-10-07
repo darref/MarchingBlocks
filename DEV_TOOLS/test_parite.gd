@@ -42,6 +42,9 @@ func _initialize() -> void:
 		var sc: Script = load(chemin)
 		_dire(sc != null and sc.can_instantiate(), "%s se charge" % chemin.get_file())
 	_dossier = ProjectSettings.globalize_path("user://test_parite")
+	# ⚠ VIDÉ D'ABORD (vu le 7 octobre 2026) : une image écrite par une exécution PRÉCÉDENTE rendait muette la mutation
+	# « l'image du représentant non écrite » — le test relisait le fichier d'hier.
+	_vider(_dossier)
 	DirAccess.make_dir_recursive_absolute(_dossier)
 	var cas: Dictionary = EP.cas_d_epreuve()
 	_dire(not cas.has("erreur"), "les cas se calculent (%s)" % str(cas.get("erreur", "")))
@@ -710,6 +713,16 @@ func _l_export_des_images() -> void:
 	_dire(FileAccess.get_file_as_string(dest.path_join("anime.mbset/README.txt")).contains("ANIMATED TEXTURES"),
 		"le README du .mbset porte la règle de l'animation")
 	_finies += 1
+
+
+static func _vider(dossier: String) -> void:
+	if not DirAccess.dir_exists_absolute(dossier):
+		return
+	for d in DirAccess.get_directories_at(dossier):
+		_vider(dossier.path_join(d))
+		DirAccess.remove_absolute(dossier.path_join(d))
+	for f in DirAccess.get_files_at(dossier):
+		DirAccess.remove_absolute(dossier.path_join(f))
 
 
 func _json_du_glb(chemin: String) -> Dictionary:
