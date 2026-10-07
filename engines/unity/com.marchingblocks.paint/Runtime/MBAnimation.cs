@@ -213,13 +213,20 @@ namespace MarchingBlocks.Paint
         }
 
         /// <summary>THE PHASE of a tile: a hash of its ORIGIN in FORMAT space (the vertex v + piece_offset — never the
-        /// engine position, which a frame mirrors and scales). In double precision, on the CPU, once per tile.</summary>
+        /// engine position, which a frame mirrors and scales), on the CPU, once per tile. The rule's EXACT precision (the
+        /// reference keeps its vectors in 32-bit floats): a_i = fract(floor(o_i + 0.5) · 0.3183099 + k_i) in double;
+        /// f_i = (float) a_i; q_i = (float)(f_i · 17) — a float32 product; phase = fract(q.x q.y q.z (q.x + q.y + q.z))
+        /// in double.</summary>
         public static double PhaseOf(double ox, double oy, double oz)
         {
-            double px = Fract(Math.Floor(ox + 0.5) * 0.3183099 + 0.71) * 17.0;
-            double py = Fract(Math.Floor(oy + 0.5) * 0.3183099 + 0.113) * 17.0;
-            double pz = Fract(Math.Floor(oz + 0.5) * 0.3183099 + 0.419) * 17.0;
-            return Fract(px * py * pz * (px + py + pz));
+            double qx = Q(ox, 0.71), qy = Q(oy, 0.113), qz = Q(oz, 0.419);
+            return Fract(qx * qy * qz * (qx + qy + qz));
+        }
+
+        static double Q(double o, double k)
+        {
+            float f = (float)Fract(Math.Floor(o + 0.5) * 0.3183099 + k);
+            return (float)(f * 17f);
         }
 
         static double Fract(double x) => x - Math.Floor(x);
