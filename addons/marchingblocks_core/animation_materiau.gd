@@ -177,6 +177,13 @@ static func pulsation_au_temps(frequence: float, mini: float, t: float, phase :=
 	return lerpf(mini, 1.0, 0.5 + 0.5 * cos(TAU * (t * frequence + phase)))
 
 
+## LE DÉFILEMENT AU TEMPS t : le décalage des UV que le shader ajoute (`lire`, ligne à ligne) — `u`, `v` en répétitions
+## de l'image par seconde ; une piste décalée part de 7 × sa phase. ⚠ La règle n'était écrite que dans le shader : la
+## voici en GDScript pour les cas d'épreuve des greffons (7 octobre 2026).
+static func defilement_au_temps(u: float, v: float, t: float, synchro: bool, phase := 0.0) -> Vector2:
+	return Vector2(u, v) * (t + (0.0 if synchro else phase * 7.0))
+
+
 ## La phase d'une copie posée à `origine` (son repère dans le monde) — le hachage du shader, `hacher`, ligne à ligne.
 static func phase_de(origine: Vector3) -> float:
 	var p := (origine + Vector3(0.5, 0.5, 0.5)).floor()
@@ -600,10 +607,13 @@ static func statique(m: Material) -> Material:
 	return m
 
 
-## Le statique pour un fichier qui QUITTE la machine (`.mbset`, vers les moteurs) : une copie dont les extras ne
-## nomment les images que par leur NOM de fichier — un chemin absolu de l'auteur (C:/Users/…) n'a rien à faire chez
-## l'acheteur, et les greffons ne lisent pas encore les images (LA LISTE DES GREFFONS À FAIRE).
-static func statique_pour_l_export(m: Material) -> Material:
+## Le statique pour un fichier qui QUITTE la machine (`.mbset`, vers les moteurs) : une copie dont les extras portent
+## l'animation AU FORMAT QUI PART (`vers_format` : en anglais, versionnée), ses images nommées RELATIVEMENT AU `.mbset`
+## (`animation/<fichier>`) — un chemin absolu de l'auteur (C:/Users/…) n'a rien à faire chez l'acheteur.
+## ⚠ LES IMAGES VOYAGENT (parité des greffons, 7 octobre 2026 ; jusque-là `tiles.glb` ne portait que l'image 0 et les
+## NOMS des autres) : `emportees` reçoit {chemin source: chemin relatif}, et c'est `FormatNeutre.exporter` qui recopie
+## les fichiers. Deux images de même nom venues de deux dossiers ne s'écrasent pas : la seconde prend « _2 ».
+static func statique_pour_l_export(m: Material, emportees: Dictionary = {}) -> Material:
 	var s := statique(m)
 	var a := animation_des_extras(s)
 	if a.is_empty():
@@ -612,9 +622,127 @@ static func statique_pour_l_export(m: Material) -> Material:
 	for canal in a:
 		var im: Dictionary = (a[canal] as Dictionary).get("images", {})
 		if not im.is_empty():
-			im["images"] = (im["images"] as Array).map(func(c: String) -> String: return c.get_file())
-	copie.set_meta("extras", {"mb_animation": a})
+			im["images"] = (im["images"] as Array).map(func(c: String) -> String: return _emportee(c, emportees))
+	copie.set_meta("extras", {"mb_animation": vers_format(a)})
 	return copie
+
+
+## Le chemin relatif (au `.mbset`) sous lequel une image part : `animation/<son nom>`, unique.
+static func _emportee(chemin: String, emportees: Dictionary) -> String:
+	if emportees.has(chemin):
+		return emportees[chemin]
+	var pris := {}
+	for c in emportees:
+		pris[emportees[c]] = true
+	var nom := chemin.get_file()
+	var rel := DOSSIER_EMPORTE + "/" + nom
+	var i := 2
+	while pris.has(rel):
+		rel = "%s/%s_%d.%s" % [DOSSIER_EMPORTE, nom.get_basename(), i, nom.get_extension()]
+		i += 1
+	emportees[chemin] = rel
+	return rel
+
+
+# ── LE FORMAT QUI PART — `mb_animation` dans les extras d'un matériau de `tiles.glb` ────────────────────
+#
+# ⚠ PARITÉ DES GREFFONS (7 octobre 2026) : le `.mbset` part chez l'acheteur, donc en ANGLAIS (charte §7) et VERSIONNÉ
+# (un greffon refuse une animation plus récente que lui). Le témoin, lui, garde les noms du cœur (son aller-retour avec
+# Blender, `animation_des_extras`). La traduction vit ICI ET NULLE PART AILLEURS.
+
+const FORMAT_ANIMATION := "marchingblocks-animation"
+const VERSION_ANIMATION := 1
+const DOSSIER_EMPORTE := "animation"
+const CANAUX_EN := {"albedo": "albedo", "normale": "normal", "orm": "orm", "emission": "emission"}
+const GENRES_EN := {"defilement": "scroll", "images": "frames", "pulsation": "pulse"}
+## Le réglage → [son nom anglais, son type : "nombre", "booleen" ou "images"].
+const REGLAGES_EN := {"u": ["u", "nombre"], "v": ["v", "nombre"], "synchro": ["synced", "booleen"],
+	"images": ["images", "images"], "ips": ["fps", "nombre"], "aller_retour": ["ping_pong", "booleen"],
+	"frequence": ["frequency", "nombre"], "mini": ["minimum", "nombre"]}
+
+
+## Une animation du cœur (normalisée d'abord) au format qui part ; {} sans animation.
+static func vers_format(a: Variant) -> Dictionary:
+	var n := normaliser(a)
+	if n.is_empty():
+		return {}
+	var sortie := {"format": FORMAT_ANIMATION, "version": VERSION_ANIMATION}
+	for canal in n:
+		var pistes := {}
+		for genre in n[canal]:
+			var r := {}
+			for k in n[canal][genre]:
+				r[REGLAGES_EN[k][0]] = n[canal][genre][k]
+			pistes[GENRES_EN[genre]] = r
+		sortie[CANAUX_EN[canal]] = pistes
+	return sortie
+
+
+## LA LECTURE DE RÉFÉRENCE du format qui part (ce que les trois greffons implémentent) : rend l'animation du cœur,
+## normalisée — {} si ce n'est pas une animation ou si sa version est plus récente. Une valeur du mauvais TYPE est
+## ignorée (le défaut la remplace), un nombre hors bornes est borné, un canal ou un genre inconnu est ignoré, une piste
+## d'images sans image n'existe pas, une pulsation hors de l'émission non plus (`normaliser`).
+static func depuis_format(e: Variant) -> Dictionary:
+	if not e is Dictionary or str((e as Dictionary).get("format", "")) != FORMAT_ANIMATION:
+		return {}
+	var v: Variant = e.get("version")
+	if not (v is float or v is int) or int(v) != v or int(v) < 1 or int(v) > VERSION_ANIMATION:
+		return {}
+	var fr := {}
+	for canal in CANAUX_EN:
+		var c: Variant = e.get(CANAUX_EN[canal])
+		if not c is Dictionary:
+			continue
+		var pistes := {}
+		for genre in GENRES_EN:
+			var g: Variant = (c as Dictionary).get(GENRES_EN[genre])
+			if not g is Dictionary:
+				continue
+			var r := {}
+			for k in REGLAGES_EN:
+				var x: Variant = (g as Dictionary).get(REGLAGES_EN[k][0])
+				match REGLAGES_EN[k][1]:
+					"nombre":
+						if x is float or x is int:
+							r[k] = float(x)
+					"booleen":
+						if x is bool:
+							r[k] = x
+					"images":
+						if x is Array:
+							r[k] = x
+			pistes[genre] = r
+		fr[canal] = pistes
+	return normaliser(fr)
+
+
+## LA RÈGLE, ÉCRITE (le README du `.mbset`, les cas d'épreuve des greffons). Une ligne par fait.
+static func regle_animation() -> PackedStringArray:
+	return PackedStringArray([
+		"ANIMATED TEXTURES — a material of tiles.glb may carry extras.mb_animation:",
+		"  format \"%s\", version %d (refuse anything newer: ignore the animation, show the still material)."
+			% [FORMAT_ANIMATION, VERSION_ANIMATION],
+		"  channels: albedo, normal, orm (r ambient occlusion, g roughness, b metal), emission. Each has tracks:",
+		"    scroll {u, v (image repeats per second, in [-%s, %s]), synced}" % [VITESSE_MAXI, VITESSE_MAXI],
+		"    frames {images (paths RELATIVE to the .mbset folder, in order; at most %d), fps (in [0.1, %s])," % [
+			IMAGES_MAXI, IPS_MAXI],
+		"            ping_pong, synced}   — a frames track without a frame does not exist",
+		"    pulse  {frequency (Hz, in [0, 20]), minimum (in [0, 1]), synced}   — emission only",
+		"  A value of the wrong type is ignored (its default takes its place), a number out of range is clamped, an",
+		"  unknown channel or track is ignored. Defaults: scroll u 0, v -0.25, synced; frames fps 12, no ping-pong,",
+		"  not synced; pulse frequency 0.5, minimum 0.2, not synced.",
+		"  The material itself is a standard glTF material showing frame 0: an engine that ignores the animation",
+		"  still shows the tile right.",
+		"TIME is global (one clock for every material). PHASE of a tile = hash of its ORIGIN in FORMAT space (the",
+		"  vertex v + piece_offset): p = floor(o + 0.5); p = fract(p * 0.3183099 + (0.71, 0.113, 0.419)) * 17;",
+		"  phase = fract(p.x * p.y * p.z * (p.x + p.y + p.z)). A synced track uses phase 0.",
+		"  scroll offset at time t = (u, v) * (t + (synced ? 0 : 7 * phase)), added to the UVs (they repeat).",
+		"  frame at time t, n frames: k = floor(t * fps + phase * n); ping_pong and n > 1: p = 2n - 2, k = k mod p,",
+		"    frame = k < n ? k : p - k; else frame = k mod n (mod is always >= 0).",
+		"  pulse at time t: frequency <= 0 gives 1; else minimum + (1 - minimum) * (0.5 + 0.5 cos(2 pi (t * frequency",
+		"    + phase))), multiplying the emission.",
+		"  The UVs of a tile turn with it: a v scroll stays vertical on every copy, a u scroll follows each copy's turn.",
+	])
 
 
 ## Les surfaces d'un maillage, en place : animées (`anime`) ou statiques (`statique`). Rend combien ont changé.

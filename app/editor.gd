@@ -5472,7 +5472,13 @@ func _exporter_le_monde(dossier: String) -> void:
 	for i in _eaux.size():
 		eaux.append({"nom": _eaux[i]["nom"], "visible": _eaux[i]["visible"], "preset": _eaux[i]["preset"],
 			"sources": _eaux[i]["sources"], "maillage": (nappes[i] as MeshInstance3D).mesh if i < nappes.size() else null})
-	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux)
+	# LES TRANSITIONS ET LE FEUILLAGE PARTENT AUSSI (parité des greffons, 7 octobre 2026) : l'état de l'atelier, les ids
+	# des couches dans l'ordre (le format les change en indices), les représentants RÉSOLUS ; le feuillage tel que le
+	# projet l'enregistre (ses modèles sont recopiés dans le monde).
+	var ids: Array = _couches.map(func(c: Dictionary) -> String: return str(c.get("id", "")))
+	var transitions := {"etat": _transitions.etat, "ids": ids, "representants": _transitions._representants()}
+	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux, transitions,
+		_feuillage.vers_donnees())
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 		for sous in DirAccess.get_directories_at(str(r["dossier"])):
@@ -5487,6 +5493,18 @@ func _exporter_le_monde(dossier: String) -> void:
 		texte += ("
 %d water layer(s), baked with their flow, kind and depth (%d mesh(es)). The plugins do not "
 			+ "show water yet.") % [r["eaux"], r["nappes"]]
+	if not (r.get("transitions", {}) as Dictionary).is_empty():
+		texte += "\n%d transition pair(s) and %d painted choice(s), with each layer's representative material." % [
+			r["transitions"]["paires"], r["transitions"]["choix"]]
+	if not (r.get("feuillage", {}) as Dictionary).is_empty():
+		texte += "\n%d foliage model(s) copied into the world, %d plant(s)." % [r["feuillage"]["modeles"],
+			r["feuillage"]["plants"]]
+		if not (r["feuillage"]["sans_maillage"] as Array).is_empty():
+			texte += ("\n[color=#f2ca79]Foliage model file(s) not found[/color] — they travel without a mesh: %s"
+				% ", ".join(PackedStringArray(r["feuillage"]["sans_maillage"])))
+	if not (r.get("images_manquantes", []) as Array).is_empty():
+		texte += ("\n[color=#f2ca79]%d animation frame(s) not found[/color] — the engine will show them magenta: %s"
+			% [(r["images_manquantes"] as Array).size(), ", ".join(PackedStringArray(r["images_manquantes"]))])
 	if not (r["sans_tuiles"] as Array).is_empty():
 		texte += ("\n\n[color=#f2ca79]%d layer(s) have no tiles yet[/color] — their cells travel, the engine "
 			+ "shows them without tiles: %s") % [(r["sans_tuiles"] as Array).size(),
@@ -5671,13 +5689,8 @@ func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
 			_extruder("haut" if sens > 0 else "bas", "etendre")
 		elif sens > 0:
 			# ÉLARGIR D'UNE COURONNE, À PLAT, CASES VIDES COMPRISES — comme « Extend selection », rien n'est posé. ⚠ PAS
-			# « Grow », qui ne garde que la matière : une sélection de volume (un Rect dans l'air) disparaissait.
-			var large := {}
-			for c: Vector3i in _vue.selection:
-				large[c] = true
-				for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
-					large[c + d] = true
-			_vue.regler_selection(large)
+			# « Grow », qui ne garde que la matière. La règle vit dans le cœur (`Outils.elargir_a_plat`, les greffons).
+			_vue.regler_selection(Outils.elargir_a_plat(_vue.selection))
 		else:
 			_vue.regler_selection(Outils.operer_selection(_occupees(), _vue.selection, "retrecir_bord")["selection"])
 		_vue.montrer_valeur("%s — %d cells" % [("Extend ↑" if sens > 0 else "Extend ↓") if maj

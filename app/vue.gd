@@ -977,11 +977,8 @@ func _toucher(position: Vector2) -> void:
 	var toutes := Outils.pinceau(Outils.ancre(g, point), point["normale"], taille, forme)
 	match g:
 		"selectionner", "deselectionner":
-			for c in toutes:
-				if g == "deselectionner":
-					selection.erase(c)
-				elif selection_vide or _occupe_actif(c):
-					selection[c] = true
+			# La règle (le pinceau Select, « Select empty cells too ») vit dans le cœur : les greffons la reprennent.
+			Outils.selectionner_au_pinceau(selection, toutes, _occupe_actif, selection_vide, g == "deselectionner")
 			_dessiner_selection()
 			selection_changee.emit()
 		_:

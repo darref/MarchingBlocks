@@ -9,7 +9,13 @@ extends RefCounted
 ##     world.json          les couches, dans l'ordre : nom, visibilité, jeu de tuiles, CASES
 ##     <jeu>.mbset/        un dossier de tuiles (format neutre, §4) par SOURCE distincte
 ##     water/<nom>.glb     la nappe CUITE d'une couche d'eau (charte §5, « le mode Fluids »), une par couche
+##     transitions/        l'image du matériau REPRÉSENTANT de chaque couche (l'atelier Transitions), s'il y en a
+##     foliage/<nom>.glb   les modèles du feuillage (l'atelier Foliage), COPIÉS comme les jeux de tuiles
 ##     README.txt
+##
+## ⚠ PARITÉ DES GREFFONS (7 octobre 2026) : `transitions` et `foliage` entrent dans `world.json`, FACULTATIVES comme
+## `water` — un monde exporté d'avant les lit absentes (rien ne se mêle, rien n'est planté), la version reste 1. Une clé
+## que ces règles ne décrivent pas est ignorée par un lecteur qui ne la connaît pas.
 ##
 ## ⚠ **LE MONDE SE SUFFIT À LUI-MÊME** : ses jeux de tuiles voyagent DANS son dossier, et `world.json`
 ## les désigne par un chemin RELATIF. Un monde qui pointerait vers un `.mbset` ailleurs sur le disque
@@ -23,6 +29,8 @@ extends RefCounted
 ## cases qu'on y peint.
 
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
+const TR := preload("res://addons/marchingblocks_core/transitions.gd")
+const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
 
 ## ⚠ L'EAU VOYAGE DANS LE MONDE, PAS DANS UN JEU DE TUILES : un `.mbset` appartient à une couche de tuiles, l'eau au
 ## monde entier (DÉCIDÉ, Jordan, 1er octobre 2026). Ses noms d'aspect, en anglais pour les greffons.
@@ -79,13 +87,85 @@ static func regle_eau() -> PackedStringArray:
 		"            Colours are quantized to 1/255.",
 		"  sources   a flat array of integers, x y z per source cell: where the water was placed. The mesh",
 		"            is deduced from them and from the cells of EVERY layer; a plugin may deduce it again.",
+		"            Only ONE sea: taking the sources of every water layer in order, the first source in the void",
+		"            is the sea; any other source in the void is refused (it makes no water).",
+	])
+
+
+## LA RÈGLE DES TRANSITIONS (`transitions.gd`, `melange`) — écrite dans le README, les cas d'épreuve des greffons.
+static func regle_transitions() -> PackedStringArray:
+	var d := TR.reglages_en({})
+	return PackedStringArray([
+		"transitions   (optional) how two tile layers blend where they meet. The GEOMETRY never changes (the tiles are",
+		"              the ones the tileset rule places); only the LOOK of the surface does. Absent: nothing blends.",
+		"  pairs             an array of {a, b, active, a_covers_b, b_covers_a}: a < b are layer indices (in layers), active a",
+		"                    bool, the two settings say how the first layer covers the second. The same pair never twice.",
+		"  settings          softness in [0.05, 1] (default %s), reach in [-0.5, 0.5] (%s), irregularity in [0, 1] (%s),"
+			% [d["softness"], d["reach"], d["irregularity"]],
+		"                    grain in [0.25, 6] (%s), fills_hollows in [0, 1] (%s). A missing setting takes its default,"
+			% [d["grain"], d["fills_hollows"]],
+		"                    one out of range is clamped.",
+		"  representatives   one per layer, in layer order: {image, color, scale, roughness}. image: a PNG path RELATIVE to",
+		"                    world.json, or null (plain colour). color [r, g, b, a] multiplies the image AS IS (no sRGB",
+		"                    conversion of the colour). scale: world cells per repeat of the image (at least 0.01). The image is",
+		"                    projected in a box: weights w = |n|^4 / sum (n the world normal), samples at p.zy/scale, p.xz/scale,",
+		"                    p.xy/scale. A layer's representative is what is laid over the OTHER layer's surface.",
+		"  choices           a flat array x y z L per vertex (FORMAT space): at that vertex, layer L covers. The same vertex",
+		"                    never twice. A choice of a layer that is not in the blending pair counts as no choice.",
+		"  Only layers 0 to %d blend (a pair with a larger index blends nothing). Hidden layers place no cell." % (TR.MAXI - 1),
+		"  Refuse the whole file, and say why, if any of these does not hold.",
+		"THE BLEND at a point p of the surface of the tile of vertex v (that tile covers [v + 1/2, v + 3/2]; take v from the",
+		"  TILE, never from p: on a joint, p belongs to two tiles):",
+		"  f = clamp(p - v - 1/2, 0, 1) on each axis. Corner k = dx + 2 dy + 4 dz (d in {0, 1}^3) is the cell v + d: rank_k",
+		"    = its layer index (-1 empty), choice_k = the layer chosen at VERTEX v + d (-1 none), weight w_k =",
+		"    (dx ? f.x : 1 - f.x) (dy ? f.y : 1 - f.y) (dz ? f.z : 1 - f.z).",
+		"  owner = the smallest rank among the corners; none: nothing. For every other rank r, part_r = the sum of its",
+		"    weights; other = the rank with the largest part, ties to the first corner in k order; none: nothing.",
+		"  The pair {owner, other} must be active (both directions known), else nothing. s = part_other / (part_other +",
+		"    w_owner), where w_owner = the sum of the owner's weights.",
+		"  covering_k = choice_k if it is owner or other, else owner (the higher priority). vote = the sum of w_k where",
+		"    covering_k = other.",
+		"  visible(S, x, h, n) = smoothstep(0.5 - S.softness / 2, 0.5 + S.softness / 2, x + (S.reach + S.fills_hollows (0.5",
+		"    - h) + S.irregularity (n - 0.5)) 4 x (1 - x)) — the shift is ZERO at both ends.",
+		"  alpha = vote visible(other covers owner, s, h_owner, n) + (1 - vote) (1 - visible(owner covers other, 1 - s,",
+		"    h_other, n)): draw the OTHER layer's representative over the surface with that alpha (nothing below 0.004).",
+		"  h_L = the luminance (0.299 r + 0.587 g + 0.114 b) of layer L's representative at p. n = a value noise in [0, 1]",
+		"    at p times the grain of the direction (the conformance cases give n, the same for both directions).",
+	])
+
+
+## LA RÈGLE DU FEUILLAGE (`feuillage.gd`) — écrite dans le README, les cas d'épreuve des greffons.
+static func regle_feuillage() -> PackedStringArray:
+	return PackedStringArray([
+		"foliage   (optional) the plants of the whole world (not of a layer). Absent: no plant.",
+		"  models    an array of {id (an integer, unique), name, mesh (a .glb path RELATIVE to world.json, or null),",
+		"            ground_offset (model units: how far its origin sits ABOVE the ground; negative buries it), scale,",
+		"            scale_random (each plant draws a factor in [1 - a, 1 + a], a <= 0.9), footprint (radius in cells, at",
+		"            scale 1), height (the top of the model above its origin, model units), wind (0 still to 1)}.",
+		"            A missing number takes its default (0, 1, 0.2, 0.5, 1, 0.5); one of another type refuses the file.",
+		"  plants    a flat array of numbers, 7 per plant: model id, x, y, z (the point ON THE GROUND, FORMAT space), yaw",
+		"            (radians around +Y), scale (the plant's own draw), mode (0 placed in the air, 1 planted).",
+		"            A plant of an unknown model refuses the file.",
+		"  A plant's model sits at T = translate(p + (0, ground_offset s, 0)) rotateY(yaw) scale(s), s = model.scale * plant",
+		"  scale; its height above the ground is max(0, (height + ground_offset) s).",
+		"  WIND (each engine writes its own shader on the same data): per plant (ground = p.y, height above ground,",
+		"  phase = (0.37 p.x + 0.71 p.z) mod 2 pi, amplitude = wind). In WORLD space, for a vertex P with normal N at time t:",
+		"  h = clamp((P.y - ground) / height, 0, 1); b = 0.35 + 0.6 sin(1.1 t + phase) + 0.3 sin(2.3 t + 1.7 phase);",
+		"  P.xz += normalize(%s, %s) b amplitude height 0.05 h^2; then P += N sin(7 t + P.(2.1, 1.7, 2.9)) 0.015 amplitude h."
+			% [FE.SENS_DU_VENT.x, FE.SENS_DU_VENT.y],
+		"  A height of 0 does not move.",
 	])
 
 
 ## Écrit le monde. `couches` : [{nom, visible, source, lot (MeshLibrary ou null), cases (Array de
 ## Vector3i)}], dans l'ordre. Rend {"dossier", "couches", "jeux", "sans_tuiles": [noms]} ou {"erreur"}.
 ## `eaux` : [{nom, visible, preset, sources (Array de Vector3i), maillage (ArrayMesh ou null)}], dans l'ordre.
-static func exporter(couches: Array, dossier: String, nom: String, generateur: String, eaux: Array = []) -> Dictionary:
+## `transitions` (parité des greffons, 7 octobre 2026) : {"etat": l'état de l'atelier (ids des couches), "ids": l'id de
+## chaque couche de `couches`, dans l'ordre, "representants": [{image (Image ou null), couleur, echelle, rugosite}] par
+## couche, RÉSOLUS par l'écran} — {} : pas de transitions. `feuillage` : ce que le projet enregistre
+## (`FE.vers_donnees` : modèles et plants à plat) — {} : pas de feuillage.
+static func exporter(couches: Array, dossier: String, nom: String, generateur: String, eaux: Array = [],
+		transitions: Dictionary = {}, feuillage: Dictionary = {}) -> Dictionary:
 	if couches.is_empty():
 		return {"erreur": "this world has no layer"}
 	var cible := dossier.path_join(_propre(nom, "world") + ".mbworld")
@@ -94,6 +174,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	var noms_pris := {}
 	var sorties: Array = []
 	var sans_tuiles: Array = []
+	var images_manquantes: Array = []
 	for c in couches:
 		var source: String = str(c.get("source", ""))
 		var lot = c.get("lot")
@@ -111,6 +192,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 				var r: Dictionary = FN.exporter(lot, cible, n, generateur)
 				if r.has("erreur"):
 					return {"erreur": "layer « %s »: %s" % [c["nom"], r["erreur"]]}
+				images_manquantes.append_array(r.get("images_manquantes", []))
 				jeux[source] = (r["dossier"] as String).get_file().path_join("tileset.json")
 			jeu = jeux[source]
 		else:
@@ -157,6 +239,31 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 			"sources": _sources_a_plat(e.get("sources", []))})
 	var monde := {"format": FORMAT, "version": VERSION, "generator": generateur, "name": _propre(nom, "world"),
 		"layers": sorties, "water": sorties_eau}
+	# LES TRANSITIONS (l'atelier Transitions) : les ids de l'écran deviennent des INDICES de `layers`, les représentants
+	# partent RÉSOLUS (le défaut « le matériau le plus porté » demande le témoin, qu'un greffon n'a pas), leurs images
+	# recopiées dans `transitions/`.
+	var tr_bilan := {}
+	if not transitions.is_empty():
+		var t := transitions_pour_le_monde(transitions.get("etat", {}), transitions.get("ids", []),
+			transitions.get("representants", []))
+		if not t.is_empty():
+			for rel in t["images"]:
+				DirAccess.make_dir_recursive_absolute(cible.path_join(str(rel).get_base_dir()))
+				var img: Image = t["images"][rel]
+				if img.save_png(cible.path_join(rel)) != OK:
+					return {"erreur": "the transition image %s could not be written" % rel}
+			monde["transitions"] = t["json"]
+			tr_bilan = {"paires": (t["json"]["pairs"] as Array).size(), "choix": (t["json"]["choices"] as Array).size() / 4}
+	# LE FEUILLAGE (l'atelier Foliage) : chaque modèle COPIÉ dans `foliage/` (comme un jeu de tuiles), ses réglages et
+	# ses plants en anglais. Un modèle introuvable part sans maillage (`mesh` null), et c'est DIT.
+	var fe_bilan := {}
+	if not feuillage.is_empty() and not (feuillage.get("modeles", []) as Array).is_empty():
+		var fe := _feuillage_pour_le_monde(feuillage, cible)
+		if fe.has("erreur"):
+			return {"erreur": fe["erreur"]}
+		monde["foliage"] = fe["json"]
+		fe_bilan = {"modeles": (fe["json"]["models"] as Array).size(), "plants": (fe["json"]["plants"] as Array).size() / 7,
+			"sans_maillage": fe["sans_maillage"]}
 	var f := FileAccess.open(cible.path_join("world.json"), FileAccess.WRITE)
 	if f == null:
 		return {"erreur": "world.json could not be written (error %d)" % FileAccess.get_open_error()}
@@ -164,11 +271,107 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	f.close()
 	var r2 := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r2 != null:
-		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
+		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\n" + "\n".join(regle_transitions())
+			+ "\n\n" + "\n".join(regle_feuillage()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
 			% generateur + "plugin for Godot, Unity or Unreal: Import MarchingBlocks world.\n")
 		r2.close()
 	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles,
-		"eaux": sorties_eau.size(), "nappes": noms_eau.size()}
+		"eaux": sorties_eau.size(), "nappes": noms_eau.size(), "transitions": tr_bilan, "feuillage": fe_bilan,
+		"images_manquantes": images_manquantes}
+
+
+## LES TRANSITIONS TELLES QUE `world.json` LES PORTE (`regle_transitions`). `etat` : {paires: {"idA|idB": {actif, couvre:
+## {id: réglages}}}, choix: {sommet: id}} ; `ids` : l'id de chaque couche, dans l'ordre de `layers` ; `representants` :
+## [{image, couleur, echelle, rugosite}] par couche. Rend {"json", "images": {chemin relatif: Image}}, ou {} s'il n'y a ni
+## paire ni choix. Une paire ou un choix d'une couche qui n'existe plus est laissé de côté.
+static func transitions_pour_le_monde(etat: Dictionary, ids: Array, representants: Array) -> Dictionary:
+	var indice := {}
+	for i in ids.size():
+		indice[str(ids[i])] = i
+	var paires: Array = []
+	var p_etat: Dictionary = etat.get("paires", {})
+	for cle in p_etat:
+		var ab: PackedStringArray = String(cle).split("|")
+		if ab.size() != 2 or not indice.has(ab[0]) or not indice.has(ab[1]) or ab[0] == ab[1]:
+			continue
+		var ia: int = indice[ab[0]]
+		var ib: int = indice[ab[1]]
+		var id_a: String = ab[0]
+		var id_b: String = ab[1]
+		if ia > ib:
+			var t := ia
+			ia = ib
+			ib = t
+			id_a = ab[1]
+			id_b = ab[0]
+		var couvre: Dictionary = p_etat[cle].get("couvre", {})
+		paires.append({"a": ia, "b": ib, "active": bool(p_etat[cle].get("actif", false)),
+			"a_covers_b": TR.reglages_en(couvre.get(id_a, {})), "b_covers_a": TR.reglages_en(couvre.get(id_b, {}))})
+	paires.sort_custom(func(x: Dictionary, y: Dictionary) -> bool:
+		return x["a"] < y["a"] or (x["a"] == y["a"] and x["b"] < y["b"]))
+	var c_etat: Dictionary = etat.get("choix", {})
+	var sommets: Array = c_etat.keys().filter(func(s): return indice.has(str(c_etat[s])))
+	sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+	var plat: Array = []
+	for s: Vector3i in sommets:
+		plat.append_array([s.x, s.y, s.z, int(indice[str(c_etat[s])])])
+	if paires.is_empty() and plat.is_empty():
+		return {}
+	var reps: Array = []
+	var images := {}
+	for i in ids.size():
+		var r: Dictionary = representants[i] if i < representants.size() and representants[i] is Dictionary else {}
+		var chemin: Variant = null
+		if r.get("image") is Image:
+			var img: Image = (r["image"] as Image).duplicate()
+			if img.is_compressed():
+				img.decompress()
+			img.convert(Image.FORMAT_RGBA8)
+			chemin = "transitions/representative_%d.png" % i
+			images[chemin] = img
+		var c: Color = r.get("couleur", Color.WHITE)
+		reps.append({"image": chemin, "color": [c.r, c.g, c.b, c.a], "scale": maxf(float(r.get("echelle", 1.0)), 0.01),
+			"roughness": float(r.get("rugosite", 0.8))})
+	return {"json": {"pairs": paires, "representatives": reps, "choices": plat}, "images": images}
+
+
+## LE FEUILLAGE tel que `world.json` le porte (`regle_feuillage`) : les modèles copiés dans `<monde>/foliage/`. `d` : ce
+## que le projet enregistre (`FE.vers_donnees`). Rend {"json", "sans_maillage": [noms]} ou {"erreur"}.
+static func _feuillage_pour_le_monde(d: Dictionary, cible: String) -> Dictionary:
+	var erreurs: Array = []
+	var lu := FE.depuis_donnees(d, erreurs)
+	if lu.is_empty():
+		return {"erreur": "foliage: %s" % ", ".join(PackedStringArray(erreurs))}
+	var modeles: Array = []
+	var pris := {}
+	var copies := {}
+	var sans_maillage: Array = []
+	for m in lu["modeles"]:
+		var chemin := str(m["chemin"])
+		var mesh: Variant = null
+		if copies.has(chemin):
+			mesh = copies[chemin]
+		elif chemin != "" and FileAccess.file_exists(chemin):
+			var base := _propre(chemin.get_file().get_basename(), "model")
+			var n := base
+			var i := 2
+			while pris.has(n):
+				n = "%s_%d" % [base, i]
+				i += 1
+			pris[n] = true
+			DirAccess.make_dir_recursive_absolute(cible.path_join("foliage"))
+			if DirAccess.copy_absolute(chemin, cible.path_join("foliage").path_join(n + ".glb")) != OK:
+				return {"erreur": "foliage: the model %s could not be copied" % chemin.get_file()}
+			mesh = "foliage/%s.glb" % n
+			copies[chemin] = mesh
+		else:
+			sans_maillage.append(str(m["nom"]))
+		modeles.append({"id": int(m["id"]), "name": str(m["nom"]), "mesh": mesh,
+			"ground_offset": float(m["decalage"]), "scale": float(m["echelle"]), "scale_random": float(m["echelle_alea"]),
+			"footprint": float(m["rayon"]), "height": float(m["hauteur"]), "wind": float(m["vent"])})
+	var plats: Array = (FE.vers_donnees(lu["modeles"], lu["plants"]) as Dictionary)["plants"]
+	return {"json": {"models": modeles, "plants": plats}, "sans_maillage": sans_maillage}
 
 
 ## Les sources d'une couche d'eau, à plat, DANS L'ORDRE (une source n'est pas une case : l'ordre est celui où
@@ -347,6 +550,142 @@ static func lire_eau(monde: Variant) -> Dictionary:
 			sources.append([int(plat[i]), int(plat[i + 1]), int(plat[i + 2])])
 		sortie.append({"name": e["name"], "visible": e["visible"], "look": e["look"], "mesh": m, "sources": sources})
 	return {"water": sortie}
+
+
+static func _entier(x: Variant) -> bool:
+	return (x is float or x is int) and int(x) == x
+
+
+static func _nombre(x: Variant) -> bool:
+	return x is float or x is int
+
+
+## LA LECTURE DES TRANSITIONS, selon `regle_transitions()` (parité des greffons, 7 octobre 2026). Rend {"transitions":
+## {pairs, representatives, choices: [[x, y, z, L]…] triés}} — normalisées : réglages complets et bornés — ou {"error"}.
+## Un monde sans la clé n'a pas de transitions (tout vide).
+static func lire_transitions(monde: Variant) -> Dictionary:
+	if not monde is Dictionary:
+		return {"error": "not a MarchingBlocks world"}
+	var n_couches: int = (monde.get("layers", []) as Array).size() if monde.get("layers") is Array else 0
+	var t: Variant = (monde as Dictionary).get("transitions")
+	if t == null:
+		return {"transitions": {"pairs": [], "representatives": [], "choices": []}}
+	if not t is Dictionary:
+		return {"error": "transitions is not an object"}
+	var paires: Variant = t.get("pairs", [])
+	if not paires is Array:
+		return {"error": "transitions: pairs is not an array"}
+	var sortie_p: Array = []
+	var vues := {}
+	for p in paires:
+		if not p is Dictionary or not _entier(p.get("a")) or not _entier(p.get("b")) or not p.get("active") is bool:
+			return {"error": "transitions: a pair has no layers a, b or no active"}
+		var a := int(p["a"])
+		var b := int(p["b"])
+		if a < 0 or b >= n_couches or a >= b:
+			return {"error": "transitions: the pair %d, %d is not two layers a < b" % [a, b]}
+		if vues.has(Vector2i(a, b)):
+			return {"error": "transitions: the pair %d, %d appears twice" % [a, b]}
+		vues[Vector2i(a, b)] = true
+		var dirs := {}
+		for k in ["a_covers_b", "b_covers_a"]:
+			var r: Variant = p.get(k)
+			if not r is Dictionary:
+				return {"error": "transitions: the pair %d, %d has no %s" % [a, b, k]}
+			for nom in r:
+				if not _nombre(r[nom]):
+					return {"error": "transitions: the setting %s of the pair %d, %d is not a number" % [nom, a, b]}
+			dirs[k] = TR.reglages_en(TR.reglages_depuis_en(r))
+		sortie_p.append({"a": a, "b": b, "active": p["active"], "a_covers_b": dirs["a_covers_b"],
+			"b_covers_a": dirs["b_covers_a"]})
+	var reps: Variant = t.get("representatives")
+	if not reps is Array or (reps as Array).size() != n_couches:
+		return {"error": "transitions: representatives is not one per layer"}
+	var sortie_r: Array = []
+	for r in reps:
+		if not r is Dictionary or not (r.get("image") == null or r.get("image") is String):
+			return {"error": "transitions: a representative's image is neither a path nor null"}
+		var c: Variant = r.get("color")
+		if not c is Array or (c as Array).size() != 4 or (c as Array).any(func(x): return not _nombre(x)):
+			return {"error": "transitions: a representative's color is not four numbers"}
+		if not _nombre(r.get("scale")) or not _nombre(r.get("roughness")):
+			return {"error": "transitions: a representative's scale or roughness is not a number"}
+		sortie_r.append({"image": r["image"], "color": (c as Array).map(func(x): return float(x)),
+			"scale": maxf(float(r["scale"]), 0.01), "roughness": clampf(float(r["roughness"]), 0.0, 1.0)})
+	var plat: Variant = t.get("choices", [])
+	if not plat is Array or (plat as Array).size() % 4 != 0:
+		return {"error": "transitions: choices is not a list of x y z L"}
+	var choix := {}
+	for i in range(0, plat.size(), 4):
+		for x in [plat[i], plat[i + 1], plat[i + 2], plat[i + 3]]:
+			if not _entier(x):
+				return {"error": "transitions: a choice is not made of integers"}
+		var s := Vector3i(int(plat[i]), int(plat[i + 1]), int(plat[i + 2]))
+		if choix.has(s):
+			return {"error": "transitions: the vertex %s is chosen twice" % s}
+		if int(plat[i + 3]) < 0 or int(plat[i + 3]) >= n_couches:
+			return {"error": "transitions: a choice names layer %d, which does not exist" % int(plat[i + 3])}
+		choix[s] = int(plat[i + 3])
+	var sommets: Array = choix.keys()
+	sommets.sort_custom(func(a: Vector3i, b: Vector3i) -> bool:
+		return a.x < b.x or (a.x == b.x and (a.y < b.y or (a.y == b.y and a.z < b.z))))
+	var sortie_c: Array = []
+	for s: Vector3i in sommets:
+		sortie_c.append([s.x, s.y, s.z, choix[s]])
+	return {"transitions": {"pairs": sortie_p, "representatives": sortie_r, "choices": sortie_c}}
+
+
+## LA LECTURE DU FEUILLAGE, selon `regle_feuillage()` — la règle du projet (`FE.depuis_donnees`) sous les noms anglais,
+## plus le chemin du maillage. Rend {"foliage": {models: [...], plants: [[id, x, y, z, lacet, échelle, mode 0 / 1]…]}} ou
+## {"error"}. Un monde sans la clé n'a pas de feuillage.
+const _MODELE_EN := {"decalage": "ground_offset", "echelle": "scale", "echelle_alea": "scale_random", "rayon": "footprint",
+	"hauteur": "height", "vent": "wind"}
+
+
+static func lire_feuillage(monde: Variant) -> Dictionary:
+	if not monde is Dictionary:
+		return {"error": "not a MarchingBlocks world"}
+	var d: Variant = (monde as Dictionary).get("foliage")
+	if d == null:
+		return {"foliage": {"models": [], "plants": []}}
+	if not d is Dictionary:
+		return {"error": "foliage is not an object"}
+	var liste: Variant = d.get("models", [])
+	if not liste is Array:
+		return {"error": "foliage: models is not an array"}
+	var ms: Array = []
+	for m in liste:
+		if not m is Dictionary:
+			return {"error": "foliage: a model is not an object"}
+		if not _entier(m.get("id")):
+			return {"error": "foliage: a model has no integer id"}
+		if m.has("name") and not m["name"] is String:
+			return {"error": "foliage: a model's name is not a string"}
+		if not (m.get("mesh") == null or m.get("mesh") is String):
+			return {"error": "foliage: a model's mesh is neither a path nor null"}
+		var fr := {"id": m["id"], "chemin": m.get("mesh") if m.get("mesh") != null else ""}
+		if m.has("name"):
+			fr["nom"] = m["name"]
+		for k in _MODELE_EN:
+			if m.has(_MODELE_EN[k]):
+				fr[k] = m[_MODELE_EN[k]]
+		ms.append(fr)
+	var erreurs: Array = []
+	var lu := FE.depuis_donnees({"modeles": ms, "plants": d.get("plants", [])}, erreurs)
+	if lu.is_empty():
+		return {"error": "foliage: %s" % ", ".join(PackedStringArray(erreurs))}
+	var modeles: Array = []
+	for i in (lu["modeles"] as Array).size():
+		var m: Dictionary = lu["modeles"][i]
+		modeles.append({"id": int(m["id"]), "name": str(m["nom"]), "mesh": liste[i].get("mesh"),
+			"ground_offset": m["decalage"], "scale": m["echelle"], "scale_random": m["echelle_alea"],
+			"footprint": m["rayon"], "height": m["hauteur"], "wind": m["vent"]})
+	var plants: Array = []
+	var plat: Array = d.get("plants", [])
+	for k in range(0, plat.size(), 7):
+		plants.append([int(plat[k]), float(plat[k + 1]), float(plat[k + 2]), float(plat[k + 3]), float(plat[k + 4]),
+			float(plat[k + 5]), 0 if int(plat[k + 6]) == 0 else 1])
+	return {"foliage": {"models": modeles, "plants": plants}}
 
 
 static func cas_d_epreuve() -> Dictionary:

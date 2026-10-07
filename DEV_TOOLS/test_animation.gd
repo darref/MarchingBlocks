@@ -269,11 +269,17 @@ func _le_materiau() -> void:
 	_dire(Anim.figer_le_maillage(mesh) == 1 and is_same(mesh.surface_get_material(0), sm), "figé : le statique")
 	_dire(Anim.animer_le_maillage(mesh) == 1 and is_same(mesh.surface_get_material(0), montre),
 		"animé de nouveau : le même animé")
-	var export: Material = Anim.statique_pour_l_export(montre)
-	var ex: Dictionary = Anim.animation_des_extras(export)
-	_dire(ex.get("albedo", {}).get("images", {}).get("images", []) == ["a_0000.png", "a_0001.png", "a_0002.png"]
-		and not is_same(export, sm), "pour l'export, les images ne sont nommées que par leur nom de fichier")
-	# Sans animation : le statique, tel quel.
+	# ⚠ PARITÉ DES GREFFONS (7 octobre 2026) : l'export écrit le format QUI PART (anglais, versionné), les images nommées
+	# relativement au .mbset — `animation/<nom>`, et rangées dans `emportees` pour être recopiées.
+	var emportees := {}
+	var export: Material = Anim.statique_pour_l_export(montre, emportees)
+	var ex: Dictionary = (export.get_meta("extras", {}) as Dictionary).get("mb_animation", {})
+	_dire(ex.get("format") == "marchingblocks-animation" and ex.get("version") == 1
+		and ex.get("albedo", {}).get("frames", {}).get("images", []) == ["animation/a_0000.png", "animation/a_0001.png",
+		"animation/a_0002.png"] and ex.get("emission", {}).get("frames", {}).get("images", []) == ["animation/e_0000.png",
+		"animation/e_0001.png"] and emportees.size() == 5 and not is_same(export, sm),
+		"pour l'export, le format qui part, les images relatives au .mbset : %s %s %d %s" % [ex.get("format"),
+		ex.get("version"), emportees.size(), JSON.stringify(ex).left(120)])	# Sans animation : le statique, tel quel.
 	var m2: RefCounted = ME.new()
 	m2.materiaux.append({"nom": "still", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": "",
 		"echelle": 1.0})
@@ -355,7 +361,7 @@ func _le_trajet_du_glb() -> void:
 	_dire(brut != null and not Anim.lot_anime(brut), "le cache est écrit STATIQUE (pas de shader ni de tableaux dedans)")
 	var relu: Dictionary = Projet.lire_cache(source)
 	_dire(relu.get("lot") != null and _animes(relu["lot"], a) == animes, "relu, il redevient animé")
-	# Le .mbset : statique, les images par leur seul nom.
+	# Le .mbset : statique, l'animation au format qui part, ses images EMPORTÉES (parité des greffons, 7 octobre 2026).
 	var r: Dictionary = FN.exporter(lot, dest, "lava", "test")
 	_dire(not r.has("erreur"), "le .mbset s'écrit (%s)" % str(r.get("erreur", "")))
 	var js2 := _json_du_glb(dest.path_join("lava.mbset/tiles.glb"))
@@ -364,10 +370,19 @@ func _le_trajet_du_glb() -> void:
 		if str(x.get("name", "")) == "lava":
 			dans = x
 	var ex2: Dictionary = (dans.get("extras", {}) as Dictionary).get("mb_animation", {})
+	var noms_lava := ["animation/lava_0000.png", "animation/lava_0001.png", "animation/lava_0002.png",
+		"animation/lava_0003.png"]
 	_dire((dans.get("pbrMetallicRoughness", {}) as Dictionary).has("baseColorTexture")
-		and ex2.get("albedo", {}).get("images", {}).get("images", []) == ["lava_0000.png", "lava_0001.png",
-		"lava_0002.png", "lava_0003.png"], "tiles.glb : un matériau standard, ses images nommées sans chemin : %s"
-		% JSON.stringify(ex2).left(160))
+		and ex2.get("albedo", {}).get("frames", {}).get("images", []) == noms_lava,
+		"tiles.glb : un matériau standard, ses images relatives au .mbset : %s" % JSON.stringify(ex2).left(160))
+	var copiees := 0
+	for k in noms_lava.size():
+		var lu := Image.load_from_file(dest.path_join("lava.mbset").path_join(noms_lava[k]))
+		var original := Image.load_from_file(str(Anim.images_de(a, "albedo")[k]))
+		if lu != null and original != null and lu.get_data() == original.get_data():
+			copiees += 1
+	_dire(copiees == 4 and int(r.get("images", 0)) == 4 and (r.get("images_manquantes", ["?"]) as Array).is_empty(),
+		"les quatre images sont dans le .mbset, octet pour octet (%d, bilan %s)" % [copiees, str(r.get("images"))])
 	# Relu comme témoin (le retour de Blender) : l'animation revient ; et sans extras, elle est reprise par le nom.
 	var relu_t: RefCounted = TL.depuis_glb(glb, dest.path_join("retour"))
 	var m_lu: Dictionary = {}
