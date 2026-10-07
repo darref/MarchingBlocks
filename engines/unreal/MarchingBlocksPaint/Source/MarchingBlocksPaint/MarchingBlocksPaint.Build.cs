@@ -8,6 +8,8 @@ public class MarchingBlocksPaint : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine" });
+		// PNG frames and representatives kept in the level, decoded into transient textures (in game too).
+		PrivateDependencyModuleNames.AddRange(new string[] { "ImageWrapper", "RenderCore" });
 		if (Target.bBuildEditor)
 		{
 			// Undo transactions and the asset registry, for the editor only.

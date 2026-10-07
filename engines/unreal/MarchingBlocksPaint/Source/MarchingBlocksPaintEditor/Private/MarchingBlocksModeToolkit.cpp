@@ -5,6 +5,7 @@
 #include "MarchingBlocksEdMode.h"
 #include "MarchingBlocksWorld.h"
 #include "ScopedTransaction.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Styling/AppStyle.h"
 #include "Styling/SlateStyleRegistry.h"
 #include "Widgets/Images/SImage.h"
@@ -78,6 +79,29 @@ namespace MarchingBlocksToolkitDetail
 	}
 
 	TSharedRef<SWidget> Gap() { return SNew(SBox).WidthOverride(8.f); }
+
+	/** A small text button, for the operations the icon set does not draw yet (Facing, Widen). */
+	TSharedRef<SWidget> TextButton(const FText& Label, const FText& Tip, TFunction<void()> Act)
+	{
+		return SNew(SBox).Padding(FMargin(0.f, 0.f, 2.f, 0.f))
+		[
+			SNew(SButton)
+			.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+			.ToolTipText(Tip)
+			.ContentPadding(FMargin(5.f, 3.f))
+			.OnClicked_Lambda([Act]() { Act(); return FReply::Handled(); })
+			[
+				SNew(STextBlock).Text(Label).Font(FAppStyle::GetFontStyle("SmallFontBold"))
+			]
+		];
+	}
+
+	/** Extrude's mode from the keys held while clicking: Shift extends the selection, Alt shifts it, nothing places. */
+	MBPaint::EExtrudeMode ExtrudeModeFromKeys()
+	{
+		const FModifierKeysState Keys = FSlateApplication::Get().GetModifierKeys();
+		return Keys.IsShiftDown() ? MBPaint::EExtrudeMode::Extend : Keys.IsAltDown() ? MBPaint::EExtrudeMode::Shift : MBPaint::EExtrudeMode::Place;
+	}
 }
 
 FText FMarchingBlocksModeToolkit::GetBaseToolkitName() const
@@ -157,6 +181,10 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 	auto Op = [World](const ANSICHAR* IconName, const FText& Tip, void (AMarchingBlocksWorld::*Fn)(), bool bDanger = false)
 	{
 		return Button(IconName, Tip, [World, Fn]() { if (AMarchingBlocksWorld* W = World()) (W->*Fn)(); }, bDanger);
+	};
+	auto ExtrudeOp = [World](const ANSICHAR* IconName, const FText& Tip, MBPaint::EExtrudeDirection Direction)
+	{
+		return Button(IconName, Tip, [World, Direction]() { if (AMarchingBlocksWorld* W = World()) W->Extrude(Direction, ExtrudeModeFromKeys()); });
 	};
 	auto SetFloor = [World](int32 Floor)
 	{
@@ -436,7 +464,32 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				]
 			]
 
-			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("FloorTitle", "FLOOR · PgUp PgDn"))]
+			+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 3.f, 0.f, 0.f))
+			[
+				SNew(SCheckBox)
+				.Visibility_Lambda([World, Shown]() { AMarchingBlocksWorld* W = World(); return Shown(W && W->Tool == EMarchingBlocksTool::Select); })
+				.ToolTipText(LOCTEXT("SelectEmptyTip", "The Select brush takes the EMPTY cells it covers too, not only the matter — a volume to build. "
+					"Shift (the inverse gesture) still removes cells, full or empty."))
+				.IsChecked_Lambda([World]() { AMarchingBlocksWorld* W = World(); return W && W->bSelectEmptyCells ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+				.OnCheckStateChanged_Lambda([World](ECheckBoxState State) { if (AMarchingBlocksWorld* W = World()) W->bSelectEmptyCells = State == ECheckBoxState::Checked; })
+				[
+					SNew(STextBlock).Text(LOCTEXT("SelectEmpty", "Select empty cells too")).Font(FAppStyle::GetFontStyle("SmallFont"))
+				]
+			]
+
+			// EXTRUDE: on the selection, or with none on this floor's matter. Shift + click extends the selection, Alt +
+			// click shifts it — nothing placed.
+			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("ExtrudeTitle", "EXTRUDE · Shift extends · Alt shifts"))]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SWrapBox).UseAllottedSize(true)
+				+ SWrapBox::Slot()[ExtrudeOp("extrude_up", LOCTEXT("ExtrudeUp", "Extrude up — places a cell above every selected (or this floor's) full cell; the selection and the floor follow. Shift + click: Extend selection up (Shift + wheel too). Alt + click: shifts the selection up."), MBPaint::EExtrudeDirection::Up)]
+				+ SWrapBox::Slot()[ExtrudeOp("extrude_down", LOCTEXT("ExtrudeDown", "Extrude down — places a cell below; the selection and the floor follow. Shift + click: Extend selection down. Alt + click: shifts the selection down."), MBPaint::EExtrudeDirection::Down)]
+				+ SWrapBox::Slot()[TextButton(LOCTEXT("Facing", "Facing"), LOCTEXT("FacingTip", "Extrude facing — towards where most selected cells face (air in front, matter behind): a wall thickens, a ceiling comes down. Shift + click extends, Alt + click shifts."),
+					[World]() { if (AMarchingBlocksWorld* W = World()) W->Extrude(MBPaint::EExtrudeDirection::Facing, ExtrudeModeFromKeys()); })]
+			]
+
+			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("FloorTitle", "FLOOR · PgUp PgDn · Ctrl + wheel"))]
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
@@ -483,12 +536,13 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 					+ SWrapBox::Slot()[Op("delete", LOCTEXT("Delete", "Delete (Del) — removes the selected matter."), &AMarchingBlocksWorld::DeleteSelected, true)]
 					+ SWrapBox::Slot()[Op("clear", LOCTEXT("Clear", "Clear (Esc) — forgets the selection. No cell changes."), &AMarchingBlocksWorld::ClearSelection)]
 					+ SWrapBox::Slot()[Gap()]
-					+ SWrapBox::Slot()[Op("extrude_up", LOCTEXT("ExtrudeUp", "Extrude up — adds the layer above; the selection AND the floor follow it."), &AMarchingBlocksWorld::ExtrudeUp)]
-					+ SWrapBox::Slot()[Op("extrude_down", LOCTEXT("ExtrudeDown", "Extrude down — adds the layer below; the selection and the floor follow it."), &AMarchingBlocksWorld::ExtrudeDown)]
-					+ SWrapBox::Slot()[Gap()]
 					+ SWrapBox::Slot()[Op("grow", LOCTEXT("Grow", "Grow — selects the matter touching the selection by a face."), &AMarchingBlocksWorld::Grow)]
-					+ SWrapBox::Slot()[Op("shrink", LOCTEXT("Shrink", "Shrink — drops the selected cells that touch an unselected one."), &AMarchingBlocksWorld::Shrink)]
+					+ SWrapBox::Slot()[Op("shrink", LOCTEXT("Shrink", "Shrink — the selection loses its edge: a rectangle its rim, a line its ends, a cube its skin (Alt + wheel down)."), &AMarchingBlocksWorld::Shrink)]
+					+ SWrapBox::Slot()[TextButton(LOCTEXT("Widen", "Widen"), LOCTEXT("WidenTip", "Widen — the selection plus its four horizontal neighbours, empty cells included. Nothing is placed (Alt + wheel up)."),
+						[World]() { if (AMarchingBlocksWorld* W = World()) W->Widen(); })]
 					+ SWrapBox::Slot()[Op("connected", LOCTEXT("Connected", "Connected — selects all the matter linked to the selection by faces."), &AMarchingBlocksWorld::SelectConnected)]
+					+ SWrapBox::Slot()[Gap()]
+					+ SWrapBox::Slot()[Op("room", LOCTEXT("RoomFromSelection", "Room from selection — a hollow room on the selection seen from above, Floors high (the Room shape's settings), rising from its lowest cells or sinking under its highest."), &AMarchingBlocksWorld::RoomFromSelection)]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(0.f, 2.f, 0.f, 0.f))
 				[

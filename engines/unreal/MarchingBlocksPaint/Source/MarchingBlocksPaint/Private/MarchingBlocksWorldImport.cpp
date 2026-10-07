@@ -5,11 +5,20 @@
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "MarchingBlocksWorld.h"
+#include "MBCore/MBFoliage.h"
+#include "MBCore/MBJson.h"
+#include "MBCore/MBTransitions.h"
+#include "MBCore/MBWater.h"
 #include "MBCore/MBWorldFile.h"
+#include "MarchingBlocksFoliage.h"
+#include "MarchingBlocksTransitions.h"
+#include "MarchingBlocksWater.h"
+#include "Engine/StaticMesh.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
 #if WITH_EDITOR
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "ScopedTransaction.h"
 #endif
 
@@ -26,6 +35,19 @@ namespace MarchingBlocksWorldImportDetail
 			Out.AppendChar(FChar::IsAlnum(C) || C == TEXT('_') || C == TEXT('-') ? C : TEXT('_'));
 		return Out.IsEmpty() ? FString(Fallback) : Out;
 	}
+
+#if WITH_EDITOR
+	/** The first Static Mesh imported under a content folder, or nullptr. */
+	UStaticMesh* MeshIn(const FString& Folder)
+	{
+		FAssetRegistryModule& Registry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+		TArray<FAssetData> Assets;
+		Registry.Get().GetAssetsByPath(FName(*Folder), Assets, true);
+		for (const FAssetData& Asset : Assets)
+			if (UStaticMesh* Mesh = Cast<UStaticMesh>(Asset.GetAsset())) return Mesh;
+		return nullptr;
+	}
+#endif
 }
 
 AMarchingBlocksWorldImport::AMarchingBlocksWorldImport()
@@ -66,6 +88,22 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		return;
 	}
 
+	MBPaint::FJsonValue Json;
+	std::string JsonError;
+	MBPaint::ParseJson(TCHAR_TO_UTF8(*Text), Json, JsonError);
+	std::vector<MBPaint::FWaterLayer> Waters;
+	MBPaint::FTransitions Transitions;
+	MBPaint::FFoliage Foliage;
+	std::string Refused = MBPaint::Water::Read(Json, Waters);
+	if (Refused.empty()) Refused = MBPaint::Transitions::Read(Json, Transitions);
+	if (Refused.empty()) Refused = MBPaint::Foliage::Read(Json, Foliage);
+	if (!Refused.empty())
+	{
+		Status = FString::Printf(TEXT("world.json refused: %s"), UTF8_TO_TCHAR(Refused.c_str()));
+		UE_LOG(LogMarchingBlocksWorldImport, Error, TEXT("%s (%s)"), *Status, *Path);
+		return;
+	}
+
 	const FString BaseDir = FPaths::GetPath(Path);
 	// "sample.mbworld" → "sample".
 	const FString WorldName = CleanName(FPaths::GetBaseFilename(BaseDir), TEXT("world"));
@@ -76,6 +114,9 @@ void AMarchingBlocksWorldImport::ImportWorld()
 	for (AMarchingBlocksWorld* Old : Imported)
 		if (IsValid(Old)) EditorWorld->EditorDestroyActor(Old, true);
 	Imported.Reset();
+	for (AActor* Old : ImportedLooks)
+		if (IsValid(Old)) EditorWorld->EditorDestroyActor(Old, true);
+	ImportedLooks.Reset();
 
 	TArray<FString> WithoutTiles;
 	TArray<FString> FoldersMissingTiles;
@@ -128,8 +169,129 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		Imported.Add(Actor);
 	}
 
-	// Each layer was rebuilt alone as it arrived: now that every layer holds its cells, the world is rebuilt.
+	// THE LOOKS: water, transitions, foliage — each an actor of the same world, in the same Outliner folder.
+	auto SpawnLook = [&](UClass* Class, const FString& Label) -> AActor*
+	{
+		FActorSpawnParameters Params;
+		Params.OverrideLevel = GetLevel();
+		Params.ObjectFlags |= RF_Transactional;
+		AActor* A = EditorWorld->SpawnActor<AActor>(Class, GetActorTransform(), Params);
+		if (!A) return nullptr;
+		A->SetActorLabel(Label);
+		A->SetFolderPath(FName(*(FString(TEXT("MarchingBlocks/")) + WorldName)));
+		ImportedLooks.Add(A);
+		return A;
+	};
+	TArray<FString> LooksToImport;
+	for (size_t I = 0; I < Waters.size(); ++I)
+	{
+		const MBPaint::FWaterLayer& L = Waters[I];
+		AMarchingBlocksWater* W = Cast<AMarchingBlocksWater>(SpawnLook(AMarchingBlocksWater::StaticClass(),
+			FString(TEXT("Water - ")) + UTF8_TO_TCHAR(L.Name.c_str())));
+		if (!W) continue;
+		W->WorldName = FName(*WorldName);
+		W->Order = static_cast<int32>(I);
+		W->Look = UTF8_TO_TCHAR(L.Look.c_str());
+		for (const MBPaint::FCell& S : L.Sources) W->Sources.Add(FIntVector(S.X, S.Y, S.Z));
+		if (L.bHasMesh)
+		{
+			const FString File = UTF8_TO_TCHAR(L.Mesh.c_str());
+			const FString Folder = Root / WorldName / TEXT("water") / CleanName(FPaths::GetBaseFilename(File), TEXT("water"));
+			W->Sheet = MeshIn(Folder);
+			if (!W->Sheet) LooksToImport.Add(FString::Printf(TEXT("%s → %s"), *(BaseDir / File), *Folder));
+		}
+		if (!L.bVisible)
+		{
+			W->bHiddenEd = true;
+			W->SetIsTemporarilyHiddenInEditor(true);
+			W->SetActorHiddenInGame(true);
+		}
+		W->RerunConstructionScripts();
+	}
+	if (!Transitions.Pairs.empty() || !Transitions.Choices.empty())
+		if (AMarchingBlocksTransitions* T = Cast<AMarchingBlocksTransitions>(SpawnLook(AMarchingBlocksTransitions::StaticClass(), TEXT("Transitions"))))
+		{
+			T->WorldName = FName(*WorldName);
+			auto Settings = [](const MBPaint::FTransitionSettings& S)
+			{
+				FMarchingBlocksTransitionSettings O;
+				O.Softness = static_cast<float>(S.Softness);
+				O.Reach = static_cast<float>(S.Reach);
+				O.Irregularity = static_cast<float>(S.Irregularity);
+				O.Grain = static_cast<float>(S.Grain);
+				O.FillsHollows = static_cast<float>(S.FillsHollows);
+				return O;
+			};
+			for (const MBPaint::FTransitionPair& P : Transitions.Pairs)
+			{
+				FMarchingBlocksTransitionPair O;
+				O.A = P.A;
+				O.B = P.B;
+				O.bActive = P.bActive;
+				O.ACoversB = Settings(P.ACoversB);
+				O.BCoversA = Settings(P.BCoversA);
+				T->Pairs.Add(O);
+			}
+			for (const MBPaint::FRepresentative& R : Transitions.Representatives)
+			{
+				FMarchingBlocksRepresentative O;
+				O.Color = FLinearColor(static_cast<float>(R.Color[0]), static_cast<float>(R.Color[1]), static_cast<float>(R.Color[2]), static_cast<float>(R.Color[3]));
+				O.Scale = static_cast<float>(R.Scale);
+				O.Roughness = static_cast<float>(R.Roughness);
+				if (R.bHasImage)
+				{
+					const FString Rel = UTF8_TO_TCHAR(R.Image.c_str());
+					O.bHasImage = MarchingBlocksLooks::LoadImageFile(BaseDir / Rel, Rel, O.Image);
+					if (!O.bHasImage) UE_LOG(LogMarchingBlocksWorldImport, Warning, TEXT("Representative image missing: %s (plain colour instead)."), *Rel);
+				}
+				T->Representatives.Add(O);
+			}
+			for (const auto& C : Transitions.Choices) T->Choices.Add(FIntVector4(C.first.X, C.first.Y, C.first.Z, C.second));
+		}
+	if (!Foliage.Models.empty() || !Foliage.Plants.empty())
+		if (AMarchingBlocksFoliage* F = Cast<AMarchingBlocksFoliage>(SpawnLook(AMarchingBlocksFoliage::StaticClass(), TEXT("Foliage"))))
+		{
+			F->WorldName = FName(*WorldName);
+			for (const MBPaint::FFoliageModel& M : Foliage.Models)
+			{
+				FMarchingBlocksFoliageModel O;
+				O.Id = static_cast<int32>(M.Id);
+				O.Name = UTF8_TO_TCHAR(M.Name.c_str());
+				O.MeshFile = M.bHasMesh ? FString(UTF8_TO_TCHAR(M.Mesh.c_str())) : FString();
+				O.GroundOffset = static_cast<float>(M.GroundOffset);
+				O.Scale = static_cast<float>(M.Scale);
+				O.ScaleRandom = static_cast<float>(M.ScaleRandom);
+				O.Footprint = static_cast<float>(M.Footprint);
+				O.Height = static_cast<float>(M.Height);
+				O.Wind = static_cast<float>(M.Wind);
+				if (M.bHasMesh)
+				{
+					const FString Folder = Root / WorldName / TEXT("foliage") / CleanName(FPaths::GetBaseFilename(O.MeshFile), TEXT("model"));
+					O.Mesh = MeshIn(Folder);
+					if (!O.Mesh) LooksToImport.Add(FString::Printf(TEXT("%s (Combine Meshes ON) → %s"), *(BaseDir / O.MeshFile), *Folder));
+				}
+				else UE_LOG(LogMarchingBlocksWorldImport, Warning, TEXT("Foliage model '%s' was exported without its file: its plants are kept, nothing is drawn."), *O.Name);
+				F->Models.Add(O);
+			}
+			for (const MBPaint::FPlant& P : Foliage.Plants)
+			{
+				FMarchingBlocksPlant O;
+				O.Model = static_cast<int32>(P.Model);
+				O.Point = FVector(P.X, P.Y, P.Z);
+				O.Yaw = static_cast<float>(P.Yaw);
+				O.Scale = static_cast<float>(P.Scale);
+				O.bPlanted = P.Mode == MBPaint::EPlantMode::Planted;
+				F->Plants.Add(O);
+			}
+			if (!F->Models.IsEmpty()) F->CurrentModel = F->Models[0].Id;
+		}
+
+	// Each layer was rebuilt alone as it arrived: now that every layer holds its cells, the world is rebuilt — the
+	// transitions laid over it, the plants and the water drawn on its frame.
 	if (Imported.Num() > 0 && IsValid(Imported[0])) Imported[0]->RebuildWorld();
+	for (AActor* A : ImportedLooks)
+		if (AMarchingBlocksFoliage* F = Cast<AMarchingBlocksFoliage>(A)) F->Rebuild();
+		else if (AMarchingBlocksWater* W = Cast<AMarchingBlocksWater>(A)) W->RerunConstructionScripts();
 	Status = FString::Printf(TEXT("%d layer(s), %d cell(s) imported from %s."), Imported.Num(), CellCount, *FPaths::GetCleanFilename(BaseDir));
 	UE_LOG(LogMarchingBlocksWorldImport, Log, TEXT("%s"), *Status);
 	if (WithoutTiles.Num() > 0)
@@ -138,6 +300,18 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		const FString Names = FString::Join(WithoutTiles, TEXT("', '"));
 		Status += FString::Printf(TEXT(" Without tiles (cells kept, nothing drawn): '%s'."), *Names);
 		UE_LOG(LogMarchingBlocksWorldImport, Warning, TEXT("Layer(s) without tiles — their cells are kept, nothing is drawn: '%s'"), *Names);
+	}
+	if (ImportedLooks.Num() > 0)
+		Status += FString::Printf(TEXT(" %d water layer(s), %s transitions, %d plant(s)."), static_cast<int32>(Waters.size()),
+			Transitions.Pairs.empty() ? TEXT("no") : TEXT("with"), static_cast<int32>(Foliage.Plants.size()));
+	if (LooksToImport.Num() > 0)
+	{
+		Status += TEXT(" Import these .glb too, then press Import World again:");
+		for (const FString& F : LooksToImport)
+		{
+			Status += TEXT(" ") + F + TEXT(";");
+			UE_LOG(LogMarchingBlocksWorldImport, Warning, TEXT("Not imported yet: %s, then press Import World again."), *F);
+		}
 	}
 	if (FoldersMissingTiles.Num() > 0)
 	{

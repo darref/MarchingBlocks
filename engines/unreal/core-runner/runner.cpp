@@ -586,6 +586,20 @@ namespace
 			if (!Near(Apply(F(0, 0, 1)), Want[Q])) Fail("a quarter turn does not send format +Z where the rule says");
 			if (!Near(Apply(F(0, 1, 0)), F(0, 1, 0))) Fail("a quarter turn moves format up");
 		}
+		// Any yaw (the plants): Turn(q pi / 2) is the quarter turn, and a yaw a sends format +Z to (sin a, 0, cos a).
+		for (int Q = 0; Q < 4; ++Q)
+		{
+			const std::array<FVec3, 3> A = Frame.QuarterTurn(Q), B = Frame.Turn(Q * 1.5707963267948966);
+			for (size_t K = 0; K < 3; ++K)
+				if ((A[K] - B[K]).Length() > 1e-9) Fail("Turn(q pi / 2) is not QuarterTurn(q)");
+		}
+		{
+			const double Yaw = 0.7;
+			const std::array<FVec3, 3> M = Frame.Turn(Yaw);
+			auto Apply = [&M](const FVec3& V) { return M[0] * V.X + M[1] * V.Y + M[2] * V.Z; };
+			if (!Near(Apply(F(0, 0, 1)), F(std::sin(Yaw), 0, std::cos(Yaw)))) Fail("Turn(a) does not send format +Z to (sin a, 0, cos a)");
+			if (!Near(Apply(F(0, 1, 0)), F(0, 1, 0))) Fail("Turn(a) moves format up");
+		}
 		FFrame Broken;
 		if (FFrame::Measure({F(0, 0, 0), F(1, 0, 0), F(0, 2, 0)}, Broken, Error)) Fail("a marker missing a point is accepted");
 		if (FFrame::Measure({F(1, 0, 0), F(0, 2, 0), F(0, 0, 3), F(0, 0, 5)}, Broken, Error)) Fail("a stray point is accepted");

@@ -9,6 +9,7 @@
 #include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
 #include "MBCore/MBTransitions.h"
+#include "MBCore/MBWater.h"
 
 #include <algorithm>
 #include <array>
@@ -510,6 +511,141 @@ namespace
 		return T.Failed;
 	}
 
+	// ── WATER ────────────────────────────────────────────────────────────────────────────────────────────────
+
+	FJsonValue PCellList(const FCellSet& S)
+	{
+		FJsonValue Out = FJsonValue::MakeArray();
+		for (const FCell& C : Tools::Sorted(S))
+		{
+			FJsonValue T = FJsonValue::MakeArray();
+			T.Push(FJsonValue::MakeInt(C.X)).Push(FJsonValue::MakeInt(C.Y)).Push(FJsonValue::MakeInt(C.Z));
+			Out.Push(T);
+		}
+		return Out;
+	}
+
+	FJsonValue PBodyJson(const FWaterBody& B)
+	{
+		FJsonValue Lakes = FJsonValue::MakeArray();
+		for (const FWaterLake& L : B.Lakes)
+		{
+			FJsonValue E = FJsonValue::MakeObject();
+			E.Set("level", FJsonValue::MakeInt(L.Level)).Set("cells", PCellList(L.Cells));
+			Lakes.Push(E);
+		}
+		FJsonValue Course = FJsonValue::MakeArray();
+		for (const FCourseStep& S : B.Course)
+		{
+			FJsonValue E = FJsonValue::MakeArray();
+			E.Push(FJsonValue::MakeInt(S.Cell.X)).Push(FJsonValue::MakeInt(S.Cell.Y)).Push(FJsonValue::MakeInt(S.Cell.Z))
+				.Push(FJsonValue::MakeString(Water::CourseName(S.Kind))).Push(FJsonValue::MakeInt(S.Lake));
+			Course.Push(E);
+		}
+		FJsonValue Out = FJsonValue::MakeObject();
+		Out.Set("kind", FJsonValue::MakeString(Water::KindName(B.Kind))).Set("error", FJsonValue::MakeString(B.Error))
+			.Set("level", FJsonValue::MakeInt(B.Level)).Set("end", FJsonValue::MakeString(Water::EndName(B.End)))
+			.Set("water", PCellList(B.Water)).Set("lakes", Lakes).Set("course", Course);
+		return Out;
+	}
+
+	std::string RunWaterCase(const FJsonValue& C, const std::map<std::string, FCellSet>& Worlds)
+	{
+		const FJsonValue& I = C["input"];
+		const FJsonValue& E = C["expected"];
+		const std::string& Kind = C["kind"].String;
+		const auto World = Kind == "read" ? Worlds.end() : Worlds.find(I["world"].String);
+		if (Kind != "read" && World == Worlds.end()) return "unknown world " + I["world"].String;
+		if (Kind == "water_world")
+		{
+			std::vector<FCell> Sources;
+			for (const FJsonValue& S : I["sources"].Array) Sources.push_back(PVec(S));
+			const FWaterWorld W = Water::World(World->second, Sources);
+			FJsonValue Got = FJsonValue::MakeObject();
+			FJsonValue Bodies = FJsonValue::MakeArray();
+			for (const FWaterBody& B : W.Bodies) Bodies.Push(PBodyJson(B));
+			Got.Set("bodies", Bodies).Set("sea", PCellList(W.Sea));
+			return PSameJson(Got, E, 0.0, "water");
+		}
+		if (Kind == "river_width")
+		{
+			FJsonValue Got = FJsonValue::MakeArray();
+			for (const FCell& S : Water::SourcesInWidth(World->second, PVec(I["source"]), static_cast<int>(I["width"].AsInt()), FCellSet()))
+			{
+				FJsonValue T = FJsonValue::MakeArray();
+				T.Push(FJsonValue::MakeInt(S.X)).Push(FJsonValue::MakeInt(S.Y)).Push(FJsonValue::MakeInt(S.Z));
+				Got.Push(T);
+			}
+			return PSameJson(Got, E, 0.0, "sources");
+		}
+		if (Kind == "surface_depth")
+		{
+			const FCellSet WaterCells = PCells(I["water"]);
+			FJsonValue Got = FJsonValue::MakeObject();
+			FJsonValue Depth = FJsonValue::MakeArray();
+			for (const FJsonValue& P : I["cells"].Array)
+			{
+				const FCell X = PVec(P);
+				FJsonValue T = FJsonValue::MakeArray();
+				T.Push(FJsonValue::MakeInt(X.X)).Push(FJsonValue::MakeInt(X.Y)).Push(FJsonValue::MakeInt(X.Z))
+					.Push(FJsonValue::MakeInt(Water::Depth(WaterCells, World->second, X)));
+				Depth.Push(T);
+			}
+			Got.Set("surface", PCellList(Water::Surface(WaterCells, World->second))).Set("depth", Depth);
+			return PSameJson(Got, E, 0.0, "surface_depth");
+		}
+		if (Kind == "read")
+		{
+			std::vector<FWaterLayer> L;
+			const std::string Error = Water::Read(I, L);
+			if (E.Find("error")) return Error.empty() ? "expected a refusal, the file was accepted" : "";
+			if (!Error.empty()) return "expected the file to be read, refused: " + Error;
+			return PSameJson(Water::ToJson(L), E, 0.0, "water");
+		}
+		return "unknown kind " + Kind;
+	}
+
+	std::string PReadFile(const std::string& Path)
+	{
+		std::ifstream In(Path, std::ios::binary);
+		if (!In) return std::string("\x01missing");
+		std::stringstream Buffer;
+		Buffer << In.rdbuf();
+		return Buffer.str();
+	}
+
+	int RunWater(const std::string& Path, const std::string& Dir)
+	{
+		FJsonValue Conf;
+		if (!PLoad(Path, Conf)) return 1;
+		if (Conf["format"].String != "marchingblocks-water-conformance" || Conf["version"].AsInt() != 1)
+		{
+			std::printf("  FAIL not a water conformance file this plugin reads%s", "\n");
+			return 1;
+		}
+		FTally T;
+		const FJsonValue& L = Conf["limits"];
+		if (L["volume_max"].AsInt() != Water::VolumeMax || L["steps_max"].AsInt() != Water::StepsMax
+			|| L["overflow_reach"].AsInt() != Water::OverflowReach)
+		{
+			++T.Failed;
+			std::printf("  FAIL water limits differ from the plugin's%s", "\n");
+		}
+		// The sea is the core's own: the plugin's copy of ocean.h must be the core's, byte for byte.
+		const std::string Core = PReadFile(Dir + "/../../../../gdextension/src/noyau/ocean.h");
+		const std::string Copy = PReadFile(Dir + "/../Source/MarchingBlocksPaint/Private/MBCore/Noyau/ocean.h");
+		if (Core.empty() || Core[0] == '\x01' || Core != Copy)
+		{
+			++T.Failed;
+			std::printf("  FAIL Noyau/ocean.h is not gdextension/src/noyau/ocean.h byte for byte (copy it again)%s", "\n");
+		}
+		std::map<std::string, FCellSet> Worlds;
+		for (const auto& Entry : Conf["worlds"].Object) Worlds[Entry.first] = PCells(Entry.second);
+		for (const FJsonValue& C : Conf["cases"].Array) T.Check(C, RunWaterCase(C, Worlds), "water");
+		T.Print("water");
+		return T.Failed;
+	}
+
 	// ── EDITING ──────────────────────────────────────────────────────────────────────────────────────────────
 
 	std::string RunEditingCase(const FJsonValue& C, const FCellSet& World)
@@ -596,5 +732,6 @@ int RunParity(const std::string& Dir)
 	Failed += RunAnimation(Dir + "/animation_conformance.json");
 	Failed += RunFoliage(Dir + "/foliage_conformance.json");
 	Failed += RunTransitions(Dir + "/transitions_conformance.json");
+	Failed += RunWater(Dir + "/water_conformance.json", Dir);
 	return Failed;
 }

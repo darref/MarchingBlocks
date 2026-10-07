@@ -18,10 +18,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "MBCore/MBEditing.h"
 #include "MBCore/MBFrame.h"
 #include "MBCore/MBRule.h"
 #include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
+#include "MarchingBlocksLooks.h"
 #include "MarchingBlocksWorld.generated.h"
 
 class UInstancedStaticMeshComponent;
@@ -147,6 +149,10 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	EMarchingBlocksBrushShape BrushShape = EMarchingBlocksBrushShape::Sphere;
 
+	/** Select only: the brush selects EMPTY cells too, not only the matter. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools", meta = (DisplayName = "Select empty cells too"))
+	bool bSelectEmptyCells = false;
+
 	/** Box only: keeps the skin of the box — a room. A box thinner than three cells stays solid. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Tools")
 	bool bHollowBox = false;
@@ -193,10 +199,23 @@ public:
 
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void Fill();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void DeleteSelected();
+	/** EXTRUDE (MarchingBlocks 0.9): on the selection, or with none on the floor's matter. Click: places one cell in
+	 *  front of every full cell, the selection and the floor follow. In the mode's panel, Shift + click EXTENDS the
+	 *  selection (nothing placed) and Alt + click SHIFTS it (nothing placed). */
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ExtrudeUp();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ExtrudeDown();
+	/** Extrude towards where most selected cells face (empty in front, matter behind): a wall thickens into the air. */
+	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ExtrudeFacing();
+	/** Extend selection up / down: the selection grows by one cell, nothing is placed (Shift + wheel in the mode). */
+	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ExtendSelectionUp();
+	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ExtendSelectionDown();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void Grow();
+	/** Shrink: the selection loses its EDGE — a rectangle its rim, a line its ends, a cube its skin. */
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void Shrink();
+	/** Widen: the selection plus its four horizontal neighbours, empty cells included. Nothing is placed. */
+	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void Widen();
+	/** Room from selection: a hollow room on the selection seen from above, Room Floors high, rising (Room Up) or sinking. */
+	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void RoomFromSelection();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void SelectConnected();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void ClearSelection();
 	UFUNCTION(CallInEditor, Category = "MarchingBlocks|Selection") void CopySelection();
@@ -229,6 +248,12 @@ public:
 	int32 Apply(const MBPaint::FChange& Change);
 	/** Runs a selection operation as one undo step; the floor follows an extrusion. */
 	int32 Operate(MBPaint::ESelectionOp Op, const TCHAR* UndoName);
+	/** EXTRUDE (MBCore Editing::Extrude) as one undo step; the floor follows the step's height. */
+	int32 Extrude(MBPaint::EExtrudeDirection Direction, MBPaint::EExtrudeMode Mode);
+	/** Replaces the selection (Widen, Shrink) and says how many cells it holds. */
+	void SetSelectionSaid(const MBPaint::FCellSet& NewSelection, const TCHAR* What);
+	/** The world box of the cells of every VISIBLE layer of this world (F frames it). False when there is none. */
+	bool VisibleMatterBounds(FBox& OutWorldBox);
 	/** Moves the selected matter by Offset (format space), as one undo step. */
 	void MoveSelection(const MBPaint::FCell& Offset);
 	/** The special shape's settings as MBCore reads them; the ends (A, B) are the caller's. */
@@ -252,6 +277,31 @@ public:
 	bool TileUnderRay(const FVector& WorldOrigin, const FVector& WorldDirection, MBPaint::FCell& OutVertex);
 	/** The Variant tool's click, as one undo step: the next variant at the vertex, or (bBackToDraw) the random draw. */
 	void ClickVariant(const MBPaint::FCell& Vertex, bool bBackToDraw);
+
+	// ── The frame, for the looks (water, foliage, transitions) ──
+
+	/** Format space → Unreal world (row vectors, as Unreal multiplies): the measured frame, the cell size, the actor. */
+	FMatrix FormatToWorld() const;
+	FVector FormatToWorldPosition(const FVector& FormatPoint) const;
+	FVector WorldToFormatPosition(const FVector& WorldPoint) const;
+	/** Where a model sits: at FormatOrigin, turned by Yaw about format +Y, scaled by Scale — in the world. A mesh imported
+	 *  by the same glTF importer as tiles.glb carries the same frame. */
+	FTransform PlacedTransform(const FVector& FormatOrigin, double Yaw, double Scale) const;
+	/** The tile components this layer drew last (transient). */
+	const TArray<TObjectPtr<UInstancedStaticMeshComponent>>& GetTileComponents() const { return Generated; }
+	/** The layers' cell size over the frame's unit: imported units → Unreal units. */
+	double ImportedToUnreal() const { return CellSize / FrameUnit; }
+
+	/** ANIMATED TEXTURES: the mb_animation of every material of tiles.glb, by material name (read from the glb's own
+	 *  JSON: the importer does not keep glTF extras), and their frames — kept in the level: a packaged game has no
+	 *  .mbset folder. */
+	UPROPERTY()
+	FString AnimationsJson;
+	UPROPERTY()
+	TArray<FMarchingBlocksImage> AnimationImages;
+	/** Off: every tile shows its still material (frame 0), as an engine that ignores the animation would. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks|Looks")
+	bool bAnimateTextures = true;
 
 	/** The ray against the MATTER (the cells, never the rendered tiles), converted into format space. */
 	MBPaint::FHit RayAgainstCells(const FVector& WorldOrigin, const FVector& WorldDirection,
@@ -315,6 +365,13 @@ private:
 	TUniquePtr<MBPaint::FRule> Rule;
 
 	void LoadTileset();
+	/** Reads tiles.glb's JSON next to tileset.json: the animations and their frames (editor only). */
+	void LoadAnimations(const FString& TilesetPath);
+	/** The material a tile slot shows: its own, or the animated one when its glTF material carries mb_animation. */
+	UMaterialInterface* LookOf(UMaterialInterface* Imported);
+	/** Animated materials made for this rebuild, by imported material. */
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<UMaterialInterface>, TObjectPtr<UMaterialInterface>> AnimatedLooks;
 	void FindTileMeshes();
 	bool MeasureFrame(UStaticMesh* Marker);
 	MBPaint::FFrame Frame() const;

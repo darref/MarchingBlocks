@@ -14,7 +14,13 @@
 //            straight out of a face, or Connect — two clicks on two faces anywhere (two floors for stairs; Esc
 //            forgets the first)
 //   KEYS     Delete · Esc · arrows move the selection (they follow the camera; Shift + up / down lift)
-//            Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste
+//            Ctrl+C / Ctrl+X / Ctrl+V copy, cut, paste · F frames all the matter of the visible layers
+//   WHEEL    MarchingBlocks' rule (editing_conformance.json, "THE MOUSE WHEEL"): alone it stays the viewport's, EXCEPT
+//            during a gesture (a Rect / Box drag: its height; a Room traced: its floors; a paste: its height). Ctrl: the
+//            floor; Ctrl + Shift with Stairs: the step. With a selection and Select / Rect / Box: Shift extends it up or
+//            down, Alt up widens it flat, Alt down shrinks its edge. Room: Alt floors, Shift rises / sinks. Other shapes:
+//            Alt size, Shift length. Add / Dig / Select: Alt the brush size, Shift the next brush shape. Each notch says
+//            its value near the mouse. Navigating, the wheel is never ours.
 //
 // The right mouse button and W A S D Q E are never taken: flying the viewport works in every aim.
 
@@ -74,6 +80,12 @@ private:
 	void HoverShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
 	void ApplyRoom(AMarchingBlocksWorld* World, const MBPaint::FCell& A, const MBPaint::FCell& B);
 	void ClickShape(AMarchingBlocksWorld* World, const FVector& Origin, const FVector& Direction);
+	/** The wheel rule; true when the notch was ours (the viewport then does not zoom). */
+	bool Wheel(AMarchingBlocksWorld* World, FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 Notch);
+	/** Says a wheel notch's value: in the panel and on the viewport, for a moment. */
+	void Say(AMarchingBlocksWorld* World, const FString& Text);
+	/** The paste anchor under the mouse, lifted by the wheel. */
+	MBPaint::FCell PasteAnchor(const MBPaint::FHit& Hit) const;
 
 	// The current stroke.
 	bool bStroking = false;
@@ -87,6 +99,9 @@ private:
 	// The first end of a Connect.
 	bool bHasShapeAnchor = false;
 	MBPaint::FHit ShapeAnchor;
+
+	// A paste preview lifted by the wheel, in cells.
+	int32 PasteLift = 0;
 
 	// What the preview draws, and in which colour.
 	std::vector<MBPaint::FCell> Preview;

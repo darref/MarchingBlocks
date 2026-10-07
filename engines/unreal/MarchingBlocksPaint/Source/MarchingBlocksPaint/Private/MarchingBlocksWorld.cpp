@@ -2,6 +2,12 @@
 
 #include "MarchingBlocksWorld.h"
 
+#include "MarchingBlocksTransitions.h"
+#include "MBCore/MBAnimation.h"
+#include "Engine/Texture.h"
+#include "Engine/Texture2DArray.h"
+#include "Materials/MaterialInterface.h"
+
 #include "Components/InstancedStaticMeshComponent.h"
 #include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
@@ -104,9 +110,45 @@ TArray<AMarchingBlocksWorld*> AMarchingBlocksWorld::GetLayers() const
 	return Out;
 }
 
+namespace MarchingBlocksWorldDetail
+{
+	// While the whole world is rebuilt, the layers do not lay the transitions one by one: once, at the end.
+	int32 RebuildingWorld = 0;
+}
+
 void AMarchingBlocksWorld::RebuildWorld()
 {
+	++MarchingBlocksWorldDetail::RebuildingWorld;
 	for (AMarchingBlocksWorld* L : GetLayers()) L->Rebuild();
+	--MarchingBlocksWorldDetail::RebuildingWorld;
+	// The transitions read every layer: they are laid again once all of them are rebuilt.
+	if (AMarchingBlocksTransitions* T = AMarchingBlocksTransitions::Find(GetWorld(), WorldName)) T->Apply();
+}
+
+FMatrix AMarchingBlocksWorld::FormatToWorld() const
+{
+	const double S = CellSize / FrameUnit;
+	return FMatrix(FrameX * S, FrameY * S, FrameZ * S, FVector::ZeroVector) * GetActorTransform().ToMatrixWithScale();
+}
+
+FVector AMarchingBlocksWorld::FormatToWorldPosition(const FVector& FormatPoint) const
+{
+	return GetActorTransform().TransformPosition(FormatToLocal(FormatPoint));
+}
+
+FVector AMarchingBlocksWorld::WorldToFormatPosition(const FVector& WorldPoint) const
+{
+	return LocalToFormat(GetActorTransform().InverseTransformPosition(WorldPoint));
+}
+
+FTransform AMarchingBlocksWorld::PlacedTransform(const FVector& FormatOrigin, double Yaw, double Scale) const
+{
+	// F · R(yaw) · F⁻¹ (MBFrame::Turn), as the ROWS of an Unreal matrix: a proper rotation even though F mirrors.
+	const std::array<MBPaint::FVec3, 3> M = Frame().Turn(Yaw);
+	const FQuat Turn(FMatrix(MarchingBlocksWorldDetail::ToFVector(M[0]), MarchingBlocksWorldDetail::ToFVector(M[1]),
+		MarchingBlocksWorldDetail::ToFVector(M[2]), FVector::ZeroVector));
+	const FTransform Local(Turn, FormatToLocal(FormatOrigin), FVector(Scale * CellSize / FrameUnit));
+	return Local * GetActorTransform();
 }
 
 bool AMarchingBlocksWorld::IsLayerVisible() const
@@ -284,10 +326,99 @@ void AMarchingBlocksWorld::ClickVariant(const MBPaint::FCell& Vertex, bool bBack
 
 void AMarchingBlocksWorld::Fill() { Operate(MBPaint::ESelectionOp::Fill, TEXT("Fill")); }
 void AMarchingBlocksWorld::DeleteSelected() { Operate(MBPaint::ESelectionOp::Delete, TEXT("Delete")); }
-void AMarchingBlocksWorld::ExtrudeUp() { Operate(MBPaint::ESelectionOp::ExtrudeUp, TEXT("Extrude up")); }
-void AMarchingBlocksWorld::ExtrudeDown() { Operate(MBPaint::ESelectionOp::ExtrudeDown, TEXT("Extrude down")); }
+// ⚠ EXTRUDE IS MBCore's Editing::Extrude (editing_conformance.json), no longer the old ExtrudeUp / ExtrudeDown selection
+// operations — those stay in MBTools only for tools_conformance.json, until the three plugins have migrated (PARITE §6).
+void AMarchingBlocksWorld::ExtrudeUp() { Extrude(MBPaint::EExtrudeDirection::Up, MBPaint::EExtrudeMode::Place); }
+void AMarchingBlocksWorld::ExtrudeDown() { Extrude(MBPaint::EExtrudeDirection::Down, MBPaint::EExtrudeMode::Place); }
+void AMarchingBlocksWorld::ExtrudeFacing() { Extrude(MBPaint::EExtrudeDirection::Facing, MBPaint::EExtrudeMode::Place); }
+void AMarchingBlocksWorld::ExtendSelectionUp() { Extrude(MBPaint::EExtrudeDirection::Up, MBPaint::EExtrudeMode::Extend); }
+void AMarchingBlocksWorld::ExtendSelectionDown() { Extrude(MBPaint::EExtrudeDirection::Down, MBPaint::EExtrudeMode::Extend); }
 void AMarchingBlocksWorld::Grow() { Operate(MBPaint::ESelectionOp::Grow, TEXT("Grow")); }
-void AMarchingBlocksWorld::Shrink() { Operate(MBPaint::ESelectionOp::Shrink, TEXT("Shrink")); }
+
+// Shrink is the EDGE rule of MarchingBlocks 0.9 (retrecir_bord), no longer the old "six neighbours selected".
+void AMarchingBlocksWorld::Shrink()
+{
+	if (Selection.empty()) { Status = TEXT("Shrink — nothing selected."); return; }
+	SetSelectionSaid(MBPaint::Editing::ShrinkEdge(Selection), TEXT("Shrink"));
+}
+
+void AMarchingBlocksWorld::Widen()
+{
+	if (Selection.empty()) { Status = TEXT("Widen — nothing selected."); return; }
+	SetSelectionSaid(MBPaint::Editing::WidenFlat(Selection), TEXT("Widen"));
+}
+
+int32 AMarchingBlocksWorld::Extrude(MBPaint::EExtrudeDirection Direction, MBPaint::EExtrudeMode Mode)
+{
+	const MBPaint::FExtrudeResult R = MBPaint::Editing::Extrude(GetCells(), Floor, Direction, Selection, Mode);
+	const TCHAR* Name = Mode == MBPaint::EExtrudeMode::Extend ? TEXT("Extend selection")
+		: Mode == MBPaint::EExtrudeMode::Shift ? TEXT("Shift selection") : TEXT("Extrude");
+	if (R.Step.IsZero())
+	{
+		Status = FString::Printf(TEXT("%s — nothing to do: %s"), Name, Selection.empty()
+			? TEXT("no matter on this floor, and no selection.") : TEXT("no direction where the selection faces the air."));
+		return 0;
+	}
+	int32 N = 0;
+	RunTransacted(Name, [&]()
+	{
+		MBPaint::FChange Change;
+		Change.Set = R.Set;
+		Change.Clear = R.Clear;
+		N = Change.IsEmpty() ? 0 : Apply(Change);
+		Selection = R.Selection;
+		// The floor FOLLOWS the step, so fill, extrude, fill… keeps going without Page Up.
+		Floor += R.Step.Y;
+	});
+	Status = FString::Printf(TEXT("%s (%d, %d, %d) — %d cell(s) placed, %d selected."), Name, R.Step.X, R.Step.Y, R.Step.Z, N,
+		static_cast<int32>(Selection.size()));
+	return N;
+}
+
+void AMarchingBlocksWorld::SetSelectionSaid(const MBPaint::FCellSet& NewSelection, const TCHAR* What)
+{
+	// The selection is not saved with the level (like every selection tool of the mode): no undo record.
+	Selection = NewSelection;
+	Status = FString::Printf(TEXT("%s — %d selected."), What, static_cast<int32>(Selection.size()));
+}
+
+void AMarchingBlocksWorld::RoomFromSelection()
+{
+	const MBPaint::FShapeResult R = MBPaint::Shapes::RoomFromSelection(GetCells(), Selection, RoomFloors, bRoomUp);
+	if (!R.Error.empty())
+	{
+		Status = R.Error == "empty" ? FString(TEXT("Room from selection — nothing selected."))
+			: R.Error == "too_small" ? FString(TEXT("Room from selection — too small: no selected cell has its four neighbours selected. Select at least 3 x 3."))
+			: FString::Printf(TEXT("Room from selection — too large: more than %lld cells."), MBPaint::Shapes::VolumeMax);
+		return;
+	}
+	int32 N = 0;
+	RunTransacted(TEXT("Room from selection"), [&]()
+	{
+		MBPaint::FChange Change;
+		Change.Set = R.Set;
+		Change.Clear = R.Clear;
+		N = Apply(Change);
+	});
+	Status = FString::Printf(TEXT("Room from selection — %d cell(s) changed%s."), N,
+		R.Repaired > 0 ? *FString::Printf(TEXT(", %d more so that no two cells touch by an edge only"), R.Repaired) : TEXT(""));
+}
+
+bool AMarchingBlocksWorld::VisibleMatterBounds(FBox& OutWorldBox)
+{
+	OutWorldBox = FBox(ForceInit);
+	for (AMarchingBlocksWorld* L : GetLayers())
+	{
+		if (!L->IsLayerVisible()) continue;
+		for (const MBPaint::FCell& C : L->GetCells())
+		{
+			const FMatrix M = L->CellMatrix(C);
+			OutWorldBox += M.TransformPosition(FVector(-0.5));
+			OutWorldBox += M.TransformPosition(FVector(0.5));
+		}
+	}
+	return OutWorldBox.IsValid != 0;
+}
 void AMarchingBlocksWorld::SelectConnected() { Operate(MBPaint::ESelectionOp::Connected, TEXT("Connected")); }
 void AMarchingBlocksWorld::ClearSelection() { Selection.clear(); bPasting = false; }
 
@@ -408,7 +539,11 @@ void AMarchingBlocksWorld::LoadTileset()
 	{
 		const FString Path = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Tileset.FilePath);
 		FString Text;
-		if (FFileHelper::LoadFileToString(Text, *Path)) ManifestText = Text;
+		if (FFileHelper::LoadFileToString(Text, *Path))
+		{
+			ManifestText = Text;
+			LoadAnimations(Path);
+		}
 		else Status = FString::Printf(TEXT("Cannot read %s"), *Path);
 	}
 	FindTileMeshes();
@@ -457,6 +592,7 @@ void AMarchingBlocksWorld::Rebuild()
 	for (UInstancedStaticMeshComponent* C : Generated)
 		if (IsValid(C)) C->DestroyComponent();
 	Generated.Reset();
+	AnimatedLooks.Reset();
 	if (!Rule) LoadTileset();
 	if (!Rule) return;
 
@@ -478,6 +614,12 @@ void AMarchingBlocksWorld::Rebuild()
 		if (UInstancedStaticMeshComponent** Found = ByTile.Find(Key)) return *Found;
 		UInstancedStaticMeshComponent* C = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
 		C->SetStaticMesh(Mesh);
+		// PER INSTANCE: the tile's vertex v (format space) and its animation phase — what the transitions and the
+		// animated textures read (a material cannot be trusted to find an instance's own position, §9 of PARITE.md).
+		C->SetNumCustomDataFloats(4);
+		if (Mesh)
+			for (int32 Slot = 0; Slot < Mesh->GetStaticMaterials().Num(); ++Slot)
+				if (UMaterialInterface* Look = LookOf(Mesh->GetMaterial(Slot))) C->SetMaterial(Slot, Look);
 		C->SetupAttachment(GetRootComponent());
 		C->RegisterComponent();
 		Generated.Add(C);
@@ -529,11 +671,113 @@ void AMarchingBlocksWorld::Rebuild()
 			continue;
 		}
 		UInstancedStaticMeshComponent* C = ComponentFor(FString(UTF8_TO_TCHAR(P.Tile.c_str())), Mesh);
-		C->AddInstance(FTransform(Turns[((P.QuarterTurns % 4) + 4) % 4], Centre, FVector(S)));
+		const int32 Instance = C->AddInstance(FTransform(Turns[((P.QuarterTurns % 4) + 4) % 4], Centre, FVector(S)));
+		// The phase of a tile comes from its ORIGIN in format space (v + piece_offset), computed HERE in double: a 32-bit
+		// shader would differ up to 0.025 (PARITE §7).
+		const float Data[4] = {static_cast<float>(P.Vertex.X), static_cast<float>(P.Vertex.Y), static_cast<float>(P.Vertex.Z),
+			static_cast<float>(MBPaint::Animation::PhaseOf(P.Vertex.X + Offset.X, P.Vertex.Y + Offset.Y, P.Vertex.Z + Offset.Z))};
+		C->SetCustomData(Instance, MakeArrayView(Data, 4), false);
 		++Placed;
 	}
+	// A layer rebuilt alone (its construction, a property) lays the transitions of its world again: its tiles are new.
+	if (MarchingBlocksWorldDetail::RebuildingWorld == 0)
+		if (AMarchingBlocksTransitions* T = AMarchingBlocksTransitions::Find(GetWorld(), WorldName)) T->Apply();
 	if (Missing > 0) Status = FString::Printf(TEXT("%d tile(s) · %d missing (red)"), Placed, Missing);
 	else if (Status.IsEmpty() || Status.Contains(TEXT("tile(s)"))) Status = FString::Printf(TEXT("%d tile(s)"), Placed);
+}
+
+// ── Animated textures ────────────────────────────────────────────────────────────────────────────
+
+void AMarchingBlocksWorld::LoadAnimations(const FString& TilesetPath)
+{
+	AnimationsJson.Reset();
+	AnimationImages.Reset();
+	const FString Folder = FPaths::GetPath(TilesetPath);
+	TArray<uint8> Glb;
+	if (!FFileHelper::LoadFileToArray(Glb, *(Folder / TEXT("tiles.glb")))) return;
+	MBPaint::FJsonValue Gltf;
+	std::string Error;
+	if (!MBPaint::Animation::ReadGlbJson(std::vector<uint8_t>(Glb.GetData(), Glb.GetData() + Glb.Num()), Gltf, Error))
+	{
+		Status = FString::Printf(TEXT("tiles.glb: %s"), UTF8_TO_TCHAR(Error.c_str()));
+		return;
+	}
+	// Kept in the level as the glb's own JSON text (a packaged game has no tiles.glb) — only when an animation is there.
+	TSet<FString> Wanted;
+	const std::map<std::string, MBPaint::FAnimation> ByName = MBPaint::Animation::ByMaterial(Gltf);
+	for (const auto& Entry : ByName)
+		for (const MBPaint::FAnimChannelTracks& T : Entry.second.Channels)
+			for (const std::string& I : T.Frames.Images) Wanted.Add(UTF8_TO_TCHAR(I.c_str()));
+	if (ByName.empty()) return;
+	const uint32 Length = Glb.Num() >= 20 ? static_cast<uint32>(Glb[12]) | (static_cast<uint32>(Glb[13]) << 8)
+		| (static_cast<uint32>(Glb[14]) << 16) | (static_cast<uint32>(Glb[15]) << 24) : 0;
+	AnimationsJson = FString(UTF8_TO_TCHAR(std::string(reinterpret_cast<const char*>(Glb.GetData()) + 20, Length).c_str()));
+	for (const FString& Rel : Wanted)
+	{
+		FMarchingBlocksImage Image;
+		if (MarchingBlocksLooks::LoadImageFile(Folder / Rel, Rel, Image)) AnimationImages.Add(MoveTemp(Image));
+		else Status = FString::Printf(TEXT("Animation frame missing: %s (the tile shows magenta there)."), *Rel);
+	}
+}
+
+UMaterialInterface* AMarchingBlocksWorld::LookOf(UMaterialInterface* Imported)
+{
+	if (!Imported || !bAnimateTextures || AnimationsJson.Len() < 3) return nullptr;
+	if (const TObjectPtr<UMaterialInterface>* Done = AnimatedLooks.Find(Imported)) return *Done;
+	AnimatedLooks.Add(Imported, nullptr);
+	MBPaint::FJsonValue Gltf;
+	std::string Error;
+	if (!MBPaint::ParseJson(TCHAR_TO_UTF8(*AnimationsJson), Gltf, Error)) return nullptr;
+	const std::map<std::string, MBPaint::FAnimation> ByName = MBPaint::Animation::ByMaterial(Gltf);
+	const auto Found = ByName.find(std::string(TCHAR_TO_UTF8(*MarchingBlocksLooks::GltfNameOf(Imported))));
+	if (Found == ByName.end()) return nullptr;
+	const MBPaint::FAnimation& A = Found->second;
+	UMaterialInterface* Base = MarchingBlocksLooks::AnimatedMaterial();
+	if (A.IsEmpty() || !Base)
+	{
+		if (!Base) Status = TEXT("The plugin's animated material is missing (Content/Materials/M_MB_Animated): the tiles stay still.");
+		return nullptr;
+	}
+	UMaterialInstanceDynamic* Mid = UMaterialInstanceDynamic::Create(Base, this);
+	// What the imported material shows (frame 0, factors): the animated one starts from it.
+	MarchingBlocksLooks::CopyImportedLook(Imported, Mid);
+	struct FChannel { const TCHAR* Name; bool bSRGB; };
+	const FChannel Channels[4] = {{TEXT("BaseColor"), true}, {TEXT("Normal"), false}, {TEXT("ORM"), false}, {TEXT("Emissive"), true}};
+	for (int32 Ch = 0; Ch < 4; ++Ch)
+	{
+		const FString P = FString(TEXT("MB_")) + Channels[Ch].Name;
+		const MBPaint::FAnimChannelTracks& T = A.Channels[Ch];
+		if (T.Frames.bPresent)
+		{
+			TArray<const FMarchingBlocksImage*> Frames;
+			for (const std::string& I : T.Frames.Images)
+				Frames.Add(AnimationImages.FindByPredicate([&I](const FMarchingBlocksImage& Image) { return Image.Path == UTF8_TO_TCHAR(I.c_str()); }));
+			if (UTexture2DArray* Array = MarchingBlocksLooks::MakeArray(Frames, Channels[Ch].bSRGB, this))
+			{
+				Mid->SetTextureParameterValue(*(P + TEXT("_Frames")), Array);
+				Mid->SetScalarParameterValue(*(P + TEXT("_Count")), static_cast<float>(T.Frames.Images.size()));
+				Mid->SetScalarParameterValue(*(P + TEXT("_Fps")), static_cast<float>(T.Frames.Fps));
+				Mid->SetScalarParameterValue(*(P + TEXT("_PingPong")), T.Frames.bPingPong ? 1.f : 0.f);
+				Mid->SetScalarParameterValue(*(P + TEXT("_FramesSynced")), T.Frames.bSynced ? 1.f : 0.f);
+			}
+		}
+		if (T.Scroll.bPresent)
+		{
+			Mid->SetScalarParameterValue(*(P + TEXT("_Scrolling")), 1.f);
+			Mid->SetScalarParameterValue(*(P + TEXT("_ScrollU")), static_cast<float>(T.Scroll.U));
+			Mid->SetScalarParameterValue(*(P + TEXT("_ScrollV")), static_cast<float>(T.Scroll.V));
+			Mid->SetScalarParameterValue(*(P + TEXT("_ScrollSynced")), T.Scroll.bSynced ? 1.f : 0.f);
+		}
+		if (T.Pulse.bPresent)
+		{
+			Mid->SetScalarParameterValue(TEXT("MB_PulseOn"), 1.f);
+			Mid->SetScalarParameterValue(TEXT("MB_PulseFrequency"), static_cast<float>(T.Pulse.Frequency));
+			Mid->SetScalarParameterValue(TEXT("MB_PulseMinimum"), static_cast<float>(T.Pulse.Minimum));
+			Mid->SetScalarParameterValue(TEXT("MB_PulseSynced"), T.Pulse.bSynced ? 1.f : 0.f);
+		}
+	}
+	AnimatedLooks.Add(Imported, Mid);
+	return Mid;
 }
 
 void AMarchingBlocksWorld::OnConstruction(const FTransform& Transform)
