@@ -52,31 +52,38 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
+    - **Unity : PARTIEL (7 octobre 2026)** — nappe cuite et six aspects sur le contrat, cases d'eau recalculées ; la nappe ne se recalcule pas, l'eau ne se pose pas dans l'éditeur. Voir « Le greffon Unity à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
+    - **Unity : FAIT (7 octobre 2026)** — l'aiguillage (`MBWheel`) et ses effets ; jamais tenu souris en main.
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les transitions entre couches** (§5, « L'atelier Transitions ») : lire la clé `transitions` d'un monde exporté (à
     écrire d'abord dans `world.json` : paires, réglages par direction, représentants, choix peints), réécrire la règle
     (`Transitions.melange`, ses cas d'épreuve) et le shader (texture 3D d'un octet par case, table des réglages) dans
     chaque moteur, et le poser par-dessus les matériaux des tuiles. Un shader ne voyage pas (§4).
+    - **Unity : FAIT (7 octobre 2026)** — Built-in et URP, vu à l'image.
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
     si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
     « Room from selection » (`FS.salle_depuis`, réécrite en C# et en C++, avec ses cas).
+    - **Unity : FAIT (7 octobre 2026)** — Select des vides, Extend selection, Room from selection ; la largeur d'une rivière : la règle seulement (Unity ne pose pas d'eau).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
+    - **Unity : FAIT (7 octobre 2026)** — Extrude ↑ ↓ Facing, Maj / Alt, Shrink du bord ; l'ancien retiré de l'interface Unity.
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
   - **Les textures animées** (§5, « l'atelier Animation ») : lire `mb_animation` dans les `extras` du matériau glTF
     (défilement u/v, images — ips, aller-retour —, pulsation de l'émission, synchro ou décalée par la position, la phase
     de `phase_de`), et le shader de chaque moteur (la règle : `image_au_temps`, `pulsation_au_temps`) ; EMPORTER LES
     IMAGES dans le `.mbset` (aujourd'hui `tiles.glb` ne porte que l'image 0 et les noms de fichiers des autres) ; leurs
     cas d'épreuve.
+    - **Unity : FAIT (7 octobre 2026)** — lecture du `.glb` lui-même, Texture2DArray, phase par tuile ; Built-in et URP.
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
+    - **Unity : PARTIEL (7 octobre 2026)** — pose et vent faits (vus à l'image) ; la règle de plantation portée ; AUCUN pinceau de feuillage dans l'éditeur.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -509,6 +516,78 @@ lire, la règle, les cas, le rendu, ce qui ne peut pas être fait). Ici, ce qui 
   ambiguë se remonte et se corrige dans le GDScript, jamais dans un moteur.
 - ⚠ **PAS TENU EN MAIN** : l'export du monde par le bouton (le panneau d'attente pend en headless, comme avant) — mené
   par `test_parite` sur `FormatMonde.exporter` directement, avec ce que l'écran lui passe (`_exporter_le_monde`, relu).
+
+### LE GREFFON UNITY À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-unity`), PARTIEL SUR L'EAU ET LE PINCEAU DE FEUILLAGE
+
+La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fait dans Unity, mesuré, et ce qui ne l'est pas.
+
+- **LES RÈGLES, EN C# PUR — FAIT, MESURÉ** (compilées telles quelles par le banc .NET et le Test Runner) : `MBTools.Extrude`,
+  `SelectionOp.ShrinkEdge`, `WidenFlat`, `SelectBrush`, `MBShapes.RoomFromSelection` ; `MBAnimation` (lecture de
+  `mb_animation`, le bloc JSON du `.glb` lu SOI-MÊME et associé par nom de matériau — glTFast n'est pas interrogé sur les
+  extras) ; `MBTransitions` (fondu, réglages, table, texture des cases, lecture) ; `MBFoliage` ; `MBWater` (`fluides.gd`
+  ligne à ligne) ; `MBWheel` (l'aiguillage de la molette). **Banc .NET : 284 cas sur 284** (editing 63, animation 44,
+  transitions 93, foliage 59, water 25 — trois cas ajoutés, ci-dessous), plus 22 vérifications de la molette écrites à la
+  main depuis le texte ; les anciens fichiers inchangés et verts. Un banc qui rencontre une sorte inconnue rougit
+  (`ParityCheck`).
+- **CE QUE LE C# A TROUVÉ DANS LE CONTRAT** :
+  - ⚠ **LA PHASE N'ÉTAIT PAS EN DOUBLE** : le texte disait « double », `phase_de` rangeait ses calculs dans un `Vector3`
+    (32 bits) — un C# qui suit le texte s'écartait jusqu'à 0,0017 sur les 7 cas. Corrigé une première fois ici (la
+    référence en double), puis **tranché autrement sur `main`** (3b582d3) : la précision mixte EXACTE est écrite dans
+    `rules_text`, les valeurs ne bougent pas. Le greffon suit le texte corrigé (`(float)` sur a_i et sur q_i) ; mutations
+    « ×17 en double » et « a_i en double » rouges.
+  - **TROIS GARDES MUETTES, TROIS CAS AJOUTÉS** (`epreuve_parite.gd`, régénérés dans les trois greffons, `test_parite`
+    188/0) : une égalité de « face » (le haut avant +z), une origine de phase non entière, un choix au-delà de la 15e
+    couche dans la texture des cases.
+  - **DEUX CAS QUI MANQUENT ENCORE, NON AJOUTÉS** (dits par les bancs du feuillage et de l'eau) : un plant au bord d'un
+    surplomb, centre dégagé mais bord couvert à MI-rayon (« under_matter au rayon entier » passe muet) ; un creux
+    ASYMÉTRIQUE dont le seuil dépend de l'ordre des voisins (« z avant x dans le creux » passe muet).
+  - Une mutation ÉQUIVALENTE : le vote « prioritaire » remplacé par « propriétaire » — la propriétaire est déjà le plus
+    petit rang.
+- **LE RENDU, DEUX PIPELINES — FAIT, VU À L'IMAGE** (Built-in : le projet d'essai ; URP 17.6 : un projet d'essai HORS
+  DÉPÔT, `D:/MB_wt_unity_urp`, copie de celui-ci avec URP, monté par un script `MBUrpSetup`). **HDRP : NON PRIS EN CHARGE,
+  NON MESURÉ** (aucune SubShader HDRP). Les shaders portent une SubShader URP (`PackageRequirements` : rien ne casse dans
+  un projet sans URP — 0 message de compilation mesuré dans les deux) et une Built-in.
+  - **Transitions** : Unity n'a pas de passage par-dessus un matériau, et un matériau ajouté ne redessine que le dernier
+    sous-maillage ⇒ **un second renderer** (enfant, jamais sauvé) sur les seules tuiles où deux couches d'une paire
+    active se touchent (36 sur le monde d'essai), le matériau `MarchingBlocks/Transition Overlay` sur CHAQUE
+    sous-maillage, le sommet de la tuile et le repère en `MaterialPropertyBlock`. Éclairé comme les tuiles :
+    `UNITY_BRDF_PBS` (Built-in), `UniversalFragmentPBR` (URP) — un éclairage maison laissait une bande plus claire (vu).
+    Le bruit suit le shader de l'appli (un par direction, PARITE §4).
+  - ⚠ **UN VRAI DÉFAUT, VU À L'IMAGE** : les réglages des représentants posés en tableaux (`SetVectorArray`) sur le
+    matériau du fondu, propriétés NON DÉCLARÉES, étaient **perdus dès qu'Unity reconstruisait les propriétés du matériau**
+    (un import d'asset après l'habillage) — le fondu ne dessinait plus rien, et le compte des renderers ne le voyait
+    pas. Tout est désormais en textures DÉCLARÉES ; la garde est une image (pixels avec et sans le fondu).
+  - **Textures animées** : `MarchingBlocks/Lit` (le matériau glTF recopié de l'importeur par noms de propriétés —
+    glTFast d'abord, puis les noms usuels), images en `Texture2DArray` (assets générés dans
+    `<jeu>.mbset/MarchingBlocks generated/`, un `MBAnimatedSet`), défilement, pulsation ; **la phase de chaque tuile
+    calculée sur le CPU** (précision de la règle) et posée par renderer ; une horloge (`_Time`, ou `_MBClock` pour les
+    essais). ⚠ L'export Godot écrit UN matériau par maillage (« lava », « lava2 »…) : autant de copies animées.
+  - **Feuillage** : `MarchingBlocksFoliage` pose les plants (T de la règle, converti par le repère MESURÉ sur le jeu de
+    tuiles d'une couche — le même importeur a lu les modèles) ; le vent dans `MarchingBlocks/Lit` (`_MB_WIND`,
+    `MBFoliage.Sway` ligne à ligne, en espace du format).
+  - **Eau** : `MarchingBlocksWater` montre la nappe CUITE ; les six aspects (`MarchingBlocks/Water`) réécrits sur le
+    CONTRAT. ⚠ **PARTIEL, DIT** : la profondeur vient du contrat (COLOR_0 a), pas du tampon de profondeur ; ni réfraction
+    ni reflet du relief en espace écran ; le fond se voit par transparence. Les CASES d'eau sont recalculées quand on
+    peint (`MBWater.World`, gizmos) ; la NAPPE ne l'est pas (`eau_maillage.gd` n'a pas de cas, PARITE §2).
+  - **MESURÉ** : glTFast retourne v (v' = 1 − v, lu sur la nappe : 1,85 → −0,85) ; les shaders reviennent aux UV glTF.
+  - ⚠ **LE PREMIER RENDU D'UNE CAPTURE URP EST FAUX** (des tuiles avec le matériau de l'autre couche, une plaque
+    différente à chaque passage), les suivants justes : un rendu à blanc précède chaque capture.
+- **L'ÉDITEUR — FAIT, MENÉ PAR LES TESTS, PAS TENU EN MAIN** : Extrude ↑ ↓ Facing (la sélection, ou la matière de
+  l'étage ; Maj + clic étend, Alt + clic décale, l'étage suit, un Ctrl+Z par clic), Shrink (le bord), Widen, Room from
+  selection, « Select empty cells too », F, et la molette (seule : le zoom d'Unity ; Maj + molette lue AUSSI en
+  défilement horizontal, ce que Windows en fait). Les anciens Extrude ↑ ↓ et Shrink ne sont plus dans l'interface Unity
+  (leurs sortes restent dans `tools_conformance.json` tant que les TROIS greffons n'ont pas migré, PARITE §6). Les
+  nouveaux boutons sont en TEXTE (Facing, Widen) : leurs icônes ne sont pas dans `generer_icones_greffons.gd`, qui
+  écrit les trois greffons à la fois — à ajouter quand les trois branches seront fusionnées.
+- **UNITY 6.6 : 51 TESTS SUR 51 EN BUILT-IN, 51 SUR 51 EN URP** (dont `ParityWorldTests`, 10, sur le monde écrit par
+  `DEV_TOOLS/preparer_parite_unity.gd` : Rock et Sand qui se mêlent, Lava animée, un lac, cinq arbres). **Mutations dans
+  Unity : 9, toutes rouges** (réglages non déclarés, phase jamais posée, plants sans le repère, molette seule volée,
+  Extrude sans groupe d'annulation, Select qui prend les vides, fondu qui ne dessine rien, vent immobile, images hors
+  du temps). **Captures regardées** (`ParityCaptures`, `-executeMethod ParityCaptures.CaptureAll -mbOut <dossier>`) :
+  vue d'ensemble, bordure, lave à deux instants, lac, les six aspects d'eau — en Built-in et en URP.
+- **CE QUI N'EST PAS FAIT** : le PINCEAU DE FEUILLAGE dans l'éditeur Unity (la règle `check` / `brush` est portée et
+  passe ses cas ; aucun outil ne plante) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
+  outil) ; recalculer la nappe ; HDRP ; Alt + molette sous Windows et tout ce qui est souris en main — jamais tenu.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
