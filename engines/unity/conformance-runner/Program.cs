@@ -83,6 +83,11 @@ static class Program
             failed += parityFailures.Count;
         }
 
+        var wheelFailures = WheelCheck.Run(out int wheelChecks);
+        foreach (var f in wheelFailures) Console.WriteLine("  FAIL wheel: " + f);
+        Console.WriteLine($"{wheelChecks} wheel checks, {wheelFailures.Count} failure(s)");
+        failed += wheelFailures.Count;
+
         var aimFailures = AimCheck.Run(out int aimChecks);
         foreach (var f in aimFailures) Console.WriteLine("  FAIL aim: " + f);
         Console.WriteLine($"{aimChecks} aim checks, {aimFailures.Count} failure(s)");

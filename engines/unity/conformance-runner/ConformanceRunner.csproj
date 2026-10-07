@@ -30,5 +30,7 @@
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/TransitionsConformanceCheck.cs" Link="TransitionsConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/FoliageConformanceCheck.cs" Link="FoliageConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterConformanceCheck.cs" Link="WaterConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBWheel.cs" Link="MBWheel.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WheelCheck.cs" Link="WheelCheck.cs" />
   </ItemGroup>
 </Project>

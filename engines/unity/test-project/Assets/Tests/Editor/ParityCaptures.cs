@@ -79,6 +79,11 @@ public static class ParityCaptures
             var cells = mat.GetTexture("_MBCells") as Texture3D;
             Debug.Log($"MB TABLE {(table == null ? "null" : table.GetPixel(0, 1) + " " + table.GetPixel(2, 0))} CELLS {(cells == null ? "null" : cells.width + "x" + cells.height + "x" + cells.depth)} origin {mat.GetVector("_MBCellsOrigin")} reps {mat.GetTexture("_MBReps")}");
         }
+        // THE UV CONVENTION OF THE IMPORTER, measured on the water sheet (the shaders flip v back to glTF's).
+        var sheet = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/parity_world.mbworld/water/lake.glb");
+        var sheetMesh = sheet != null ? sheet.GetComponentInChildren<MeshFilter>()?.sharedMesh : null;
+        if (sheetMesh != null)
+            Debug.Log($"MB UV vertex 0: position {sheetMesh.vertices[0].ToString("F4")} uv {sheetMesh.uv[0].ToString("F4")}");
         var layer = r.Layers[0];
         var F = layer.FormatToWorld;
         var cam = Camera.main;
@@ -110,6 +115,23 @@ public static class ParityCaptures
             cam.transform.position = e;
             cam.transform.rotation = Quaternion.LookRotation(a - e, Vector3.up);
             shots[name] = Render(cam, 1280, 720);
+        }
+        // THE SIX LOOKS of the water, one after the other on the same sheet.
+        var water = r.Root.GetComponentInChildren<MarchingBlocksWater>();
+        if (water != null)
+        {
+            var e = F.MultiplyPoint3x4(new Vector3(3f, 4f, 6.5f));
+            cam.transform.position = e;
+            cam.transform.rotation = Quaternion.LookRotation(F.MultiplyPoint3x4(new Vector3(4f, 1.5f, 10.5f)) - e, Vector3.up);
+            foreach (var look in MBWaterLooks.Looks)
+            {
+                var l = water.layers[0];
+                l.material = MBWaterLooks.Material(look, "Assets/parity_world.mbworld/" + MBLitMaterials.GeneratedFolder);
+                water.layers[0] = l;
+                water.Rebuild();
+                UnityEngine.Object.DestroyImmediate(Render(cam, 640, 360));
+                shots["water_" + look] = Render(cam, 640, 360);
+            }
         }
         return shots;
     }
