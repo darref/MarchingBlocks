@@ -32,8 +32,12 @@ extends "res://DEV_TOOLS/filmer_animation.gd"
 ##   pente derrière lui (la tête remplit l'image) ; entre les arbres, elle traverse troncs et couronnes (pas de collision).
 ##   Le sable sec de la plage (dessus à MER + 1) et le vol, caméra haute (12 cases, élévation 0,5), sont propres.
 ## ⚠ LE VOL S'ARRÊTE NET à chaque prise (3, 4, 5 : 35 à 50 s immobile, W tenu ; en 4 et 5, x et z figés au centième) — d'où la parade « coincé »
-##   de `_voler_t` (monter 1 s), qui NE SUFFIT PAS (prise 5 : il monte de 25 à 30, x et z restent figés) ; cause non
-##   trouvée. Les plans de vol du trailer sont pris AVANT l'arrêt.
+##   de `_voler_t` (monter 1 s), qui NE SUFFIT PAS (prise 5 : il monte de 25 à 30, x et z restent figés). Les plans de vol
+##   du trailer sont pris AVANT l'arrêt. **CAUSE TROUVÉE ET CORRIGÉE (7 octobre 2026)** : pas le personnage, le PILOTE.
+##   Sous Windows, une autre application qui prend la main fait relâcher à Godot toutes les touches enfoncées ; W n'était
+##   enfoncée qu'une fois pour tout le vol, Espace et A renvoyées à chaque image. `filmer_ui._process` renfonce désormais
+##   chaque touche tenue (`test_pilote_tournage.gd`). Reproduit en headless sur ce tournage (W relâchée au milieu du vol :
+##   x et z figés au millionième, y de 24,6 à 29,4 — la prise 5) ; avec la correction, il repart.
 
 const FE_T := preload("res://addons/marchingblocks_core/feuillage.gd")
 const SPIRIT_T := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
@@ -750,8 +754,9 @@ func _voler_t(cles: Array) -> void:
 		for d in [Vector2(3, 0), Vector2(-3, 0), Vector2(0, 3), Vector2(0, -3)]:
 			sol = maxf(sol, _sol_t(devant.x + d.x, devant.z + d.y))
 		var haut := pos.y - sol
-		# ⚠ COINCÉ (troisième tournage : 36 s immobile contre le bord du plateau) : s'il n'a pas avancé d'une case en
-		# 1,5 s, il monte 1 s tout droit (la parade du devlog du paysage).
+		# ⚠ COINCÉ : s'il n'a pas avancé d'une case en 1,5 s, il monte 1 s tout droit (la parade du devlog du paysage).
+		# ⚠ Les « 36 s immobile » du troisième tournage n'étaient PAS le bord du plateau mais W relâchée par la perte du
+		# focus (voir l'en-tête) ; la parade reste pour un vrai bord.
 		if i % int(1.5 * FPS) == 0:
 			if i > 0 and pos.distance_to(_derniere_pos_t) < 1.0:
 				_montee_t = int(1.0 * FPS)

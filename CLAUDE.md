@@ -3180,6 +3180,13 @@ ffmpeg) ; on **PEINT IMAGE PAR IMAGE** ; un albedo animé par images n'a **PAS D
     la vitesse, bras en ailes, jambes qui traînent. Gardé par `fumee_appli` (373 : F, monter, planer une fois
     lâché, le sol qui arrête la descente, retomber hors du vol) ; trois mutations rouges (gravité en vol, vol à
     travers le décor, F non branché). ⚠ Ni vu à l'image ni tenu en main.
+    ⚠ **« LE VOL S'ARRÊTE NET » (tournage du trailer final, 7 octobre 2026) N'ÉTAIT PAS LE PERSONNAGE — MESURÉ.** Sous
+    Windows, une autre application qui prend la main fait relâcher à Godot toutes les touches enfoncées (sonde : W
+    injectée, le Bloc-notes par-dessus, `is_physical_key_pressed` passe à faux) ; le pilote du tournage n'enfonçait W
+    qu'une fois pour 50 s de vol, et renvoyait Espace et A à chaque image — d'où x et z figés, y qui monte encore.
+    Reproduit en headless sur le vrai tournage (W relâchée au milieu du vol : la prise 5 au millionième), corrigé dans
+    le pilote (`filmer_ui._process` renfonce chaque touche tenue). Gardé par `test_pilote_tournage` (6) ; deux mutations
+    rouges (pas de renfoncement : 2 échecs, dont « il avance encore » 0,61 case au lieu de 3,65 ; touche lâchée renfoncée).
   - ⚠ **VU À L'IMAGE, PAS TENU EN MAIN** : `capture_app.gd` photographie le personnage posé, en marche,
     en saut, de près et de face (yeux et contour lisibles). Le ressenti — vitesse, hauteur de saut, le pas
     de 0,3 case, la caméra qui se rapproche contre les parois — se juge clavier en main, par Jordan.

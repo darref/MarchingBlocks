@@ -307,7 +307,15 @@ func _clic(bouton: int, carte := "", detail := "") -> void:
 	await _images(int(0.5 * FPS))
 
 
+## Les touches que le tournage TIENT : touche → [ctrl, shift]. Voir `_process`.
+var _tenues := {}
+
+
 func _cle(k: Key, oui: bool, ctrl := false, shift := false) -> void:
+	if oui:
+		_tenues[k] = [ctrl, shift]
+	else:
+		_tenues.erase(k)
 	var e := InputEventKey.new()
 	e.keycode = k
 	e.physical_keycode = k
@@ -315,6 +323,30 @@ func _cle(k: Key, oui: bool, ctrl := false, shift := false) -> void:
 	e.ctrl_pressed = ctrl
 	e.shift_pressed = shift
 	_envoyer(e)
+
+
+## ⚠ UNE TOUCHE TENUE PAR LE TOURNAGE EST RENFONCÉE À CHAQUE IMAGE (correction du 7 octobre 2026). Sous Windows, quand
+## une AUTRE application prend la main, Godot relâche toutes les touches enfoncées (`Input.release_pressed_events`),
+## celles qu'on a injectées comme les vraies — MESURÉ : W injectée, le Bloc-notes ouvert par-dessus, W passe à faux. Le
+## vol du trailer final enfonçait W UNE fois pour 50 s : une fenêtre qui prend la main pendant le tournage (40 min,
+## d'autres sessions au travail) et le stickman s'arrêtait net, x et z figés, alors qu'Espace et A, renvoyées à chaque
+## image par le pilote d'altitude, le faisaient encore monter et descendre (prises 3, 4 et 5). Le personnage n'y était
+## pour rien. ⚠ Dans le `_process` de l'arbre, pas dans `_images` : plusieurs tournages réécrivent `_images` sans `super`.
+func _process(_dt: float) -> bool:
+	_renfoncer_les_touches()
+	return false
+
+
+func _renfoncer_les_touches() -> void:
+	for k: Key in _tenues:
+		if not Input.is_physical_key_pressed(k):
+			var e := InputEventKey.new()
+			e.keycode = k
+			e.physical_keycode = k
+			e.pressed = true
+			e.ctrl_pressed = _tenues[k][0]
+			e.shift_pressed = _tenues[k][1]
+			_envoyer(e)
 
 
 func _touche(k: Key, carte: String, detail: String, ctrl := false, shift := false) -> void:
