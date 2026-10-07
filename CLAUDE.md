@@ -925,7 +925,7 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   loin de l'eau : 4 ms ; copie des cases 8 ms, leur comparaison (sur le fil) 107 ms. Dans Unity (monde exporté) : bouton
   4–10 ms ; un trait sur l'escalier : 15 ms dont 0,2–3 ms sur le fil principal pour partir. La coupure d'1 s ne devrait
   donc pas tomber sur l'exemple — non vu dans Unity (l'exemple n'y a pas été importé).
-- **UNITY 6.6 : 58 TESTS SUR 58 EN BUILT-IN ET EN URP** (dont `WaterRebuildTests`, 4 : bout en bout, le trait qui périme puis
+- **UNITY 6.6 : 65 TESTS SUR 65 EN BUILT-IN ET EN URP, APRÈS LA FUSION DE `main`** (58 avant elle) (dont `WaterRebuildTests`, 4 : bout en bout, le trait qui périme puis
   se recalcule hors du fil, le résultat dépassé non posé, la coupure et le bouton ; et dans le paquet la reprise et
   `MBWaterFollow`). ⚠ **Les trois tests À L'IMAGE du monde de la parité rendent du NOIR avec `-nographics`** (0,00 par
   pixel) : les lancer SANS ce drapeau (le README du projet d'essai le dit à tort). **Mutations dans Unity : 6, toutes
