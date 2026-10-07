@@ -11,6 +11,7 @@
 #include "MBCore/MBJson.h"
 #include "MBCore/MBRule.h"
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <map>

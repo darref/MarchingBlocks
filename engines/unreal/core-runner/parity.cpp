@@ -4,12 +4,17 @@
 
 #include "MBCore/MBAnimation.h"
 #include "MBCore/MBEditing.h"
+#include "MBCore/MBFoliage.h"
 #include "MBCore/MBJson.h"
 #include "MBCore/MBShapes.h"
 #include "MBCore/MBTools.h"
+#include "MBCore/MBTransitions.h"
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <fstream>
 #include <map>
@@ -183,6 +188,328 @@ namespace
 		return T.Failed;
 	}
 
+	// ── FOLIAGE ──────────────────────────────────────────────────────────────────────────────────────────────
+
+	struct FFoliageBench
+	{
+		FCellSet World;
+		FCellSet Water;
+		FFoliage Models;
+		FFoliageWorld Ask;
+	};
+
+	bool PModeOf(const std::string& S, EFoliageMode& Out)
+	{
+		if (S == "air") Out = EFoliageMode::Air;
+		else if (S == "free") Out = EFoliageMode::Free;
+		else if (S == "overflow") Out = EFoliageMode::Overflow;
+		else return false;
+		return true;
+	}
+
+	std::vector<FPlant> PPlants(const FJsonValue& A)
+	{
+		std::vector<FPlant> Out;
+		for (const FJsonValue& E : A.Array)
+		{
+			FPlant P;
+			P.Model = E[0].AsInt();
+			P.X = E[1].AsReal();
+			P.Y = E[2].AsReal();
+			P.Z = E[3].AsReal();
+			P.Yaw = E[4].AsReal();
+			P.Scale = E[5].AsReal();
+			P.Mode = E[6].AsInt() == 0 ? EPlantMode::Air : EPlantMode::Planted;
+			Out.push_back(P);
+		}
+		return Out;
+	}
+
+	std::string RunFoliageCase(const FJsonValue& C, const FFoliageBench& B)
+	{
+		const FJsonValue& I = C["input"];
+		const FJsonValue& E = C["expected"];
+		const std::string& Kind = C["kind"].String;
+		const FFoliageModel* M = B.Models.FindModel(I["model"].AsInt());
+		if (Kind == "check" || Kind == "brush" || Kind == "place" || Kind == "wind_data")
+			if (!M) return "unknown model";
+		if (Kind == "check")
+		{
+			EFoliageMode Mode;
+			if (!PModeOf(I["mode"].String, Mode)) return "unknown mode";
+			FPlant P;
+			P.Model = M->Id;
+			P.X = I["point"][0].AsReal();
+			P.Y = I["point"][1].AsReal();
+			P.Z = I["point"][2].AsReal();
+			P.Yaw = I["yaw"].AsReal();
+			P.Scale = I["scale"].AsReal();
+			const FPlantIndex Index(PPlants(I["plants"]), B.Models);
+			const std::string Got = Foliage::Check(*M, P, I["normal"][0].AsReal(), I["normal"][1].AsReal(), I["normal"][2].AsReal(), Mode,
+				B.Ask, Index, B.Models, I["spacing"].AsReal(), I["max_slope"].AsReal());
+			return Got == E.String ? "" : "expected '" + E.String + "', got '" + Got + "'";
+		}
+		if (Kind == "brush")
+		{
+			EFoliageMode Mode;
+			if (!PModeOf(I["mode"].String, Mode)) return "unknown mode";
+			std::vector<std::array<double, 4>> Candidates;
+			for (const FJsonValue& K : I["candidates"].Array)
+				Candidates.push_back({K[0].AsReal(), K[1].AsReal(), K[2].AsReal(), K[3].AsReal()});
+			FPlantIndex Index(PPlants(I["plants"]), B.Models);
+			const FBrushResult R = Foliage::Sow(*M, I["y_top"].AsReal(), Candidates, Mode, B.Ask, Index, B.Models, I["spacing"].AsReal(),
+				I["max_slope"].AsReal());
+			FJsonValue Got = FJsonValue::MakeObject();
+			FJsonValue Plants = FJsonValue::MakeArray();
+			for (const FPlant& P : R.Plants)
+			{
+				FJsonValue A = FJsonValue::MakeArray();
+				A.Push(FJsonValue::MakeReal(P.X)).Push(FJsonValue::MakeReal(P.Y)).Push(FJsonValue::MakeReal(P.Z))
+					.Push(FJsonValue::MakeReal(P.Yaw)).Push(FJsonValue::MakeReal(P.Scale));
+				Plants.Push(A);
+			}
+			FJsonValue Refused = FJsonValue::MakeObject();
+			for (const auto& Entry : R.Refused) Refused.Set(Entry.first, FJsonValue::MakeInt(Entry.second));
+			Got.Set("plants", Plants).Set("refused", Refused);
+			return PSameJson(Got, E, 1e-6, "brush");
+		}
+		if (Kind == "place")
+		{
+			FPlant P;
+			P.Model = M->Id;
+			P.X = I["point"][0].AsReal();
+			P.Y = I["point"][1].AsReal();
+			P.Z = I["point"][2].AsReal();
+			P.Yaw = I["yaw"].AsReal();
+			P.Scale = I["scale"].AsReal();
+			double Columns[3][3], Origin[3];
+			Foliage::Transform(*M, P, Columns, Origin);
+			for (int K = 0; K < 3; ++K)
+				for (int J = 0; J < 3; ++J)
+				{
+					const std::string Why = PNear(Columns[K][J], E["basis"][static_cast<size_t>(K)][static_cast<size_t>(J)].AsReal(), 1e-5);
+					if (!Why.empty()) return "basis column " + std::to_string(K) + ": " + Why;
+				}
+			for (int J = 0; J < 3; ++J)
+			{
+				const std::string Why = PNear(Origin[J], E["origin"][static_cast<size_t>(J)].AsReal(), 1e-6);
+				if (!Why.empty()) return "origin: " + Why;
+			}
+			return PNear(Foliage::HeightAboveGround(*M, P), E["height_above_ground"].AsReal(), 1e-6);
+		}
+		if (Kind == "wind_data")
+		{
+			FPlant P;
+			P.Model = M->Id;
+			P.X = I["point"][0].AsReal();
+			P.Y = I["point"][1].AsReal();
+			P.Z = I["point"][2].AsReal();
+			P.Scale = I["scale"].AsReal();
+			double W[4];
+			Foliage::WindData(*M, P, W);
+			for (size_t J = 0; J < 4; ++J)
+			{
+				const std::string Why = PNear(W[J], E[J].AsReal(), 1e-6);
+				if (!Why.empty()) return "[" + std::to_string(J) + "] " + Why;
+			}
+			return "";
+		}
+		if (Kind == "sway")
+		{
+			const double P[3] = {I["vertex"][0].AsReal(), I["vertex"][1].AsReal(), I["vertex"][2].AsReal()};
+			const double N[3] = {I["normal"][0].AsReal(), I["normal"][1].AsReal(), I["normal"][2].AsReal()};
+			const double W[4] = {I["wind"][0].AsReal(), I["wind"][1].AsReal(), I["wind"][2].AsReal(), I["wind"][3].AsReal()};
+			double Out[3];
+			Foliage::Sway(P, N, W, I["t"].AsReal(), I["direction"][0].AsReal(), I["direction"][1].AsReal(), Out);
+			for (size_t J = 0; J < 3; ++J)
+			{
+				const std::string Why = PNear(Out[J], E[J].AsReal(), 1e-5);
+				if (!Why.empty()) return "[" + std::to_string(J) + "] " + Why;
+			}
+			return "";
+		}
+		if (Kind == "ground_of_cells")
+		{
+			FGround G;
+			const bool bFound = Foliage::GroundOfCells(B.Ask.IsFull, I["x"].AsReal(), I["z"].AsReal(), I["y_top"].AsReal(), G);
+			if (E.IsNull()) return bFound ? "expected no ground, got " + std::to_string(G.Y) : "";
+			if (!bFound) return "expected " + std::to_string(E.AsReal()) + ", got no ground";
+			return PNear(G.Y, E.AsReal(), 1e-6);
+		}
+		if (Kind == "read")
+		{
+			FFoliage F;
+			const std::string Error = Foliage::Read(I, F);
+			if (E.Find("error")) return Error.empty() ? "expected a refusal, the file was accepted" : "";
+			if (!Error.empty()) return "expected the file to be read, refused: " + Error;
+			return PSameJson(Foliage::ToJson(F), E, 1e-6, "foliage");
+		}
+		return "unknown kind " + Kind;
+	}
+
+	int RunFoliage(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!PLoad(Path, Conf)) return 1;
+		if (Conf["format"].String != "marchingblocks-foliage-conformance" || Conf["version"].AsInt() != 1)
+		{
+			std::printf("  FAIL not a foliage conformance file this plugin reads%s", "\n");
+			return 1;
+		}
+		FTally T;
+		const FJsonValue& K = Conf["constants"];
+		if (K["max_slope_deg"].AsReal() != Foliage::MaxSlopeDeg || K["ground_tolerance"].AsReal() != Foliage::GroundTolerance
+			|| K["edge_samples"].AsInt() != Foliage::EdgeSamples || K["duplicate"].AsReal() != Foliage::Duplicate
+			|| K["water_offset"].AsReal() != Foliage::WaterOffset || K["ground_search_floor"].AsInt() != Foliage::GroundSearchFloor
+			|| std::fabs(K["wind_direction"][0].AsReal() - Foliage::WindX) > 1e-6 || std::fabs(K["wind_direction"][1].AsReal() - Foliage::WindZ) > 1e-6)
+		{
+			++T.Failed;
+			std::printf("  FAIL foliage constants differ from the plugin's%s", "\n");
+		}
+		FFoliageBench B;
+		B.World = PCells(Conf["world_cells"]);
+		B.Water = PCells(Conf["water_cells"]);
+		for (const auto& Entry : Conf["models"].Object)
+		{
+			const FJsonValue& E = Entry.second;
+			FFoliageModel M;
+			M.Id = E["id"].AsInt();
+			M.Name = E["name"].String;
+			M.GroundOffset = E["ground_offset"].AsReal();
+			M.Scale = E["scale"].AsReal();
+			M.ScaleRandom = E["scale_random"].AsReal();
+			M.Footprint = E["footprint"].AsReal();
+			M.Height = E["height"].AsReal();
+			M.Wind = E["wind"].AsReal();
+			B.Models.Models.push_back(M);
+		}
+		const FCellSet* World = &B.World;
+		const FCellSet* Water = &B.Water;
+		B.Ask.IsFull = [World](const FCell& X) { return World->count(X) > 0; };
+		B.Ask.IsWater = [Water](const FCell& X) { return Water->count(X) > 0; };
+		const std::function<bool(const FCell&)> IsFull = B.Ask.IsFull;
+		B.Ask.Ground = [IsFull](double X, double Z, double YTop, FGround& Out) { return Foliage::GroundOfCells(IsFull, X, Z, YTop, Out); };
+		for (const FJsonValue& C : Conf["cases"].Array) T.Check(C, RunFoliageCase(C, B), "foliage");
+		T.Print("foliage");
+		return T.Failed;
+	}
+
+	// ── TRANSITIONS ──────────────────────────────────────────────────────────────────────────────────────────
+
+	FTransitionTable PTable(const FJsonValue& T)
+	{
+		FTransitionTable Out;
+		for (const auto& Entry : T.Object)
+		{
+			const size_t Bar = Entry.first.find('|');
+			Out[{std::atoi(Entry.first.substr(0, Bar).c_str()), std::atoi(Entry.first.substr(Bar + 1).c_str())}] =
+				Transitions::ReadSettings(Entry.second);
+		}
+		return Out;
+	}
+
+	std::vector<std::pair<FCell, int>> PRanked(const FJsonValue& A)
+	{
+		std::vector<std::pair<FCell, int>> Out;
+		for (const FJsonValue& E : A.Array) Out.push_back({PVec(E), static_cast<int>(E[3].AsInt())});
+		return Out;
+	}
+
+	std::string RunTransitionsCase(const FJsonValue& C)
+	{
+		const FJsonValue& I = C["input"];
+		const FJsonValue& E = C["expected"];
+		const std::string& Kind = C["kind"].String;
+		if (Kind == "blend")
+		{
+			int Ranks[8], Choices[8];
+			for (size_t K = 0; K < 8; ++K)
+			{
+				Ranks[K] = static_cast<int>(I["ranks"][K].AsInt());
+				Choices[K] = static_cast<int>(I["choices"][K].AsInt());
+			}
+			const double F[3] = {I["f"][0].AsReal(), I["f"][1].AsReal(), I["f"][2].AsReal()};
+			std::map<int, double> H;
+			for (const auto& Entry : I["h"].Object) H[std::atoi(Entry.first.c_str())] = Entry.second.AsReal();
+			const FBlend B = Transitions::Blend(Ranks, F, Choices, PTable(I["table"]), H, I["n"].AsReal());
+			FJsonValue Got = FJsonValue::MakeObject();
+			if (B.bDrawn)
+				Got.Set("owner", FJsonValue::MakeInt(B.Owner)).Set("other", FJsonValue::MakeInt(B.Other)).Set("s", FJsonValue::MakeReal(B.S))
+					.Set("vote", FJsonValue::MakeReal(B.Vote)).Set("alpha", FJsonValue::MakeReal(B.Alpha));
+			return PSameJson(Got, E, 1e-6, "blend");
+		}
+		if (Kind == "settings") return PSameJson(Transitions::SettingsToJson(Transitions::ReadSettings(I)), E, 1e-6, "settings");
+		if (Kind == "table")
+		{
+			std::vector<FTransitionPair> Pairs;
+			for (const FJsonValue& P : I["pairs"].Array)
+			{
+				FTransitionPair Pair;
+				Pair.A = static_cast<int>(P["a"].AsInt());
+				Pair.B = static_cast<int>(P["b"].AsInt());
+				Pair.bActive = P["active"].Bool;
+				Pair.ACoversB = Transitions::ReadSettings(P["a_covers_b"]);
+				Pair.BCoversA = Transitions::ReadSettings(P["b_covers_a"]);
+				Pairs.push_back(Pair);
+			}
+			FJsonValue Got = FJsonValue::MakeObject();
+			for (const auto& Entry : Transitions::Table(Pairs, static_cast<int>(I["layers"].AsInt())))
+				Got.Set(std::to_string(Entry.first.first) + "|" + std::to_string(Entry.first.second), Transitions::SettingsToJson(Entry.second));
+			return PSameJson(Got, E, 1e-6, "table");
+		}
+		if (Kind == "cell_texture")
+		{
+			const FCellTexture D = Transitions::BuildCellTexture(PRanked(I["cells"]), PRanked(I["choices"]));
+			FJsonValue Got = FJsonValue::MakeObject();
+			FJsonValue Origin = FJsonValue::MakeArray(), Size = FJsonValue::MakeArray(), Bytes = FJsonValue::MakeArray();
+			Origin.Push(FJsonValue::MakeInt(D.Origin.X)).Push(FJsonValue::MakeInt(D.Origin.Y)).Push(FJsonValue::MakeInt(D.Origin.Z));
+			Size.Push(FJsonValue::MakeInt(D.Size.X)).Push(FJsonValue::MakeInt(D.Size.Y)).Push(FJsonValue::MakeInt(D.Size.Z));
+			for (int Z = 0; Z < D.Size.Z; ++Z)
+				for (int Y = 0; Y < D.Size.Y; ++Y)
+					for (int X = 0; X < D.Size.X; ++X)
+					{
+						const uint8_t B = D.Bytes[static_cast<size_t>(D.IndexOf(D.Origin + FCell(X, Y, Z)))];
+						if (B == 0) continue;
+						FJsonValue T = FJsonValue::MakeArray();
+						T.Push(FJsonValue::MakeInt(X)).Push(FJsonValue::MakeInt(Y)).Push(FJsonValue::MakeInt(Z)).Push(FJsonValue::MakeInt(B));
+						Bytes.Push(T);
+					}
+			Got.Set("origin", Origin).Set("size", Size).Set("bytes", Bytes);
+			return PSameJson(Got, E, 0.0, "cell_texture");
+		}
+		if (Kind == "read")
+		{
+			FTransitions T;
+			const std::string Error = Transitions::Read(I, T);
+			if (E.Find("error")) return Error.empty() ? "expected a refusal, the file was accepted" : "";
+			if (!Error.empty()) return "expected the file to be read, refused: " + Error;
+			return PSameJson(Transitions::ToJson(T), E, 1e-6, "transitions");
+		}
+		return "unknown kind " + Kind;
+	}
+
+	int RunTransitions(const std::string& Path)
+	{
+		FJsonValue Conf;
+		if (!PLoad(Path, Conf)) return 1;
+		if (Conf["format"].String != "marchingblocks-transitions-conformance" || Conf["version"].AsInt() != 1)
+		{
+			std::printf("  FAIL not a transitions conformance file this plugin reads%s", "\n");
+			return 1;
+		}
+		FTally T;
+		const FJsonValue Defaults = Transitions::SettingsToJson(FTransitionSettings());
+		if (Conf["limits"]["layers_max"].AsInt() != Transitions::LayersMax || Conf["limits"]["margin"].AsInt() != Transitions::Margin
+			|| !PSameJson(Defaults, Conf["settings"]["defaults"], 0.0).empty())
+		{
+			++T.Failed;
+			std::printf("  FAIL transitions limits or defaults differ from the plugin's%s", "\n");
+		}
+		for (const FJsonValue& C : Conf["cases"].Array) T.Check(C, RunTransitionsCase(C), "transitions");
+		T.Print("transitions");
+		return T.Failed;
+	}
+
 	// ── EDITING ──────────────────────────────────────────────────────────────────────────────────────────────
 
 	std::string RunEditingCase(const FJsonValue& C, const FCellSet& World)
@@ -267,5 +594,7 @@ int RunParity(const std::string& Dir)
 {
 	int Failed = RunEditing(Dir + "/editing_conformance.json");
 	Failed += RunAnimation(Dir + "/animation_conformance.json");
+	Failed += RunFoliage(Dir + "/foliage_conformance.json");
+	Failed += RunTransitions(Dir + "/transitions_conformance.json");
 	return Failed;
 }
