@@ -1,3 +1,4 @@
+#include "../appli/licence.h"
 #include "mb_monde.h"
 #include "mb_natif.h"
 
@@ -14,6 +15,7 @@ static void initialiser(ModuleInitializationLevel niveau) {
 	}
 	GDREGISTER_CLASS(MBNatif);
 	GDREGISTER_CLASS(MBMonde);
+	GDREGISTER_CLASS(MBLicence);
 }
 
 static void terminer(ModuleInitializationLevel niveau) {

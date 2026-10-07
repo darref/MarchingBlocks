@@ -17,6 +17,8 @@ gdextension/
   tests/              les cas d'épreuve PROPRES au noyau (`./build.sh` : g++ aux drapeaux d'Unreal)
   src/godot/          le PONT vers Godot (classes MBNatif et MBMonde), en français : il ne part que dans l'exe
   src/appli/          la partie PRIVÉE de l'appli (cartes PBR, découpe, eau) : jamais dans les greffons
+    licence.*           MBLicence : la vérification Ed25519 des clés de licence (version SITE)
+    monocypher/         Monocypher 4.0.2 (BSD-2 ou CC0), son Ed25519 de la RFC 8032 — en C, tel que publié
 addons/marchingblocks_core/
   natif.gd            l'aiguillage : charge la bibliothèque, ou rend null (le GDScript prend la main)
   natif/marchingblocks_natif.gdextension
@@ -130,6 +132,16 @@ une couche retirée part avec ses grilles), puis applique le diff — qui ne dit
 qu'elle passe (l'ordre n'entre dans la décision que par le propriétaire du sommet) ; branché, `deplacer_couche` vide
 l'attente, fait suivre chaque inscrit (et la photo d'une couche qui dort) ; l'écran ne renumérote que l'union
 (`editor._renumeroter_l_union`). 120 821 cases : Up 555 → 70 ms.
+
+## La clé de licence — `MBLicence` (7 octobre 2026)
+
+`src/appli/licence.*` : `verifier(publique, message, signature)`, `publique_de(graine)`, `signer(graine, message)` —
+l'Ed25519 de Monocypher 4.0.2 (`src/appli/monocypher/`, recopié tel quel depuis monocypher.org et comparé au tag 4.0.2
+de GitHub ; BSD-2 ou CC0 au choix, audité par Cure53 en 2020). Godot n'a pas Ed25519. Le format des clés, le produit et
+les révocations vivent dans `app/licence.gd` ; `DEV_TOOLS/test_vente.gd` juge le natif contre la RFC 8032 et contre
+OpenSSL (`vecteurs_ed25519.json`, signés par Python `cryptography`). ⚠ Le natif ÉTEINT (`MB_NATIF=0`) ne coupe pas la
+licence : il choisit la route des calculs. ⚠ Les `.so` Linux du dépôt n'ont PAS `MBLicence` tant qu'ils ne sont pas
+reconstruits (`scons platform=linux …`).
 
 ## Éteindre le natif
 

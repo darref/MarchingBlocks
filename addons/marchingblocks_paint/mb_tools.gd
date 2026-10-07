@@ -177,6 +177,116 @@ static func operate(cells: Dictionary, selection: Dictionary, op: String) -> Dic
 	return {"set": set_, "clear": clear, "selection": after}
 
 
+# ── Extrude, Shrink, Widen, the Select brush (editing_conformance.json) ─────────────────────────────
+
+const EXTRUDE_DIRECTIONS := ["up", "down", "facing"]
+## place (click) · extend (Shift + click: "Extend selection") · shift (Alt + click).
+const EXTRUDE_MODES := ["place", "extend", "shift"]
+## The six directions of "facing", in the order that breaks ties.
+const FACING := [Vector3i(0, 1, 0), Vector3i(0, -1, 0), Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1),
+	Vector3i(0, 0, -1)]
+
+
+## The step of an extrusion: up, down, or "facing" — the direction d where the most base cells p (the FULL cells of
+## the selection, or with no selection the full cells at y = floor) have p + d empty and p - d full. The first of
+## FACING wins a tie; none: ZERO.
+static func extrude_step(cells: Dictionary, floor_y: int, direction: String, selection: Dictionary) -> Vector3i:
+	match direction:
+		"up":
+			return Vector3i.UP
+		"down":
+			return Vector3i.DOWN
+		"facing":
+			var best := Vector3i.ZERO
+			var best_count := 0
+			for d: Vector3i in FACING:
+				var n := 0
+				for c: Vector3i in cells:
+					var inside: bool = selection.has(c) if not selection.is_empty() else c.y == floor_y
+					if inside and not cells.has(c + d) and cells.has(c - d):
+						n += 1
+				if n > best_count:
+					best_count = n
+					best = d
+			return best
+	return Vector3i.ZERO
+
+
+## EXTRUDE — one operation, three gestures. The BASE is the selection, or (none) the full cells at y = floor.
+##   place  — sets p + step for every FULL base cell p where it is empty; the selection becomes the base shifted
+##            (it stays empty when there was none): click again to go on;
+##   extend — sets nothing; the selection becomes the base PLUS the base shifted (empty cells included);
+##   shift  — sets nothing; the selection becomes the base shifted.
+## Returns {"set", "clear", "selection", "step"}; the floor follows step.y. A ZERO step changes nothing.
+static func extrude(cells: Dictionary, floor_y: int, direction: String, selection: Dictionary,
+		mode: String) -> Dictionary:
+	var base := selection
+	if base.is_empty():
+		base = {}
+		for c: Vector3i in cells:
+			if c.y == floor_y:
+				base[c] = true
+	var step := extrude_step(cells, floor_y, direction, selection)
+	var out := {"set": {}, "clear": {}, "selection": selection, "step": step}
+	if step == Vector3i.ZERO or base.is_empty():
+		out["step"] = Vector3i.ZERO
+		return out
+	var shifted := {}
+	for c: Vector3i in base:
+		shifted[c + step] = true
+	match mode:
+		"extend":
+			var both := base.duplicate()
+			both.merge(shifted)
+			out["selection"] = both
+		"shift":
+			out["selection"] = shifted
+		_:
+			for c: Vector3i in base:
+				if cells.has(c) and not cells.has(c + step):
+					out["set"][c + step] = true
+			out["selection"] = shifted if not selection.is_empty() else {}
+	return out
+
+
+## SHRINK — the EDGE leaves: a cell where, on some axis, the selection goes on on one side and stops on the other.
+## Full or empty cells alike. A rectangle loses its rim, a line its ends, a cube its skin; a single cell stays.
+static func shrink_edge(selection: Dictionary) -> Dictionary:
+	var after := {}
+	for c: Vector3i in selection:
+		var edge := false
+		for f: Vector3i in FACES:
+			if selection.has(c - f) and not selection.has(c + f):
+				edge = true
+				break
+		if not edge:
+			after[c] = true
+	return after
+
+
+## WIDEN — the selection plus the four horizontal neighbours of every cell (Alt + wheel up). Nothing is set.
+static func widen_flat(selection: Dictionary) -> Dictionary:
+	var wide := {}
+	for c: Vector3i in selection:
+		wide[c] = true
+		for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+			wide[c + d] = true
+	return wide
+
+
+## THE SELECT BRUSH on its cells: they join the selection — only the full ones, or all of them with "Select empty
+## cells too" (`include_empty`); `deselect` (the inverse gesture) removes them, full or empty. IN PLACE (a stroke
+## touches a few cells of a selection that may hold thousands); returns the same selection.
+static func select_brush(selection: Dictionary, targets: Array, is_full: Callable, include_empty: bool,
+		deselect := false) -> Dictionary:
+	for c in targets:
+		if deselect:
+			selection.erase(c)
+		elif include_empty or is_full.call(c):
+			selection[c] = true
+	return selection
+
+
 ## Every cell between two corners, bounds included, full or empty. `hollow` keeps the skin only (a room);
 ## a box thinner than three cells on an axis has no inside and stays solid. More than BOX_VOLUME_MAX
 ## cells: empty — say so to the user.

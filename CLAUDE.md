@@ -52,31 +52,38 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
+    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; la nappe se dit périmée quand on peint. ⚠ La NAPPE n'est pas recalculée (le mailleur n'a pas de cas). Voir « Le greffon Godot à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
+    - ✓ **Godot — FAIT sauf F (7 octobre 2026)** : la règle de l'appli dans `mb_editor.gd` (`wheel`), éprouvée par de vrais événements. ⚠ F : la caméra de la vue 3D appartient à l'éditeur de Godot (pas d'API pour la poser).
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les transitions entre couches** (§5, « L'atelier Transitions ») : lire la clé `transitions` d'un monde exporté (à
     écrire d'abord dans `world.json` : paires, réglages par direction, représentants, choix peints), réécrire la règle
     (`Transitions.melange`, ses cas d'épreuve) et le shader (texture 3D d'un octet par case, table des réglages) dans
     chaque moteur, et le poser par-dessus les matériaux des tuiles. Un shader ne voyage pas (§4).
+    - ✓ **Godot — FAIT (7 octobre 2026)** : lecture, règle (93/93 cas), le shader de l'appli en `next_pass` sur les matériaux des tuiles, qui suit les cases peintes. Vu à l'image.
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
     si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
     « Room from selection » (`FS.salle_depuis`, réécrite en C# et en C++, avec ses cas).
+    - ✓ **Godot — FAIT (7 octobre 2026)** : « Select empty cells too », Extend selection (Maj + clic / Maj + molette), Room from selection. La largeur d'une rivière : la règle et ses cas seulement (le greffon ne pose pas d'eau).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
+    - ✓ **Godot — FAIT (7 octobre 2026)** : Extrude ↑ ↓ face (Maj étend, Alt décale), Shrink du bord ; les anciens Extrude ↑ ↓ et Shrink quittent sa barre (leurs fonctions restent pour `tools_conformance.json`).
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
   - **Les textures animées** (§5, « l'atelier Animation ») : lire `mb_animation` dans les `extras` du matériau glTF
     (défilement u/v, images — ips, aller-retour —, pulsation de l'émission, synchro ou décalée par la position, la phase
     de `phase_de`), et le shader de chaque moteur (la règle : `image_au_temps`, `pulsation_au_temps`) ; EMPORTER LES
     IMAGES dans le `.mbset` (aujourd'hui `tiles.glb` ne porte que l'image 0 et les noms de fichiers des autres) ; leurs
     cas d'épreuve.
+    - ✓ **Godot — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `.glb` (repli : la méta `extras`), le shader de l'appli (copie générée, phase en espace du format), 43/43 cas. Vu à l'image.
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
+    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas). ⚠ Pas d'outil pour PLANTER dans l'éditeur de Godot. Vu à l'image.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -437,6 +444,177 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 - **OUVERT** : la licence ; l'icône (remplacée en `362ae23`, pas encore validée ici) ; les textures PBR de test (retirées avec le PBR le 29 septembre 2026)
   venaient de HEART_WORLD.
 
+### LA VENTE — fait le 7 octobre 2026 (branche `vente`, à la demande de Jordan : « rends MarchingBlocks vendable »)
+
+Ce qui reste à faire pour vendre, sorti des décisions du 3 et du 7 octobre (§0 et §10 : clé signée nominative, hors ligne,
+sans limite de machines ; site + Steam ; démo ; installeur Inno Setup). Le code : `app/edition.gd`, `licence.gd`,
+`contrat.gd`, `demo.gd`, `mises_a_jour.gd`, `avis_tiers.gd`, `vente.gd` (ce que l'acheteur voit) ; `gdextension/src/appli/
+licence.*` ; `DEV_TOOLS/exporter_marchingblocks.sh`, `preparer_livraison.gd`, `installeur/marchingblocks.iss`,
+`licence_signer.py`, `lancer_les_suites.sh`, `test_vente.gd`.
+
+- **LE PRIX : 39,00 €, LE MÊME SUR LE SITE ET SUR STEAM — DÉCIDÉ (Jordan, 7 octobre 2026).** Il n'apparaît nulle part
+  dans l'appli ni dans l'installeur (rien à changer le jour où il change) ; s'il y entre un jour, c'est celui-là.
+- **TROIS ÉDITIONS, UNE BASE DE CODE — PROPOSÉ (Claude), ÉCRIT ET MESURÉ.** Trois préréglages d'export (`Site`, `Steam`,
+  `Demo`) posent chacun leur balise (`edition_site`, `edition_steam`, `edition_demo`), cuite dans le PCK chiffré ;
+  `Edition.nom()` la lit. Le site exige la clé et vérifie les mises à jour ; Steam ne demande rien (le compte Steam tient
+  lieu de licence, Steam livre les mises à jour) ; la démo ne garde rien. L'éditeur et les suites sont « dev » : rien de
+  tout cela. ⚠ **UN EXE EXPORTÉ SANS BALISE EST UN EXE DU SITE** (clé exigée) : un préréglage oublié ou recopié ne livre
+  jamais le logiciel complet sans clé ; deux balises ensemble → la plus restreinte (démo, puis site). L'ancien préréglage
+  « Windows Desktop » est remplacé par les trois.
+- **LA CLÉ DE LICENCE — ÉCRITE ET MESURÉE.** `MBK1.<charge base64url>.<signature base64url>` ; la charge, du JSON
+  (`product`, `name`, `email`, `id`, `issued`) ; la signature, Ed25519 (RFC 8032) de « MBK1. » + charge (le préfixe est
+  signé : une signature d'un autre format ne sert pas). Vérifiée HORS LIGNE par la clé publique de `app/licence.gd`
+  (`CLE_PUBLIQUE`) : aucune activation, aucun serveur, aucune limite de machines. Une clé collée depuis un e-mail (coupée,
+  espaces) se lit ; un autre produit, un nom vide, une clé révoquée (`REVOQUEES`, par son `id` : le contrat, art. 11) sont
+  refusés, chacun avec sa raison à l'écran.
+  - **POURQUOI ED25519 EN C++ (MONOCYPHER) — PROPOSÉ, la raison** : Godot n'a pas Ed25519 (son `Crypto` fait RSA et ECDSA
+    par mbedTLS) ; une signature RSA ferait une clé de 400 caractères au lieu de ~200, et l'ECDSA demande un aléa sûr à
+    chaque signature (le site le ferait en JavaScript). **Monocypher 4.0.2** (`gdextension/src/appli/monocypher/`,
+    BSD-2 ou CC0, audité par Cure53 en 2020, un seul fichier C, recopié tel quel et comparé au tag GitHub) donne l'Ed25519
+    de la RFC 8032 — celui de Python `cryptography`, de libsodium, de la Web Crypto des fonctions Cloudflare : le site
+    signera avec n'importe lequel. Dans la partie PRIVÉE de la GDExtension (`MBLicence` : `verifier`, `publique_de`,
+    `signer`), jamais dans les greffons. ⚠ Sans la DLL, aucune clé n'est bonne — l'export refuse un exe sans elle.
+  - ⚠ **CE QUE ÇA NE FAIT PAS** (comme le chiffrement, §0) : un déterminé modifie l'exe. La clé rend l'achat honnête
+    simple ; le rempart reste le contrat.
+  - **L'OUTIL DE JORDAN** : `python DEV_TOOLS/licence_signer.py signer --nom "…" --email … [--id COMMANDE]` imprime la
+    clé et la note dans `C:/Users/jorda/.marchingblocks/licences_emises.csv` ; `verifier "MBK1…"` dit ce qu'elle porte.
+    **LA CLÉ PRIVÉE VIT HORS DU DÉPÔT** : `C:/Users/jorda/.marchingblocks/licence_ed25519_privee.hex` (générée le 7 octobre
+    2026 par `generer`, qui refuse d'écraser). ⚠ **À SAUVEGARDER HORS DU PC** : perdue, aucune clé neuve ne se vérifie dans
+    les exe livrés ; volée, n'importe qui signe — il faudrait une paire neuve et une mise à jour. L'export REFUSE si la clé
+    publique de l'appli n'est pas celle de cette clé privée. ⚠ Le jour du site, sa fonction (après le webhook de Paddle)
+    signe de la même façon, avec la même clé privée posée en secret chez Cloudflare (OUVERT).
+  - **À L'ÉCRAN (version site)** : au premier lancement, après le contrat, « Activate MarchingBlocks » (coller la clé ;
+    « Quit » ferme l'appli) ; une clé retenue qui ne se vérifie plus est redemandée ; « About » dit « Licensed to Nom
+    (e-mail) » et « Enter another license key ».
+- **LA DÉMO : UN EXE À PART, PAS UN DRAPEAU — PROPOSÉ (Claude), puis DÉCIDÉ POUR STEAM (Jordan, 7 octobre 2026 : « une
+  démo au lancement, appli Steam Demo à part, gratuite »).** La raison : Steam l'exige de toute façon (une démo est une
+  application à part, son AppID, son dépôt) ; le fichier gratuit du site n'est pas l'exe payant ; aucune clé, aucun
+  argument ne la change en version complète ; un même exe « sans clé = démo » mêlerait les parcours (un acheteur qui a mal
+  collé sa clé se croirait floué de ses enregistrements). Ce qu'elle fait : TOUT, dans un bac jetable
+  (`user://demo_scratch`, vidé au lancement et à la fermeture ; ses données dans `%APPDATA%/MarchingBlocks Demo`, à part
+  de la version complète — réglage par balise dans `project.godot`) : le projet neuf et l'exemple y vivent, l'enregistrement
+  automatique y écrit, donc tous les ateliers marchent. Ce qu'elle refuse, en le disant : ouvrir un projet d'ailleurs,
+  « Save as », le témoin pour Blender, le jeu de tuiles, le monde, le patron UV — trois portes (`_demander`,
+  `_fichier_choisi`, `_ecrire_le_projet`). Ni associations de fichiers, ni « ton monde » rouvert. La barre de titre dit
+  « FREE DEMO — no saving, no export ». ⚠ PAS UN VERROU : le bac est un dossier ordinaire pendant la séance (ce qui y vaut
+  pour un moteur, le `.mbset`, ne s'y écrit jamais).
+- **LES MISES À JOUR (site) — ÉCRITES ET MESURÉES.** Au lancement, un JSON du site (`{"version", "date", "notes",
+  "download"}`, `MisesAJour.URL`) ; plus récente (les NOMBRES comparés : 0.9.10 > 0.9.9), la barre de titre dit « Update
+  0.9.1 available », un clic ouvre « My downloads » ; rien ne se télécharge. Case « Check for updates at launch » dans
+  Project. ⚠ **JAMAIS BLOQUANTE** : la requête part sans attendre (mesuré < 500 ms pour la lancer), hors ligne on se tait.
+  Un lien qui n'est pas en https n'est pas gardé. ⚠ **L'URL ATTEND LE DOMAINE** : `https://A-REMPLIR.example/…` dans
+  `app/mises_a_jour.gd` (et `URL_SITE` dans `app/vente.gd`, le lien « Buy / demo » du dialogue de la clé) — tant qu'elle
+  porte « A-REMPLIR », rien ne part et l'export le rappelle.
+- **LE CONTRAT LIVRÉ — ÉCRIT.** `app/textes/LICENSE.txt` : le modèle OUTIL de `D:/SpannerGames/LEGAL` (français qui fait
+  foi, puis anglais), au nom de MarchingBlocks, l'article 8 (données) écrit pour lui (la vérification des mises à jour, la
+  clé qui porte nom et e-mail sans rien transmettre). Montré et ACCEPTÉ au premier lancement dans les trois éditions
+  (« I accept » / « Quit »), retenu dans `reglages.cfg` avec sa VERSION (`Contrat.VERSION` : à monter quand le fond
+  change, chacun le relira) ; livré à côté de l'exe et montré par l'installeur. ⚠ **SES BLANCS [À COMPLÉTER] (SIRET,
+  adresse, e-mail du studio, médiateur) ATTENDENT LA MICRO-ENTREPRISE** : l'export le rappelle à chaque fois.
+- **LES AVIS DES LICENCES TIERCES — ÉCRITS.** `app/avis_tiers.gd`, UN texte : Godot (MIT) et ses 102 composants tels que
+  le moteur les déclare (`Engine.get_copyright_info`, polices comprises — Open Sans, Noto Sans, Inter, JetBrains Mono,
+  DroidSans, Vazirmatn —, FreeType, HarfBuzz, mbedTLS…), godot-cpp (MIT), Monocypher (BSD-2). Dans « About » et dans le
+  dossier livré (`THIRD_PARTY_NOTICES.txt`). ⚠ Le fichier livré est écrit par l'éditeur Godot : un sur-ensemble de ce
+  qu'embarque le modèle recompilé (sans D3D12 ni AccessKit), jamais un oubli. Une bibliothèque C++ ajoutée s'ajoute à
+  `PROPRES`.
+- **LES GREFFONS GRATUITS PORTENT LEUR MIT** (`LEGAL/LICENCE_GREFFONS_MIT.txt`) : `addons/marchingblocks_paint/LICENSE`,
+  `engines/unreal/MarchingBlocksPaint/LICENSE`, `engines/unity/com.marchingblocks.paint/LICENSE.md` (+ `.meta`, et
+  `"license": "MIT"` dans `package.json`).
+- **L'INSTALLEUR INNO SETUP (site) — ÉCRIT ET MESURÉ.** `DEV_TOOLS/installeur/marchingblocks.iss`, compilé par l'export.
+  **PROPOSÉ : UNE INSTALLATION PAR UTILISATEUR** (`PrivilegesRequired=lowest`) — aucune demande d'administrateur, le
+  programme dans `%LOCALAPPDATA%\Programs\MarchingBlocks`, ses clés dans HKEY_CURRENT_USER : LES MÊMES que celles que
+  l'appli pose elle-même sans installeur (la section `[Registry]` est ÉCRITE d'après `Associations.TYPES` par
+  `preparer_livraison.gd` : une règle, un endroit), donc la case « File icons » de Project les retire et les remet de la
+  même façon. Raccourci du menu Démarrer (et du Bureau, case à cocher), le contrat à accepter, `.mbproj` / `.mbtiles` et
+  leurs icônes (`{app}\icones`), le double-clic ; la désinstallation retire l'exe, la DLL, les raccourcis, les clés
+  (« uninsdeletekey » sur les types, la valeur et la clé vide sur les extensions) et les icônes ; elle LAISSE les
+  réglages, la clé de licence et les projets. Installée, l'appli ne s'inscrit pas par-dessus (`unins000.exe` à côté de
+  l'exe), et ses dossiers exportés prennent les icônes de `{app}\icones`. L'`AppId` ne change jamais (une version
+  remplace l'autre). ⚠ **NON SIGNÉ** : SmartScreen avertira (OUVERT).
+- **STEAM : LE DOSSIER TEL QUEL** (exe + DLL + LICENSE.txt + avis), et la démo de même ; `steampipe/app_build_steam.vdf`
+  et `app_build_demo.vdf` écrits par l'export, AppID et dépôts À REMPLIR (`steamcmd +run_app_build`). Sans installeur,
+  l'exe Steam s'inscrit lui-même (comme avant).
+- **LA COMMANDE UNIQUE** : `bash DEV_TOOLS/exporter_marchingblocks.sh [sortie]` (défaut `build/`). Elle REFUSE : clé du PCK
+  absente ; clé publique de l'appli ≠ clé privée de licence ; exemple non pris ; DLL release absente ; UNE suite rouge
+  (`lancer_les_suites.sh`, les 26) ; un exe lisible en clair (les 7 chaînes, dans chacun des trois) ; une DLL absente ou
+  différente de celle du dépôt ; un exe qui ne charge pas sa DLL — la SONDE (`MarchingBlocks.exe --headless --
+  --mb-sonde` : « MB-SONDE natif=1 licence=1 edition=… version=… », rien d'autre) et les modules du processus
+  (`Get-Process … .Modules`). Puis l'installeur, puis SteamPipe. Elle DIT sans refuser : les blancs du contrat, l'URL à
+  remplir.
+- **LA BATTERIE** : `bash DEV_TOOLS/lancer_les_suites.sh` — une par une (elles réécrivent `reglages.cfg`) ; verte = code 0
+  ET « N vérifications, 0 échec(s) » (N > 0) ET pas de « VERDICT : ÉCHEC » (`test_fluides` et `test_formes_speciales`
+  n'écrivent pas de VERDICT : le premier jet du runner les donnait rouges à tort).
+- **MESURÉ (7 octobre 2026, Windows 10, Godot 4.7, DLL reconstruites par MSVC 2022)** :
+  - `test_vente` **153** (la 26e suite) : l'Ed25519 natif contre les 3 vecteurs de la RFC 8032 et 24 signatures d'OpenSSL
+    (Python `cryptography`) — mêmes publiques, mêmes signatures octet pour octet, un bit changé refusé (message, R, S, clé),
+    S + L (malléable) refusée, tailles fausses refusées ; les clés signées par Python (noms accentués, japonais, guillemets)
+    lues ; les éditions (7 cas de balises) ; les mises à jour (12 comparaisons, réponses, hors ligne : < 500 ms pour lancer,
+    rien dit) ; le contrat ; les avis ; la démo (règles et bac) ; et L'APPLI MENÉE dans les trois éditions (site : contrat
+    → clé → projet, la clé retenue au lancement suivant, une clé qui ne se vérifie plus redemandée, About ; démo : six
+    refus dits, deux choix de fichier forcés et un `Save as` forcé sans rien écrire, un projet hors du bac jamais écrit,
+    le geste écrit dans le bac, « ton monde » intact au MD5, la fermeture qui vide le bac ; Steam : contrat, pas de clé).
+  - **LA BATTERIE : 26 SUITES VERTES** sur la branche (`lancer_les_suites.sh`), dont `fumee_appli` 937, `test_natif` 158,
+    `test_projet` 134, `test_vente` 153 — lancées par la commande d'export elle-même.
+  - **TRENTE MUTATIONS, TOUTES ROUGES** — GDScript (26) : le préfixe non signé, le produit, la révocation, les espaces,
+    le nom vide, la signature ignorée ; l'exe sans balise rendu « dev », Steam avant la démo ; la comparaison des versions
+    en texte, le lien http gardé, l'URL à remplir ignorée, la case ignorée ; la version du contrat ignorée ; le site sans
+    clé, le contrat jamais montré, une mauvaise clé acceptée, l'écran qui n'attend pas la vente ; les trois portes de la
+    démo, le projet neuf hors du bac, « ton monde » rouvert, le bac non vidé à la fermeture, le bac qui bute sur un fichier
+    en lecture seule ; l'installeur ignoré par les associations ; Monocypher oublié des avis. C++ (4, DLL reconstruite) :
+    `verifier` qui dit toujours oui, S ≥ L accepté dans Monocypher, la signature d'un octet de moins, les tailles non
+    gardées. ⚠ **QUATRE D'ABORD FAUSSES, PAR LE TEST** : trois mutations de la démo rougissaient pour la MAUVAISE raison
+    (un essai d'avant avait écrit dans le dossier jetable — il repart vide désormais) ; « le bac en lecture seule » et
+    « les tailles non gardées » étaient MUETTES (aucun fichier en lecture seule ; des tableaux vides au lieu d'une signature
+    de 65 octets) — le test les fait rougir.
+  - **L'EXPORT, LANCÉ POUR DE VRAI** (sortie `D:/MB_wt_vente_sorties`, pas `build/`) : la batterie verte, les trois exe
+    (~175 Mo : l'exemple pèse aujourd'hui 81 Mo), chiffrés (0 chaîne sur 7 dans chacun), la DLL à côté, identique à celle
+    du dépôt ; la sonde dit « natif=1 licence=1 edition=site|steam|demo version=0.9.0 » et la DLL est dans les modules de
+    chaque processus — **ROUGE VU** : la DLL retirée du dossier, la sonde dit « natif=0 licence=0 » et « MODULE_ABSENT ».
+    L'exe du site reconnaît une clé signée à l'instant par la clé privée de Jordan (« ok nom=Export check ») et refuse la
+    même, un caractère de sa signature changé. ⚠ **DEUX DÉFAUTS DE LA COMMANDE, TROUVÉS EN LA LANÇANT** : `Process.Modules`
+    se met en cache à sa première lecture (« MODULE_ABSENT » sur une DLL chargée : `Refresh()` à chaque tour) ; Git Bash
+    réécrivait `/DVersion=…` d'Inno en chemin (`MSYS2_ARG_CONV_EXCL`).
+  - **L'INSTALLEUR, INSTALLÉ ET DÉSINSTALLÉ SUR LE PC** (silencieux, 125 Mo) : les fichiers dans
+    `%LOCALAPPDATA%\Programs\MarchingBlocks` (exe, DLL, LICENSE, avis, `icones/`), les quatre clés et leurs valeurs
+    (`.mbproj` → `MarchingBlocks.Project`, l'icône, `"…\MarchingBlocks.exe" "%1"`), le menu Démarrer, le Bureau, l'entrée
+    « Programmes » (MarchingBlocks 0.9.0, SpannerGames) ; l'exe installé charge sa DLL. Désinstallé : plus rien — ni
+    dossier, ni clé, ni raccourci, ni entrée. ⚠ **UN EXE ENCORE OUVERT RESTE** jusqu'au redémarrage (vu une fois, l'exe
+    venait d'être lancé) : interactif, l'installeur propose de fermer l'appli (`CloseApplications`). ⚠ **UN DÉFAUT RÉEL,
+    PAYÉ SUR LE PC DE JORDAN** : la désinstallation emportait aussi les icônes des données de l'appli
+    (`app_userdata/MarchingBlocks/icones`), que désignait encore son exe de développement — retiré de l'installeur ; les
+    icônes réécrites par `Associations.ecrire_les_icones`, et ses clés `.mbproj` / `.mbtiles` (sauvées avant l'essai)
+    remises telles quelles.
+  - **VU À L'IMAGE** (exe du site lancé, captures d'écran) : le contrat (« MarchingBlocks — License agreement », « I accept »
+    / « Quit ») par-dessus l'appli, aucun projet ouvert derrière ; puis « Activate MarchingBlocks ». Corrigé après : le
+    champ de la clé prend le focus (on collait dans le vide), le contrat en paragraphes (les lignes coupées du Markdown
+    se lisaient mal dans la boîte). **La démo**, lancée de même : ses données dans `%APPDATA%\MarchingBlocks Demo` (la
+    balise de `project.godot` tient dans l'exe), le projet neuf dans le bac, « FREE DEMO — no saving, no export » dans la
+    barre et le rapport qui le dit ; fermée par la fenêtre, le bac est VIDE, rien dans Documents, les clés de fichiers de
+    Jordan intactes.
+- **CE QUE JORDAN DOIT FAIRE** :
+  - **SAUVEGARDER `C:/Users/jorda/.marchingblocks/licence_ed25519_privee.hex`** hors du PC (avec `cle_pck.hex`).
+  - Signer une clé : `python DEV_TOOLS/licence_signer.py signer --nom "Prénom Nom" --email adresse@… --id COMMANDE` (il
+    faut `pip install cryptography`) ; l'envoyer telle quelle à l'acheteur. En attendant le site, c'est à la main.
+  - Avant la vente : remplir les blancs du contrat (SIRET, adresse, e-mail, médiateur — `D:/SpannerGames/LEGAL`, puis
+    recopier dans `app/textes/LICENSE.txt` ; monter `Contrat.VERSION` si le fond change) ; le domaine dans
+    `MisesAJour.URL` et `Vente.URL_SITE` ; les AppID et dépôts (logiciel ET démo) dans les `.vdf`.
+  - Lancer l'export : `bash DEV_TOOLS/exporter_marchingblocks.sh` (≈ 15 min : la batterie d'abord).
+  - Tenir en main : le contrat, la clé, About, la démo, l'installeur interactif (rien de cela n'a été cliqué à la
+    souris ; l'installeur n'a tourné qu'en silencieux).
+- **OUVERT** :
+  - **LE SITE QUI SIGNE** : la fonction (webhook Paddle → clé → e-mail) n'existe pas ; elle signera au même format, la clé
+    privée en secret chez Cloudflare.
+  - **LA SIGNATURE DE CODE** : l'exe et l'installeur ne sont pas signés — SmartScreen avertira (« éditeur inconnu ») ; un
+    certificat coûte (≈ 100 à 300 € par an, ou Azure Trusted Signing ≈ 10 $ / mois s'il accepte un entrepreneur français).
+  - **STEAM SANS DRM** : le dossier Steam copié marche ailleurs sans clé (le choix courant des outils ; l'enveloppe DRM
+    de Steamworks est possible, à trancher par Jordan).
+  - **LE ZIP DE LA DÉMO DU SITE** : le dossier `demo/` est prêt ; l'archive à poser sur le site n'est pas faite.
+  - **LES `.so` LINUX** n'ont pas `MBLicence` (WSL hors service sur le PC) : sous Linux, `test_vente` rougit tant qu'ils ne
+    sont pas reconstruits (`scons platform=linux target=template_debug|template_release`).
+  - **LE CONTRAT DEUX FOIS** pour qui installe (l'installeur le montre, l'appli le fait accepter) : voulu prudent ; à
+    alléger si Jordan le trouve lourd (l'installeur pourrait marquer l'acceptation).
+  - Un PC qui a la version Steam ET la version du site : la désinstallation du site retire les clés de fichiers que la
+    version Steam avait posées (les mêmes) ; la case de Project les remet.
 ### LE CONTRAT DE LA PARITÉ — FAIT LE 7 OCTOBRE 2026 (première étape de « parité complète des greffons à la 0.9.0 »)
 
 La spécification lisible par l'agent de chaque moteur est **`engines/PARITE.md`** (entrée par entrée : ce qu'il faut
@@ -509,6 +687,64 @@ lire, la règle, les cas, le rendu, ce qui ne peut pas être fait). Ici, ce qui 
   ambiguë se remonte et se corrige dans le GDScript, jamais dans un moteur.
 - ⚠ **PAS TENU EN MAIN** : l'export du monde par le bouton (le panneau d'attente pend en headless, comme avant) — mené
   par `test_parite` sur `FormatMonde.exporter` directement, avec ce que l'écran lui passe (`_exporter_le_monde`, relu).
+
+### LE GREFFON GODOT À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-godot`, sur le contrat ci-dessus)
+
+Le greffon gratuit (`addons/marchingblocks_paint/`) porte la liste des greffons, entrée par entrée (cochées dans la
+liste, §0). **Il ne charge toujours RIEN du cœur** : chaque règle y est réécrite depuis `rules_text` (en anglais, elle
+part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
+
+- **LES RÈGLES — MESURÉ : 282 CAS SUR 282** (`test_greffon_peinture`, qui lit les cinq fichiers ; une sorte inconnue
+  rougit, le nombre de cas de chaque fichier est vérifié) : `mb_tools.gd` (Extrude poser / étendre / décaler × haut /
+  bas / face, `shrink_edge`, `widen_flat`, `select_brush`), `mb_shapes.gd` (`room_from_selection`), `mb_animation.gd`,
+  `mb_transitions.gd`, `mb_foliage.gd`, `mb_water.gd` (la règle de `fluides.gd`, sans le natif ni la reprise).
+- **LES SHADERS SONT CEUX DE L'APPLI, COPIÉS PAR UN GÉNÉRATEUR** (`DEV_TOOLS/generer_shaders_greffon.gd` →
+  `mb_shaders.gd`, gardé par la péremption dans `test_greffon_peinture`, comme les icônes) : l'animation, les
+  transitions, le vent, les six presets d'eau. **Deux transformations seulement**, chacune refusée si son motif manque :
+  chaque `MODEL_MATRIX` passe par `mb_world_to_format` (l'animation et les transitions : un nœud du greffon peut être
+  déplacé, tourné, à case ≠ 1 — l'appli, elle, est en espace du format) ; l'horloge de l'appli (`mb_temps`, `mb_image`)
+  devient le `TIME` de Godot (le greffon ne peint pas d'images). Le vent et l'eau partent tels quels.
+- **L'IMPORT D'UN MONDE** (`mb_world_file.gd`, `read_all`) lit `water`, `transitions`, `foliage` (une clé malformée refuse
+  le monde) et pose à côté des couches : **MarchingBlocksWater** (la nappe cuite, le preset de son aspect ou le matériau
+  de l'artiste ; elle se dit PÉRIMÉE quand les cases changent, et `follow_cells` montre l'eau recalculée — éteint par
+  défaut : une mer de millions de cases en GDScript), **MarchingBlocksTransitions** (le passage en `next_pass` sur
+  TOUS les matériaux des tuiles des couches, qui suit les cases peintes dans l'éditeur), **MarchingBlocksFoliage**
+  (MultiMesh, le vent ; le sol et la hauteur passés dans le monde de Godot). Un jeu de tuiles animé : `mb_animation` lu
+  dans le JSON du `.glb` (repli : la méta `extras`), ses images dans `animation/`. Les maillages d'une couche qui change
+  un matériau deviennent les SIENS (`Tileset.own`) : un autre monde qui charge le même `.glb` n'est pas touché.
+- **L'ÉDITION** : la barre a Extrude ↑ ↓ face (clic pose, Maj étend, Alt décale ; sur la sélection ou la matière de
+  l'étage), Shrink du bord, « Select empty cells too », Room from selection ; les anciens Extrude ↑ ↓ et Shrink QUITTENT
+  la barre de Godot (leurs fonctions restent pour `tools_conformance.json`, PARITE §6). **La molette** suit la règle de
+  l'appli (`mb_editor.wheel`), sa valeur dite près de la souris. Éprouvé par de vrais événements (350 vérifications).
+- **VU À L'IMAGE** (un projet d'essai avec le greffon seul, un monde exporté par l'appli, rendu avec fenêtre) : le fondu
+  sable / roche (avec et sans passage, puis un représentant rouge pour voir OÙ il dessine), l'animation décalée tuile par
+  tuile à deux instants, les arbres qui se balancent à trois instants, les SIX presets d'eau, et la barre
+  (`ART/barre_greffon.png`, refaite).
+- **MUTATIONS — 24, 24 ROUGES** : le fondu (départage, décalage sans 1 − s), la table au-delà de 15, la marge de la
+  texture, l'aller-retour, la phase, une version plus récente, le défilement sans 7 × phase, le balancement ∝ h, un plant
+  d'un modèle inconnu, le pinceau qui n'indexe pas, l'ordre des voisins de l'eau, deux mers, le lac qui ne déborde
+  jamais, Extrude face, Shrink, Select, Room from selection, la molette (Alt ↑ inversé, le zoom volé), la copie des
+  shaders retouchée, le passage non posé, la nappe sans son preset. ⚠ **UNE ÉTAIT D'ABORD MUETTE** : lire l'eau sous un
+  plant au point même au lieu de p + 0,1 ne change AUCUN cas `check` (leurs plants sont à y = 1). Gardée dans
+  `test_greffon_peinture` contre la référence du cœur (un sol à y = 0,75) — **les cas communs ne la gardent pas : à
+  ajouter dans `epreuve_parite.gd`** (OUVERT : régénérer touche les trois greffons).
+- ⚠ **UNE AMBIGUÏTÉ DE LA RÈGLE, TROUVÉE — OUVERT, À TRANCHER DANS LE CŒUR** : `phase_de` range `fract(p · 0,3183099 + k)`
+  puis `× 17` dans un `Vector3` — en FLOTTANTS 32 BITS — alors que `rules_text` dit « computed in DOUBLE precision ».
+  Mesuré : en double pur, l'origine (130, 64, −90) donne 0,32110 au lieu de 0,32080 attendu (et (1, 1, 1) 0,99927 au lieu
+  de 0,99919) : **un greffon C# ou C++ écrit depuis le texte ÉCHOUE les cas `phase`**. Godot les passe parce que son
+  `Vector3` arrondit pareil. Deux voies : dire l'arrondi 32 bits dans le texte, ou calculer `phase_de` en double (les
+  cas changent). Aucune ne change le rendu de l'appli (son shader calcule à part).
+- ⚠ **CE QUI RESTE, ET POURQUOI** : F (cadrer toute la matière) — la caméra de la vue 3D appartient à l'éditeur de Godot,
+  sans API pour la poser (son F à lui centre la sélection) ; PLANTER dans l'éditeur — pas d'outil (la règle et le pinceau
+  sont là et éprouvés ; le sol devrait se chercher contre les tuiles posées) ; la NAPPE d'eau recalculée — attend les cas
+  du mailleur (PARITE §2) ; le bruit des transitions — un par direction dans le shader, un seul dans les cas (PARITE §4,
+  le greffon suit le shader) ; le vent d'un monde TOURNÉ tourne avec lui (exact pour un monde déplacé et mis à
+  l'échelle).
+- ⚠ **VU EN PASSANT** : l'export glTF de l'appli donne un matériau PAR MAILLAGE (« sand », « sand2 »… « sand52 »), chacun
+  avec ses extras — l'association par nom marche, mais un moteur reçoit 52 matériaux pour un (le greffon partage
+  au moins leurs tableaux d'images). À regarder pour Unity et Unreal (lots d'appels de dessin).
+- ⚠ **PAS TENU EN MAIN** : le greffon dans l'éditeur de Godot lui-même (souris, molette réelle sous Windows, Alt +
+  molette) — tout ce qu'il relaie est éprouvé par événements, l'aiguillage de l'éditeur ne se teste pas en headless.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 

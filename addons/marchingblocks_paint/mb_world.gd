@@ -57,6 +57,54 @@ var _last := {"tiles": 0, "missing": 0, "error": ""}
 func _ready() -> void:
 	_build_children()
 	rebuild()
+	set_notify_transform(true)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_TRANSFORM_CHANGED:
+		_update_format_space()
+
+
+## Godot's world → FORMAT space (cell c covers [c, c + 1], the tile of vertex v centred on v + piece_offset): the
+## inverse of this node's pose, divided by the cell size. The animated tiles read their phase in it.
+func format_space() -> Transform3D:
+	var t := global_transform if is_inside_tree() else transform
+	return t.affine_inverse().scaled(Vector3.ONE / cell_size)
+
+
+## The materials of the tiles this layer places, its OWN copies (`Tileset.own`): what the transitions pass is laid
+## over. [] without a tileset.
+func tile_materials() -> Array:
+	if _loaded.is_empty() or _loaded.has("error"):
+		return []
+	var library: MeshLibrary = _loaded["library"]
+	Tileset.own(library)
+	var out: Array = []
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if m != null and not out.has(m):
+				out.append(m)
+	return out
+
+
+## Every animated material of this layer learns where the layer stands.
+func _update_format_space() -> void:
+	if _loaded.is_empty() or _loaded.has("error") or int(_loaded.get("animated", 0)) == 0:
+		return
+	var f := Projection(format_space())
+	var library: MeshLibrary = _loaded["library"]
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if m is ShaderMaterial and m.has_meta("mb_animation"):
+				(m as ShaderMaterial).set_shader_parameter("mb_world_to_format", f)
 
 
 func _process(_delta: float) -> void:
@@ -102,6 +150,7 @@ func rebuild() -> Dictionary:
 		return _last
 	var library: MeshLibrary = _loaded["library"]
 	tiles_grid.mesh_library = library
+	_update_format_space()
 	var ids := {}
 	for id in library.get_item_list():
 		ids[library.get_item_name(id)] = id

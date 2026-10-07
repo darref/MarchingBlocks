@@ -50,6 +50,11 @@ const Manuel := preload("res://app/manuel.gd")
 const Associations := preload("res://app/associations.gd")
 const Exemple := preload("res://app/exemple.gd")
 const Dossiers := preload("res://app/dossiers.gd")
+## LA VENTE (charte §0, « la vente ») : l'édition de l'exe (site, Steam, démo), la démo, et ce que l'acheteur en voit.
+const Edition := preload("res://app/edition.gd")
+const Demo := preload("res://app/demo.gd")
+const Vente := preload("res://app/vente.gd")
+const MisesAJour := preload("res://app/mises_a_jour.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
@@ -298,6 +303,9 @@ var _preset_eau: OptionButton
 var _droite_jeu: Panneau
 var _controles_rendu := {}
 var _choix_meteo: OptionButton
+var _vente: Node
+var _bouton_maj: Button
+var _case_maj: CheckButton
 
 
 ## ⚠ `UndoRedo` N'EST PAS COMPTÉ PAR RÉFÉRENCE : il fuit si on ne le libère pas, avec les couches
@@ -311,6 +319,10 @@ func _notification(quoi: int) -> void:
 		if _dev != null:
 			_attendre_l_ecriture()
 			_dev.a_la_fermeture(_projet)
+		# LA DÉMO NE GARDE RIEN : ce qu'elle a écrit dans son bac part avec elle.
+		if Edition.est_demo():
+			_attendre_l_ecriture()
+			Demo.vider_le_bac()
 	if quoi == NOTIFICATION_PREDELETE:
 		_attendre_l_ecriture()
 		# Les cartes PBR en route sur un autre fil : on ne démonte pas le moteur sous elles.
@@ -321,6 +333,11 @@ func _notification(quoi: int) -> void:
 
 
 func _ready() -> void:
+	# LA SONDE DE L'EXPORT (`exporter_marchingblocks.sh`) : l'exe dit s'il a chargé sa DLL, et laquelle de ses éditions il
+	# est, puis s'arrête — RIEN d'autre (ni contrat, ni projet, ni registre). Elle ne débloque rien.
+	if OS.get_cmdline_user_args().has("--mb-sonde"):
+		await _sonder()
+		return
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	_brancher_le_dev()
 	_regler_fenetre()
@@ -333,8 +350,34 @@ func _ready() -> void:
 	_lire_les_durees()
 	await get_tree().process_frame
 	_regler_fenetre()
+	# LA VENTE, AVANT TOUT PROJET (charte §0, « la vente ») : le contrat à accepter, la clé (site). Quitter là ne touche
+	# à rien. Hors de l'exe livré (l'éditeur, les suites), rien.
+	if not await _vente.au_lancement():
+		get_tree().quit()
+		return
+	if Edition.est_demo():
+		Demo.vider_le_bac()
+		racine_exemple = Demo.BAC.path_join("example")
 	await _ouvrir_au_lancement()
+	if Edition.est_demo():
+		_dire(Demo.MESSAGE)
 	_inscrire_les_fichiers()
+
+
+func _sonder() -> void:
+	const Licence := preload("res://app/licence.gd")
+	const Natif := preload("res://addons/marchingblocks_core/natif.gd")
+	print("MB-SONDE natif=%d licence=%d edition=%s version=%s" % [int(Natif.disponible()),
+		int(Licence.verificateur() != null), Edition.nom(), ProjectSettings.get_setting("application/config/version", "")])
+	# `--mb-cle=<clé>` : la clé est-elle bonne POUR CET EXE (sa clé publique livrée) ? L'export y passe une clé signée à
+	# l'instant par la clé privée de Jordan — la chaîne entière, de l'outil de signature à l'exe chiffré.
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--mb-cle="):
+			var r: Dictionary = Licence.lire(a.trim_prefix("--mb-cle="))
+			print("MB-SONDE-CLE %s" % (("ok nom=" + str(r["nom"])) if r["ok"] else ("refusee " + str(r["raison"]))))
+	# Le temps que l'export voie la DLL dans les modules du processus.
+	await get_tree().create_timer(3.0).timeout
+	get_tree().quit()
 
 
 ## ⚠ LA FENÊTRE S'OUVRE MAXIMISÉE (Jordan, 27 septembre 2026 : « on a besoin de place ») — fenêtrée,
@@ -499,6 +542,9 @@ func _batir() -> void:
 
 	_manuel = Manuel.new()
 	add_child(_manuel)
+	_vente = Vente.new()
+	add_child(_vente)
+	_vente.mise_a_jour.connect(_dire_la_mise_a_jour)
 
 	_dialogue = FileDialog.new()
 	_dialogue.access = FileDialog.ACCESS_FILESYSTEM
@@ -606,6 +652,27 @@ func _barre_titre() -> Control:
 	manuel.focus_mode = Control.FOCUS_NONE
 	manuel.pressed.connect(func() -> void: _manuel.ouvrir())
 	ligne.add_child(manuel)
+	# « About » : la version, l'édition, la licence en vigueur, le contrat et les avis des licences tierces.
+	var about := Button.new()
+	about.text = "About"
+	about.tooltip_text = "Version, license, third-party notices"
+	about.focus_mode = Control.FOCUS_NONE
+	about.pressed.connect(func() -> void: _vente.ouvrir_about())
+	ligne.add_child(about)
+	# UNE MISE À JOUR (site) : un mot discret, caché tant que le site n'a rien annoncé ; il ouvre « My downloads ».
+	_bouton_maj = Button.new()
+	_bouton_maj.flat = true
+	_bouton_maj.visible = false
+	_bouton_maj.focus_mode = Control.FOCUS_NONE
+	_bouton_maj.add_theme_font_size_override("font_size", 12)
+	_bouton_maj.add_theme_color_override("font_color", Palette.AMBRE)
+	ligne.add_child(_bouton_maj)
+	if Edition.est_demo():
+		var demo := Label.new()
+		demo.text = "FREE DEMO — no saving, no export"
+		demo.add_theme_font_size_override("font_size", 12)
+		demo.add_theme_color_override("font_color", Palette.AMBRE)
+		ligne.add_child(demo)
 
 	# L'éditeur, tout à droite. ⚠ LE LOGO DÉTOURÉ, pas `spannergames.png` : son fond violet opaque
 	# ferait un carré sur la barre.
@@ -917,6 +984,17 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 	_case_associations.focus_mode = Control.FOCUS_NONE
 	_case_associations.toggled.connect(_regler_les_associations)
 	projet.contenu.add_child(_case_associations)
+	# LES MISES À JOUR (site seulement : Steam livre les siennes) — vérifiées au lancement, sans rien télécharger.
+	_case_maj = CheckButton.new()
+	_case_maj.text = "Check for updates at launch"
+	_case_maj.add_theme_font_size_override("font_size", 11)
+	_case_maj.tooltip_text = ("Reads a small file on the SpannerGames website at launch and says, up in the title "
+		+ "bar, when a newer version is out.\nNothing is downloaded by itself. Offline, nothing happens.")
+	_case_maj.focus_mode = Control.FOCUS_NONE
+	_case_maj.visible = Edition.nom() == Edition.SITE
+	_case_maj.set_pressed_no_signal(MisesAJour.voulue())
+	_case_maj.toggled.connect(func(oui: bool) -> void: MisesAJour.regler(oui))
+	projet.contenu.add_child(_case_maj)
 
 	# ── LE TÉMOIN — en RÉFÉRENCE (Jordan) : on le consulte, on n'y travaille pas.
 	var temoin := Section.new("Witness", true, Icones.icone("cube"))
@@ -4715,6 +4793,10 @@ func _dire_la_cible() -> void:
 
 
 func _demander(quoi: String) -> void:
+	# LA DÉMO (`demo.gd`) : ni ouvrir un projet d'ailleurs, ni « Save as », ni aucune sortie.
+	if Edition.est_demo() and Demo.refuse(quoi):
+		_dire(Demo.MESSAGE)
+		return
 	_action_fichier = quoi
 	var ecrire: bool = quoi in ["exporter", "enregistrer"]
 	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if ecrire else FileDialog.FILE_MODE_OPEN_FILE
@@ -4755,6 +4837,9 @@ func _demander(quoi: String) -> void:
 
 
 func _fichier_choisi(fichier: String) -> void:
+	if Edition.est_demo() and Demo.refuse(_action_fichier):   # la seconde porte : rien n'arrive ici sans `_demander`
+		_dire(Demo.MESSAGE)
+		return
 	match _action_fichier:
 		"exporter":
 			_exporter(fichier)
@@ -6291,6 +6376,10 @@ func _ouvrir_au_lancement() -> void:
 		var exemple := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
 		if exemple != "" and await _ouvrir(exemple):
 			return
+	# LA DÉMO n'ouvre que ce qui est dans son bac (vidé au lancement) : ni un projet passé en argument, ni « ton monde ».
+	if Edition.est_demo():
+		_nouveau_projet()
+		return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
 	if passe != "" and await _ouvrir(passe):
 		return
@@ -6384,6 +6473,8 @@ func _nouveau_projet() -> void:
 ## puis `untitled 2/…` — ses témoins s'écrivent à côté de lui, pas en vrac. Si ce dossier ne peut pas être écrit (Documents
 ## en lecture seule), les données de l'appli, comme avant.
 func _chemin_libre() -> String:
+	if Edition.est_demo():   # la démo travaille dans son bac, vidé à chaque lancement
+		return Dossiers.projet_libre(Projet.EXTENSION, Demo.BAC)
 	var chemin := Dossiers.projet_libre(Projet.EXTENSION)
 	if chemin == "":
 		chemin = Dossiers.projet_libre(Projet.EXTENSION, "user://")
@@ -6727,6 +6818,14 @@ func _attendre_l_ecriture() -> void:
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
 		transitions: Dictionary = {}, feuillage: Dictionary = {}) -> void:
 	var raison := ""
+	# LA DÉMO N'ÉCRIT QUE DANS SON BAC (`demo.gd`) — la dernière porte, si un chemin d'ailleurs arrivait jusqu'ici.
+	if Edition.est_demo() and not Demo.dans_le_bac(chemin):
+		raison = "the free demo does not save (%s)." % chemin.get_file()
+		if en_fond:
+			_ecriture_finie.call_deferred(raison)
+		else:
+			_ecriture_finie(raison)
+		return
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
@@ -6780,7 +6879,8 @@ static func _attend(minuterie: Timer) -> bool:
 func _inscrire_les_fichiers() -> void:
 	var reglages := ConfigFile.new()
 	reglages.load(REGLAGES)
-	var livre: bool = OS.get_name() == "Windows" and OS.has_feature("template")
+	# ⚠ LA DÉMO NE S'INSCRIT PAS : elle n'ouvre aucun projet d'ailleurs, un double-clic n'y mènerait à rien.
+	var livre: bool = OS.get_name() == "Windows" and OS.has_feature("template") and not Edition.est_demo()
 	if _case_associations != null:
 		_case_associations.disabled = not livre
 		_case_associations.set_pressed_no_signal(livre and not bool(reglages.get_value("associations", "refus", false)))
@@ -6790,7 +6890,9 @@ func _inscrire_les_fichiers() -> void:
 		return
 	var exe := OS.get_executable_path()
 	var version := str(ProjectSettings.get_setting("application/config/version", ""))
-	if not Associations.a_inscrire(reglages, exe, version):
+	# ⚠ INSTALLÉ PAR L'INSTALLEUR (`unins000.exe` à côté de l'exe, version SITE) : c'est lui qui a inscrit les fichiers,
+	# et sa désinstallation les retire — l'appli ne s'inscrit pas par-dessus (la case de Project reste libre).
+	if not Associations.a_inscrire(reglages, exe, version, Associations.installe_par_l_installeur(exe)):
 		return
 	var raison: String = Associations.inscrire(exe)
 	if raison != "":
@@ -7171,6 +7273,18 @@ func _touche_du_temoin(k: InputEventKey) -> bool:
 		_bouton_prop.set_pressed_no_signal(_modeleur.proportionnel)
 		_suivre_le_mode_de_selection()
 	return pris
+
+
+## Le site annonce une version plus récente (`MisesAJour`, version SITE) : un mot dans la barre de titre, rien de plus.
+func _dire_la_mise_a_jour(version: String, lien: String) -> void:
+	_bouton_maj.text = "Update %s available" % version
+	_bouton_maj.tooltip_text = ("A newer version of MarchingBlocks is out. Click to open your downloads page." if lien != ""
+		else "A newer version of MarchingBlocks is out: get it from your downloads page.")
+	for c in _bouton_maj.pressed.get_connections():
+		_bouton_maj.pressed.disconnect(c["callable"])
+	if lien != "":
+		_bouton_maj.pressed.connect(func() -> void: OS.shell_open(lien))
+	_bouton_maj.visible = true
 
 
 func _dire(texte: String) -> void:
