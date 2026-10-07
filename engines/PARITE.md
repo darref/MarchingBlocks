@@ -30,6 +30,7 @@
 | `foliage_conformance.json` | 59 | `check` 23, `brush` 4, `place` 3, `wind_data` 2, `sway` 9, `ground_of_cells` 6, `read` 12 |
 | `water_conformance.json` | 25 | `water_world` 11, `river_width` 5, `surface_depth` 2, `read` 7 |
 | `editing_conformance.json` | 62 | `extrude` 39, `shrink_edge` 6, `widen_flat` 3, `select_brush` 4, `room_from_selection` 10 |
+| `water_mesh_conformance.json` (7 octobre 2026, §12) | 14 | `water_mesh` 14 — la nappe recalculée, en ensemble de triangles |
 
 Chaque fichier : `format`, `version` (1), `rules_text` (la règle, ligne à ligne — **à lire en entier**), parfois
 `limits` / `constants` / `settings`, des mondes nommés (`world_cells`, `worlds`, `models`), et `cases` :
@@ -73,7 +74,7 @@ convertit par le repère MESURÉ `F` (le nœud `mb_frame`, `conformance.json`) :
 `F⁻¹(P / taille de case)` en espace du format. **Un shader qui lit une texture 3D des cases, une phase ou un vent doit
 faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres) inversent ou échangent des axes.
 
-## 2. Les fluides — PARTIEL (lecture et règle : cas ; maillage et presets : pas de cas)
+## 2. Les fluides — lecture, règle et MAILLAGE : cas (le maillage : §12) ; presets : pas de cas
 
 - **Lire** : la clé `water` (`FormatMonde.lire_eau` ; `regle_eau()` dans `rules_text`) — par couche d'eau `name`,
   `visible`, `look` (une SUGGESTION : `stylized`, `clear`, `reflective`, `lava`, `swamp`, `acid` ; un aspect inconnu est
@@ -91,11 +92,11 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   est résumée dans `rules_text`, mais **la référence est `fluides.gd` ligne à ligne** : l'ordre des voisins (+x, −x, +z,
   −z, bas, haut) et le tas départagé par l'ordre d'insertion décident de tout. ⚠ La mer d'Unreal peut reprendre
   `gdextension/src/noyau/ocean.h` (déjà en C++ standard, déjà éprouvé contre le GDScript par `test_natif`).
-- **CE QUI N'A PAS DE CAS** : le MAILLAGE de l'eau (`eau_maillage.gd` : plats sans jonction en T, nappe sous un étage
-  flottant, cascades en volume, remous, source). Un greffon qui recalcule l'eau devrait aussi refaire la nappe — c'est
-  une seconde réécriture de ~1 000 lignes, sans cas aujourd'hui. **Conseil** : à la 0.9.0, les greffons montrent la
-  nappe CUITE (déjà complète) et recalculent les CASES d'eau (règle + cas) ; recalculer la nappe en peignant attend
-  qu'`eau_maillage.gd` ait ses cas (ou passe au cœur C++, comme les plats l'ont déjà fait).
+- **LE MAILLAGE DE L'EAU A SES CAS DEPUIS LE 7 OCTOBRE 2026** (`water_mesh_conformance.json`, **§12**) : plats sans
+  jonction en T, nappe sous un étage flottant, cascades en volume, remous, source, un seul océan, largeur de rivière. Un
+  greffon qui recalcule l'eau refait aussi la nappe — ~1 000 lignes à réécrire, désormais jugées par 14 cas et un
+  appariement en sac de triangles. (Avant : « les greffons montrent la nappe CUITE et recalculent les CASES » — c'est
+  toujours le minimum livré ; §12 dit comment aller au-delà, et à quel coût.)
 - **Vérifié (7 octobre 2026)** : l'export de l'eau est complet pour ce qui est décidé (nappes, presets en aspects,
   cascades en volume dans le maillage, un seul océan) ; seule manquait la phrase « un seul océan » dans `regle_eau()`,
   ajoutée.
@@ -215,7 +216,8 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   `InstancedStaticMeshComponent`, NON MESURÉ ; « Object Position » d'une instance dans un matériau d'ISM : NON MESURÉ
   (le même piège que la `MODEL_MATRIX` d'une MultiMesh dans Godot). La texture 3D : `UVolumeTexture` (R8), à mesurer.
 - **Lire les extras glTF** : seulement Godot est mesuré (§1). Lire le JSON de `tiles.glb` soi-même lève le doute.
-- **Recalculer la NAPPE d'eau** : pas de cas (§2).
+- **Recalculer la NAPPE d'eau** : ses cas existent (§12) ; le COÛT est le risque — une grande mer en GDScript se compte
+  en secondes (mesuré, §12) : jamais pendant un geste.
 - **La molette sur les panneaux du moteur** : pas à nous (§3).
 - **Une phase d'animation calculée en 32 bits** diffère jusqu'à 0,025 (§7).
 - **Rien de ce qui se VOIT n'est gardé par ces cas** : chaque rendu se juge à l'image, avec fenêtre, dans chaque moteur
@@ -246,3 +248,149 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   sensible à l'ordre) — l'Unreal peut partir du `noyau/ocean.h`.
 - **Godot est le plus court** : mêmes shaders que l'appli (copies générées et gardées), MultiMesh pour le feuillage,
   `next_pass` pour les transitions.
+
+## 12. Le maillage de l'eau — la nappe recalculée (FAIT LE 7 OCTOBRE 2026 : cas, garde, budget ; à écrire dans chaque moteur)
+
+> Les trois greffons montrent la nappe CUITE (six presets) et recalculent les CASES d'eau ; ils ne refaisaient pas la
+> NAPPE en peignant, faute de cas pour `eau_maillage.gd`. Ce paragraphe les donne. Il est écrit pour les trois agents
+> qui porteront le mailleur — un par moteur.
+
+### Ce qui fait foi
+
+- **`addons/marchingblocks_core/eau_maillage.gd`**, ligne à ligne ; ses cas : **`water_mesh_conformance.json`** (14), écrit
+  par `epreuve_parite.gd` (`_maillage_eau`) dans les trois greffons (`.meta` à GUID fixe pour Unity). Le résumé de la règle
+  est dans `rules_text` (« THE WATER MESH ») ; les constantes dans `constants` ; les tolérances dans `tolerances`.
+- **Ce que les cas décrivent, ce sont les TABLEAUX** (`EauMaillage.tableaux_du_maillage`, sorti de `maillage` pour
+  l'être), pas l'`ArrayMesh` : celui de Godot range les couleurs sur 8 bits (0,5 relu 0,498039) et les normales en
+  octaèdre (une normale (0, 1, 0) relue avec z = −1,5e−5) — MESURÉ au premier essai, la première version des cas en
+  était faussée. Un greffon compare ce qu'il CALCULE, avant de le confier au moteur.
+- ⚠ **`eau_poser_les_plats`** (le cœur C++, `gdextension/src/appli/eau.cpp`) est PRIVÉ : il ne part pas dans les greffons.
+  Les cas sont calculés avec lui et relus sans lui (`MB_NATIF=0`) : mêmes triangles (`test_parite` vert dans les deux).
+
+### L'entrée d'un cas
+
+`{world, bodies}` : un monde nommé (`worlds`, cases pleines de TOUTES les couches) et les corps d'UNE couche d'eau, **au
+format de sortie des `water_world`** (`kind`, `error`, `level`, `end`, `water`, `lakes`, `course`). Le mailleur se teste
+donc SANS la règle de l'eau ; dans le greffon, il prend la sortie de sa propre règle (déjà jugée par
+`water_conformance.json`). La boîte est celle des cases pleines grandie d'une case. ⚠ L'appli lit la surface de la mer
+sur ses TRONÇONS (`colonnes`, `surface_des_colonnes`) ; un greffon ne les a pas : la mer relue de son eau
+(`surface_dessinee`) donne les MÊMES triangles — gardé par `test_parite` sur les trois mers des cas.
+
+### La sortie : un SAC DE TRIANGLES canonique — et pourquoi cette forme
+
+`expected` = `{summary, vertices, triangles}`. Dépliés (`vertices[i]` pour chaque indice), ce sont des triangles de trois
+coins `[px, py, pz, nx, ny, nz, r, g, b, a, u, v]`, **dans le sens du format** (anti-horaire vu de l'avant, comme le
+`.glb` ; Godot range à l'envers), arrondis au millionième. Les sommets et les indices ne sont qu'un rangement compact
+(570 Ko au lieu de 1,6 Mo en triangles à plat).
+
+- **Pourquoi pas les tableaux dans l'ordre** : l'ordre des sommets et des triangles dépend des mémoires, du cœur natif,
+  de la manière d'écrire la boucle ; un moteur qui les rend dans un autre ordre dessine exactement la même eau. L'exiger
+  ferait réécrire des détails sans valeur, et rougir à tort.
+- **Pourquoi pas des invariants seuls** (nombre et aire par genre, pas de jonction en T, hauteur des plats) : MESURÉ, sur
+  16 mutations réelles du mailleur, **6 laissent le nombre et l'aire de chaque genre IDENTIQUES** — l'écume des cascades
+  linéaire au lieu de e², la lèvre la plus basse gardée quand deux cascades se rejoignent, l'anneau du remous sans ses
+  0,02 au-dessus de l'eau, le sens des triangles par la normale du 2e coin, la profondeur des bandes à 0 au lieu de 0,05,
+  deux bandes sur une même case. Des invariants seuls les laisseraient passer ; le sac les voit toutes.
+- **Le sac est honnête** : la géométrie ET les attributs (le contrat COLOR_0 : courant, genre, profondeur, écume ; la
+  normale qui fait le volume des cascades ; les UV qui font couler), sans exiger l'ordre ; la réflexion d'un triangle est
+  refusée (le sens fait partie du contrat : faces arrière éliminées). Le `summary` (nombre, aire par genre) n'est qu'un
+  diagnostic avant l'appariement.
+- **Les flottants** : Godot calcule en double et range en 32 bits (Vector3, Color) ; un C# ou un C++ en double s'écarte
+  de ~1e−6. Tolérances : position et uv 1e−4, normale 1e−3 (calculée par différences de points 32 bits), couleur 1e−4.
+  **Les seuils du mailleur sont loin** — MESURÉ sur les 14 cas : les 112 triangles jetés (|AB × AC| < 1e−7) ont une aire
+  EXACTEMENT nulle (deux coins confondus : le centre d'un disque), le plus petit gardé est à 1,0e−3 ; le sens de chaque
+  triangle de grille, tranché par un produit scalaire avec la normale de son premier coin, a une marge d'au moins 0,345.
+  Les seuils de `_chutes` et `_travers` comparent des multiples de 0,05 avec 0,01 de marge au moins (raisonné, pas
+  mesuré). Un moteur en double ne tranche donc autrement nulle part dans ces cas.
+
+### Comparer (ce que chaque banc écrit, ~60 lignes ; la référence est `_meme_sac` dans `test_parite.gd`)
+
+1. Même nombre de triangles. 2. Ranger ses triangles dans des seaux par centre arrondi au centième. 3. Pour chaque triangle
+attendu, chercher dans les 27 seaux voisins un triangle NON ENCORE PRIS égal à l'une de ses trois ROTATIONS (A B C, B C A,
+C A B), coin par coin aux tolérances. Un banc qui ne trouve pas dit le triangle (ses trois positions). **La comparaison est
+elle-même éprouvée** (`test_parite`) : vraie sur le bassin (1 453 triangles) mélangé, tourné, bruité sous la tolérance ;
+fausse sur un coin déplacé de 2e−4, un triangle retourné, un triangle doublé à la place d'un autre, des couleurs sur 8 bits.
+
+### Les 14 cas (ce que chacun exerce, gardé par `test_parite` sur les triangles eux-mêmes)
+
+| Cas | Exerce |
+| --- | --- |
+| a calm lake in a crater | la nappe d'un lac : 9 cases fusionnées en UN rectangle, débord de 0,45 sous la roche |
+| a lake that overflows into a river | le lac d'une rivière, ses bandes, deux cascades |
+| a river down the stairs | bandes (courant, profondeur 0,05), trois cascades en volume à bouts libres arrondis, remous, la SOURCE |
+| a river three cells wide (river_width 3) | trois cascades d'un même plan raccordées (bouts droits au milieu, z de −0,1 à 3,1) |
+| a sea around an island | la mer, ses profondeurs, l'horizon (quatre rectangles jusqu'à ±2 000), sans jonction en T |
+| one sea only | la seconde source refusée ne dessine RIEN (mêmes triangles que la mer seule) |
+| a river joins the sea, in the sea's layer / in a layer of its own | le remous sur la nappe de la mer ; la même rivière avec ou sans la mer |
+| the sea under a floating slab | la nappe passe sous l'étage flottant (1,5 ; 2,7 ; 1,5) |
+| a lake under the ceiling of a closed cave | la nappe d'un lac sous un plafond, à niveau + 0,7 |
+| a waterfall into a basin it fills | la cascade de quatre cases : au-delà de 0,35 devant le plan, rentrée à 0,4 dans la roche, écume 0 → 1, anneau à 1,72 sur la nappe du bassin, puis une seconde cascade au bord du monde |
+| a sea above the whole world | la hauteur forcée (niveau au-dessus de la boîte : 6,7 partout) |
+| a sea in an empty world | un seul plan, deux triangles |
+| a refused source draws nothing | aucun triangle |
+
+Gardé aussi, sur chaque cas : aucune jonction en T entre plats, nappes à rangée + 0,7, bandes à case − 0,15 ; les quatre
+genres exercés. ⚠ **NON EXERCÉ** : la cascade « droite » (d = 0, sans sens connu) — d'après la lecture de `fluides.gd`, la
+règle ne la produit pas (la lèvre suit toujours un pas horizontal ou un mur voisin) ; sa ligne reste dans `rules_text`.
+
+### Mutations — 17, 16 ROUGES, 1 ÉQUIVALENTE (MESURÉ, `MB_NATIF=0`)
+
+Chacune appliquée à `eau_maillage.gd` : **sans régénérer, le fichier livré rougit** (16 sur 16 : un greffon qui aurait ce
+défaut échouerait les cas) ; **régénérée**, 11 rougissent encore par une garde nommée de `test_parite` (jonction en T,
+nappe à 0,65, pas de débord en x−, pas de nappe sous l'étage, rangées sans la couleur, horizon à trois rectangles, bouts
+non arrondis, rentrée de 0,3 — vue par la marge de sens, 0,042 —, remous jamais sur l'eau dormante, anneau sans ses
+0,02, source sans dôme). Les 5 autres (écume linéaire, lèvre la plus basse, 2e coin, bande à 0, deux bandes) ne sont
+gardées QUE par les cas — c'est leur rôle. **L'ÉQUIVALENTE, attendue** : garder les sommets orphelins des grilles ne change
+aucun triangle (le contrat est en triangles, pas en sommets).
+
+### Le recalcul quand on peint — le budget MESURÉ, et ce qu'on recommande
+
+`DEV_TOOLS/banc_eau_recalcul.gd` sur l'exemple livré (739 481 cases pleines, 3 couches d'eau, 106 sources, une mer de
+354 159 cases ; deux passes, machine partagée avec une autre session Godot : des écarts de ×2 entre passes) :
+
+| Ce qu'on refait | GDScript seul (`MB_NATIF=0`, le greffon Godot) | Avec le cœur natif (l'appli) |
+| --- | --- | --- |
+| La règle en entier (`FL.monde`) | 2,0 – 3,3 s | 1,0 – 2,7 s |
+| Les nappes en entier (3 couches) | 3,1 – 3,3 s, dont **la mer seule 1,8 s pour 72 triangles** | 2,7 – 5,7 s |
+| Tout refaire (un greffon sans reprise, à chaque geste) | **5,1 – 6,7 s** | 3,7 – 8,4 s |
+| Un geste près d'une rivière, avec la reprise de l'appli | 0,7 – 1,2 s (84 sources reprises sur 106) | 0,24 – 0,32 s |
+| Un geste loin de l'eau, avec la reprise | 0,7 s (99 reprises) | 0,09 s |
+
+La mer relue de son eau (ce qu'a le greffon) coûte autant que relue de ses tronçons, à ces écarts près. C# et C++ : NON
+MESURÉS (attendus plus rapides que GDScript, sans chiffre).
+
+**RECOMMANDÉ (PROPOSÉ, à valider par Jordan)** :
+1. **Jamais pendant un geste.** Un trait de pinceau ne touche pas à l'eau ; la nappe se dit PÉRIMÉE (le greffon Godot le
+   fait déjà, `stale`).
+2. **Un recalcul DIFFÉRÉ à la fin du geste** (relâcher, annuler, refaire), après ~0,5 s sans nouveau geste — sur un fil à
+   part si le moteur le permet (fonctions pures sur une COPIE des cases : `WorkerThreadPool`, une `Task` .NET, une tâche
+   asynchrone d'Unreal), la nappe échangée sur le fil principal.
+3. **La reprise de l'appli, à porter** (`FL.monde` avec `avant` / `changees` ; `_etendre`, `_boite_compatible` ; « une couche
+   dont tous les corps sont repris garde sa nappe » ; la mémoire des nappes par corps) : c'est elle qui fait passer un
+   geste de ~6 s à moins d'une. Pas de cas propre — elle rend la MÊME sortie que le calcul entier : le banc de chaque
+   moteur le vérifie sur des gestes au hasard (incrémental == entier).
+4. **Un bouton « Rebuild water » toujours là**, et le suivi automatique (2) qui se COUPE de lui-même quand le dernier
+   recalcul a dépassé ~1 s (la nappe reste dite périmée jusqu'au bouton) — une grande mer en GDScript y tombe, un monde
+   ordinaire non.
+5. **Le contrôle de bout en bout** : dans chaque moteur, la nappe recalculée depuis les sources d'un `world.json` exporté
+   doit être le sac de la nappe CUITE de ce monde (`water/<nom>.glb`), couleurs à 1/255 près.
+
+### Découpage conseillé des trois agents moteurs
+
+Un agent par moteur, en parallèle ; les cas sont le commun. Dans chaque moteur, dans cet ordre :
+
+1. **Le banc d'abord** : lire `water_mesh_conformance.json` (une sorte inconnue rougit), l'appariement en sac, et son
+   auto-épreuve (mélanger / tourner / bruiter : vrai ; déplacer / retourner / doubler : faux). Godot : passer `water_mesh`
+   de `PARITE_A_VENIR` à `PARITE` dans `test_greffon_peinture` ; Unity : un `WaterMeshConformanceCheck` (banc .NET et
+   Test Runner) ; Unreal : `core-runner/parity.cpp`.
+2. **Le mailleur, du plus simple au plus dur, cas par cas** : SHEET (le lac du cratère, la grotte : 2 triangles) → la mer
+   et l'horizon (île, dalle, mer au-dessus de tout, monde vide, un seul océan, refus) → les plats sans jonction en T →
+   les bandes et la source (l'escalier) → les cascades (plan, fusion, grille, normales) → l'écume (anneau, embruns) → la
+   rivière large, le débordement, la mer rejointe, le bassin. Godot : du GDScript dans `mb_water.gd` (il ne charge rien
+   du cœur) ; Unity : C# pur à côté de `MBWater` ; Unreal : C++ standard dans `MBCore` (le C++ privé de l'appli ne part pas).
+3. **Le branchement** (2 à 5 ci-dessus) : différé, fil à part, reprise, bouton, coupure au-delà d'~1 s, contrôle de bout
+   en bout contre la nappe cuite.
+4. **À l'image** : la nappe recalculée sous les six presets, à côté de la nappe cuite du même monde — indiscernables
+   (« ce qui se voit se juge à l'image »).
+
+Une règle ambiguë se remonte et se corrige dans `eau_maillage.gd`, puis on régénère : jamais dans un moteur.

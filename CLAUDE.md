@@ -45,7 +45,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     choisi par l'artiste, et les SIX presets réécrits dans chaque moteur (stylisé, clair, réfléchissant, et depuis
     le 2 octobre 2026 lave, marais, acide luminescent — leurs aspects exportés : `lava`, `swamp`, `acid`) qui
     lisent le contrat (COLOR_0 : courant, genre, profondeur) ; un emplacement de matériau par genre d'eau ; plus
-    tard, recalculer l'eau quand on peint (`fluides.gd` réécrit en C# et C++, avec ses cas d'épreuve) ; prévenir
+    tard, recalculer l'eau quand on peint (`fluides.gd` réécrit en C# et C++, avec ses cas d'épreuve ; la NAPPE a ses cas
+    depuis le 7 octobre 2026, « le contrat de l'eau recalculée » ci-dessous) ; prévenir
     l'artiste que les presets ne sont pas obligatoires. Et depuis le 3 octobre 2026 : **un seul océan** (une
     seconde source de mer est refusée, `un_seul_ocean`) ; la nappe **sous un étage flottant** (`surface_dessinee`) ;
     les plats **sans jonction en T** ; le **clapot sur les cascades aussi** (§5, « l'eau du 3 octobre »).
@@ -706,6 +707,53 @@ lire, la règle, les cas, le rendu, ce qui ne peut pas être fait). Ici, ce qui 
   ambiguë se remonte et se corrige dans le GDScript, jamais dans un moteur.
 - ⚠ **PAS TENU EN MAIN** : l'export du monde par le bouton (le panneau d'attente pend en headless, comme avant) — mené
   par `test_parite` sur `FormatMonde.exporter` directement, avec ce que l'écran lui passe (`_exporter_le_monde`, relu).
+
+### LE CONTRAT DE L'EAU RECALCULÉE — FAIT LE 7 OCTOBRE 2026 (branche `contrat-eau` ; la parité des greffons, le seul écart)
+
+Les trois greffons montraient la nappe CUITE sans la refaire en peignant : le mailleur (`eau_maillage.gd`) n'avait pas de
+cas. La spécification pour les trois agents moteurs : **`engines/PARITE.md` §12**. Ici, ce qui est fait et mesuré.
+
+- **LES CAS — 14, DANS UN SIXIÈME FICHIER** (`water_mesh_conformance.json`, `epreuve_parite.gd` `_maillage_eau`, écrit dans les
+  trois greffons, `.meta` à GUID fixe) : à partir de corps d'eau DONNÉS au format des `water_world` (le mailleur se juge
+  sans la règle), la nappe en **SAC DE TRIANGLES canonique** — sens du format (glTF), coins `[position, normale, COLOR_0,
+  UV]`, arrondis au millionième, rangés en sommets + indices (570 Ko). Comparaison sans ordre, rotations permises, réflexion
+  refusée, tolérances (position, uv 1e−4 ; normale 1e−3 ; couleur 1e−4). Couvre mer, lac, rivière, cascade en volume
+  (nappe courbe, rentrée dans la roche, remous, source), plats sans jonction en T, nappe sous un étage flottant et sous un
+  plafond, un seul océan, largeur de rivière, mer au-dessus de tout, monde vide, refus. Les cinq fichiers d'avant n'ont
+  pas bougé d'un octet.
+- **POURQUOI CETTE FORME (PROPOSÉ, Claude)** : l'ordre des triangles n'est pas la règle (mémoires, natif) ; des invariants
+  seuls ne suffisent pas — **MESURÉ : 6 mutations réelles sur 16 laissent nombre et aire par genre identiques** (écume
+  linéaire, lèvre la plus basse, anneau sans ses 0,02, sens par le 2e coin, bande à profondeur 0, deux bandes par case).
+- ⚠ **LES CAS DÉCRIVENT LES TABLEAUX, PAS L'ArrayMesh — UN PIÈGE PAYÉ AU PREMIER ESSAI** : relus de l'`ArrayMesh`, les
+  couleurs étaient sur 8 bits (0,5 → 0,498039) et les normales en octaèdre ((0, 1, 0) → z = −1,5e−5). `maillage` est coupé
+  en deux : `tableaux_du_maillage` (ce que les cas décrivent) puis l'ArrayMesh — même sortie pour l'appli.
+- **LA GARDE : `test_parite` (279)** — le sixième fichier à jour dans les trois greffons ; l'appariement en sac éprouvé
+  (vrai mélangé / tourné / bruité, faux sur un coin à 2e−4, un triangle retourné, un doublé, des couleurs sur 8 bits) ;
+  **la mer relue de son eau (ce qu'a un greffon) = relue de ses tronçons (l'appli)** ; et, sur les triangles mêmes, ce que
+  chaque cas nomme (aucune jonction en T, hauteurs, la nappe sous la dalle à 2,7, la cascade du bassin de 2,6 à > 3,35 et de
+  z 0,9 à 2,1, écume 0 → 1, anneau à 1,72, le bouillon de la source, la rivière large raccordée, un seul océan, la même
+  rivière avec ou sans la mer). Vert avec le cœur natif ET sans (`MB_NATIF=0`).
+- **MESURÉ — LES SEUILS SONT LOIN** : les 112 triangles jetés ont une aire exactement nulle, le plus petit gardé 1,0e−3 (le
+  seuil : 1e−7) ; la marge de sens la plus faible 0,345. Un moteur en double ne tranche autrement nulle part.
+- **MUTATIONS — 17, 16 ROUGES, 1 ÉQUIVALENTE** : toutes rougissent sans régénérer (le fichier livré les voit) ; régénérées, 11
+  rougissent encore par une garde nommée ; l'équivalente, attendue : garder les sommets orphelins (le contrat est en
+  triangles). ⚠ La « jonction en T » d'abord ABSENTE de la campagne (motif mal indenté, dit par le script) : relancée seule,
+  rouge.
+- **LE BUDGET, MESURÉ** (`DEV_TOOLS/banc_eau_recalcul.gd`, l'exemple : 739 481 cases, 106 sources, mer de 354 159 cases ;
+  machine partagée, ×2 d'une passe à l'autre) : en GDScript seul (le greffon Godot), **tout refaire 5,1 à 6,7 s** (la mer
+  seule : 1,8 s de nappe pour 72 triangles) ; **un geste avec la reprise de l'appli 0,7 à 1,2 s**. Avec le cœur natif, un
+  geste 0,09 à 0,32 s. C# et C++ : non mesurés.
+- **RECOMMANDÉ (PROPOSÉ, à valider par Jordan)** : jamais pendant un geste (la nappe se dit périmée) ; un recalcul DIFFÉRÉ
+  à la fin du geste (~0,5 s de calme, sur un fil à part) ; la REPRISE de l'appli portée (incrémental == entier vérifié
+  par chaque banc) ; un bouton « Rebuild water » toujours là, le suivi automatique coupé au-delà d'~1 s ; contrôle de bout
+  en bout contre la nappe cuite d'un monde exporté.
+- **LE DÉCOUPAGE CONSEILLÉ** : un agent par moteur ; le banc et l'appariement d'abord, puis le mailleur du lac du cratère au
+  bassin, puis le branchement, puis l'image (nappe recalculée et nappe cuite indiscernables sous les six presets).
+  `test_greffon_peinture` porte le fichier en `PARITE_A_VENIR` (livré, compté, PAS ENCORE REJOUÉ) : l'agent Godot le passe
+  dans `PARITE` quand `mb_water.gd` maille.
+- ⚠ **NON EXERCÉ** : la cascade « droite » (sans sens connu) — la règle ne semble pas la produire (lu, pas prouvé).
+- ⚠ **VU EN PASSANT** : l'exemple livré a 739 481 cases et une mer de 354 159 cases (`sonde_eau_exemple.gd` disait 2,4 millions le 4 octobre :
+  OUVERT — l'exemple a changé, ou la mer était comptée autrement ; non vérifié).
 
 ### LE GREFFON UNITY À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-unity`), PARTIEL SUR L'EAU ET LE PINCEAU DE FEUILLAGE
 
