@@ -185,10 +185,19 @@ static func defilement_au_temps(u: float, v: float, t: float, synchro: bool, pha
 
 
 ## La phase d'une copie posée à `origine` (son repère dans le monde) — le hachage du shader, `hacher`, ligne à ligne.
+## ⚠ **EN DOUBLE, SANS `Vector3` (parité Unreal, 7 octobre 2026)** : un `Vector3` de Godot STOCKE en flottants 32 bits.
+## L'ancien corps rangeait `fract(p · 0,3183099 + c) · 17` dans un `Vector3` : les cas `phase`, annoncés « en double »,
+## portaient cet arrondi caché (jusqu'à 0,002 d'écart sur les origines des cas) — un greffon qui suivait le texte à la
+## lettre (C++, C#) les ratait, et la seconde implémentation de `test_parite`, écrite elle aussi en `Vector3`, ne le
+## voyait pas. Tout est désormais en `float` (double) de bout en bout.
 static func phase_de(origine: Vector3) -> float:
-	var p := (origine + Vector3(0.5, 0.5, 0.5)).floor()
-	p = Vector3(_fract(p.x * 0.3183099 + 0.71), _fract(p.y * 0.3183099 + 0.113), _fract(p.z * 0.3183099 + 0.419)) * 17.0
-	return _fract(p.x * p.y * p.z * (p.x + p.y + p.z))
+	var px := floorf(float(origine.x) + 0.5)
+	var py := floorf(float(origine.y) + 0.5)
+	var pz := floorf(float(origine.z) + 0.5)
+	var qx := _fract(px * 0.3183099 + 0.71) * 17.0
+	var qy := _fract(py * 0.3183099 + 0.113) * 17.0
+	var qz := _fract(pz * 0.3183099 + 0.419) * 17.0
+	return _fract(qx * qy * qz * (qx + qy + qz))
 
 
 static func _fract(x: float) -> float:

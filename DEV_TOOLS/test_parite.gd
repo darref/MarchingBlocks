@@ -337,9 +337,13 @@ func _animation(f: Dictionary) -> void:
 	var ecart_32 := 0.0
 	for c in s["phase"]:
 		var o: Array = c["input"]["origin"]
-		var p := Vector3(floor(o[0] + 0.5), floor(o[1] + 0.5), floor(o[2] + 0.5))
-		p = Vector3(_fract(p.x * 0.3183099 + 0.71), _fract(p.y * 0.3183099 + 0.113), _fract(p.z * 0.3183099 + 0.419)) * 17.0
-		var ph := _fract(p.x * p.y * p.z * (p.x + p.y + p.z))
+		# ⚠ EN `float` (double), JAMAIS DANS UN `Vector3` (32 bits) : c'est ainsi que l'arrondi caché de `phase_de` a passé
+		# cette garde (trouvé par le banc C++ d'Unreal, 7 octobre 2026).
+		var ajout := [0.71, 0.113, 0.419]
+		var q: Array = []
+		for k in 3:
+			q.append(_fract(floorf(float(o[k]) + 0.5) * 0.3183099 + float(ajout[k])) * 17.0)
+		var ph := _fract(float(q[0]) * float(q[1]) * float(q[2]) * (float(q[0]) + float(q[1]) + float(q[2])))
 		_dire(_proche(ph, c["expected"], 1e-6), "la phase depuis le texte : %s" % c["name"])
 		ecart_32 = maxf(ecart_32, absf(_phase_32(Vector3(o[0], o[1], o[2])) - float(c["expected"])))
 	# ⚠ MESURÉ, PAS JUGÉ : la même formule en flottants 32 bits (ce que calcule un shader) s'écarte de l'attendu double.

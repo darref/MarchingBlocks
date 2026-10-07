@@ -21,6 +21,9 @@
 
 using namespace MBPaint;
 
+// parity.cpp: the five parity files (editing, animation, foliage, transitions, water).
+int RunParity(const std::string& Dir);
+
 namespace
 {
 	bool Load(const std::string& Path, FJsonValue& Out)
@@ -647,6 +650,7 @@ int main(int Argc, char** Argv)
 	Failed += RunWorld(Dir + "/world_conformance.json");
 	Failed += RunFrame();
 	Failed += RunAim();
+	Failed += RunParity(Dir);
 	std::printf(Failed == 0 ? "VERDICT: OK\n" : "VERDICT: FAILED\n");
 	return Failed == 0 ? 0 : 1;
 }
