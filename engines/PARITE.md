@@ -395,10 +395,20 @@ Un agent par moteur, en parallèle ; les cas sont le commun. Dans chaque moteur,
 
 Une règle ambiguë se remonte et se corrige dans `eau_maillage.gd`, puis on régénère : jamais dans un moteur.
 
-**UNITY — FAIT (7 octobre 2026, branche `eau-unity`)** : `MBWaterMesh` 14/14, la reprise portée (banc incrémental = entier),
-le branchement (`MBWaterFollow`, Rebuild water), le bout en bout contre la nappe cuite, vu à l'image (charte, « L'eau
-recalculée dans Unity »). ⚠ **REMONTÉ, OUVERT** : aucun des 14 cas ne fusionne deux cascades d'un même lieu ni ne voit deux
-fois une case de bande (sondé dans le C# : une exception dans ces branches laisse les 14 verts) — les mutations « lèvre la
-plus basse » et « deux bandes sur une case » n'y sont donc PAS gardées par les cas, contrairement à ce que dit la liste
-ci-dessus. Un cas à ajouter dans `epreuve_parite.gd` (deux rivières sur les mêmes cases, l'une sortant d'un tunnel sous la
-cascade de l'autre : le monde de `DEV_TOOLS/preparer_eau_unity.gd` le fait).
+### Godot — FAIT (7 octobre 2026, branche `eau-godot`)
+
+`mb_water_mesh.gd` 14/14 ; reprise portée (incrémental = entier sur 68 gestes) ; branchement 1 à 5 fait ; sur l'exemple, un
+geste 0,04 à 0,35 s, tout refaire 3 à 9 s, et les nappes refaites = les `.glb` cuits. Détail : `CLAUDE.md`, « L'eau
+recalculée dans le greffon Godot ». ⚠ **DEUX MUTATIONS NE SONT PAS VUES PAR LES 14 CAS** (mesuré dans le cœur aussi :
+« lèvre la plus basse » et « deux bandes sur une même case » — aucun cas n'a deux rivières au même endroit) ; la ligne
+« 16 sur 16 rouges sans régénérer » ci-dessus est donc fausse pour elles. OUVERT : un cas à ajouter (`epreuve_parite.gd`) ;
+Unity et Unreal doivent s'en garder eux-mêmes d'ici là.
+
+### Unity — FAIT (7 octobre 2026, branche `eau-unity`)
+
+`MBWaterMesh` 14/14 ; reprise portée (incrémental = entier sur 6 020 gestes, dont des gestes SCRIPTÉS au bord des emprises) ;
+branchement 1 à 5 fait (`MBWaterFollow`, Rebuild water) ; sur l'exemple, en C#, tout refaire 0,40 s et un geste 4 à 13 ms ;
+nappes refaites = `.glb` cuits tels que glTFast les lit ; vu à l'image (Built-in, URP). Détail : `CLAUDE.md`, « L'eau
+recalculée dans Unity ». Les deux mutations muettes ci-dessus le sont aussi en C# (sondé : une exception dans ces branches
+laisse les 14 cas verts) ; Unity s'en garde par un monde exporté (`DEV_TOOLS/preparer_eau_unity.gd` : deux rivières sur les
+mêmes cases, l'une sortant d'un tunnel sous la cascade de l'autre) — le cas à ajouter peut le reprendre.

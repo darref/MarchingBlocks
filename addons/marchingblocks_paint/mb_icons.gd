@@ -24,6 +24,7 @@ const STROKES := {
 	"erase": '<path d="M20 20.5H9.5l-5.3-5.3a2 2 0 0 1 0-2.8L13.2 3.4a2 2 0 0 1 2.8 0l4.6 4.6a2 2 0 0 1 0 2.8L11 20.5"/><path d="M7.5 10.5l6 6"/>',
 	"extrude_down": '<path d="M4 4h16"/><path d="M12 8v11.5M7 14.5l5 5 5-5"/>',
 	"extrude_up": '<path d="M12 16V4.5M7 9.5l5-5 5 5"/><path d="M4 20h16"/>',
+	"facing": '<path d="M5 3.5v17M5 7.5 2.5 10M5 12.5 2.5 15M5 17.5 2.5 20"/><path d="M9 12h11.5M16.5 8l4 4-4 4"/>',
 	"fill": '<path d="M2.5 16 12 11l9.5 5-9.5 5z"/><path d="M12 2.5V8M9 5.5 12 8.5l3-3"/>',
 	"floor": '<path d="M3 10h18v4H3z"/><path d="M12 2.5v4.5M9.5 5 12 2.5 14.5 5M12 17v4.5M9.5 19 12 21.5 14.5 19"/>',
 	"grid": '<path d="M2.5 16 12 20.5l9.5-4.5L12 11.5z"/><path d="M12 3v7M9 7.5l3 3 3-3"/>',
@@ -34,6 +35,7 @@ const STROKES := {
 	"move": '<path d="M12 2.5v19M2.5 12h19M9 5.5l3-3 3 3M9 18.5l3 3 3-3M5.5 9l-3 3 3 3M18.5 9l3 3-3 3"/>',
 	"navigate": '<circle cx="12" cy="12" r="8.5"/><path d="M15.5 8.5 13.2 13.2 8.5 15.5l2.3-4.7z"/>',
 	"paste": '<rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 3h6v3.5H9z"/>',
+	"plant": '<path d="M12 2.5 6.5 10h3l-4 6h13l-4-6h3z"/><path d="M12 16v5.5"/>',
 	"rail": '<path d="M3 19.5h18M3 8.5h18M6 8.5v11M12 8.5v11M18 8.5v11"/>',
 	"rect": '<path d="M2.5 13.5 12 8.5l9.5 5-9.5 5z" stroke-dasharray="3.5 2.6"/>',
 	"right": '<path d="M4.5 12h15M13 5.5l6.5 6.5-6.5 6.5"/>',
@@ -50,6 +52,7 @@ const STROKES := {
 	"up": '<path d="M12 19.5v-15M5.5 11 12 4.5 18.5 11"/>',
 	"variant": '<rect x="3.5" y="8.5" width="11" height="11" rx="2"/><rect x="9.5" y="3.5" width="11" height="11" rx="2" stroke-dasharray="3 2.4"/>',
 	"well": '<path d="M2.5 9 12 4.5 21.5 9 12 13.5z"/><ellipse cx="12" cy="9" rx="3.4" ry="1.6"/><path d="M12 13.5v7M9 17.5l3 3 3-3"/>',
+	"widen": '<path d="M3 12h18M6.5 8.5 3 12l3.5 3.5M17.5 8.5 21 12l-3.5 3.5"/>',
 	"world": '<path d="M2.5 15.5 12 20.5l9.5-5L12 10.5z"/><path d="M7 13l9.5 5M17 13l-9.5 5M12 10.5v-6M9.5 7 12 4.5 14.5 7"/>',
 }
 

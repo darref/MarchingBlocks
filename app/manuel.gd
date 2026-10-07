@@ -332,7 +332,8 @@ func _outils() -> String:
 		+ "material[/b] — by default the one its witness wears most — and that is what spreads over the other "
 		+ "layer's tiles; it is projected like a box, so a tileable image works best. Every change is one "
 		+ _touche("Ctrl+Z") + ", and everything is saved with the project. " + _touche("Esc") + " goes back to World.")
-	l.append(_note("Transitions are drawn by the app; the engine plugins do not have them yet."))
+	l.append(_note("Transitions travel in the exported world (.mbworld): the Godot, Unity and Unreal plugins draw the "
+		+ "same blend over their tiles."))
 	l.append(_titre("Foliage"))
 	l.append("Foliage is a workshop of its own: the painted world in the view, and nothing to do but plant trees, "
 		+ "bushes, grass. [b]Import .glb…[/b] brings a 3D model (it is copied into the project). On the "
@@ -348,8 +349,9 @@ func _outils() -> String:
 		+ _touche("Alt") + " + wheel: its size, " + _touche("Shift") + " + wheel: its [b]Density[/b]); "
 		+ "[b]Spacing[/b] keeps plants apart in every mode. A right click removes; a stroke is one "
 		+ _touche("Ctrl+Z") + ". " + _touche("Esc") + " goes back to World.")
-	l.append(_note("A plant does not follow the ground if you dig under it later. Foliage is not in the exported "
-		+ "world (.mbworld) yet, and the engine plugins do not plant it yet."))
+	l.append(_note("A plant does not follow the ground if you dig under it later. Foliage travels in the exported "
+		+ "world (.mbworld), models included: the Godot, Unity and Unreal plugins show it swaying in the wind, and plant "
+		+ "more with the same three ways and brush."))
 	return "\n".join(l)
 
 

@@ -35,9 +35,14 @@ signal changed
 
 const Tools := preload("res://addons/marchingblocks_paint/mb_tools.gd")
 const Shapes := preload("res://addons/marchingblocks_paint/mb_shapes.gd")
+const Planting := preload("res://addons/marchingblocks_paint/mb_planting.gd")
 
 const AIMS := ["grid", "sculpt"]
-const MODES := ["add", "dig", "select", "rect", "box", "shape", "variant"]
+const MODES := ["add", "dig", "select", "rect", "box", "shape", "variant", "plant"]
+## The Plant tool's placing modes (`mb_foliage.gd`): in the air, planted with a free neighbourhood, planted overflowing.
+const PLANT_MODES := ["air", "free", "overflow"]
+## A brush stroke dabs again once the mouse has gone this part of the brush radius (the tool's step).
+const PLANT_STEP := 0.4
 const REACH := 2000.0
 const MAX_DRAWN := 4000
 const ADD_COLOUR := Color(0.55, 0.82, 0.45, 0.35)
@@ -86,6 +91,19 @@ var clipboard: Array[Vector3i] = []
 var pasting := false
 ## What the last operation did, for the toolbar.
 var status := ""
+## THE PLANT TOOL (mode "plant") — the world's MarchingBlocksFoliage plants: the model (its id; -1 or unknown: the
+## first one), the placing mode, the brush (radius in cells, tries per dab), the least distance between two plants,
+## the steepest ground taken, a random yaw. Click plants one; Ctrl + click (and drag) a dab of the brush; Shift +
+## click (and drag) erases within the brush. Each stroke is ONE undo step.
+var plant_model := -1
+var plant_mode := "free"
+var plant_radius := 3.0
+var plant_tries := 12
+var plant_spacing := 0.0
+var plant_slope := 40.0
+var plant_random_yaw := true
+## The draws of the plant tool (yaw, scale, the brush's spots). Seeded by the tests.
+var plant_draw := RandomNumberGenerator.new()
 
 var _stroking := false
 var _stroke_inverse := false
@@ -105,6 +123,13 @@ var _paste_lift := 0
 var _preview: MultiMeshInstance3D
 var _selection_view: MultiMeshInstance3D
 var _last_mouse := Vector2(-1, -1)
+## A plant stroke: the foliage node, its plants before, what the world asks (built once), the gesture ("one",
+## "sow", "erase") and where it last dabbed.
+var _plant_foliage: Node
+var _plant_before := PackedFloat32Array()
+var _plant_ask := {}
+var _plant_gesture := ""
+var _plant_last: Variant = null
 
 
 ## Feeds one viewport event. Returns true when the event is taken (the editor must not act on it).
@@ -141,7 +166,7 @@ func input(camera: Camera3D, event: InputEvent) -> bool:
 	if motion != null:
 		_last_mouse = motion.position
 		hover(camera, motion.position, motion.shift_pressed)
-		return _stroking or _box_start != null
+		return _stroking or _box_start != null or _plant_gesture != ""
 	return false
 
 
@@ -226,6 +251,9 @@ func _gesture(inverse: bool) -> String:
 # ── Hover and strokes ───────────────────────────────────────────────────────────────────────────────
 
 func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
+	if mode == "plant":
+		_hover_plant(camera, position, shift)
+		return
 	if _drawing_room():
 		var corner = _corner(camera, position)
 		if _box_start == null:
@@ -307,6 +335,12 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 	if b.alt_pressed:
 		return false
+	if mode == "plant":
+		if b.pressed:
+			_start_plant(camera, b.position, b.ctrl_pressed or b.meta_pressed, b.shift_pressed)
+		else:
+			_end_plant()
+		return true
 	if mode == "variant":
 		if b.pressed:
 			click_variant(camera, b.position, b.shift_pressed)
@@ -526,6 +560,107 @@ func click_shape(camera: Camera3D, position: Vector2) -> void:
 	hover(camera, position)
 
 
+# ── The Plant tool ──────────────────────────────────────────────────────────────────────────────────
+#
+# The rule is `mb_foliage.gd` (proven by foliage_conformance.json); `mb_planting.gd` gives it this world (cells, water,
+# the ground of the placed tiles) and makes the gestures. Here: the strokes and the undo.
+
+## The world's MarchingBlocksFoliage node, or null (said in the status).
+func foliage() -> Node:
+	return Planting.foliage_of(world)
+
+
+## The model the tool plants: the chosen one, or the first of the foliage when it is unknown. -1: none.
+func current_plant_model() -> int:
+	var f := foliage()
+	if f == null:
+		return -1
+	var ids: Array = Planting.models_of(f).keys()
+	if ids.is_empty():
+		return -1
+	return plant_model if ids.has(plant_model) else int(ids[0])
+
+
+func plant_settings() -> Dictionary:
+	return {"model": current_plant_model(), "mode": plant_mode, "radius": plant_radius, "tries": plant_tries,
+		"spacing": plant_spacing, "max_slope": plant_slope, "random_yaw": plant_random_yaw}
+
+
+func _hover_plant(camera: Camera3D, position: Vector2, shift: bool) -> void:
+	# Only the matter is needed to aim: the whole world (water, tiles) is asked once per stroke.
+	var asked: Dictionary = _plant_ask if _plant_gesture != "" else Planting.matter(world)
+	var o: Vector3 = world.world_to_cells(camera.project_ray_origin(position))
+	var d: Vector3 = world.world_direction_to_cells(camera.project_ray_normal(position))
+	var p = Planting.aimed_point(asked, o, d, plant_mode, world.floor_y)
+	if p == null:
+		_show_preview([], ADD_COLOUR)
+		return
+	var at := Vector3i(floori(p.x), floori(p.y - (0.0 if plant_mode == "air" else 0.5)), floori(p.z))
+	var erasing := _plant_gesture == "erase" if _plant_gesture != "" else shift
+	_show_preview([at], DIG_COLOUR if erasing else ADD_COLOUR)
+	# A brush or erase stroke dabs again once the mouse has gone PLANT_STEP of the radius.
+	if _plant_gesture in ["sow", "erase"] and _plant_last != null 			and (p as Vector3).distance_to(_plant_last) >= plant_radius * PLANT_STEP:
+		_plant_dab(o, d)
+
+
+## A press of the Plant tool: one plant, a dab of the brush (Ctrl), or erase (Shift). The stroke ends on release.
+func _start_plant(camera: Camera3D, position: Vector2, brush: bool, erase: bool) -> void:
+	_end_plant()
+	var f := foliage()
+	if f == null:
+		status = ("Plant — this world has no MarchingBlocksFoliage node: import a world exported with foliage, or add "
+			+ "one next to the layers and give it models.")
+		changed.emit()
+		return
+	_plant_foliage = f
+	_plant_before = (f.plants as PackedFloat32Array).duplicate()
+	_plant_ask = Planting.ask(world)
+	_plant_gesture = "erase" if erase else ("sow" if brush else "one")
+	_plant_last = null
+	_plant_dab(world.world_to_cells(camera.project_ray_origin(position)),
+		world.world_direction_to_cells(camera.project_ray_normal(position)))
+	if _plant_gesture == "one":
+		_end_plant()
+
+
+func _plant_dab(origin: Vector3, direction: Vector3) -> void:
+	var settings := plant_settings()
+	var r: Dictionary
+	match _plant_gesture:
+		"erase":
+			r = Planting.erase_at(world, _plant_foliage, origin, direction, settings, _plant_ask)
+		"sow":
+			r = Planting.sow_at(world, _plant_foliage, origin, direction, settings, plant_draw, _plant_ask)
+		_:
+			r = Planting.plant_at(world, _plant_foliage, origin, direction, settings, plant_draw, _plant_ask)
+	_plant_last = Planting.aimed_point(_plant_ask, origin, direction, plant_mode, world.floor_y)
+	if r["plants"] != null:
+		_plant_foliage.plants = r["plants"]
+	status = r["status"]
+	changed.emit()
+
+
+## The end of a stroke: what it planted or erased becomes ONE undo step (already on screen: recorded, not run again).
+func _end_plant() -> void:
+	if _plant_gesture == "":
+		return
+	var f := _plant_foliage
+	var before := _plant_before
+	_plant_gesture = ""
+	_plant_foliage = null
+	_plant_ask = {}
+	_plant_last = null
+	if f == null or not is_instance_valid(f) or f.plants == before:
+		return
+	var after: PackedFloat32Array = (f.plants as PackedFloat32Array).duplicate()
+	if undo == null:
+		return
+	undo.create_action("MarchingBlocks plants")
+	undo.add_do_property(f, "plants", after)
+	undo.add_undo_property(f, "plants", before)
+	undo.commit_action(false)
+
+
 # ── Operations (the toolbar calls these too) ────────────────────────────────────────────────────────
 
 func operate(op: String) -> int:
@@ -653,6 +788,16 @@ func wheel(notch: int, alt: bool, shift: bool, ctrl: bool, act := true) -> bool:
 		if act:
 			_set_floor(world.floor_y + notch)
 			_say("Floor %d" % world.floor_y)
+		return true
+	if mode == "plant":
+		# The tool's: Alt the brush size, Shift its density.
+		if act:
+			if alt:
+				plant_radius = clampf(plant_radius + 0.5 * notch, 0.5, 32.0)
+				_say("Brush %.1f" % plant_radius)
+			else:
+				plant_tries = clampi(plant_tries + notch, 1, 200)
+				_say("Density %d" % plant_tries)
 		return true
 	if mode == "shape":
 		if special == "room":
@@ -928,6 +1073,7 @@ func _set_selection(cells: Dictionary) -> void:
 
 
 func _cancel() -> void:
+	_end_plant()
 	pasting = false
 	shape_anchor = {}
 	_box_start = null

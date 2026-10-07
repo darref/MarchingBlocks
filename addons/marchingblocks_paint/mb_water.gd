@@ -9,8 +9,13 @@ extends RefCounted
 ## tied by an insertion counter — never by a hash table.
 ##
 ## What a world SHOWS is the water sheet the tool baked (`water/<name>.glb`, its COLOR_0 the contract: flow, kind,
-## depth); this rule tells which cells hold water once the cells are painted again (the sheet itself is not rebuilt
-## here — that needs the tool's mesher, which has no reference cases yet).
+## depth); this rule tells which cells hold water once the cells are painted again, and `mb_water_mesh.gd` rebuilds
+## the sheet from it.
+##
+## THE REUSE (the tool's own, ported): `world` may take its previous result and the cells changed since. A body whose
+## FOOTPRINT (the box of every cell it looked at, grown by one) holds no changed cell, under a compatible world box, is
+## reused AS IS — the same Dictionary, recognised by `is_same`. It gives the SAME output as a full computation (proved
+## on random strokes by the plugin's bench), for a fraction of the cost.
 
 ## A lake (or a river's lake) of more cells is refused (too_large). Not the sea: it is never refused for its size.
 const VOLUME_MAX := 64 * 64 * 64
@@ -240,7 +245,7 @@ static func _hollow(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: 
 					threshold = s
 					break
 			return {"level": p - 1, "cells": lake, "threshold": threshold, "way_out": "joins" if is_water else "leaves",
-				"error": ""}
+				"error": "", "seen": seen}
 		out_cells.append(u)
 		if out_cells.size() > max_cells:
 			return {"error": "too_large"}
@@ -261,12 +266,13 @@ static func _hollow(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: 
 		if prio[s] <= ceiling:
 			closed[s] = true
 			level = maxi(level, s.y)
-	return {"level": level, "cells": closed, "threshold": null, "way_out": "closed", "error": ""}
+	return {"level": level, "cells": closed, "threshold": null, "way_out": "closed", "error": "", "seen": seen}
 
 
 ## THE FLAT RUN: from c, on its floor, the shortest path (breadth first, neighbours in order) to a cell the water
 ## falls from, joins other water, or leaves the world. `ignore`: the lake just left, flown over without falling in.
-## {"path", "end": "" (falls next) | "leaves" | "joins"}, or {"hollow": true}, or {"error"}.
+## {"path", "end": "" (falls next) | "leaves" | "joins", "seen"}, or {"hollow": true, "seen"}, or {"error"}; `seen`:
+## the cells visited (for the footprint).
 static func _flat(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: Dictionary, c: Vector3i,
 		ignore: Dictionary, max_cells: int) -> Dictionary:
 	var lo: Vector3i = b["lo"]
@@ -301,10 +307,10 @@ static func _flat(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: Di
 			while w != null:
 				path.push_front(w)
 				w = pred[w]
-			return {"path": path, "end": end}
+			return {"path": path, "end": end, "seen": pred}
 		if queue.size() > max_cells:
 			return {"error": "too_large"}
-	return {"hollow": true}
+	return {"hollow": true, "seen": pred}
 
 
 # ── A SOURCE, AND THE WORLD ──────────────────────────────────────────────────────────────────────────
@@ -314,7 +320,9 @@ static func _flat(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: Di
 ##   level  — sea and lake: the level (the highest row of water cells);
 ##   water  — {cell: true}: the sea's cells, or the cells of the lake(s);
 ##   lakes  — [{level, cells}];  course — [{cell, kind: flow | fall | lake, lake: index or -1}] in order;
-##   end    — river: leaves, joins or closed; lake: closed in a closed cavity.
+##   end    — river: leaves, joins or closed; lake: closed in a closed cavity;
+##   footprint — [lo, hi]: the box of every cell it looked at, grown by one (the sea: the whole box up to level + 1);
+##   box    — the world box it was computed under.
 static func source(cells: Dictionary, s: Vector3i, fixed: Dictionary = {}, max_cells := VOLUME_MAX,
 		b: Dictionary = {}) -> Dictionary:
 	if b.is_empty():
@@ -331,8 +339,13 @@ static func source(cells: Dictionary, s: Vector3i, fixed: Dictionary = {}, max_c
 		r["kind"] = "sea"
 		r["level"] = s.y
 		r["water"] = o["water"]
+		# The sea depends on the whole box below its level, and on the row above (its surface).
+		if not b.is_empty():
+			r["footprint"] = [b["lo"], Vector3i((b["hi"] as Vector3i).x, s.y + 1, (b["hi"] as Vector3i).z)]
+		r["box"] = b
 		return r
 	var lakes_d := {}
+	var foot := {"lo": s, "hi": s}
 	var c := s
 	while not cells.has(c + DOWN) and c.y > (b["lo"] as Vector3i).y:
 		c += DOWN
@@ -351,15 +364,17 @@ static func source(cells: Dictionary, s: Vector3i, fixed: Dictionary = {}, max_c
 		var flat := _flat(cells, b, fixed, lakes_d, c, ignore, max_cells)
 		if flat.has("error"):
 			return _refuse(r, flat["error"])
+		_grow(foot, flat.get("seen", {}))
 		if flat.has("hollow"):
 			var h := _hollow(cells, b, fixed, lakes_d, c, s.y, max_cells)
+			_grow(foot, h.get("seen", {}))
 			if h["error"] != "":
 				return _refuse(r, h["error"])
 			lakes.append({"level": h["level"], "cells": h["cells"]})
 			for k in h["cells"]:
 				lakes_d[k] = true
 			if first and not (h["way_out"] == "leaves"
-					and _fall_near(cells, b, fixed, lakes_d, h["threshold"], h["cells"], max_cells)):
+					and _fall_near(cells, b, fixed, lakes_d, h["threshold"], h["cells"], max_cells, foot)):
 				r["kind"] = "lake"
 				r["level"] = h["level"]
 				r["end"] = "closed" if h["way_out"] == "closed" else ""
@@ -395,6 +410,7 @@ static func source(cells: Dictionary, s: Vector3i, fixed: Dictionary = {}, max_c
 			if cells.has(v):
 				break
 			course.append({"cell": v, "kind": "fall"})
+			_grow(foot, {v: true})
 			u = v
 			# The BOTTOM only: a fall along a side of the box goes down to the bottom (or to the sea).
 			if v.y == (b["lo"] as Vector3i).y:
@@ -407,16 +423,31 @@ static func source(cells: Dictionary, s: Vector3i, fixed: Dictionary = {}, max_c
 	r["course"] = course
 	r["lakes"] = lakes
 	r["water"] = lakes_d
+	_grow(foot, {c: true})
+	r["footprint"] = [(foot["lo"] as Vector3i) - Vector3i.ONE, (foot["hi"] as Vector3i) + Vector3i.ONE]
+	r["box"] = b
 	return r
+
+
+## Grows the footprint `f` ({lo, hi}) to hold the cells of `list`.
+static func _grow(f: Dictionary, list: Dictionary) -> void:
+	var lo: Vector3i = f["lo"]
+	var hi: Vector3i = f["hi"]
+	for k: Vector3i in list:
+		lo = Vector3i(mini(lo.x, k.x), mini(lo.y, k.y), mini(lo.z, k.z))
+		hi = Vector3i(maxi(hi.x, k.x), maxi(hi.y, k.y), maxi(hi.z, k.z))
+	f["lo"] = lo
+	f["hi"] = hi
 
 
 ## From a lake's threshold, does the water find, flat, a fall (or other water, or the edge) at most OVERFLOW_REACH
 ## cells away? The river's own flat run, bounded.
 static func _fall_near(cells: Dictionary, b: Dictionary, fixed: Dictionary, lakes: Dictionary, threshold: Variant,
-		lake: Dictionary, max_cells: int) -> bool:
+		lake: Dictionary, max_cells: int, foot: Dictionary = {"lo": Vector3i.ZERO, "hi": Vector3i.ZERO}) -> bool:
 	if threshold == null:
 		return false
 	var flat := _flat(cells, b, fixed, lakes, threshold, lake, mini(max_cells, (2 * OVERFLOW_REACH + 1) ** 2))
+	_grow(foot, flat.get("seen", {}))
 	return flat.has("path") and (flat["path"] as Array).size() - 1 <= OVERFLOW_REACH
 
 
@@ -432,30 +463,102 @@ static func _refuse(r: Dictionary, error: String) -> Dictionary:
 
 ## THE WORLD'S WATER: the sea first (the FIRST source in the void, in source order; any other in the void is refused,
 ## one_sea_only), then every other source against the sea only — their order does not matter.
-## {"bodies": [one `source` result per source, in order], "sea": {cell: true}}.
-static func world(cells: Dictionary, sources: Array, max_cells := VOLUME_MAX) -> Dictionary:
+## {"bodies": [one `source` result per source, in order], "sea": {cell: true}, "sources", "box"}.
+## THE REUSE: `before` is a previous result, `changed` the full cells added or removed since ({cell: true}; null:
+## everything is computed). A body is reused (the same Dictionary) when no changed cell is in its footprint and the
+## box did not move where it looked (`_box_compatible`); a body that is not the sea also needs the sea reused.
+## `b`: the box of `cells`, if the caller has it (else it is computed: a sweep of every cell).
+static func world(cells: Dictionary, sources: Array, max_cells := VOLUME_MAX, before: Dictionary = {},
+		changed: Variant = null, b: Variant = null) -> Dictionary:
 	var bodies: Array = []
 	bodies.resize(sources.size())
-	var b := box(cells)
+	var bx: Dictionary = b if b != null else box(cells)
+	var old := {}
+	if changed != null and before.has("bodies") and before.has("sources"):
+		for i in (before["sources"] as Array).size():
+			old[before["sources"][i]] = before["bodies"][i]
+	var reuse := func(s: Vector3i) -> Variant:
+		var r: Variant = old.get(s, null)
+		if r == null or r["error"] != "" or not r.has("footprint") or not _box_compatible(r, bx):
+			return null
+		var lo: Vector3i = r["footprint"][0]
+		var hi: Vector3i = r["footprint"][1]
+		for c: Vector3i in changed:
+			if c.x >= lo.x and c.y >= lo.y and c.z >= lo.z and c.x <= hi.x and c.y <= hi.y and c.z <= hi.z:
+				return null
+		return r
+	var sea_reused := true
 	var seas := 0
 	for i in sources.size():
 		var s: Vector3i = sources[i]
-		if not cells.has(s) and in_the_void(cells, s, b):
+		if not cells.has(s) and in_the_void(cells, s, bx):
 			if seas > 0:
 				bodies[i] = _refuse({"kind": "", "error": "", "level": 0, "water": {}, "lakes": [], "course": [],
 					"end": ""}, "one_sea_only")
 				continue
 			seas += 1
-			bodies[i] = source(cells, s, {}, max_cells, b)
+			var r: Variant = reuse.call(s)
+			if r == null or r["kind"] != "sea":
+				sea_reused = false
+				r = source(cells, s, {}, max_cells, bx)
+			bodies[i] = r
+	var seas_before := 0
+	for r in before.get("bodies", []):
+		if r != null and r["kind"] == "sea":
+			seas_before += 1
+	sea_reused = sea_reused and not old.is_empty() and seas == seas_before and before.has("sea")
 	var sea_d := {}
-	for r in bodies:
-		if r != null:
-			for k in r["water"]:
-				sea_d[k] = true
+	if sea_reused:
+		sea_d = before["sea"]
+	else:
+		# ONE sea: its water IS the sea water — shared, never copied (a sea of millions of cells). Nobody changes it.
+		var holding: Array = bodies.filter(func(r): return r != null and not (r["water"] as Dictionary).is_empty())
+		if holding.size() == 1:
+			sea_d = holding[0]["water"]
+		else:
+			for r in holding:
+				for k in r["water"]:
+					sea_d[k] = true
 	for i in sources.size():
 		if bodies[i] == null:
-			bodies[i] = source(cells, sources[i], sea_d, max_cells, b)
-	return {"bodies": bodies, "sea": sea_d}
+			var r: Variant = reuse.call(sources[i]) if sea_reused else null
+			if r == null or r["kind"] == "sea":
+				r = source(cells, sources[i], sea_d, max_cells, bx)
+			bodies[i] = r
+	return {"bodies": bodies, "sea": sea_d, "sources": sources.duplicate(), "box": bx}
+
+
+## Did the world's box move WHERE the body looked? Each face (sides, bottom, top) that moved must stay out of the
+## footprint, at its old place as at its new one: painting above the highest point raises the box's top, and must not
+## recompute a lake that never rose that high.
+static func _box_compatible(r: Dictionary, b: Dictionary) -> bool:
+	var rb: Dictionary = r.get("box", {})
+	if rb.is_empty() or b.is_empty():
+		return rb.is_empty() and b.is_empty()
+	var flo: Vector3i = r["footprint"][0]
+	var fhi: Vector3i = r["footprint"][1]
+	var alo: Vector3i = rb["lo"]
+	var ahi: Vector3i = rb["hi"]
+	var nlo: Vector3i = b["lo"]
+	var nhi: Vector3i = b["hi"]
+	for k in 3:
+		if alo[k] != nlo[k] and flo[k] <= maxi(alo[k], nlo[k]):
+			return false
+		if ahi[k] != nhi[k] and fhi[k] >= mini(ahi[k], nhi[k]):
+			return false
+	return true
+
+
+## The full cells added or removed between two states of the world.
+static func changed_between(before: Dictionary, after: Dictionary) -> Dictionary:
+	var d := {}
+	for c in after:
+		if not before.has(c):
+			d[c] = true
+	for c in before:
+		if not after.has(c):
+			d[c] = true
+	return d
 
 
 ## THE WIDTH OF A RIVER: `width` sources side by side ACROSS the first horizontal step of the river placed at s,
