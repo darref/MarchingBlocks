@@ -28,6 +28,11 @@ const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
 const GENERATEUR_ICONES := preload("res://DEV_TOOLS/generer_icones_greffons.gd")
+const GENERATEUR_SHADERS := preload("res://DEV_TOOLS/generer_shaders_greffon.gd")
+const Anim := preload("res://addons/marchingblocks_paint/mb_animation.gd")
+const Trans := preload("res://addons/marchingblocks_paint/mb_transitions.gd")
+const Foliage := preload("res://addons/marchingblocks_paint/mb_foliage.gd")
+const Water := preload("res://addons/marchingblocks_paint/mb_water.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -47,6 +52,8 @@ func _initialize() -> void:
 	_un_format_plus_recent_est_refuse()
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
+	_le_greffon_passe_les_cas_de_parite()
+	_les_shaders_livres_sont_a_jour()
 	_les_cas_de_monde()
 	_les_icones_livrees_sont_a_jour()
 	_la_barre_ne_montre_que_l_utile()
@@ -633,6 +640,238 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 				ecart += "opened/repaired %s/%s au lieu de %s/%s" % [r["opened"], r["repaired"], e["opened"], e["repaired"]]
 			return ecart
 	return "sorte inconnue " + str(c["kind"])
+
+
+# ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
+# ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
+# cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
+const PARITE := {"transitions": 93, "animation": 43, "foliage": 59, "water": 25, "editing": 62}
+
+
+func _le_greffon_passe_les_cas_de_parite() -> void:
+	var total := 0
+	for nom in PARITE:
+		var chemin := "res://addons/marchingblocks_paint/%s_conformance.json" % nom
+		var f = JSON.parse_string(FileAccess.get_file_as_string(chemin)) if FileAccess.file_exists(chemin) else null
+		_vrai(f is Dictionary, "%s n'est pas livré avec le greffon Godot" % chemin)
+		if not f is Dictionary:
+			continue
+		_egal((f["cases"] as Array).size(), PARITE[nom], "le nombre de cas de %s_conformance.json" % nom)
+		var rouges := 0
+		var sortes := {}
+		for c in f["cases"]:
+			sortes[c["kind"]] = int(sortes.get(c["kind"], 0)) + 1
+			var pourquoi := _cas_de_parite(nom, f, c)
+			if pourquoi != "":
+				rouges += 1
+				if rouges <= 6:
+					_vrai(false, "%s « %s » — %s" % [nom, c["name"], pourquoi])
+		_egal(rouges, 0, "cas de %s où le greffon Godot diverge de l'appli" % nom)
+		total += (f["cases"] as Array).size()
+		print("  parité %s : %d cas %s, %d divergence(s)" % [nom, (f["cases"] as Array).size(), str(sortes), rouges])
+	print("  parité : %d cas en tout" % total)
+
+
+## Compare deux valeurs JSON (et ce que le greffon rend) : entiers exacts, réels à `tol` près, tableaux dans l'ordre,
+## dictionnaires clé à clé. Rend "" ou l'écart.
+func _proche(obtenu: Variant, voulu: Variant, tol: float, ou := "") -> String:
+	if (voulu is float or voulu is int) and (obtenu is float or obtenu is int):
+		return "" if absf(float(obtenu) - float(voulu)) <= tol else "%s : %s au lieu de %s" % [ou, obtenu, voulu]
+	if voulu is Array:
+		if not (obtenu is Array) or (obtenu as Array).size() != (voulu as Array).size():
+			return "%s : %s au lieu de %s" % [ou, str(obtenu).left(200), str(voulu).left(200)]
+		for k in (voulu as Array).size():
+			var e := _proche(obtenu[k], voulu[k], tol, "%s[%d]" % [ou, k])
+			if e != "":
+				return e
+		return ""
+	if voulu is Dictionary:
+		if not (obtenu is Dictionary) or (obtenu as Dictionary).size() != (voulu as Dictionary).size():
+			return "%s : %s au lieu de %s" % [ou, str(obtenu).left(200), str(voulu).left(200)]
+		for k in voulu:
+			if not (obtenu as Dictionary).has(k):
+				return "%s : il manque « %s »" % [ou, k]
+			var e := _proche(obtenu[k], voulu[k], tol, "%s.%s" % [ou, k])
+			if e != "":
+				return e
+		return ""
+	return "" if typeof(obtenu) == typeof(voulu) and obtenu == voulu else "%s : %s au lieu de %s" % [ou, obtenu, voulu]
+
+
+## Un ensemble de cases (Dictionary ou Array de Vector3i) trié x, y, z, en triplets — comme les cas.
+func _trie(cases_: Variant) -> Array:
+	var l: Array = (cases_ as Dictionary).keys() if cases_ is Dictionary else Array(cases_).duplicate()
+	l.sort()
+	return l.map(func(c: Vector3i) -> Array: return [c.x, c.y, c.z])
+
+
+func _vf(v: Vector3) -> Array:
+	return [v.x, v.y, v.z]
+
+
+func _cas_de_parite(fichier: String, f: Dictionary, c: Dictionary) -> String:
+	var i: Variant = c["input"]
+	var e: Variant = c["expected"]
+	var k: String = c["kind"]
+	var tol := 1e-5 if k in ["pulse", "place", "sway"] else 1e-6
+	match fichier + "/" + k:
+		# ── transitions
+		"transitions/blend":
+			var h := {}
+			for r in i["h"]:
+				h[int(r)] = float(i["h"][r])
+			var ch: Array = (i["choices"] as Array).map(func(x): return int(x))
+			var rg: Array = (i["ranks"] as Array).map(func(x): return int(x))
+			return _proche(Trans.blend(rg, _v3(i["f"]), ch, i["table"], h, float(i["n"])), e, tol)
+		"transitions/settings":
+			return _proche(Trans.settings(i), e, tol)
+		"transitions/table":
+			return _proche(Trans.table(i["pairs"], int(i["layers"])), e, tol)
+		"transitions/cell_texture":
+			var cells := {}
+			for q in i["cells"]:
+				cells[_vi(q)] = int(q[3])
+			var choices := {}
+			for q in i["choices"]:
+				choices[_vi(q)] = int(q[3])
+			var d := Trans.cell_texture(cells, choices)
+			var n: Vector3i = d["size"]
+			var octets: Array = []
+			for z in n.z:
+				for y in n.y:
+					for x in n.x:
+						var b: int = (d["bytes"] as PackedByteArray)[(z * n.y + y) * n.x + x]
+						if b != 0:
+							octets.append([x, y, z, b])
+			var o: Vector3i = d["origin"]
+			return _proche({"origin": [o.x, o.y, o.z], "size": [n.x, n.y, n.z], "bytes": octets}, e, tol)
+		"transitions/read":
+			var r := Trans.read(i)
+			return _proche({"error": true} if r.has("error") else r["transitions"], e, tol)
+		# ── animation
+		"animation/frame":
+			return _proche(Anim.frame_at(int(i["count"]), float(i["fps"]), bool(i["ping_pong"]), float(i["t"]),
+				float(i["phase"])), e, tol)
+		"animation/pulse":
+			return _proche(Anim.pulse_at(float(i["frequency"]), float(i["minimum"]), float(i["t"]), float(i["phase"])),
+				e, tol)
+		"animation/phase":
+			return _proche(Anim.phase_of(_v3(i["origin"])), e, tol)
+		"animation/scroll":
+			var s := Anim.scroll_at(float(i["u"]), float(i["v"]), float(i["t"]), bool(i["synced"]), float(i["phase"]))
+			return _proche([s.x, s.y], e, tol)
+		"animation/read":
+			return _proche(Anim.read(i), e, tol)
+		# ── feuillage
+		"foliage/place", "foliage/wind_data", "foliage/check", "foliage/brush":
+			var models := {}
+			for id in f["models"]:
+				models[int(id)] = f["models"][id]
+			var m: Dictionary = models[int(i["model"])]
+			if k == "place":
+				var pl := Foliage.plant(int(i["model"]), _v3(i["point"]), float(i["yaw"]), float(i["scale"]), "ground")
+				var t := Foliage.transform(m, pl)
+				return _proche({"basis": [_vf(t.basis.x), _vf(t.basis.y), _vf(t.basis.z)], "origin": _vf(t.origin),
+					"height_above_ground": Foliage.height_above_ground(m, pl)}, e, tol)
+			if k == "wind_data":
+				var pl := Foliage.plant(int(i["model"]), _v3(i["point"]), 0.0, float(i["scale"]), "ground")
+				var wd := Foliage.wind_of(m, pl)
+				return _proche([wd.r, wd.g, wd.b, wd.a], e, tol)
+			var monde := _ensemble(f["world_cells"])
+			var eau := _ensemble(f["water_cells"])
+			var plein := func(v: Vector3i) -> bool: return monde.has(v)
+			var w := {"full": plein,
+				"ground": func(x: float, z: float, y: float) -> Variant: return Foliage.ground_of_cells(plein, x, z, y),
+				"water": func(q: Vector3) -> bool: return eau.has(Foliage.water_cell(q))}
+			var deja: Array = (i["plants"] as Array).map(func(row: Array) -> Dictionary: return Foliage.plant_of(row))
+			var ix := Foliage.index(deja, models)
+			if k == "check":
+				var pl := Foliage.plant(int(i["model"]), _v3(i["point"]), float(i["yaw"]), float(i["scale"]),
+					"air" if i["mode"] == "air" else "ground")
+				return _proche(Foliage.check(m, pl, _v3(i["normal"]), i["mode"], w, ix, models, float(i["spacing"]),
+					float(i["max_slope"])), e, tol)
+			var r := Foliage.brush(m, float(i["y_top"]), i["candidates"], i["mode"], w, ix, models, float(i["spacing"]),
+				float(i["max_slope"]))
+			var acceptes: Array = (r["plants"] as Array).map(func(pl: Dictionary) -> Array:
+				var p: Vector3 = pl["p"]
+				return [p.x, p.y, p.z, pl["yaw"], pl["scale"]])
+			return _proche({"plants": acceptes, "refused": r["refused"]}, e, tol)
+		"foliage/sway":
+			var wv: Array = i["wind"]
+			var v := Foliage.sway(_v3(i["vertex"]), _v3(i["normal"]), Color(wv[0], wv[1], wv[2], wv[3]), float(i["t"]),
+				Vector2(i["direction"][0], i["direction"][1]))
+			return _proche(_vf(v), e, tol)
+		"foliage/ground_of_cells":
+			var monde := _ensemble(f["world_cells"])
+			var g: Variant = Foliage.ground_of_cells(func(v: Vector3i) -> bool: return monde.has(v), float(i["x"]),
+				float(i["z"]), float(i["y_top"]))
+			return _proche(null if g == null else g["y"], e, tol)
+		"foliage/read":
+			var r := Foliage.read(i)
+			return _proche({"error": true} if r.has("error") else r["foliage"], e, tol)
+		# ── l'eau
+		"water/water_world":
+			var w := Water.world(_ensemble(f["worlds"][i["world"]]), _liste(i["sources"]))
+			var corps: Array = (w["bodies"] as Array).map(func(r: Dictionary) -> Dictionary:
+				return {"kind": r["kind"], "error": r["error"], "level": r["level"], "end": r["end"],
+					"water": _trie(r["water"]),
+					"lakes": (r["lakes"] as Array).map(func(l: Dictionary) -> Dictionary:
+						return {"level": l["level"], "cells": _trie(l["cells"])}),
+					"course": (r["course"] as Array).map(func(q: Dictionary) -> Array:
+						var v: Vector3i = q["cell"]
+						return [v.x, v.y, v.z, q["kind"], int(q.get("lake", -1))])})
+			return _proche({"bodies": corps, "sea": _trie(w["sea"])}, e, tol)
+		"water/river_width":
+			var s := Water.river_width(_ensemble(f["worlds"][i["world"]]), _vi(i["source"]), int(i["width"]))
+			return _proche(s.map(func(v: Vector3i) -> Array: return [v.x, v.y, v.z]), e, tol)
+		"water/surface_depth":
+			var cells := _ensemble(f["worlds"][i["world"]])
+			var eau := _ensemble(i["water"])
+			var prof: Array = (i["cells"] as Array).map(func(q: Array) -> Array:
+				return [int(q[0]), int(q[1]), int(q[2]), Water.depth(eau, cells, _vi(q))])
+			return _proche({"surface": _trie(Water.surface(eau, cells)), "depth": prof}, e, tol)
+		"water/read":
+			var r := Water.read(i)
+			return _proche({"error": true} if r.has("error") else r["water"], e, tol)
+		# ── l'édition
+		"editing/extrude":
+			var cells := _ensemble(f["world_cells"]) if i["cells"] is String else _ensemble(i["cells"])
+			var r := Tools.extrude(cells, int(i["floor"]), i["direction"], _ensemble(i["selection"]), i["mode"])
+			var st: Vector3i = r["step"]
+			return _proche({"set": _trie(r["set"]), "clear": _trie(r["clear"]), "selection": _trie(r["selection"]),
+				"step": [st.x, st.y, st.z]}, e, tol)
+		"editing/shrink_edge":
+			return _proche(_trie(Tools.shrink_edge(_ensemble(i["selection"]))), e, tol)
+		"editing/widen_flat":
+			return _proche(_trie(Tools.widen_flat(_ensemble(i["selection"]))), e, tol)
+		"editing/select_brush":
+			var cells := _ensemble(f["world_cells"]) if i["cells"] is String else _ensemble(i["cells"])
+			var sel := Tools.select_brush(_ensemble(i["selection"]), _liste(i["targets"]),
+				func(v: Vector3i) -> bool: return cells.has(v), bool(i["include_empty"]), bool(i["deselect"]))
+			return _proche(_trie(sel), e, tol)
+		"editing/room_from_selection":
+			var cells := _ensemble(f["world_cells"]) if i["cells"] is String else _ensemble(i["cells"])
+			var r := Shapes.room_from_selection(cells, _ensemble(i["selection"]), int(i["floors"]), bool(i["up"]))
+			var bx: Array = (r["box"] as Array).map(func(v: Vector3i) -> Array: return [v.x, v.y, v.z])
+			return _proche({"error": r["error"], "set": _trie(r["set"]), "clear": _trie(r["clear"]),
+				"repaired": r["repaired"], "box": bx}, e, tol)
+	return "sorte inconnue « %s » dans %s_conformance.json" % [k, fichier]
+
+
+# ── 3 ter. Les shaders du greffon sont ceux de l'appli, AUJOURD'HUI (comme les icônes) ──────────────
+func _les_shaders_livres_sont_a_jour() -> void:
+	var frais: Dictionary = GENERATEUR_SHADERS.sorties()
+	_vrai(not frais.has("erreur"), "générateur de shaders : %s" % str(frais.get("erreur", "")))
+	if frais.has("erreur"):
+		return
+	for chemin in frais:
+		var ici := FileAccess.get_file_as_bytes(chemin) if FileAccess.file_exists(chemin) else PackedByteArray()
+		_vrai(ici == frais[chemin], "%s absent ou PÉRIMÉ : relancer DEV_TOOLS/generer_shaders_greffon.gd" % chemin)
+	var Shaders: GDScript = load("res://addons/marchingblocks_paint/mb_shaders.gd")
+	for nom in ["ANIMATION", "TRANSITIONS"]:
+		var code: String = Shaders.get_script_constant_map()[nom]
+		_vrai(code.contains("uniform mat4 mb_world_to_format") and not code.contains("global uniform"),
+			"le shader %s du greffon n'est pas en espace du format, ou garde une globale" % nom)
 
 
 func _meme_changement(r: Dictionary, e: Dictionary) -> String:
