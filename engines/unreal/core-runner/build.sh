@@ -7,7 +7,7 @@ SRC=../MarchingBlocksPaint/Source/MarchingBlocksPaint
 ${CXX:-g++} -std=c++17 -O2 -fno-exceptions -fno-rtti \
   -Wall -Wextra -Wshadow -Wconversion -Wsign-conversion -Werror \
   -I"$SRC/Public" \
-  runner.cpp "$SRC/Private/MBCore/MBJson.cpp" "$SRC/Private/MBCore/MBRule.cpp" "$SRC/Private/MBCore/MBTools.cpp" "$SRC/Private/MBCore/MBFrame.cpp" \
+  runner.cpp parity.cpp "$SRC/Private/MBCore/MBEditing.cpp" "$SRC/Private/MBCore/MBAnimation.cpp" "$SRC/Private/MBCore/MBFoliage.cpp" "$SRC/Private/MBCore/MBTransitions.cpp" "$SRC/Private/MBCore/MBWater.cpp" "$SRC/Private/MBCore/MBJson.cpp" "$SRC/Private/MBCore/MBRule.cpp" "$SRC/Private/MBCore/MBTools.cpp" "$SRC/Private/MBCore/MBFrame.cpp" \
   "$SRC/Private/MBCore/MBWorldFile.cpp" "$SRC/Private/MBCore/MBShapes.cpp" \
   -o runner
 ./runner "${1:-../MarchingBlocksPaint/Tests}"

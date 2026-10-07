@@ -55,5 +55,12 @@ namespace MBPaint
 		/// rotation (orthonormal, determinant +1), even when F mirrors — which a left-handed engine's F
 		/// necessarily does.
 		std::array<FVec3, 3> QuarterTurn(int QuarterTurns) const;
+
+		/// The same for ANY angle about format +Y (a plant's yaw, in radians, right-hand): F · R(yaw) · F⁻¹, as the images
+		/// of the imported space's unit axes. Turn(q pi / 2) is QuarterTurn(q).
+		std::array<FVec3, 3> Turn(double Radians) const;
+
+	private:
+		std::array<FVec3, 3> TurnCosSin(double C, double S) const;
 	};
 }

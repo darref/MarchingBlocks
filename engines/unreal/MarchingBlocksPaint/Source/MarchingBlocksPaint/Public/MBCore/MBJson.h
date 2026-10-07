@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -39,6 +40,27 @@ namespace MBPaint
 		const FJsonValue& operator[](const std::string& Key) const;
 		const FJsonValue& operator[](size_t Index) const;
 		size_t Size() const { return Type == EType::Array ? Array.size() : Object.size(); }
+
+		/// An integer, or a real without a fractional part (a writer may write 3 or 3.0).
+		bool IsWhole() const { return Type == EType::Integer || (Type == EType::Real && std::isfinite(Real) && std::floor(Real) == Real); }
+
+		// ── Building values (what a reader gives back, normalized) ──
+		static FJsonValue MakeBool(bool B) { FJsonValue V; V.Type = EType::Bool; V.Bool = B; return V; }
+		static FJsonValue MakeInt(int64_t I) { FJsonValue V; V.Type = EType::Integer; V.Integer = I; return V; }
+		static FJsonValue MakeReal(double R) { FJsonValue V; V.Type = EType::Real; V.Real = R; return V; }
+		static FJsonValue MakeString(const std::string& S) { FJsonValue V; V.Type = EType::String; V.String = S; return V; }
+		static FJsonValue MakeArray() { FJsonValue V; V.Type = EType::Array; return V; }
+		static FJsonValue MakeObject() { FJsonValue V; V.Type = EType::Object; return V; }
+		/// Appends to an array.
+		FJsonValue& Push(FJsonValue V) { Array.push_back(std::move(V)); return *this; }
+		/// Sets a key of an object (replaces it when present).
+		FJsonValue& Set(const std::string& Key, FJsonValue V)
+		{
+			for (auto& Entry : Object)
+				if (Entry.first == Key) { Entry.second = std::move(V); return *this; }
+			Object.emplace_back(Key, std::move(V));
+			return *this;
+		}
 	};
 
 	/// Parses Text into Out. Returns false and sets Error when the text is not valid JSON.

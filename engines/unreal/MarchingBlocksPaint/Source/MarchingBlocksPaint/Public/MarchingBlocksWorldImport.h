@@ -10,6 +10,14 @@
 // <Tiles Root>/<world>/<tileset>: the Status and the Output Log name every folder still missing.
 // A layer without tiles keeps its cells and draws nothing — it is never given tiles it did not have.
 //
+// MarchingBlocks 0.9 worlds carry more, each made here too, in the same undo step:
+//   water        one MarchingBlocks Water per water layer (its sources, its look; the baked sheet water/<name>.glb is
+//                imported into <Tiles Root>/<world>/water/<name>);
+//   transitions  one MarchingBlocks Transitions (pairs, representatives — their images kept in the level —, choices);
+//   foliage      one MarchingBlocks Foliage (models and plants; each model's .glb imported, Combine Meshes ON, into
+//                <Tiles Root>/<world>/foliage/<name>).
+// A file whose water, transitions or foliage break their rule is refused whole, like a bad layer.
+//
 // This actor is editor-only: it is not cooked, and nothing refers to it once the layers exist.
 
 #pragma once
@@ -54,4 +62,8 @@ private:
 	/** The layers the last import made, so that importing again replaces them. */
 	UPROPERTY()
 	TArray<TObjectPtr<AMarchingBlocksWorld>> Imported;
+
+	/** The water, transitions and foliage actors the last import made. */
+	UPROPERTY()
+	TArray<TObjectPtr<AActor>> ImportedLooks;
 };

@@ -70,8 +70,17 @@ namespace MBPaint
 	std::array<FVec3, 3> FFrame::QuarterTurn(int QuarterTurns) const
 	{
 		const int Q = ((QuarterTurns % 4) + 4) % 4;
-		const double C = Q == 0 ? 1.0 : Q == 2 ? -1.0 : 0.0;
-		const double S = Q == 1 ? 1.0 : Q == 3 ? -1.0 : 0.0;
+		// Exact values: a quarter turn must not carry the rounding of cos(pi / 2).
+		return TurnCosSin(Q == 0 ? 1.0 : Q == 2 ? -1.0 : 0.0, Q == 1 ? 1.0 : Q == 3 ? -1.0 : 0.0);
+	}
+
+	std::array<FVec3, 3> FFrame::Turn(double Radians) const
+	{
+		return TurnCosSin(std::cos(Radians), std::sin(Radians));
+	}
+
+	std::array<FVec3, 3> FFrame::TurnCosSin(double C, double S) const
+	{
 		std::array<FVec3, 3> Images;
 		const FVec3 Units[3] = {FVec3(1, 0, 0), FVec3(0, 1, 0), FVec3(0, 0, 1)};
 		for (size_t I = 0; I < 3; ++I)

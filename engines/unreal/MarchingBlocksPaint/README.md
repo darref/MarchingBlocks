@@ -42,9 +42,27 @@ panel — leaves navigation. In this mode Space no longer cycles the transform g
 | Arrows | move the selection; they follow the camera. Shift + ↑ ↓ lift and lower |
 | Ctrl + C · X · V | copy · cut · paste (then click to place) |
 
-The selection operations — **Fill, Delete, Extrude ↑ ↓, Grow, Shrink, Connected, Copy, Cut, Paste** —
-are in the mode's panel once something is selected (and still on the actor's Details panel). Extruding moves the floor with the selection, so *Rect, Fill, Extrude,
-Fill…* raises a room. Every change is one Ctrl+Z.
+The selection operations — **Fill, Delete, Grow, Shrink, Widen, Connected, Room from selection, Copy, Cut,
+Paste** — are in the mode's panel once something is selected (and still on the actor's Details panel). **Shrink**
+removes the selection's edge (a rectangle loses its rim, a line its ends); **Widen** adds the four horizontal
+neighbours of every cell, empty ones included. **Select empty cells too** (under the Select brush) selects a volume to
+build, not only matter.
+
+**Extrude** (up, down, or *Facing*: where most selected cells face the air) works on the selection, or with none on the
+matter of the current floor. Click: places a cell in front of every full cell, and the selection and the floor follow,
+so *Rect, Fill, Extrude, Fill…* raises a room. **Shift + click extends the selection** (nothing placed), **Alt + click
+shifts it**. Every change is one Ctrl+Z.
+
+| Mouse wheel (in the mode) | |
+|---|---|
+| alone | Unreal's own (zoom) — except during a gesture: a Rect / Box drag (its height), a Room traced (its floors), a paste (its height) |
+| Ctrl | the floor · Ctrl + Shift with Stairs: the step |
+| Shift / Alt, with a selection and Select, Rect or Box | Shift: extend the selection up / down · Alt up: Widen · Alt down: Shrink |
+| Room shape | Alt: floors · Shift: rises / sinks |
+| Other shapes | Alt: size · Shift: length |
+| Add, Dig, Select | Alt: brush size · Shift: next brush shape |
+
+**F** frames all the matter of the visible layers.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you. One actor is one
 layer, with its own tileset. Actors with the same **World Name** (Details, *Layers*) are the layers of one
@@ -68,6 +86,27 @@ with their cells) and one `.mbset` tileset folder per tile source, inside it.
 A file that breaks the rule (see its `README.txt`) is refused whole, with the reason, and nothing is made.
 A layer exported **without tiles** keeps its cells and draws nothing: the import says so, and never gives
 it tiles it did not have. The import actor is editor-only and is not cooked.
+
+## Water, transitions, foliage, animated textures (MarchingBlocks 0.9)
+
+The world import also makes, in the same undo step:
+
+- **MarchingBlocks Water**, one per water layer: its sources and the sheet MarchingBlocks baked (`water/<name>.glb`,
+  imported into `<Tiles Root>/<world>/water/<name>`), drawn with one of the six example presets shipped in
+  `Content/Materials` (stylized, clear, reflective, lava, swamp, acid). **The presets are examples, not a requirement**:
+  set your own material in *Material*; every vertex carries the data (COLOR_0 r g the flow, b the kind, a the depth / 8
+  or the foam; NORMAL; TEXCOORD_0). *Recompute Water* deduces the water cells again from the cells (the sheet itself is
+  not rebuilt: export again from MarchingBlocks after painting).
+- **MarchingBlocks Transitions**: where two layers meet, the look of one is laid over the other's surface (an overlay
+  material on the tiles; the geometry never changes). Edit the pairs and their settings in its Details panel.
+- **MarchingBlocks Foliage**: the models (import each `foliage/<name>.glb`, Combine Meshes ON, into
+  `<Tiles Root>/<world>/foliage/<name>`) and the plants, swaying in the wind. It plants too: in the air, planted with a
+  free neighbourhood, or planted overflowing, one by one or with a brush.
+- **Animated textures**: a tile material carrying an animation (frames, scroll, pulse) is replaced by the plugin's
+  animated material; its frames are kept in the level.
+
+The materials are built from `Tools/build_materials.py` (Unreal materials are binary assets; this script is their
+source). The rules are in `Tests/*_conformance.json` (`rules_text`), proven outside Unreal by `../core-runner`.
 
 ## Why it works with any importer
 

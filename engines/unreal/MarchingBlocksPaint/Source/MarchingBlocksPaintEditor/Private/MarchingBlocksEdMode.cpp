@@ -4,8 +4,10 @@
 
 #include "MarchingBlocksModeToolkit.h"
 #include "EditorViewportClient.h"
+#include "Engine/Engine.h"
 #include "Engine/Selection.h"
 #include "Editor.h"
+#include "MarchingBlocksFoliage.h"
 #include "MarchingBlocksWorld.h"
 #include "SceneManagement.h"
 #include "SceneView.h"
@@ -125,12 +127,11 @@ void UMarchingBlocksEdMode::Touch(AMarchingBlocksWorld* World, MBPaint::EBrushTo
 	LastKey = Key;
 	if (BrushTool == MBPaint::EBrushTool::Select)
 	{
+		// MBCore's rule (editing_conformance.json, select_brush): the full cells only, or every cell with "Select empty
+		// cells too"; the inverse gesture removes them, full or empty.
 		const MBPaint::FCellSet& Full = World->GetCells();
-		for (const MBPaint::FCell& C : Cells)
-		{
-			if (bDeselect) World->Selection.erase(C);
-			else if (Full.count(C)) World->Selection.insert(C);
-		}
+		MBPaint::Editing::SelectBrush(World->Selection, Cells, [&Full](const MBPaint::FCell& C) { return Full.count(C) > 0; },
+			World->bSelectEmptyCells, bDeselect);
 		return;
 	}
 	const MBPaint::FCellSet& Full = World->GetCells();
@@ -157,7 +158,7 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 	{
 		MBPaint::FHit Hit;
 		if (!Aimed(World, Origin, Direction, true, Hit)) return;
-		const MBPaint::FCell Anchor = MBPaint::Tools::Anchor(MBPaint::EBrushTool::Add, Hit);
+		const MBPaint::FCell Anchor = PasteAnchor(Hit);
 		for (const MBPaint::FCell& D : World->Clipboard) Preview.push_back(Anchor + D);
 		PreviewColour = AddColour;
 		return;
@@ -182,6 +183,7 @@ void UMarchingBlocksEdMode::Hover(FEditorViewportClient* ViewportClient, FViewpo
 		HoverShape(World, Origin, Direction);
 		return;
 	}
+	if (World->Tool == EMarchingBlocksTool::Foliage) return;
 	if (World->Tool == EMarchingBlocksTool::Variant)
 	{
 		const MBPaint::FHit Hit = World->RayAgainstCells(Origin, Direction);
@@ -262,11 +264,11 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				{
 					const FScopedTransaction Transaction(LOCTEXT("Paste", "Paste"));
 					World->Modify();
-					const MBPaint::FChange Change = MBPaint::Tools::Paste(World->GetCells(), World->Clipboard,
-						MBPaint::Tools::Anchor(MBPaint::EBrushTool::Add, Hit));
+					const MBPaint::FChange Change = MBPaint::Tools::Paste(World->GetCells(), World->Clipboard, PasteAnchor(Hit));
 					World->Apply(Change);
 					World->Selection = Change.Selection;
 					World->bPasting = false;
+					PasteLift = 0;
 				}
 				return true;
 			}
@@ -281,6 +283,17 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 			if (World->Tool == EMarchingBlocksTool::Shape)
 			{
 				ClickShape(World, Origin, Direction);
+				return true;
+			}
+			if (World->Tool == EMarchingBlocksTool::Foliage)
+			{
+				// The rule is MBCore's (MBFoliage): the Foliage actor of this world plants, sows or erases.
+				AMarchingBlocksFoliage* F = AMarchingBlocksFoliage::Find(World->GetWorld(), World->WorldName);
+				if (!F) World->Status = TEXT("Foliage — this world has no MarchingBlocks Foliage actor (the world import makes one; or place one and set its World Name).");
+				else if (bShift) F->EraseAt(Origin, Direction);
+				else if (bControl) F->SowAt(Origin, Direction);
+				else F->PlantAt(Origin, Direction);
+				if (F) World->Status = F->Status;
 				return true;
 			}
 			if (World->Tool == EMarchingBlocksTool::Variant)
@@ -320,7 +333,7 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				ApplyRoom(World, BoxStart, BoxEnd);
 				return true;
 			}
-			if (World->Tool == EMarchingBlocksTool::Shape) return true;
+			if (World->Tool == EMarchingBlocksTool::Shape || World->Tool == EMarchingBlocksTool::Foliage) return true;
 			if (bBoxing)
 			{
 				const MBPaint::FCellSet Volume = MBPaint::Tools::Box(BoxStart, BoxEnd, World->bHollowBox && World->Tool == EMarchingBlocksTool::Box);
@@ -348,7 +361,20 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 		return false;
 	}
 
+	if (Key == EKeys::MouseScrollUp || Key == EKeys::MouseScrollDown)
+	{
+		if (Event != IE_Pressed || bFlying) return false;
+		return Wheel(World, ViewportClient, Viewport, Key == EKeys::MouseScrollUp ? 1 : -1);
+	}
 	if (Event != IE_Pressed || bFlying) return false;
+	if (Key == EKeys::F && !bControl && !bShift)
+	{
+		// F frames ALL the matter of the visible layers (MarchingBlocks' F), not the selected actor.
+		FBox Bounds;
+		if (!World->VisibleMatterBounds(Bounds)) return false;
+		ViewportClient->FocusViewportOnBox(Bounds);
+		return true;
+	}
 	if (bControl)
 	{
 		if (Key == EKeys::C) { World->CopySelection(); return true; }
@@ -418,7 +444,7 @@ bool UMarchingBlocksEdMode::HandleShortcut(AMarchingBlocksWorld* World, FViewpor
 	else if (Key == EKeys::Delete) World->DeleteSelected();
 	else if (Key == EKeys::Escape)
 	{
-		if (World->bPasting || bBoxing || bHasShapeAnchor) { World->bPasting = false; bBoxing = false; bHasShapeAnchor = false; }
+		if (World->bPasting || bBoxing || bHasShapeAnchor) { World->bPasting = false; bBoxing = false; bHasShapeAnchor = false; PasteLift = 0; }
 		else World->ClearSelection();
 	}
 	else return false;
@@ -575,6 +601,134 @@ MBPaint::FCell UMarchingBlocksEdMode::ArrowOffset(AMarchingBlocksWorld* World, F
 	if (Key == EKeys::Down) return MBPaint::FCell(-F.X, 0, -F.Z);
 	if (Key == EKeys::Right) return R;
 	return MBPaint::FCell(-R.X, 0, -R.Z);
+}
+
+MBPaint::FCell UMarchingBlocksEdMode::PasteAnchor(const MBPaint::FHit& Hit) const
+{
+	return MBPaint::Tools::Anchor(MBPaint::EBrushTool::Add, Hit) + MBPaint::FCell(0, PasteLift, 0);
+}
+
+void UMarchingBlocksEdMode::Say(AMarchingBlocksWorld* World, const FString& Text)
+{
+	World->Status = Text;
+	// ⚠ NOT NEAR THE MOUSE, as MarchingBlocks says it: in Unreal 5.8 a mode draws on the viewport's canvas only through
+	// ILegacyEdModeWidgetInterface (a dozen abstract gizmo methods). The value is said on the viewport (top left), for a moment.
+	if (GEngine) GEngine->AddOnScreenDebugMessage(static_cast<uint64>(0x4D42574845454CULL), 1.5f, FColor(140, 209, 115), Text);
+}
+
+// THE MOUSE WHEEL — MarchingBlocks' rule (app/editor.gd, _molette_du_monde; editing_conformance.json "THE MOUSE WHEEL").
+// The EFFECTS on cells are MBCore's (Editing::Extrude extend, WidenFlat, ShrinkEdge — with cases); which setting a
+// modifier drives is a UI rule, judged by hand. ⚠ The wheel is taken ONLY when a gesture or a modifier asks for it:
+// alone, it stays Unreal's (zoom, or the camera speed while flying). The Details panel is not ours.
+bool UMarchingBlocksEdMode::Wheel(AMarchingBlocksWorld* World, FEditorViewportClient* ViewportClient, FViewport* Viewport, int32 Notch)
+{
+	using namespace MarchingBlocksEdModeDetail;
+	const bool bShift = Viewport->KeyState(EKeys::LeftShift) || Viewport->KeyState(EKeys::RightShift);
+	const bool bControl = Viewport->KeyState(EKeys::LeftControl) || Viewport->KeyState(EKeys::RightControl);
+	const bool bAlt = Viewport->KeyState(EKeys::LeftAlt) || Viewport->KeyState(EKeys::RightAlt);
+	const bool bRoom = DrawingRoom(World);
+	const bool bShape = World->Tool == EMarchingBlocksTool::Shape;
+	// 1. During a gesture, the wheel shapes it, without a modifier.
+	if (!bShift && !bControl && !bAlt)
+	{
+		if (bBoxing && bRoom)
+		{
+			World->RoomFloors = FMath::Clamp(World->RoomFloors + Notch, 1, MBPaint::Shapes::RoomFloorsMax);
+			Say(World, FString::Printf(TEXT("Room — %d floor(s)"), World->RoomFloors));
+		}
+		else if (bBoxing && (World->Tool == EMarchingBlocksTool::Rect || World->Tool == EMarchingBlocksTool::Box))
+		{
+			// One cell per notch: a flat Rect becomes a box.
+			BoxEnd.Y += Notch;
+			Say(World, FString::Printf(TEXT("Height %d"), FMath::Abs(BoxEnd.Y - BoxStart.Y) + 1));
+		}
+		else if (World->bPasting)
+		{
+			PasteLift += Notch;
+			Say(World, FString::Printf(TEXT("Paste height %+d"), PasteLift));
+		}
+		else return false;
+		Hover(ViewportClient, Viewport);
+		return true;
+	}
+	// 2. Ctrl + Shift with the Stairs shape: its step. Ctrl: the floor.
+	if (bControl && bShift && bShape && World->SpecialShape == EMarchingBlocksSpecialShape::Stairs)
+	{
+		World->StairsStep = FMath::Clamp(World->StairsStep + Notch, 1, MBPaint::Shapes::StepMax);
+		Say(World, FString::Printf(TEXT("Stairs step %d"), World->StairsStep));
+		return true;
+	}
+	if (bControl)
+	{
+		const FScopedTransaction Transaction(LOCTEXT("Floor", "Change floor"));
+		World->Modify();
+		World->Floor += Notch;
+		Say(World, FString::Printf(TEXT("Floor %d"), World->Floor));
+		Hover(ViewportClient, Viewport);
+		return true;
+	}
+	// 3. A selection and a selection tool: Shift extends it, Alt widens it (up) or shrinks its edge (down). Nothing is set.
+	const bool bSelectionTool = World->Tool == EMarchingBlocksTool::Select || World->Tool == EMarchingBlocksTool::Rect
+		|| World->Tool == EMarchingBlocksTool::Box;
+	if (!World->Selection.empty() && bSelectionTool)
+	{
+		if (bShift) World->Extrude(Notch > 0 ? MBPaint::EExtrudeDirection::Up : MBPaint::EExtrudeDirection::Down, MBPaint::EExtrudeMode::Extend);
+		else if (Notch > 0) World->Widen();
+		else World->Shrink();
+		Say(World, FString::Printf(TEXT("%s — %d selected"), bShift ? (Notch > 0 ? TEXT("Extend up") : TEXT("Extend down"))
+			: Notch > 0 ? TEXT("Widen") : TEXT("Shrink"), static_cast<int32>(World->Selection.size())));
+		return true;
+	}
+	// 4. The room: Alt its floors, Shift rises / sinks. Other shapes: Alt the size, Shift the length.
+	if (bRoom)
+	{
+		if (bAlt)
+		{
+			World->RoomFloors = FMath::Clamp(World->RoomFloors + Notch, 1, MBPaint::Shapes::RoomFloorsMax);
+			Say(World, FString::Printf(TEXT("Room — %d floor(s)"), World->RoomFloors));
+		}
+		else
+		{
+			World->bRoomUp = Notch > 0;
+			Say(World, World->bRoomUp ? TEXT("Room — rises") : TEXT("Room — sinks"));
+		}
+		Hover(ViewportClient, Viewport);
+		return true;
+	}
+	if (bShape)
+	{
+		if (bAlt)
+		{
+			World->ShapeSize = FMath::Clamp(World->ShapeSize + Notch, 1, 7);
+			Say(World, FString::Printf(TEXT("Shape size %d"), World->ShapeSize));
+		}
+		else
+		{
+			World->ShapeLength = FMath::Clamp(World->ShapeLength + Notch, 1, MBPaint::Shapes::LengthMax);
+			Say(World, FString::Printf(TEXT("Shape length %d"), World->ShapeLength));
+		}
+		Hover(ViewportClient, Viewport);
+		return true;
+	}
+	// 5. Add / Dig / Select: Alt the brush size, Shift the next brush shape.
+	if (World->Tool == EMarchingBlocksTool::Add || World->Tool == EMarchingBlocksTool::Dig || World->Tool == EMarchingBlocksTool::Select)
+	{
+		if (bAlt)
+		{
+			World->BrushSize = FMath::Clamp(World->BrushSize + Notch, 1, 7);
+			Say(World, FString::Printf(TEXT("Brush size %d"), World->BrushSize));
+		}
+		else
+		{
+			const int32 Next = (static_cast<int32>(World->BrushShape) + (Notch > 0 ? 1 : 2)) % 3;
+			World->BrushShape = static_cast<EMarchingBlocksBrushShape>(Next);
+			Say(World, World->BrushShape == EMarchingBlocksBrushShape::Sphere ? TEXT("Brush — sphere")
+				: World->BrushShape == EMarchingBlocksBrushShape::Cube ? TEXT("Brush — cube") : TEXT("Brush — disc"));
+		}
+		Hover(ViewportClient, Viewport);
+		return true;
+	}
+	return false;
 }
 
 void UMarchingBlocksEdMode::Draw(const FSceneView* View, FPrimitiveDrawInterface* PDI)

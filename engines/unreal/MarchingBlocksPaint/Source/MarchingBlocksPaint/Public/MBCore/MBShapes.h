@@ -53,6 +53,10 @@ namespace MBPaint
 		std::string Error;
 		bool bOpened = false;
 		int Repaired = 0;
+		/// Room from selection: the box of the room, [BoxLo, BoxHi] (bHasBox false on an error).
+		bool bHasBox = false;
+		FCell BoxLo;
+		FCell BoxHi;
 		bool IsEmpty() const { return Set.empty() && Clear.empty(); }
 	};
 
@@ -68,6 +72,12 @@ namespace MBPaint
 		/// rectangle is the room's floor — or DOWN — it is its ceiling — by Floors free floors. A shell one cell
 		/// thick, its inside dug out. At least 3 × 3 (too_small). Nothing changes on an error.
 		MARCHINGBLOCKSPAINT_API FShapeResult Room(const FCellSet& Cells, const FCell& A, const FCell& B, int Floors, bool bUp);
+
+		/// ROOM FROM SELECTION (editing_conformance.json): the FOOTPRINT is the selection seen from above; the base is
+		/// its lowest y rising, its highest sinking. Inside = footprint cells whose four horizontal neighbours are in
+		/// it (none: too_small; an empty selection: empty). A shell over Floors free floors, the inside dug, repaired
+		/// as an add shape. Nothing changes on an error.
+		MARCHINGBLOCKSPAINT_API FShapeResult RoomFromSelection(const FCellSet& Cells, const FCellSet& Selection, int Floors, bool bUp);
 
 		MARCHINGBLOCKSPAINT_API bool Digs(ESpecialShape Shape);
 

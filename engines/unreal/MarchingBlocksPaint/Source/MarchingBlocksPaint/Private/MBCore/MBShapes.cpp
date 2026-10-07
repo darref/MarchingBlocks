@@ -305,6 +305,53 @@ namespace MBPaint
 			return Res;
 		}
 
+		FShapeResult RoomFromSelection(const FCellSet& Cells, const FCellSet& Selection, int Floors, bool bUp)
+		{
+			FShapeResult Res;
+			if (Selection.empty()) { Res.Error = "empty"; return Res; }
+			// L'empreinte vue de dessus (x, z), dans une case de y = 0 ; la base : le plus bas en montant, le plus haut en descendant.
+			FCellSet Footprint;
+			int Base = 0;
+			bool bFirst = true;
+			for (const FCell& C : Selection)
+			{
+				Footprint.insert(FCell(C.X, 0, C.Z));
+				if (bFirst || (bUp ? C.Y < Base : C.Y > Base)) { Base = C.Y; bFirst = false; }
+			}
+			FCellSet Inside;
+			for (const FCell& P : Footprint)
+				if (Footprint.count(P + FCell(1, 0, 0)) && Footprint.count(P + FCell(-1, 0, 0)) && Footprint.count(P + FCell(0, 0, 1))
+					&& Footprint.count(P + FCell(0, 0, -1)))
+					Inside.insert(P);
+			if (Inside.empty()) { Res.Error = "too_small"; return Res; }
+			const int E = std::max(1, std::min(Floors, RoomFloorsMax));
+			const int Y0 = bUp ? Base : Base - E - 1;
+			const int Y1 = Y0 + E + 1;
+			if (static_cast<long long>(Footprint.size()) * (E + 2) > VolumeMax) { Res.Error = "too_large"; return Res; }
+			FCell Lo(2147483647, Y0, 2147483647), Hi(-2147483647, Y1, -2147483647);
+			for (const FCell& P : Footprint)
+			{
+				Lo.X = std::min(Lo.X, P.X);
+				Lo.Z = std::min(Lo.Z, P.Z);
+				Hi.X = std::max(Hi.X, P.X);
+				Hi.Z = std::max(Hi.Z, P.Z);
+				for (int Y = Y0; Y <= Y1; ++Y)
+				{
+					const FCell C(P.X, Y, P.Z);
+					if (Y == Y0 || Y == Y1 || !Inside.count(P))
+					{
+						if (!Cells.count(C)) Res.Set.insert(C);
+					}
+					else if (Cells.count(C)) Res.Clear.insert(C);
+				}
+			}
+			Res.Repaired = ShpRepair(Cells, Res.Set, Res.Clear, false);
+			Res.bHasBox = true;
+			Res.BoxLo = Lo;
+			Res.BoxHi = Hi;
+			return Res;
+		}
+
 		bool Digs(ESpecialShape Shape) { return Shape == ESpecialShape::Tunnel || Shape == ESpecialShape::Well; }
 
 		FCell WallNormal(const FCellSet& Cells, const FCell& C, const FCell& Face)
