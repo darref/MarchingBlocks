@@ -394,3 +394,12 @@ Un agent par moteur, en parallèle ; les cas sont le commun. Dans chaque moteur,
    (« ce qui se voit se juge à l'image »).
 
 Une règle ambiguë se remonte et se corrige dans `eau_maillage.gd`, puis on régénère : jamais dans un moteur.
+
+### Godot — FAIT (7 octobre 2026, branche `eau-godot`)
+
+`mb_water_mesh.gd` 14/14 ; reprise portée (incrémental = entier sur 68 gestes) ; branchement 1 à 5 fait ; sur l'exemple, un
+geste 0,04 à 0,35 s, tout refaire 3 à 9 s, et les nappes refaites = les `.glb` cuits. Détail : `CLAUDE.md`, « L'eau
+recalculée dans le greffon Godot ». ⚠ **DEUX MUTATIONS NE SONT PAS VUES PAR LES 14 CAS** (mesuré dans le cœur aussi :
+« lèvre la plus basse » et « deux bandes sur une même case » — aucun cas n'a deux rivières au même endroit) ; la ligne
+« 16 sur 16 rouges sans régénérer » ci-dessus est donc fausse pour elles. OUVERT : un cas à ajouter (`epreuve_parite.gd`) ;
+Unity et Unreal doivent s'en garder eux-mêmes d'ici là.

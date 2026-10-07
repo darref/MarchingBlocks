@@ -38,6 +38,9 @@ const Anim := preload("res://addons/marchingblocks_paint/mb_animation.gd")
 const Trans := preload("res://addons/marchingblocks_paint/mb_transitions.gd")
 const Foliage := preload("res://addons/marchingblocks_paint/mb_foliage.gd")
 const Water := preload("res://addons/marchingblocks_paint/mb_water.gd")
+const WaterMesh := preload("res://addons/marchingblocks_paint/mb_water_mesh.gd")
+const Sac := preload("res://DEV_TOOLS/eau_sac.gd")
+const WaterNode := preload("res://addons/marchingblocks_paint/mb_water_node.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -58,6 +61,9 @@ func _initialize() -> void:
 	_les_cas_d_outils()
 	_le_greffon_passe_les_cas_d_outils()
 	_le_greffon_passe_les_cas_de_parite()
+	_le_sac_est_eprouve()
+	_la_reprise_egale_le_calcul_entier()
+	_deux_rivieres_au_meme_endroit()
 	_les_shaders_livres_sont_a_jour()
 	_les_cas_de_monde()
 	_les_icones_livrees_sont_a_jour()
@@ -661,11 +667,11 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
-const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63}
-## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT (7 octobre 2026, le contrat de l'eau recalculée, PARITE.md §12) :
-## le fichier est là et compte ses cas ; quand `mb_water.gd` saura mailler la nappe, il passe dans PARITE (et
-## `_cas_de_parite` gagne la sorte `water_mesh`) — un fichier livré et jamais rejoué ne doit pas passer pour vert.
-const PARITE_A_VENIR := {"water_mesh": 14}
+const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 14}
+## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT : un fichier livré et jamais rejoué ne doit pas passer pour vert.
+## `water_mesh` en est sorti le 7 octobre 2026 (branche `eau-godot`) : `mb_water_mesh.gd` maille la nappe, ses 14 cas
+## sont rejoués en SAC DE TRIANGLES (`eau_sac.gd`, écrit depuis `rules_text`).
+const PARITE_A_VENIR := {}
 
 
 func _le_greffon_passe_les_cas_de_parite() -> void:
@@ -899,7 +905,273 @@ func _cas_de_parite(fichier: String, f: Dictionary, c: Dictionary) -> String:
 			var bx: Array = (r["box"] as Array).map(func(v: Vector3i) -> Array: return [v.x, v.y, v.z])
 			return _proche({"error": r["error"], "set": _trie(r["set"]), "clear": _trie(r["clear"]),
 				"repaired": r["repaired"], "box": bx}, e, tol)
+		# ── la nappe recalculée (PARITE.md §12) : un sac de triangles, sans ordre, rotations permises, réflexion refusée
+		"water_mesh/water_mesh":
+			var bodies: Array = (i["bodies"] as Array).map(_corps_du_cas)
+			var a := WaterMesh.arrays(bodies, _ensemble(f["worlds"][i["world"]]))
+			var obtenu := Sac.triangles(a)
+			var voulu := Sac.deplier(e)
+			var ecart := Sac.meme_sac(voulu, obtenu)
+			return "" if ecart == "" else "%s (résumé rendu %s, attendu %s)" % [ecart, Sac.resume(obtenu), e["summary"]]
 	return "sorte inconnue « %s » dans %s_conformance.json" % [k, fichier]
+
+
+## LA REPRISE = LE CALCUL ENTIER (PARITE.md §12, « incrémental == entier ») : des gestes AU HASARD (graine fixe) sur
+## les mondes des cas de l'eau — des cases posées ou retirées près de l'eau, ou n'importe où —, et à chaque geste le
+## calcul du nœud AVEC la reprise (la règle reprend les corps hors de l'emprise, une couche dont tous les corps sont
+## repris garde sa nappe, les cascades et les sources gardent leurs grilles) rend EXACTEMENT ce que rend le calcul
+## entier : les mêmes corps, et le même sac de triangles par couche. Et la reprise sert : des corps et des couches repris.
+func _la_reprise_egale_le_calcul_entier() -> void:
+	var f = JSON.parse_string(FileAccess.get_file_as_string("res://addons/marchingblocks_paint/water_conformance.json"))
+	var mondes: Dictionary = f["worlds"]
+	var decale := func(nom: String, d: Vector3i) -> Dictionary:
+		var r := {}
+		for c in mondes[nom]:
+			r[_vi(c) + d] = true
+		return r
+	var compose: Dictionary = decale.call("crater near the edge", Vector3i.ZERO)
+	compose.merge(decale.call("stairs", Vector3i(20, 0, 0)))
+	# [nom, cases, sources par couche d'eau]
+	var essais: Array = [
+		["l'île : la mer, une rivière (deux couches)", _ensemble(mondes["island"]), [[Vector3i(-1, 2, -1)], [Vector3i(4, 4, 4)]]],
+		["le cratère qui déborde", _ensemble(mondes["crater near the edge"]), [[Vector3i(2, 2, 6)]]],
+		["le cratère calme", _ensemble(mondes["crater in a plain"]), [[Vector3i(6, 3, 6)]]],
+		["l'escalier, trois rivières", _ensemble(mondes["stairs"]), [[Vector3i(0, 3, 0), Vector3i(0, 3, 1)], [Vector3i(0, 3, 2)]]],
+		["la grotte close", _ensemble(mondes["closed cave"]), [[Vector3i(2, 2, 2)]]],
+		["le cratère et l'escalier côte à côte", compose, [[Vector3i(2, 2, 6)], [Vector3i(20, 3, 1), Vector3i(20, 3, 2)]]],
+		# GESTES IMPOSÉS (chacun a d'abord laissé passer une mutation, 7 octobre 2026) :
+		#  - une couche, un lac et une rivière loin l'un de l'autre ; une case sur la rivière : le lac est repris, la
+		#    couche NE l'est PAS (« une couche gardée si UN corps est repris » passait muette) ;
+		#  - une case posée très haut puis retirée : la boîte remonte puis redescend (« une case retirée au bord ne
+		#    rebalaye pas la boîte » passait muette — la boîte est aussi comparée à chaque geste) ;
+		["un lac et une rivière dans UNE couche", compose, [[Vector3i(2, 2, 6), Vector3i(20, 3, 1)]],
+			[func(b: Dictionary) -> Array: return [_milieu_du_cours(b["world"]["bodies"][1]) + Vector3i.UP],
+			func(_b: Dictionary) -> Array: return [Vector3i(3, 40, 3)],
+			func(_b: Dictionary) -> Array: return [Vector3i(3, 40, 3)]]],
+		#  - une rivière qui sort d'un enclos par l'AUTRE côté, et revient : son chemin à plat sort de la boîte entre la
+		#    source et sa chute ; une case posée sur ce chemin (« l'emprise oublie la coulée à plat » passait muette).
+		["une rivière qui fait un détour", _enclos(), [[Vector3i(5, 2, 15)]],
+			[func(b: Dictionary) -> Array: return [_le_plus_a_l_est(b["world"]["bodies"][0])]]],
+	]
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 2026
+	var gestes := 0
+	var ecarts := 0
+	var corps_repris := 0
+	var couches_reprises := 0
+	for e in essais:
+		var cells: Dictionary = (e[1] as Dictionary).duplicate()
+		var sources: Array = []
+		var counts: Array = []
+		for l in e[2]:
+			sources.append_array(l)
+			counts.append((l as Array).size())
+		var job := {"layers": _en_deux_couches(cells), "sources": sources, "counts": counts, "base": {}}
+		WaterNode._compute(job)
+		var base: Dictionary = job["out"]
+		var imposes: Array = e[3] if e.size() > 3 else []
+		for g in imposes.size() + 8:
+			var bx := Water.box(cells)
+			var eau: Array = []
+			for r in base["world"]["bodies"]:
+				eau.append_array((r["water"] as Dictionary).keys().slice(0, 400))
+			for c: Vector3i in ((imposes[g] as Callable).call(base) if g < imposes.size() else []):
+				if cells.has(c):
+					cells.erase(c)
+				else:
+					cells[c] = true
+			for _k in (hasard.randi_range(1, 3) if g >= imposes.size() else 0):
+				var c: Vector3i
+				if not eau.is_empty() and hasard.randf() < 0.6:
+					c = eau[hasard.randi_range(0, eau.size() - 1)] + Vector3i(hasard.randi_range(-2, 2),
+						hasard.randi_range(-1, 1), hasard.randi_range(-2, 2))
+				else:
+					var lo: Vector3i = bx["lo"]
+					var hi: Vector3i = bx["hi"]
+					c = Vector3i(hasard.randi_range(lo.x - 1, hi.x + 1), hasard.randi_range(lo.y, hi.y + 1),
+						hasard.randi_range(lo.z - 1, hi.z + 1))
+				if cells.has(c):
+					cells.erase(c)
+				else:
+					cells[c] = true
+			var inc := {"layers": _en_deux_couches(cells), "sources": sources, "counts": counts, "base": base}
+			WaterNode._compute(inc)
+			var entier := {"layers": _en_deux_couches(cells), "sources": sources, "counts": counts, "base": {}}
+			WaterNode._compute(entier)
+			gestes += 1
+			var pourquoi := ""
+			if inc["out"]["box"] != Water.box(cells):
+				pourquoi += "la boîte suivie %s au lieu de %s ; " % [inc["out"]["box"], Water.box(cells)]
+			if inc["out"]["fingerprint"] != WaterNode.fingerprint(cells):
+				pourquoi += "l'empreinte suivie n'est pas celle des cases ; "
+			var bi: Array = inc["out"]["world"]["bodies"]
+			var be: Array = entier["out"]["world"]["bodies"]
+			for j in be.size():
+				if _corps_canon(bi[j]) != _corps_canon(be[j]):
+					pourquoi = "le corps %d diffère" % j
+				if is_same(bi[j], base["world"]["bodies"][j]):
+					corps_repris += 1
+			for i in counts.size():
+				if is_same(inc["out"]["arrays"][i], base["arrays"][i]):
+					couches_reprises += 1
+				var s := Sac.meme_sac(Sac.triangles(entier["out"]["arrays"][i]), Sac.triangles(inc["out"]["arrays"][i]))
+				if s != "":
+					pourquoi += " ; la nappe de la couche %d : %s" % [i, s]
+			if pourquoi != "":
+				ecarts += 1
+				if ecarts <= 4:
+					_vrai(false, "reprise ≠ entier, %s, geste %d : %s" % [e[0], g, pourquoi])
+			base = inc["out"]
+	_egal(ecarts, 0, "gestes au hasard où la reprise ne rend pas le calcul entier (sur %d)" % gestes)
+	_vrai(corps_repris > 0 and couches_reprises > 0,
+		"la reprise sert : %d corps repris, %d nappes de couche gardées sur %d gestes" % [corps_repris, couches_reprises, gestes])
+	print("  reprise : %d gestes au hasard, %d corps repris, %d nappes gardées, %d écart(s)" % [gestes, corps_repris,
+		couches_reprises, ecarts])
+
+
+## ⚠ DEUX MUTATIONS QUE LES 14 CAS COMMUNS NE VOIENT PAS (7 octobre 2026, mesuré ici ET dans le cœur : la même mutation
+## dans `eau_maillage.gd`, `test_parite` reste vert, le fichier livré ne change pas) : « deux cascades jointes gardent la
+## lèvre la plus BASSE » et « deux bandes sur une même case ». Aucun cas n'a deux rivières qui tombent au même endroit
+## de hauteurs différentes, ni deux rivières qui coulent sur une même case. Gardé ICI, contre la référence du cœur (comme
+## le + 0,1 du feuillage) : une falaise percée d'une galerie — une rivière tombe du haut, une autre sort de la galerie
+## sur la même face, à la même place ; au pied, elles coulent sur les mêmes cases. À AJOUTER aux cas communs
+## (`epreuve_parite.gd`, OUVERT : régénérer touche les trois greffons).
+func _deux_rivieres_au_meme_endroit() -> void:
+	var d := {}
+	for x in 5:
+		for y in 6:
+			for z in 3:
+				d[Vector3i(x, y, z)] = true
+	for x in range(5, 11):
+		for z in 3:
+			d[Vector3i(x, 0, z)] = true
+	d.erase(Vector3i(3, 2, 1))
+	d.erase(Vector3i(4, 2, 1))
+	var sources := [Vector3i(4, 6, 1), Vector3i(3, 2, 1)]
+	var w := Water.world(d, sources)
+	var bodies: Array = w["bodies"]
+	# Ce que le monde exerce, lu sur les corps : deux chutes de la même face (x = 5, z = 1), de lèvres différentes ;
+	# des cases de rivière communes, posées sur la matière.
+	var levres := {}
+	var bandes := {}
+	var communes := 0
+	for r in bodies:
+		var course: Array = r["course"]
+		for i in course.size():
+			var c: Vector3i = course[i]["cell"]
+			if course[i]["kind"] == "fall" and i > 0 and course[i - 1]["kind"] != "fall":
+				levres[(course[i - 1]["cell"] as Vector3i).y] = (course[i - 1]["cell"] as Vector3i).x
+			if course[i]["kind"] == "flow" and d.has(c + Vector3i.DOWN):
+				if bandes.has(c) and bandes[c] != r:
+					communes += 1
+				bandes[c] = r
+	_vrai(bodies.size() == 2 and bodies[0]["kind"] == "river" and bodies[1]["kind"] == "river"
+		and levres.size() >= 2 and levres.values().all(func(x: int) -> bool: return x == 5) and communes > 0,
+		"deux rivières au même endroit : deux lèvres sur la face x = 5 (%s), %d case(s) de rivière communes" % [levres, communes])
+	var coeur := EM.tableaux_du_maillage(FL.monde(d, sources)["corps"], d)
+	var greffon := WaterMesh.arrays(bodies, d)
+	_egal(Sac.meme_sac(Sac.triangles(coeur), Sac.triangles(greffon)), "",
+		"deux rivières au même endroit : la nappe du greffon est celle du cœur (une cascade, de la plus haute lèvre ; une bande par case)")
+
+
+## La case du milieu du cours d'une rivière.
+func _milieu_du_cours(r: Dictionary) -> Vector3i:
+	return r["course"][(r["course"] as Array).size() / 2]["cell"]
+
+
+## La case la plus à l'est (x le plus grand) du cours d'une rivière.
+func _le_plus_a_l_est(r: Dictionary) -> Vector3i:
+	var m: Vector3i = r["course"][0]["cell"]
+	for e in r["course"]:
+		if (e["cell"] as Vector3i).x > m.x:
+			m = e["cell"]
+	return m
+
+
+## Un plateau (x 0..20, y 0..1, z 0..30) et, dessus, un enclos ouvert vers +x autour de la case (5, 2, 15) : l'eau en
+## sort vers l'est, puis contourne l'enclos jusqu'au bord ouest — son chemin à plat passe hors de la boîte qui va de la
+## source à sa chute.
+func _enclos() -> Dictionary:
+	var d := {}
+	for x in 21:
+		for z in 31:
+			for y in 2:
+				d[Vector3i(x, y, z)] = true
+	for c in [Vector3i(4, 2, 14), Vector3i(4, 2, 15), Vector3i(4, 2, 16), Vector3i(5, 2, 14), Vector3i(6, 2, 14),
+			Vector3i(5, 2, 16), Vector3i(6, 2, 16)]:
+		d[c] = true
+	return d
+
+
+## Les cases en DEUX couches de tuiles (x + z pair, impair), dans un ordre fixe : un geste n'en change souvent qu'une,
+## l'autre est relue telle quelle (le même tableau, comme `get_used_cells` d'une couche qu'on n'a pas touchée).
+func _en_deux_couches(cells: Dictionary) -> Array:
+	var l: Array = cells.keys()
+	l.sort()
+	return [l.filter(func(c: Vector3i) -> bool: return (c.x + c.z) % 2 == 0),
+		l.filter(func(c: Vector3i) -> bool: return (c.x + c.z) % 2 != 0)]
+
+
+## Un corps d'eau sous une forme comparable (les ensembles triés).
+func _corps_canon(r: Dictionary) -> Array:
+	return [r["kind"], r["error"], r["level"], r["end"], _trie(r["water"]),
+		(r["lakes"] as Array).map(func(l: Dictionary) -> Array: return [l["level"], _trie(l["cells"])]),
+		(r["course"] as Array).map(func(q: Dictionary) -> Array: return [q["cell"], q["kind"], int(q.get("lake", -1))])]
+
+
+## Un corps d'eau d'un cas `water_mesh` (le format de sortie des `water_world`, en listes) au format de `Water.world`.
+func _corps_du_cas(b: Dictionary) -> Dictionary:
+	var course: Array = (b["course"] as Array).map(func(q: Array) -> Dictionary:
+		var d := {"cell": Vector3i(int(q[0]), int(q[1]), int(q[2])), "kind": q[3]}
+		if q[3] == "lake":
+			d["lake"] = int(q[4])
+		return d)
+	var lakes: Array = (b["lakes"] as Array).map(func(l: Dictionary) -> Dictionary:
+		return {"level": int(l["level"]), "cells": _ensemble(l["cells"])})
+	return {"kind": b["kind"], "error": b["error"], "level": int(b["level"]), "end": b["end"],
+		"water": _ensemble(b["water"]), "lakes": lakes, "course": course}
+
+
+## L'APPARIEMENT EN SAC, ÉPROUVÉ AVANT D'ÊTRE CRU (PARITE.md §12, « la comparaison est elle-même éprouvée ») : sur la
+## plus grande nappe des cas (le bassin), vrai mélangé, tourné, bruité sous la tolérance ; faux sur un coin déplacé de
+## 2e-4, un triangle retourné, un triangle doublé à la place d'un autre, des couleurs rangées sur 8 bits.
+func _le_sac_est_eprouve() -> void:
+	var f = JSON.parse_string(FileAccess.get_file_as_string("res://addons/marchingblocks_paint/water_mesh_conformance.json"))
+	var bassin: Array = []
+	for c in f["cases"]:
+		var t := Sac.deplier(c["expected"])
+		if t.size() > bassin.size():
+			bassin = t
+	var hasard := RandomNumberGenerator.new()
+	hasard.seed = 7
+	var melange: Array = []
+	for t: Array in bassin:
+		var r := hasard.randi_range(0, 2)
+		var tourne: Array = t.slice(12 * r) + t.slice(0, 12 * r)
+		melange.append(tourne.map(func(x: float) -> float: return x + hasard.randf_range(-4e-5, 4e-5)))
+	for k in range(melange.size() - 1, 0, -1):
+		var j := hasard.randi_range(0, k)
+		var x = melange[k]
+		melange[k] = melange[j]
+		melange[j] = x
+	_vrai(bassin.size() > 1000 and Sac.meme_sac(bassin, melange) == "",
+		"le sac : %d triangles mélangés, tournés, bruités sous la tolérance — égal (%s)" % [bassin.size(),
+		Sac.meme_sac(bassin, melange)])
+	var deplace := melange.duplicate(true)
+	deplace[17][1] += 2e-4
+	_vrai(Sac.meme_sac(bassin, deplace) != "", "le sac : un coin déplacé de 2e-4 — différent")
+	var retourne := melange.duplicate(true)
+	retourne[5] = (retourne[5] as Array).slice(0, 12) + (retourne[5] as Array).slice(24, 36) + (retourne[5] as Array).slice(12, 24)
+	_vrai(Sac.meme_sac(bassin, retourne) != "", "le sac : un triangle retourné (le sens fait partie du contrat) — différent")
+	var double := melange.duplicate(true)
+	double[3] = (double[4] as Array).duplicate()
+	_vrai(Sac.meme_sac(bassin, double) != "", "le sac : un triangle doublé à la place d'un autre — différent")
+	var huit_bits := melange.duplicate(true)
+	for t: Array in huit_bits:
+		for k in 3:
+			for j in range(6, 10):
+				t[12 * k + j] = roundf(float(t[12 * k + j]) * 255.0) / 255.0
+	_vrai(Sac.meme_sac(bassin, huit_bits) != "", "le sac : les couleurs rangées sur 8 bits (l'ArrayMesh de Godot) — différent")
 
 
 # ── 3 ter. Les shaders du greffon sont ceux de l'appli, AUJOURD'HUI (comme les icônes) ──────────────
@@ -1292,6 +1564,8 @@ func _de_bout_en_bout() -> void:
 	_le_monde_de_bout_en_bout(lot, pleines, attendu)
 	_le_monde_complet_de_bout_en_bout(lot)
 	_vrai(_monde_complet_fini, "SENTINELLE : le monde complet s'est arrêté en route (erreur d'exécution ?)")
+	_l_eau_recalculee_de_bout_en_bout(lot)
+	_vrai(_eau_recalculee_finie, "SENTINELLE : l'eau recalculée s'est arrêtée en route (erreur d'exécution ?)")
 	_fin()
 
 
@@ -1449,6 +1723,139 @@ func _les_cas_de_monde() -> void:
 # ── 4 quinquies. L'ÉDITION DE LA PARITÉ DANS LA VUE (7 octobre 2026) : Extrude, Select des cases vides, la molette,
 # Room from selection — par de vrais événements, une vraie caméra, une vraie annulation.
 var _edition_finie := false
+# ── 6 ter. L'EAU RECALCULÉE DE BOUT EN BOUT (7 octobre 2026, PARITE.md §12) : l'appli exporte l'île, sa mer et une
+# rivière, en DEUX couches d'eau, avec leurs nappes CUITES (ce que fait l'écran : `FL.monde`, puis `EM.maillage` couche
+# par couche) ; le greffon l'importe et REFAIT les nappes. Attendus :
+#   - la nappe recalculée de chaque couche EST la nappe cuite relue du .glb (le sac, couleurs à 1/255 près) ;
+#   - le branchement : pendant un geste rien ne part (la nappe se dit périmée), 0,5 s de calme puis un fil à part, la
+#     nappe échangée, à jour ; la reprise sert ; une reprise plus lente que `auto_limit` COUPE le suivi (la nappe reste
+#     périmée, l'inspecteur le dit) ; le bouton refait tout et rétablit le suivi.
+var _eau_recalculee_finie := false
+
+
+func _l_eau_recalculee_de_bout_en_bout(base: MeshLibrary) -> void:
+	var dossier := ProjectSettings.globalize_path("user://test_eau_recalculee")
+	_vider(dossier)
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var f = JSON.parse_string(FileAccess.get_file_as_string("res://addons/marchingblocks_paint/water_conformance.json"))
+	var ile := _ensemble(f["worlds"]["island"])
+	var mer := Vector3i(-1, 2, -1)
+	var source := Vector3i(4, 4, 4)
+	var w := FL.monde(ile, [mer, source])
+	var r := FM.exporter([{"nom": "Rock", "visible": true, "source": "a", "lot": base, "cases": ile.keys()}], dossier,
+		"eau", "test", [
+			{"nom": "Sea", "visible": true, "preset": "transparent", "sources": [mer],
+				"maillage": EM.maillage([w["corps"][0]], ile)},
+			{"nom": "River", "visible": true, "preset": "stylise", "sources": [source],
+				"maillage": EM.maillage([w["corps"][1]], ile)}])
+	_vrai(not r.has("erreur"), "l'appli exporte l'île et ses deux couches d'eau (%s)" % str(r.get("erreur", "")))
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var b := WorldFile.build(dossier.path_join("eau.mbworld/world.json"), tenant)
+	_vrai(not b.has("error"), "le greffon importe l'île (%s)" % str(b.get("error", "")))
+	if b.has("error"):
+		tenant.free()
+		_eau_recalculee_finie = true
+		return
+	var eaux: Array = (b["extras"] as Array).filter(func(x: Node) -> bool: return x.get_script() == WaterNode)
+	_egal(eaux.map(func(x: Node) -> String: return str(x.name)), ["Water Sea", "Water River"], "deux couches d'eau posées")
+	if eaux.size() != 2:
+		tenant.free()
+		_eau_recalculee_finie = true
+		return
+	var mene: Node = eaux[0]
+	_vrai(eaux[1].leader() == mene, "la première couche d'eau mène le calcul de toutes")
+	_vrai(not mene.stale(), "importée, la nappe cuite est à jour")
+	# 1. LA NAPPE RECALCULÉE = LA NAPPE CUITE (le .glb relu ; couleurs à 1/255 : le .glb les range sur 8 bits).
+	var dt: float = eaux[1].rebuild_water_now()
+	var tol := Sac.TOL.duplicate()
+	tol["color"] = 1.0 / 255.0 + 1e-6
+	for i in 2:
+		var cuite := _arrays_du_glb(eaux[i].mesh_path)
+		var refaite: Dictionary = mene._base["arrays"][i]
+		var s := Sac.meme_sac(Sac.triangles(cuite), Sac.triangles(refaite), tol) if not cuite.is_empty() else "illisible"
+		_vrai(s == "", "%s : la nappe recalculée est la nappe cuite (%d triangles) %s" % [
+			eaux[i].name, (refaite["i"] as PackedInt32Array).size() / 3, s])
+		_vrai(eaux[i].sheet_mesh() == eaux[i]._rebuilt and eaux[i]._rebuilt.get_surface_count() == 1,
+			"%s : elle est montrée à la place de la cuite" % eaux[i].name)
+		_vrai(not eaux[i].stale(), "%s : à jour" % eaux[i].name)
+	print("  eau recalculée : l'île, deux couches, %.3f s (entier)" % dt)
+	# 2. LE BRANCHEMENT. Un geste : une case posée sur le cours de la rivière.
+	var couche: Node = b["nodes"][0]
+	var cours: Array = w["corps"][1]["cours"]
+	var pres: Vector3i = cours[1]["case"] + Vector3i(0, 1, 0)
+	couche.apply_cells([pres], [])
+	_vrai(eaux[0].stale() and eaux[1].stale(), "une case peinte : les deux nappes se disent périmées")
+	mene.tick(10000)
+	_vrai(mene._pending and mene._task == -1, "le geste vu : rien ne part encore")
+	_vrai(not eaux[1]._get_configuration_warnings().is_empty(), "l'inspecteur dit la nappe périmée")
+	mene.tick(10400)
+	_vrai(mene._task == -1, "moins de 0,5 s de calme : rien ne part")
+	mene.tick(10700, true)
+	_vrai(mene._task == -1, "un bouton de souris tenu (un geste en cours) : rien ne part")
+	var prise_avant: Mesh = eaux[1].sheet_mesh()
+	mene.tick(10800)
+	_vrai(mene._task != -1, "0,5 s de calme, plus de geste : le calcul part sur un fil à part")
+	_vrai(eaux[1].sheet_mesh() == prise_avant, "pendant le calcul, la nappe montrée ne change pas")
+	_attendre(mene)
+	mene.tick(10900)
+	_vrai(mene._task == -1 and not mene._pending, "le calcul fini : rien d'autre à faire")
+	_vrai(not eaux[0].stale() and not eaux[1].stale(), "les deux nappes sont à jour des cases")
+	_vrai(eaux[1].sheet_mesh() != prise_avant, "la nappe de la rivière est échangée")
+	_vrai(eaux[1]._get_configuration_warnings().is_empty(), "l'inspecteur ne dit plus rien")
+	var entier := {"layers": [mene.world_cells().keys()], "sources": [mer, source], "counts": [1, 1], "base": {}}
+	WaterNode._compute(entier)
+	for i in 2:
+		_egal(Sac.meme_sac(Sac.triangles(entier["out"]["arrays"][i]), Sac.triangles(mene._base["arrays"][i])), "",
+			"après le geste, la couche %d est le calcul entier" % i)
+	print("  eau recalculée : un geste, %.3f s (reprise : %s)" % [mene.last_seconds, mene.last_reused])
+	_vrai(mene.last_reused.begins_with("1 of 2 sources, 1 of 2 layers"),
+		"la reprise sert : la mer (loin du geste) reprise, sa nappe gardée (%s)" % mene.last_reused)
+	# 3. LA COUPURE : une reprise plus lente que `auto_limit` coupe le suivi automatique.
+	mene.auto_limit = 0.0
+	couche.apply_cells([], [pres])
+	mene.tick(20000)
+	mene.tick(20600)
+	_attendre(mene)
+	mene.tick(20700)
+	_vrai(mene.paused, "une reprise plus lente que la limite : le suivi se coupe")
+	couche.apply_cells([pres], [])
+	mene.tick(21000)
+	mene.tick(22000)
+	_vrai(mene._task == -1 and eaux[1].stale(), "coupé : un geste ne relance rien, la nappe reste périmée")
+	var dit: PackedStringArray = eaux[1]._get_configuration_warnings()
+	_vrai(not dit.is_empty() and dit[0].contains("Rebuild water"), "l'inspecteur dit d'appuyer sur « Rebuild water » (%s)" % [dit])
+	mene.auto_limit = 1.0
+	eaux[1].rebuild_water_now()
+	_vrai(not mene.paused and not eaux[1].stale(), "le bouton refait l'eau, et rétablit le suivi")
+	# Le bouton est un vrai bouton de l'inspecteur.
+	var bouton := false
+	for p in eaux[1].get_property_list():
+		if p["name"] == "rebuild_water_button" and p["hint"] == PROPERTY_HINT_TOOL_BUTTON:
+			bouton = true
+	_vrai(bouton, "« Rebuild water » est un bouton de l'inspecteur")
+	tenant.free()
+	_eau_recalculee_finie = true
+
+
+## Attend la fin du calcul d'eau d'un nœud (le fil à part).
+func _attendre(mene: Node) -> void:
+	var t := Time.get_ticks_msec()
+	while mene._task != -1 and not WorkerThreadPool.is_task_completed(mene._task) and Time.get_ticks_msec() - t < 60000:
+		OS.delay_msec(5)
+
+
+## Les tableaux de la nappe d'un .glb (relue par l'importeur de Godot, sans passer par l'ArrayMesh) : {v, n, c, uv, i}.
+func _arrays_du_glb(chemin: String) -> Dictionary:
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	if doc.append_from_file(chemin, etat) != OK or etat.get_meshes().is_empty():
+		return {}
+	var a: Array = ((etat.get_meshes()[0] as GLTFMesh).mesh as ImporterMesh).get_surface_arrays(0)
+	return {"v": a[Mesh.ARRAY_VERTEX], "n": a[Mesh.ARRAY_NORMAL], "c": a[Mesh.ARRAY_COLOR], "uv": a[Mesh.ARRAY_TEX_UV],
+		"i": a[Mesh.ARRAY_INDEX]}
+
+
 var _monde_complet_fini := false
 
 

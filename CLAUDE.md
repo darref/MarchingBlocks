@@ -57,7 +57,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - **Unity : FAIT (7 octobre 2026)** — l'aiguillage (`MBWheel`) et ses effets ; jamais tenu souris en main.
-    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; la nappe se dit périmée quand on peint. ⚠ La NAPPE n'est pas recalculée (le mailleur n'a pas de cas). Voir « Le greffon Godot à parité ».
+    - ✓ **Godot — FAIT (7 octobre 2026, branche `eau-godot`)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; **la NAPPE RECALCULÉE** (`mb_water_mesh.gd`, 14/14 cas en sac de triangles), la reprise portée, recalcul différé sur un fil à part, « Rebuild water », coupure au-delà d'1 s ; = la nappe cuite de l'exemple exporté. Vu à l'image (six presets). Voir « L'eau recalculée dans le greffon Godot ».
     - ✓ **Unreal — PARTIEL (7 octobre 2026)** : lecture de `water` (acteur MarchingBlocks Water par couche), la nappe cuite et les SIX presets réécrits en HLSL (`Tools/build_materials.py`), le matériau de l'artiste, la règle des cases (`MBWater`, 25/25 ; la mer est `noyau/ocean.h` lui-même). Vu à l'image (six presets). ⚠ La NAPPE n'est pas recalculée ; « réfléchissant » sans la marche en espace écran de l'appli ; « stylisé » montre un aplat sombre près de l'île. Voir « Le greffon Unreal à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
@@ -754,6 +754,58 @@ cas. La spécification pour les trois agents moteurs : **`engines/PARITE.md` §1
 - ⚠ **NON EXERCÉ** : la cascade « droite » (sans sens connu) — la règle ne semble pas la produire (lu, pas prouvé).
 - ⚠ **VU EN PASSANT** : l'exemple livré a 739 481 cases et une mer de 354 159 cases (`sonde_eau_exemple.gd` disait 2,4 millions le 4 octobre :
   OUVERT — l'exemple a changé, ou la mer était comptée autrement ; non vérifié).
+
+### L'EAU RECALCULÉE DANS LE GREFFON GODOT — FAIT LE 7 OCTOBRE 2026 (branche `eau-godot`, sur le contrat ci-dessus)
+
+La dernière entrée de la parité pour Godot. Le greffon ne charge toujours RIEN du cœur : le mailleur est réécrit en
+anglais depuis `eau_maillage.gd` (`addons/marchingblocks_paint/mb_water_mesh.gd`), la reprise de `fluides.gd` portée
+dans `mb_water.gd`, le branchement dans `mb_water_node.gd`.
+
+- **LES 14 CAS — MESURÉ : 14 SUR 14** (`test_greffon_peinture` : `water_mesh` passe de `PARITE_A_VENIR` à `PARITE`, 298 cas
+  communs en tout) ; l'appariement en sac écrit DEPUIS `rules_text` (`DEV_TOOLS/eau_sac.gd`, pas copié de `test_parite`) et
+  éprouvé avant d'être cru (vrai mélangé / tourné / bruité ; faux sur un coin à 2e−4, un triangle retourné, un doublé, des
+  couleurs sur 8 bits). Passés d'un coup : le portage est ligne à ligne (32 bits là où le cœur range en 32 bits —
+  `_chutes` en `PackedFloat32Array`, les points en `Vector3`).
+- **LA REPRISE, PORTÉE** : `Water.world(cells, sources, max, before, changed, box)` (emprise, `_box_compatible`, la mer
+  reprise d'abord) ; « une couche dont tous les corps sont repris garde sa nappe » ; la mémoire des nappes par corps, des
+  cascades et des sources. **Incrémental = entier, MESURÉ** : 68 gestes (64 au hasard, graine fixe, 4 imposés) sur sept
+  mondes — mêmes corps, même sac par couche, même boîte, même empreinte.
+- **LE BRANCHEMENT (DÉCIDÉ par la coordination)** : la première couche d'eau mène pour toutes ; pendant un geste (bouton
+  de souris tenu) rien ne part et la nappe se dit périmée (avertissement de l'inspecteur) ; après 0,5 s de calme, calcul
+  sur `WorkerThreadPool` à partir d'une COPIE (`get_used_cells` de chaque couche, copie native), nappes échangées sur le
+  fil principal ; bouton « Rebuild water » (`@export_tool_button`) toujours là ; `auto_limit` (1 s) : une reprise plus
+  lente COUPE le suivi jusqu'au bouton (un bouton rapide le rétablit). `follow_cells` (les cubes bleus) est retiré.
+- **CE QU'UN GESTE COÛTE, C'EST CE QU'IL CHANGE** (MESURÉ au premier essai : 1,6 à 2 s par geste, dont ~1 s de différence
+  de cases et ~1 s d'empreinte triée sur 739 481 cases) : une couche dont `get_used_cells` est le même tableau est sautée ;
+  sinon on ne compare que le MILIEU des deux tableaux (une GridMap liste ses cases dans l'ordre d'insertion) ; la boîte et
+  l'empreinte (désormais une SOMME de hachages, sans ordre) suivent les cases changées. ⚠ L'empreinte a changé de
+  formule : un monde importé avant se dit périmé une fois (un calcul entier, sur le fil).
+- **LES TEMPS, MESURÉS sur l'exemple** (`DEV_TOOLS/banc_eau_greffon.gd` ; 739 481 cases, 3 couches de tuiles, 106 sources,
+  mer de 354 159 cases ; machine partagée, ×2 d'une passe à l'autre) : **tout refaire 3,0 à 8,9 s** ; **un geste avec la
+  reprise 0,04 à 0,35 s** (près d'une rivière 0,17 s, loin de l'eau 0,08 s, 84 à 99 sources reprises) ; un geste qui
+  touche la mer ou le bord de la boîte (une case au fond) refait la mer : 2,1 à 4,2 s — le suivi s'y coupe, comme décidé.
+  Chaque geste mesuré = le calcul entier.
+- **LE BOUT EN BOUT** : dans `test_greffon_peinture`, l'appli exporte l'île (mer et rivière, deux couches) avec ses nappes
+  cuites, le greffon l'importe et refait : chaque nappe = le `.glb` relu (couleurs à 1/255) ; puis le branchement mené
+  pas à pas (geste, délai, souris tenue, fil, échange, coupure, bouton). Sur l'EXEMPLE (le banc) : les trois nappes
+  refaites = celles du cœur (au millionième) ET les `.glb` cuits par `FormatMonde.exporter` (66 151, 5 073, 72 triangles).
+- **VU À L'IMAGE** (`DEV_TOOLS/capture_eau_greffon.gd`, avec fenêtre : deux SubViewport, même caméra, même instant ; cuite
+  à gauche, refaite à droite) : le bassin (écart maximal 1/255), l'île (moins de 0,05 % des valeurs à plus de 8/255), une
+  cascade de l'exemple (moins de 0,4 %), sous les SIX presets — indiscernables à l'œil ; l'écart restant est celui du
+  `.glb` (couleurs sur 8 bits) et de l'ordre des triangles transparents.
+- **MUTATIONS — 23, 23 ROUGES** (mailleur 13, reprise 3, nœud 7). ⚠ **CINQ ÉTAIENT D'ABORD MUETTES** : « une couche gardée
+  si UN corps est repris », « l'emprise oublie la coulée à plat », « une case retirée au bord ne rebalaye pas la boîte »
+  — rouges depuis des gestes imposés (une couche à deux corps, un détour hors de la boîte, une case posée haut puis ôtée)
+  et la boîte comparée à chaque geste ; et **deux que LES 14 CAS COMMUNS NE VOIENT PAS** : « deux cascades jointes gardent
+  la lèvre la plus BASSE » et « deux bandes sur une même case » — mesuré aussi dans le CŒUR (`MB_NATIF=0`, la même
+  mutation dans `eau_maillage.gd` : `test_parite` 279/0, le fichier livré inchangé). Aucun cas n'a deux rivières au même
+  endroit : **ce que disait le contrat (« 16 sur 16 rouges sans régénérer ») est faux pour ces deux-là.** Gardé dans
+  `test_greffon_peinture` contre le cœur (une falaise percée d'une galerie, deux rivières sur la même face) ;
+  **OUVERT : un cas commun à ajouter dans `epreuve_parite.gd`** (régénérer touche les trois greffons).
+- ⚠ **PAS TENU EN MAIN** : dans l'éditeur de Godot lui-même (vraie souris, inspecteur, bouton cliqué) — le branchement est
+  mené par `tick(now, stroke)` ; et la détection d'un changement lit l'empreinte que chaque couche prend à sa
+  reconstruction (`live_update`, `apply_cells`) : une couche sans `live_update` ne fait pas suivre l'eau (ni ses tuiles).
+  ⚠ Le greffon reconstruit encore TOUTES les tuiles à chaque geste (§4, OUVERT) : sur l'exemple, c'est lui le goulot, plus l'eau.
 
 ### LE GREFFON UNITY À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-unity`), PARTIEL SUR L'EAU ET LE PINCEAU DE FEUILLAGE
 

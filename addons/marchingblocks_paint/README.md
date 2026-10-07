@@ -34,9 +34,11 @@ What else a world exported by MarchingBlocks brings comes with it, next to the l
   one of six example looks (stylized, clear, reflective, lava, swamp, acid) — **or your own material**: the looks
   are examples, not an obligation. Any water shader gets the data: COLOR_0 r, g the flow along x and z ([-1, 1]
   mapped to [0, 1]); b the kind (0 still, 0.5 river, 0.75 foam, 1 waterfall); a the depth / 8 on still water and
-  rivers, the amount of foam on waterfalls and foam; NORMAL the shape; TEXCOORD_0. Paint the cells and the sheet
-  says it is stale; *Follow Cells* shows the water of the new cells (the rule of the tool, `mb_water.gd`).
-  Re-export the world from MarchingBlocks to rebake the sheet.
+  rivers, the amount of foam on waterfalls and foam; NORMAL the shape; TEXCOORD_0. **The water follows the
+  cells**: while you paint, the sheet says it is stale; half a second after the stroke, the plugin rebuilds it on
+  a worker thread — the tool's own rule (`mb_water.gd`) and mesher (`mb_water_mesh.gd`), redoing only what the
+  stroke changed — and swaps it in. *Rebuild water* (inspector) rebuilds at any time; if a rebuild after a stroke
+  takes longer than *Auto Limit* (1 s: a huge sea), the automatic rebuild pauses itself until you press it.
 
 | Aim (Tab switches) | |
 |---|---|
@@ -87,5 +89,6 @@ layer. The placement rule is written in `tileset.json` (`rules_text`), the tools
 `tools_conformance.json` (`rules_text`); `conformance.json` and `tools_conformance.json` prove this plugin
 follows both exactly — the same reference cases as the Unity and Unreal plugins. So do
 `editing_conformance.json` (Extrude, Shrink, Widen, the Select brush, Room from selection, the mouse wheel),
-`animation_conformance.json`, `transitions_conformance.json`, `foliage_conformance.json` and
-`water_conformance.json`: each holds its rule in full (`rules_text`) and the cases every plugin passes.
+`animation_conformance.json`, `transitions_conformance.json`, `foliage_conformance.json`,
+`water_conformance.json` and `water_mesh_conformance.json` (the water sheet, compared as a bag of triangles): each
+holds its rule in full (`rules_text`) and the cases every plugin passes.
