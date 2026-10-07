@@ -337,9 +337,12 @@ func _animation(f: Dictionary) -> void:
 	var ecart_32 := 0.0
 	for c in s["phase"]:
 		var o: Array = c["input"]["origin"]
-		var p := Vector3(floor(o[0] + 0.5), floor(o[1] + 0.5), floor(o[2] + 0.5))
-		p = Vector3(_fract(p.x * 0.3183099 + 0.71), _fract(p.y * 0.3183099 + 0.113), _fract(p.z * 0.3183099 + 0.419)) * 17.0
-		var ph := _fract(p.x * p.y * p.z * (p.x + p.y + p.z))
+		# ⚠ EN DOUBLE, COMME LE TEXTE : un `Vector3` (32 bits dans Godot) ici rendait la même erreur que le cœur, et le
+		# texte et la référence s'accordaient sur un faux double — c'est le greffon Unity, en C#, qui l'a vu.
+		var px: float = _fract(floor(float(o[0]) + 0.5) * 0.3183099 + 0.71) * 17.0
+		var py: float = _fract(floor(float(o[1]) + 0.5) * 0.3183099 + 0.113) * 17.0
+		var pz: float = _fract(floor(float(o[2]) + 0.5) * 0.3183099 + 0.419) * 17.0
+		var ph := _fract(px * py * pz * (px + py + pz))
 		_dire(_proche(ph, c["expected"], 1e-6), "la phase depuis le texte : %s" % c["name"])
 		ecart_32 = maxf(ecart_32, absf(_phase_32(Vector3(o[0], o[1], o[2])) - float(c["expected"])))
 	# ⚠ MESURÉ, PAS JUGÉ : la même formule en flottants 32 bits (ce que calcule un shader) s'écarte de l'attendu double.

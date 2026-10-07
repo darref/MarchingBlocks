@@ -185,10 +185,14 @@ static func defilement_au_temps(u: float, v: float, t: float, synchro: bool, pha
 
 
 ## La phase d'une copie posée à `origine` (son repère dans le monde) — le hachage du shader, `hacher`, ligne à ligne.
+## ⚠ EN DOUBLE DE BOUT EN BOUT (greffon Unity, 7 octobre 2026) : la règle écrite dit « double », mais les résultats
+## intermédiaires étaient rangés dans un `Vector3` — 32 bits dans Godot — ; un greffon qui suivait le texte en double
+## (C#, C++) s'écartait de l'attendu jusqu'à 0,0017 sur les cas `phase`. Des `float` GDScript (64 bits) désormais.
 static func phase_de(origine: Vector3) -> float:
-	var p := (origine + Vector3(0.5, 0.5, 0.5)).floor()
-	p = Vector3(_fract(p.x * 0.3183099 + 0.71), _fract(p.y * 0.3183099 + 0.113), _fract(p.z * 0.3183099 + 0.419)) * 17.0
-	return _fract(p.x * p.y * p.z * (p.x + p.y + p.z))
+	var x: float = _fract(floor(origine.x + 0.5) * 0.3183099 + 0.71) * 17.0
+	var y: float = _fract(floor(origine.y + 0.5) * 0.3183099 + 0.113) * 17.0
+	var z: float = _fract(floor(origine.z + 0.5) * 0.3183099 + 0.419) * 17.0
+	return _fract(x * y * z * (x + y + z))
 
 
 static func _fract(x: float) -> float:

@@ -257,7 +257,7 @@
       "name": "pulse: 20.0 Hz, minimum 0.5, t 0.0125, phase 0.0"
     },
     {
-      "expected": 0.999188064374152,
+      "expected": 0.999268273095936,
       "input": {
         "origin": [
           1.0,
@@ -269,7 +269,7 @@
       "name": "phase: origin (1.0, 1.0, 1.0)"
     },
     {
-      "expected": 0.129629643793123,
+      "expected": 0.129665752338951,
       "input": {
         "origin": [
           0.0,
@@ -281,7 +281,7 @@
       "name": "phase: origin (0.0, 0.0, 0.0)"
     },
     {
-      "expected": 0.790116108915754,
+      "expected": 0.791841118023513,
       "input": {
         "origin": [
           5.0,
@@ -293,7 +293,7 @@
       "name": "phase: origin (5.0, 2.0, -3.0)"
     },
     {
-      "expected": 0.926004860080269,
+      "expected": 0.926017113228852,
       "input": {
         "origin": [
           -7.0,
@@ -305,7 +305,7 @@
       "name": "phase: origin (-7.0, -2.0, 5.0)"
     },
     {
-      "expected": 0.956249739423129,
+      "expected": 0.956328721378441,
       "input": {
         "origin": [
           12.0,
@@ -317,7 +317,7 @@
       "name": "phase: origin (12.0, 0.0, 12.0)"
     },
     {
-      "expected": 0.211566194284387,
+      "expected": 0.210904302155541,
       "input": {
         "origin": [
           -40.0,
@@ -329,7 +329,7 @@
       "name": "phase: origin (-40.0, 3.0, 17.0)"
     },
     {
-      "expected": 0.320798174911488,
+      "expected": 0.321104011696207,
       "input": {
         "origin": [
           130.0,
