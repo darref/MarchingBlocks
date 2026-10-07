@@ -54,6 +54,12 @@ namespace MarchingBlocks.Paint.EditorTools
         // The first end of a Connect, or null.
         static Hit? shapeAnchor;
 
+        // "Select empty cells too" (the Select brush takes the empty cells of its brush as well).
+        static bool selectEmpty;
+        // The wheel during a gesture: the height of a Rect / Box being dragged, of a paste preview.
+        static int gestureHeight;
+        static int pasteHeight;
+
         static readonly HashSet<Int3> selection = new HashSet<Int3>();
         static List<Int3> clipboard = new List<Int3>();
         static bool pasting;
@@ -275,6 +281,10 @@ namespace MarchingBlocks.Paint.EditorTools
                     GUILayout.Space(8);
                     brushSize = EditorGUILayout.IntSlider(brushSize, 1, 7);
                 }
+                if (mode == Mode.Select)
+                    selectEmpty = EditorGUILayout.ToggleLeft(new GUIContent("Select empty cells too",
+                        "The brush selects every cell it covers, empty ones included (a volume to build in). Off: the matter only."),
+                        selectEmpty);
             }
 
             Section("FLOOR · PgUp PgDn");
@@ -288,6 +298,21 @@ namespace MarchingBlocks.Paint.EditorTools
                 GUILayout.FlexibleSpace();
             }
 
+            Section(selection.Count > 0 ? "EXTRUDE · the selection" : "EXTRUDE · the floor's matter");
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                const string how = " Shift + click: Extend selection (nothing is set, the selection grows a step). " +
+                    "Alt + click: shifts the selection a step. The floor follows.";
+                if (IconButton(Icon("extrude_up", "Extrude up — a cell above every full cell of the selection (or of the floor)." + how)))
+                    Extrude(ExtrudeDirection.Up, Event.current);
+                if (IconButton(Icon("extrude_down", "Extrude down — a cell below every full cell." + how)))
+                    Extrude(ExtrudeDirection.Down, Event.current);
+                if (GUILayout.Button(new GUIContent("Facing", "Extrude facing — one cell away from the matter behind: a wall " +
+                        "thickens towards the air, a cave ceiling comes down." + how), EditorStyles.miniButton, GUILayout.Height(24)))
+                    Extrude(ExtrudeDirection.Facing, Event.current);
+                GUILayout.FlexibleSpace();
+            }
+
             if (selection.Count > 0)
             {
                 Section($"SELECTION · {selection.Count} cells");
@@ -297,11 +322,12 @@ namespace MarchingBlocks.Paint.EditorTools
                     if (IconButton(Icon("delete", "Delete (Del) — removes the selected matter."), Red)) Operate(SelectionOp.Delete);
                     if (IconButton(Icon("clear", "Clear (Esc) — forgets the selection. No cell changes."))) ClearSelection();
                     GUILayout.Space(8);
-                    if (IconButton(Icon("extrude_up", "Extrude up — adds the layer above; the selection AND the floor follow it."))) Operate(SelectionOp.ExtrudeUp);
-                    if (IconButton(Icon("extrude_down", "Extrude down — adds the layer below; the selection and the floor follow it."))) Operate(SelectionOp.ExtrudeDown);
-                    GUILayout.Space(8);
                     if (IconButton(Icon("grow", "Grow — selects the matter touching the selection by a face."))) Operate(SelectionOp.Grow);
-                    if (IconButton(Icon("shrink", "Shrink — drops the selected cells that touch an unselected one."))) Operate(SelectionOp.Shrink);
+                    if (IconButton(Icon("shrink", "Shrink (Alt + wheel down) — the selection loses its edge: a rectangle its rim, " +
+                        "a line its ends, a cube its skin; a single cell stays. Full or empty cells alike."))) Operate(SelectionOp.ShrinkEdge);
+                    if (GUILayout.Button(new GUIContent("Widen", "Widen (Alt + wheel up) — adds the four neighbours in the plane of " +
+                        "every selected cell, empty ones included. Nothing is set."), EditorStyles.miniButton, GUILayout.Height(24)))
+                        Widen();
                     if (IconButton(Icon("connected", "Connected — selects all the matter linked to the selection by faces."))) Operate(SelectionOp.Connected);
                     GUILayout.FlexibleSpace();
                 }
@@ -319,6 +345,18 @@ namespace MarchingBlocks.Paint.EditorTools
                     if (IconButton(Icon("copy", "Copy (Ctrl+C) — copies the selected matter."))) Copy();
                     if (IconButton(Icon("cut", "Cut (Ctrl+X) — copies, then deletes."))) Cut();
                     GUILayout.FlexibleSpace();
+                }
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (IconButton(Icon("room", $"Room from selection — the selection seen from above is the room's footprint: " +
+                        $"it rises from its lowest cells (Up) or sinks under its highest (Down), {roomFloors} floor(s) high " +
+                        "(the Room shape's settings), walls one cell thick.")))
+                        RoomFromSelection();
+                    int sense = Segmented(roomUp ? 0 : 1,
+                        Icon("up", "Up — the room rises from the selection."),
+                        Icon("down", "Down — the room sinks under the selection."));
+                    roomUp = sense == 0;
+                    roomFloors = EditorGUILayout.IntSlider(roomFloors, 1, MBShapes.RoomFloorsMax);
                 }
             }
             if (clipboard.Count > 0)
@@ -412,7 +450,7 @@ namespace MarchingBlocks.Paint.EditorTools
             int id = GUIUtility.GetControlID(FocusType.Passive);
             if (e.type == EventType.Layout) HandleUtility.AddDefaultControl(id);
 
-            if (HandleCommands(e) || HandleKeys(e)) return;
+            if (HandleCommands(e) || HandleKeys(e) || HandleWheel(e)) return;
 
             var ray = HandleUtility.GUIPointToWorldRay(e.mousePosition);
             if (pasting) { ScenePaste(e, ray); return; }
@@ -490,9 +528,7 @@ namespace MarchingBlocks.Paint.EditorTools
             lastKey = key;
             if (gesture == BrushTool.Select)
             {
-                foreach (var c in cells)
-                    if (deselect) selection.Remove(c);
-                    else if (World.Cells.Contains(c)) selection.Add(c);
+                MBTools.SelectBrush(selection, cells, World.Cells.Contains, selectEmpty, deselect);
                 Repaint();
                 return;
             }
@@ -682,6 +718,7 @@ namespace MarchingBlocks.Paint.EditorTools
                 {
                     boxStart = corner;
                     boxEnd = corner;
+                    gestureHeight = 0;
                     GUIUtility.hotControl = id;
                     e.Use();
                 }
@@ -689,7 +726,7 @@ namespace MarchingBlocks.Paint.EditorTools
             else
             {
                 if (has) boxEnd = corner;
-                var volume = MBTools.Box(boxStart.Value, boxEnd, hollow && mode == Mode.Box);
+                var volume = MBTools.Box(boxStart.Value, boxEnd + new Int3(0, gestureHeight, 0), hollow && mode == Mode.Box);
                 DrawCells(volume, e.control ? DigColour : SelectColour, 0.02f);
                 if (e.type == EventType.MouseDrag) e.Use();
                 if (e.type == EventType.MouseUp && e.button == 0)
@@ -715,7 +752,7 @@ namespace MarchingBlocks.Paint.EditorTools
         void ScenePaste(Event e, Ray ray)
         {
             if (!Aimed(ray, true, out var hit)) return;
-            var anchor = MBTools.Anchor(BrushTool.Add, hit);
+            var anchor = MBTools.Anchor(BrushTool.Add, hit) + new Int3(0, pasteHeight, 0);
             var cells = new List<Int3>();
             foreach (var d in clipboard) cells.Add(anchor + d);
             DrawCells(cells, AddColour, 0.04f);
@@ -790,6 +827,7 @@ namespace MarchingBlocks.Paint.EditorTools
                     if (mode == Mode.Shape && special == SpecialShape.Room) roomFloors = Mathf.Min(MBShapes.RoomFloorsMax, roomFloors + 1);
                     else if (mode == Mode.Shape) shapeSize = Mathf.Min(7, shapeSize + 1); else brushSize = Mathf.Min(7, brushSize + 1);
                     break;
+                case KeyCode.F: FrameMatter(); break;
                 case KeyCode.PageUp: ChangeFloor(1); break;
                 case KeyCode.PageDown: ChangeFloor(-1); break;
                 case KeyCode.Escape:
@@ -808,6 +846,82 @@ namespace MarchingBlocks.Paint.EditorTools
         }
 
         void SetMode(Mode m) { mode = m; CancelAll(); }
+
+        // THE MOUSE WHEEL (MBWheel, the rule of MarchingBlocks): ours only when a gesture or a modifier asks for it;
+        // otherwise Unity zooms. Each notch says its value in the Scene view.
+        bool HandleWheel(Event e)
+        {
+            if (e.type != EventType.ScrollWheel) return false;
+            // Windows turns Shift + wheel into a horizontal scroll: read either axis. Unity's delta is + towards you.
+            float d = Mathf.Abs(e.delta.y) >= Mathf.Abs(e.delta.x) ? e.delta.y : e.delta.x;
+            var state = new WheelState
+            {
+                Navigating = aim.Navigating,
+                DraggingBox = boxStart != null && (mode == Mode.Rect || mode == Mode.Box),
+                TracingRoom = boxStart != null && mode == Mode.Shape && special == SpecialShape.Room,
+                PastePreview = pasting,
+                Ctrl = e.control || e.command, Shift = e.shift, Alt = e.alt,
+                Notch = d < 0 ? 1 : d > 0 ? -1 : 0,
+                Tool = mode == Mode.Add ? WheelTool.Add : mode == Mode.Dig ? WheelTool.Dig : mode == Mode.Select ? WheelTool.Select
+                    : mode == Mode.Rect ? WheelTool.Rect : mode == Mode.Box ? WheelTool.Box : mode == Mode.Shape ? WheelTool.Shape
+                    : WheelTool.Other,
+                Shape = special,
+                HasSelection = selection.Count > 0,
+            };
+            var action = MBWheel.Route(state);
+            if (action == WheelAction.None) return false;
+            WheelDo(action, state.Notch);
+            e.Use();
+            Repaint();
+            SceneView.RepaintAll();
+            return true;
+        }
+
+        void WheelDo(WheelAction action, int notch)
+        {
+            string said = "";
+            switch (action)
+            {
+                case WheelAction.GestureHeight: gestureHeight += notch; said = $"Height {gestureHeight + 1}"; break;
+                case WheelAction.PasteHeight: pasteHeight += notch; said = $"Paste height {pasteHeight:+0;-0;0}"; break;
+                case WheelAction.RoomFloors:
+                    roomFloors = Mathf.Clamp(roomFloors + notch, 1, MBShapes.RoomFloorsMax); said = $"Floors {roomFloors}"; break;
+                case WheelAction.RoomRiseSink: roomUp = notch > 0; said = roomUp ? "Room rises" : "Room sinks"; break;
+                case WheelAction.StairsStep: stairsStep = Mathf.Clamp(stairsStep + notch, 1, MBShapes.StepMax); said = $"Step {stairsStep}"; break;
+                case WheelAction.Floor: ChangeFloor(notch); said = $"Floor {World.floor}"; break;
+                case WheelAction.ExtendSelection:
+                    Extrude(notch > 0 ? ExtrudeDirection.Up : ExtrudeDirection.Down, ExtrudeMode.Extend);
+                    said = notch > 0 ? "Extend selection ↑" : "Extend selection ↓"; break;
+                case WheelAction.WidenFlat: Widen(); said = $"Widen — {selection.Count} selected"; break;
+                case WheelAction.ShrinkEdge: Operate(SelectionOp.ShrinkEdge); said = $"Shrink — {selection.Count} selected"; break;
+                case WheelAction.ShapeSize: shapeSize = Mathf.Clamp(shapeSize + notch, 1, 7); said = $"Size {shapeSize}"; break;
+                case WheelAction.ShapeLength:
+                    shapeLength = Mathf.Clamp(shapeLength + notch, 1, MBShapes.LengthMax); said = $"Length {shapeLength}"; break;
+                case WheelAction.BrushSize: brushSize = Mathf.Clamp(brushSize + notch, 1, 7); said = $"Brush {brushSize}"; break;
+                case WheelAction.NextBrushShape:
+                    shape = (BrushShape)(((int)shape + (notch > 0 ? 1 : 2)) % 3); said = shape.ToString(); break;
+            }
+            status = said;
+            if (SceneView.lastActiveSceneView != null) SceneView.lastActiveSceneView.ShowNotification(new GUIContent(said), 0.6);
+        }
+
+        // F — frames all the matter of the visible layers (Unity's own F frames the selected object).
+        void FrameMatter()
+        {
+            var b = new Bounds();
+            bool any = false;
+            foreach (var l in World.Layers())
+            {
+                if (!l.isActiveAndEnabled) continue;
+                var m = l.FormatToWorld;
+                foreach (var c in l.Cells)
+                {
+                    var p = m.MultiplyPoint3x4(new Vector3(c.x + 0.5f, c.y + 0.5f, c.z + 0.5f));
+                    if (!any) { b = new Bounds(p, Vector3.zero); any = true; } else b.Encapsulate(p);
+                }
+            }
+            if (any && SceneView.lastActiveSceneView != null) SceneView.lastActiveSceneView.Frame(b, false);
+        }
 
         // THE VARIANT TOOL (the tileset rule, step 8): a click on a tile shows its next variant (base → 1 → … →
         // base); Shift + click gives it back to the random draw. The tile is found by MBTools.TileVertex, on the
@@ -893,6 +1007,64 @@ namespace MarchingBlocks.Paint.EditorTools
             SceneView.RepaintAll();
         }
 
+        // EXTRUDE (MBTools.Extrude): the selection, or the floor's matter without one. Shift + click extends the
+        // selection, Alt + click shifts it; the floor follows the step.
+        void Extrude(ExtrudeDirection direction, Event e)
+        {
+            var m = e != null && e.shift ? ExtrudeMode.Extend : e != null && e.alt ? ExtrudeMode.Shift : ExtrudeMode.Place;
+            Extrude(direction, m);
+        }
+
+        void Extrude(ExtrudeDirection direction, ExtrudeMode m)
+        {
+            var change = MBTools.Extrude(World.Cells, World.floor, direction, selection, m);
+            if (change.Step.Equals(default(Int3)))
+            {
+                status = direction == ExtrudeDirection.Facing
+                    ? "Extrude facing — no cell looks at the air with matter behind it."
+                    : "Extrude — nothing to extrude: select cells, or set the floor on some matter.";
+                return;
+            }
+            // ONE undo step per click: the cells and the floor together.
+            Undo.IncrementCurrentGroup();
+            Undo.RecordObjects(World.LayerObjects(), "Extrude");
+            int n = World.Apply(change);
+            if (selection.Count > 0 || m != ExtrudeMode.Place) SetSelection(change.Selection);
+            selectionOwner = World;
+            World.floor += change.Step.y;
+            status = $"Extrude {direction} ({m}) — {n} cell(s) set, {selection.Count} selected.";
+            SceneView.RepaintAll();
+        }
+
+        // WIDEN (MBTools.WidenFlat): the selection grows a ring in its plane, empty cells included.
+        void Widen()
+        {
+            if (selection.Count == 0) return;
+            SetSelection(MBTools.WidenFlat(selection));
+            SceneView.RepaintAll();
+        }
+
+        // ROOM FROM SELECTION (MBShapes.RoomFromSelection): refused and said, or applied as ONE undo step.
+        void RoomFromSelection()
+        {
+            var r = MBShapes.RoomFromSelection(World.Cells, selection, roomFloors, roomUp, out _, out _);
+            if (r.Error != "")
+            {
+                status = r.Error == "empty" ? "Room from selection — select the room's footprint first."
+                    : r.Error == "too_small" ? "Room from selection — the footprint needs an inside: at least 3 × 3."
+                    : $"Room from selection — too large: more than {MBShapes.VolumeMax} cells.";
+                return;
+            }
+            var change = new Change();
+            foreach (var c in r.Set) change.Set.Add(c);
+            foreach (var c in r.Clear) change.Clear.Add(c);
+            Undo.RecordObjects(World.LayerObjects(), "Room from selection");
+            World.Apply(change);
+            status = $"Room — {r.Set.Count} cell(s) of shell, {r.Clear.Count} dug out" +
+                (r.Repaired > 0 ? $", {r.Repaired} added where it touched the world by an edge." : ".");
+            SceneView.RepaintAll();
+        }
+
         void Move(Int3 offset)
         {
             if (selection.Count == 0) return;
@@ -947,6 +1119,8 @@ namespace MarchingBlocks.Paint.EditorTools
 
         void CancelAll()
         {
+            gestureHeight = 0;
+            pasteHeight = 0;
             pasting = false;
             shapeAnchor = null;
             boxStart = null;

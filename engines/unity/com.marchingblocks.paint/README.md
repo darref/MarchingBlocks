@@ -38,10 +38,27 @@ only taken while **Paint the world** is on; Shift + Space stays Unity's.
 | Delete · Esc | delete the selection · clear it or cancel a paste |
 | Arrows | move the selection; they follow the camera. Shift + ↑ ↓ lift and lower |
 | Ctrl + C · X · V | copy · cut · paste (then click to place) |
+| F | frames all the matter of the visible layers |
 
-The selection buttons — **Fill, Delete, Extrude ↑ ↓, Grow, Shrink, Connected, Move, Copy, Cut, Paste** —
-are in the inspector. Extruding moves the floor with the selection, so *Rect, Fill, Extrude, Fill…*
-raises a room.
+The selection buttons — **Fill, Delete, Grow, Shrink, Widen, Connected, Move, Copy, Cut, Paste, Room from
+selection** — are in the inspector, with **Extrude ↑ ↓ Facing** (on the selection, or on the floor's matter
+without one). A click places a cell in front of every full cell; **Shift + click** is *Extend selection* (nothing
+is placed, the selection grows a step), **Alt + click** shifts the selection a step. The floor follows, so
+*Rect, Fill, Extrude, Fill…* raises a room. **Shrink** takes the selection's edge away (a rectangle loses its rim,
+a line its ends); **Widen** adds a ring in its plane, empty cells included. **Room from selection** raises a room
+from the selection's footprint (or sinks it under), with the Room shape's floors. The Select brush takes the matter
+only, or every cell with **Select empty cells too**.
+
+| Mouse wheel (while painting) | |
+|---|---|
+| alone | Unity's zoom — except during a gesture: the height of a Rect / Box being dragged, the floors of a Room being traced, the height of a paste |
+| Ctrl | the floor · with Shift and the Stairs shape: the step |
+| Shift / Alt, a selection and Select, Rect or Box | Extend selection ↑ ↓ / Widen (up) · Shrink (down) |
+| Alt / Shift, Room shape | its floors / rises or sinks |
+| Alt / Shift, another shape | its size / its length |
+| Alt / Shift, Add, Dig, Select | brush size / next brush shape |
+
+Each notch says its value in the Scene view. Navigate (Space) gives the wheel back to Unity.
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you.
 One component is one layer, with its own tileset. **Sibling GameObjects** (children of one parent) are the
@@ -63,6 +80,30 @@ You get one GameObject named after the world, with one child per layer, in order
 tiles arrives with its cells and no tiles, and the Console names it. The whole import is one Ctrl+Z.
 A world made by a newer MarchingBlocks is refused: update the package.
 
+## What else a world carries
+
+A world exported by MarchingBlocks 0.9 may also carry — and Import World sets them up:
+
+- **Transitions between layers**: where two layers of an active pair meet, the OTHER layer's look (its
+  *representative*: an image projected in a box, times a colour) is drawn over the tiles, in a soft, irregular band
+  (**MarchingBlocks Transitions** on the world's root; its settings per direction: softness, reach, irregularity,
+  grain, fills hollows). The geometry never changes. Unity has no pass drawn over a material: the tiles along the
+  border get a second renderer with the overlay (`MarchingBlocks/Transition Overlay`).
+- **Animated textures**: a material of `tiles.glb` may scroll, play frames (its images travel in
+  `<set>.mbset/animation/`) or pulse its emission. Import World makes `MarchingBlocks/Lit` copies of those materials
+  (in `<set>.mbset/MarchingBlocks generated/`, with an **MBAnimatedSet**); every tile gets its own phase. One clock
+  for every material: Unity's time (in the Scene view, turn on *Always Refresh* to see it move).
+- **Plants**: their models (`foliage/<model>.glb`) placed on the ground (**MarchingBlocks Foliage**), and swaying in
+  the wind (`MarchingBlocks/Lit` copies of their materials, with the wind on). Their own skeleton animation is not
+  played.
+- **Water**: the sheet MarchingBlocks baked for each water layer (`water/<name>.glb`), with one of six looks
+  (`MarchingBlocks/Water`: stylized, clear, reflective, lava, swamp, acid) — EXAMPLES, not an obligation: every vertex
+  of the sheet carries the data (flow, kind, depth or foam in its colour), any water shader of yours can read it.
+  When you paint, the water CELLS are deduced again (shown as gizmos when the Water object is selected); the sheet
+  itself is not rebuilt — export the world again from MarchingBlocks.
+
+**Render pipelines**: the shaders have a URP and a Built-in version. HDRP is not supported.
+
 ## Why it works with any importer
 
 Unity is left-handed, glTF is right-handed, and every importer converts in its own way. `tiles.glb`
@@ -72,6 +113,8 @@ grid with exactly the same mapping. Nothing is assumed.
 ## The rule
 
 The placement rule is written in `tileset.json` (`rules_text`), the tools in `Tests/tools_conformance.json`
-(`rules_text`), the world file in `Tests/world_conformance.json` (`rule`). All three hold reference cases computed by the MarchingBlocks tool itself and shared with the
-other plugins; `Tests/Editor/` runs them in the Test Runner (list `com.marchingblocks.paint` under
+(`rules_text`), the world file in `Tests/world_conformance.json` (`rule`); the editing tools, animated textures,
+transitions, foliage and water in `Tests/editing_`, `animation_`, `transitions_`, `foliage_` and
+`water_conformance.json`. All of them hold reference cases computed by the MarchingBlocks tool itself and shared with
+the other plugins; `Tests/Editor/` runs them in the Test Runner (list `com.marchingblocks.paint` under
 `testables` in your project manifest).

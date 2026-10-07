@@ -20,5 +20,17 @@
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/AimCheck.cs" Link="AimCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/LayeredConformanceCheck.cs" Link="LayeredConformanceCheck.cs" />
     <Compile Include="../com.marchingblocks.paint/Tests/Editor/VariantConformanceCheck.cs" Link="VariantConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/ParityCheck.cs" Link="ParityCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/EditingConformanceCheck.cs" Link="EditingConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBAnimation.cs" Link="MBAnimation.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/AnimationConformanceCheck.cs" Link="AnimationConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBTransitions.cs" Link="MBTransitions.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBFoliage.cs" Link="MBFoliage.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBWater.cs" Link="MBWater.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/TransitionsConformanceCheck.cs" Link="TransitionsConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/FoliageConformanceCheck.cs" Link="FoliageConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WaterConformanceCheck.cs" Link="WaterConformanceCheck.cs" />
+    <Compile Include="../com.marchingblocks.paint/Runtime/MBWheel.cs" Link="MBWheel.cs" />
+    <Compile Include="../com.marchingblocks.paint/Tests/Editor/WheelCheck.cs" Link="WheelCheck.cs" />
   </ItemGroup>
 </Project>

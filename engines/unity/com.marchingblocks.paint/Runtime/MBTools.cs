@@ -18,7 +18,16 @@ namespace MarchingBlocks.Paint
 {
     public enum BrushTool { Add, Dig, Select }
     public enum BrushShape { Sphere, Cube, Disc }
-    public enum SelectionOp { Delete, ExtrudeUp, ExtrudeDown, Grow, Shrink, Connected, Fill }
+    // ⚠ Les valeurs sont sérialisées par Unity : une opération neuve s'ajoute À LA FIN.
+    // ShrinkEdge remplace Shrink (l'ancienne règle, gardée pour tools_conformance.json) dans l'interface.
+    public enum SelectionOp { Delete, ExtrudeUp, ExtrudeDown, Grow, Shrink, Connected, Fill, ShrinkEdge }
+
+    /// <summary>Extrude: up, down, or FACING — the side most of the base looks at (empty in front, matter behind).</summary>
+    public enum ExtrudeDirection { Up, Down, Facing }
+
+    /// <summary>Extrude: Place (click) sets cells; Extend (Shift + click, "Extend selection") and Shift (Alt + click)
+    /// only move the selection.</summary>
+    public enum ExtrudeMode { Place, Extend, Shift }
 
     /// <summary>What a click aims at: the floor plane (Grid) or the matter itself (Sculpt).</summary>
     public enum BrushAim { Grid, Sculpt }
@@ -61,6 +70,8 @@ namespace MarchingBlocks.Paint
         public readonly HashSet<Int3> Set = new HashSet<Int3>();
         public readonly HashSet<Int3> Clear = new HashSet<Int3>();
         public readonly HashSet<Int3> Selection = new HashSet<Int3>();
+        /// <summary>Extrude only: the step taken (0, 0, 0 when nothing could be extruded). The floor follows Step.y.</summary>
+        public Int3 Step;
         public bool IsEmpty => Set.Count == 0 && Clear.Count == 0;
     }
 
@@ -234,6 +245,18 @@ namespace MarchingBlocks.Paint
                         if (inner) ch.Selection.Add(c);
                     }
                     break;
+                case SelectionOp.ShrinkEdge:
+                    // A cell is on the EDGE when, on some axis, the selection goes on on one side and stops on the
+                    // other. The edge leaves, full or empty cells alike: a rectangle loses its rim, a line its ends,
+                    // a cube its skin, a single cell stays.
+                    foreach (var c in selection)
+                    {
+                        bool edge = false;
+                        foreach (var f in Faces)
+                            if (selection.Contains(c - f) && !selection.Contains(c + f)) { edge = true; break; }
+                        if (!edge) ch.Selection.Add(c);
+                    }
+                    break;
                 case SelectionOp.Fill:
                     // The selection stays: fill, extrude, fill is how a room goes up.
                     foreach (var c in selection)
@@ -258,6 +281,99 @@ namespace MarchingBlocks.Paint
                     break;
             }
             return ch;
+        }
+
+        /// <summary>The six sides of "facing", in the order that breaks a tie: up first.</summary>
+        static readonly Int3[] FacingSides =
+        {
+            new Int3(0, 1, 0), new Int3(0, -1, 0), new Int3(1, 0, 0),
+            new Int3(-1, 0, 0), new Int3(0, 0, 1), new Int3(0, 0, -1),
+        };
+
+        /// <summary>EXTRUDE (Extend selection ↑ ↓ and the facing side, in one operation). The BASE is the selection,
+        /// or — without one — the full cells at y = floor. Place sets a cell in front of every FULL base cell where it
+        /// is empty, and the selection (if any) moves one step; Extend sets nothing and the selection becomes base +
+        /// shifted base; Shift sets nothing and the selection becomes the shifted base. Facing: the side d where the
+        /// most full base cells have p + d empty and p − d full; none, or an empty base: Step is zero, nothing
+        /// changes. The caller moves its floor by Step.y.</summary>
+        public static Change Extrude(ICollection<Int3> cells, int floor, ExtrudeDirection direction,
+            ICollection<Int3> selection, ExtrudeMode mode)
+        {
+            var ch = new Change();
+            var baseCells = new List<Int3>();
+            if (selection.Count > 0) baseCells.AddRange(selection);
+            else foreach (var c in cells) if (c.y == floor) baseCells.Add(c);
+            Int3 step = default;
+            switch (direction)
+            {
+                case ExtrudeDirection.Up: step = new Int3(0, 1, 0); break;
+                case ExtrudeDirection.Down: step = new Int3(0, -1, 0); break;
+                default:
+                    // Counted on the FULL cells of the base only (the selection may hold empty cells).
+                    int best = 0;
+                    foreach (var d in FacingSides)
+                    {
+                        int n = 0;
+                        foreach (var p in baseCells)
+                            if (cells.Contains(p) && !cells.Contains(p + d) && cells.Contains(p - d)) n++;
+                        if (n > best) { best = n; step = d; }
+                    }
+                    break;
+            }
+            if (step.Equals(default(Int3)) || baseCells.Count == 0)
+            {
+                foreach (var c in selection) ch.Selection.Add(c);
+                return ch;
+            }
+            ch.Step = step;
+            switch (mode)
+            {
+                case ExtrudeMode.Extend:
+                    foreach (var c in baseCells) { ch.Selection.Add(c); ch.Selection.Add(c + step); }
+                    break;
+                case ExtrudeMode.Shift:
+                    foreach (var c in baseCells) ch.Selection.Add(c + step);
+                    break;
+                default:
+                    foreach (var c in baseCells)
+                    {
+                        var p = c + step;
+                        if (cells.Contains(c) && !cells.Contains(p)) ch.Set.Add(p);
+                    }
+                    if (selection.Count > 0) foreach (var c in baseCells) ch.Selection.Add(c + step);
+                    break;
+            }
+            return ch;
+        }
+
+        /// <summary>WIDEN, FLAT (Alt + wheel up on a selection): the selection plus the four horizontal neighbours of
+        /// every cell, full or empty. Nothing is set.</summary>
+        public static HashSet<Int3> WidenFlat(IEnumerable<Int3> selection)
+        {
+            var wide = new HashSet<Int3>();
+            foreach (var c in selection)
+            {
+                wide.Add(c);
+                wide.Add(new Int3(c.x + 1, c.y, c.z));
+                wide.Add(new Int3(c.x - 1, c.y, c.z));
+                wide.Add(new Int3(c.x, c.y, c.z + 1));
+                wide.Add(new Int3(c.x, c.y, c.z - 1));
+            }
+            return wide;
+        }
+
+        /// <summary>THE SELECT BRUSH on its target cells, IN PLACE: they join the selection — only the full ones, or all
+        /// of them with "Select empty cells too" (<paramref name="includeEmpty"/>); <paramref name="deselect"/> (Shift)
+        /// removes them, full or empty. Returns the same selection.</summary>
+        public static HashSet<Int3> SelectBrush(HashSet<Int3> selection, IEnumerable<Int3> targets, Func<Int3, bool> full,
+            bool includeEmpty, bool deselect = false)
+        {
+            foreach (var c in targets)
+            {
+                if (deselect) selection.Remove(c);
+                else if (includeEmpty || full(c)) selection.Add(c);
+            }
+            return selection;
         }
 
         /// <summary>Every cell between two corners, bounds included, full or empty. Hollow keeps the skin

@@ -25,6 +25,8 @@ namespace MarchingBlocks.Paint
         public TextAsset tileset;
         [Tooltip("The tiles.glb of the same .mbset folder, as imported by your glTF importer (glTFast, UnityGLTF…).")]
         public GameObject tiles;
+        [Tooltip("The animated copies of the tileset's materials (textures animated in MarchingBlocks). Made by Import World, or by the button below.")]
+        public MBAnimatedSet animatedMaterials;
         [Tooltip("Size of one cell, in Unity units.")]
         [Min(0.01f)] public float cellSize = 1f;
         [Tooltip("The floor the brush paints on, in cells.")]
@@ -58,8 +60,25 @@ namespace MarchingBlocks.Paint
         // it may have changed behind our back (undo, a scene reload, OnValidate).
         [System.NonSerialized] HashSet<Int3> index;
 
+        /// <summary>A tile placed by the last Rebuild: its vertex (format space) and its GameObject.</summary>
+        public readonly struct PlacedTile
+        {
+            public readonly Int3 Vertex;
+            public readonly GameObject Object;
+            public PlacedTile(Int3 vertex, GameObject o) { Vertex = vertex; Object = o; }
+        }
+
+        /// <summary>Every tile placed by the last Rebuild (red cubes of missing tiles excluded).</summary>
+        public IReadOnlyList<PlacedTile> PlacedObjects => placedObjects;
+        [System.NonSerialized] readonly List<PlacedTile> placedObjects = new List<PlacedTile>();
+
+        /// <summary>Raised at the end of every Rebuild of a layer: what dresses the tiles (transitions, animated
+        /// materials) dresses them again. Not raised by a hidden layer, which places nothing.</summary>
+        public static event System.Action<MarchingBlocksWorld> Rebuilt;
+
         const string ContainerName = "MarchingBlocks tiles (generated)";
         MBTileset loaded;
+        static MaterialPropertyBlock phaseBlock;
         static Mesh errorMesh;
         static Material errorMaterial;
 
@@ -288,6 +307,11 @@ namespace MarchingBlocks.Paint
             }
         }
 
+        /// <summary>The importer's conversion, undone: its imported-root space → format space (the inverse of the frame
+        /// MEASURED on the tileset's marker). A model or a water sheet read by the same importer is brought back to format
+        /// space by it: FormatToWorld · ImporterFrameInverse places it.</summary>
+        public Matrix4x4 ImporterFrameInverse => Tileset != null ? Tileset.FrameInverse : Matrix4x4.identity;
+
         /// <summary>The cell of the current floor under a world-space ray, if the ray meets the floor.</summary>
         public bool CellUnderRay(Ray ray, out Vector3Int cell)
         {
@@ -346,6 +370,7 @@ namespace MarchingBlocks.Paint
             LastPlaced = 0;
             LastMissing = 0;
             placedTiles.Clear();
+            placedObjects.Clear();
             var set = Tileset;
             if (set == null) return;
 
@@ -388,9 +413,33 @@ namespace MarchingBlocks.Paint
                 go.transform.localRotation = m.rotation;
                 go.transform.localScale = m.lossyScale;
                 go.AddComponent<MeshFilter>().sharedMesh = tile.Mesh;
-                go.AddComponent<MeshRenderer>().sharedMaterials = tile.Materials;
+                var renderer = go.AddComponent<MeshRenderer>();
+                if (animatedMaterials == null) renderer.sharedMaterials = tile.Materials;
+                else
+                {
+                    // ANIMATED TEXTURES: the animated copies, and the tile's PHASE — the hash of its ORIGIN in format space
+                    // (v + piece_offset), in double, once per tile (never the engine position: a frame mirrors, scales).
+                    var mats = new Material[tile.Materials.Length];
+                    bool animated = false;
+                    for (int k = 0; k < mats.Length; k++)
+                    {
+                        mats[k] = animatedMaterials.Swap(tile.Materials[k]);
+                        animated |= mats[k] != tile.Materials[k];
+                    }
+                    renderer.sharedMaterials = mats;
+                    if (animated)
+                    {
+                        if (phaseBlock == null) phaseBlock = new MaterialPropertyBlock();
+                        phaseBlock.Clear();
+                        phaseBlock.SetFloat("_MBPhase", (float)MBAnimation.PhaseOf(
+                            p.Vertex.x + offset.x, p.Vertex.y + offset.y, p.Vertex.z + offset.z));
+                        renderer.SetPropertyBlock(phaseBlock);
+                    }
+                }
+                placedObjects.Add(new PlacedTile(p.Vertex, go));
                 LastPlaced++;
             }
+            Rebuilt?.Invoke(this);
         }
 
         // A red cube where the tileset lacks the tile the rule asks for. Nothing is ever filled in:

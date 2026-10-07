@@ -72,6 +72,22 @@ static class Program
         Console.WriteLine($"{worldCases} world cases, {worldFailures.Count} failure(s)");
         failed += worldFailures.Count;
 
+        // THE PARITY FILES (engines/PARITE.md): five files, read IN ADDITION — the three above never change.
+        string tests = Path.GetDirectoryName(Path.GetFullPath(path));
+        foreach (var (file, run) in Parity)
+        {
+            var conf2 = (Dictionary<string, object>)MBJson.Parse(File.ReadAllText(Path.Combine(tests, file)));
+            var parityFailures = run(conf2, out int parityCases);
+            foreach (var f in parityFailures) Console.WriteLine($"  FAIL {file}: " + f);
+            Console.WriteLine($"{parityCases} cases of {file}, {parityFailures.Count} failure(s)");
+            failed += parityFailures.Count;
+        }
+
+        var wheelFailures = WheelCheck.Run(out int wheelChecks);
+        foreach (var f in wheelFailures) Console.WriteLine("  FAIL wheel: " + f);
+        Console.WriteLine($"{wheelChecks} wheel checks, {wheelFailures.Count} failure(s)");
+        failed += wheelFailures.Count;
+
         var aimFailures = AimCheck.Run(out int aimChecks);
         foreach (var f in aimFailures) Console.WriteLine("  FAIL aim: " + f);
         Console.WriteLine($"{aimChecks} aim checks, {aimFailures.Count} failure(s)");
@@ -79,6 +95,17 @@ static class Program
         Console.WriteLine(failed == 0 ? "VERDICT: OK" : "VERDICT: FAILED");
         return failed == 0 ? 0 : 1;
     }
+
+    delegate List<string> ParityRun(Dictionary<string, object> conf, out int cases);
+
+    static readonly (string, ParityRun)[] Parity =
+    {
+        ("editing_conformance.json", EditingConformanceCheck.Run),
+        ("animation_conformance.json", AnimationConformanceCheck.Run),
+        ("transitions_conformance.json", TransitionsConformanceCheck.Run),
+        ("foliage_conformance.json", FoliageConformanceCheck.Run),
+        ("water_conformance.json", WaterConformanceCheck.Run),
+    };
 
     static string Show(List<object> e) =>
         $"[{MBJson.AsLong(e[0])},{MBJson.AsLong(e[1])},{MBJson.AsLong(e[2])},{(e[3] == null ? "null" : (string)e[3])},{MBJson.AsLong(e[4])}]";
