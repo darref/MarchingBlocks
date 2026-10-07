@@ -5,8 +5,13 @@ extends RefCounted
 ## Returns {"manifest": Dictionary, "library": MeshLibrary} — one library item per tile, named after the
 ## tile — or {"error": reason}. Every failure says WHICH one: a missing file, an unreadable manifest, a
 ## newer format, a tile the manifest lists but the .glb does not carry.
+##
+## ANIMATED TEXTURES: a material of `tiles.glb` whose glTF extras carry `mb_animation` is replaced by the animated
+## material (`mb_animation.gd`); its frames are read in the `.mbset` folder. Such a library OWNS its meshes (`own`):
+## the animated material of one layer carries that layer's place in the world.
 
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
+const Anim := preload("res://addons/marchingblocks_paint/mb_animation.gd")
 
 
 static func load_tileset(manifest_path: String) -> Dictionary:
@@ -47,7 +52,63 @@ static func load_tileset(manifest_path: String) -> Dictionary:
 	if not missing.is_empty():
 		return {"error": "%d tile(s) listed in tileset.json are not in %s: %s"
 			% [missing.size(), glb.get_file(), str(missing.slice(0, 5))]}
-	return {"manifest": manifest, "library": library}
+	var animated := animate(library, glb)
+	return {"manifest": manifest, "library": library, "animated": animated}
+
+
+## Replaces every animated material of the library by its animated material. Returns how many materials are animated.
+## The animation is read in the glTF JSON of the .glb (the most certain), else in the "extras" meta of the material.
+static func animate(library: MeshLibrary, glb: String) -> int:
+	var by_name := Anim.of_glb(glb)
+	var base := glb.get_base_dir()
+	var found := {}
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if m is BaseMaterial3D and not found.has(m):
+				var a: Dictionary = by_name.get(m.resource_name, {})
+				if a.is_empty():
+					a = Anim.of_material(m)
+				if not a.is_empty():
+					found[m] = a
+	if found.is_empty():
+		return 0
+	var copies := own(library)
+	var animated := {}
+	for still in found:
+		animated[copies.get(still, still)] = Anim.material(copies.get(still, still), found[still], base)
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if animated.has(m):
+				mesh.surface_set_material(s, animated[m])
+	return animated.size()
+
+
+## Every mesh of the library becomes the library's OWN copy, its materials too (one copy per material, shared by
+## its surfaces as before): a material changed for one layer — its place in the world, the transitions pass laid over
+## it — must not change another layer, or another world, that loaded the same file. Returns {original: copy}.
+static func own(library: MeshLibrary) -> Dictionary:
+	var copies := {}
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		if mesh == null or mesh.has_meta("mb_own"):
+			continue
+		var copy := mesh.duplicate() as Mesh
+		for s in copy.get_surface_count():
+			var m := copy.surface_get_material(s)
+			if m == null:
+				continue
+			if not copies.has(m):
+				copies[m] = m.duplicate()
+			copy.surface_set_material(s, copies[m])
+		copy.set_meta("mb_own", true)
+		library.set_item_mesh(id, copy)
+	return copies
 
 
 ## {node name: Mesh} for every mesh node of the .glb. An imported resource is used when the project has

@@ -9,5 +9,6 @@
     "com.unity.modules.unitywebrequesttexture": "1.0.0"
   },
   "author": { "name": "MarchingBlocks" },
+  "license": "MIT",
   "keywords": ["tiles", "level design", "marching cubes", "terrain", "voxel", "gltf"]
 }

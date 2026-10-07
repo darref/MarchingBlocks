@@ -1,0 +1,178 @@
+MarchingBlocks — SpannerGames
+
+La version française fait foi ; la version anglaise en est la traduction.
+The French version prevails; the English version is a translation.
+
+==============================================================================
+
+Contrat de licence d'utilisation — logiciels SpannerGames
+
+Modèle commun aux OUTILS de SpannerGames (MarchingBlocks, SoluTiles, et les suivants). Version 1, 4 octobre 2026. La version française fait foi ; la version anglaise (ci-dessous) en est la traduction.
+
+1. Les parties
+
+Le Concédant : Jordan Ferrad, entrepreneur individuel (EI), exerçant sous le nom commercial SpannerGames, SIRET [À COMPLÉTER], adresse [À COMPLÉTER], contact : [ADRESSE E-MAIL DU STUDIO].
+
+L'Utilisateur : la personne physique ou morale qui a acquis une licence du Logiciel, directement ou auprès d'un revendeur autorisé (notamment Paddle, qui agit comme revendeur, ou Steam).
+
+2. Définitions
+
+- Le Logiciel : le programme MarchingBlocks, son exécutable, ses mises à jour, sa documentation, ses contenus d'exemple et tout élément livré avec lui, à l'exception des Greffons gratuits (article 7).
+- La Clé : le code de licence nominatif remis à l'Utilisateur lors de l'achat.
+- Les Créations : tout ce que l'Utilisateur produit avec le Logiciel (fichiers de projet, tuiles, modèles, mondes, textures, exports).
+
+3. Ce que la licence accorde
+
+Le Concédant accorde à l'Utilisateur, en contrepartie du prix payé, un droit d'utilisation du Logiciel :
+
+- personnel : réservé à l'Utilisateur, ou, pour une personne morale, à UN seul de ses membres nommément désigné ;
+- non exclusif, non cessible et non transférable ;
+- pour le monde entier et pour toute la durée de protection du Logiciel par le droit d'auteur ;
+- sur autant d'ordinateurs que l'Utilisateur en utilise lui-même, la Clé ne pouvant servir qu'à lui.
+
+Le Logiciel est concédé, pas vendu : le Concédant reste seul titulaire de tous les droits de propriété intellectuelle sur le Logiciel, son code, ses algorithmes, son interface, ses marques et ses contenus.
+
+4. Ce qui est interdit
+
+Sauf accord écrit et préalable du Concédant, l'Utilisateur s'interdit de :
+
+1. partager le Logiciel ou sa Clé, les mettre à disposition d'un tiers, les publier, les diffuser ou les déposer sur un réseau de partage, gratuitement ou non ;
+2. revendre, louer, prêter, céder ou sous-licencier le Logiciel ou sa Clé, ou s'en servir pour offrir un service à des tiers (hébergement, utilisation à distance, location de poste) ;
+3. modifier, adapter, traduire, arranger le Logiciel ou en créer une œuvre dérivée ;
+4. décompiler, désassembler, déchiffrer le Logiciel, contourner son chiffrement ou sa vérification de licence, ou en extraire tout ou partie du code ou des contenus ;
+5. retirer ou modifier une mention de propriété, une marque ou ce contrat.
+
+Ces interdictions s'appliquent dans les limites de l'article L. 122-6-1 du Code de la propriété intellectuelle, que rien dans ce contrat ne restreint : l'Utilisateur peut faire une copie de sauvegarde, observer et étudier le fonctionnement du Logiciel, et décompiler les seules parties nécessaires à l'interopérabilité quand ces informations ne lui sont pas déjà accessibles.
+
+5. Les Créations de l'Utilisateur
+
+Les Créations appartiennent à l'Utilisateur. Il peut les utiliser, les modifier, les vendre et les intégrer à ses propres produits, y compris commerciaux (jeux, applications, visuels), sans redevance due au Concédant et sans obligation de le mentionner.
+
+Les contenus d'exemple livrés avec le Logiciel (projets d'exemple, témoin calculé) peuvent être utilisés dans les Créations ; ils ne peuvent pas être redistribués seuls, en l'état, comme un produit ou une ressource à part entière.
+
+6. Accès anticipé et mises à jour
+
+Pendant l'accès anticipé, le Logiciel est en cours de développement : il évolue, et des fonctions peuvent changer. Les mises à jour sont fournies selon les conditions de la page de vente ; elles sont régies par ce contrat. Le Concédant s'efforce de garder lisibles les fichiers produits par les versions précédentes.
+
+7. Les Greffons gratuits et le format ouvert
+
+Les greffons de peinture gratuits pour les moteurs de jeu, et la description du format de fichiers, sont distribués sous leur propre licence, jointe à chacun d'eux. Ce contrat ne les concerne pas.
+
+8. Données personnelles
+
+Le Logiciel ne collecte ni ne transmet aucune donnée personnelle. La version vendue sur le site de SpannerGames vérifie au lancement s'il existe une version plus récente : elle se contente de lire un fichier public sur ce site, et cette vérification se désactive dans les réglages ; comme toute connexion à un site, elle lui fait connaître l'adresse IP de l'ordinateur. La Clé, vérifiée sur l'ordinateur sans connexion, porte le nom et l'adresse e-mail de l'Utilisateur, qui ne sont transmis à personne.
+
+9. Garanties
+
+Lorsque l'Utilisateur est un consommateur, il bénéficie de la garantie légale de conformité des contenus et services numériques (articles L. 224-25-1 et suivants du Code de la consommation), que ce contrat ne restreint pas.
+
+Lorsque l'Utilisateur est un professionnel, le Logiciel est fourni en l'état ; le Concédant ne garantit pas qu'il convienne à un usage particulier ni qu'il fonctionne sans interruption ni erreur.
+
+10. Responsabilité
+
+Envers un professionnel, la responsabilité du Concédant, toutes causes confondues, est limitée au prix payé pour la licence, et il ne répond pas des dommages indirects (perte de données, de chiffre d'affaires, d'exploitation). Il appartient à l'Utilisateur de sauvegarder ses Créations.
+
+Envers un consommateur, la responsabilité du Concédant s'applique dans les conditions du droit commun ; aucune clause de ce contrat n'exclut sa responsabilité en cas de faute lourde, de dol ou de dommage corporel.
+
+11. Résiliation
+
+En cas de manquement de l'Utilisateur à l'article 4, et après une mise en demeure restée sans effet pendant quinze jours (sauf manquement grave, comme la diffusion publique de la Clé), le Concédant peut résilier la licence et révoquer la Clé. L'Utilisateur doit alors cesser d'utiliser le Logiciel et le supprimer. Ses Créations restent à lui.
+
+12. Vente, rétractation, remboursement
+
+La vente elle-même est régie par les conditions du revendeur (Paddle, Steam), notamment pour le paiement, la facture, le droit de rétractation et les remboursements. Pour un contenu numérique téléchargé, le droit de rétractation s'éteint lorsque le consommateur a expressément accepté le téléchargement immédiat et renoncé à ce droit (article L. 221-28, 13° du Code de la consommation).
+
+13. Droit applicable et litiges
+
+Ce contrat est régi par le droit français. En cas de difficulté, l'Utilisateur contacte d'abord le Concédant à l'adresse indiquée à l'article 1. Un consommateur peut recourir gratuitement à un médiateur de la consommation [À COMPLÉTER : nom et site du médiateur] ou à la plateforme européenne de règlement en ligne des litiges. À défaut d'accord, les tribunaux français sont compétents, sous réserve des règles de compétence protectrices du consommateur.
+
+14. Acceptation
+
+L'installation ou l'utilisation du Logiciel vaut acceptation de ce contrat. Si l'Utilisateur ne l'accepte pas, il ne doit ni installer ni utiliser le Logiciel.
+
+==============================================================================
+
+End User License Agreement — SpannerGames software
+
+Shared template for SpannerGames TOOLS (MarchingBlocks, SoluTiles, and later ones). Version 1, October 4, 2026. This is a translation: the French version (above) prevails.
+
+1. Parties
+
+Licensor: Jordan Ferrad, sole trader (entrepreneur individuel, EI), trading as SpannerGames, SIRET [TO BE COMPLETED], address [TO BE COMPLETED], contact: [STUDIO EMAIL].
+
+User: the individual or legal entity that acquired a license to the Software, directly or from an authorized reseller (including Paddle, acting as reseller, or Steam).
+
+2. Definitions
+
+- Software: the program MarchingBlocks, its executable, updates, documentation, sample content and everything delivered with it, except the free Plugins (section 7).
+- Key: the personal license code given to the User at purchase.
+- Creations: everything the User makes with the Software (project files, tiles, models, worlds, textures, exports).
+
+3. License grant
+
+In return for the price paid, the Licensor grants the User a right to use the Software that is:
+
+- personal: for the User only or, for a legal entity, for ONE named member of it;
+- non-exclusive, non-assignable and non-transferable;
+- worldwide, for the full term of the Software's copyright protection;
+- on as many computers as the User personally uses, the Key serving the User alone.
+
+The Software is licensed, not sold: the Licensor keeps all intellectual property rights in the Software, its code, algorithms, interface, trademarks and content.
+
+4. Restrictions
+
+Unless the Licensor gives prior written consent, the User shall not:
+
+1. share the Software or its Key, make them available to anyone else, publish, distribute or upload them to any sharing network, for free or not;
+2. resell, rent, lend, assign or sublicense the Software or its Key, or use it to provide a service to third parties (hosting, remote use, seat rental);
+3. modify, adapt, translate the Software or create a derivative work of it;
+4. decompile, disassemble, decrypt the Software, circumvent its encryption or license check, or extract any part of its code or content;
+5. remove or alter any proprietary notice, trademark or this agreement.
+
+These restrictions apply within the limits of article L. 122-6-1 of the French Intellectual Property Code, which nothing here limits: the User may make a backup copy, observe and study how the Software works, and decompile only what is needed for interoperability when that information is not otherwise available.
+
+5. The User's Creations
+
+Creations belong to the User. The User may use, modify, sell and include them in their own products, including commercial ones (games, applications, artwork), with no royalty owed to the Licensor and no obligation to credit it.
+
+Sample content shipped with the Software (sample projects, the computed witness) may be used inside Creations; it may not be redistributed on its own, as is, as a product or asset in itself.
+
+6. Early Access and updates
+
+During Early Access the Software is under development: it changes, and features may change. Updates are provided as stated on the store page and are governed by this agreement. The Licensor strives to keep files made with earlier versions readable.
+
+7. Free plugins and the open format
+
+The free painting plugins for game engines, and the file format specification, are distributed under their own license, included with each of them. This agreement does not cover them.
+
+8. Personal data
+
+The Software does not collect or send any personal data. The version sold on the SpannerGames website checks at launch whether a newer version exists: it only reads a public file on that website, and the check can be turned off in the settings; like any connection to a website, it reveals the computer's IP address to it. The Key, checked on the computer without any connection, carries the User's name and e-mail address, which are sent to no one.
+
+9. Warranty
+
+If the User is a consumer, they benefit from the statutory conformity guarantee for digital content and services (articles L. 224-25-1 et seq. of the French Consumer Code), which this agreement does not limit.
+
+If the User is a business, the Software is provided as is; the Licensor does not warrant that it is fit for a particular purpose or that it will run without interruption or error.
+
+10. Liability
+
+Towards a business, the Licensor's total liability is limited to the price paid for the license, and it is not liable for indirect damages (loss of data, revenue or business). The User is responsible for backing up their Creations.
+
+Towards a consumer, the Licensor's liability applies under general law; nothing in this agreement excludes liability for gross negligence, fraud or personal injury.
+
+11. Termination
+
+If the User breaches section 4, and after a formal notice left unremedied for fifteen days (except for a serious breach, such as publicly sharing the Key), the Licensor may terminate the license and revoke the Key. The User must then stop using the Software and delete it. Their Creations remain theirs.
+
+12. Sale, withdrawal, refunds
+
+The sale itself is governed by the reseller's terms (Paddle, Steam), including payment, invoicing, the right of withdrawal and refunds. For downloaded digital content, the right of withdrawal ends when the consumer has expressly agreed to immediate download and waived that right (article L. 221-28, 13° of the French Consumer Code).
+
+13. Governing law and disputes
+
+This agreement is governed by French law. In case of difficulty, the User first contacts the Licensor at the address in section 1. A consumer may use a consumer mediator free of charge [TO BE COMPLETED: name and website of the mediator] or the EU online dispute resolution platform. Failing agreement, French courts have jurisdiction, subject to the rules protecting consumers.
+
+14. Acceptance
+
+Installing or using the Software means accepting this agreement. If the User does not accept it, they must not install or use the Software. 
