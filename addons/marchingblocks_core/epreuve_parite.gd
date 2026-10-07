@@ -241,7 +241,8 @@ static func _transitions() -> Dictionary:
 
 	# ── cell_texture : l'empaquetage RECOMMANDÉ (un octet par case : rang + 1 en bas, choix + 1 en haut)
 	var union := {Vector3i(0, 0, 0): 0, Vector3i(1, 0, 0): 1, Vector3i(-3, 2, 5): 14, Vector3i(2, -1, 0): 15}
-	var choix_t := {Vector3i(0, 0, 0): 1, Vector3i(1, 0, 0): 0, Vector3i(40, 40, 40): 1}
+	# ⚠ UN CHOIX AU-DELÀ DE LA 15e AUSSI (greffon Unity, 7 octobre 2026) : sans lui, un quartet haut non borné passait muet.
+	var choix_t := {Vector3i(0, 0, 0): 1, Vector3i(1, 0, 0): 0, Vector3i(40, 40, 40): 1, Vector3i(-3, 2, 5): 16}
 	var d := TR.construire(union, choix_t)
 	var octets: Array = []
 	var o: PackedByteArray = d["octets"]
@@ -258,7 +259,8 @@ static func _transitions() -> Dictionary:
 	var c_en: Array = []
 	for c in choix_t:
 		c_en.append([c.x, c.y, c.z, choix_t[c]])
-	cas.append({"name": "cell_texture: ranks, a layer beyond the 15th, a choice outside the box", "kind": "cell_texture",
+	cas.append({"name": "cell_texture: ranks, a layer beyond the 15th, a choice outside the box, a choice beyond the 15th",
+		"kind": "cell_texture",
 		"input": {"cells": u_en, "choices": c_en}, "expected": {"origin": _v(d["origine"]), "size": _v(n),
 		"bytes": octets}})
 
@@ -356,8 +358,10 @@ static func _animation() -> Dictionary:
 			"input": {"frequency": e[0], "minimum": e[1], "t": e[2], "phase": e[3]},
 			"expected": Anim.pulsation_au_temps(e[0], e[1], e[2], e[3])})
 	# ── phase : l'origine de la tuile en espace du format (v + piece_offset)
+	# ⚠ DES ORIGINES NON ENTIÈRES AUSSI (greffon Unity, 7 octobre 2026) : sur des entiers, floor(o) et floor(o + 0,5) sont
+	# égaux — « la phase sans le demi » passait muette.
 	for o in [Vector3(1, 1, 1), Vector3(0, 0, 0), Vector3(5, 2, -3), Vector3(-7, -2, 5), Vector3(12, 0, 12),
-			Vector3(-40, 3, 17), Vector3(130, 64, -90)]:
+			Vector3(-40, 3, 17), Vector3(130, 64, -90), Vector3(2.5, 0.75, -1.5)]:
 		cas.append({"name": "phase: origin %s" % o, "kind": "phase", "input": {"origin": _f(o)},
 			"expected": Anim.phase_de(o)})
 	# ── scroll : u, v, t, synchro, phase
@@ -852,6 +856,14 @@ static func _edition() -> Dictionary:
 			"input": {"cells": "world", "floor": 2, "direction": QUOI_EN[quoi], "mode": "place", "selection": []},
 			"expected": {"set": _cases(r["poser"]), "clear": _cases(r["effacer"]), "selection": _cases(r["selection"]),
 			"step": _v(r["sens"])}})
+	# ⚠ UNE ÉGALITÉ DE « FACE » (greffon Unity, 7 octobre 2026) : le haut du pilier regarde vers le haut, le devant du mur vers
+	# +z, une case chacun — l'ordre des sens départage (le haut d'abord). Sans ce cas, « le dernier sens l'emporte » passait muet.
+	var egalite := _ensemble([Vector3i(4, 3, 4), Vector3i(2, 1, 1)])
+	var re := Etages.extruder(m, 0, "face", egalite, "poser")
+	cas.append({"name": "extrude facing, place, on a tie (up comes before +z)", "kind": "extrude",
+		"input": {"cells": "world", "floor": 0, "direction": "facing", "mode": "place", "selection": _cases(egalite)},
+		"expected": {"set": _cases(re["poser"]), "clear": _cases(re["effacer"]), "selection": _cases(re["selection"]),
+		"step": _v(re["sens"])}})
 	# ── shrink_edge : `retrecir_bord` (remplace l'ancien `shrink` de tools_conformance.json)
 	var formes := {
 		"a flat 4x4 rectangle": _boite(Vector3i(0, 5, 0), Vector3i(3, 5, 3)),

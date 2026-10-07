@@ -1365,6 +1365,31 @@
       "name": "extrude facing, place, on floor 2 (no selection)"
     },
     {
+      "expected": {
+        "clear": [],
+        "selection": [
+          [2, 2, 1],
+          [4, 4, 4]
+        ],
+        "set": [
+          [4, 4, 4]
+        ],
+        "step": [0, 1, 0]
+      },
+      "input": {
+        "cells": "world",
+        "direction": "facing",
+        "floor": 0,
+        "mode": "place",
+        "selection": [
+          [2, 1, 1],
+          [4, 3, 4]
+        ]
+      },
+      "kind": "extrude",
+      "name": "extrude facing, place, on a tie (up comes before +z)"
+    },
+    {
       "expected": [
         [1, 5, 1],
         [1, 5, 2],
