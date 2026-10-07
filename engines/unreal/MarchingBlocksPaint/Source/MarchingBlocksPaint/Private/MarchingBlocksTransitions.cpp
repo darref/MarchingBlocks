@@ -3,7 +3,8 @@
 // ⚠ L'EMPAQUETAGE EST CELUI RECOMMANDÉ PAR LES CAS (cell_texture) : un octet par case sur la boîte de l'union élargie de 6,
 // quartet bas = rang + 1 de sa couche, quartet haut = rang + 1 choisi à ce sommet ; MBCore le construit
 // (Transitions::BuildCellTexture), éprouvé par le banc. La table et les représentants suivent la disposition du shader de
-// l'appli : texel (2C, D) = (active, softness, reach, irregularity), (2C + 1, D) = (fills_hollows, grain).
+// l'appli (transitions_rendu.gd) : quand C couvre D, texel (2D, C) = (active, softness, reach, irregularity), (2D + 1, C) =
+// (fills_hollows, grain).
 
 #include "MarchingBlocksTransitions.h"
 
@@ -125,8 +126,8 @@ void AMarchingBlocksTransitions::Apply()
 	{
 		const int32 C = Entry.first.first, D = Entry.first.second;
 		const MBPaint::FTransitionSettings& S = Entry.second;
-		TableTexels[D * 2 * Max + 2 * C] = FLinearColor(1.f, static_cast<float>(S.Softness), static_cast<float>(S.Reach), static_cast<float>(S.Irregularity));
-		TableTexels[D * 2 * Max + 2 * C + 1] = FLinearColor(static_cast<float>(S.FillsHollows), static_cast<float>(S.Grain), 0.f, 0.f);
+		TableTexels[C * 2 * Max + 2 * D] = FLinearColor(1.f, static_cast<float>(S.Softness), static_cast<float>(S.Reach), static_cast<float>(S.Irregularity));
+		TableTexels[C * 2 * Max + 2 * D + 1] = FLinearColor(static_cast<float>(S.FillsHollows), static_cast<float>(S.Grain), 0.f, 0.f);
 	}
 	TableTexture = FloatTexture(2 * Max, Max, TableTexels);
 

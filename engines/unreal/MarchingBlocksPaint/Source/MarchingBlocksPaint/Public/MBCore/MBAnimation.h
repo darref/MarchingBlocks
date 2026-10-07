@@ -104,8 +104,8 @@ namespace MBPaint
 		/// The UV offset at time T, written to OutU, OutV (added to the UVs; they repeat).
 		MARCHINGBLOCKSPAINT_API void ScrollAt(double U, double V, double T, bool bSynced, double Phase, double& OutU, double& OutV);
 
-		/// The phase of a tile whose ORIGIN (vertex + piece_offset) is at Ox, Oy, Oz in FORMAT space — in double
-		/// precision (a 32-bit shader differs up to 0.025 on large origins: the plugin computes it per instance).
+		/// The phase of a tile whose ORIGIN (vertex + piece_offset) is at Ox, Oy, Oz in FORMAT space — in the rule's mixed
+		/// precision, on the CPU (a 32-bit shader differs up to 0.025 on large origins: the plugin computes it per instance).
 		MARCHINGBLOCKSPAINT_API double PhaseOf(double Ox, double Oy, double Oz);
 
 		/// The JSON chunk of a .glb (12-byte header, then the first chunk's length and type "JSON"). False and Error

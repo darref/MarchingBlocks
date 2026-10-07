@@ -146,11 +146,10 @@ func _la_phase() -> void:
 		for z in 10:
 			var o := Vector3(x * 1.0 + 1.0, 3.0, z * 1.0 - 4.0)
 			var p := Anim.phase_de(o)
-			# En `float` (double), pas en `Vector3` (32 bits) : la règle des cas `phase` (parité, 7 octobre 2026).
-			var rx := fposmod(floorf(o.x + 0.5) * 0.3183099 + 0.71, 1.0) * 17.0
-			var ry := fposmod(floorf(o.y + 0.5) * 0.3183099 + 0.113, 1.0) * 17.0
-			var rz := fposmod(floorf(o.z + 0.5) * 0.3183099 + 0.419, 1.0) * 17.0
-			var attendu := fposmod(rx * ry * rz * (rx + ry + rz), 1.0)
+			var q: Vector3 = floor(o + Vector3(0.5, 0.5, 0.5))
+			var r := Vector3(fposmod(q.x * 0.3183099 + 0.71, 1.0), fposmod(q.y * 0.3183099 + 0.113, 1.0),
+				fposmod(q.z * 0.3183099 + 0.419, 1.0)) * 17.0
+			var attendu := fposmod(r.x * r.y * r.z * (r.x + r.y + r.z), 1.0)
 			justes = justes and absf(p - attendu) < 1e-4
 			bornees = bornees and p >= 0.0 and p < 1.0
 			distinctes[snappedf(p, 0.001)] = true

@@ -161,8 +161,14 @@ namespace MBPaint
 		{
 			const double P[3] = {std::floor(Ox + 0.5), std::floor(Oy + 0.5), std::floor(Oz + 0.5)};
 			const double Add[3] = {0.71, 0.113, 0.419};
+			// THE MIXED PRECISION OF THE RULE (rules_text): a_i = fract(p_i 0.3183099 + k_i) in double, f_i = (float32) a_i,
+			// q_i = (float32)(f_i 17) — a multiplication in float32 —, then the product in double.
 			double Q[3];
-			for (int I = 0; I < 3; ++I) Q[I] = AnmFract(P[I] * 0.3183099 + Add[I]) * 17.0;
+			for (int I = 0; I < 3; ++I)
+			{
+				const float F = static_cast<float>(AnmFract(P[I] * 0.3183099 + Add[I]));
+				Q[I] = static_cast<double>(F * 17.0f);
+			}
 			return AnmFract(Q[0] * Q[1] * Q[2] * (Q[0] + Q[1] + Q[2]));
 		}
 
