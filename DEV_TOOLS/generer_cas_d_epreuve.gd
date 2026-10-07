@@ -5,7 +5,8 @@ extends SceneTree
 ##   - ceux des OUTILS D'ÉDITION (`EpreuveOutils.cas_d_epreuve()`) → `tools_conformance.json`, les trois
 ##     greffons (Godot depuis le 28 septembre 2026) ;
 ##   - ceux de la PARITÉ DES GREFFONS (`EpreuveParite.cas_d_epreuve()`, 7 octobre 2026) → cinq fichiers de plus, les
-##     trois greffons : `transitions_`, `animation_`, `foliage_`, `water_`, `editing_conformance.json`.
+##     trois greffons : `transitions_`, `animation_`, `foliage_`, `water_`, `editing_conformance.json` ; et depuis le
+##     7 octobre 2026 (le contrat de l'eau recalculée) `water_mesh_conformance.json`, un triangle par ligne.
 ##
 ## LANCEMENT
 ##   godot --headless --path D:/MarchingBlocks --script res://DEV_TOOLS/generer_cas_d_epreuve.gd
@@ -70,9 +71,36 @@ static func _ecrire(cas: Dictionary, cibles: Array) -> void:
 	var triplet := RegEx.new()
 	triplet.compile("\\[\\s*(-?\\d+),\\s*(-?\\d+),\\s*(-?\\d+)\\s*\\]")
 	texte = triplet.sub(texte, "[$1, $2, $3]", true)
+	if cas.get("format", "") == "marchingblocks-water-mesh-conformance":
+		texte = _une_ligne_par_tableau_de_nombres(texte)
 	for cible in cibles:
 		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(cible).get_base_dir())
 		var f := FileAccess.open(cible, FileAccess.WRITE)
 		f.store_string(texte)
 		f.close()
 		print("%d cas → %s (%d octets)" % [(cas["cases"] as Array).size(), cible, texte.length()])
+
+
+## ⚠ LES TRIANGLES DE L'EAU (7 octobre 2026) : 36 nombres chacun, un par ligne une fois indentés — ~1 Mo de blancs. Tout
+## tableau qui ne contient QUE des nombres tient sur une ligne. Réservé au fichier du maillage : les autres fichiers ne
+## changent pas d'un octet.
+static func _une_ligne_par_tableau_de_nombres(texte: String) -> String:
+	var lignes := texte.split("\n")
+	var nombre := RegEx.create_from_string("^\\s*-?[0-9][0-9.eE+-]*,?$")
+	var sortie := PackedStringArray()
+	var i := 0
+	while i < lignes.size():
+		var l: String = lignes[i]
+		if l.ends_with("["):
+			var j := i + 1
+			var morceaux := PackedStringArray()
+			while j < lignes.size() and nombre.search(lignes[j]) != null:
+				morceaux.append(lignes[j].strip_edges())
+				j += 1
+			if not morceaux.is_empty() and j < lignes.size() and lignes[j].strip_edges().begins_with("]"):
+				sortie.append(l + " ".join(morceaux) + lignes[j].strip_edges())
+				i = j + 1
+				continue
+		sortie.append(l)
+		i += 1
+	return "\n".join(sortie)

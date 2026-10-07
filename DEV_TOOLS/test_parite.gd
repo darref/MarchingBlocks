@@ -12,6 +12,9 @@ extends SceneTree
 ##      mêmes réponses (le fondu, l'image, la pulsation, la phase, le défilement, la pose, le vent, Shrink, Widen, le
 ##      pinceau Select, la table) — la preuve que le texte suffit à un greffon, et l'attendu qui ne passe pas par la
 ##      fonction éprouvée (charte §6) ;
+##   3 bis. LE MAILLAGE DE L'EAU (`water_mesh_conformance.json`, 7 octobre 2026) : l'appariement en sac que les greffons
+##      emploieront rougit sur ce qu'il doit voir, la mer se relit pareil de son eau ou de ses tronçons, et les triangles
+##      montrent ce que chaque cas nomme (plats sans jonction en T, nappe sous la dalle, cascade en volume, source…) ;
 ##   4. L'EXPORT écrit ce que le contrat dit : `transitions` et `foliage` dans `world.json` (indices, représentants et
 ##      leurs images, modèles copiés), les images des textures animées dans le `.mbset` — et un monde sans elles se lit
 ##      toujours.
@@ -23,6 +26,8 @@ const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
+const FL := preload("res://addons/marchingblocks_core/fluides.gd")
+const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
 
 const DOSSIERS := ["res://addons/marchingblocks_paint", "res://engines/unity/com.marchingblocks.paint/Tests",
 	"res://engines/unreal/MarchingBlocksPaint/Tests"]
@@ -60,10 +65,11 @@ func _initialize() -> void:
 	_animation(lus["animation"])
 	_feuillage(lus["foliage"])
 	_eau(lus["water"])
+	_maillage_de_l_eau(lus["water_mesh"])
 	_edition(lus["editing"])
 	_l_export_du_monde()
 	_l_export_des_images()
-	_dire(_finies == 8, "SENTINELLE : les huit sections sont allées jusqu'au bout (%d)" % _finies)
+	_dire(_finies == 9, "SENTINELLE : les neuf sections sont allées jusqu'au bout (%d)" % _finies)
 	_fin()
 
 
@@ -489,6 +495,292 @@ func _eau(f: Dictionary) -> void:
 	_lectures(s["read"], "water", 5)
 	_finies += 1
 
+
+# ── LE MAILLAGE DE L'EAU (7 octobre 2026 : le contrat de l'eau recalculée) ──────────────────────────────────
+# Ce qui est gardé ici, en plus de la péremption (`_a_jour`) :
+#   - LA FORME SE COMPARE : l'appariement en sac (sans ordre, rotations permises, réflexion refusée, tolérances) rend
+#     vrai sur un maillage mélangé, tourné et bruité sous la tolérance — et faux sur un coin déplacé de 2e-4, un triangle
+#     retourné, un triangle doublé à la place d'un autre, des couleurs rangées sur 8 bits ;
+#   - L'ENTRÉE SUFFIT : la mer relue de son eau (sans les tronçons, ce que le greffon a) donne les mêmes triangles que la
+#     mer relue de ses tronçons (ce que fait l'appli) ;
+#   - LES CAS EXERCENT CE QU'ILS NOMMENT (attendus déroulés à la main sur les triangles, pas sur le code) : aucune jonction
+#     en T entre plats, la hauteur des plats, la nappe sous la dalle et sous le plafond, un seul océan, la cascade en
+#     volume (devant le plan, rentrée dans la roche), son remous sur la nappe, la source, la largeur de rivière ;
+#   - LES SEUILS DU MAILLEUR SONT LOIN : un triangle gardé a une aire très au-dessus de celle qui le ferait jeter, et son
+#     sens ne dépend pas d'un produit scalaire proche de zéro — un moteur en double ne tranche pas autrement.
+
+const TOL_MAILLAGE := {"position": 1e-4, "normal": 1e-3, "color": 1e-4, "uv": 1e-4}
+
+
+## Les triangles d'un attendu, dépliés : 36 nombres chacun.
+static func _deplier(e: Dictionary) -> Array:
+	var v: Array = e["vertices"]
+	var sortie: Array = []
+	for t in e["triangles"]:
+		sortie.append((v[int(t[0])] as Array) + (v[int(t[1])] as Array) + (v[int(t[2])] as Array))
+	return sortie
+
+
+## Deux coins (12 nombres) égaux aux tolérances.
+static func _coin_proche(a: Array, ia: int, b: Array, ib: int) -> bool:
+	for k in 12:
+		var tol: float = TOL_MAILLAGE["position"] if k < 3 else (TOL_MAILLAGE["normal"] if k < 6 else
+			(TOL_MAILLAGE["color"] if k < 10 else TOL_MAILLAGE["uv"]))
+		if absf(float(a[ia + k]) - float(b[ib + k])) > tol:
+			return false
+	return true
+
+
+static func _cle_centre(t: Array) -> Vector3i:
+	return Vector3i(roundi((float(t[0]) + float(t[12]) + float(t[24])) / 3.0 * 100.0),
+		roundi((float(t[1]) + float(t[13]) + float(t[25])) / 3.0 * 100.0),
+		roundi((float(t[2]) + float(t[14]) + float(t[26])) / 3.0 * 100.0))
+
+
+## L'APPARIEMENT EN SAC, tel que `rules_text` le demande aux greffons : "" si égal, sinon la raison.
+static func _meme_sac(attendu: Array, obtenu: Array) -> String:
+	if attendu.size() != obtenu.size():
+		return "%d triangles au lieu de %d" % [obtenu.size(), attendu.size()]
+	var seaux := {}
+	for i in obtenu.size():
+		var k := _cle_centre(obtenu[i])
+		if not seaux.has(k):
+			seaux[k] = []
+		seaux[k].append(i)
+	var pris := {}
+	for t: Array in attendu:
+		var k0 := _cle_centre(t)
+		var trouve := false
+		for dx in [-1, 0, 1]:
+			for dy in [-1, 0, 1]:
+				for dz in [-1, 0, 1]:
+					for i in seaux.get(k0 + Vector3i(dx, dy, dz), []):
+						if trouve or pris.has(i):
+							continue
+						var o: Array = obtenu[i]
+						for r in 3:
+							if _coin_proche(t, 0, o, 12 * r) and _coin_proche(t, 12, o, 12 * ((r + 1) % 3)) \
+									and _coin_proche(t, 24, o, 12 * ((r + 2) % 3)):
+								trouve = true
+								pris[i] = true
+								break
+		if not trouve:
+			return "aucun triangle pour %s" % [t.slice(0, 3) + t.slice(12, 15) + t.slice(24, 27)]
+	return ""
+
+
+static func _genre_t(t: Array) -> float:
+	return float(t[8])
+
+
+static func _plat_t(t: Array) -> bool:
+	return absf(float(t[4]) - 1.0) < 1e-6 and absf(float(t[1]) - float(t[13])) < 1e-6 \
+		and absf(float(t[1]) - float(t[25])) < 1e-6 and (_genre_t(t) == 0.0 or _genre_t(t) == 0.5)
+
+
+## Le point (x, z) est-il dans le triangle (projeté sur le plan horizontal), bord compris ?
+static func _couvre_t(t: Array, p: Vector3) -> bool:
+	if absf(float(t[1]) - p.y) > 1e-4:
+		return false
+	var a := Vector2(t[0], t[2])
+	var b := Vector2(t[12], t[14])
+	var c := Vector2(t[24], t[26])
+	var q := Vector2(p.x, p.z)
+	var d1 := (b - a).cross(q - a)
+	var d2 := (c - b).cross(q - b)
+	var d3 := (a - c).cross(q - c)
+	return (d1 >= -1e-9 and d2 >= -1e-9 and d3 >= -1e-9) or (d1 <= 1e-9 and d2 <= 1e-9 and d3 <= 1e-9)
+
+
+## AUCUNE JONCTION EN T entre les plats d'une même hauteur : aucun sommet de plat n'est STRICTEMENT à l'intérieur d'un
+## côté horizontal ou vertical (en x ou en z) d'un triangle plat — compté en vingtièmes, comme le mailleur.
+static func _jonctions_en_t(tris: Array) -> int:
+	var sur_z := {}   # (h, z) → {x}
+	var sur_x := {}   # (h, x) → {z}
+	var plats: Array = tris.filter(_plat_t)
+	for t: Array in plats:
+		for k in 3:
+			var h := roundi(float(t[12 * k + 1]) * 20.0)
+			var x := roundi(float(t[12 * k]) * 20.0)
+			var z := roundi(float(t[12 * k + 2]) * 20.0)
+			if not sur_z.has(Vector2i(h, z)):
+				sur_z[Vector2i(h, z)] = {}
+			sur_z[Vector2i(h, z)][x] = true
+			if not sur_x.has(Vector2i(h, x)):
+				sur_x[Vector2i(h, x)] = {}
+			sur_x[Vector2i(h, x)][z] = true
+	var n := 0
+	for t: Array in plats:
+		for k in 3:
+			var a: int = 12 * k
+			var b: int = 12 * ((k + 1) % 3)
+			var h := roundi(float(t[a + 1]) * 20.0)
+			var xa := roundi(float(t[a]) * 20.0)
+			var za := roundi(float(t[a + 2]) * 20.0)
+			var xb := roundi(float(t[b]) * 20.0)
+			var zb := roundi(float(t[b + 2]) * 20.0)
+			if za == zb:
+				for x in sur_z.get(Vector2i(h, za), {}):
+					if x > mini(xa, xb) and x < maxi(xa, xb):
+						n += 1
+			elif xa == xb:
+				for z in sur_x.get(Vector2i(h, xa), {}):
+					if z > mini(za, zb) and z < maxi(za, zb):
+						n += 1
+	return n
+
+
+func _maillage_de_l_eau(f: Dictionary) -> void:
+	var cas := {}
+	for c in f["cases"]:
+		_dire(c["kind"] == "water_mesh", "maillage : une seule sorte, water_mesh (« %s »)" % c["kind"])
+		cas[(c["name"] as String).trim_prefix("mesh: ")] = c
+	var soupe := func(nom: String) -> Array:
+		var c: Dictionary = cas.get(nom, {})
+		_dire(not c.is_empty(), "maillage : le cas « %s » existe" % nom)
+		return [] if c.is_empty() else _deplier(c["expected"])
+	# ── la forme se compare
+	var bassin: Array = soupe.call("a waterfall into a basin it fills")
+	var melange: Array = []
+	var graine := 7
+	for t: Array in bassin:
+		var r := graine % 3
+		graine = (graine * 1103515245 + 12345) & 0x7FFFFFFF
+		var tourne: Array = t.slice(12 * r) + t.slice(0, 12 * r)
+		for k in 36:
+			var amplitude := 5e-4 if k % 12 >= 3 and k % 12 < 6 else 5e-5
+			tourne[k] = float(tourne[k]) + (amplitude if (k + graine) % 2 == 0 else -amplitude)
+		melange.insert(graine % (melange.size() + 1), tourne)
+	_dire(bassin.size() > 1000 and _meme_sac(bassin, melange) == "",
+		"l'appariement : le bassin (%d triangles) mélangé, tourné, bruité sous la tolérance — le même (%s)" % [bassin.size(),
+		_meme_sac(bassin, melange)])
+	var deplace: Array = bassin.duplicate(true)
+	deplace[500][13] = float(deplace[500][13]) + 2e-4
+	_dire(_meme_sac(bassin, deplace) != "", "l'appariement : un coin déplacé de 2e-4 — différent")
+	var retourne: Array = bassin.duplicate(true)
+	retourne[300] = (retourne[300] as Array).slice(0, 12) + (retourne[300] as Array).slice(24, 36) + (retourne[300] as Array).slice(12, 24)
+	_dire(_meme_sac(bassin, retourne) != "", "l'appariement : un triangle retourné (le sens fait partie du contrat) — différent")
+	var double: Array = bassin.duplicate(true)
+	double[10] = double[11]
+	_dire(_meme_sac(bassin, double) != "", "l'appariement : un triangle doublé à la place d'un autre — différent")
+	var huit_bits: Array = bassin.duplicate(true)
+	for t: Array in huit_bits:
+		for k in 3:
+			for j in range(6, 10):
+				t[12 * k + j] = roundf(float(t[12 * k + j]) * 255.0) / 255.0
+	_dire(_meme_sac(bassin, huit_bits) != "", "l'appariement : les couleurs rangées sur 8 bits (l'ArrayMesh de Godot) — différent")
+	# ── l'entrée suffit : la mer relue de son eau ou de ses tronçons
+	for nom in ["a sea around an island", "the sea under a floating slab", "a sea above the whole world"]:
+		var c: Dictionary = cas.get(nom, {})
+		if c.is_empty():
+			continue
+		var occ := {}
+		for v in f["worlds"][c["input"]["world"]]:
+			occ[Vector3i(v[0], v[1], v[2])] = true
+		var b := FL.boite(occ)
+		var corps: Array = (c["input"]["bodies"] as Array).map(func(x: Dictionary) -> Dictionary: return EP.corps_depuis_en(x))
+		var o := FL.ocean(occ, int(corps[0]["niveau"]), FL.VOLUME_MAXI, b)
+		_dire(corps[0]["genre"] == "ocean" and o["eau"] == corps[0]["eau"], "%s : la mer du cas est celle de la règle" % nom)
+		corps[0]["colonnes"] = o["colonnes"]
+		var avec := EP.triangles_canoniques(EM.tableaux_du_maillage(corps, occ, b))
+		_dire(_meme_sac(_deplier(c["expected"]), avec) == "",
+			"%s : relue de ses tronçons (l'appli), la même nappe que relue de son eau (le greffon)" % nom)
+	# ── les cas exercent ce qu'ils nomment
+	var genres := {}
+	var t_total := 0
+	var pire_aire := INF
+	var pire_sens := INF
+	for nom in cas:
+		var tris := _deplier(cas[nom]["expected"])
+		t_total += tris.size()
+		for t: Array in tris:
+			genres[_genre_t(t)] = true
+		_dire(_jonctions_en_t(tris) == 0, "%s : aucune jonction en T entre plats (%d)" % [nom, _jonctions_en_t(tris)])
+		var hauteurs_justes := true
+		for t: Array in tris.filter(_plat_t):
+			var y := float(t[1])
+			var frac := y - floorf(y)
+			if _genre_t(t) == 0.0:
+				hauteurs_justes = hauteurs_justes and absf(frac - 0.7) < 1e-5
+			else:
+				hauteurs_justes = hauteurs_justes and absf(frac - 0.85) < 1e-5
+		_dire(hauteurs_justes, "%s : nappes à la rangée + 0,7, bandes à la case − 0,15" % nom)
+		# Les seuils : aire d'un triangle gardé, et le sens tranché par la normale du premier coin.
+		for t: Array in tris:
+			if _plat_t(t):
+				continue
+			var a := Vector3(t[0], t[1], t[2])
+			var x := (Vector3(t[12], t[13], t[14]) - a).cross(Vector3(t[24], t[25], t[26]) - a)
+			pire_aire = minf(pire_aire, x.length())
+			# Le premier coin de la grille n'est plus connu (rotation canonique) : le PLUS FAVORABLE des trois est
+			# le sien (le sens a été choisi pour lui) ; sa marge est le pire cas.
+			var meilleur := -INF
+			for k in 3:
+				meilleur = maxf(meilleur, x.normalized().dot(Vector3(t[12 * k + 3], t[12 * k + 4], t[12 * k + 5])))
+			pire_sens = minf(pire_sens, meilleur)
+	for g in [0.0, 0.5, 0.75, 1.0]:
+		_dire(genres.has(g), "maillage : le genre %s est exercé" % g)
+	print("  maillage de l'eau : %d cas, %d triangles ; plus petit |AB × AC| gardé %s (jeté sous 1e-7) ; pire marge de sens %.3f"
+		% [cas.size(), t_total, String.num_scientific(pire_aire), pire_sens])
+	_dire(pire_aire > 1e-5, "les triangles gardés sont loin du seuil d'aire (%s > 1e-5)" % String.num_scientific(pire_aire))
+	_dire(pire_sens > 0.05, "le sens d'aucun triangle ne tient à un produit scalaire proche de zéro (%.3f)" % pire_sens)
+	# Un seul océan : la seconde source ne dessine rien.
+	_dire(_meme_sac(soupe.call("a sea around an island"), soupe.call("one sea only: the second source draws nothing")) == "",
+		"un seul océan : la mer et la source refusée dessinent la mer seule")
+	# La rivière dans la couche de la mer, et seule : la même rivière, la mer en plus (96 triangles dormants).
+	var avec_mer: Array = soupe.call("a river joins the sea, in the sea's layer")
+	var seule: Array = soupe.call("the same river in a layer of its own")
+	_dire(_meme_sac(avec_mer.filter(func(t): return _genre_t(t) != 0.0), seule) == ""
+		and avec_mer.filter(func(t): return _genre_t(t) == 0.0).size() == 96,
+		"la rivière qui rejoint la mer : la même, avec ou sans la mer dans sa couche (son remous sur la nappe, à 2,7 ou 2,72)")
+	# Sous la dalle et sous le plafond, la nappe passe — à la main : la mer de niveau 2 en (1,5 ; 2,7 ; 1,5) ; le lac de
+	# la grotte de niveau 2 en (2,5 ; 2,7 ; 2,5).
+	_dire(soupe.call("the sea under a floating slab").any(func(t): return _couvre_t(t, Vector3(1.5, 2.7, 1.5))),
+		"sous la dalle, à 2,7 : la nappe passe")
+	_dire(soupe.call("a lake under the ceiling of a closed cave").any(func(t): return _couvre_t(t, Vector3(2.5, 2.7, 2.5))),
+		"sous le plafond de la grotte, à 2,7 : la nappe du lac")
+	_dire(soupe.call("a sea above the whole world").all(func(t): return absf(float(t[1]) - 6.7) < 1e-5),
+		"la mer au-dessus de tout : une nappe à 6,7, partout")
+	var vide: Array = soupe.call("a sea in an empty world: one plane")
+	_dire(vide.size() == 2 and vide.all(func(t): return absf(absf(float(t[0])) - 2000.0) < 1e-6),
+		"le monde vide : un plan, deux triangles, jusqu'à ±2000")
+	_dire((soupe.call("a refused source draws nothing") as Array).is_empty(), "une source refusée : aucun triangle")
+	_dire(soupe.call("a calm lake in a crater").size() == 2, "le lac du cratère : un rectangle, deux triangles (9 cases fusionnées)")
+	# La cascade en volume du bassin, à la main : la falaise en x = 3 (la lèvre est la case (3, 5, 1)), la nappe sort à
+	# 0,35 devant dès 0,7 de chute et s'évase, ses bouts libres rentrent à 0,4 dans la roche ; z de −0,1 à 3,1 (une case,
+	# + 0,1 à chaque bout libre) ; l'écume de 0 en haut à 1 au pied ; l'anneau posé sur la nappe du bassin, à 1,7 + 0,02.
+	# (La première : le bassin plein déborde ensuite et la rivière tombe encore du bord du monde, en x = 8.)
+	var chute: Array = bassin.filter(func(t): return _genre_t(t) == 1.0 and float(t[0]) < 5.0)
+	var xs := []
+	var zs := []
+	var ecumes := []
+	for t: Array in chute:
+		for k in 3:
+			xs.append(float(t[12 * k]))
+			zs.append(float(t[12 * k + 2]))
+			ecumes.append(float(t[12 * k + 9]))
+	_dire(not xs.is_empty() and absf(xs.min() - 2.6) < 1e-4 and xs.max() > 3.35 and xs.max() < 3.35 + 0.2 + 1e-4,
+		"la cascade du bassin : rentrée à 2,6 dans la roche, sortie au-delà de 3,35 (%s .. %s)" % [xs.min(), xs.max()])
+	_dire(not zs.is_empty() and absf(zs.min() - 0.9) < 1e-4 and absf(zs.max() - 2.1) < 1e-4,
+		"la cascade du bassin : de z = 0,9 à 2,1 (la case 1, + 0,1 à chaque bout libre) — %s .. %s" % [zs.min(), zs.max()])
+	_dire(not ecumes.is_empty() and ecumes.min() == 0.0 and ecumes.max() == 1.0, "la cascade : écume de 0 en haut à 1 au pied")
+	_dire(bassin.any(func(t): return _genre_t(t) == 0.75 and absf(float(t[1]) - 1.72) < 1e-5 and absf(float(t[4]) - 1.0) < 1e-6),
+		"le remous du bassin : un anneau à plat sur sa nappe, à 1,72")
+	# La source de la rivière de l'escalier : elle naît en (0, 3, 1) — le bouillon bombé en (0,5 ; 2,93 ; 1,5).
+	var esc: Array = soupe.call("a river down the stairs: bands, three waterfalls, a spring")
+	_dire(esc.any(func(t): return (_genre_t(t) == 0.75 and absf(float(t[0]) - 0.5) < 1e-5 and absf(float(t[1]) - 2.93) < 1e-5
+		and absf(float(t[2]) - 1.5) < 1e-5 and float(t[9]) == 1.0)), "la source : le bouillon bombé en (0,5 ; 2,93 ; 1,5), écume 1")
+	# La rivière large de trois : trois cascades côte à côte ne font qu'une par marche — ses bouts libres seulement aux
+	# deux extrémités (z de −0,1 à 3,1), donc moins de triangles que trois rivières seules.
+	var large: Array = soupe.call("a river three cells wide down the stairs (river_width 3)")
+	var zl := []
+	for t: Array in large.filter(func(t): return _genre_t(t) == 1.0):
+		for k in 3:
+			zl.append(float(t[12 * k + 2]))
+	_dire(not zl.is_empty() and absf(zl.min() + 0.1) < 1e-4 and absf(zl.max() - 3.1) < 1e-4
+		and large.filter(func(t): return _genre_t(t) == 1.0).size() < 3 * esc.filter(func(t): return _genre_t(t) == 1.0).size(),
+		"la rivière large de trois : une cascade de z = −0,1 à 3,1 par marche, raccordée au milieu")
+	_finies += 1
 
 # ── L'ÉDITION ───────────────────────────────────────────────────────────────────────────────────────────
 

@@ -662,6 +662,10 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
 const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63}
+## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT (7 octobre 2026, le contrat de l'eau recalculée, PARITE.md §12) :
+## le fichier est là et compte ses cas ; quand `mb_water.gd` saura mailler la nappe, il passe dans PARITE (et
+## `_cas_de_parite` gagne la sorte `water_mesh`) — un fichier livré et jamais rejoué ne doit pas passer pour vert.
+const PARITE_A_VENIR := {"water_mesh": 14}
 
 
 func _le_greffon_passe_les_cas_de_parite() -> void:
@@ -686,6 +690,13 @@ func _le_greffon_passe_les_cas_de_parite() -> void:
 		total += (f["cases"] as Array).size()
 		print("  parité %s : %d cas %s, %d divergence(s)" % [nom, (f["cases"] as Array).size(), str(sortes), rouges])
 	print("  parité : %d cas en tout" % total)
+	for nom in PARITE_A_VENIR:
+		var chemin := "res://addons/marchingblocks_paint/%s_conformance.json" % nom
+		var f = JSON.parse_string(FileAccess.get_file_as_string(chemin)) if FileAccess.file_exists(chemin) else null
+		_vrai(f is Dictionary and (f["cases"] as Array).size() == PARITE_A_VENIR[nom],
+			"%s est livré avec le greffon Godot, %d cas" % [chemin, PARITE_A_VENIR[nom]])
+		_vrai(not PARITE.has(nom), "%s n'est pas compté deux fois" % nom)
+		print("  parité %s : livré, PAS ENCORE REJOUÉ par le greffon Godot (la nappe recalculée)" % nom)
 	# ⚠ UNE MUTATION MUETTE DES CAS COMMUNS (7 octobre 2026) : lire l'eau au point même au lieu de p + 0,1 ne change aucun
 	# cas `check` (leurs plants sont à y = 1, où floor(y + 0,2) et floor(y + 0,3) coïncident). Gardé ICI, contre la
 	# référence du cœur : un sol à y = 0,75 au-dessus d'une case d'eau en y = 1 — seul le + 0,1 y voit l'eau.

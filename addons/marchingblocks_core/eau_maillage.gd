@@ -83,6 +83,25 @@ const CASCADE := 1.0
 ## l'appel courant restent. ⚠ Mesuré (4 octobre 2026, l'exemple) : 469 cascades, ~0,32 s des ~0,45 s d'un geste de l'eau.
 ## `memoire["sources"]` : {case : les grilles compilées de sa source} (`_source` ne lit que la case).
 static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> ArrayMesh:
+	var a := tableaux_du_maillage(corps, occupees, boite, memoire)
+	if (a["v"] as PackedVector3Array).is_empty():
+		return null
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = a["v"]
+	arr[Mesh.ARRAY_NORMAL] = a["n"]
+	arr[Mesh.ARRAY_COLOR] = a["c"]
+	arr[Mesh.ARRAY_TEX_UV] = a["uv"]
+	arr[Mesh.ARRAY_INDEX] = a["i"]
+	var m := ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	return m
+
+
+## LES TABLEAUX DU MAILLAGE, avant l'ArrayMesh : {v, n, c, uv, i}. ⚠ CE SONT EUX QUE LES CAS DES GREFFONS DÉCRIVENT
+## (`epreuve_parite.gd`, 7 octobre 2026) : l'ArrayMesh de Godot range les couleurs sur 8 bits (0,5 → 127/255) et les
+## normales en octaèdre (une normale (0, 1, 0) relue (0, 1, −1,5e−5)) — un stockage, pas la règle.
+static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> Dictionary:
 	var a := _tableaux()
 	var b: Dictionary = boite if boite != null else FL.boite(occupees)
 	var plats: Array = []
@@ -141,18 +160,7 @@ static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, 
 		_poser(a, g)
 	# ⚠ PAS D'ORPHELIN À RETIRER ICI : seules les grilles en laissent (`_quad` et l'éventail des plats emploient tous
 	# leurs sommets), et chaque grille compilée a déjà retiré les siens (`_grille_compilee`).
-	if (a["v"] as PackedVector3Array).is_empty():
-		return null
-	var arr := []
-	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = a["v"]
-	arr[Mesh.ARRAY_NORMAL] = a["n"]
-	arr[Mesh.ARRAY_COLOR] = a["c"]
-	arr[Mesh.ARRAY_TEX_UV] = a["uv"]
-	arr[Mesh.ARRAY_INDEX] = a["i"]
-	var m := ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	return m
+	return a
 
 
 ## Les rectangles de nappe d'un corps : l'océan (et son large), un lac, les lacs d'une rivière.
