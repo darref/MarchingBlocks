@@ -121,11 +121,18 @@ static func projet_en_argument(args: PackedStringArray) -> String:
 
 ## Faut-il s'inscrire ? Au premier lancement, et quand l'exécutable a changé de place ou de version — jamais
 ## si l'utilisateur a retiré les associations (la case de Project) : son refus tient d'un lancement à l'autre.
-static func a_inscrire(reglages: ConfigFile, exe: String, version: String) -> bool:
-	if bool(reglages.get_value("associations", "refus", false)):
+## ⚠ ET JAMAIS QUAND L'INSTALLEUR L'A FAIT (`installe`) : la version SITE est installée par Inno Setup
+## (`DEV_TOOLS/installeur/marchingblocks.iss`), qui inscrit les MÊMES clés et les retire à la désinstallation.
+static func a_inscrire(reglages: ConfigFile, exe: String, version: String, installe := false) -> bool:
+	if installe or bool(reglages.get_value("associations", "refus", false)):
 		return false
 	return str(reglages.get_value("associations", "exe", "")) != exe \
 		or str(reglages.get_value("associations", "version", "")) != version
+
+
+## L'exe a-t-il été posé par l'installeur ? Inno Setup laisse son désinstalleur à côté de lui.
+static func installe_par_l_installeur(exe: String) -> bool:
+	return FileAccess.file_exists(exe.get_base_dir().path_join("unins000.exe"))
 
 
 ## Écrit un texte en UTF-16 LE avec sa marque d'ordre — ce que `reg import` et `desktop.ini` lisent en Unicode.
