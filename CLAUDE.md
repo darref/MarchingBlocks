@@ -437,6 +437,79 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 - **OUVERT** : la licence ; l'icône (remplacée en `362ae23`, pas encore validée ici) ; les textures PBR de test (retirées avec le PBR le 29 septembre 2026)
   venaient de HEART_WORLD.
 
+### LE CONTRAT DE LA PARITÉ — FAIT LE 7 OCTOBRE 2026 (première étape de « parité complète des greffons à la 0.9.0 »)
+
+La spécification lisible par l'agent de chaque moteur est **`engines/PARITE.md`** (entrée par entrée : ce qu'il faut
+lire, la règle, les cas, le rendu, ce qui ne peut pas être fait). Ici, ce qui a été fait et mesuré.
+
+- **CE QUE LE LOGICIEL EXPORTE DÉSORMAIS — ÉCRIT** (`format_monde.gd`, `format_neutre.gd`, `animation_materiau.gd`) :
+  - `world.json` gagne **`transitions`** (paires en INDICES de `layers` — les ids de l'écran convertis, une paire dont
+    l'ordre s'inverse échange ses directions —, réglages par direction sous les noms de l'écran en anglais `softness`,
+    `reach`, `irregularity`, `grain`, `fills_hollows`, un représentant RÉSOLU par couche et son image dans
+    `transitions/`, les choix peints) et **`foliage`** (les modèles COPIÉS dans `foliage/`, comme les jeux de tuiles ; un
+    modèle introuvable part sans maillage et l'export le dit ; les plants à plat par sept). **FACULTATIVES comme `water`**
+    (PROPOSÉ, Claude) : la version reste 1, un monde d'avant les lit absentes, une clé inconnue est ignorée.
+  - le `.mbset` **emporte les images des textures animées** (`animation/`, deux images de même nom venues de deux
+    dossiers ne s'écrasent pas : « _2 ») et `mb_animation` part **au format qui part** — anglais, `format`
+    « marchingblocks-animation », `version` 1 (`Anim.vers_format` / `depuis_format`, la traduction à un endroit). Le
+    témoin garde les noms du cœur (son aller-retour avec Blender ne change pas). Une image introuvable est dite.
+  - les lectures de référence `FormatMonde.lire_transitions`, `lire_feuillage` (celle du projet, `FE.depuis_donnees`,
+    sous les noms anglais) ; « un seul océan » ajouté à `regle_eau()` (la seule phrase qui manquait à l'eau). Les quatre
+    règles sont dans les `README.txt` exportés.
+  - **SORTI DE L'ÉCRAN VERS LE CŒUR**, pour qu'une règle des greffons ne vive pas dans `app/` : `Outils.elargir_a_plat`
+    (Alt + molette), `Outils.selectionner_au_pinceau` (Select des cases vides), `FE.vent_du_plant`, `FE.balancement`,
+    `FE.SENS_DU_VENT`, `FE.case_d_eau`, `FE.semer_candidats` (le pinceau sans hasard, même corps `_semer_un` que `semer`,
+    même ordre des tirages), `Anim.defilement_au_temps` (le défilement n'était écrit que dans le shader). L'écran les
+    appelle ; comportement identique (fumée 937 avant et après).
+- **LES CAS — 282, EN CINQ FICHIERS NEUFS** (`epreuve_parite.gd`, écrits par `generer_cas_d_epreuve.gd` dans les trois
+  greffons, un `.meta` à GUID fixe pour Unity) : `transitions_conformance.json` 93 (65 `blend` dont 48 générés par un
+  congruentiel ÉCRIT — les greffons lisent les entrées —, `settings`, `table`, `cell_texture`, 19 `read`),
+  `animation_conformance.json` 43, `foliage_conformance.json` 59 (les trois modes, les huit refus, le pinceau sur des
+  candidats donnés, la pose, le vent), `water_conformance.json` 25 (`Fluides.monde` : mer, lac calme, lac qui déborde,
+  rivière, grotte close, un seul océan, refus ; `sources_en_largeur` ; surface et profondeur), `editing_conformance.json`
+  62 (`Etages.extruder` 3 × 3, `retrecir_bord`, `elargir_a_plat`, le pinceau Select, `FS.salle_depuis`). **Les trois
+  fichiers existants n'ont pas bougé d'un octet** (les bancs refusent une sorte inconnue : d'où des fichiers à part).
+- **LA GARDE : `test_parite` (186)** — les cinq fichiers à jour dans les trois greffons ; chaque raison, mode, fin, refus
+  exercé ; une **SECONDE IMPLÉMENTATION écrite dans le test depuis le seul `rules_text`** (le fondu, l'image, la
+  pulsation, la phase, le défilement, la pose, le vent, Shrink, Widen, Select, la table) rend tous les cas ; des attendus
+  déroulés à la main ; l'export de bout en bout (indices, directions échangées, image du représentant octet pour octet,
+  modèle copié, les six images animées dans l'ordre, un monde sans les clés qui se lit vide).
+- **MESURÉ** : les 26 suites vertes (dont `fumee_appli` 937, `test_greffon_peinture` 282, `test_animation` 76 — son
+  contrôle du `.mbset` suit le nouveau format et vérifie la copie des images) ; banc .NET et banc C++ (clang de Unity,
+  drapeaux d'Unreal) verts, inchangés (18 + 6 + 6 cas de pose, 128 d'outils, 14 de monde). Unity 6.6 et Unreal non
+  relancés (rien de ce qu'ils lisent n'a changé). ⚠ **`phase_de` en flottants 32 bits** (un shader) **s'écarte jusqu'à
+  0,025** de l'attendu double sur les origines des cas — l'appli elle-même est dans ce cas ; les cas `phase` sont en
+  double (un greffon qui la calcule sur le CPU les passe).
+- **MUTATIONS — 24, 23 ROUGES, 1 ÉQUIVALENTE** : le fondu (décalage sans 1 − s, départage au dernier coin — rendues par
+  la seconde implémentation, cas RÉGÉNÉRÉS), l'aller-retour non replié (sans régénérer : fichier périmé ; régénéré : le
+  texte), la phase, le défilement sans 7 × phase, la phase du vent, le balancement ∝ h, la pose sans l'échelle, l'eau du
+  feuillage jamais vue, Widen en hauteur, Shrink sans « s'arrête de l'autre », Select qui prend les vides, l'eau sans
+  débordement ; l'export (directions non échangées, modèle non copié, image du représentant non écrite, choix d'une
+  couche disparue gardés, images animées non recopiées, deux images de même nom écrasées) ; deux lectures (paire a = b,
+  animation plus récente — sans régénérer) ; le générateur sans eau dans le monde du feuillage. ⚠ **« L'IMAGE DU
+  REPRÉSENTANT NON ÉCRITE » D'ABORD MUETTE, PAR LE TEST** : il relisait l'image d'une exécution précédente — il vide son
+  dossier d'abord. ⚠ **UNE ÉQUIVALENTE** : faire voter le choix d'une troisième couche pour elle-même — le vote ne compte
+  que les coins où l'AUTRE couvre, donc une troisième couche et « pas de choix » ne votent ni l'une ni l'autre.
+  ⚠ Les lectures (`read`) ne sont gardées que par la péremption et les bancs des moteurs : une lecture mutée PUIS
+  régénérée passerait `test_parite`.
+- **CE QUI RESTE PARTIEL OU IMPOSSIBLE TEL QUEL, ET POURQUOI** (le détail : `engines/PARITE.md` §9) : le MAILLAGE de
+  l'eau (`eau_maillage.gd`) n'a pas de cas — conseillé : la nappe cuite à la 0.9.0, les cases d'eau recalculées ; la
+  molette n'a de cas que pour ses effets (l'aiguillage est une règle d'interface ; les panneaux de Unity et d'Unreal ne
+  sont pas à nous) ; les shaders ne voyagent pas et ne sont gardés par aucun cas ; **Unity n'a pas de passage
+  par-dessus un matériau** (un matériau de plus ne redessine que le dernier sous-maillage) et a trois pipelines ;
+  **les matériaux d'Unreal sont des assets binaires** (Overlay Material sur des instances, « Object Position » d'une
+  instance : NON MESURÉS) ; lire les extras glTF n'est mesuré que dans Godot (lire le JSON de `tiles.glb` soi-même lève
+  le doute) ; le GDScript des transitions emploie un bruit pour les deux directions, le shader un par direction
+  (OUVERT). **L'API DE JEU** n'est pas dans ce contrat.
+- **LE DÉCOUPAGE CONSEILLÉ** (PROPOSÉ) : un agent par moteur, en parallèle ; les cas sont le commun, pas du code. Dans
+  chaque moteur : lecteurs → `editing` (+ boutons, Maj / Alt, molette) → `animation` → `foliage` → `transitions` →
+  `water` (règle des cases, puis les six presets sur la nappe cuite). Le plus risqué, à mesurer TÔT sur le seul fondu des
+  transitions : le rendu Unity et les matériaux Unreal ; puis la règle de l'eau (longue, sensible à l'ordre — Unreal peut
+  partir de `gdextension/src/noyau/ocean.h`). Godot est le plus court (copies générées des shaders de l'appli). Une règle
+  ambiguë se remonte et se corrige dans le GDScript, jamais dans un moteur.
+- ⚠ **PAS TENU EN MAIN** : l'export du monde par le bouton (le panneau d'attente pend en headless, comme avant) — mené
+  par `test_parite` sur `FormatMonde.exporter` directement, avec ce que l'écran lui passe (`_exporter_le_monde`, relu).
+
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
 > **Peindre des tuiles 3D NON CUBIQUES dans un GridMap, à partir de blocs que l'artiste modélise

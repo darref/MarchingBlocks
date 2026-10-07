@@ -231,9 +231,12 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
 
 ## 11. Découpage conseillé du travail des trois agents moteurs
 
-- **Commun (un seul agent, avant les autres ? non : chacun le sien, dans sa langue)** : il n'y a pas de code partagé
-  entre C# et C++ ; ce qui est commun, ce sont les CAS. Chaque agent ajoute à son banc (`conformance-runner` .NET,
-  `core-runner` C++, `test_greffon_peinture` pour Godot) la lecture des cinq fichiers, et rougit sur une sorte inconnue.
+- **Ce qui est commun, ce sont les CAS, pas du code** : rien ne se partage entre GDScript, C# et C++ (sauf, pour Unreal,
+  ce qui est déjà dans `gdextension/src/noyau/`). Chaque agent travaille dans SA langue, en parallèle des deux autres, et
+  ajoute à son banc (`conformance-runner` .NET, `core-runner` C++, `test_greffon_peinture` pour Godot) la lecture des
+  cinq fichiers — un banc qui rencontre une sorte inconnue rougit (il ne saute rien en silence).
+- **Une seule règle change à la fois** : si un agent trouve une règle ambiguë ou fausse, il ne la corrige pas dans son
+  moteur — il la remonte, on corrige le GDScript, on régénère, et les trois bancs la reçoivent ensemble.
 - **Ordre, par moteur** : (1) lecteurs (`read` des trois clés, `mb_animation` par le JSON du `.glb`) ; (2) `editing`
   (Extrude, Shrink, Widen, Select vides, Room from selection) + leurs boutons et Maj / Alt — c'est aussi la molette ;
   (3) `animation` (règle) puis son shader ; (4) `foliage` (pose + vent) puis son rendu ; (5) `transitions` (règle) puis
