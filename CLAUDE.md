@@ -58,7 +58,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - **Unity : FAIT (7 octobre 2026)** — l'aiguillage (`MBWheel`) et ses effets ; jamais tenu souris en main.
     - ✓ **Godot — FAIT (7 octobre 2026, branche `eau-godot`)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; **la NAPPE RECALCULÉE** (`mb_water_mesh.gd`, 14/14 cas en sac de triangles), la reprise portée, recalcul différé sur un fil à part, « Rebuild water », coupure au-delà d'1 s ; = la nappe cuite de l'exemple exporté. Vu à l'image (six presets). Voir « L'eau recalculée dans le greffon Godot ».
-    - ✓ **Unreal — PARTIEL (7 octobre 2026)** : lecture de `water` (acteur MarchingBlocks Water par couche), la nappe cuite et les SIX presets réécrits en HLSL (`Tools/build_materials.py`), le matériau de l'artiste, la règle des cases (`MBWater`, 25/25 ; la mer est `noyau/ocean.h` lui-même). Vu à l'image (six presets). ⚠ La NAPPE n'est pas recalculée ; « réfléchissant » sans la marche en espace écran de l'appli ; « stylisé » montre un aplat sombre près de l'île. Voir « Le greffon Unreal à parité ».
+    - ✓ **Unreal — FAIT (7 octobre 2026, branche `eau-unreal`)** : lecture de `water` (acteur MarchingBlocks Water par couche), la nappe cuite et les SIX presets réécrits en HLSL (`Tools/build_materials.py`), le matériau de l'artiste, la règle des cases (`MBWater`, 25/25 ; la mer est `noyau/ocean.h` lui-même) ; **la NAPPE RECALCULÉE** (`MBCore/MBWaterMesh`, C++ standard, 14/14 cas en sac), la reprise portée (`Water::WorldResumed`), recalcul différé sur une tâche d'Unreal, « Rebuild water » (acteur et panneau du mode), coupure au-delà d'1 s ; = la nappe cuite de l'île ET de l'exemple exportés (66 151, 5 073, 72 triangles). Vu à l'image (six presets, cuite et refaite à une image d'écart). ⚠ « réfléchissant » sans la marche en espace écran de l'appli ; l'aplat sombre de « stylisé » près de l'île était la nappe CUITE importée, pas le mailleur (la refaite ne l'a pas). Voir « L'eau recalculée dans le greffon Unreal ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - ✓ **Godot — FAIT sauf F (7 octobre 2026)** : la règle de l'appli dans `mb_editor.gd` (`wheel`), éprouvée par de vrais événements. ⚠ F : la caméra de la vue 3D appartient à l'éditeur de Godot (pas d'API pour la poser).
@@ -1049,7 +1049,7 @@ du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore`
 - **CONSTRUIT** : `RunUAT BuildPlugin` (UE 5.8.3, Win64) **BUILD SUCCESSFUL, aucun avertissement**, les 9 matériaux empaquetés ⚠ un premier passage a échoué là où la construction du projet passait : sans « unity build », `TextureResource.h` manquait (`FTexture2DMipMap`) ; le projet d'essai se construit par
   `Build.bat UnrealEditor … -Project=C:\mbu\mbu.uproject` (chemin court : 260 caractères).
 - ⚠ **PAS TENU EN MAIN** : aucun clic, aucune molette, aucune plantation à la souris dans l'éditeur ; tout a été mené par
-  script (import, rendu). ⚠ **NON FAIT** : la nappe d'eau recalculée (pas de cas), le texte du cran « près de la souris »,
+  script (import, rendu). ⚠ **NON FAIT** : ~~la nappe d'eau recalculée~~ (faite depuis, branche `eau-unreal`), le texte du cran « près de la souris »,
   ~~les icônes « Facing » / « Widen » / « Plant »~~ (**FAITES**, finitions, ci-dessous), un jeu empaqueté.
 
 ### LES FINITIONS DES GREFFONS — FAIT LE 7 OCTOBRE 2026 (branche `finitions-greffons`) : LES ICÔNES, LE PINCEAU DE PLANTATION
@@ -1111,6 +1111,67 @@ Les deux trous de la parité hors de l'eau (l'eau : une autre branche, pas touch
 - ⚠ **PAS TENU EN MAIN** : aucun des trois pinceaux à la souris dans un vrai éditeur ; le sol cherché sur de vrais arbres
   importés par l'artiste ; la performance d'un trait sur un très grand monde (l'eau et l'index des tuiles sont recalculés
   une fois par trait, en GDScript pour Godot).
+
+### L'EAU RECALCULÉE DANS LE GREFFON UNREAL — FAITE LE 7 OCTOBRE 2026 (branche `eau-unreal`, PARITE §12 ; la dernière entrée de la parité)
+
+Le greffon ne charge rien du cœur GDScript ni de la partie privée du cœur C++ (`gdextension/src/appli/eau.cpp` n'est pas
+copié) : le mailleur est réécrit en C++ standard depuis `eau_maillage.gd` (`MBCore/MBWaterMesh.h/.cpp`, ni exceptions ni
+RTTI), la reprise de `fluides.gd` portée dans `MBWater` (`WorldResumed`), le branchement dans `AMarchingBlocksWater`.
+
+- **LES 14 CAS — MESURÉ : 14 SUR 14 AU PREMIER PASSAGE** (`core-runner/water_mesh.cpp`, sous MSVC aux drapeaux d'Unreal) ;
+  l'appariement en sac écrit depuis `rules_text` et ÉPROUVÉ (vrai mélangé / tourné / bruité ; faux sur un coin à 2e−4, un
+  triangle retourné, un doublé, des couleurs sur 8 bits, un triangle de moins). Flottants comme Godot : scalaires en
+  double, points et normales en 32 bits (`_chutes` en float). Les tableaux de Godot (triangles horaires) sont retournés à
+  la fin : le format est anti-horaire.
+- **LA REPRISE, PORTÉE ET MESURÉE** : l'emprise tenue pendant le calcul (`vus` des coulées et des creux, les chutes, la
+  dernière case, élargie d'une case ; la mer : la boîte sous son niveau + 1), `_boite_compatible`, la mer reprise d'abord,
+  un `Id` par corps (un corps repris garde le sien) ; la mémoire des nappes par corps. **Reprise = entier** : 637 gestes
+  au hasard (graine fixe) sur six mondes des cas — mêmes corps, même mer, mêmes tableaux de nappe à l'octet.
+- **LE BOUT EN BOUT** (le banc prend des dossiers `.mbworld` en arguments) : l'île de `test_fluides` (583 triangles) et
+  l'EXEMPLE livré exporté par `FormatMonde.exporter` (739 481 cases, 106 sources : 66 151, 5 073, 72 triangles) — la nappe
+  refaite = le `.glb` cuit, **couleurs à 1/255 : un pas ENTIER, pas un demi** (MESURÉ : l'ArrayMesh de Godot TRONQUE,
+  0,5 → 127/255 ; un écart de 0,0026 vu sur une cascade de l'île).
+- **LES TEMPS, MESURÉS (C++, l'exemple)** : tout refaire **0,28 à 0,67 s** (boîte 31–62 ms, règle 110–307 ms, nappes
+  134–301 ms ; machine partagée, quatre passes) — contre 5,1 à 6,7 s en GDScript ; **un geste avec la reprise 0,06 à 0,13 s** (près d'une
+  rivière : 84 sources sur 106 reprises ; sur le sommet : 99). Dans l'éditeur (la copie des cases et leur différence
+  comprises) : Rebuild Water entier 0,76 s ; un geste qui vide une couche entière (52 407 cases, la mer s'étend) 6,8 s —
+  le suivi se coupe, comme décidé, et Rebuild Water rend l'eau en 0,86 s.
+- **LE BRANCHEMENT (DÉCIDÉ par la coordination)** : chaque changement de cases (`RebuildWorld`, l'annulation, l'import,
+  les sources d'une couche d'eau) dit l'eau périmée ; le mode dit quand un geste est ouvert (trait ou boîte tenus) — rien
+  ne part pendant ; ~0,5 s de calme après (`mb.Water.Calm`), une tâche `UE::Tasks` calcule sur une COPIE (les `TArray` des
+  couches ; la différence avec la copie d'avant donne les cases changées), le résultat est posé sur le fil du jeu ; une
+  couche d'eau dont aucun corps n'a changé garde sa nappe ; **coupure** quand un recalcul automatique dépasse 1 s
+  (`mb.Water.AutoRebuildLimit`, mesuré sur le seul calcul, pas l'attente du fil du jeu) : la nappe reste dite périmée
+  jusqu'à « Rebuild water » (bouton de l'acteur et du panneau du mode, toujours là ; il rétablit le suivi s'il tient sous
+  la seconde). **Mené dans l'éditeur** (script, l'île) : geste → recalcul posé 0,53 s après ; annulation → idem ; limite
+  forcée à 0,1 ms → coupure, l'annulation suivante ne recalcule pas (« STALE ») ; le bouton → rétabli.
+- ⚠ **LES COULEURS DE SOMMET, UN PIÈGE PAYÉ** (MESURÉ par `CompareWithBakedSheet`) : Interchange lit `COLOR_0` comme du
+  sRGB et le range LINÉARISÉ (0,498 → 0,212) ; la construction le réencode en octets sRGB, que lisent les presets. La nappe
+  refaite stockée brute aurait donné 0,735 au lieu de 0,5 — une autre eau. Elle est linéarisée de même ; la comparaison
+  relit en sRGB. **Dans l'éditeur, nappe refaite = nappe cuite importée** (583 triangles sur 583, aucun retourné : le sens
+  des triangles est le bon), y compris après un geste et son annulation.
+- **VU À L'IMAGE** (`C:\mbw`, SceneCapture2D ; la refaite puis une copie de la cuite avec le MÊME matériau, à une image
+  d'écart, quatre vues, six presets) : mêmes formes, mêmes cascades et remous ; **l'aplat sombre près de l'île, noté sous
+  « stylisé », est sur la nappe CUITE seulement** — le grand rectangle d'horizon importé rend uni et sombre (plusieurs
+  presets), la refaite y montre le motif. Pas le mailleur ; cause présumée : UV ±2 000 en demi-flottants dans la
+  construction complète de l'importeur (NON MESURÉ). Les écarts de pixels restants sont l'animation (une image) et
+  l'ordre des triangles transparents (la construction complète les réordonne).
+- **MUTATIONS — 25, 23 ROUGES, 2 ÉQUIVALENTES** (mailleur 19, reprise et mémoire 6). ⚠ **« deux cascades jointes gardent la
+  lèvre la plus BASSE » D'ABORD MUETTE** : instrumenté, AUCUN des 14 cas ni des gestes au hasard ne joint deux cascades
+  (même constat que le greffon Godot) — rouge depuis une vérification écrite d'après `rules_text` (deux rivières qui
+  quittent la même falaise de deux hauteurs : une nappe de 4,85 au pied le plus bas). « Deux bandes sur une case » n'est
+  rouge que par l'exemple (bout en bout). Équivalentes : les sommets orphelins gardés (attendu) ; l'emprise de la mer sans
+  sa rangée du dessus (la surface d'un greffon est relue de l'eau, ses débords lisent la même rangée — raisonné).
+- **CONSTRUIT** : `RunUAT BuildPlugin` (UE 5.8.3, Win64) **BUILD SUCCESSFUL, aucun avertissement** (⚠ la cible JEU a d'abord échoué là où l'éditeur passait : le constructeur
+  `FStaticMaterial` à nom de slot importé n'existe qu'en éditeur ; et la fusion de `main` avait retiré `TextButton` du panneau) ; les modules `MeshDescription` et
+  `StaticMeshDescription` passent au runtime (la nappe se construit en jeu aussi, « fast build »).
+- **EN PASSANT** : `Clear cells` ne reconstruisait QUE sa couche (bords des autres, transitions, eau oubliés) : il passe par
+  `RebuildWorld`.
+- ⚠ **OUVERT** : un monde SANS jeu de tuiles n'a pas de repère mesuré — la nappe cuite est posée par l'importeur, la refaite
+  dans le repère par défaut : elles ne coïncident pas (un tel monde ne montre pas non plus de tuiles). Le coût d'un geste
+  qui agrandit la mer (la profondeur relue case par case sous chaque case de surface). Le cas commun « deux rivières au
+  même endroit » à ajouter dans `epreuve_parite.gd`. ⚠ **PAS TENU EN MAIN** : aucun trait à la souris — le branchement est
+  mené par script (Clear cells, annuler, la console).
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 

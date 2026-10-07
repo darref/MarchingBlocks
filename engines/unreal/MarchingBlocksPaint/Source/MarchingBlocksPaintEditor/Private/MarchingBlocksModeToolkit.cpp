@@ -584,8 +584,18 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth()[TextButton(LOCTEXT("RebuildWater", "Rebuild water"), LOCTEXT("RebuildWaterTip", "Rebuild water — the water cells and sheets of this world, now (on a worker thread). The water also follows by itself, half a second after the last gesture, unless a rebuild took more than a second."),
-					[World]() { if (AMarchingBlocksWorld* W = World()) AMarchingBlocksWater::RebuildWorldWater(W->GetWorld(), W->WorldName); })]
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(SButton)
+					.ButtonStyle(FAppStyle::Get(), "SimpleButton")
+					.ToolTipText(LOCTEXT("RebuildWaterTip", "Rebuild water — the water cells and sheets of this world, now (on a worker thread). The water also follows by itself, half a second after the last gesture, unless a rebuild took more than a second."))
+					.ContentPadding(FMargin(5.f, 3.f))
+					.OnClicked_Lambda([World]()
+					{
+						if (AMarchingBlocksWorld* W = World()) AMarchingBlocksWater::RebuildWorldWater(W->GetWorld(), W->WorldName);
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text(LOCTEXT("RebuildWater", "Rebuild water"))
+					]]
 			]
 			+ SVerticalBox::Slot().AutoHeight()
 			[

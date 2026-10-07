@@ -95,8 +95,11 @@ The world import also makes, in the same undo step:
   imported into `<Tiles Root>/<world>/water/<name>`), drawn with one of the six example presets shipped in
   `Content/Materials` (stylized, clear, reflective, lava, swamp, acid). **The presets are examples, not a requirement**:
   set your own material in *Material*; every vertex carries the data (COLOR_0 r g the flow, b the kind, a the depth / 8
-  or the foam; NORMAL; TEXCOORD_0). *Recompute Water* deduces the water cells again from the cells (the sheet itself is
-  not rebuilt: export again from MarchingBlocks after painting).
+  or the foam; NORMAL; TEXCOORD_0). **The water follows the world**: about half a second after your last gesture (never
+  during one), its cells and its sheet are rebuilt on a worker thread — the same sheet MarchingBlocks bakes. If one
+  rebuild takes more than about a second, the automatic follow switches itself off: press *Rebuild Water* (on the actor
+  and in the MarchingBlocks mode panel). Console: `mb.Water.Calm` (0.5 s), `mb.Water.AutoRebuildLimit` (1 s).
+  *Compare With Baked Sheet* checks the rebuilt sheet against the imported one.
 - **MarchingBlocks Transitions**: where two layers meet, the look of one is laid over the other's surface (an overlay
   material on the tiles; the geometry never changes). Edit the pairs and their settings in its Details panel.
 - **MarchingBlocks Foliage**: the models (import each `foliage/<name>.glb`, Combine Meshes ON, into

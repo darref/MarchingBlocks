@@ -397,7 +397,8 @@ namespace MarchingBlocksWaterDetail
 			else Desc.CreateTriangle(Group, {A, B, C});
 		}
 		UStaticMesh* Mesh = NewObject<UStaticMesh>(Outer, NAME_None, RF_Transient);
-		Mesh->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName(TEXT("Water")), FName(TEXT("Water"))));
+		// (The imported slot name exists in the editor only: the game target has no such argument.)
+		Mesh->GetStaticMaterials().Add(FStaticMaterial(nullptr, FName(TEXT("Water"))));
 		UStaticMesh::FBuildMeshDescriptionsParams Params;
 		Params.bMarkPackageDirty = false;
 		Params.bBuildSimpleCollision = false;
