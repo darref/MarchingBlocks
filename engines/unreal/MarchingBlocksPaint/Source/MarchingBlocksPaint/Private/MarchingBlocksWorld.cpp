@@ -648,7 +648,10 @@ void AMarchingBlocksWorld::Rebuild()
 	const MBPaint::FVariantSettings Settings = GetVariantSettings();
 	In[Mine].Variants = &Settings;
 	PlacedTiles.clear();
-	for (const MBPaint::FPlacement& P : MBPaint::FRule::PlacementsLayered(In)[Mine])
+	// ⚠ KEPT IN A LOCAL: a range-for over PlacementsLayered(In)[Mine] would walk a reference into a temporary destroyed
+	// before the loop (C++ extends the life of the range expression only) — measured: a crash in the world import.
+	const std::vector<std::vector<MBPaint::FPlacement>> AllPlacements = MBPaint::FRule::PlacementsLayered(In);
+	for (const MBPaint::FPlacement& P : AllPlacements[Mine])
 	{
 		PlacedTiles[P.Vertex] = P.Tile;
 		const FVector Centre = FormatToLocal(FVector(P.Vertex.X + Offset.X, P.Vertex.Y + Offset.Y, P.Vertex.Z + Offset.Z));
