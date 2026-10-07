@@ -29,6 +29,8 @@ func _enter_tree() -> void:
 	_editor = Editor.new()
 	_editor.undo = get_undo_redo()
 	add_child(_editor)
+	# A wheel notch says its value near the mouse, for a moment.
+	_editor.changed.connect(func() -> void: update_overlays())
 	_bar = Toolbar.new()
 	_bar.ui_scale = EditorInterface.get_editor_scale()
 	_bar.editor = _editor
@@ -108,6 +110,20 @@ func _own(node: Node, root: Node) -> void:
 		_own(child, root)
 	if node != root:
 		node.owner = root
+
+
+## The value a wheel notch just set, near the mouse, for a little more than a second.
+func _forward_3d_draw_over_viewport(overlay: Control) -> void:
+	if _editor == null or _editor.hint == "" or Time.get_ticks_msec() - int(_editor.hint_msec) > 1200:
+		return
+	var font := overlay.get_theme_font("font", "Label")
+	var size := int(14 * EditorInterface.get_editor_scale())
+	var at: Vector2 = _editor.hint_at + Vector2(18, -10) * EditorInterface.get_editor_scale()
+	var w := font.get_string_size(_editor.hint, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	overlay.draw_rect(Rect2(at - Vector2(6, size + 2), Vector2(w + 12, size + 10)), Color(0, 0, 0, 0.6))
+	overlay.draw_string(font, at, _editor.hint, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Toolbar.OLIVE)
+	# Fade out: one more redraw once it has expired.
+	get_tree().create_timer(1.3).timeout.connect(func() -> void: update_overlays(), CONNECT_ONE_SHOT)
 
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:

@@ -80,8 +80,6 @@ func rebuild() -> void:
 		if not by_model.has(pl["model"]):
 			by_model[pl["model"]] = []
 		(by_model[pl["model"]] as Array).append(pl)
-	var g := global_transform if is_inside_tree() else transform
-	var up := (g.basis * Vector3.UP).length()
 	for m in models:
 		var mine: Array = by_model.get(int(m["id"]), [])
 		if mine.is_empty() or not m.get("mesh") is String:
@@ -96,16 +94,29 @@ func rebuild() -> void:
 			mm.use_custom_data = true
 			mm.mesh = part[3]
 			mm.instance_count = mine.size()
+			var inst := instances(m, mine, part[1])
 			for i in mine.size():
-				var pl: Dictionary = mine[i]
-				mm.set_instance_transform(i, Foliage.transform(m, pl) * (part[1] as Transform3D))
-				# The shader moves vertices in WORLD space: the ground and the height in Godot's world.
-				var w := Foliage.wind_of(m, pl)
-				mm.set_instance_custom_data(i, Color((g * (pl["p"] as Vector3)).y, w.g * up, w.b, w.a))
+				mm.set_instance_transform(i, inst[0][i])
+				mm.set_instance_custom_data(i, inst[1][i])
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
 			mmi.set_meta("model", int(m["id"]))
 			add_child(mmi, false, Node.INTERNAL_MODE_BACK)
+
+
+## WHAT EACH PLANT GIVES THE MULTIMESH of a part: [poses, wind data]. The pose: the plant's (`Foliage.transform`), then
+## the part's in the model. The wind: (ground, height above the ground, phase, amplitude) — the shader moves vertices in
+## WORLD space, so the ground and the height are turned into Godot's world (this node's pose and scale).
+func instances(m: Dictionary, plants_: Array, part_pose: Transform3D) -> Array:
+	var g := global_transform if is_inside_tree() else transform
+	var up := (g.basis * Vector3.UP).length()
+	var poses: Array = []
+	var wind: Array = []
+	for pl in plants_:
+		poses.append(Foliage.transform(m, pl) * part_pose)
+		var w := Foliage.wind_of(m, pl)
+		wind.append(Color((g * (pl["p"] as Vector3)).y, w.g * up, w.b, w.a))
+	return [poses, wind]
 
 
 ## A model's parts: {"parts": [[mesh, pose in the model, materials, wind mesh]…]} or {"error"}. Cached by path.

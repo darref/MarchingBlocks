@@ -20,6 +20,14 @@ extends Node
 ##            floors for stairs; Escape forgets the first)
 ##   KEYS     Delete · Escape · arrows move the selection (they follow the camera; Shift + up / down
 ##            lift) · Ctrl+C / Ctrl+X / Ctrl+V
+##   EXTRUDE  up · down · facing, on the selection or the floor's matter: a click adds matter (the selection and
+##            the floor follow), Shift + click extends the selection, Alt + click moves it (`Tools.extrude`)
+##   WHEEL    the MarchingBlocks tool's rule (editing_conformance.json, "THE MOUSE WHEEL"): alone it zooms, except
+##            during a gesture (a Rect / Box drag: its height; a Room traced: its floors; a paste: its height);
+##            Ctrl: the floor; Ctrl + Shift: the Stairs' step; with a selection and Select · Rect · Box: Shift extends
+##            it up / down, Alt widens it (up) or shrinks its edge (down); a shape: Alt its size (a Room: its
+##            floors), Shift its length (a Room rises / sinks); Add · Dig · Select: Alt the brush size, Shift the next
+##            brush shape. Navigate never takes it. Each notch says its value near the mouse (`hint`).
 ##
 ## The right mouse button is never taken: Godot's free look works in every aim.
 
@@ -67,6 +75,12 @@ var room_floors := 3
 var room_up := true
 ## The first end of a Connect: {"cell", "face"}, empty otherwise.
 var shape_anchor := {}
+## The Select brush takes the EMPTY cells too ("Select empty cells too"): paint a room's footprint on the floor.
+var select_empty := false
+## What the last wheel notch did, said near the mouse (the plugin draws it over the viewport), where, and when.
+var hint := ""
+var hint_at := Vector2.ZERO
+var hint_msec := -100000
 var selection := {}
 var clipboard: Array[Vector3i] = []
 var pasting := false
@@ -84,6 +98,10 @@ var _stroke_clear := {}
 var _stroke_taken := {}
 var _box_start: Variant = null
 var _box_end := Vector3i.ZERO
+## The wheel during a Rect / Box drag: how many cells the box rises (or sinks) from the drawn corner.
+var _box_lift := 0
+## The wheel during a paste: how many cells the paste is lifted.
+var _paste_lift := 0
 var _preview: MultiMeshInstance3D
 var _selection_view: MultiMeshInstance3D
 var _last_mouse := Vector2(-1, -1)
@@ -111,6 +129,14 @@ func input(camera: Camera3D, event: InputEvent) -> bool:
 	var button := event as InputEventMouseButton
 	if button != null and button.button_index == MOUSE_BUTTON_LEFT:
 		return _left_button(camera, button)
+	if button != null and button.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		var taken := wheel(1 if button.button_index == MOUSE_BUTTON_WHEEL_UP else -1, button.alt_pressed,
+			button.shift_pressed, button.ctrl_pressed or button.meta_pressed, button.pressed)
+		if taken and button.pressed:
+			hint_at = button.position
+			if _last_mouse.x >= 0.0:
+				hover(camera, _last_mouse, false)
+		return taken
 	var motion := event as InputEventMouseMotion
 	if motion != null:
 		_last_mouse = motion.position
@@ -222,7 +248,7 @@ func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
 		var p := aimed(camera, position, true)
 		var cells: Array = []
 		if not p.is_empty():
-			var at := Tools.anchor("add", p)
+			var at := Tools.anchor("add", p) + Vector3i(0, _paste_lift, 0)
 			for d in clipboard:
 				cells.append(at + d)
 		_show_preview(cells, ADD_COLOUR)
@@ -232,7 +258,7 @@ func hover(camera: Camera3D, position: Vector2, shift := false) -> void:
 		if _box_start != null:
 			if corner != null:
 				_box_end = corner
-			_show_preview(Tools.box(_box_start, _box_end, hollow and mode == "box").keys(),
+			_show_preview(Tools.box(_box_start, _lifted_end(), hollow and mode == "box").keys(),
 				DIG_COLOUR if _stroke_control else SELECT_COLOUR)
 		else:
 			_show_preview([] if corner == null else [corner], SELECT_COLOUR)
@@ -257,11 +283,8 @@ func _touch(g: String, at: Vector3i, normal: Vector3i, cells: Array) -> void:
 	_last_key = key
 	if g == "select":
 		var full: Dictionary = world.cells()
-		for c in cells:
-			if _stroke_control:
-				selection.erase(c)
-			elif full.has(c):
-				selection[c] = true
+		Tools.select_brush(selection, cells, func(c: Vector3i) -> bool: return full.has(c), select_empty,
+			_stroke_control)
 		_draw_selection()
 		return
 	var full: Dictionary = world.cells()
@@ -315,7 +338,8 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 		if pasting:
 			var p := aimed(camera, b.position, true)
 			if not p.is_empty():
-				var change: Dictionary = Tools.paste(world.cells(), clipboard, Tools.anchor("add", p))
+				var change: Dictionary = Tools.paste(world.cells(), clipboard,
+					Tools.anchor("add", p) + Vector3i(0, _paste_lift, 0))
 				_commit("Paste", change["set"], {})
 				_set_selection(change["selection"])
 				pasting = false
@@ -325,6 +349,7 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 			if corner != null:
 				_box_start = corner
 				_box_end = corner
+				_box_lift = 0
 				_stroke_control = b.ctrl_pressed
 				_stroke_inverse = b.shift_pressed
 			return true
@@ -342,7 +367,7 @@ func _left_button(camera: Camera3D, b: InputEventMouseButton) -> bool:
 		return true
 	# Released.
 	if _box_start != null:
-		var volume: Dictionary = Tools.box(_box_start, _box_end, hollow and mode == "box")
+		var volume: Dictionary = Tools.box(_box_start, _lifted_end(), hollow and mode == "box")
 		if volume.is_empty():
 			status = "Box too large — more than %d cells. Draw a smaller one." % Tools.BOX_VOLUME_MAX
 		else:
@@ -518,6 +543,177 @@ func operate(op: String) -> int:
 	return r["set"].size() + r["clear"].size()
 
 
+## EXTRUDE up, down or facing (`Tools.extrude`) on the selection, or on the matter of the floor when nothing is
+## selected. `how`: place (a click), extend (Shift + click, "Extend selection") or shift (Alt + click); "" reads the
+## keys held now. The selection follows, and the floor follows the step up or down — ONE undo step.
+func extrude(direction: String, how := "") -> void:
+	if world == null:
+		return
+	if how == "":
+		how = "extend" if Input.is_key_pressed(KEY_SHIFT) else ("shift" if Input.is_key_pressed(KEY_ALT) else "place")
+	var had_selection := not selection.is_empty()
+	var on: String = ("the selection (%d cells)" % selection.size()) if had_selection else "floor %d" % world.floor_y
+	var r: Dictionary = Tools.extrude(world.cells(), world.floor_y, direction, selection, how)
+	var step: Vector3i = r["step"]
+	if step == Vector3i.ZERO:
+		status = "Nothing to extrude on %s — %s" % [on, "no cell has matter behind it and air in front."
+			if direction == "facing" else "it holds no matter."]
+		changed.emit()
+		return
+	var way: String = STEP_NAMES.get(step, "")
+	_commit("Extrude " + way, r["set"], r["clear"], step.y)
+	if how != "place" or had_selection:
+		_set_selection(r["selection"])
+	match how:
+		"extend":
+			status = "Selection extended %s — %d cell(s) selected. No matter added." % [way, selection.size()]
+		"shift":
+			status = "Selection moved %s — %d cell(s). No matter added." % [way, selection.size()]
+		_:
+			status = ("Extrude %s on %s — %d cell(s) added. Click again to keep going; Shift + click extends the "
+				+ "selection, Alt + click moves it.") % [way, on, (r["set"] as Dictionary).size()]
+	changed.emit()
+
+
+const STEP_NAMES := {Vector3i(0, 1, 0): "up", Vector3i(0, -1, 0): "down", Vector3i(1, 0, 0): "toward X+",
+	Vector3i(-1, 0, 0): "toward X-", Vector3i(0, 0, 1): "toward Z+", Vector3i(0, 0, -1): "toward Z-"}
+
+
+## SHRINK: the edge of the selection leaves (`Tools.shrink_edge`) — a rectangle loses its rim. No cell changes.
+func shrink_selection() -> void:
+	var before := selection.size()
+	_set_selection(Tools.shrink_edge(selection))
+	status = "Shrink — %d cell(s) selected (%d dropped)." % [selection.size(), before - selection.size()]
+	changed.emit()
+
+
+## WIDEN: a flat ring around the selection, empty cells included (`Tools.widen_flat`). No cell changes.
+func widen_selection() -> void:
+	_set_selection(Tools.widen_flat(selection))
+	status = "Widen — %d cell(s) selected." % selection.size()
+	changed.emit()
+
+
+## ROOM FROM SELECTION (`Shapes.room_from_selection`): the selection seen from above becomes a room — its outline the
+## walls, the whole footprint the floor and the ceiling, the inside dug out; Floors and Up / Down are the Room shape's.
+## ONE undo step.
+func room_from_selection() -> void:
+	if world == null:
+		return
+	var r: Dictionary = Shapes.room_from_selection(world.cells(), selection, room_floors, room_up)
+	match r["error"]:
+		"empty":
+			status = "Room from selection — nothing selected. Paint the footprint first: Select, with Select empty cells too."
+		"too_small":
+			status = "Room from selection — the footprint is too thin: a room needs at least one cell inside its walls."
+		"too_large":
+			status = "Room from selection — too large (more than %d cells)." % Shapes.VOLUME_MAX
+		_:
+			_commit("MarchingBlocks room from selection", r["set"], r["clear"])
+			status = "Room from selection — %d cell(s) of shell, %d dug out%s." % [r["set"].size(), r["clear"].size(),
+				"" if int(r["repaired"]) == 0 else ", %d added where it touched the world by an edge" % int(r["repaired"])]
+	changed.emit()
+
+
+## The far corner of a Rect / Box drag, lifted by the wheel: a flat Rect becomes a box.
+func _lifted_end() -> Vector3i:
+	return _box_end + Vector3i(0, _box_lift, 0)
+
+
+## THE MOUSE WHEEL — the MarchingBlocks tool's rule (editing_conformance.json, "THE MOUSE WHEEL"). `notch` +1 up, -1
+## down. Returns true when the notch is ours (the editor must not zoom); acts only when `act` (the press — a wheel
+## notch is a press and a release).
+func wheel(notch: int, alt: bool, shift: bool, ctrl: bool, act := true) -> bool:
+	if world == null or navigating:
+		return false
+	# During a gesture: the wheel alone.
+	if not (alt or shift or ctrl):
+		if pasting:
+			if act:
+				_paste_lift += notch
+				_say("Paste height %+d" % _paste_lift)
+			return true
+		if _box_start != null and _drawing_room():
+			if act:
+				room_floors = clampi(room_floors + notch, 1, Shapes.ROOM_FLOORS_MAX)
+				_say("Floors %d" % room_floors)
+			return true
+		if _box_start != null and mode in ["rect", "box"]:
+			if act:
+				_box_lift += notch
+				_say("Height %+d" % _box_lift if _box_lift != 0 else "Flat")
+			return true
+		return false
+	if ctrl and shift and mode == "shape" and special == "stairs":
+		if act:
+			stairs_step = clampi(stairs_step + notch, 1, Shapes.STEP_MAX)
+			_say("Step %d" % stairs_step)
+		return true
+	if ctrl:
+		if act:
+			_set_floor(world.floor_y + notch)
+			_say("Floor %d" % world.floor_y)
+		return true
+	if mode == "shape":
+		if special == "room":
+			if act:
+				if alt:
+					room_floors = clampi(room_floors + notch, 1, Shapes.ROOM_FLOORS_MAX)
+					_say("Floors %d" % room_floors)
+				else:
+					room_up = notch > 0
+					_say("Rises" if room_up else "Sinks")
+		elif act:
+			if alt:
+				shape_size = clampi(shape_size + notch, 1, 7)
+				_say("Size %d" % shape_size)
+			elif special == "balcony" or not connect_ends:
+				shape_length = clampi(shape_length + notch, 1, Shapes.LENGTH_MAX)
+				_say("Length %d" % shape_length)
+		return true
+	if not selection.is_empty() and mode in ["select", "rect", "box"]:
+		if act:
+			var before := selection.size()
+			if shift:
+				extrude("up" if notch > 0 else "down", "extend")
+			elif notch > 0:
+				widen_selection()
+			else:
+				shrink_selection()
+			var what: String = ("Extend up" if notch > 0 else "Extend down") if shift else ("Widen" if notch > 0 else "Shrink")
+			_say("%s — %d cells" % [what, selection.size()] if selection.size() != before else "Selection unchanged")
+		return true
+	if mode in ["add", "dig", "select"]:
+		if act:
+			if alt:
+				brush_size = clampi(brush_size + notch, 1, 7)
+				_say("Brush size %d" % brush_size)
+			else:
+				shape = Tools.SHAPES[posmod(Tools.SHAPES.find(shape) + notch, Tools.SHAPES.size())]
+				_say(shape.capitalize())
+		return true
+	return false
+
+
+## Says a value near the mouse (the plugin draws `hint` over the viewport for a moment) and in the toolbar.
+func _say(text: String) -> void:
+	hint = text
+	hint_msec = Time.get_ticks_msec()
+	status = text
+	changed.emit()
+
+
+## The floor, as one undo step (Page Up / Page Down, Ctrl + wheel).
+func _set_floor(value: int) -> void:
+	if undo != null:
+		undo.create_action("Change floor")
+		undo.add_do_property(world, "floor_y", value)
+		undo.add_undo_property(world, "floor_y", world.floor_y)
+		undo.commit_action()
+	else:
+		world.floor_y = value
+
+
 func move_selection(offset: Vector3i) -> void:
 	if selection.is_empty():
 		return
@@ -541,6 +737,7 @@ func cut_selection() -> void:
 
 func start_paste() -> void:
 	pasting = not clipboard.is_empty()
+	_paste_lift = 0
 	status = "Pasting — click in the viewport (Escape cancels)." if pasting else "The clipboard is empty."
 	changed.emit()
 

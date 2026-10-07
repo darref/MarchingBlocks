@@ -29,6 +29,11 @@ const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
 const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
 const GENERATEUR_ICONES := preload("res://DEV_TOOLS/generer_icones_greffons.gd")
 const GENERATEUR_SHADERS := preload("res://DEV_TOOLS/generer_shaders_greffon.gd")
+const FL := preload("res://addons/marchingblocks_core/fluides.gd")
+const EM := preload("res://addons/marchingblocks_core/eau_maillage.gd")
+const TR := preload("res://addons/marchingblocks_core/transitions.gd")
+const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+const Shaders := preload("res://addons/marchingblocks_paint/mb_shaders.gd")
 const Anim := preload("res://addons/marchingblocks_paint/mb_animation.gd")
 const Trans := preload("res://addons/marchingblocks_paint/mb_transitions.gd")
 const Foliage := preload("res://addons/marchingblocks_paint/mb_foliage.gd")
@@ -188,6 +193,17 @@ func _la_barre_ne_montre_que_l_utile() -> void:
 	_egal(etat.call("rect"), "false false", "Rect : ni pinceau ni Hollow")
 	_egal(etat.call("box"), "false true", "Box : Hollow, pas de pinceau")
 	_vrai(not vus.call("_selection_bar") and not vus.call("_paste"), "rien de sélectionné ni copié : ni sélection ni Paste")
+	# LA PARITÉ (7 octobre 2026) : « Select empty cells too » sous Select seulement ; Extrude ↑ ↓ face avec un outil de
+	# sélection, ou dès qu'il y a une sélection (sans elle, il agit sur la matière de l'étage).
+	ed.mode = "select"
+	ed.changed.emit()
+	_vrai(vus.call("_select_empty") and vus.call("_extrude_bar"), "Select : la case des cases vides, et Extrude")
+	ed.mode = "add"
+	ed.changed.emit()
+	_vrai(not vus.call("_select_empty") and not vus.call("_extrude_bar"), "Add sans sélection : ni l'une ni l'autre")
+	(barre.get("_select_empty") as Button).set_pressed_no_signal(true)
+	(barre.get("_select_empty") as Button).pressed.emit()
+	_vrai(ed.select_empty, "la case coche « Select empty cells too » dans l'éditeur")
 	ed.selection = {Vector3i.ZERO: true, Vector3i.ONE: true}
 	ed.clipboard = [Vector3i.ZERO] as Array[Vector3i]
 	ed.changed.emit()
@@ -1151,6 +1167,9 @@ func _les_outils_dans_la_vue() -> void:
 func _de_bout_en_bout() -> void:
 	_vrai(_barre_finie, "SENTINELLE : l'épreuve de la barre s'est arrêtée en route (erreur d'exécution ?)")
 	_les_outils_dans_la_vue()
+	_l_edition_de_parite_dans_la_vue()
+	_vrai(_edition_finie, "SENTINELLE : l'édition de la parité dans la vue s'est arrêtée en route (erreur d'exécution ?)")
+
 	var bilan: Dictionary = BM.librairie()
 	var lot: MeshLibrary = bilan["lot"]
 	var dossier := ProjectSettings.globalize_path("user://test_format")
@@ -1243,6 +1262,8 @@ func _de_bout_en_bout() -> void:
 	monde.queue_free()
 	_les_variantes_de_bout_en_bout(lot, dossier)
 	_le_monde_de_bout_en_bout(lot, pleines, attendu)
+	_le_monde_complet_de_bout_en_bout(lot)
+	_vrai(_monde_complet_fini, "SENTINELLE : le monde complet s'est arrêté en route (erreur d'exécution ?)")
 	_fin()
 
 
@@ -1395,6 +1416,290 @@ func _les_cas_de_monde() -> void:
 	_vrai(negatif and bon.any(func(l): return not l["visible"]) and bon.any(func(l): return l["tileset"] == null)
 		and bon.any(func(l): return (l["cells"] as Array).is_empty()),
 		"le cas bon porte une case négative, une couche cachée, une couche sans tuiles, une couche vide")
+
+
+# ── 4 quinquies. L'ÉDITION DE LA PARITÉ DANS LA VUE (7 octobre 2026) : Extrude, Select des cases vides, la molette,
+# Room from selection — par de vrais événements, une vraie caméra, une vraie annulation.
+var _edition_finie := false
+var _monde_complet_fini := false
+
+
+func _l_edition_de_parite_dans_la_vue() -> void:
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var monde: Node3D = World.new()
+	tenant.add_child(monde)
+	var cam := Camera3D.new()
+	root.add_child(cam)
+	cam.current = true
+	cam.look_at_from_position(Vector3(2.5, 14, 2.5), Vector3(2.5, 0, 2.5), Vector3.FORWARD)
+	var ed: Node = Editeur.new()
+	root.add_child(ed)
+	var annul := UndoRedo.new()
+	ed.undo = annul
+	ed.world = monde
+	var ecran := func(case_: Vector3i) -> Vector2:
+		return cam.unproject_position(Vector3(case_) + Vector3(0.5, 0.0, 0.5))
+	var clic := func(pos: Vector2, appuye: bool) -> bool:
+		var b := InputEventMouseButton.new()
+		b.button_index = MOUSE_BUTTON_LEFT
+		b.pressed = appuye
+		b.position = pos
+		return ed.input(cam, b)
+	var bouge := func(pos: Vector2) -> bool:
+		var m := InputEventMouseMotion.new()
+		m.position = pos
+		return ed.input(cam, m)
+	var molette := func(haut: bool, alt := false, maj := false, ctrl := false) -> bool:
+		var pris := false
+		for appuye in [true, false]:
+			var b := InputEventMouseButton.new()
+			b.button_index = MOUSE_BUTTON_WHEEL_UP if haut else MOUSE_BUTTON_WHEEL_DOWN
+			b.pressed = appuye
+			b.alt_pressed = alt
+			b.shift_pressed = maj
+			b.ctrl_pressed = ctrl
+			b.position = Vector2(100, 100)
+			pris = ed.input(cam, b) if appuye else pris and ed.input(cam, b)
+		return pris
+	var sol: Array = []
+	for x in 3:
+		for z in 3:
+			sol.append(Vector3i(x, 0, z))
+	monde.apply_cells(sol, [])
+	# EXTRUDE sans sélection : la matière de l'étage monte d'un cran, l'étage suit, un Ctrl+Z rend tout.
+	ed.extrude("up", "place")
+	_egal(monde.cells().size(), 18, "Extrude up sans sélection pose l'étage du dessus de la matière de l'étage")
+	_egal(monde.floor_y, 1, "et l'étage suit")
+	annul.undo()
+	_vrai(monde.cells().size() == 9 and monde.floor_y == 0, "un Ctrl+Z reprend les cases ET l'étage")
+	# FACING : rien n'est sous le sol (pas de matière derrière vers le haut) ; ses bords +X regardent l'air, adossés à la
+	# matière — le premier des sens à égalité (+X avant −X, +Z, −Z) : trois cases en x = 3, l'étage ne bouge pas.
+	ed.extrude("facing", "place")
+	_vrai(monde.cells().size() == 12 and monde.cells().has(Vector3i(3, 0, 1)) and monde.floor_y == 0,
+		"Extrude facing : le sol plat s'étend vers +X (le premier sens à égalité), l'étage reste")
+	annul.undo()
+	# SELECT DES CASES VIDES : le pinceau prend l'air seulement avec la case cochée.
+	ed.set_mode("select")
+	clic.call(ecran.call(Vector3i(6, 0, 6)), true)
+	clic.call(ecran.call(Vector3i(6, 0, 6)), false)
+	_vrai(ed.selection.is_empty(), "Select sur une case vide : rien, sans « Select empty cells too »")
+	ed.select_empty = true
+	clic.call(ecran.call(Vector3i(6, 0, 6)), true)
+	clic.call(ecran.call(Vector3i(6, 0, 6)), false)
+	_egal(ed.selection, {Vector3i(6, 0, 6): true}, "avec la case cochée, le pinceau prend la case VIDE")
+	# LA MOLETTE : seule et sans geste, elle est laissée au zoom de l'éditeur.
+	ed.set_mode("add")
+	_vrai(not molette.call(true), "la molette seule, sans geste : laissée à l'éditeur (zoom)")
+	_vrai(molette.call(true, false, false, true) and monde.floor_y == 1, "Ctrl + molette : l'étage")
+	annul.undo()
+	_egal(monde.floor_y, 0, "l'étage changé à la molette s'annule")
+	_vrai(molette.call(true, true) and ed.brush_size == 2, "Add : Alt + molette, la taille du pinceau")
+	var forme_avant: String = ed.shape
+	_vrai(molette.call(true, false, true) and ed.shape != forme_avant, "Add : Maj + molette, la forme suivante")
+	ed.shape = "sphere"
+	ed.brush_size = 1
+	# Avec une sélection et un outil de sélection : Alt ↑ élargit à plat, Alt ↓ rogne le bord, Maj étend.
+	ed.set_mode("select")
+	ed._set_selection({Vector3i(1, 0, 1): true})
+	_vrai(molette.call(true, true) and ed.selection.size() == 5, "Alt + molette ↑ : Widen, une couronne à plat")
+	_vrai(molette.call(false, true) and ed.selection.keys() == [Vector3i(1, 0, 1)], "Alt + molette ↓ : Shrink, le bord part")
+	var cases_avant: int = monde.cells().size()
+	_vrai(molette.call(true, false, true) and ed.selection.size() == 2 and monde.cells().size() == cases_avant,
+		"Maj + molette ↑ : Extend selection, rien n'est posé")
+	_egal(monde.floor_y, 1, "et l'étage suit l'extension")
+	annul.undo()
+	ed.clear_selection()
+	# Pendant un geste : la hauteur d'un Rect qui devient une boîte.
+	ed.set_mode("rect")
+	clic.call(ecran.call(Vector3i(0, 0, 0)), true)
+	bouge.call(ecran.call(Vector3i(2, 0, 2)))
+	_vrai(molette.call(true) and molette.call(true), "pendant un Rect, la molette seule est PRISE")
+	clic.call(ecran.call(Vector3i(2, 0, 2)), false)
+	_egal(ed.selection.size(), 27, "un Rect de 3 × 3 haussé de deux crans : une boîte de 3 × 3 × 3")
+	# En Navigate, jamais.
+	ed.set_navigating(true)
+	_vrai(not molette.call(true, true), "en Navigate, la molette n'est jamais prise")
+	ed.set_navigating(false)
+	# ROOM FROM SELECTION : une empreinte de 3 × 3 peinte dans le vide, montée d'un étage — 26 cases de coque.
+	var empreinte := {}
+	for x in range(10, 13):
+		for z in range(10, 13):
+			empreinte[Vector3i(x, 0, z)] = true
+	ed._set_selection(empreinte)
+	ed.room_floors = 1
+	ed.room_up = true
+	var n0: int = monde.cells().size()
+	ed.room_from_selection()
+	_egal(monde.cells().size() - n0, 26, "Room from selection : sol, plafond et murs autour d'une case de vide")
+	annul.undo()
+	_egal(monde.cells().size(), n0, "et un Ctrl+Z la reprend")
+	ed._set_selection({Vector3i(20, 0, 20): true})
+	ed.room_from_selection()
+	_vrai(ed.status.contains("too thin"), "une empreinte sans dedans est refusée, et c'est dit")
+	ed.world = null
+	ed.queue_free()
+	cam.queue_free()
+	tenant.queue_free()
+	annul.free()
+	_edition_finie = true
+
+
+# ── 6 bis. UN MONDE COMPLET DE BOUT EN BOUT (7 octobre 2026) : l'appli exporte (FM.exporter) deux couches dont une
+# ANIMÉE, un lac, un fondu actif et deux plants ; le greffon l'importe (WorldFile.build). Ce qui se VOIT se juge à
+# l'image (capture, avec fenêtre) ; ici, ce que le greffon a POSÉ : la nappe et son preset, le passage par-dessus les
+# matériaux, les plants, le matériau animé et son espace du format, la nappe qui se dit périmée.
+func _le_monde_complet_de_bout_en_bout(base: MeshLibrary) -> void:
+	var dossier := ProjectSettings.globalize_path("user://test_monde_complet")
+	_vider(dossier)
+	DirAccess.make_dir_recursive_absolute(dossier.path_join("images"))
+	var images: Array = []
+	for k in 3:
+		var img := Image.create_empty(8, 8, false, Image.FORMAT_RGBA8)
+		img.fill([Color.RED, Color.GREEN, Color.BLUE][k])
+		var chemin := dossier.path_join("images/frame_%d.png" % k)
+		img.save_png(chemin)
+		images.append(chemin)
+	var roche := StandardMaterial3D.new()
+	roche.resource_name = "rock"
+	var anime := StandardMaterial3D.new()
+	anime.resource_name = "glow"
+	anime.set_meta("extras", {"mb_animation": {"albedo": {"images": {"images": images, "ips": 4.0}}}})
+	var lots: Array = []
+	for mat in [roche, anime]:
+		var lot := MeshLibrary.new()
+		for id in base.get_item_list():
+			var m: Mesh = base.get_item_mesh(id).duplicate()
+			for s in m.get_surface_count():
+				m.surface_set_material(s, mat)
+			lot.create_item(id)
+			lot.set_item_name(id, base.get_item_name(id))
+			lot.set_item_mesh(id, m)
+		lots.append(lot)
+	var c_roche: Array = []
+	var c_anime: Array = []
+	for x in 8:
+		for z in 7:
+			for y in 2:
+				if y == 1 and x == 3 and z == 3:
+					continue
+				(c_anime if x >= 6 and y == 1 else c_roche).append(Vector3i(x, y, z))
+	var toutes := {}
+	for c in c_roche + c_anime:
+		toutes[c] = true
+	var sources := [Vector3i(3, 3, 3)]
+	var nappe := EM.maillage(FL.monde(toutes, sources)["corps"], toutes)
+	var glb := dossier.path_join("box.glb")
+	var racine := Node3D.new()
+	var mi := MeshInstance3D.new()
+	mi.name = "box"
+	mi.mesh = BoxMesh.new()
+	racine.add_child(mi)
+	var doc := GLTFDocument.new()
+	var etat := GLTFState.new()
+	doc.append_from_scene(racine, etat)
+	doc.write_to_filesystem(etat, glb)
+	racine.free()
+	var feuillage := FE.vers_donnees([FE.modele(4, "Box", glb)], [FE.plant(1, 4, Vector3(1.5, 2.0, 1.5), 0.5, 1.0, "sol"),
+		FE.plant(2, 4, Vector3(5.5, 2.0, 5.5), 0.0, 1.2, "sol")])
+	var r := FM.exporter([{"nom": "Rock", "visible": true, "source": "a", "lot": lots[0], "cases": c_roche},
+		{"nom": "Glow", "visible": true, "source": "b", "lot": lots[1], "cases": c_anime}], dossier, "complet", "test",
+		[{"nom": "Lake", "visible": true, "maillage": nappe, "preset": "lave", "sources": sources}],
+		{"etat": {"paires": {"1|2": {"actif": true, "couvre": {"1": TR.reglages({}), "2": TR.reglages({})}}}, "choix": {}},
+		"ids": ["1", "2"], "representants": [{"image": null, "couleur": Color.GRAY, "echelle": 1.0, "rugosite": 0.9},
+		{"image": null, "couleur": Color.YELLOW, "echelle": 1.0, "rugosite": 1.0}]}, feuillage)
+	_vrai(not r.has("erreur"), "l'appli exporte le monde complet (%s)" % str(r.get("erreur", "")))
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var b := WorldFile.build(dossier.path_join("complet.mbworld/world.json"), tenant)
+	_vrai(not b.has("error"), "le greffon importe le monde complet (%s)" % str(b.get("error", "")))
+	if b.has("error"):
+		tenant.queue_free()
+		_monde_complet_fini = true
+		return
+	var par_nom := {}
+	for x in b["extras"]:
+		par_nom[str(x.name)] = x
+	_egal(par_nom.keys(), ["Water Lake", "Transitions", "Foliage"], "à côté des couches : l'eau, les transitions, le feuillage")
+	# L'EAU : la nappe cuite, sous le preset de son aspect (« lava »), et l'artiste peut mettre le sien.
+	var eau: Node3D = par_nom.get("Water Lake")
+	var feuille: MeshInstance3D = eau.get_child(0, true) if eau != null else null
+	_vrai(feuille != null and feuille.mesh != null and feuille.mesh.get_surface_count() > 0, "la nappe cuite est posée")
+	if feuille != null:
+		var sm := feuille.material_override as ShaderMaterial
+		_vrai(sm != null and sm.shader.code == Shaders.WATER["lava"], "sous le preset de son aspect (lava)")
+		var a_moi := StandardMaterial3D.new()
+		eau.material = a_moi
+		eau.rebuild()
+		_vrai(feuille.material_override == a_moi, "le matériau de l'artiste remplace le preset")
+	_vrai(eau != null and not eau.stale(), "la nappe est à jour des cases importées")
+	var couches: Array = b["nodes"]
+	couches[0].apply_cells([Vector3i(3, 1, 3)], [])
+	_vrai(eau != null and eau.stale(), "une case peinte : la nappe se dit périmée")
+	_vrai(eau != null and eau.water_cells().is_empty(), "et l'eau recalculée (le cratère comblé) n'a plus de case")
+	couches[0].apply_cells([], [Vector3i(3, 1, 3)])
+	_vrai(eau != null and not eau.stale() and eau.water_cells().size() == 1, "le cratère rendu : la nappe redevient juste")
+	# LES TRANSITIONS : la table des deux directions, le passage posé sur les matériaux des tuiles des deux couches.
+	var tr: Node = par_nom.get("Transitions")
+	if tr != null:
+		tr.refresh()
+		_egal(tr.table().keys(), ["0|1", "1|0"], "la paire active, ses deux directions")
+		var portes := 0
+		var tous := 0
+		for l in couches:
+			for m in l.tile_materials():
+				tous += 1
+				if (m as Material).next_pass == tr.material():
+					portes += 1
+		_vrai(tous > 0 and portes == tous, "le passage est posé par-dessus TOUS les matériaux des tuiles (%d sur %d)" % [portes, tous])
+		var origine: Vector3i = tr.material().get_shader_parameter("origine")
+		_egal(origine, Vector3i(-6, -6, -6), "la texture des cases : la boîte des cases élargie de 6")
+		tr.enabled = false
+		tr.refresh()
+		_vrai(couches[0].tile_materials().all(func(m): return (m as Material).next_pass == null), "éteint, il est retiré")
+	# LE FEUILLAGE : deux plants, posés comme la règle le dit.
+	var fo: Node3D = par_nom.get("Foliage")
+	if fo != null:
+		_egal(fo.drawn(4), 2, "les deux plants sont dessinés")
+		# ⚠ SANS RENDU (headless), une MultiMesh ne rend pas ce qu'on lui a donné : on éprouve ce que le nœud lui DONNE.
+		var m: Dictionary = fo.models_by_id()[4]
+		var inst: Array = fo.instances(m, fo.plant_list(), Transform3D.IDENTITY)
+		_vrai((inst[0][0] as Transform3D).is_equal_approx(Foliage.transform(m, fo.plant_list()[0])),
+			"le premier plant est à sa pose (%s)" % inst[0][0])
+		var vent: Color = inst[1][1]
+		_vrai(is_equal_approx(vent.r, 2.0) and is_equal_approx(vent.a, 0.5) and is_equal_approx(vent.g, 1.2),
+			"ses données de vent : le sol, la hauteur (× 1,2), l'amplitude (%s)" % vent)
+		fo.position = Vector3(0, 10, 0)
+		fo.scale = Vector3.ONE * 2.0
+		vent = fo.instances(m, fo.plant_list(), Transform3D.IDENTITY)[1][1]
+		_vrai(is_equal_approx(vent.r, 14.0) and is_equal_approx(vent.g, 2.4),
+			"le monde déplacé et à case de 2 : le sol et la hauteur en monde de Godot (%s)" % vent)
+	# LA TEXTURE ANIMÉE : le matériau de la seconde couche est animé, ses trois images dans un tableau, et il sait où
+	# la couche se tient.
+	var anim_mat: ShaderMaterial = null
+	var lib: MeshLibrary = couches[1].get_node("Tiles").mesh_library
+	for id in lib.get_item_list():
+		var mt := lib.get_item_mesh(id).surface_get_material(0)
+		if mt is ShaderMaterial and mt.has_meta("mb_animation"):
+			anim_mat = mt
+	_vrai(anim_mat != null, "la couche animée porte le matériau animé")
+	if anim_mat != null:
+		var tab = anim_mat.get_shader_parameter("albedo_images")
+		_vrai(tab is Texture2DArray and (tab as Texture2DArray).get_layers() == 3, "ses trois images, en tableau")
+		couches[1].cell_size = 2.0
+		couches[1].position = Vector3(5, 0, 0)
+		# La notification de pose est différée à l'image suivante : on la rend ici comme le moteur la rendra.
+		couches[1].notification(Node3D.NOTIFICATION_TRANSFORM_CHANGED)
+		var f: Projection = anim_mat.get_shader_parameter("mb_world_to_format")
+		var attendu: Transform3D = couches[1].format_space()
+		_vrai(f.x.is_equal_approx(Vector4(attendu.basis.x.x, attendu.basis.x.y, attendu.basis.x.z, 0.0))
+			and is_equal_approx(f.w.x, attendu.origin.x) and is_equal_approx(attendu.origin.x, -2.5),
+			"mb_world_to_format suit la pose et la case du nœud (%s)" % f)
+	_vrai(not (couches[0].tile_materials()[0] as Material).has_meta("mb_animation"), "la roche, elle, n'est pas animée")
+	# ⚠ LIBÉRÉ TOUT DE SUITE : des nœuds déplacés attendent leur notification de pose ; libérés au moment où le test
+	# quitte, ils laissaient une erreur de liste à la sortie.
+	tenant.free()
+	_monde_complet_fini = true
 
 
 func _vider(d: String) -> void:
