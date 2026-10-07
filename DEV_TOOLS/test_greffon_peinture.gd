@@ -162,6 +162,24 @@ func _les_icones_livrees_sont_a_jour() -> void:
 				if not connues.has(r.get_string(1)):
 					inconnues.append("%s : %s" % [f.get_file(), r.get_string(1)])
 	_vrai(inconnues.is_empty(), "des greffons demandent des icônes qui n'existent pas : %s" % str(inconnues))
+	# LES BOUTONS NEUFS DE LA PARITÉ ONT LEUR ICÔNE DANS LES TROIS BARRES (finitions, 7 octobre 2026) : Facing, Widen,
+	# Plant — plus de bouton en texte. Lu dans le texte : chaque source demande les trois noms, et aucune ne garde le
+	# bouton texte d'avant.
+	var demandes := {
+		"res://addons/marchingblocks_paint/mb_toolbar.gd": [r'\["facing", "facing"', r'\["widen", "widen"',
+			r'\["plant", "Plant"', r'_menu\(_plant_bar, "plant"'],
+		"res://engines/unity/com.marchingblocks.paint/Editor/MarchingBlocksWorldEditor.cs": [r'Icon\("facing"',
+			r'Icon\("widen"', r'Icon\("plant"'],
+		"res://engines/unreal/MarchingBlocksPaint/Source/MarchingBlocksPaintEditor/Private/MarchingBlocksModeToolkit.cpp":
+			[r'ExtrudeOp\("facing"', r'Op\("widen"', r'ToolToggle\("plant"'],
+	}
+	var texte_avant := [r'GUIContent\("(Facing|Widen|Plant)"', r'TextButton\(', r'\["move", "facing"']
+	for f in demandes:
+		var texte := FileAccess.get_file_as_string(f)
+		for m in demandes[f]:
+			_vrai(RegEx.create_from_string(m).search(texte) != null, "%s ne demande pas l'icône : %s" % [f.get_file(), m])
+		for m in texte_avant:
+			_vrai(RegEx.create_from_string(m).search(texte) == null, "%s garde un bouton en texte : %s" % [f.get_file(), m])
 	# Un motif qui ne trouve rien ne garde rien : les trois sources doivent en demander.
 	_vrai(vus >= 60, "les icônes demandées n'ont pas été trouvées dans les sources (%d)" % vus)
 	for nom in connues:
@@ -1281,6 +1299,8 @@ func _de_bout_en_bout() -> void:
 	_le_monde_de_bout_en_bout(lot, pleines, attendu)
 	_le_monde_complet_de_bout_en_bout(lot)
 	_vrai(_monde_complet_fini, "SENTINELLE : le monde complet s'est arrêté en route (erreur d'exécution ?)")
+	_le_pinceau_de_plantation()
+	_vrai(_plantation_finie, "SENTINELLE : le pinceau de plantation s'est arrêté en route (erreur d'exécution ?)")
 	_fin()
 
 
@@ -1717,6 +1737,218 @@ func _le_monde_complet_de_bout_en_bout(base: MeshLibrary) -> void:
 	# quitte, ils laissaient une erreur de liste à la sortie.
 	tenant.free()
 	_monde_complet_fini = true
+
+
+# ── 6 ter. LE PINCEAU DE PLANTATION DANS LA VUE (finitions, 7 octobre 2026) ────────────────────────────────────────
+# Le monde complet exporté par l'appli au-dessus (deux couches du témoin, un lac dans un cratère, deux plants), réimporté ;
+# l'outil Plant mené par de VRAIS clics à travers une caméra, une vraie annulation. Les attendus viennent d'ailleurs que
+# du code éprouvé : la surface du témoin à 1,75 (un quart de case sous le dessus des cases, charte §5), le bord des
+# cases à x = 8, le lac du cratère en (3, 1, 3), des distances recalculées ici.
+var _plantation_finie := false
+const Planting := preload("res://addons/marchingblocks_paint/mb_planting.gd")
+const Barre := preload("res://addons/marchingblocks_paint/mb_toolbar.gd")
+
+
+func _le_pinceau_de_plantation() -> void:
+	var chemin := ProjectSettings.globalize_path("user://test_monde_complet").path_join("complet.mbworld/world.json")
+	var tenant := Node3D.new()
+	root.add_child(tenant)
+	var b := WorldFile.build(chemin, tenant)
+	_vrai(not b.has("error"), "le monde complet se réimporte (%s)" % str(b.get("error", "")))
+	if b.has("error"):
+		tenant.free()
+		_plantation_finie = true
+		return
+	var couches: Array = b["nodes"]
+	var fo: Node3D = tenant.get_node_or_null("Foliage")
+	_vrai(fo != null, "le monde a son feuillage")
+	if fo == null:
+		tenant.free()
+		_plantation_finie = true
+		return
+	var cam := Camera3D.new()
+	root.add_child(cam)
+	cam.current = true
+	cam.look_at_from_position(Vector3(4, 40, 3.5), Vector3(4, 0, 3.5), Vector3.FORWARD)
+	var ed: Node = Editeur.new()
+	root.add_child(ed)
+	var annul := UndoRedo.new()
+	ed.undo = annul
+	ed.world = couches[0]
+	ed.plant_draw.seed = 7
+	var ecran := func(p: Vector3) -> Vector2: return cam.unproject_position(p)
+	var clic := func(p: Vector3, ctrl := false, maj := false) -> bool:
+		var pris := true
+		for appuye in [true, false]:
+			var e := InputEventMouseButton.new()
+			e.button_index = MOUSE_BUTTON_LEFT
+			e.pressed = appuye
+			e.ctrl_pressed = ctrl
+			e.shift_pressed = maj
+			e.position = ecran.call(p)
+			pris = ed.input(cam, e) and pris
+		return pris
+	var plants := func() -> Array: return fo.plant_list()
+	ed.set_mode("plant")
+	_egal(ed.current_plant_model(), 4, "sans choix, l'outil plante le premier modèle du feuillage")
+	# UN CLIC, « Planted · free », au milieu du plateau : un plant, sur la surface VUE des tuiles (1,75), pas sur le
+	# dessus des cases (2).
+	# ⚠ HORS DU CENTRE D'UNE CASE : un point visé arrondi au centre de sa case passait muet quand tous les clics étaient
+	# en x,5 (mutation vue).
+	_vrai(clic.call(Vector3(1.3, 2, 4.7)), "le clic de l'outil Plant est pris")
+	_egal(plants.call().size(), 3, "un clic plante un plant (%s)" % ed.status)
+	if plants.call().size() == 3:
+		var p: Vector3 = plants.call()[2]["p"]
+		_vrai(absf(p.y - 1.75) < 0.02, "il est sur la surface des tuiles, à 1,75 (y = %.3f)" % p.y)
+		_vrai(Vector2(p.x, p.z).distance_to(Vector2(1.3, 4.7)) < 0.02, "là où l'on a cliqué (%s)" % p)
+		_egal(int(plants.call()[2]["model"]), 4, "du modèle choisi")
+		_egal(plants.call()[2]["mode"], "ground", "planté")
+	annul.undo()
+	_egal(plants.call().size(), 2, "Ctrl+Z reprend le plant")
+	annul.redo()
+	_egal(plants.call().size(), 3, "Ctrl+Y le rend")
+	# AU BORD (x = 8 est le bord des cases) : « free » refuse, et le dit ; « overflow » accepte.
+	clic.call(Vector3(7.8, 2, 2.5))
+	_egal(plants.call().size(), 3, "au bord, « free » refuse")
+	_vrai(ed.status.contains("edge"), "et le dit (%s)" % ed.status)
+	ed.plant_mode = "overflow"
+	clic.call(Vector3(7.8, 2, 2.5))
+	_egal(plants.call().size(), 4, "au bord, « overflow » plante (%s)" % ed.status)
+	# DANS LE LAC du cratère (3, 1, 3) : refusé, même en « overflow ».
+	clic.call(Vector3(3.5, 2, 3.5))
+	_egal(plants.call().size(), 4, "dans l'eau du cratère, refusé")
+	_vrai(ed.status.contains("water"), "et le dit (%s)" % ed.status)
+	# SUR UN PLANT : refusé (le doublon).
+	clic.call(Vector3(1.5, 2, 1.5))
+	_egal(plants.call().size(), 4, "sur un plant existant, refusé")
+	_vrai(ed.status.contains("already there") or ed.status.contains("too close"), "et le dit (%s)" % ed.status)
+	# DANS L'AIR, sur le plan de l'étage (0) : au-dessus du vide, accepté à y = 0 ; dans la matière, refusé.
+	ed.plant_mode = "air"
+	clic.call(Vector3(11.5, 0, 3.5))
+	_egal(plants.call().size(), 5, "dans l'air, au-dessus du vide : planté (%s)" % ed.status)
+	if plants.call().size() == 5:
+		var a: Dictionary = plants.call()[4]
+		_vrai(absf((a["p"] as Vector3).y) < 1e-4 and a["mode"] == "air", "sur le plan de l'étage, en mode air (%s)" % a)
+	clic.call(Vector3(5.5, 0, 1.5))
+	_egal(plants.call().size(), 5, "dans l'air mais dans la matière : refusé")
+	_vrai(ed.status.contains("inside the matter"), "et le dit (%s)" % ed.status)
+	# LE MODÈLE CHOISI : un second modèle, plus large ; l'outil plante celui qu'on lui donne.
+	var modeles: Array = fo.models.duplicate(true)
+	var second: Dictionary = (modeles[0] as Dictionary).duplicate()
+	second["id"] = 9
+	second["name"] = "Wide"
+	second["footprint"] = 1.0
+	modeles.append(second)
+	fo.models = modeles
+	ed.plant_model = 9
+	ed.plant_mode = "free"
+	clic.call(Vector3(4.5, 2, 1.5))
+	_egal(int(plants.call()[-1]["model"]), 9, "le modèle choisi est celui qui est planté (%s)" % ed.status)
+	# LE PINCEAU (Ctrl) : un coup, puis la souris traînée plus loin que 0,4 rayon : un second coup ; UN Ctrl+Z pour le
+	# trait entier. Les acceptés se respectent (« free » : jamais deux empreintes qui empiètent), tous sur le plateau.
+	ed.plant_model = 4
+	ed.plant_radius = 1.5
+	ed.plant_tries = 20
+	var avant: int = plants.call().size()
+	var appui := InputEventMouseButton.new()
+	appui.button_index = MOUSE_BUTTON_LEFT
+	appui.pressed = true
+	appui.ctrl_pressed = true
+	appui.position = ecran.call(Vector3(2.0, 2, 1.5))
+	ed.input(cam, appui)
+	var apres_un: int = plants.call().size()
+	var glisse := InputEventMouseMotion.new()
+	glisse.position = ecran.call(Vector3(5.0, 2, 2.5))
+	_vrai(ed.input(cam, glisse), "pendant un trait de pinceau, le glissé est pris")
+	var apres_deux: int = plants.call().size()
+	var lache: InputEventMouseButton = appui.duplicate()
+	lache.pressed = false
+	ed.input(cam, lache)
+	_vrai(apres_un > avant, "un coup de pinceau plante (%d)" % (apres_un - avant))
+	_vrai(apres_deux > apres_un, "le glissé plus loin donne un second coup (%d)" % (apres_deux - apres_un))
+	var tous: Array = plants.call()
+	var empietent := 0
+	var hors := 0
+	var par_id: Dictionary = Planting.models_of(fo)
+	for i in range(avant, tous.size()):
+		var p: Vector3 = tous[i]["p"]
+		if p.x < 0.0 or p.x > 8.0 or p.z < 0.0 or p.z > 7.0 or absf(p.y - 1.75) > 0.05:
+			hors += 1
+		for j in tous.size():
+			if j == i or tous[j]["mode"] == "air":
+				continue
+			var q: Vector3 = tous[j]["p"]
+			var r_i: float = float(par_id[int(tous[i]["model"])]["footprint"]) * float(tous[i]["scale"])
+			var r_j: float = float(par_id[int(tous[j]["model"])]["footprint"]) * float(tous[j]["scale"])
+			if Vector2(p.x - q.x, p.z - q.z).length() < r_i + r_j - 1e-4:
+				empietent += 1
+	_egal(hors, 0, "tous les plants du pinceau sont sur le plateau, à la surface")
+	_egal(empietent, 0, "aucun plant du pinceau n'empiète sur une autre empreinte (« free »)")
+	annul.undo()
+	_egal(plants.call().size(), avant, "UN Ctrl+Z reprend le trait entier (les deux coups)")
+	annul.redo()
+	_egal(plants.call().size(), apres_deux, "et Ctrl+Y le rend")
+	# EFFACER (Maj) : les plants à moins d'un rayon de (2, 1,5) partent, les autres restent ; Ctrl+Z les rend.
+	var centre := Vector3(2.0, 1.75, 1.5)
+	var dedans := 0
+	for pl in plants.call():
+		var q: Vector3 = pl["p"]
+		if Vector2(q.x - centre.x, q.z - centre.z).length() <= ed.plant_radius \
+				and q.distance_to(centre) <= ed.plant_radius + 0.5:
+			dedans += 1
+	var n0: int = plants.call().size()
+	clic.call(Vector3(2.0, 2, 1.5), false, true)
+	_vrai(dedans > 0 and plants.call().size() == n0 - dedans, "Maj + clic efface les %d plants du pinceau, pas plus (%s)"
+		% [dedans, ed.status])
+	annul.undo()
+	_egal(plants.call().size(), n0, "Ctrl+Z les rend")
+	# LA MOLETTE de l'outil : Alt la taille du pinceau, Maj sa densité.
+	var molette := func(alt: bool, maj: bool) -> bool:
+		var e := InputEventMouseButton.new()
+		e.button_index = MOUSE_BUTTON_WHEEL_UP
+		e.pressed = true
+		e.alt_pressed = alt
+		e.shift_pressed = maj
+		return ed.input(cam, e)
+	_vrai(molette.call(true, false) and is_equal_approx(ed.plant_radius, 2.0), "Alt + molette : le pinceau grandit")
+	_vrai(molette.call(false, true) and ed.plant_tries == 21, "Maj + molette : la densité")
+	# LA BARRE : les réglages de l'outil ne paraissent qu'avec lui ; le menu des modèles les nomme, coche le courant, et
+	# en choisit un autre.
+	var barre: HBoxContainer = Barre.new()
+	barre.set("editor", ed)
+	var plant_bar: Control = barre.get("_plant_bar")
+	_vrai(plant_bar.visible, "l'outil Plant : sa barre paraît")
+	(barre.get("_plant_modes")["overflow"] as Button).pressed.emit()
+	_egal(ed.plant_mode, "overflow", "un clic sur « Planted · overflow » choisit le mode")
+	var menu: MenuButton = barre.get("_plant_model")
+	barre.call("_fill_plant_models")
+	var popup := menu.get_popup()
+	var noms: Array = []
+	for i in popup.item_count:
+		noms.append(popup.get_item_text(i))
+	_vrai(noms.has("Box") and noms.has("Wide") and noms.has("Random rotation"), "le menu nomme les modèles (%s)" % str(noms))
+	_vrai(popup.is_item_checked(popup.get_item_index(4)) and not popup.is_item_checked(popup.get_item_index(9)),
+		"et coche le courant")
+	popup.id_pressed.emit(9)
+	_egal(ed.plant_model, 9, "le menu choisit un autre modèle")
+	_egal(menu.text, "Wide", "la barre nomme le modèle courant")
+	popup.id_pressed.emit(-2)
+	_vrai(not ed.plant_random_yaw, "« Random rotation » se décoche")
+	ed.set_mode("add")
+	_vrai(not plant_bar.visible, "un autre outil : la barre de plantation disparaît")
+	barre.free()
+	# SANS FEUILLAGE : l'outil le dit, rien ne casse.
+	tenant.remove_child(fo)
+	ed.set_mode("plant")
+	clic.call(Vector3(1.5, 2, 4.5))
+	_vrai(ed.status.contains("no MarchingBlocksFoliage"), "un monde sans feuillage : c'est dit (%s)" % ed.status)
+	fo.free()
+	ed.world = null
+	ed.free()
+	cam.free()
+	annul.free()
+	tenant.free()
+	_plantation_finie = true
 
 
 func _vider(d: String) -> void:

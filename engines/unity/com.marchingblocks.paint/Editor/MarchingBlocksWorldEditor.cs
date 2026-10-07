@@ -15,6 +15,8 @@
 //   SHAPES   Tunnel · Well · Bridge · Balcony · Stairs (MBShapes.cs), always aimed at the matter: Straight
 //            is one click square out of a face, Connect is two clicks on two faces anywhere (two floors for
 //            Stairs; Esc forgets the first)
+//   PLANT    the models of the world's MarchingBlocks Foliage (MBPlanting.cs, the rule MBFoliage): a click plants one,
+//            Ctrl + click (and drag) a dab of the brush, Shift + click (and drag) erases within it — one undo step a stroke
 //   SELECT   Fill, Delete, Extrude ↑ ↓ (the floor follows), Grow, Shrink, Connected,
 //            Move (arrow keys follow the camera; Shift + ↑ ↓ raise and lower), Copy / Cut / Paste
 //
@@ -30,7 +32,7 @@ namespace MarchingBlocks.Paint.EditorTools
     [CustomEditor(typeof(MarchingBlocksWorld))]
     public sealed class MarchingBlocksWorldEditor : Editor
     {
-        enum Mode { Add, Dig, Select, Rect, Box, Shape, Variant }
+        enum Mode { Add, Dig, Select, Rect, Box, Shape, Variant, Plant }
 
         static bool editing;
         static AimState aim = AimState.Start;
@@ -59,6 +61,16 @@ namespace MarchingBlocks.Paint.EditorTools
         // The wheel during a gesture: the height of a Rect / Box being dragged, of a paste preview.
         static int gestureHeight;
         static int pasteHeight;
+
+        // THE PLANT TOOL: the model, the placing mode, the brush, the spacing, the slope, the random yaw; its draws.
+        static readonly PlantSettings plant = new PlantSettings();
+        static System.Random plantDraw = new System.Random();
+        // A plant stroke: its gesture (one, sow, erase), the world asked once, where it last dabbed.
+        string plantGesture;
+        MBPlanting.Asked plantAsk;
+        MarchingBlocksFoliage plantFoliage;
+        Vector3? plantLast;
+        const float PlantStep = 0.4f;
 
         static readonly HashSet<Int3> selection = new HashSet<Int3>();
         static List<Int3> clipboard = new List<Int3>();
@@ -93,7 +105,11 @@ namespace MarchingBlocks.Paint.EditorTools
 
         void RebuildAfterUndo()
         {
-            if (target != null) World.Rebuild();
+            if (target == null) return;
+            World.Rebuild();
+            // The plants undone come back drawn.
+            var f = MBPlanting.FoliageOf(World);
+            if (f != null) f.Rebuild();
         }
 
         // ── The inspector ──────────────────────────────────────────────────────────────────────────
@@ -180,8 +196,8 @@ namespace MarchingBlocks.Paint.EditorTools
             Section("TOOL");
             using (new EditorGUILayout.HorizontalScope())
             {
-                // The row of tools: Add … Box, then Variant (index 5 of the row, not Mode.Shape).
-                int shownTool = mode <= Mode.Box ? (int)mode : mode == Mode.Variant ? 5 : -1;
+                // The row of tools: Add … Box, then Variant (index 5 of the row, not Mode.Shape), then Plant (6).
+                int shownTool = mode <= Mode.Box ? (int)mode : mode == Mode.Variant ? 5 : mode == Mode.Plant ? 6 : -1;
                 int pickedTool = Segmented(shownTool,
                     Icon("add", "Add (A) — adds matter. Shift digs."),
                     Icon("dig", "Dig (D) — removes matter. Shift adds."),
@@ -189,10 +205,12 @@ namespace MarchingBlocks.Paint.EditorTools
                     Icon("rect", "Rect (G) — a FLAT rectangle on the floor, whatever the aim, empty cells included: a room's floor."),
                     Icon("box", "Box (B) — a 3D box: the whole volume, empty cells included. Shift adds, Ctrl removes."),
                     Icon("variant", "Variant (V) — click a tile: its next variant (base, 1, 2…). Shift + click gives it back " +
-                        "to the random draw. Only for a tileset whose tiles have variants."));
+                        "to the random draw. Only for a tileset whose tiles have variants."),
+                    Icon("plant", "Plant — plants the models of this world's MarchingBlocks Foliage: a click plants one, " +
+                        "Ctrl + click (and drag) a dab of the brush, Shift + click (and drag) erases within it. Ctrl+Z undoes a stroke."));
                 if (pickedTool != shownTool && pickedTool >= 0)
                 {
-                    mode = pickedTool == 5 ? Mode.Variant : (Mode)pickedTool;
+                    mode = pickedTool == 5 ? Mode.Variant : pickedTool == 6 ? Mode.Plant : (Mode)pickedTool;
                     CancelAll();
                 }
                 if (mode == Mode.Box)
@@ -269,6 +287,8 @@ namespace MarchingBlocks.Paint.EditorTools
                         stairsStep, 1, MBShapes.StepMax);
             }
 
+            if (mode == Mode.Plant) PlantPanel(world);
+
             if (mode == Mode.Add || mode == Mode.Dig || mode == Mode.Select)
             {
                 Section("BRUSH · [ ]");
@@ -307,8 +327,8 @@ namespace MarchingBlocks.Paint.EditorTools
                     Extrude(ExtrudeDirection.Up, Event.current);
                 if (IconButton(Icon("extrude_down", "Extrude down — a cell below every full cell." + how)))
                     Extrude(ExtrudeDirection.Down, Event.current);
-                if (GUILayout.Button(new GUIContent("Facing", "Extrude facing — one cell away from the matter behind: a wall " +
-                        "thickens towards the air, a cave ceiling comes down." + how), EditorStyles.miniButton, GUILayout.Height(24)))
+                if (IconButton(Icon("facing", "Extrude facing — one cell away from the matter behind: a wall " +
+                        "thickens towards the air, a cave ceiling comes down." + how)))
                     Extrude(ExtrudeDirection.Facing, Event.current);
                 GUILayout.FlexibleSpace();
             }
@@ -325,8 +345,8 @@ namespace MarchingBlocks.Paint.EditorTools
                     if (IconButton(Icon("grow", "Grow — selects the matter touching the selection by a face."))) Operate(SelectionOp.Grow);
                     if (IconButton(Icon("shrink", "Shrink (Alt + wheel down) — the selection loses its edge: a rectangle its rim, " +
                         "a line its ends, a cube its skin; a single cell stays. Full or empty cells alike."))) Operate(SelectionOp.ShrinkEdge);
-                    if (GUILayout.Button(new GUIContent("Widen", "Widen (Alt + wheel up) — adds the four neighbours in the plane of " +
-                        "every selected cell, empty ones included. Nothing is set."), EditorStyles.miniButton, GUILayout.Height(24)))
+                    if (IconButton(Icon("widen", "Widen (Alt + wheel up) — adds the four neighbours in the plane of " +
+                        "every selected cell, empty ones included. Nothing is set.")))
                         Widen();
                     if (IconButton(Icon("connected", "Connected — selects all the matter linked to the selection by faces."))) Operate(SelectionOp.Connected);
                     GUILayout.FlexibleSpace();
@@ -387,6 +407,51 @@ namespace MarchingBlocks.Paint.EditorTools
                 }
                 GUILayout.FlexibleSpace();
             }
+        }
+
+        // THE PLANT TOOL's settings: the model (the world's foliage models), the placing mode, the brush, the spacing, the
+        // steepest ground, a random yaw.
+        void PlantPanel(MarchingBlocksWorld world)
+        {
+            Section("PLANT · Ctrl brush · Shift erase");
+            var f = MBPlanting.FoliageOf(world);
+            if (f == null || f.models.Count == 0)
+            {
+                EditorGUILayout.HelpBox(f == null ? "This world has no MarchingBlocks Foliage: import a world exported with " +
+                    "foliage, or add one under the world's root and give it models." : "The foliage of this world has no model.",
+                    MessageType.Info);
+                return;
+            }
+            var names = new string[f.models.Count];
+            int current = 0, chosen = MBPlanting.CurrentModel(f, plant.Model);
+            for (int i = 0; i < names.Length; i++)
+            {
+                names[i] = string.IsNullOrEmpty(f.models[i].name) ? $"model {f.models[i].id}" : f.models[i].name;
+                if (f.models[i].id == chosen) current = i;
+            }
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                GUILayout.Label(Icon("plant", "The model a click or the brush plants."), GUILayout.Width(22), GUILayout.Height(22));
+                int picked = EditorGUILayout.Popup(current, names);
+                if (picked != current || plant.Model != f.models[picked].id) plant.Model = f.models[picked].id;
+                GUILayout.Space(8);
+                plant.Mode = (FoliageMode)Segmented((int)plant.Mode,
+                    Icon("up", "In the air — anywhere: on the plane of the floor (Page Up / Page Down), even over nothing."),
+                    Icon("plant", "Planted · free — on the ground you see, with room around it: refused on a slope, in the " +
+                        "water, at an edge, under an overhang, or on another plant's footprint."),
+                    Icon("widen", "Planted · overflow — on the ground you see, overflowing edges, walls and other plants as " +
+                        "it likes. Only the spacing keeps plants apart."));
+                GUILayout.FlexibleSpace();
+            }
+            plant.Radius = EditorGUILayout.Slider(new GUIContent("Brush size", "The radius of a dab and of the eraser, in cells (Alt + wheel)."),
+                plant.Radius, 0.5f, 32f);
+            plant.Tries = EditorGUILayout.IntSlider(new GUIContent("Density", "How many spots each dab tries (Shift + wheel)."), plant.Tries, 1, 200);
+            plant.Spacing = EditorGUILayout.Slider(new GUIContent("Spacing", "No two plants closer than this, in cells — in every mode."),
+                plant.Spacing, 0f, 20f);
+            plant.MaxSlope = EditorGUILayout.Slider(new GUIContent("Max slope", "The planted modes refuse a ground steeper than this, in degrees."),
+                plant.MaxSlope, 0f, 90f);
+            plant.RandomYaw = EditorGUILayout.ToggleLeft(new GUIContent("Random rotation", "Each plant turned at random around its up axis."),
+                plant.RandomYaw);
         }
 
         static void Section(string title)
@@ -458,6 +523,7 @@ namespace MarchingBlocks.Paint.EditorTools
             if (mode == Mode.Shape) { SceneShape(e, ray, id); return; }
             if (mode == Mode.Rect || mode == Mode.Box) { SceneBox(e, ray, id); return; }
             if (mode == Mode.Variant) { SceneVariant(e, ray, id); return; }
+            if (mode == Mode.Plant) { ScenePlant(e, ray, id); return; }
             SceneBrush(e, ray, id);
         }
 
@@ -518,6 +584,109 @@ namespace MarchingBlocks.Paint.EditorTools
                 e.Use();
             }
             if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag) SceneView.RepaintAll();
+        }
+
+        // ── The Plant tool ─────────────────────────────────────────────────────────────────────────
+        //
+        // The rule is MBFoliage's (foliage_conformance.json); MBPlanting gives it this world (cells, water, the ground of the
+        // placed tiles) and makes the gestures. Here: the strokes and the undo — ONE step a stroke.
+
+        void ScenePlant(Event e, Ray ray, int id)
+        {
+            var f = plantFoliage != null ? plantFoliage : MBPlanting.FoliageOf(World);
+            var asked = plantAsk;
+            var full = asked != null ? (System.Func<Int3, bool>)asked.Full.Contains : AllCells().Contains;
+            bool aimed = MBPlanting.AimedPoint(World, f, full, ray, plant.Mode, out var at);
+            if (aimed && e.type == EventType.Repaint)
+            {
+                bool erasing = plantGesture != null ? plantGesture == "erase" : e.shift;
+                DrawCells(new[] { new Int3(Mathf.FloorToInt(at.x), Mathf.FloorToInt(at.y - (plant.Mode == FoliageMode.Air ? 0f : 0.5f)),
+                    Mathf.FloorToInt(at.z)) }, erasing ? DigColour : AddColour, 0.04f);
+            }
+            if (e.type == EventType.MouseDown && e.button == 0 && !e.alt)
+            {
+                StartPlant(ray, e.control || e.command, e.shift);
+                GUIUtility.hotControl = id;
+                e.Use();
+            }
+            else if (e.type == EventType.MouseDrag && e.button == 0 && plantGesture != null)
+            {
+                PlantDrag(ray);
+                e.Use();
+            }
+            else if (e.type == EventType.MouseUp && e.button == 0)
+            {
+                EndPlant();
+                if (GUIUtility.hotControl == id) GUIUtility.hotControl = 0;
+                e.Use();
+            }
+            if (e.type == EventType.MouseMove || e.type == EventType.MouseDrag) SceneView.RepaintAll();
+        }
+
+        HashSet<Int3> AllCells()
+        {
+            var all = new HashSet<Int3>();
+            foreach (var l in World.Layers()) if (l.isActiveAndEnabled) all.UnionWith(l.Cells);
+            return all;
+        }
+
+        // A press: one plant, a dab of the brush (Ctrl), or erase (Shift); the stroke ends on release.
+        void StartPlant(Ray ray, bool brush, bool erase)
+        {
+            EndPlant();
+            var f = MBPlanting.FoliageOf(World);
+            if (f == null)
+            {
+                status = "Plant — this world has no MarchingBlocks Foliage: import a world exported with foliage, or add one " +
+                    "under the world's root and give it models.";
+                Repaint();
+                return;
+            }
+            plantFoliage = f;
+            plantAsk = MBPlanting.Ask(World, f);
+            plantGesture = erase ? "erase" : brush ? "sow" : "one";
+            plantLast = null;
+            Undo.IncrementCurrentGroup();
+            strokeGroup = Undo.GetCurrentGroup();
+            PlantDab(ray);
+            if (plantGesture == "one") EndPlant();
+        }
+
+        // A drag of a brush or erase stroke dabs again once the mouse has gone PlantStep of the radius.
+        void PlantDrag(Ray ray)
+        {
+            if ((plantGesture != "sow" && plantGesture != "erase") || plantLast == null) return;
+            if (MBPlanting.AimedPoint(World, plantFoliage, plantAsk.World.Full, ray, plant.Mode, out var at)
+                && Vector3.Distance(at, plantLast.Value) >= plant.Radius * PlantStep)
+                PlantDab(ray);
+        }
+
+        void PlantDab(Ray ray)
+        {
+            var f = plantFoliage;
+            PlantResult r = plantGesture == "erase" ? MBPlanting.EraseAt(World, f, ray, plant, plantAsk)
+                : plantGesture == "sow" ? MBPlanting.SowAt(World, f, ray, plant, plantDraw, plantAsk)
+                : MBPlanting.PlantAt(World, f, ray, plant, plantDraw, plantAsk);
+            plantLast = MBPlanting.AimedPoint(World, f, plantAsk.World.Full, ray, plant.Mode, out var at) ? at : (Vector3?)null;
+            if (r.Plants != null)
+            {
+                Undo.RecordObject(f, plantGesture == "erase" ? "Erase plants" : "Plant");
+                f.plants = r.Plants;
+                f.Rebuild();
+            }
+            status = r.Status;
+            Repaint();
+        }
+
+        // The end of a stroke: everything it planted or erased is ONE undo step.
+        void EndPlant()
+        {
+            if (plantGesture == null) return;
+            plantGesture = null;
+            plantAsk = null;
+            plantFoliage = null;
+            plantLast = null;
+            Undo.CollapseUndoOperations(strokeGroup);
         }
 
         void Touch(BrushTool gesture, Int3 anchor, Hit hit, List<Int3> cells, bool deselect)
@@ -854,6 +1023,19 @@ namespace MarchingBlocks.Paint.EditorTools
             if (e.type != EventType.ScrollWheel) return false;
             // Windows turns Shift + wheel into a horizontal scroll: read either axis. Unity's delta is + towards you.
             float d = Mathf.Abs(e.delta.y) >= Mathf.Abs(e.delta.x) ? e.delta.y : e.delta.x;
+            // The Plant tool's own (the tool's foliage workshop): Alt the brush size, Shift its density. Ctrl stays the floor.
+            if (mode == Mode.Plant && !aim.Navigating && !(e.control || e.command) && e.alt != e.shift && d != 0f)
+            {
+                int n = d < 0 ? 1 : -1;
+                string said;
+                if (e.alt) { plant.Radius = Mathf.Clamp(plant.Radius + 0.5f * n, 0.5f, 32f); said = $"Brush {plant.Radius:0.0}"; }
+                else { plant.Tries = Mathf.Clamp(plant.Tries + n, 1, 200); said = $"Density {plant.Tries}"; }
+                status = said;
+                if (SceneView.lastActiveSceneView != null) SceneView.lastActiveSceneView.ShowNotification(new GUIContent(said), 0.6);
+                e.Use();
+                Repaint();
+                return true;
+            }
             var state = new WheelState
             {
                 Navigating = aim.Navigating,
@@ -1125,6 +1307,7 @@ namespace MarchingBlocks.Paint.EditorTools
             shapeAnchor = null;
             boxStart = null;
             stroking = false;
+            EndPlant();
         }
 
         // ── Drawing ────────────────────────────────────────────────────────────────────────────────

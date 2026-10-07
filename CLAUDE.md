@@ -95,13 +95,13 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
-    - **Unity : PARTIEL (7 octobre 2026)** — pose et vent faits (vus à l'image) ; la règle de plantation portée ; AUCUN pinceau de feuillage dans l'éditeur.
+    - ✓ **Unity : FAIT (7 octobre 2026, branche `finitions-greffons`)** — pose et vent (vus à l'image), la règle de plantation, et l'outil Plant de l'inspecteur (`MBPlanting.cs` : le modèle, les trois modes, clic / Ctrl pinceau / Maj effacer, un Ctrl+Z par trait). Voir « Le greffon Unity à parité ».
     - ✓ **Godot — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `.glb` (repli : la méta `extras`), le shader de l'appli (copie générée, phase en espace du format), 43/43 cas. Vu à l'image.
     - ✓ **Unreal — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `tiles.glb` (gardé dans le niveau, images en PNG), `M_MB_Animated` (images, défilement, pulsation), phase par instance calculée sur le CPU (précision mixte de la règle). Vu à l'image (deux instants).
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
-    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas). ⚠ Pas d'outil pour PLANTER dans l'éditeur de Godot. Vu à l'image.
+    - ✓ **Godot — FAIT (7 octobre 2026, branche `finitions-greffons`)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas), et l'outil Plant de la barre (`mb_planting.gd` : le modèle, les trois modes, clic / Ctrl pinceau / Maj effacer, un Ctrl+Z par trait, le sol par rayon contre les tuiles posées). Vu à l'image.
     - ✓ **Unreal — FAIT (7 octobre 2026)** : lecture, pose (`FFrame::Turn`), vent `M_MB_Wind` (World Position Offset, données par instance), plantation dans le mode (clic, pinceau Ctrl, effacer Maj) avec la règle `MBFoliage` (59/59) et le sol par rayon contre les tuiles. Vu à l'image (vent). ⚠ Plantation jamais tenue souris en main.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
@@ -767,16 +767,14 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   selection, « Select empty cells too », F, et la molette (seule : le zoom d'Unity ; Maj + molette lue AUSSI en
   défilement horizontal, ce que Windows en fait). Les anciens Extrude ↑ ↓ et Shrink ne sont plus dans l'interface Unity
   (leurs sortes restent dans `tools_conformance.json` tant que les TROIS greffons n'ont pas migré, PARITE §6). Les
-  nouveaux boutons sont en TEXTE (Facing, Widen) : leurs icônes ne sont pas dans `generer_icones_greffons.gd`, qui
-  écrit les trois greffons à la fois — à ajouter quand les trois branches seront fusionnées.
+  nouveaux boutons ~~sont en TEXTE (Facing, Widen)~~ — **leurs icônes sont faites** (finitions, ci-dessous).
 - **UNITY 6.6 : 51 TESTS SUR 51 EN BUILT-IN, 51 SUR 51 EN URP** (dont `ParityWorldTests`, 10, sur le monde écrit par
   `DEV_TOOLS/preparer_parite_unity.gd` : Rock et Sand qui se mêlent, Lava animée, un lac, cinq arbres). **Mutations dans
   Unity : 9, toutes rouges** (réglages non déclarés, phase jamais posée, plants sans le repère, molette seule volée,
   Extrude sans groupe d'annulation, Select qui prend les vides, fondu qui ne dessine rien, vent immobile, images hors
   du temps). **Captures regardées** (`ParityCaptures`, `-executeMethod ParityCaptures.CaptureAll -mbOut <dossier>`) :
   vue d'ensemble, bordure, lave à deux instants, lac, les six aspects d'eau — en Built-in et en URP.
-- **CE QUI N'EST PAS FAIT** : le PINCEAU DE FEUILLAGE dans l'éditeur Unity (la règle `check` / `brush` est portée et
-  passe ses cas ; aucun outil ne plante) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
+- **CE QUI N'EST PAS FAIT** : ~~le PINCEAU DE FEUILLAGE dans l'éditeur Unity~~ (**FAIT**, finitions, ci-dessous) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
   outil) ; recalculer la nappe ; HDRP ; Alt + molette sous Windows et tout ce qui est souris en main — jamais tenu.
 ### LE GREFFON GODOT À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-godot`, sur le contrat ci-dessus)
 
@@ -825,8 +823,7 @@ part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
   `Vector3` arrondit pareil. Deux voies : dire l'arrondi 32 bits dans le texte, ou calculer `phase_de` en double (les
   cas changent). Aucune ne change le rendu de l'appli (son shader calcule à part).
 - ⚠ **CE QUI RESTE, ET POURQUOI** : F (cadrer toute la matière) — la caméra de la vue 3D appartient à l'éditeur de Godot,
-  sans API pour la poser (son F à lui centre la sélection) ; PLANTER dans l'éditeur — pas d'outil (la règle et le pinceau
-  sont là et éprouvés ; le sol devrait se chercher contre les tuiles posées) ; la NAPPE d'eau recalculée — attend les cas
+  sans API pour la poser (son F à lui centre la sélection) ; ~~PLANTER dans l'éditeur~~ (**FAIT**, finitions, ci-dessous) ; la NAPPE d'eau recalculée — attend les cas
   du mailleur (PARITE §2) ; le bruit des transitions — un par direction dans le shader, un seul dans les cas (PARITE §4,
   le greffon suit le shader) ; le vent d'un monde TOURNÉ tourne avec lui (exact pour un monde déplacé et mis à
   l'échelle).
@@ -891,8 +888,67 @@ du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore`
   `Build.bat UnrealEditor … -Project=C:\mbu\mbu.uproject` (chemin court : 260 caractères).
 - ⚠ **PAS TENU EN MAIN** : aucun clic, aucune molette, aucune plantation à la souris dans l'éditeur ; tout a été mené par
   script (import, rendu). ⚠ **NON FAIT** : la nappe d'eau recalculée (pas de cas), le texte du cran « près de la souris »,
-  les icônes « Facing » / « Widen » / « Plant » (boutons texte : le générateur d'icônes écrit les trois greffons à la fois,
-  `elargir` / `extruder_face` / `arbre` y sont à ajouter quand les branches se rejoignent), un jeu empaqueté.
+  ~~les icônes « Facing » / « Widen » / « Plant »~~ (**FAITES**, finitions, ci-dessous), un jeu empaqueté.
+
+### LES FINITIONS DES GREFFONS — FAIT LE 7 OCTOBRE 2026 (branche `finitions-greffons`) : LES ICÔNES, LE PINCEAU DE PLANTATION
+
+Les deux trous de la parité hors de l'eau (l'eau : une autre branche, pas touchée ici).
+
+- **LES ICÔNES — FAIT, VU À L'IMAGE.** `generer_icones_greffons.gd` écrit trois icônes de plus dans les TROIS greffons à
+  la fois, depuis celles de l'appli : `facing` (`extruder_face`), `widen` (`elargir`), `plant` (`arbre`) — 48 icônes ; les
+  45 d'avant inchangées octet pour octet. Branchées : Godot (Extrude facing, qui empruntait `move` ; Widen, qui n'avait
+  PAS de bouton — Alt + molette seulement ; l'outil Plant et sa barre), Unity (Facing, Widen, l'outil Plant), Unreal
+  (`ExtrudeOp("facing")`, `Op("widen")`, `ToolToggle("plant")` : l'outil Plant devient une bascule comme les autres ;
+  `TextButton` retiré, plus d'appelant). Plus aucun bouton neuf en texte (les −X … +Z de Move de Unity et d'Unreal sont
+  d'avant : des libellés d'axes). **Garde** (`test_greffon_peinture`) : chaque source demande les trois noms, aucune ne
+  garde `GUIContent("Facing" | "Widen" | "Plant")`, `TextButton(` ni le `move` de Facing.
+- **LE PINCEAU DE PLANTATION, GODOT — FAIT.** `mb_planting.gd` (nouveau) donne à la règle `mb_foliage.gd` le monde du
+  greffon : les cases de toutes les couches visibles, l'eau (les cases que déduisent les nœuds MarchingBlocksWater), et le
+  SOL — un rayon vertical contre les triangles des tuiles posées (index par colonne, une fois par trait), le sol des cases
+  à défaut ; puis les trois gestes (un plant, un coup de pinceau — les essais tirés dans le disque dans l'ordre de l'appli —,
+  effacer). `mb_editor.gd` : l'outil « plant » — clic : un plant ; Ctrl + clic (et glisser, un coup tous les 0,4 rayon) :
+  le pinceau ; Maj + clic (et glisser) : effacer ; **UN Ctrl+Z par trait** (la propriété `plants` du nœud) ; Alt + molette
+  la taille du pinceau, Maj + molette la densité (Ctrl reste l'étage). La barre : l'icône Plant parmi les outils, et sa
+  barre — le MODÈLE (un menu des modèles du feuillage du monde, le courant coché, « Random rotation »), les trois modes
+  (`up` dans l'air, `plant` libre, `widen` débordement), Brush · Density · Spacing · Slope. ⚠ Le nœud du feuillage doit
+  rester où l'import l'a mis (son espace EST celui du format) ; Maj, pas le clic droit de l'appli (le clic droit vole la
+  vue de Godot) — comme Unreal.
+- **LE PINCEAU DE PLANTATION, UNITY — FAIT.** `Editor/MBPlanting.cs` (le même partage : `Asked` — cases, eau, sol par rayon
+  vertical contre les maillages des tuiles posées, Möller–Trumbore —, `AimedPoint`, `PlantAt`, `SowAt`, `EraseAt`) ;
+  l'inspecteur : l'icône Plant au bout de la rangée TOOL, la section PLANT (le modèle en liste, les trois modes en icônes,
+  Brush size, Density, Spacing, Max slope, Random rotation) ; la vue : clic / Ctrl / Maj comme Godot et Unreal,
+  `Undo.RecordObject` du feuillage, un groupe d'annulation par trait, le feuillage redessiné après un Ctrl+Z ; Alt / Maj
+  + molette sur le pinceau (avant `MBWheel`, qui n'a pas bougé : le banc .NET non plus).
+- **MESURÉ** : `test_greffon_peinture` 353 → **416** (le pinceau de plantation dans la vue, 44 vérifications, par de VRAIS
+  clics à travers une caméra sur le monde complet exporté par l'appli — un plant sur la surface VUE à 1,75 et non sur les
+  cases à 2, là où l'on a cliqué, Ctrl+Z / Ctrl+Y, refusé au bord en « free » et dit, accepté en « overflow », refusé dans
+  le lac du cratère, sur un plant, dans la matière en l'air, accepté en l'air au-dessus du vide, le modèle choisi, un trait
+  de pinceau de deux coups sans empiètement et UN Ctrl+Z, l'effacement exact et rendu, la molette, la barre et son menu,
+  un monde sans feuillage dit ; plus la garde des icônes) ; **Unity 6.6 : 58 tests sur 58** (51 + `PlantToolTests` 7, sur le
+  monde de la parité importé par glTFast, mêmes épreuves) ; banc .NET inchangé et vert ; les 28 suites Godot vertes (`fumee_appli` 937 :
+  rouge une fois sur « Espace lâchée, il PLANE » pendant qu'un build Unreal chargeait la machine — le vol du Play test,
+  hors du greffon —, verte relancée seule).
+- **MUTATIONS — GODOT 12, TOUTES ROUGES** : le sol aux cases, l'eau jamais vue, le décalage de la grille des tuiles oublié,
+  le point visé au centre de sa case, l'effacement sans rayon, le trait sans annulation, le glissé sans second coup, le
+  modèle choisi ignoré, Maj sans effacer, le mode toujours libre, le menu des modèles inerte, la molette laissée à
+  l'éditeur. ⚠ **« LE POINT VISÉ AU CENTRE DE SA CASE » D'ABORD MUETTE, PAR LE TEST** : tous les clics étaient en x,5 — le
+  premier clic est désormais hors du centre. **UNITY 8, TOUTES ROUGES** (`PlantToolTests`) : le sol aux cases, l'eau
+  jamais vue, le point visé au centre de sa case, l'effacement sans rayon, le trait sans regroupement d'annulation, le
+  glissé sans second coup, le modèle choisi ignoré, la molette laissée à Unity. ⚠ **« LE TRAIT SANS REGROUPEMENT » D'ABORD
+  MUETTE** : Unity ouvre un groupe d'annulation à chaque événement GUI, le test n'en ouvrait pas entre deux coups — il le
+  fait désormais.
+  ⚠ **UN ÉVÉNEMENT DE LA VUE FABRIQUÉ HORS D'UNE PASSE GUI SE LIT « Ignore »** dans Unity (son `rawType` reste MouseDown) :
+  `ScenePlant` n'y voyait rien. Les tests mènent ce qu'il appelle (`StartPlant`, `PlantDrag`, `EndPlant`), comme
+  `ShapeEditorTests` mène `ClickShape`.
+- **VU À L'IMAGE** : la barre de Godot en quatre états (`ART/barre_greffon.png`, refaite : Add, Box, une sélection — Widen,
+  Extrude facing —, l'outil Plant et sa barre ; les quatre nombres d'abord muets, nommés dans leur boîte depuis) ;
+  l'inspecteur de Unity, AVEC fenêtre (`PanelCapture.Capture`, nouveau : l'icône Plant dans TOOL,
+  Facing dans EXTRUDE, Widen dans SELECTION, la section PLANT et son modèle « Tree ») ; les icônes d'Unreal sur une planche (`Resources/Icons`, même trait que les
+  autres). ⚠ **Le panneau d'Unreal n'a pas été vu** (aucune capture de Slate hors éditeur ouvert) : ce qui y est changé (trois noms d'icônes, la bascule Plant) est gardé par le texte des sources, et
+  **`RunUAT BuildPlugin` (UE 5.8.3, Win64) : BUILD SUCCESSFUL, aucun avertissement**, les 48 icônes empaquetées.
+- ⚠ **PAS TENU EN MAIN** : aucun des trois pinceaux à la souris dans un vrai éditeur ; le sol cherché sur de vrais arbres
+  importés par l'artiste ; la performance d'un trait sur un très grand monde (l'eau et l'index des tuiles sont recalculés
+  une fois par trait, en GDScript pour Godot).
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 
