@@ -780,7 +780,67 @@ func _maillage_de_l_eau(f: Dictionary) -> void:
 	_dire(not zl.is_empty() and absf(zl.min() + 0.1) < 1e-4 and absf(zl.max() - 3.1) < 1e-4
 		and large.filter(func(t): return _genre_t(t) == 1.0).size() < 3 * esc.filter(func(t): return _genre_t(t) == 1.0).size(),
 		"la rivière large de trois : une cascade de z = −0,1 à 3,1 par marche, raccordée au milieu")
+	_deux_rivieres_au_meme_endroit(f, cas)
 	_finies += 1
+
+
+## DEUX RIVIÈRES AU MÊME ENDROIT (7 octobre 2026) — le cas qui manquait : « deux cascades jointes gardent la lèvre la plus
+## BASSE » et « deux bandes sur une même case » ne rougissaient sur aucun des 14 premiers cas (mesuré par les trois
+## greffons ET dans le cœur). Le cas doit les exercer : vérifié sur son ENTRÉE (deux lèvres de hauteurs différentes à la
+## même place d'une même face ; des cases de bande communes aux deux cours) et sur ses TRIANGLES (la nappe monte à la
+## plus haute lèvre ; chaque case commune n'est couverte qu'une fois par les bandes).
+func _deux_rivieres_au_meme_endroit(f: Dictionary, cas: Dictionary) -> void:
+	var nom := "two rivers in one place: one falls from the top, one leaves a gallery below, on the same cells"
+	var c: Dictionary = cas.get(nom, {})
+	_dire(not c.is_empty(), "maillage : le cas « %s » existe" % nom)
+	if c.is_empty():
+		return
+	var occ := {}
+	for v in f["worlds"][c["input"]["world"]]:
+		occ[Vector3i(v[0], v[1], v[2])] = true
+	var bodies: Array = c["input"]["bodies"]
+	# Les lèvres (la case avant chaque suite de « fall ») et leur place sur la face (le plan, le long), d'après rules_text.
+	var places := {}   # "axe|plan|le long" → [y des lèvres]
+	var bandes := {}   # case de bande → nombre de cours qui la portent
+	for b: Dictionary in bodies:
+		var course: Array = b["course"]
+		var cases_: Array = course.map(func(e: Array) -> Vector3i: return Vector3i(int(e[0]), int(e[1]), int(e[2])))
+		var vues := {}
+		for i in course.size():
+			var ici: Vector3i = cases_[i]
+			if course[i][3] != "lake" and occ.has(ici + Vector3i.DOWN) and not vues.has(ici):
+				vues[ici] = true
+				bandes[ici] = int(bandes.get(ici, 0)) + 1
+			if course[i][3] == "fall" and i >= 2 and course[i - 1][3] != "fall":
+				var levre: Vector3i = cases_[i - 1]
+				var d: Vector3i = levre - cases_[i - 2]
+				if d.y == 0 and absi(d.x) + absi(d.z) == 1:
+					var plan: int = (levre.x if d.x != 0 else levre.z) + (1 if (d.x + d.z) < 0 else 0)
+					var cle := "%s|%d|%d" % ["x" if d.x != 0 else "z", plan, levre.z if d.x != 0 else levre.x]
+					if not places.has(cle):
+						places[cle] = []
+					places[cle].append(levre.y)
+	var jointes: Array = places.values().filter(func(ys: Array) -> bool: return ys.min() != ys.max())
+	_dire(bodies.size() == 2 and bodies.all(func(b): return b["kind"] == "river") and jointes.size() == 1,
+		"deux rivières au même endroit : deux cascades de lèvres différentes à la même place d'une face (%s)" % [places])
+	var communes: Array = bandes.keys().filter(func(k: Vector3i) -> bool: return bandes[k] > 1)
+	_dire(communes.size() >= 2, "deux rivières au même endroit : des cases de bande communes aux deux cours (%s)" % [communes])
+	var tris := _deplier(c["expected"])
+	var ys := []
+	for t: Array in tris.filter(func(t): return _genre_t(t) == 1.0):
+		for k in 3:
+			ys.append(float(t[12 * k + 1]))
+	var plus_haute: float = (jointes[0] as Array).max() if jointes.size() == 1 else INF
+	_dire(not ys.is_empty() and absf(ys.max() - (plus_haute - 0.15)) < 1e-5,
+		"deux rivières au même endroit : une seule nappe, depuis la PLUS HAUTE lèvre (haut à %s, attendu %s)" % [
+		ys.max() if not ys.is_empty() else null, plus_haute - 0.15])
+	var une_fois := true
+	for k: Vector3i in communes:
+		# Un point quelconque de la case (pas sur une diagonale ni un rayon d'éventail), à la hauteur des bandes.
+		var p := Vector3(k.x + 0.37, k.y - 0.15, k.z + 0.61)
+		var n := tris.filter(func(t): return _genre_t(t) == 0.5 and _plat_t(t) and _couvre_t(t, p)).size()
+		une_fois = une_fois and n == 1
+	_dire(une_fois and not communes.is_empty(), "deux rivières au même endroit : une bande par case commune, pas deux")
 
 # ── L'ÉDITION ───────────────────────────────────────────────────────────────────────────────────────────
 

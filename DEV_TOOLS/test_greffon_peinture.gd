@@ -685,10 +685,11 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
-const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 14}
+const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 15}
 ## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT : un fichier livré et jamais rejoué ne doit pas passer pour vert.
-## `water_mesh` en est sorti le 7 octobre 2026 (branche `eau-godot`) : `mb_water_mesh.gd` maille la nappe, ses 14 cas
-## sont rejoués en SAC DE TRIANGLES (`eau_sac.gd`, écrit depuis `rules_text`).
+## `water_mesh` en est sorti le 7 octobre 2026 (branche `eau-godot`) : `mb_water_mesh.gd` maille la nappe, ses cas (14,
+## puis 15 avec « deux rivières au même endroit », branche `cas-eau`) sont rejoués en SAC DE TRIANGLES (`eau_sac.gd`,
+## écrit depuis `rules_text`).
 const PARITE_A_VENIR := {}
 
 
@@ -1052,8 +1053,9 @@ func _la_reprise_egale_le_calcul_entier() -> void:
 ## lèvre la plus BASSE » et « deux bandes sur une même case ». Aucun cas n'a deux rivières qui tombent au même endroit
 ## de hauteurs différentes, ni deux rivières qui coulent sur une même case. Gardé ICI, contre la référence du cœur (comme
 ## le + 0,1 du feuillage) : une falaise percée d'une galerie — une rivière tombe du haut, une autre sort de la galerie
-## sur la même face, à la même place ; au pied, elles coulent sur les mêmes cases. À AJOUTER aux cas communs
-## (`epreuve_parite.gd`, OUVERT : régénérer touche les trois greffons).
+## sur la même face, à la même place ; au pied, elles coulent sur les mêmes cases. ✓ AJOUTÉ AUX CAS COMMUNS (7 octobre
+## 2026, branche `cas-eau`) : le 15e cas de `water_mesh_conformance.json` est ce monde. Cette garde reste : elle passe
+## par la RÈGLE du greffon (`Water.world`), le cas commun part de corps donnés.
 func _deux_rivieres_au_meme_endroit() -> void:
 	var d := {}
 	for x in 5:

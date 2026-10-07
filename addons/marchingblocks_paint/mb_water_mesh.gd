@@ -4,7 +4,7 @@ extends RefCounted
 ## cells of every tile layer. What MarchingBlocks bakes into `water/<name>.glb`, computed here again when you paint.
 ##
 ## The rule is written in `water_mesh_conformance.json` (`rules_text`, "THE WATER MESH"; the MarchingBlocks tool's
-## `eau_maillage.gd` is its reference, line by line); this file implements it, and that file's 14 cases prove it — a
+## `eau_maillage.gd` is its reference, line by line); this file implements it, and that file's cases prove it — a
 ## BAG of triangles, compared without order, rotations allowed, reflections refused. It uses nothing from the tool.
 ##
 ## THE CONTRACT every vertex carries (what the six looks, or your own shader, read):

@@ -849,6 +849,18 @@ static func _mondes_maillage() -> Dictionary:
 		bassin.erase(c)
 	m["a cliff above a basin"] = bassin
 	m["an empty world"] = {}
+	# DEUX RIVIÈRES AU MÊME ENDROIT (7 octobre 2026 — le trou que les trois greffons ont mesuré : deux mutations du
+	# mailleur, « la lèvre la plus BASSE gardée » et « deux bandes sur une même case », ne rougissaient sur AUCUN cas) :
+	# une falaise (x 0..4, y 0..5, z 0..2) percée d'une galerie en y = 2, z = 1 (x 3..4), au pied une plaine (x 5..10,
+	# y = 0). Une rivière tombe du haut, l'autre sort de la galerie : deux cascades sur la MÊME face (x = 5), à la même
+	# place (z = 1), de lèvres différentes — une seule nappe, de la plus haute ; au pied, elles coulent sur les MÊMES
+	# cases — une bande par case. Le monde de la garde que le greffon Godot avait écrite (`test_greffon_peinture`).
+	var galerie := {}
+	for c in _boite(Vector3i(0, 0, 0), Vector3i(4, 5, 2)) + _boite(Vector3i(5, 0, 0), Vector3i(10, 0, 2)):
+		galerie[c] = true
+	galerie.erase(Vector3i(3, 2, 1))
+	galerie.erase(Vector3i(4, 2, 1))
+	m["a cliff pierced by a gallery"] = galerie
 	return m
 
 
@@ -985,6 +997,8 @@ static func _maillage_eau() -> Dictionary:
 		["a sea above the whole world", "island", [Vector3i(-1, 6, -1)], null],
 		["a sea in an empty world: one plane", "an empty world", [Vector3i(0, 0, 0)], null],
 		["a refused source draws nothing", "stairs", [Vector3i(0, 1, 1)], null],
+		["two rivers in one place: one falls from the top, one leaves a gallery below, on the same cells",
+			"a cliff pierced by a gallery", [Vector3i(4, 6, 1), Vector3i(3, 2, 1)], null],
 	]
 	var cas: Array = []
 	for e in essais:

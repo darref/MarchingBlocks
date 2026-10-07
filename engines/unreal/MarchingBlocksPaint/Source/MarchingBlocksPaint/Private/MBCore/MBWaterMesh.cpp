@@ -2,7 +2,7 @@
 // (`tableaux_du_maillage`, `_nappes_du_corps`, `rectangles_de_nappe`, `surface_dessinee`, `_large`, `_riviere`,
 // `sens_du_cours`, `_lame`, `_poser_les_lames`, `_lame_calculee`, `_travers`, `_chutes`, `_sortie`, `_profil`, `_devant`,
 // `_point_de_lame`, `_normale_de_lame`, `_couronne`, `_source`, `_grille_compilee`, `_poser`, `_quad`, `_plat`,
-// `_case_plate`, `_poser_les_plats`). Éprouvée par Tests/water_mesh_conformance.json (14 cas, un SAC de triangles).
+// `_case_plate`, `_poser_les_plats`). Éprouvée par Tests/water_mesh_conformance.json (15 cas, un SAC de triangles).
 //
 // ⚠ LES FLOTTANTS COMME GODOT : les scalaires en double (GDScript), les Vector3 / Color / Vector2 en 32 bits — un point de
 // cascade est calculé en double puis rangé en float ; sa normale vient de différences de ces points 32 bits, en

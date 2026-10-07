@@ -647,7 +647,7 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 		T.Expect(Why.empty(), Name + " — " + Why + "\n    expected " + WSummary(Want) + "\n    got      " + WSummary(Got));
 	}
 	std::printf("water_mesh_conformance.json: %d cases, %d failure(s)\n", Cases, CaseFailures);
-	T.Expect(Cases == 14, "the file has " + std::to_string(Cases) + " cases, PARITE.md says 14");
+	T.Expect(Cases == 15, "the file has " + std::to_string(Cases) + " cases, PARITE.md says 15");
 	// The comparison, proven on the largest case (the basin).
 	const int Before = T.Failed;
 	WProveBag(Basin, Tol, T);

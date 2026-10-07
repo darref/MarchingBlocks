@@ -30,7 +30,7 @@
 | `foliage_conformance.json` | 59 | `check` 23, `brush` 4, `place` 3, `wind_data` 2, `sway` 9, `ground_of_cells` 6, `read` 12 |
 | `water_conformance.json` | 25 | `water_world` 11, `river_width` 5, `surface_depth` 2, `read` 7 |
 | `editing_conformance.json` | 62 | `extrude` 39, `shrink_edge` 6, `widen_flat` 3, `select_brush` 4, `room_from_selection` 10 |
-| `water_mesh_conformance.json` (7 octobre 2026, §12) | 14 | `water_mesh` 14 — la nappe recalculée, en ensemble de triangles |
+| `water_mesh_conformance.json` (7 octobre 2026, §12) | 15 | `water_mesh` 15 — la nappe recalculée, en ensemble de triangles |
 
 Chaque fichier : `format`, `version` (1), `rules_text` (la règle, ligne à ligne — **à lire en entier**), parfois
 `limits` / `constants` / `settings`, des mondes nommés (`world_cells`, `worlds`, `models`), et `cases` :
@@ -94,7 +94,7 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   `gdextension/src/noyau/ocean.h` (déjà en C++ standard, déjà éprouvé contre le GDScript par `test_natif`).
 - **LE MAILLAGE DE L'EAU A SES CAS DEPUIS LE 7 OCTOBRE 2026** (`water_mesh_conformance.json`, **§12**) : plats sans
   jonction en T, nappe sous un étage flottant, cascades en volume, remous, source, un seul océan, largeur de rivière. Un
-  greffon qui recalcule l'eau refait aussi la nappe — ~1 000 lignes à réécrire, désormais jugées par 14 cas et un
+  greffon qui recalcule l'eau refait aussi la nappe — ~1 000 lignes à réécrire, désormais jugées par 15 cas et un
   appariement en sac de triangles. (Avant : « les greffons montrent la nappe CUITE et recalculent les CASES » — c'est
   toujours le minimum livré ; §12 dit comment aller au-delà, et à quel coût.)
 - **Vérifié (7 octobre 2026)** : l'export de l'eau est complet pour ce qui est décidé (nappes, presets en aspects,
@@ -257,7 +257,7 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
 
 ### Ce qui fait foi
 
-- **`addons/marchingblocks_core/eau_maillage.gd`**, ligne à ligne ; ses cas : **`water_mesh_conformance.json`** (14), écrit
+- **`addons/marchingblocks_core/eau_maillage.gd`**, ligne à ligne ; ses cas : **`water_mesh_conformance.json`** (15), écrit
   par `epreuve_parite.gd` (`_maillage_eau`) dans les trois greffons (`.meta` à GUID fixe pour Unity). Le résumé de la règle
   est dans `rules_text` (« THE WATER MESH ») ; les constantes dans `constants` ; les tolérances dans `tolerances`.
 - **Ce que les cas décrivent, ce sont les TABLEAUX** (`EauMaillage.tableaux_du_maillage`, sorti de `maillage` pour
@@ -311,7 +311,7 @@ C A B), coin par coin aux tolérances. Un banc qui ne trouve pas dit le triangle
 elle-même éprouvée** (`test_parite`) : vraie sur le bassin (1 453 triangles) mélangé, tourné, bruité sous la tolérance ;
 fausse sur un coin déplacé de 2e−4, un triangle retourné, un triangle doublé à la place d'un autre, des couleurs sur 8 bits.
 
-### Les 14 cas (ce que chacun exerce, gardé par `test_parite` sur les triangles eux-mêmes)
+### Les 15 cas (ce que chacun exerce, gardé par `test_parite` sur les triangles eux-mêmes)
 
 | Cas | Exerce |
 | --- | --- |
@@ -328,6 +328,7 @@ fausse sur un coin déplacé de 2e−4, un triangle retourné, un triangle doubl
 | a sea above the whole world | la hauteur forcée (niveau au-dessus de la boîte : 6,7 partout) |
 | a sea in an empty world | un seul plan, deux triangles |
 | a refused source draws nothing | aucun triangle |
+| two rivers in one place (7 octobre 2026, branche `cas-eau`) | une falaise percée d'une galerie : une rivière tombe du haut, l'autre sort de la galerie — deux cascades sur la MÊME face (x = 5, z = 1), lèvres en y = 6 et y = 2 : UNE nappe, de 5,85 (la plus haute) ; au pied, deux cases de bande communes aux deux cours : UNE bande par case |
 
 Gardé aussi, sur chaque cas : aucune jonction en T entre plats, nappes à rangée + 0,7, bandes à case − 0,15 ; les quatre
 genres exercés. ⚠ **NON EXERCÉ** : la cascade « droite » (d = 0, sans sens connu) — d'après la lecture de `fluides.gd`, la
@@ -336,11 +337,17 @@ règle ne la produit pas (la lèvre suit toujours un pas horizontal ou un mur vo
 ### Mutations — 17, 16 ROUGES, 1 ÉQUIVALENTE (MESURÉ, `MB_NATIF=0`)
 
 Chacune appliquée à `eau_maillage.gd` : **sans régénérer, le fichier livré rougit** (16 sur 16 : un greffon qui aurait ce
-défaut échouerait les cas) ; **régénérée**, 11 rougissent encore par une garde nommée de `test_parite` (jonction en T,
+défaut échouerait les cas — ⚠ **C'ÉTAIT FAUX POUR DEUX** jusqu'au 15e cas, voir plus bas ; vrai depuis, MESURÉ) ; **régénérée**, 11 rougissent encore par une garde nommée de `test_parite` (jonction en T,
 nappe à 0,65, pas de débord en x−, pas de nappe sous l'étage, rangées sans la couleur, horizon à trois rectangles, bouts
 non arrondis, rentrée de 0,3 — vue par la marge de sens, 0,042 —, remous jamais sur l'eau dormante, anneau sans ses
 0,02, source sans dôme). Les 5 autres (écume linéaire, lèvre la plus basse, 2e coin, bande à 0, deux bandes) ne sont
-gardées QUE par les cas — c'est leur rôle. **L'ÉQUIVALENTE, attendue** : garder les sommets orphelins des grilles ne change
+gardées QUE par les cas — c'est leur rôle. ⚠ **« LÈVRE LA PLUS BASSE » ET « DEUX BANDES SUR UNE CASE » NE L'ÉTAIENT PAS** :
+aucun des 14 premiers cas n'avait deux rivières au même endroit — la mutation laissait le fichier livré inchangé, mesuré
+par les trois greffons et dans le cœur. **Bouché le 7 octobre 2026 (branche `cas-eau`) par le 15e cas, « two rivers in one
+place »** : MESURÉ (`MB_NATIF=0`), chacune rend les trois fichiers livrés périmés ET rougit par une garde nommée de
+`test_parite` (la nappe ne monte qu'à 1,85 au lieu de 5,85 ; la case commune couverte deux fois) ; et dans chaque greffon,
+la même mutation de SON mailleur rougit le 15e cas (Godot `mb_water_mesh.gd`, Unity `MBWaterMesh.cs`, Unreal
+`MBWaterMesh.cpp` : 1 093 ou 1 295 triangles au lieu de 1 279). **L'ÉQUIVALENTE, attendue** : garder les sommets orphelins des grilles ne change
 aucun triangle (le contrat est en triangles, pas en sommets).
 
 ### Le recalcul quand on peint — le budget MESURÉ, et ce qu'on recommande
@@ -401,8 +408,8 @@ Une règle ambiguë se remonte et se corrige dans `eau_maillage.gd`, puis on ré
 geste 0,04 à 0,35 s, tout refaire 3 à 9 s, et les nappes refaites = les `.glb` cuits. Détail : `CLAUDE.md`, « L'eau
 recalculée dans le greffon Godot ». ⚠ **DEUX MUTATIONS NE SONT PAS VUES PAR LES 14 CAS** (mesuré dans le cœur aussi :
 « lèvre la plus basse » et « deux bandes sur une même case » — aucun cas n'a deux rivières au même endroit) ; la ligne
-« 16 sur 16 rouges sans régénérer » ci-dessus est donc fausse pour elles. OUVERT : un cas à ajouter (`epreuve_parite.gd`) ;
-Unity et Unreal doivent s'en garder eux-mêmes d'ici là.
+« 16 sur 16 rouges sans régénérer » ci-dessus était donc fausse pour elles. ✓ **Bouché par le 15e cas** (« Le cas commun des
+deux rivières au même endroit », ci-dessous).
 
 ### Unity — FAIT (7 octobre 2026, branche `eau-unity`)
 
@@ -411,4 +418,15 @@ branchement 1 à 5 fait (`MBWaterFollow`, Rebuild water) ; sur l'exemple, en C#,
 nappes refaites = `.glb` cuits tels que glTFast les lit ; vu à l'image (Built-in, URP). Détail : `CLAUDE.md`, « L'eau
 recalculée dans Unity ». Les deux mutations muettes ci-dessus le sont aussi en C# (sondé : une exception dans ces branches
 laisse les 14 cas verts) ; Unity s'en garde par un monde exporté (`DEV_TOOLS/preparer_eau_unity.gd` : deux rivières sur les
-mêmes cases, l'une sortant d'un tunnel sous la cascade de l'autre) — le cas à ajouter peut le reprendre.
+mêmes cases, l'une sortant d'un tunnel sous la cascade de l'autre) — ✓ désormais aussi par le 15e cas commun (ci-dessous).
+
+### Le cas commun des deux rivières au même endroit — FAIT (7 octobre 2026, branche `cas-eau`)
+
+`epreuve_parite.gd` : le monde « a cliff pierced by a gallery » (celui de la garde maison du greffon Godot) et le cas « two
+rivers in one place » — une rivière tombe du haut de la falaise, l'autre sort d'une galerie percée dessous ; deux cascades sur
+la même face, à la même place, lèvres en y = 6 et y = 2 (une nappe, de la plus haute) ; au pied, deux cases de bande communes
+(une bande par case). 1 279 triangles des quatre genres sauf l'eau dormante. Seul `water_mesh_conformance.json` change (les
+14 premiers cas identiques, un monde de plus) ; aucune règle ne change, `rules_text` disait déjà les deux branches (« are ONE:
+top = max », « not SEEN »). **MESURÉ** : `test_parite` 287/0 (natif et `MB_NATIF=0`) ; les deux mutations, dans le cœur, dans
+`mb_water_mesh.gd`, `MBWaterMesh.cs` et `MBWaterMesh.cpp`, rougissent le 15e cas ; les trois greffons passent 15/15 sans
+correction (Godot `test_greffon_peinture`, Unity banc .NET et 65 tests Unity en batch, Unreal `core-runner` sous MSVC).

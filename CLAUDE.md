@@ -752,6 +752,18 @@ cas. La spécification pour les trois agents moteurs : **`engines/PARITE.md` §1
   `test_greffon_peinture` porte le fichier en `PARITE_A_VENIR` (livré, compté, PAS ENCORE REJOUÉ) : l'agent Godot le passe
   dans `PARITE` quand `mb_water.gd` maille.
 - ⚠ **NON EXERCÉ** : la cascade « droite » (sans sens connu) — la règle ne semble pas la produire (lu, pas prouvé).
+- **LE 15e CAS, « DEUX RIVIÈRES AU MÊME ENDROIT » — MESURÉ LE 7 OCTOBRE 2026 (branche `cas-eau`)** : les trois greffons avaient
+  trouvé deux mutations du mailleur muettes sur les 14 cas (« lèvre la plus BASSE gardée », « deux bandes sur une même
+  case ») — « 16 sur 16 rouges sans régénérer » était faux pour elles. Ajouté dans `epreuve_parite.gd` : le monde « a cliff
+  pierced by a gallery » (la garde maison du greffon Godot) et son cas (deux cascades sur la même face, lèvres en y = 6 et
+  2 ; deux cases de bande communes ; 1 279 triangles). Seul `water_mesh_conformance.json` change (les 14 premiers cas
+  identiques). `test_parite` 287/0 (natif et `MB_NATIF=0`), avec des gardes nommées (deux lèvres au même endroit, cases
+  communes, la nappe à 5,85, une bande par case). **Les deux mutations ROUGISSENT** : dans le cœur (`MB_NATIF=0` : les trois
+  fichiers livrés périmés + la garde nommée), et dans chaque greffon par le 15e cas (Godot, Unity C#, Unreal C++ : 1 093 ou
+  1 295 triangles au lieu de 1 279). **Les trois greffons passent 15/15 sans correction** : `test_greffon_peinture` (299 cas
+  communs), banc .NET et Unity 6.6 en batch (65/65), `core-runner` Unreal sous MSVC 2022 (`cl /std:c++17 /EHs-c- /GR- /W4
+  /WX /D_HAS_EXCEPTIONS=0` — sans ce dernier drapeau, que pose Unreal, la STL avertit C4530 et `/WX` refuse). Batterie `lancer_les_suites.sh` : 28 suites vertes (⚠ dans un
+  worktree neuf, `test_projet` rougit tant que `godot --headless --import` n'a pas rempli `.godot/imported`).
 - ⚠ **VU EN PASSANT** : l'exemple livré a 739 481 cases et une mer de 354 159 cases (`sonde_eau_exemple.gd` disait 2,4 millions le 4 octobre :
   OUVERT — l'exemple a changé, ou la mer était comptée autrement ; non vérifié).
 
@@ -801,7 +813,7 @@ dans `mb_water.gd`, le branchement dans `mb_water_node.gd`.
   mutation dans `eau_maillage.gd` : `test_parite` 279/0, le fichier livré inchangé). Aucun cas n'a deux rivières au même
   endroit : **ce que disait le contrat (« 16 sur 16 rouges sans régénérer ») est faux pour ces deux-là.** Gardé dans
   `test_greffon_peinture` contre le cœur (une falaise percée d'une galerie, deux rivières sur la même face) ;
-  **OUVERT : un cas commun à ajouter dans `epreuve_parite.gd`** (régénérer touche les trois greffons).
+  ~~OUVERT : un cas commun à ajouter~~ **✓ FAIT : le 15e cas commun** (branche `cas-eau`, « Le contrat de l'eau recalculée »).
 - ⚠ **PAS TENU EN MAIN** : dans l'éditeur de Godot lui-même (vraie souris, inspecteur, bouton cliqué) — le branchement est
   mené par `tick(now, stroke)` ; et la détection d'un changement lit l'empreinte que chaque couche prend à sa
   reconstruction (`live_update`, `apply_cells`) : une couche sans `live_update` ne fait pas suivre l'eau (ni ses tuiles).
@@ -889,7 +901,8 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   gardée » (fusion de deux cascades d'un même lieu) et « deux bandes sur une case » restent vertes sur les 14 cas. SONDÉ :
   une exception posée dans ces deux branches laisse les 14 cas verts — **aucun cas ne fusionne deux cascades ni ne voit deux
   fois une case de bande** (aucun cas n'a deux rivières sur une même case). Le greffon Godot l'a mesuré de son côté
-  (« L'eau recalculée dans le greffon Godot ») : PARITE §12 se trompait en les disant gardées par les cas — OUVERT, à
+  (« L'eau recalculée dans le greffon Godot ») : PARITE §12 se trompait en les disant gardées par les cas — ✓ **BOUCHÉ par le
+  15e cas commun (branche `cas-eau`) ; ce qui suit est l'état d'avant** — OUVERT, à
   trancher dans `epreuve_parite.gd` (un cas à deux rivières sur les mêmes cases, dont l'une sort
   d'un tunnel sous la cascade de l'autre), PAS dans le greffon. En attendant, le greffon Unity les garde par le monde
   exporté ci-dessous (4 + 5 cases vues deux fois, 1 fusion, comptées par le préparateur) : **les deux deviennent ROUGES**.
@@ -1169,8 +1182,8 @@ RTTI), la reprise de `fluides.gd` portée dans `MBWater` (`WorldResumed`), le br
   `RebuildWorld`.
 - ⚠ **OUVERT** : un monde SANS jeu de tuiles n'a pas de repère mesuré — la nappe cuite est posée par l'importeur, la refaite
   dans le repère par défaut : elles ne coïncident pas (un tel monde ne montre pas non plus de tuiles). Le coût d'un geste
-  qui agrandit la mer (la profondeur relue case par case sous chaque case de surface). Le cas commun « deux rivières au
-  même endroit » à ajouter dans `epreuve_parite.gd`. ⚠ **PAS TENU EN MAIN** : aucun trait à la souris — le branchement est
+  qui agrandit la mer (la profondeur relue case par case sous chaque case de surface). ~~Le cas commun « deux rivières au
+  même endroit » à ajouter~~ (✓ fait, branche `cas-eau` : le 15e cas, rouge sous les deux mutations du C++). ⚠ **PAS TENU EN MAIN** : aucun trait à la souris — le branchement est
   mené par script (Clear cells, annuler, la console).
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
