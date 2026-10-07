@@ -661,7 +661,7 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
-const PARITE := {"transitions": 93, "animation": 43, "foliage": 59, "water": 25, "editing": 62}
+const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63}
 
 
 func _le_greffon_passe_les_cas_de_parite() -> void:
