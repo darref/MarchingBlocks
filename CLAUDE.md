@@ -21,6 +21,18 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 > projet, mais 3D au lieu de 2D »), et exportera vers TROIS greffons de peinture — Godot, Unity,
 > Unreal — **écrits APRÈS lui**.
 
+- **LES DÉCISIONS DU 7 OCTOBRE 2026 — DÉCIDÉ (Jordan, en réponse à l'inventaire du lancement).** Le but : amener
+  MarchingBlocks à « il ne reste vraiment plus rien à faire à part publier sur Steam après avoir payé la marque et poster
+  partout » (la marque ~190 €, l'AppID 100 $ et le domaine attendent l'argent ; la playlist YouTube est en PRIVÉ).
+  - **GEL DES FONCTIONS, MAINTENANT** : plus aucun atelier ni fonction neuve avant la 0.9.0 — corrections, finition, vente
+    seulement. Props, Houses et toute idée neuve partent à la 1.0. Le logiciel est fini : **les greffons commencent**.
+  - **PARITÉ COMPLÈTE DES GREFFONS À LA 0.9.0** : toute la LISTE DES GREFFONS À FAIRE (ci-dessous) est livrée dans
+    Godot, Unity et Unreal pour le lancement — fluides et leurs presets, molette, transitions, demandes du 3 octobre,
+    Extrude / Shrink, textures animées, feuillage —, chacune avec ses cas d'épreuve communs.
+  - **UN INSTALLEUR INNO SETUP** (gratuit) livre l'exe et sa DLL, les raccourcis, les associations de fichiers, et une
+    désinstallation propre qui les retire. Steam livre le dossier tel quel. (Tranche l'OUVERT « un exécutable », §0.)
+  - **LE TRAILER FINAL EST CONSTRUIT PAR CLAUDE, PAR SCRIPT, MAINTENANT** (60 s et 2 min), comme les devlogs — plus le
+    monde filmé à la souris en décembre de la stratégie de lancement.
 - **LES GREFFONS ATTENDENT LA FIN DU LOGICIEL — DÉCIDÉ (Jordan, 1er octobre 2026)** : « les greffons à faire
   quand tout le dev du soft sera terminé, sinon allers-retours incessants ». Une fonction neuve du logiciel ne
   se porte plus dans Godot, Unity et Unreal au fil de l'eau : on la note dans **LA LISTE DES GREFFONS À FAIRE**
