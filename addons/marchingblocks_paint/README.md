@@ -20,6 +20,24 @@ in one layer removes it from the others, in the same Ctrl+Z. A hidden layer leav
 without tiles arrives with its cells and no tiles, and the Output panel says so. `world_conformance.json`
 holds the reading rule's reference cases.
 
+What else a world exported by MarchingBlocks brings comes with it, next to the layers:
+
+- **Animated textures** — a material of a tileset whose glTF extras carry `mb_animation` (scroll, frames,
+  pulse, on the base colour, normal, ORM and emission) is drawn by the MarchingBlocks tool's own shader; its
+  frames travel in `<tileset>.mbset/animation/`. A de-synced track starts each tile at its own phase.
+- **Transitions** (a *MarchingBlocksTransitions* node) — where two layers meet, the surface of one takes the
+  look of the other, softly: a pass laid over the tiles' materials. It follows the cells as you paint (in a
+  game, call `refresh()` after changing cells).
+- **Foliage** (a *MarchingBlocksFoliage* node) — every plant, drawn as MultiMeshes, swaying in the wind. The
+  models' own animations (skeletons) are not played.
+- **Water** (a *MarchingBlocksWater* node per water layer) — the water sheet MarchingBlocks baked, drawn with
+  one of six example looks (stylized, clear, reflective, lava, swamp, acid) — **or your own material**: the looks
+  are examples, not an obligation. Any water shader gets the data: COLOR_0 r, g the flow along x and z ([-1, 1]
+  mapped to [0, 1]); b the kind (0 still, 0.5 river, 0.75 foam, 1 waterfall); a the depth / 8 on still water and
+  rivers, the amount of foam on waterfalls and foam; NORMAL the shape; TEXCOORD_0. Paint the cells and the sheet
+  says it is stale; *Follow Cells* shows the water of the new cells (the rule of the tool, `mb_water.gd`).
+  Re-export the world from MarchingBlocks to rebake the sheet.
+
 | Aim (Tab switches) | |
 |---|---|
 | Grid | aims at the floor plane — Page Up / Page Down move it |
@@ -35,10 +53,39 @@ holds the reading rule's reference cases.
 | Arrows | move the selection; they follow the camera. Shift + ↑ ↓ lift and lower |
 | Ctrl + C · X · V | copy · cut · paste (then click to place) |
 
-The **Selection** menu holds Fill, Delete, Extrude ↑ ↓, Grow, Shrink, Connected, Copy, Cut, Paste.
-Extruding moves the floor with the selection, so *Rect, Fill, Extrude, Fill…* raises a room.
+Once something is selected, the toolbar holds Fill, Delete, Clear, Grow, **Shrink** (drops the EDGE of the
+selection: a rectangle loses its rim), Connected, **Room from selection**, Move, Copy, Cut, Paste.
+
+**Extrude** ↑ · ↓ · **facing** (with Select, Rect, Box, or a selection) acts on the selection — or, with nothing
+selected, on the matter of the floor:
+
+| | |
+|---|---|
+| Click | adds matter one cell that way; the selection and the floor follow — click again to keep going |
+| Shift + click | **Extend selection**: the selection grows one cell that way, empty cells included — no matter added |
+| Alt + click | moves the selection one cell that way — no matter added |
+
+*Facing* goes away from the matter behind the cells: a wall thickens toward the air, a cave ceiling comes down.
+So *Rect, Fill, Extrude, Fill…* raises a wall, and *Select empty cells too* (a toggle under Select) paints a
+room's footprint on the floor grid — then **Room from selection** turns it into a room (Floors and Up / Down
+are the Room shape's), or Extend selection ↑ and Fill.
+
+| Mouse wheel | |
+|---|---|
+| alone | the editor's zoom — except during a gesture: a Rect / Box drag (its height: a flat Rect becomes a box), a Room being traced (its floors), a paste (its height) |
+| Ctrl | the floor |
+| Ctrl + Shift | the Stairs' step |
+| with a selection (Select, Rect, Box) | Shift: Extend selection ↑ ↓ · Alt ↑: widen it, a flat ring · Alt ↓: shrink its edge |
+| a shape | Alt: its size (a Room: its floors) · Shift: its length (a Room: rises / sinks) |
+| Add · Dig · Select | Alt: the brush size · Shift: the next brush shape |
+
+Each notch says its value near the mouse. Navigate never takes the wheel, and the inspector's own fields keep
+theirs. (Godot's F keeps framing the selected node: the 3D view's camera belongs to the editor.)
 
 A red cube is a tile your tileset does not have. Nothing is ever filled in for you. One node is one
 layer. The placement rule is written in `tileset.json` (`rules_text`), the tools in
 `tools_conformance.json` (`rules_text`); `conformance.json` and `tools_conformance.json` prove this plugin
-follows both exactly — the same reference cases as the Unity and Unreal plugins.
+follows both exactly — the same reference cases as the Unity and Unreal plugins. So do
+`editing_conformance.json` (Extrude, Shrink, Widen, the Select brush, Room from selection, the mouse wheel),
+`animation_conformance.json`, `transitions_conformance.json`, `foliage_conformance.json` and
+`water_conformance.json`: each holds its rule in full (`rules_text`) and the cases every plugin passes.

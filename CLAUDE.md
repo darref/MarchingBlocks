@@ -52,31 +52,38 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
+    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture de `water`, la nappe cuite et les SIX presets (copie générée), le matériau de l'artiste, la règle des cases (25/25 cas) ; la nappe se dit périmée quand on peint. ⚠ La NAPPE n'est pas recalculée (le mailleur n'a pas de cas). Voir « Le greffon Godot à parité ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
+    - ✓ **Godot — FAIT sauf F (7 octobre 2026)** : la règle de l'appli dans `mb_editor.gd` (`wheel`), éprouvée par de vrais événements. ⚠ F : la caméra de la vue 3D appartient à l'éditeur de Godot (pas d'API pour la poser).
   - ~~**la salle**~~ — **FAITE (2 octobre 2026)**, voir §4, « la salle dans les greffons ».
   - ~~**la règle multicouche**~~ — **FAITE (2 octobre 2026)**, voir §4, « la règle multicouche dans les greffons ».
   - **Les transitions entre couches** (§5, « L'atelier Transitions ») : lire la clé `transitions` d'un monde exporté (à
     écrire d'abord dans `world.json` : paires, réglages par direction, représentants, choix peints), réécrire la règle
     (`Transitions.melange`, ses cas d'épreuve) et le shader (texture 3D d'un octet par case, table des réglages) dans
     chaque moteur, et le poser par-dessus les matériaux des tuiles. Un shader ne voyage pas (§4).
+    - ✓ **Godot — FAIT (7 octobre 2026)** : lecture, règle (93/93 cas), le shader de l'appli en `next_pass` sur les matériaux des tuiles, qui suit les cases peintes. Vu à l'image.
   - **Les demandes du 3 octobre 2026** (§5, « les demandes du 3 octobre ») : le pinceau Select qui prend aussi les
     cases VIDES (une case à cocher), « Extend selection ↑ ↓ » (le mode « étendre » d'`Etages.extruder`, en bouton), et,
     si les greffons posent un jour de l'eau, la largeur d'une rivière à la pose (`FL.sources_en_largeur`, ses cas) ; et
     « Room from selection » (`FS.salle_depuis`, réécrite en C# et en C++, avec ses cas).
+    - ✓ **Godot — FAIT (7 octobre 2026)** : « Select empty cells too », Extend selection (Maj + clic / Maj + molette), Room from selection. La largeur d'une rivière : la règle et ses cas seulement (le greffon ne pose pas d'eau).
   - **Extrude, et Shrink** (§5, « Extrude, une seule fois ») : les trois greffons ont encore Extrude ↑ ↓ dans les
     opérations de sélection et l'ancien Shrink (`retrecir`, gardé dans `outils.gd` pour leurs cas d'épreuve). Il
     faut : `Etages.extruder` (poser / étendre / décaler, haut / bas / face) réécrite en C# et en C++, `retrecir_bord`
     à la place de `retrecir`, leurs cas dans `tools_conformance.json`, et Maj / Alt dans les trois éditeurs.
+    - ✓ **Godot — FAIT (7 octobre 2026)** : Extrude ↑ ↓ face (Maj étend, Alt décale), Shrink du bord ; les anciens Extrude ↑ ↓ et Shrink quittent sa barre (leurs fonctions restent pour `tools_conformance.json`).
   - ~~**Les variantes voulues**~~ — **FAITES (5 octobre 2026)**, voir §3, « les variantes dans les greffons ».
   - **Les textures animées** (§5, « l'atelier Animation ») : lire `mb_animation` dans les `extras` du matériau glTF
     (défilement u/v, images — ips, aller-retour —, pulsation de l'émission, synchro ou décalée par la position, la phase
     de `phase_de`), et le shader de chaque moteur (la règle : `image_au_temps`, `pulsation_au_temps`) ; EMPORTER LES
     IMAGES dans le `.mbset` (aujourd'hui `tiles.glb` ne porte que l'image 0 et les noms de fichiers des autres) ; leurs
     cas d'épreuve.
+    - ✓ **Godot — FAIT (7 octobre 2026)** : `mb_animation` lu dans le JSON du `.glb` (repli : la méta `extras`), le shader de l'appli (copie générée, phase en espace du format), 43/43 cas. Vu à l'image.
   - **Le feuillage** (§5, « l'atelier Foliage ») : porter les modèles et les plants dans le `.mbworld` (le `.glb` copié
     dedans, comme les jeux de tuiles), la règle `feuillage.gd` (les trois modes, le pinceau, ses cas d'épreuve), le
     vent (le shader réécrit dans chaque moteur, sur les mêmes données : sol, hauteur, phase, amplitude par plant).
+    - ✓ **Godot — PARTIEL (7 octobre 2026)** : lecture, pose en MultiMesh, le vent (shader de l'appli), la règle de placement et du pinceau (59/59 cas). ⚠ Pas d'outil pour PLANTER dans l'éditeur de Godot. Vu à l'image.
   - **UNE API DE JEU — PROPOSÉ (4 octobre 2026), validée comme entrée de la liste par Jordan le même jour** (« pour
     que les game dev puissent simplement faire leur jeu par-dessus »). Les trois greffons sont des OUTILS D'ÉDITEUR :
     leur surface publique n'a jamais été conçue comme une API (Godot `cells` / `apply_cells` / `cell_under_ray` /
@@ -509,6 +516,64 @@ lire, la règle, les cas, le rendu, ce qui ne peut pas être fait). Ici, ce qui 
   ambiguë se remonte et se corrige dans le GDScript, jamais dans un moteur.
 - ⚠ **PAS TENU EN MAIN** : l'export du monde par le bouton (le panneau d'attente pend en headless, comme avant) — mené
   par `test_parite` sur `FormatMonde.exporter` directement, avec ce que l'écran lui passe (`_exporter_le_monde`, relu).
+
+### LE GREFFON GODOT À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-godot`, sur le contrat ci-dessus)
+
+Le greffon gratuit (`addons/marchingblocks_paint/`) porte la liste des greffons, entrée par entrée (cochées dans la
+liste, §0). **Il ne charge toujours RIEN du cœur** : chaque règle y est réécrite depuis `rules_text` (en anglais, elle
+part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
+
+- **LES RÈGLES — MESURÉ : 282 CAS SUR 282** (`test_greffon_peinture`, qui lit les cinq fichiers ; une sorte inconnue
+  rougit, le nombre de cas de chaque fichier est vérifié) : `mb_tools.gd` (Extrude poser / étendre / décaler × haut /
+  bas / face, `shrink_edge`, `widen_flat`, `select_brush`), `mb_shapes.gd` (`room_from_selection`), `mb_animation.gd`,
+  `mb_transitions.gd`, `mb_foliage.gd`, `mb_water.gd` (la règle de `fluides.gd`, sans le natif ni la reprise).
+- **LES SHADERS SONT CEUX DE L'APPLI, COPIÉS PAR UN GÉNÉRATEUR** (`DEV_TOOLS/generer_shaders_greffon.gd` →
+  `mb_shaders.gd`, gardé par la péremption dans `test_greffon_peinture`, comme les icônes) : l'animation, les
+  transitions, le vent, les six presets d'eau. **Deux transformations seulement**, chacune refusée si son motif manque :
+  chaque `MODEL_MATRIX` passe par `mb_world_to_format` (l'animation et les transitions : un nœud du greffon peut être
+  déplacé, tourné, à case ≠ 1 — l'appli, elle, est en espace du format) ; l'horloge de l'appli (`mb_temps`, `mb_image`)
+  devient le `TIME` de Godot (le greffon ne peint pas d'images). Le vent et l'eau partent tels quels.
+- **L'IMPORT D'UN MONDE** (`mb_world_file.gd`, `read_all`) lit `water`, `transitions`, `foliage` (une clé malformée refuse
+  le monde) et pose à côté des couches : **MarchingBlocksWater** (la nappe cuite, le preset de son aspect ou le matériau
+  de l'artiste ; elle se dit PÉRIMÉE quand les cases changent, et `follow_cells` montre l'eau recalculée — éteint par
+  défaut : une mer de millions de cases en GDScript), **MarchingBlocksTransitions** (le passage en `next_pass` sur
+  TOUS les matériaux des tuiles des couches, qui suit les cases peintes dans l'éditeur), **MarchingBlocksFoliage**
+  (MultiMesh, le vent ; le sol et la hauteur passés dans le monde de Godot). Un jeu de tuiles animé : `mb_animation` lu
+  dans le JSON du `.glb` (repli : la méta `extras`), ses images dans `animation/`. Les maillages d'une couche qui change
+  un matériau deviennent les SIENS (`Tileset.own`) : un autre monde qui charge le même `.glb` n'est pas touché.
+- **L'ÉDITION** : la barre a Extrude ↑ ↓ face (clic pose, Maj étend, Alt décale ; sur la sélection ou la matière de
+  l'étage), Shrink du bord, « Select empty cells too », Room from selection ; les anciens Extrude ↑ ↓ et Shrink QUITTENT
+  la barre de Godot (leurs fonctions restent pour `tools_conformance.json`, PARITE §6). **La molette** suit la règle de
+  l'appli (`mb_editor.wheel`), sa valeur dite près de la souris. Éprouvé par de vrais événements (350 vérifications).
+- **VU À L'IMAGE** (un projet d'essai avec le greffon seul, un monde exporté par l'appli, rendu avec fenêtre) : le fondu
+  sable / roche (avec et sans passage, puis un représentant rouge pour voir OÙ il dessine), l'animation décalée tuile par
+  tuile à deux instants, les arbres qui se balancent à trois instants, les SIX presets d'eau, et la barre
+  (`ART/barre_greffon.png`, refaite).
+- **MUTATIONS — 24, 24 ROUGES** : le fondu (départage, décalage sans 1 − s), la table au-delà de 15, la marge de la
+  texture, l'aller-retour, la phase, une version plus récente, le défilement sans 7 × phase, le balancement ∝ h, un plant
+  d'un modèle inconnu, le pinceau qui n'indexe pas, l'ordre des voisins de l'eau, deux mers, le lac qui ne déborde
+  jamais, Extrude face, Shrink, Select, Room from selection, la molette (Alt ↑ inversé, le zoom volé), la copie des
+  shaders retouchée, le passage non posé, la nappe sans son preset. ⚠ **UNE ÉTAIT D'ABORD MUETTE** : lire l'eau sous un
+  plant au point même au lieu de p + 0,1 ne change AUCUN cas `check` (leurs plants sont à y = 1). Gardée dans
+  `test_greffon_peinture` contre la référence du cœur (un sol à y = 0,75) — **les cas communs ne la gardent pas : à
+  ajouter dans `epreuve_parite.gd`** (OUVERT : régénérer touche les trois greffons).
+- ⚠ **UNE AMBIGUÏTÉ DE LA RÈGLE, TROUVÉE — OUVERT, À TRANCHER DANS LE CŒUR** : `phase_de` range `fract(p · 0,3183099 + k)`
+  puis `× 17` dans un `Vector3` — en FLOTTANTS 32 BITS — alors que `rules_text` dit « computed in DOUBLE precision ».
+  Mesuré : en double pur, l'origine (130, 64, −90) donne 0,32110 au lieu de 0,32080 attendu (et (1, 1, 1) 0,99927 au lieu
+  de 0,99919) : **un greffon C# ou C++ écrit depuis le texte ÉCHOUE les cas `phase`**. Godot les passe parce que son
+  `Vector3` arrondit pareil. Deux voies : dire l'arrondi 32 bits dans le texte, ou calculer `phase_de` en double (les
+  cas changent). Aucune ne change le rendu de l'appli (son shader calcule à part).
+- ⚠ **CE QUI RESTE, ET POURQUOI** : F (cadrer toute la matière) — la caméra de la vue 3D appartient à l'éditeur de Godot,
+  sans API pour la poser (son F à lui centre la sélection) ; PLANTER dans l'éditeur — pas d'outil (la règle et le pinceau
+  sont là et éprouvés ; le sol devrait se chercher contre les tuiles posées) ; la NAPPE d'eau recalculée — attend les cas
+  du mailleur (PARITE §2) ; le bruit des transitions — un par direction dans le shader, un seul dans les cas (PARITE §4,
+  le greffon suit le shader) ; le vent d'un monde TOURNÉ tourne avec lui (exact pour un monde déplacé et mis à
+  l'échelle).
+- ⚠ **VU EN PASSANT** : l'export glTF de l'appli donne un matériau PAR MAILLAGE (« sand », « sand2 »… « sand52 »), chacun
+  avec ses extras — l'association par nom marche, mais un moteur reçoit 52 matériaux pour un (le greffon partage
+  au moins leurs tableaux d'images). À regarder pour Unity et Unreal (lots d'appels de dessin).
+- ⚠ **PAS TENU EN MAIN** : le greffon dans l'éditeur de Godot lui-même (souris, molette réelle sous Windows, Alt +
+  molette) — tout ce qu'il relaie est éprouvé par événements, l'aiguillage de l'éditeur ne se teste pas en headless.
 
 ## 1. Le greffon en une phrase — DÉCIDÉ
 

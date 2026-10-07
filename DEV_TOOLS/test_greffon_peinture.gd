@@ -686,6 +686,23 @@ func _le_greffon_passe_les_cas_de_parite() -> void:
 		total += (f["cases"] as Array).size()
 		print("  parité %s : %d cas %s, %d divergence(s)" % [nom, (f["cases"] as Array).size(), str(sortes), rouges])
 	print("  parité : %d cas en tout" % total)
+	# ⚠ UNE MUTATION MUETTE DES CAS COMMUNS (7 octobre 2026) : lire l'eau au point même au lieu de p + 0,1 ne change aucun
+	# cas `check` (leurs plants sont à y = 1, où floor(y + 0,2) et floor(y + 0,3) coïncident). Gardé ICI, contre la
+	# référence du cœur : un sol à y = 0,75 au-dessus d'une case d'eau en y = 1 — seul le + 0,1 y voit l'eau.
+	var FEc: GDScript = load("res://addons/marchingblocks_core/feuillage.gd")
+	var eau_ici := {Vector3i(0, 1, 0): true}
+	var m_fr: Dictionary = FEc.modele(1, "M", "")
+	var m_en := {"id": 1, "ground_offset": 0.0, "scale": 1.0, "scale_random": 0.2, "footprint": 0.5, "height": 1.0, "wind": 0.5}
+	var monde_fr := {"plein": func(_c: Vector3i) -> bool: return false, "sol": func(_x, _z, _y): return null,
+		"eau": func(q: Vector3) -> bool: return eau_ici.has(FEc.case_d_eau(q))}
+	var monde_en := {"full": func(_c: Vector3i) -> bool: return false, "ground": func(_x, _z, _y): return null,
+		"water": func(q: Vector3) -> bool: return eau_ici.has(Foliage.water_cell(q))}
+	var p := Vector3(0.5, 0.75, 0.5)
+	var ref: String = FEc.verifier(m_fr, FEc.plant(1, 1, p, 0.0, 1.0, "sol"), Vector3.UP, "sol_debord", monde_fr,
+		FEc.index([], {}), {})
+	var lu := Foliage.check(m_en, Foliage.plant(1, p, 0.0, 1.0, "ground"), Vector3.UP, "overflow", monde_en,
+		Foliage.index([], {}), {})
+	_vrai(ref == "dans_l_eau" and lu == "in_water", "l'eau sous un plant se lit en p + 0,1 (cœur « %s », greffon « %s »)" % [ref, lu])
 
 
 ## Compare deux valeurs JSON (et ce que le greffon rend) : entiers exacts, réels à `tol` près, tableaux dans l'ordre,
