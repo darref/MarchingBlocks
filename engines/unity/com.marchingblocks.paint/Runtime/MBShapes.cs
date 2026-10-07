@@ -79,6 +79,53 @@ namespace MarchingBlocks.Paint
             return r;
         }
 
+        /// <summary>ROOM FROM SELECTION: the FOOTPRINT is the selection seen from above (x, z); the base is its lowest y
+        /// when rising (<paramref name="up"/>), its highest when sinking. Inside = footprint cells whose four horizontal
+        /// neighbours are in the footprint (none: too_small; an empty selection: empty). Floor, ceiling and walls are set
+        /// where empty, the inside is cleared where full, then repaired like any added shape. The box: the room's
+        /// corners (low, high).</summary>
+        public static ShapeResult RoomFromSelection(ICollection<Int3> cells, ICollection<Int3> selection, int floors, bool up,
+            out Int3 boxLow, out Int3 boxHigh)
+        {
+            var r = new ShapeResult();
+            boxLow = boxHigh = default;
+            if (selection.Count == 0) { r.Error = "empty"; return r; }
+            var footprint = new HashSet<(int, int)>();
+            var order = new List<(int, int)>();
+            int baseY = 0;
+            bool first = true;
+            foreach (var c in selection)
+            {
+                if (footprint.Add((c.x, c.z))) order.Add((c.x, c.z));
+                if (first || (up ? c.y < baseY : c.y > baseY)) { baseY = c.y; first = false; }
+            }
+            var inside = new HashSet<(int, int)>();
+            foreach (var p in order)
+                if (footprint.Contains((p.Item1 + 1, p.Item2)) && footprint.Contains((p.Item1 - 1, p.Item2))
+                    && footprint.Contains((p.Item1, p.Item2 + 1)) && footprint.Contains((p.Item1, p.Item2 - 1)))
+                    inside.Add(p);
+            if (inside.Count == 0) { r.Error = "too_small"; return r; }
+            int e = Math.Max(1, Math.Min(floors, RoomFloorsMax));
+            int y0 = up ? baseY : baseY - e - 1, y1 = y0 + e + 1;
+            if ((long)footprint.Count * (e + 2) > VolumeMax) { r.Error = "too_large"; return r; }
+            int x0 = int.MaxValue, z0 = int.MaxValue, x1 = int.MinValue, z1 = int.MinValue;
+            foreach (var p in order)
+            {
+                x0 = Math.Min(x0, p.Item1); z0 = Math.Min(z0, p.Item2);
+                x1 = Math.Max(x1, p.Item1); z1 = Math.Max(z1, p.Item2);
+                for (int y = y0; y <= y1; y++)
+                {
+                    var c = new Int3(p.Item1, y, p.Item2);
+                    if (y == y0 || y == y1 || !inside.Contains(p)) { if (!cells.Contains(c)) r.Set.Add(c); }
+                    else if (cells.Contains(c)) r.Clear.Add(c);
+                }
+            }
+            r.Repaired = Repair(cells, r.Set, r.Clear, false);
+            boxLow = new Int3(x0, y0, z0);
+            boxHigh = new Int3(x1, y1, z1);
+            return r;
+        }
+
         static readonly Int3[] Horizontal = { new Int3(1, 0, 0), new Int3(-1, 0, 0), new Int3(0, 0, 1), new Int3(0, 0, -1) };
         static readonly Int3[][] Planes =
         {
