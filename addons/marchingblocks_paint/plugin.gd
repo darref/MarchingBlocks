@@ -10,6 +10,9 @@ const World := preload("res://addons/marchingblocks_paint/mb_world.gd")
 const Editor := preload("res://addons/marchingblocks_paint/mb_editor.gd")
 const WorldFile := preload("res://addons/marchingblocks_paint/mb_world_file.gd")
 const Toolbar := preload("res://addons/marchingblocks_paint/mb_toolbar.gd")
+const TransitionsNode := preload("res://addons/marchingblocks_paint/mb_transitions_node.gd")
+const FoliageNode := preload("res://addons/marchingblocks_paint/mb_foliage_node.gd")
+const WaterNode := preload("res://addons/marchingblocks_paint/mb_water_node.gd")
 const IMPORT_WORLD := "Import MarchingBlocks world..."
 
 var _editor: Node
@@ -19,6 +22,10 @@ var _world_dialog: EditorFileDialog
 
 func _enter_tree() -> void:
 	add_custom_type("MarchingBlocksWorld", "Node3D", World, null)
+	# What a world exported by MarchingBlocks brings next to its layers (Import MarchingBlocks world).
+	add_custom_type("MarchingBlocksTransitions", "Node", TransitionsNode, null)
+	add_custom_type("MarchingBlocksFoliage", "Node3D", FoliageNode, null)
+	add_custom_type("MarchingBlocksWater", "Node3D", WaterNode, null)
 	_editor = Editor.new()
 	_editor.undo = get_undo_redo()
 	add_child(_editor)
@@ -41,6 +48,8 @@ func _enter_tree() -> void:
 
 func _exit_tree() -> void:
 	remove_custom_type("MarchingBlocksWorld")
+	for t in ["MarchingBlocksTransitions", "MarchingBlocksFoliage", "MarchingBlocksWater"]:
+		remove_custom_type(t)
 	remove_tool_menu_item(IMPORT_WORLD)
 	if _world_dialog != null:
 		_world_dialog.queue_free()

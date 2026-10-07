@@ -1741,3 +1741,6 @@ void fragment() {
 	}
 }
 """
+
+## The water shaders by look.
+const WATER := {"stylized": WATER_STYLIZED, "clear": WATER_CLEAR, "reflective": WATER_REFLECTIVE, "lava": WATER_LAVA, "swamp": WATER_SWAMP, "acid": WATER_ACID}

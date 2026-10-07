@@ -172,9 +172,21 @@ static func of_material(m: Material) -> Dictionary:
 	return read((e as Dictionary).get("mb_animation")) if e is Dictionary else {}
 
 
+static var _arrays := {}
+
+
 ## The images of a frames track, as one Texture2DArray (the size of the first; a lost image shows MAGENTA — a hole
-## must be seen). `base` is the .mbset folder the paths are relative to.
+## must be seen). `base` is the .mbset folder the paths are relative to. Shared: the same frames, the same array.
 static func frames_texture(paths: Array, base: String) -> Texture2DArray:
+	var key := base + "|" + "|".join(PackedStringArray(paths))
+	if _arrays.has(key) and is_instance_valid(_arrays[key]):
+		return _arrays[key]
+	var tex := _frames_texture(paths, base)
+	_arrays[key] = tex
+	return tex
+
+
+static func _frames_texture(paths: Array, base: String) -> Texture2DArray:
 	var images: Array[Image] = []
 	var size := Vector2i.ZERO
 	for p in paths:

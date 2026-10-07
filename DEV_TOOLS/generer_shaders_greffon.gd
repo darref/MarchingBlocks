@@ -114,4 +114,8 @@ static func sorties() -> Dictionary:
 			return {"erreur": "le shader %s contient des triples guillemets" % nom}
 		gd.append("")
 		gd.append("const %s := \"\"\"%s\"\"\"" % [nom, code.replace("\\", "\\\\")])
+	gd.append("")
+	gd.append("## The water shaders by look.")
+	gd.append("const WATER := {%s}" % ", ".join(PackedStringArray(ASPECTS.keys().map(func(a: String) -> String:
+		return "\"%s\": WATER_%s" % [a, a.to_upper()]))))
 	return {CIBLE: ("\n".join(gd) + "\n").to_utf8_buffer()}
