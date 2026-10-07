@@ -8,6 +8,7 @@
 #include "Engine/Selection.h"
 #include "Editor.h"
 #include "MarchingBlocksFoliage.h"
+#include "MarchingBlocksWater.h"
 #include "MarchingBlocksWorld.h"
 #include "SceneManagement.h"
 #include "SceneView.h"
@@ -47,7 +48,9 @@ void UMarchingBlocksEdMode::CreateToolkit()
 void UMarchingBlocksEdMode::Exit()
 {
 	bStroking = false;
+	AMarchingBlocksWater::SetGestureOpen(false);
 	bBoxing = false;
+	AMarchingBlocksWater::SetGestureOpen(false);
 	bHasShapeAnchor = false;
 	Preview.clear();
 	Super::Exit();
@@ -277,6 +280,7 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				MBPaint::FCell Corner;
 				if (!BoxCorner(World, Origin, Direction, Corner)) return true;
 				bBoxing = true;
+				AMarchingBlocksWater::SetGestureOpen(true);   // the water waits for the end of the gesture
 				BoxStart = BoxEnd = Corner;
 				return true;
 			}
@@ -309,12 +313,14 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 				MBPaint::FCell Corner;
 				if (!BoxCorner(World, Origin, Direction, Corner)) return true;
 				bBoxing = true;
+				AMarchingBlocksWater::SetGestureOpen(true);   // the water waits for the end of the gesture
 				bStrokeControl = bControl;
 				bStrokeInverse = bShift;
 				BoxStart = BoxEnd = Corner;
 				return true;
 			}
 			bStroking = true;
+			AMarchingBlocksWater::SetGestureOpen(true);   // the water waits for the end of the gesture
 			bStrokeInverse = bShift;
 			bStrokeControl = bControl;
 			LastKey.Reset();
@@ -330,6 +336,7 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 			{
 				if (!bBoxing) return true;
 				bBoxing = false;
+				AMarchingBlocksWater::SetGestureOpen(false);
 				ApplyRoom(World, BoxStart, BoxEnd);
 				return true;
 			}
@@ -349,11 +356,13 @@ bool UMarchingBlocksEdMode::InputKey(FEditorViewportClient* ViewportClient, FVie
 					}
 				}
 				bBoxing = false;
+				AMarchingBlocksWater::SetGestureOpen(false);
 				return true;
 			}
 			if (bStroking)
 			{
 				bStroking = false;
+				AMarchingBlocksWater::SetGestureOpen(false);
 				GEditor->EndTransaction();
 				return true;
 			}
@@ -402,9 +411,11 @@ void UMarchingBlocksEdMode::SetAimState(AMarchingBlocksWorld* World, const MBPai
 		if (bStroking)
 		{
 			bStroking = false;
+			AMarchingBlocksWater::SetGestureOpen(false);
 			GEditor->EndTransaction();
 		}
 		bBoxing = false;
+		AMarchingBlocksWater::SetGestureOpen(false);
 	}
 	Preview.clear();
 }

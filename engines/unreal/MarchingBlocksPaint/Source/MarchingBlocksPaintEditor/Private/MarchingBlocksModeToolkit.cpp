@@ -3,6 +3,7 @@
 #include "MarchingBlocksModeToolkit.h"
 
 #include "MarchingBlocksEdMode.h"
+#include "MarchingBlocksWater.h"
 #include "MarchingBlocksWorld.h"
 #include "ScopedTransaction.h"
 #include "Framework/Application/SlateApplication.h"
@@ -595,6 +596,29 @@ TSharedRef<SWidget> FMarchingBlocksModeToolkit::BuildPanel()
 				SNew(SHorizontalBox)
 				+ SHorizontalBox::Slot().AutoWidth()[Op("world", LOCTEXT("Rebuild", "Rebuild — lays the tiles again from the cells."), &AMarchingBlocksWorld::Rebuild)]
 				+ SHorizontalBox::Slot().AutoWidth()[Op("erase", LOCTEXT("ClearCells", "Clear cells — erases every cell of this layer (Ctrl+Z brings them back)."), &AMarchingBlocksWorld::ClearCells, true)]
+			]
+
+			// THE WATER follows the world by itself (half a second after the last gesture); the button is always there.
+			+ SVerticalBox::Slot().AutoHeight()[Title(LOCTEXT("Water", "WATER"))]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth()[TextButton(LOCTEXT("RebuildWater", "Rebuild water"), LOCTEXT("RebuildWaterTip", "Rebuild water — the water cells and sheets of this world, now (on a worker thread). The water also follows by itself, half a second after the last gesture, unless a rebuild took more than a second."),
+					[World]() { if (AMarchingBlocksWorld* W = World()) AMarchingBlocksWater::RebuildWorldWater(W->GetWorld(), W->WorldName); })]
+			]
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock).AutoWrapText(true).Font(FAppStyle::GetFontStyle("SmallFont"))
+				.Text_Lambda([World]()
+				{
+					AMarchingBlocksWorld* W = World();
+					return W ? FText::FromString(AMarchingBlocksWater::FollowStatus(W->GetWorld(), W->WorldName)) : FText::GetEmpty();
+				})
+				.ColorAndOpacity_Lambda([World]()
+				{
+					AMarchingBlocksWorld* W = World();
+					return W && AMarchingBlocksWater::FollowStatus(W->GetWorld(), W->WorldName).Contains(TEXT("STALE")) ? FSlateColor(Red) : FSlateColor(Grey);
+				})
 			]
 
 			// What happened last: tiles placed, missing ones, an error.

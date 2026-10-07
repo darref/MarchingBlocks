@@ -3,6 +3,7 @@
 #include "MarchingBlocksWorld.h"
 
 #include "MarchingBlocksTransitions.h"
+#include "MarchingBlocksWater.h"
 #include "MBCore/MBAnimation.h"
 #include "Engine/Texture.h"
 #include "Engine/Texture2DArray.h"
@@ -123,6 +124,8 @@ void AMarchingBlocksWorld::RebuildWorld()
 	--MarchingBlocksWorldDetail::RebuildingWorld;
 	// The transitions read every layer: they are laid again once all of them are rebuilt.
 	if (AMarchingBlocksTransitions* T = AMarchingBlocksTransitions::Find(GetWorld(), WorldName)) T->Apply();
+	// The water follows the world: stale now, rebuilt about half a second after the last gesture (never during one).
+	AMarchingBlocksWater::NoteWorldEdited(GetWorld(), WorldName);
 }
 
 FMatrix AMarchingBlocksWorld::FormatToWorld() const
@@ -232,6 +235,7 @@ void AMarchingBlocksWorld::SetLayer(const FString& TilesetFile, const FString& I
 	bIndexValid = false;
 	Selection.clear();
 	Rebuild();
+	AMarchingBlocksWater::NoteWorldEdited(GetWorld(), WorldName);
 	if (TilesetFile.IsEmpty())
 		Status = FString::Printf(TEXT("This layer has no tiles (it was exported without a tileset): its %d cell(s) are kept, nothing is drawn."),
 			Cells.Num());
@@ -449,7 +453,9 @@ void AMarchingBlocksWorld::ClearCells()
 		Cells.Reset();
 		bIndexValid = false;
 		Selection.clear();
-		Rebuild();
+		// The whole world: the other layers' borders, the transitions and the water follow (it rebuilt this layer only
+		// until 7 October 2026 — the water never heard of it).
+		RebuildWorld();
 	});
 }
 

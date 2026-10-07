@@ -241,6 +241,8 @@ public:
 	void SetAimState(const MBPaint::FAimState& State);
 
 	const MBPaint::FCellSet& GetCells();
+	/** The cells as the level stores them (format space) — a plain copy of it is what a worker thread may read. */
+	const TArray<FIntVector>& GetCellArray() const { return Cells; }
 	/** The layers of this actor's world, in priority order (itself included; just itself without a World Name). */
 	TArray<AMarchingBlocksWorld*> GetLayers() const;
 	/** Rebuilds every layer of the world: a change of cells moves the borders of the others. */

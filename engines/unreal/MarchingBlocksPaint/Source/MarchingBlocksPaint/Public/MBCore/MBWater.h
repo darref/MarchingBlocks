@@ -6,14 +6,18 @@
 // +x, -x, +z, -z, down, up, heaps tied by insertion order. The sea fill is the core's own (Noyau/ocean.h, a verbatim
 // copy of gdextension/src/noyau/ocean.h, kept identical by core-runner). Water never changes cells.
 //
-// What this does NOT do: rebuild the water SHEET (eau_maillage.gd has no cases yet). The plugin shows the sheet baked by
-// MarchingBlocks, and recomputes the water CELLS.
+// The SHEET drawn from these bodies is MBWaterMesh. WorldResumed is MarchingBlocks' own RESUMPTION (FL.monde with
+// avant / changees): after a gesture, a source whose REACH (the box of every cell it looked at, grown by 1) holds no
+// changed cell, under the same world box where it looked, is taken back as it was — the same result as computing
+// everything again (core-runner checks it on random gestures), for a fraction of the time.
 
 #pragma once
 
 #include "MBCore/MBJson.h"
 #include "MBCore/MBRule.h"
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,6 +38,15 @@ namespace MBPaint
 		std::string Mesh;
 		/// Where the water was placed, format space, in order.
 		std::vector<FCell> Sources;
+	};
+
+	/// The box of the full cells grown by 1 — its sides and bottom are the HORIZON. Empty when the world is.
+	struct FWaterBox
+	{
+		bool bEmpty = true;
+		FCell Lo, Hi;
+		bool operator==(const FWaterBox& O) const { return bEmpty == O.bEmpty && (bEmpty || (Lo == O.Lo && Hi == O.Hi)); }
+		bool operator!=(const FWaterBox& O) const { return !(*this == O); }
 	};
 
 	enum class EWaterKind { None, Sea, Lake, River };
@@ -67,6 +80,27 @@ namespace MBPaint
 		FCellSet Water;
 		std::vector<FWaterLake> Lakes;
 		std::vector<FCourseStep> Course;
+
+		/// Who computed it: 0 unknown; WorldResumed gives each body it computes a new Id and keeps the Id of a body it
+		/// takes back (the sheet memory recognises it by that).
+		uint64_t Id = 0;
+		/// Its REACH: the box of every cell it looked at, grown by 1 (none on an error), and the world box it saw.
+		bool bHasReach = false;
+		FCell ReachLo, ReachHi;
+		FWaterBox Box;
+	};
+
+	/// What WorldResumed hands to the next call: the sources, their bodies (shared: a body taken back is not copied),
+	/// the sea's cells and the world box.
+	struct FWaterState
+	{
+		bool bValid = false;
+		std::vector<FCell> Sources;
+		std::vector<std::shared_ptr<const FWaterBody>> Bodies;
+		std::shared_ptr<const FCellSet> Sea;
+		FWaterBox Box;
+		/// How many bodies this call took back.
+		int Reused = 0;
 	};
 
 	struct FWaterWorld
@@ -92,6 +126,19 @@ namespace MBPaint
 		/// THE WATER OF A WORLD: every source, the sea first (the FIRST source in the void; another one is refused,
 		/// one_sea_only), then each other source against the sea only — their order does not matter.
 		MARCHINGBLOCKSPAINT_API FWaterWorld World(const FCellSet& Cells, const std::vector<FCell>& Sources);
+
+		/// The box of the full cells, grown by 1.
+		MARCHINGBLOCKSPAINT_API FWaterBox BoxOf(const FCellSet& Cells);
+
+		/// THE SAME WATER AS World, RESUMED (FL.monde with avant / changees): Before the previous result (nullptr or
+		/// invalid: everything is computed), Changed the full cells added or removed since (nullptr: everything is
+		/// computed). Box: the box of Cells if the caller has it. A source that is not the sea is taken back only when
+		/// the sea itself was.
+		MARCHINGBLOCKSPAINT_API FWaterState WorldResumed(const FCellSet& Cells, const std::vector<FCell>& Sources, const FWaterState* Before,
+			const FCellSet* Changed, const FWaterBox* Box = nullptr);
+
+		/// The cells in one set and not in the other.
+		MARCHINGBLOCKSPAINT_API FCellSet ChangedBetween(const FCellSet& Before, const FCellSet& After);
 
 		/// RIVER WIDTH: Width sources side by side across the first horizontal step of the river placed at S (centred,
 		/// one more on the + side when even), S first; only neighbours that are rivers stay.

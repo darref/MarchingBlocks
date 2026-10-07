@@ -6,14 +6,18 @@
 // ⚠ L'ORDRE DÉCIDE DE TOUT : voisins +x, −x, +z, −z, bas, haut ; le tas départagé par l'ordre d'insertion (une clé
 // entière, priorité dans les 32 bits hauts) ; les tables de hachage ne servent qu'à « est-ce dedans ? », jamais à un
 // parcours dont l'ordre compte.
-// ⚠ Préfixe Wtr… (les « unity builds » d'Unreal fusionnent les .cpp). L'emprise et la reprise de l'appli (son cache
-// geste par geste) ne sont pas portées : elles ne changent pas le résultat.
+// ⚠ Préfixe Wtr… (les « unity builds » d'Unreal fusionnent les .cpp).
+// LA REPRISE DE L'APPLI (`FL.monde` avec `avant` / `changees`, `_etendre`, `_boite_compatible`) est portée depuis le
+// 7 octobre 2026 (WorldResumed) : l'EMPRISE de chaque source (`vus` de `_a_plat`, `_creux`, `_chute_proche`, les cases de
+// chute, la dernière case) est tenue pendant le calcul même ; elle ne change rien au résultat (World reste la règle
+// entière, et le banc compare les deux sur des gestes au hasard).
 
 #include "MBCore/MBWater.h"
 
 #include "Noyau/ocean.h"
 
 #include <algorithm>
+#include <atomic>
 #include <climits>
 #include <cstdint>
 #include <functional>
@@ -29,10 +33,21 @@ namespace MBPaint
 		const FCell WtrNeighbours[6] = {FCell(1, 0, 0), FCell(-1, 0, 0), FCell(0, 0, 1), FCell(0, 0, -1), FCell(0, -1, 0), FCell(0, 1, 0)};
 		const int64_t WtrBias = 1 << 20;
 
-		struct FWtrBox
+		using FWtrBox = FWaterBox;
+
+		// L'EMPRISE en cours de calcul : la boîte des cases regardées (`_etendre`).
+		struct FWtrReach
 		{
-			bool bEmpty = true;
 			FCell Lo, Hi;
+			void Add(const FCell& C)
+			{
+				Lo = FCell(std::min(Lo.X, C.X), std::min(Lo.Y, C.Y), std::min(Lo.Z, C.Z));
+				Hi = FCell(std::max(Hi.X, C.X), std::max(Hi.Y, C.Y), std::max(Hi.Z, C.Z));
+			}
+			void AddAll(const FCellSet& S)
+			{
+				for (const FCell& C : S) Add(C);
+			}
 		};
 
 		FWtrBox WtrBoxOf(const FCellSet& Cells)
@@ -104,7 +119,7 @@ namespace MBPaint
 
 		// LE CREUX : remplissage par priorité depuis C ; l'eau déjà là (Fixed, Lakes) fait office d'issue.
 		FWtrHollow WtrHollow(const FCellSet& Cells, const FWtrBox& B, const FCellSet& Fixed, const FCellSet& Lakes, const FCell& C,
-			int Ceiling, int Max)
+			int Ceiling, int Max, FWtrReach* Reach)
 		{
 			FWtrHollow R;
 			std::priority_queue<int64_t, std::vector<int64_t>, std::greater<int64_t>> Heap;
@@ -142,6 +157,7 @@ namespace MBPaint
 						if (Prio[S] >= P) { R.bHasThreshold = true; R.Threshold = S; break; }
 					R.Level = P - 1;
 					R.Issue = bWater ? EWaterEnd::Joins : EWaterEnd::Leaves;
+					if (Reach) Reach->AddAll(Seen);
 					return R;
 				}
 				Out.push_back(U);
@@ -169,6 +185,7 @@ namespace MBPaint
 					R.Level = std::max(R.Level, S.Y);
 				}
 			R.Issue = EWaterEnd::Closed;
+			if (Reach) Reach->AddAll(Seen);
 			return R;
 		}
 
@@ -184,7 +201,7 @@ namespace MBPaint
 		// LA COULÉE À PLAT : le plus court chemin à l'étage de C jusqu'à une case d'où l'eau tombe, rejoint une eau, ou
 		// quitte le monde. Ignore : le lac qu'on vient de quitter.
 		FWtrFlat WtrFlat(const FCellSet& Cells, const FWtrBox& B, const FCellSet& Fixed, const FCellSet& Lakes, const FCell& C,
-			const FCellSet& Ignore, int Max)
+			const FCellSet& Ignore, int Max, FWtrReach* Reach)
 		{
 			FWtrFlat R;
 			std::unordered_map<FCell, FCell, FCellHash> Pred;
@@ -222,20 +239,23 @@ namespace MBPaint
 					}
 					std::reverse(R.Path.begin(), R.Path.end());
 					R.End = Fin == 1 ? EWaterEnd::None : Fin == 2 ? EWaterEnd::Leaves : EWaterEnd::Joins;
+					if (Reach) Reach->AddAll(Seen);
 					return R;
 				}
 				if (Queue.size() > static_cast<size_t>(Max)) { R.Error = "too_large"; return R; }
 			}
 			R.bHollow = true;
+			if (Reach) Reach->AddAll(Seen);
 			return R;
 		}
 
 		// Depuis le seuil d'un lac, une chute (ou une eau, ou le bord) à au plus OverflowReach cases à plat ?
-		bool WtrFallNear(const FCellSet& Cells, const FWtrBox& B, const FCellSet& Fixed, const FCellSet& Lakes, const FWtrHollow& H, int Max)
+		bool WtrFallNear(const FCellSet& Cells, const FWtrBox& B, const FCellSet& Fixed, const FCellSet& Lakes, const FWtrHollow& H, int Max,
+			FWtrReach* Reach)
 		{
 			if (!H.bHasThreshold) return false;
-			const int Reach = 2 * Water::OverflowReach + 1;
-			const FWtrFlat Flat = WtrFlat(Cells, B, Fixed, Lakes, H.Threshold, H.Cells, std::min(Max, Reach * Reach));
+			const int Span = 2 * Water::OverflowReach + 1;
+			const FWtrFlat Flat = WtrFlat(Cells, B, Fixed, Lakes, H.Threshold, H.Cells, std::min(Max, Span * Span), Reach);
 			return Flat.Error.empty() && !Flat.bHollow && static_cast<int>(Flat.Path.size()) - 1 <= Water::OverflowReach;
 		}
 
@@ -249,6 +269,7 @@ namespace MBPaint
 		FWaterBody WtrSource(const FCellSet& Cells, const FCell& S, const FCellSet& Fixed, int Max, const FWtrBox& B)
 		{
 			FWaterBody R;
+			R.Box = B;
 			if (WtrHas(Cells, S)) { R.Error = "in_matter"; return R; }
 			if (WtrHas(Fixed, S)) { R.Error = "in_water"; return R; }
 			if (WtrInVoid(Cells, S, B))
@@ -256,8 +277,16 @@ namespace MBPaint
 				R.Kind = EWaterKind::Sea;
 				R.Level = S.Y;
 				R.Water = WtrOcean(Cells, S.Y, B);
+				// La mer dépend de toute la boîte sous son niveau, et de la rangée du dessus (sa surface).
+				if (!B.bEmpty)
+				{
+					R.bHasReach = true;
+					R.ReachLo = B.Lo;
+					R.ReachHi = FCell(B.Hi.X, S.Y + 1, B.Hi.Z);
+				}
 				return R;
 			}
+			FWtrReach Reach{S, S};
 			FCellSet LakeCells;
 			// Le clic au-dessus du sol : on descend jusqu'à lui.
 			FCell C = S;
@@ -275,18 +304,18 @@ namespace MBPaint
 			{
 				++Steps;
 				if (Steps > Water::StepsMax || Course.size() > static_cast<size_t>(Water::StepsMax)) return WtrRefuse("too_long");
-				const FWtrFlat Flat = WtrFlat(Cells, B, Fixed, LakeCells, C, Ignore, Max);
+				const FWtrFlat Flat = WtrFlat(Cells, B, Fixed, LakeCells, C, Ignore, Max, &Reach);
 				if (!Flat.Error.empty()) return WtrRefuse("too_large");
 				if (Flat.bHollow)
 				{
-					const FWtrHollow H = WtrHollow(Cells, B, Fixed, LakeCells, C, S.Y, Max);
+					const FWtrHollow H = WtrHollow(Cells, B, Fixed, LakeCells, C, S.Y, Max, &Reach);
 					if (!H.Error.empty()) return WtrRefuse("too_large");
 					FWaterLake L;
 					L.Level = H.Level;
 					L.Cells = H.Cells;
 					Lakes.push_back(L);
 					LakeCells.insert(H.Cells.begin(), H.Cells.end());
-					if (bFirst && !(H.Issue == EWaterEnd::Leaves && WtrFallNear(Cells, B, Fixed, LakeCells, H, Max)))
+					if (bFirst && !(H.Issue == EWaterEnd::Leaves && WtrFallNear(Cells, B, Fixed, LakeCells, H, Max, &Reach)))
 					{
 						R.Kind = EWaterKind::Lake;
 						R.Level = H.Level;
@@ -330,6 +359,7 @@ namespace MBPaint
 					Step.Cell = V;
 					Step.Kind = ECourseKind::Fall;
 					Course.push_back(Step);
+					Reach.Add(V);
 					U = V;
 					if (V.Y == B.Lo.Y) { Fin = EWaterEnd::Leaves; break; }
 				}
@@ -339,7 +369,34 @@ namespace MBPaint
 			R.Course = Course;
 			R.Lakes = Lakes;
 			R.Water = LakeCells;
+			Reach.Add(C);
+			R.bHasReach = true;
+			R.ReachLo = Reach.Lo - FCell(1, 1, 1);
+			R.ReachHi = Reach.Hi + FCell(1, 1, 1);
 			return R;
+		}
+
+		int WtrAxis(const FCell& C, int K) { return K == 0 ? C.X : K == 1 ? C.Y : C.Z; }
+
+		// La boîte du monde a-t-elle changé LÀ OÙ la source regardait ? (`_boite_compatible`)
+		bool WtrBoxCompatible(const FWaterBody& R, const FWtrBox& B)
+		{
+			if (R.Box.bEmpty || B.bEmpty) return R.Box.bEmpty && B.bEmpty;
+			for (int K = 0; K < 3; ++K)
+			{
+				const int ALo = WtrAxis(R.Box.Lo, K), NLo = WtrAxis(B.Lo, K), AHi = WtrAxis(R.Box.Hi, K), NHi = WtrAxis(B.Hi, K);
+				if (ALo != NLo && WtrAxis(R.ReachLo, K) <= std::max(ALo, NLo)) return false;
+				if (AHi != NHi && WtrAxis(R.ReachHi, K) >= std::min(AHi, NHi)) return false;
+			}
+			return true;
+		}
+
+		std::atomic<uint64_t> WtrNextId{1};
+
+		std::shared_ptr<const FWaterBody> WtrFresh(FWaterBody&& Body)
+		{
+			Body.Id = WtrNextId.fetch_add(1);
+			return std::make_shared<const FWaterBody>(std::move(Body));
 		}
 	}
 
@@ -414,6 +471,102 @@ namespace MBPaint
 					.Set("sources", Sources);
 				Out.Push(E);
 			}
+			return Out;
+		}
+
+		FWaterBox BoxOf(const FCellSet& Cells)
+		{
+			return WtrBoxOf(Cells);
+		}
+
+		FCellSet ChangedBetween(const FCellSet& Before, const FCellSet& After)
+		{
+			FCellSet Out;
+			for (const FCell& C : After)
+				if (!Before.count(C)) Out.insert(C);
+			for (const FCell& C : Before)
+				if (!After.count(C)) Out.insert(C);
+			return Out;
+		}
+
+		// `FL.monde` avec la reprise, ligne à ligne.
+		FWaterState WorldResumed(const FCellSet& Cells, const std::vector<FCell>& Sources, const FWaterState* Before,
+			const FCellSet* Changed, const FWaterBox* InBox)
+		{
+			FWaterState Out;
+			Out.bValid = true;
+			Out.Sources = Sources;
+			const FWtrBox B = InBox ? *InBox : WtrBoxOf(Cells);
+			Out.Box = B;
+			const size_t N = Sources.size();
+			std::vector<std::shared_ptr<const FWaterBody>> Bodies(N);
+			// L'ancien rendu, par source (la dernière l'emporte, comme le dictionnaire `vieux`).
+			std::unordered_map<FCell, std::shared_ptr<const FWaterBody>, FCellHash> Old;
+			if (Changed && Before && Before->bValid)
+				for (size_t I = 0; I < Before->Sources.size() && I < Before->Bodies.size(); ++I) Old[Before->Sources[I]] = Before->Bodies[I];
+			auto TakeBack = [&](const FCell& S) -> std::shared_ptr<const FWaterBody>
+			{
+				const auto Found = Old.find(S);
+				if (Found == Old.end()) return nullptr;
+				const std::shared_ptr<const FWaterBody>& R = Found->second;
+				if (!R || !R->Error.empty() || !R->bHasReach || !WtrBoxCompatible(*R, B)) return nullptr;
+				for (const FCell& C : *Changed)
+					if (C.X >= R->ReachLo.X && C.Y >= R->ReachLo.Y && C.Z >= R->ReachLo.Z && C.X <= R->ReachHi.X && C.Y <= R->ReachHi.Y
+						&& C.Z <= R->ReachHi.Z)
+						return nullptr;
+				return R;
+			};
+			const FCellSet NoWater;
+			bool bSeasResumed = true;
+			int Seas = 0;
+			for (size_t I = 0; I < N; ++I)
+			{
+				const FCell& S = Sources[I];
+				if (WtrHas(Cells, S) || !WtrInVoid(Cells, S, B)) continue;
+				// UN SEUL OCÉAN : le premier dans l'ordre des sources ; un autre est refusé.
+				if (Seas > 0) { Bodies[I] = WtrFresh(WtrRefuse("one_sea_only")); continue; }
+				++Seas;
+				std::shared_ptr<const FWaterBody> R = TakeBack(S);
+				if (!R || R->Kind != EWaterKind::Sea)
+				{
+					bSeasResumed = false;
+					R = WtrFresh(WtrSource(Cells, S, NoWater, VolumeMax, B));
+				}
+				else ++Out.Reused;
+				Bodies[I] = R;
+			}
+			// Les océans tous repris, et aucun de perdu : leur eau aussi.
+			int SeasBefore = 0;
+			if (Before && Before->bValid)
+				for (const std::shared_ptr<const FWaterBody>& R : Before->Bodies)
+					if (R && R->Kind == EWaterKind::Sea) ++SeasBefore;
+			bSeasResumed = bSeasResumed && !Old.empty() && Seas == SeasBefore && Before->Sea;
+			std::shared_ptr<const FCellSet> Sea;
+			if (bSeasResumed) Sea = Before->Sea;
+			else
+			{
+				// UN SEUL OCÉAN : son eau EST l'eau de mer — partagée (le corps la porte), jamais recopiée.
+				std::vector<std::shared_ptr<const FWaterBody>> Carrying;
+				for (const std::shared_ptr<const FWaterBody>& R : Bodies)
+					if (R && !R->Water.empty()) Carrying.push_back(R);
+				if (Carrying.size() == 1) Sea = std::shared_ptr<const FCellSet>(Carrying[0], &Carrying[0]->Water);
+				else
+				{
+					std::shared_ptr<FCellSet> Union = std::make_shared<FCellSet>();
+					for (const std::shared_ptr<const FWaterBody>& R : Carrying) Union->insert(R->Water.begin(), R->Water.end());
+					Sea = Union;
+				}
+			}
+			for (size_t I = 0; I < N; ++I)
+			{
+				if (Bodies[I]) continue;
+				std::shared_ptr<const FWaterBody> R = bSeasResumed ? TakeBack(Sources[I]) : nullptr;
+				if (!R || R->Kind == EWaterKind::Sea) R = WtrFresh(WtrSource(Cells, Sources[I], *Sea, VolumeMax, B));
+				else ++Out.Reused;
+				Bodies[I] = R;
+			}
+			Out.Bodies = std::move(Bodies);
+			Out.Sea = Sea;
 			return Out;
 		}
 

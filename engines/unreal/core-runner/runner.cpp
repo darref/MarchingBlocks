@@ -23,6 +23,7 @@ using namespace MBPaint;
 
 // parity.cpp: the five parity files (editing, animation, foliage, transitions, water).
 int RunParity(const std::string& Dir);
+int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs);
 
 namespace
 {
@@ -665,6 +666,8 @@ int main(int Argc, char** Argv)
 	Failed += RunFrame();
 	Failed += RunAim();
 	Failed += RunParity(Dir);
+	// The water sheet; every further argument is an exported .mbworld folder for the end-to-end check.
+	Failed += RunWaterMesh(Dir, Argc > 2 ? Argc - 2 : 0, Argv + 2);
 	std::printf(Failed == 0 ? "VERDICT: OK\n" : "VERDICT: FAILED\n");
 	return Failed == 0 ? 0 : 1;
 }
