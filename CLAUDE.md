@@ -841,7 +841,7 @@ part chez l'acheteur), et les cinq fichiers de cas communs la jugent.
 Le greffon gratuit (`engines/unreal/MarchingBlocksPaint/`) porte la liste des greffons (cochée, §0). **Il ne charge rien
 du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore` (ni exceptions ni RTTI), depuis `rules_text`.
 
-- **LES RÈGLES — MESURÉ : 282 CAS SUR 282** (`core-runner/parity.cpp`, qui lit les cinq fichiers ; une sorte inconnue
+- **LES RÈGLES — MESURÉ : 282 CAS SUR 282, PUIS 285 SUR 285 après la fusion de la branche Unity** (`core-runner/parity.cpp`, qui lit les cinq fichiers ; une sorte inconnue
   rougit ; limites et constantes vérifiées) : `MBEditing` (Extrude × 3 × 3, ShrinkEdge, WidenFlat, SelectBrush) et
   `Shapes::RoomFromSelection` 62/62 ; `MBAnimation` 43/43 (avec la lecture du JSON d'un `.glb`) ; `MBFoliage` 59/59 ;
   `MBTransitions` 93/93 ; `MBWater` 25/25 — la règle de `fluides.gd` ligne à ligne, **la mer étant `noyau/ocean.h`
@@ -850,15 +850,17 @@ du cœur GDScript** : chaque règle est réécrite en C++ standard dans `MBCore`
   (1 624 poses, 128 d'outils, 14 de monde, repère, visée) toujours verts.
 - **LE BANC TOURNE SOUS MSVC** (`cl /std:c++17 /EHs-c- /GR- /W4 /WX`, masquage et rétrécissement en erreurs) : ni g++ ni
   clang ne sont nécessaires ; `build.sh` liste les nouveaux fichiers.
-- **MUTATIONS — 33, 31 ROUGES, 2 MUETTES** : édition 5 (Facing départagé au dernier sens, poser sans sélection qui en fait
+- **MUTATIONS — 33, 32 ROUGES, 1 ÉQUIVALENTE** : édition 5 (Facing départagé au dernier sens, poser sans sélection qui en fait
   une, Shrink sur tout bord ouvert, Select sans les vides, base de la salle toujours la plus basse), animation 6
   (aller-retour non replié, phase toute en double, défilement sans 7 × phase, pulsation hors émission, version plus
   récente acceptée…), feuillage 6, transitions 6 (décalage sans 1 − s, départage au dernier coin, choix ignorés, choix
   dans le quartet bas, paire a = b, couche au-delà de la 15e), eau 9 (ordre des voisins horizontaux, tas pris par le haut,
   plusieurs mers, débord sans portée, dessus de la boîte en horizon, profondeur sans fond, source fractionnaire, chute
-  sortant au bas + 1, copie de `ocean.h` périmée). ⚠ **MUETTES, PAR LES CAS** : « phase sans + 0,5 » (toutes les
-  origines des cas étaient entières — la branche Unity ajoute une origine non entière) ; « voisins bas et haut échangés »
-  dans le creux (aucun cas ne départage cet ordre — à ajouter aux cas de l'eau).
+  sortant au bas + 1, copie de `ocean.h` périmée). ⚠ **« PHASE SANS + 0,5 » D'ABORD MUETTE, PAR LES CAS** (toutes les origines étaient entières) : rouge depuis le cas
+  d'origine non entière venu de la branche Unity (285 cas). ⚠ **UNE ÉQUIVALENTE, CHERCHÉE** : échanger bas et haut dans
+  l'ordre des voisins du CREUX ne change rien — 400 000 mondes au hasard (reliefs à corniches, grottes à 55 et 70 % de
+  plein) comparés à une seconde version de `MBWater` : aucune différence. Le lac (tout ce qui sort sous P) et P ne
+  dépendent pas de l'ordre ; aucun cas n'a été ajouté, faute de monde qui le départage.
 - **UNE RÈGLE AMBIGUË, TRANCHÉE SUR MAIN** : `phase_de` rangeait le vecteur intermédiaire dans un `Vector3` (32 bits)
   alors que le texte disait « double » — le banc C++ l'a vu (7 cas rouges). Corrigé sur main par le texte (précision
   mixte écrite) ; `Animation::PhaseOf` la suit.
