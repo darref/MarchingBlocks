@@ -209,10 +209,39 @@ namespace MarchingBlocks.Paint.Tests
                             }
                         }
                 if (!found)
-                    return $"no triangle for ({F(t[0])}, {F(t[1])}, {F(t[2])}) ({F(t[12])}, {F(t[13])}, {F(t[14])}) " +
+                    return Nearest(t, got, buckets, k0) + $" — no triangle for ({F(t[0])}, {F(t[1])}, {F(t[2])}) ({F(t[12])}, {F(t[13])}, {F(t[14])}) " +
                         $"({F(t[24])}, {F(t[25])}, {F(t[26])}) kind {F(t[8])}";
             }
             return null;
+        }
+
+        // Le diagnostic : le triangle le plus proche (toutes rotations), et son plus grand écart par attribut.
+        static string Nearest(double[] t, List<double[]> got, Dictionary<(long, long, long), List<int>> buckets, (long, long, long) k0)
+        {
+            double best = double.MaxValue;
+            double[] dev = null;
+            for (int dx = -1; dx <= 1; dx++)
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dz = -1; dz <= 1; dz++)
+                    {
+                        if (!buckets.TryGetValue((k0.Item1 + dx, k0.Item2 + dy, k0.Item3 + dz), out var l)) continue;
+                        foreach (var i in l)
+                            for (int r = 0; r < 3; r++)
+                            {
+                                var d = new double[4];
+                                for (int c = 0; c < 3; c++)
+                                    for (int k = 0; k < 12; k++)
+                                    {
+                                        double e = Math.Abs(t[12 * c + k] - got[i][12 * ((c + r) % 3) + k]);
+                                        int a = k < 3 ? 0 : k < 6 ? 1 : k < 10 ? 2 : 3;
+                                        d[a] = Math.Max(d[a], e);
+                                    }
+                                double s = d[0] + d[1] + d[2] + d[3];
+                                if (s < best) { best = s; dev = d; }
+                            }
+                    }
+            return dev == null ? "nothing near" :
+                $"nearest: position {dev[0]:E1}, normal {dev[1]:E1}, colour {dev[2]:E1}, uv {dev[3]:E1}";
         }
 
         /// <summary>Count and area per kind (b of the first corner): a diagnosis, not the comparison.</summary>

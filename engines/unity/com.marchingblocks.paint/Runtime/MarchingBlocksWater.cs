@@ -6,13 +6,22 @@
 // with the material you choose — the six looks shipped with the plugin (MarchingBlocks/Water) are EXAMPLES, not an
 // obligation: any shader that reads the vertex colours gets the same data.
 //
-// WHEN YOU PAINT, the water CELLS are deduced again from the sources and the cells of every layer (MBWater.World, the
-// rule of MarchingBlocks, its cases in Tests/water_conformance.json) and drawn as gizmos when this object is selected.
-// ⚠ The SHEET itself is not rebuilt in Unity: the mesh of the water (MarchingBlocks' eau_maillage) has no cases yet —
-// export the world again from MarchingBlocks to get a new sheet.
+// WHEN YOU PAINT, the water is deduced again from the sources and the cells of every layer (MBWater.World, the rule of
+// MarchingBlocks, Tests/water_conformance.json) and its SHEET is rebuilt (MBWaterMesh, MarchingBlocks' eau_maillage,
+// Tests/water_mesh_conformance.json) — the same triangles MarchingBlocks bakes:
+//   - never during a stroke: the sheet is only said STALE (MBWaterFollow);
+//   - after half a second without a new gesture, on a worker thread, from a COPY of the cells; only what the gesture
+//     reached is computed again (the reprise of MarchingBlocks: a body whose footprint was not touched is taken again,
+//     with its sheet); the new meshes are swapped in on the main thread;
+//   - "Rebuild water" (the inspector, or RebuildWater()) is always there; the automatic follow cuts itself when a rebuild
+//     took more than a second (a very large sea), and the sheet stays stale until the button.
+// Until the first rebuild the baked sheet is shown; the rebuilt sheet replaces it, placed the same way.
 
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace MarchingBlocks.Paint
 {
@@ -27,7 +36,7 @@ namespace MarchingBlocks.Paint
             public bool visible;
             [Tooltip("A suggestion of the author: stylized, clear, reflective, lava, swamp, acid (or anything else).")]
             public string look;
-            [Tooltip("The baked sheet (water/<name>.glb) as your glTF importer made it; none: nothing to draw.")]
+            [Tooltip("The baked sheet (water/<name>.glb) as your glTF importer made it; shown until the water is rebuilt.")]
             public GameObject sheet;
             [Tooltip("The material of the sheet: one of the six looks, or yours.")]
             public Material material;
@@ -38,21 +47,76 @@ namespace MarchingBlocks.Paint
         [Tooltip("The layer whose tileset gives the frame (the conversion of your glTF importer) and the cell size.")]
         public MarchingBlocksWorld frameFrom;
         public List<Layer> layers = new List<Layer>();
+        [Tooltip("Rebuild the water sheets half a second after each gesture (on a worker thread). Cuts itself when a rebuild " +
+            "takes more than a second: then use Rebuild water.")]
+        public bool followPainting = true;
 
         const string ContainerName = "MarchingBlocks water (generated)";
         readonly List<WaterWorld> lastWorlds = new List<WaterWorld>();
         static MaterialPropertyBlock block;
+        static Material fallbackMaterial;
+
+        // ── the rebuilt sheets ──
+        readonly MBWaterFollow follow = new MBWaterFollow();
+        Mesh[] rebuilt;
+        // What the worker reads and writes (one rebuild at a time): the previous water, the cells it was computed on, the
+        // mesher's memory of each water layer.
+        WaterWorld previous;
+        HashSet<Int3> previousCells;
+        readonly List<WaterMeshMemory> memories = new List<WaterMeshMemory>();
+        Task<Result> running;
+        int runningTicket;
+        Stopwatch runningClock;
+
+        /// <summary>When the sheet is rebuilt, and whether it is stale (read by the inspector).</summary>
+        public MBWaterFollow Follow => follow;
+        /// <summary>The last rebuild, said: bodies taken again, times.</summary>
+        public string LastRebuildReport { get; private set; } = "";
+        /// <summary>The bodies taken again by the last rebuild, and how many there were.</summary>
+        public int LastTaken { get; private set; }
+        public int LastBodies { get; private set; }
+        /// <summary>The rebuilt sheet of a layer (importer space, placed like the baked one), or null (the baked one shows).</summary>
+        public Mesh RebuiltMesh(int layer) => rebuilt != null && layer < rebuilt.Length ? rebuilt[layer] : null;
+        /// <summary>A rebuild is running on the worker thread.</summary>
+        public bool Rebuilding => running != null;
+
+        sealed class Result
+        {
+            public WaterWorld World;
+            public HashSet<Int3> Cells;
+            public List<WaterSheetArrays> Sheets = new List<WaterSheetArrays>();
+            public int Taken, Bodies;
+            public double WorkerSeconds;
+        }
 
         void OnEnable()
         {
             MarchingBlocksWorld.Rebuilt += OnLayerRebuilt;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.update += Tick;
+#endif
+            follow.Enabled = followPainting;
             Rebuild();
         }
 
-        void OnDisable() => MarchingBlocksWorld.Rebuilt -= OnLayerRebuilt;
+        void OnDisable()
+        {
+            MarchingBlocksWorld.Rebuilt -= OnLayerRebuilt;
+#if UNITY_EDITOR
+            UnityEditor.EditorApplication.update -= Tick;
+#endif
+        }
+
+        void OnDestroy()
+        {
+            if (rebuilt != null) foreach (var m in rebuilt) if (m != null) DestroyImmediate(m);
+        }
 
         void OnValidate()
         {
+            follow.Enabled = followPainting;
+            // The sources may have changed: the sheet is stale.
+            follow.Changed(Now());
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.delayCall += () => { if (this != null && isActiveAndEnabled) Rebuild(); };
 #endif
@@ -60,10 +124,196 @@ namespace MarchingBlocks.Paint
 
         void OnLayerRebuilt(MarchingBlocksWorld layer)
         {
-            if (this != null && isActiveAndEnabled && layer.transform.parent == transform.parent) lastWorlds.Clear();
+            if (this == null || !isActiveAndEnabled || layer.transform.parent != transform.parent) return;
+            lastWorlds.Clear();
+            follow.Changed(Now());
         }
 
-        /// <summary>Shows every sheet again.</summary>
+        static double Now()
+        {
+#if UNITY_EDITOR
+            return UnityEditor.EditorApplication.timeSinceStartup;
+#else
+            return Time.realtimeSinceStartupAsDouble;
+#endif
+        }
+
+        void Update()
+        {
+            if (Application.isPlaying) Tick();
+        }
+
+        /// <summary>The follow, one step: a finished rebuild is swapped in; a due one (the gesture over, the calm) starts on
+        /// a worker thread. Called by the editor's update loop (in play mode, by Update).</summary>
+        public void Tick()
+        {
+            if (this == null || !isActiveAndEnabled) return;
+            if (running != null && running.IsCompleted) Collect();
+            // Un geste tenu : un outil de la vue (le pinceau, une boîte, la poignée d'Unity) a la main.
+            if (follow.Due(Now(), GUIUtility.hotControl != 0)) Launch();
+        }
+
+        void Launch()
+        {
+            var cells = AllCells();
+            var sources = SourcesByLayer();
+            var before = previous;
+            var beforeCells = previousCells;
+            runningTicket = follow.Start();
+            runningClock = Stopwatch.StartNew();
+            running = Task.Run(() => Compute(cells, sources, before, beforeCells, memories));
+        }
+
+        void Collect()
+        {
+            var task = running;
+            running = null;
+            if (task.IsFaulted)
+            {
+                follow.Failed();
+                UnityEngine.Debug.LogException(task.Exception);
+                return;
+            }
+            Swap(task.Result, runningTicket, runningClock);
+        }
+
+        /// <summary>REBUILD WATER: the sheets again, now, on this thread (the button). Waits for a running rebuild first.</summary>
+        public void RebuildWater()
+        {
+            if (running != null)
+            {
+                try { running.Wait(); } catch (System.AggregateException) { }
+                Collect();
+            }
+            var clock = Stopwatch.StartNew();
+            int ticket = follow.Start();
+            Result r;
+            try { r = Compute(AllCells(), SourcesByLayer(), previous, previousCells, memories); }
+            catch { follow.Failed(); throw; }
+            Swap(r, ticket, clock);
+        }
+
+        // Le résultat d'une reconstruction : gardé pour la reprise suivante, posé s'il est encore celui du monde. Le temps est
+        // compté jusqu'aux maillages posés : c'est lui qui coupe le suivi.
+        void Swap(Result r, int ticket, Stopwatch clock)
+        {
+            previous = r.World;
+            previousCells = r.Cells;
+            bool current = follow.Current(ticket);
+            if (current)
+            {
+                var frame = frameFrom != null ? frameFrom.ImporterFrameInverse.inverse : Matrix4x4.identity;
+                var meshes = new Mesh[layers.Count];
+                for (int i = 0; i < layers.Count && i < r.Sheets.Count; i++) meshes[i] = ToMesh(r.Sheets[i], frame, layers[i].name);
+                if (rebuilt != null) foreach (var m in rebuilt) if (m != null) DestroyImmediate(m);
+                rebuilt = meshes;
+                Rebuild();
+            }
+            follow.Finished(ticket, clock.Elapsed.TotalSeconds);
+            LastTaken = r.Taken;
+            LastBodies = r.Bodies;
+            LastRebuildReport = $"{(current ? "" : "obsolete, not shown: ")}{r.Taken} of {r.Bodies} bodies taken again, " +
+                $"{clock.Elapsed.TotalMilliseconds:F0} ms (worker {r.WorkerSeconds * 1000:F0} ms)";
+        }
+
+        /// <summary>Forgets the rebuilt sheets and shows the BAKED ones again (until the next rebuild, which starts afresh).</summary>
+        public void ShowBakedSheets()
+        {
+            if (running != null) { try { running.Wait(); } catch (System.AggregateException) { } running = null; follow.Failed(); }
+            if (rebuilt != null) foreach (var m in rebuilt) if (m != null) DestroyImmediate(m);
+            rebuilt = null;
+            previous = null;
+            previousCells = null;
+            memories.Clear();
+            Rebuild();
+        }
+
+        /// <summary>The cells of every tile layer of the world (hidden ones too), copied.</summary>
+        HashSet<Int3> AllCells()
+        {
+            var cells = new HashSet<Int3>();
+            if (transform.parent != null)
+                for (int i = 0; i < transform.parent.childCount; i++)
+                {
+                    var w = transform.parent.GetChild(i).GetComponent<MarchingBlocksWorld>();
+                    if (w != null) cells.UnionWith(w.Cells);
+                }
+            return cells;
+        }
+
+        List<List<Int3>> SourcesByLayer()
+        {
+            var o = new List<List<Int3>>();
+            foreach (var l in layers)
+            {
+                var s = new List<Int3>();
+                if (l.sources != null) foreach (var c in l.sources) s.Add(new Int3(c.x, c.y, c.z));
+                o.Add(s);
+            }
+            return o;
+        }
+
+        // ── pur C# : ce qui tourne sur le fil ──
+
+        static Result Compute(HashSet<Int3> cells, List<List<Int3>> sources, WaterWorld before, HashSet<Int3> beforeCells,
+            List<WaterMeshMemory> memories)
+        {
+            var clock = Stopwatch.StartNew();
+            var all = new List<Int3>();
+            foreach (var l in sources) all.AddRange(l);
+            HashSet<Int3> changed = before != null && beforeCells != null ? MBWater.ChangedBetween(beforeCells, cells) : null;
+            var w = MBWater.World(cells, all, before, changed);
+            var r = new Result { World = w, Cells = cells, Bodies = all.Count };
+            while (memories.Count < sources.Count) memories.Add(new WaterMeshMemory());
+            int k = 0;
+            for (int i = 0; i < sources.Count; i++)
+            {
+                var bodies = w.Bodies.GetRange(k, sources[i].Count);
+                if (before != null)
+                    for (int j = 0; j < bodies.Count; j++)
+                        if (k + j < before.Bodies.Count && ReferenceEquals(bodies[j], before.Bodies[k + j])) r.Taken++;
+                k += sources[i].Count;
+                r.Sheets.Add(MBWaterMesh.Arrays(bodies, cells, w.Box, memories[i]));
+            }
+            r.WorkerSeconds = clock.Elapsed.TotalSeconds;
+            return r;
+        }
+
+        /// <summary>A sheet (format space, glTF winding) as a Unity mesh in the IMPORTER's space — the space of the baked
+        /// sheet as the glTF importer made it, so that it is placed the same way: positions and normals through the frame
+        /// (MEASURED on the tileset: glTFast mirrors X), v flipped (glTFast flips v: the shaders flip it back), the winding
+        /// reversed when the frame mirrors.</summary>
+        public static Mesh ToMesh(WaterSheetArrays a, Matrix4x4 frame, string name)
+        {
+            int n = a.VertexCount;
+            var v = new Vector3[n];
+            var nn = new Vector3[n];
+            var c = new Color[n];
+            var uv = new Vector2[n];
+            for (int i = 0; i < n; i++)
+            {
+                var p = a.Positions[i];
+                var q = a.Normals[i];
+                v[i] = frame.MultiplyPoint3x4(new Vector3(p.x, p.y, p.z));
+                nn[i] = frame.MultiplyVector(new Vector3(q.x, q.y, q.z)).normalized;
+                c[i] = new Color(a.Colors[4 * i], a.Colors[4 * i + 1], a.Colors[4 * i + 2], a.Colors[4 * i + 3]);
+                uv[i] = new Vector2(a.UVs[2 * i], 1f - a.UVs[2 * i + 1]);
+            }
+            var t = a.Triangles.ToArray();
+            if (frame.determinant < 0f)
+                for (int k = 0; k < t.Length; k += 3) (t[k + 1], t[k + 2]) = (t[k + 2], t[k + 1]);
+            var m = new Mesh { name = name + " (rebuilt)", hideFlags = HideFlags.DontSave };
+            m.indexFormat = n > 65535 ? IndexFormat.UInt32 : IndexFormat.UInt16;
+            m.vertices = v;
+            m.normals = nn;
+            m.colors = c;
+            m.uv = uv;
+            m.triangles = t;
+            m.RecalculateBounds();
+            return m;
+        }
+
+        /// <summary>Shows every sheet again: the rebuilt one of a layer when there is one, else the baked one.</summary>
         public void Rebuild()
         {
             var container = transform.Find(ContainerName);
@@ -83,10 +333,25 @@ namespace MarchingBlocks.Paint
             Matrix4x4 formatToWorld = frameFrom != null ? frameFrom.FormatToWorld : transform.localToWorldMatrix;
             Matrix4x4 importerInverse = frameFrom != null ? frameFrom.ImporterFrameInverse : Matrix4x4.identity;
             var world = formatToWorld * importerInverse;
-            foreach (var l in layers)
+            for (int li = 0; li < layers.Count; li++)
             {
-                if (l.sheet == null) continue;
-                var go = Instantiate(l.sheet, container);
+                var l = layers[li];
+                var mesh = RebuiltMesh(li);
+                GameObject go;
+                if (mesh != null)
+                {
+                    go = new GameObject(l.name, typeof(MeshFilter), typeof(MeshRenderer));
+                    go.transform.SetParent(container, false);
+                    go.GetComponent<MeshFilter>().sharedMesh = mesh;
+                    if (l.material == null)
+                    {
+                        if (fallbackMaterial == null)
+                            fallbackMaterial = new Material(Shader.Find("MarchingBlocks/Water")) { hideFlags = HideFlags.DontSave };
+                        go.GetComponent<MeshRenderer>().sharedMaterial = fallbackMaterial;
+                    }
+                }
+                else if (l.sheet != null) go = Instantiate(l.sheet, container);
+                else continue;
                 go.name = l.name;
                 go.hideFlags = HideFlags.DontSave;
                 go.transform.position = world.GetColumn(3);
@@ -103,7 +368,7 @@ namespace MarchingBlocks.Paint
                         for (int k = 0; k < mats.Length; k++) mats[k] = l.material;
                         r.sharedMaterials = mats;
                     }
-                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                    r.shadowCastingMode = ShadowCastingMode.Off;
                     // The looks work in FORMAT space (cells), as in MarchingBlocks.
                     block.Clear();
                     block.SetMatrix("_MBWorldToFormat", formatToWorld.inverse);
@@ -121,13 +386,7 @@ namespace MarchingBlocks.Paint
         {
             if (lastWorlds.Count == layers.Count) return lastWorlds;
             lastWorlds.Clear();
-            var cells = new HashSet<Int3>();
-            if (transform.parent != null)
-                for (int i = 0; i < transform.parent.childCount; i++)
-                {
-                    var w = transform.parent.GetChild(i).GetComponent<MarchingBlocksWorld>();
-                    if (w != null) cells.UnionWith(w.Cells);
-                }
+            var cells = AllCells();
             // The sources of every layer, in order, through the rule at once (the sea is decided across layers).
             var all = new List<Int3>();
             var owner = new List<int>();

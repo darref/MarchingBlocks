@@ -104,6 +104,11 @@ static class Program
         }
         else Console.WriteLine("(no exported water world: run DEV_TOOLS/preparer_eau_unity.gd to check it)");
 
+        var followFailures = WaterFollowCheck.Run(out int followChecks);
+        foreach (var f in followFailures) Console.WriteLine("  FAIL water follow: " + f);
+        Console.WriteLine($"{followChecks} water follow checks, {followFailures.Count} failure(s)");
+        failed += followFailures.Count;
+
         var wheelFailures = WheelCheck.Run(out int wheelChecks);
         foreach (var f in wheelFailures) Console.WriteLine("  FAIL wheel: " + f);
         Console.WriteLine($"{wheelChecks} wheel checks, {wheelFailures.Count} failure(s)");

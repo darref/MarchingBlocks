@@ -28,6 +28,14 @@ namespace MarchingBlocks.Paint.Tests
         [Test] public void EveryWaterCaseIsReproduced() => Run("water_conformance.json", WaterConformanceCheck.Run);
         [Test] public void EveryWaterMeshCaseIsReproduced() => Run("water_mesh_conformance.json", WaterMeshConformanceCheck.Run);
 
+        [Test]
+        public void TheWaterSheetIsRebuiltAfterTheGestureOnly()
+        {
+            var failures = WaterFollowCheck.Run(out int checks);
+            Assert.Greater(checks, 0);
+            Assert.IsEmpty(failures, string.Join("\n", failures));
+        }
+
         // The reprise of the water (a previous world, the changed cells) gives what the whole computation gives.
         [Test]
         public void TheWaterReprisePutsBackWhatTheWholeComputationGives()
@@ -37,8 +45,7 @@ namespace MarchingBlocks.Paint.Tests
             var failures = WaterIncrementalCheck.Run(conf, 60, 7, out int checks, out string stats);
             UnityEngine.Debug.Log($"MB WATER REPRISE {checks} gestures: {stats}");
             Assert.Greater(checks, 0);
-            Assert.IsEmpty(failures, string.Join("
-", failures));
+            Assert.IsEmpty(failures, string.Join("\n", failures));
         }
     }
 }

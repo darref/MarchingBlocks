@@ -53,7 +53,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     Et **les cascades en volume** (§5, « les cascades du 3 octobre ») : la nappe courbe refermée dans la roche, son
     remous, la source — le contrat change (genre 0,75 = écume ; COLOR_0 a = l'écume sur une cascade), et le motif
     `motif_cascade` est à réécrire dans chaque preset.
-    - **Unity : PARTIEL (7 octobre 2026)** — nappe cuite et six aspects sur le contrat, cases d'eau recalculées ; la nappe ne se recalcule pas, l'eau ne se pose pas dans l'éditeur. Voir « Le greffon Unity à parité ».
+    - ✓ **Unity — FAIT SAUF LA POSE (7 octobre 2026)** — nappe cuite et six aspects sur le contrat, cases d'eau recalculées, et **la NAPPE RECALCULÉE quand on peint** (`MBWaterMesh`, 14/14 cas ; après le geste, sur un fil, avec la reprise ; « Rebuild water ») ; ⚠ l'eau ne se POSE toujours pas dans l'éditeur (pas d'outil de source). Voir « Le greffon Unity à parité » et « L'eau recalculée dans Unity ».
   - **La molette du contexte** (§5, « la molette ») : la même règle dans les trois éditeurs (pendant un geste, Alt, Maj,
     Ctrl), F qui cadre toute la matière, et des panneaux où la molette ne règle rien.
     - **Unity : FAIT (7 octobre 2026)** — l'aiguillage (`MBWheel`) et ses effets ; jamais tenu souris en main.
@@ -806,7 +806,7 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   - **Eau** : `MarchingBlocksWater` montre la nappe CUITE ; les six aspects (`MarchingBlocks/Water`) réécrits sur le
     CONTRAT. ⚠ **PARTIEL, DIT** : la profondeur vient du contrat (COLOR_0 a), pas du tampon de profondeur ; ni réfraction
     ni reflet du relief en espace écran ; le fond se voit par transparence. Les CASES d'eau sont recalculées quand on
-    peint (`MBWater.World`, gizmos) ; la NAPPE ne l'est pas (`eau_maillage.gd` n'a pas de cas, PARITE §2).
+    peint (`MBWater.World`, gizmos) ; la NAPPE l'est depuis le 7 octobre au soir (« L'eau recalculée dans Unity », ci-dessous).
   - **MESURÉ** : glTFast retourne v (v' = 1 − v, lu sur la nappe : 1,85 → −0,85) ; les shaders reviennent aux UV glTF.
   - ⚠ **LE PREMIER RENDU D'UNE CAPTURE URP EST FAUX** (des tuiles avec le matériau de l'autre couche, une plaque
     différente à chaque passage), les suivants justes : un rendu à blanc précède chaque capture.
@@ -826,6 +826,68 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
 - **CE QUI N'EST PAS FAIT** : le PINCEAU DE FEUILLAGE dans l'éditeur Unity (la règle `check` / `brush` est portée et
   passe ses cas ; aucun outil ne plante) ; poser de l'eau dans l'éditeur (la règle `river_width` est portée, sans
   outil) ; recalculer la nappe ; HDRP ; Alt + molette sous Windows et tout ce qui est souris en main — jamais tenu.
+### L'EAU RECALCULÉE DANS UNITY — FAITE LE 7 OCTOBRE 2026 (branche `eau-unity`, PARITE §12 ; la dernière entrée de la parité)
+
+- **LE MAILLEUR, EN C# PUR — FAIT, MESURÉ** : `Runtime/MBWaterMesh.cs`, `eau_maillage.gd` (`tableaux_du_maillage`) ligne à
+  ligne, calcul en double, rangement en 32 bits comme Godot (points, couleurs, `_chutes` en `PackedFloat32Array`,
+  différences des normales). Sortie en espace du FORMAT, sens glTF. **14 cas sur 14 du premier coup** (banc
+  `WaterMeshConformanceCheck` : appariement en sac, seaux par centre, rotations, ni réflexion ni doublon ; les tolérances
+  et les 16 constantes du fichier relues et comparées ; l'appariement lui-même éprouvé sur le bassin : mélangé / tourné /
+  bruité vrai, coin à 2e−4 / triangle retourné / doublé / couleurs 8 bits faux ; une sorte inconnue rougit ; un échec dit
+  le triangle le plus proche et son écart par attribut).
+- **MUTATIONS DU MAILLEUR : 24, 22 ROUGES PAR LES CAS, 2 MUETTES — ET UN TROU DU CONTRAT, MESURÉ** : « la lèvre la plus basse
+  gardée » (fusion de deux cascades d'un même lieu) et « deux bandes sur une case » restent vertes sur les 14 cas. SONDÉ :
+  une exception posée dans ces deux branches laisse les 14 cas verts — **aucun cas ne fusionne deux cascades ni ne voit deux
+  fois une case de bande** (aucun cas n'a deux rivières sur une même case). ⚠ Cela CONTREDIT PARITE §12, qui les dit
+  « gardées par les cas » et rouges côté GDScript : la campagne GDScript n'est pas dans le dépôt, sa mutation était
+  peut-être autre — OUVERT, à trancher dans `epreuve_parite.gd` (un cas à deux rivières sur les mêmes cases, dont l'une sort
+  d'un tunnel sous la cascade de l'autre), PAS dans le greffon. En attendant, le greffon Unity les garde par le monde
+  exporté ci-dessous (4 + 5 cases vues deux fois, 1 fusion, comptées par le préparateur) : **les deux deviennent ROUGES**.
+- **LA REPRISE, PORTÉE** (`MBWater.World(cells, sources, before, changed)`) : l'EMPRISE de chaque source (`_etendre` :
+  coulées à plat, creux, débord, chutes, élargie d'une case ; la mer : la boîte jusqu'à niveau + 1), la boîte vue
+  (`_boite_compatible`), « la mer reprise, sinon rien d'autre », un seul océan partagé ; `MBWaterMesh` garde les nappes
+  par corps (même OBJET), les cascades par leur signature, les sources par case (`memoire`). **Banc « incrémental =
+  entier » (`WaterIncrementalCheck`, 6 020 gestes)** : SCRIPTÉS sur des mondes faits pour (un cratère profond dont le
+  rebord est au-dessus de la source, un trou à côté du chemin d'une rivière sur un plateau, un conduit LOIN d'une rivière
+  qui rend sa mare marine ou non, une rivière sur trois qui s'arrête, un bassin rehaussé sous sa cascade), SYSTÉMATIQUES
+  (chaque case au contact de l'eau basculée puis remise) et AU HASARD ; règle, mer et nappe comparées au calcul entier.
+  ⚠ **LE PREMIER BANC (gestes au hasard seuls) LAISSAIT MUETTES 6 MUTATIONS SUR 10** : il ne touchait presque jamais le bord
+  d'une emprise. ⚠ **Deux « mutations » de la mémoire des cascades n'éprouvaient RIEN** (champ retiré d'`Equals` mais pas
+  du hachage : la recherche ratait, on recalculait) — refaites sur les deux. **Mutations de la reprise : 10, 9 ROUGES, 1
+  ÉQUIVALENTE** (l'emprise de la mer jusqu'à niveau au lieu de niveau + 1 : relue de son eau, la nappe d'une mer ne lit
+  pas la rangée du dessus — `surface_dessinee` reprend les cases du niveau sous un plafond ; raisonné, gardé pour la
+  fidélité à `fluides.gd`).
+- **LE BRANCHEMENT (la décision de coordination)** : `MBWaterFollow` (C# pur, 16 vérifications) — jamais pendant un geste
+  (`GUIUtility.hotControl` tenu : la nappe se dit PÉRIMÉE), 0,5 s de calme, une `Task` .NET sur une COPIE des cases (la
+  nappe échangée sur le fil principal), un résultat dépassé par un nouveau geste n'est PAS posé, le suivi se COUPE au-delà
+  d'1 s (temps compté jusqu'aux maillages posés) jusqu'au bouton **Rebuild water** (inspecteur `MarchingBlocksWaterEditor`,
+  ou `RebuildWater()`), qui le réarme s'il est rapide. La nappe refaite est un `Mesh` en espace de l'IMPORTEUR (repère
+  mesuré : glTFast X → −X, v retourné, sens inversé par le miroir) : posée exactement comme la cuite, mêmes matériaux.
+  Jusqu'au premier recalcul, la nappe cuite se montre.
+- **LE CONTRÔLE DE BOUT EN BOUT** : `DEV_TOOLS/preparer_eau_unity.gd` exporte un monde (mer et large, dalle sur la mer,
+  tunnel sous une cascade, lac profond, trois rivières dans un escalier ; trois couches d'eau, 2 103 triangles) ; Unity
+  recalcule depuis les sources = **la nappe cuite telle que glTFast l'a lue**, en sac, en espace du format. ⚠ **MESURÉ : les
+  couleurs du .glb sont TRONQUÉES, pas arrondies** (écart 2,8e−3, plus qu'un demi-pas de 1/255) : tolérance 1/255. Le banc
+  .NET relit aussi les triangles de la référence de ce monde (hors git, sauté s'il manque).
+- **LES TEMPS, MESURÉS** (C#, l'exemple livré : 739 481 cases, 106 sources, mer de 354 159 cases ; `dotnet run -c Release --
+  --water-timing <vidage>`) : **tout refaire 0,40 s** (règle 92 ms, nappes 309 ms dont la mer 267 ms pour 72 triangles)
+  contre 5,1–6,7 s en GDScript ; **un geste près d'une rivière, avec la reprise : 13 ms** (84 sources reprises sur 106) ;
+  loin de l'eau : 4 ms ; copie des cases 8 ms, leur comparaison (sur le fil) 107 ms. Dans Unity (monde exporté) : bouton
+  4–10 ms ; un trait sur l'escalier : 15 ms dont 0,2–3 ms sur le fil principal pour partir. La coupure d'1 s ne devrait
+  donc pas tomber sur l'exemple — non vu dans Unity (l'exemple n'y a pas été importé).
+- **UNITY 6.6 : 58 TESTS SUR 58 EN BUILT-IN ET EN URP** (dont `WaterRebuildTests`, 4 : bout en bout, le trait qui périme puis
+  se recalcule hors du fil, le résultat dépassé non posé, la coupure et le bouton ; et dans le paquet la reprise et
+  `MBWaterFollow`). ⚠ **Les trois tests À L'IMAGE du monde de la parité rendent du NOIR avec `-nographics`** (0,00 par
+  pixel) : les lancer SANS ce drapeau (le README du projet d'essai le dit à tort). **Mutations dans Unity : 6, toutes
+  rouges** (v non retourné, sens non inversé par le miroir, geste tenu ignoré, sans la reprise au bouton, sans la reprise
+  sur le fil, nappe dépassée posée quand même), avec une passe de RÉFÉRENCE verte — qui a d'abord rougi : le geste de mon
+  test était dans l'emprise de la mer (niveau + 1), la reprise avait raison.
+- **VU À L'IMAGE** (`WaterCaptures.CaptureAll`, Built-in et URP) : nappe cuite et nappe refaite sous les six aspects, la
+  cascade fusionnée, l'escalier, le lac, la mer sous la dalle — **indiscernables** (0,00 à 0,25 d'écart moyen par pixel, des
+  bords de 8 bits). URP : un projet hors dépôt, `D:/MB_wt_eau_unity_urp` (comme `D:/MB_wt_unity_urp`).
+- **CE QUI N'EST PAS FAIT** : poser une source d'eau dans l'éditeur Unity ; tenir le pinceau en main (la reprise et le fil
+  sont menés par les tests, jamais à la souris).
+
 ### LE GREFFON GODOT À PARITÉ — FAIT LE 7 OCTOBRE 2026 (branche `greffon-godot`, sur le contrat ci-dessus)
 
 Le greffon gratuit (`addons/marchingblocks_paint/`) porte la liste des greffons, entrée par entrée (cochées dans la

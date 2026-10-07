@@ -394,3 +394,11 @@ Un agent par moteur, en parallèle ; les cas sont le commun. Dans chaque moteur,
    (« ce qui se voit se juge à l'image »).
 
 Une règle ambiguë se remonte et se corrige dans `eau_maillage.gd`, puis on régénère : jamais dans un moteur.
+
+**UNITY — FAIT (7 octobre 2026, branche `eau-unity`)** : `MBWaterMesh` 14/14, la reprise portée (banc incrémental = entier),
+le branchement (`MBWaterFollow`, Rebuild water), le bout en bout contre la nappe cuite, vu à l'image (charte, « L'eau
+recalculée dans Unity »). ⚠ **REMONTÉ, OUVERT** : aucun des 14 cas ne fusionne deux cascades d'un même lieu ni ne voit deux
+fois une case de bande (sondé dans le C# : une exception dans ces branches laisse les 14 verts) — les mutations « lèvre la
+plus basse » et « deux bandes sur une case » n'y sont donc PAS gardées par les cas, contrairement à ce que dit la liste
+ci-dessus. Un cas à ajouter dans `epreuve_parite.gd` (deux rivières sur les mêmes cases, l'une sortant d'un tunnel sous la
+cascade de l'autre : le monde de `DEV_TOOLS/preparer_eau_unity.gd` le fait).
