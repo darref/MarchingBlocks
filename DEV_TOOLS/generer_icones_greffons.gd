@@ -23,7 +23,7 @@ const NOMS := {
 	"add": "ajouter", "dig": "creuser", "select": "selectionner", "rect": "rect", "box": "boite",
 	"hollow": "evider", "sphere": "sphere", "cube": "cube", "disc": "disque", "floor": "etage",
 	"fill": "remplir", "delete": "poubelle", "clear": "croix", "extrude_up": "extruder_haut",
-	"extrude_down": "extruder_bas", "grow": "grandir", "shrink": "retrecir", "connected": "connexe",
+	"extrude_down": "extruder_bas", "facing": "extruder_face", "widen": "elargir", "plant": "arbre", "grow": "grandir", "shrink": "retrecir", "connected": "connexe",
 	"up": "haut", "down": "bas", "left": "gauche", "right": "droite", "move": "deplacer",
 	"copy": "copier", "cut": "couper", "paste": "coller", "erase": "gomme", "layers": "couches",
 	"world": "monde",
