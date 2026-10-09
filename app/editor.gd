@@ -267,6 +267,10 @@ var _presse_papiers: Array = []
 
 ## LES FLUIDES : les couches d'eau (`Projet.couche_d_eau` : nom, visible, preset, SOURCES) et ce qui s'en déduit.
 var _eaux: Array = []
+## LE CRAN DU MONDE — un par projet (Jordan, 9 octobre 2026 : « un cran par monde ») : la surface de ses témoins calculés
+## (`BM.RETRAITS`) et le sol que son eau suppose (`EauMaillage.nappe`). Un projet neuf au neutre ; un projet d'avant à
+## l'aminci (`Projet.depuis_texte`).
+var _retrait: float = BM.RETRAIT_PAR_DEFAUT
 var _eau_active := 0
 var _corps_eau: Array = []      # par couche d'eau, un résultat de `FL.source` par source
 var _ocean_eau := {}
@@ -1697,6 +1701,11 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 			_enregistrer_plus_tard())
 	ligne.add_child(_preset_eau)
 	sec.contenu.add_child(ligne)
+	# LE SOL QUE L'EAU SUPPOSE (Jordan, 9 octobre 2026) : le cran du monde (Witness geometry, « Witness surface »).
+	var note_sol := _texte("Lakes and rivers sit on the ground of the witness surface chosen in Witness geometry "
+		+ "(Inset, Centred or Outset). Sculpted ground may sit elsewhere.", 11, Palette.GRIS)
+	note_sol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(note_sol)
 	var note := _texte("These looks are examples, not a requirement: in your engine you can assign your own "
 		+ "water shader from the plugin. It receives the same data — flow, kind of water, depth.", 11, Palette.GRIS)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2049,7 +2058,7 @@ func _recalculer_eau(avec_barre := true) -> void:
 		else:
 			while _nappes_memoire.size() <= i:
 				_nappes_memoire.append({})
-			m = EauMaillage.maillage(corps, _occ_eau, w["boite"], _nappes_memoire[i])
+			m = EauMaillage.maillage(corps, _occ_eau, w["boite"], _nappes_memoire[i], _retrait)
 		maillages.append([corps, m])
 		nappes.append([m, _materiaux_eau[preset], bool(e["visible"])])
 	_maillages_eau = maillages
@@ -2907,6 +2916,121 @@ func _rhabiller_avec_attente(pour_jouer := false) -> void:
 	_fin_attente()
 
 
+# ── LE CRAN DU TÉMOIN ET DU SOL DE L'EAU (Jordan, 9 octobre 2026 : « go pour les trois crans, 0 par défaut ») ────────
+#
+# Le témoin calculé d'une couche pose sa surface rentrée d'un quart de case (Inset, l'aminci d'avant), au bord des cases
+# (Centred) ou débordante d'un quart (Outset) — `BM.RETRAITS`. Un coin de massif ne se chanfreine que jusqu'au plan de
+# coupe : 0,25 de jeu rentré, 0,5 au bord, 0,75 débordant. Le cran ne vaut que pour un témoin CALCULÉ : un témoin modelé
+# porte sa forme dans son `.mbtiles`.
+
+const CRANS := {"aminci": BM.RETRAIT_AMINCI, "neutre": BM.RETRAIT_NEUTRE, "epais": BM.RETRAIT_EPAIS}
+const NOMS_CRANS := {"aminci": "Inset", "neutre": "Centred", "epais": "Outset"}
+var _boutons_cran := {}
+var _note_cran: Label
+
+
+func _batir_cran(pile: VBoxContainer) -> void:
+	var sec := Section.new("Witness surface", true, Icones.icone("cube"))
+	pile.add_child(sec)
+	var aide := _texte("Where the computed witnesses of this world put their surface — and where the water sits. A "
+		+ "corner can only be chamfered up to the cut plane: Inset leaves 0.25 of a cell to carve, Centred 0.5, Outset "
+		+ "0.75 — and the opposite to bulge out. One for the whole world: layers that meet share their borders.", 11,
+		Palette.GRIS)
+	aide.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(aide)
+	sec.contenu.add_child(_rangee_de_choix(_boutons_cran, [
+		["aminci", "Inset", "retrecir", "The surface a quarter of a cell inside its cells: room to bulge out (0.75), "
+			+ "little to carve corners (0.25)."],
+		["neutre", "Centred", "cube", "The surface on the cell boundaries, halfway between the cut planes: as much room "
+			+ "to carve as to bulge (0.5). The default."],
+		["epais", "Outset", "grandir", "The surface a quarter of a cell beyond its cells: room to carve and round corners "
+			+ "(0.75), little to bulge (0.25)."],
+	], _choisir_cran))
+	_note_cran = _texte("", 11, Palette.GRIS)
+	_note_cran.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sec.contenu.add_child(_note_cran)
+
+
+## Le nom d'un cran (`CRANS`) pour un retrait.
+func _nom_du_cran(r: float) -> String:
+	for nom in CRANS:
+		if float(CRANS[nom]) == BM.cran(r):
+			return nom
+	return "neutre"
+
+
+## ⚠ `set_pressed_no_signal` IGNORE LE ButtonGroup (charte §0, « l'exemple ne s'impose pas ») : on règle les trois.
+func _enfoncer(boutons: Dictionary, nom: String) -> void:
+	for k in boutons:
+		(boutons[k] as Button).set_pressed_no_signal(k == nom)
+
+
+## Les couches dont le témoin est MODELÉ (ou revenu de Blender) : elles gardent leur forme quel que soit le cran.
+func _couches_hors_du_cran() -> Array:
+	return _couches.filter(func(c: Dictionary) -> bool: return _origine_du_temoin(c) != "computed witness")
+
+
+func _dire_le_cran() -> void:
+	if _boutons_cran.is_empty():
+		return
+	_enfoncer(_boutons_cran, _nom_du_cran(_retrait))
+	var hors: Array = _couches_hors_du_cran()
+	_note_cran.text = "Every computed witness and the water follow it." if hors.is_empty() else \
+		("%d layer(s) have their own witness (%s) and keep their shape: where they meet a layer on another surface, a "
+		+ "gap.") % [hors.size(), ", ".join(PackedStringArray(hors.map(func(c): return "« %s »" % c["nom"])))]
+
+
+func _choisir_cran(nom: String) -> void:
+	var avant := _retrait
+	var apres := float(CRANS[nom])
+	if apres == avant:
+		return
+	_histoire.create_action("Witness surface")
+	_histoire.add_do_method(_poser_le_cran.bind(apres))
+	_histoire.add_undo_method(_poser_le_cran.bind(avant))
+	_histoire.commit_action()
+
+
+## Pose le cran `r` sur le monde : le témoin calculé de chaque couche qui n'a pas le sien est refait, et son monde le suit
+## (le `.glb` de son témoin, ou le lot du témoin calculé à ce cran) ; l'eau est refaite (ses hauteurs en dépendent).
+## `refaire` : faux à l'ouverture et pour un projet neuf (rien n'est encore posé).
+func _poser_le_cran(r: float, refaire := true) -> void:
+	_retrait = BM.cran(r)
+	if _vue != null:
+		_vue.retrait_eau = _retrait
+	if refaire:
+		for i in _couches.size():
+			var c: Dictionary = _couches[i]
+			if _origine_du_temoin(c) != "computed witness":
+				continue
+			c.erase("_temoin")
+			c.erase("_vignette")
+			_oublier_la_vignette(c)
+			var s := str(c.get("source", ""))
+			if s == _glb_du_temoin(c):
+				_temoin_de(c)
+				c["_glb_perime"] = true
+			elif Projet.est_le_temoin(s):
+				c["source"] = Projet.source_du_temoin(_retrait)
+				_habiller_couche(i)
+		_suivre_le_temoin_de_la_couche()
+		if not _vue.edition:
+			_montrer_temoin()
+		_maillages_eau = []
+		_nappes_memoire = []
+		_cle_apercu_eau = ""
+		_eau_perimee()
+		_rafraichir_couches()
+		_enregistrer_plus_tard()
+		_dire("[b]Witness surface: %s[/b] — every computed witness and the water follow. [i]Ctrl+Z goes back.[/i]"
+			% NOMS_CRANS[_nom_du_cran(_retrait)])
+	# ⚠ LA VUE DU TÉMOIN SUIT AUSSI À L'OUVERTURE (vu par la fumée : un projet neutre ouvert après un aminci montrait encore
+	# le témoin aminci).
+	elif _vue != null and not _vue.edition and _atelier in ["witness", "texture", "anim", "projet"]:
+		_montrer_temoin()
+	_dire_le_cran()
+
+
 ## Entrer en édition par un geste (Tab, le bouton) : charger le témoin d'une couche coûte ~2 s la première fois.
 func _basculer_edition(oui: bool) -> void:
 	if oui and not _vue.edition and _ecran_vivant() and _modeleur.temoin != _couches[_active].get("_temoin", null):
@@ -3034,7 +3158,21 @@ func _contexte() -> void:
 ## « Show it in the witness » (World) : on va dans Witness, la forme allumée, la place EXACTE de la tuile
 ## marquée, la vue cadrée dessus sous l'angle de la photo de la forme.
 ## Le témoin calculé en tuiles, gardé tant que le modeleur ne l'a pas pris (la planche peut le demander avant).
-var _temoin_calcule: RefCounted
+## Le témoin calculé en tuiles liées, par CRAN (`BM.RETRAITS`, 9 octobre 2026) : {retrait: TemoinLie}.
+var _temoins_calcules := {}
+
+
+## Le cran du témoin calculé d'une couche : celui du monde (un pour toutes — leurs bords doivent se raccorder).
+func _cran_de(_c: Dictionary) -> float:
+	return _retrait
+
+
+## Le témoin calculé au cran `r`, fabriqué une fois (~2 s).
+func _temoin_calcule_au(r: float) -> RefCounted:
+	r = BM.cran(r)
+	if not _temoins_calcules.has(r):
+		_temoins_calcules[r] = TL.depuis_le_temoin_calcule(r)
+	return _temoins_calcules[r]
 
 
 func _temoin_pour_la_planche() -> RefCounted:
@@ -3156,6 +3294,7 @@ func _contexte_des_outils() -> void:
 
 func _batir_droite_temoin(pile: VBoxContainer) -> void:
 	_bouton_edition = _sections_d_edition(pile, "Witness geometry", _boutons_selmode)
+	_batir_cran(pile)
 
 	var tr := Section.new("Transform", true, Icones.icone("deplacer"))
 	pile.add_child(tr)
@@ -4148,7 +4287,7 @@ func _donner_les_autres_temoins() -> void:
 
 func _suit_son_temoin(c: Dictionary) -> bool:
 	var s := str(c.get("source", ""))
-	return s == "" or s == Projet.TEMOIN or s == _glb_du_temoin(c)
+	return s == "" or Projet.est_le_temoin(s) or s == _glb_du_temoin(c)
 
 
 ## Les témoins modifiés depuis le dernier enregistrement (un par couche touchée).
@@ -4297,7 +4436,7 @@ func _inscrire_les_retouches() -> void:
 ## Repart du témoin calculé : TOUTES les tuiles, en UNE annulation (une par tuile, dans la même action).
 func _remettre_le_temoin() -> void:
 	_regler_edition(true)
-	var neuf: RefCounted = TL.depuis_le_temoin_calcule()
+	var neuf: RefCounted = _temoin_calcule_au(_cran_de(_couches[_active]))
 	_histoire.create_action("Witness: Reset")
 	for c in _modeleur.temoin.tuiles:
 		if not neuf.tuiles.has(c):
@@ -4388,9 +4527,7 @@ func _temoin_de(c: Dictionary) -> RefCounted:
 	if t == null and _source_liee(c):
 		t = TL.depuis_glb(str(c["source"]), _chemin_temoin_de(c).get_basename() + "_images")
 	if t == null:
-		if _temoin_calcule == null:
-			_temoin_calcule = TL.depuis_le_temoin_calcule()
-		t = _temoin_calcule.copie()
+		t = _temoin_calcule_au(_cran_de(c)).copie()
 	c["_temoin"] = t
 	return t
 
@@ -4410,7 +4547,7 @@ func _source_liee(c: Dictionary) -> bool:
 	if c.has("_lie"):
 		return bool(c["_lie"])
 	var s := str(c.get("source", ""))
-	var lie: bool = s != "" and s != Projet.TEMOIN and s.get_extension().to_lower() in ["glb", "gltf"] \
+	var lie: bool = s != "" and not Projet.est_le_temoin(s) and s.get_extension().to_lower() in ["glb", "gltf"] \
 		and FileAccess.file_exists(s) and not BM.tuiles_liees(s, [], []).is_empty()
 	c["_lie"] = lie
 	return lie
@@ -4423,7 +4560,7 @@ func _origine_du_temoin(c: Dictionary) -> String:
 	if _source_liee(c):
 		return "from Blender (linked)"
 	var s := str(c.get("source", ""))
-	if s != "" and s != Projet.TEMOIN:
+	if s != "" and not Projet.est_le_temoin(s):
 		return "unlinked work"
 	return "computed witness"
 
@@ -4495,7 +4632,7 @@ func _suivre_son_temoin(c: Dictionary) -> void:
 	var i: int = _couches.find(c)
 	var propre := _glb_du_temoin(c)
 	var s := str(c.get("source", ""))
-	if i < 0 or (s != "" and s != Projet.TEMOIN and s != propre):
+	if i < 0 or (s != "" and not Projet.est_le_temoin(s) and s != propre):
 		return
 	var bilan: Dictionary = BM.librairie_depuis_glb(propre)
 	var lot: MeshLibrary = bilan.get("lot", null)
@@ -4557,7 +4694,15 @@ func _copier_le_temoin() -> void:
 ## La vignette d'une couche : son témoin, photographié une fois, reprise quand il change.
 var _vignettes: Node
 ## ⚠ PAS `static` : un maillage statique survit à la fermeture avec son matériau — vu en fuite dans la fumée.
-var _maillage_calcule: Mesh
+## Par cran (`_cran_de`) : {retrait: Mesh}.
+var _maillages_calcules := {}
+
+
+func _maillage_calcule_au(r: float) -> Mesh:
+	r = BM.cran(r)
+	if not _maillages_calcules.has(r):
+		_maillages_calcules[r] = BM.maillage_du_temoin(0, r)
+	return _maillages_calcules[r]
 
 
 func _vignette_de(c: Dictionary) -> Texture2D:
@@ -4579,9 +4724,7 @@ func _vignette_de(c: Dictionary) -> Texture2D:
 			return gardee
 	var mesh: Mesh
 	if _origine_du_temoin(c) == "computed witness" and c.get("_temoin", null) == null:
-		if _maillage_calcule == null:
-			_maillage_calcule = BM.maillage_moitie(0)
-		mesh = _maillage_calcule
+		mesh = _maillage_calcule_au(_cran_de(c))
 	else:
 		mesh = _temoin_de(c).assemble()
 	var vue := SubViewport.new()
@@ -4700,7 +4843,7 @@ func _etat_de(i: int) -> String:
 		etat = "sliced" if a_jour else "witness changed · slice again"
 		if c.get("_glb_perime", false):
 			etat = "sliced · follows its witness when you open World"
-	elif s == Projet.TEMOIN:
+	elif Projet.est_le_temoin(s):
 		etat = "witness changed · slice again" if _origine_du_temoin(c) == "modelled" else "sliced"
 	else:
 		etat = "tiles from " + s.get_file()
@@ -4709,8 +4852,10 @@ func _etat_de(i: int) -> String:
 
 # ── LE TÉMOIN ET LE TRAVAIL ──────────────────────────────────────────────────────────────────────────
 
+## Le témoin calculé, au cran de la couche active (`_cran_de`).
 func _montrer_temoin() -> void:
-	_vue.montrer_maillage(BM.maillage_moitie(0), null)
+	var r: float = _cran_de(_couches[_active]) if not _couches.is_empty() else BM.RETRAIT_PAR_DEFAUT
+	_vue.montrer_maillage(_maillage_calcule_au(r), null)
 
 
 ## ⚠ **LE CHEMIN ET LE MAILLAGE SE LISENT DANS LA LISTE, ILS NE SONT PLUS GARDÉS À CÔTÉ.** Deux copies
@@ -4893,7 +5038,8 @@ func _exporter(fichier: String) -> void:
 	# ⚠ LE TÉMOIN DE LA COUCHE ACTIVE : jamais modelé, c'est le témoin calculé (légende, UV canoniques) ;
 	# sinon le sien, tel qu'on l'a sculpté.
 	var c_export: Dictionary = _couches[_active]
-	var raison: String = BM.exporter_le_temoin_lie(fichier) if _origine_du_temoin(c_export) == "computed witness" \
+	var raison: String = BM.exporter_le_temoin_lie(fichier, _cran_de(c_export)) \
+		if _origine_du_temoin(c_export) == "computed witness" \
 		else _temoin_de(c_export).vers_glb(fichier, true)   # pour Blender : soudé, sans normales
 	_empreintes_vues.clear()   # le fichier choisi peut être le `.glb` d'une couche
 	_fin_attente()
@@ -4971,8 +5117,9 @@ func _importer(fichier: String) -> void:
 func _trancher_temoin() -> void:
 	if _vue.monde() == null:
 		return
-	var bilan: Dictionary = await _trancher_source(Projet.TEMOIN)
-	_poser_lot(bilan, "witness", Projet.TEMOIN)
+	var source := Projet.source_du_temoin(_cran_de(_couches[_active]))
+	var bilan: Dictionary = await _trancher_source(source)
+	_poser_lot(bilan, "witness", source)
 
 
 func _trancher_travail() -> void:
@@ -5022,9 +5169,10 @@ func _trancher_source(source: String) -> Dictionary:
 	var bilan: Dictionary
 	# ⚠ SUR UN AUTRE FIL (`_en_fond`) : 2 s pour le témoin, ~17 s pour un travail non lié — la barre défile et
 	# l'écran reste vivant au lieu de geler. Le cœur ne touche à aucun nœud de la scène.
-	if source == Projet.TEMOIN:
+	if Projet.est_le_temoin(source):
 		await _attendre("Slicing the witness", "52 tiles, one per key")
-		bilan = await _en_fond(func() -> Dictionary: return BM.librairie())
+		var r := Projet.retrait_de_la_source(source)
+		bilan = await _en_fond(func() -> Dictionary: return BM.librairie(r))
 	else:
 		await _attendre("Slicing your work", source.get_file())
 		bilan = await _en_fond(func() -> Dictionary: return BM.librairie_depuis_glb(source))
@@ -5563,7 +5711,7 @@ func _exporter_le_monde(dossier: String) -> void:
 	var ids: Array = _couches.map(func(c: Dictionary) -> String: return str(c.get("id", "")))
 	var transitions := {"etat": _transitions.etat, "ids": ids, "representants": _transitions._representants()}
 	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux, transitions,
-		_feuillage.vers_donnees())
+		_feuillage.vers_donnees(), _retrait)
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 		for sous in DirAccess.get_directories_at(str(r["dossier"])):
@@ -6253,6 +6401,7 @@ func _rafraichir_couches() -> void:
 	if _liste_couches == null:
 		return
 	_transitions.dire()   # une couche ajoutée, renommée, déplacée : les paires suivent
+	_dire_le_cran()
 	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
 	_bouton_supprimer_couche.disabled = _couches.size() <= 1
 	if _bouton_monter_couche != null:
@@ -6313,11 +6462,11 @@ func _rafraichir_couches() -> void:
 
 
 func _dire_la_source(c: Dictionary) -> String:
+	if Projet.est_le_temoin(str(c["source"])):
+		return "computed witness"
 	match c["source"]:
 		"":
 			return "no tiles yet"
-		Projet.TEMOIN:
-			return "computed witness"
 	return str(c["source"]).get_file()
 
 
@@ -6498,6 +6647,7 @@ func _vider_le_projet() -> void:
 	_monde_coeur = null   # un projet neuf, un monde neuf : les couches d'avant n'y sont plus inscrites
 	_active = 0
 	_eaux.clear()
+	_poser_le_cran(BM.RETRAIT_PAR_DEFAUT, false)
 	_eau_active = 0
 	_travaux.clear()
 	_travail_actif = -1
@@ -6533,6 +6683,8 @@ func _ouvrir(chemin: String) -> bool:
 		return false
 	_ouverture = true
 	_vider_le_projet()
+	# LE CRAN DU MONDE D'ABORD : les témoins calculés de ses couches (vignettes, ensembles PBR, tranchage) en dépendent.
+	_poser_le_cran(float(etat.get("retrait", BM.RETRAIT_AMINCI)), false)
 	_projet = chemin
 	var notes: Array = []
 	# LA BARRE AVANCE D'UNE COUCHE À L'AUTRE (chaque couche : ses cases, son lot, parfois un tranchage).
@@ -6748,7 +6900,7 @@ func _habiller_couche_(i: int) -> String:
 	if cache["a_jour"]:
 		massif.lot = cache["lot"]
 		return ""
-	var presente: bool = c["source"] == Projet.TEMOIN or FileAccess.file_exists(c["source"])
+	var presente: bool = Projet.est_le_temoin(str(c["source"])) or FileAccess.file_exists(c["source"])
 	if presente:
 		var bilan: Dictionary = await _trancher_source(c["source"])
 		if bilan.get("lot", null) != null:
@@ -6792,10 +6944,11 @@ func _enregistrer(en_fond := false) -> void:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
-		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions, feuillage),
+		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions, feuillage,
+			_retrait),
 			true, "Saving the project")
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -6816,7 +6969,7 @@ func _attendre_l_ecriture() -> void:
 ## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
 ## `_ecriture_finie`, sur le fil principal).
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
-		transitions: Dictionary = {}, feuillage: Dictionary = {}) -> void:
+		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT) -> void:
 	var raison := ""
 	# LA DÉMO N'ÉCRIT QUE DANS SON BAC (`demo.gd`) — la dernière porte, si un chemin d'ailleurs arrivait jusqu'ici.
 	if Edition.est_demo() and not Demo.dans_le_bac(chemin):
@@ -6831,7 +6984,7 @@ func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array,
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:

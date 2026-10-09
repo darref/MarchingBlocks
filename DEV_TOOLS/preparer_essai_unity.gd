@@ -40,7 +40,7 @@ func _initialize() -> void:
 
 
 func _preparer() -> void:
-	var lot: MeshLibrary = BM.librairie()["lot"]
+	var lot: MeshLibrary = BM.librairie(BM.RETRAIT_AMINCI)["lot"]
 	var r: Dictionary = FN.exporter(lot, CIBLE, "witness", "MarchingBlocks (test)")
 	if r.has("erreur"):
 		print("✗ " + r["erreur"])
@@ -98,7 +98,7 @@ func _pbr() -> bool:
 		Peinture.tamponner(Peinture.calque_actif(toile), Vector2(rng.randf() * 256, rng.randf() * 256), rng.randf_range(4, 16),
 			Color(0.8, 0.75, 0.7) if i % 2 == 0 else Color(0.2, 0.18, 0.15), 0.5, 1.0)
 	Peinture.composer(toile)
-	var t: RefCounted = TL.depuis_le_temoin_calcule()
+	var t: RefCounted = TL.depuis_le_temoin_calcule(BM.RETRAIT_AMINCI)
 	t.materiaux.append({"nom": "rock", "couleur": Color.WHITE, "rugosite": 0.8, "metal": 0.0, "texture": toile,
 		"echelle": 1.0, "pbr": Cartes.DEFAUTS.duplicate()})
 	for c in t.tuiles:

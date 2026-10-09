@@ -417,15 +417,17 @@ namespace MBPaint
 			return Kind == ECourseKind::Flow ? "flow" : Kind == ECourseKind::Fall ? "fall" : "lake";
 		}
 
-		std::string Read(const FJsonValue& World, std::vector<FWaterLayer>& Out)
+		std::string Read(const FJsonValue& World, std::vector<FWaterLayer>& Out, double* Floor)
 		{
 			Out.clear();
+			if (Floor) *Floor = 0.25;
 			if (World.Type != FJsonValue::EType::Object) return "not a MarchingBlocks world";
 			const FJsonValue* List = World.Find("water");
-			if (!List) return "";
-			if (List->Type != FJsonValue::EType::Array) return "water is not an array";
+			if (List && List->Type != FJsonValue::EType::Array) return "water is not an array";
+			// No "water": no layer — the floor is still read (a world without water may say it).
+			const FJsonValue NoWater = FJsonValue::MakeArray();
 			std::vector<FWaterLayer> Layers;
-			for (const FJsonValue& E : List->Array)
+			for (const FJsonValue& E : (List ? *List : NoWater).Array)
 			{
 				if (E.Type != FJsonValue::EType::Object || E["name"].Type != FJsonValue::EType::String
 					|| E["visible"].Type != FJsonValue::EType::Bool || E["look"].Type != FJsonValue::EType::String)
@@ -449,7 +451,16 @@ namespace MBPaint
 				}
 				Layers.push_back(L);
 			}
+			// THE FLOOR the water sits on (`water_floor`): 0.25, 0 or -0.25; absent (worlds exported before it): 0.25.
+			double F = 0.25;
+			if (const FJsonValue* Fv = World.Find("water_floor"))
+			{
+				if (!Fv->IsNumber()) return "water_floor is not 0.25, 0 or -0.25";
+				F = Fv->AsReal();
+				if (F != 0.25 && F != 0.0 && F != -0.25) return "water_floor is not 0.25, 0 or -0.25";
+			}
 			Out = Layers;
+			if (Floor) *Floor = F;
 			return "";
 		}
 

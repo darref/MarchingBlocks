@@ -30,6 +30,16 @@ class UMaterialInterface;
 class UStaticMesh;
 class UStaticMeshComponent;
 
+/** Where the ground of the tiles is drawn, for the heights of the water (world.json "water_floor"): the top of a full cell
+ *  y - 1 is seen at y - 0.25 (inset), y (centred) or y + 0.25 (outset). */
+UENUM()
+enum class EMarchingBlocksWaterFloor : uint8
+{
+	Inset,
+	Centred,
+	Outset
+};
+
 UCLASS(ClassGroup = MarchingBlocks, meta = (DisplayName = "MarchingBlocks Water"))
 class MARCHINGBLOCKSPAINT_API AMarchingBlocksWater : public AActor
 {
@@ -53,6 +63,18 @@ public:
 	/** Where the water was placed, format space. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks")
 	TArray<FIntVector> Sources;
+
+	/** The floor the water sits on (world.json "water_floor", set at import): lakes at L + 1 - |r| - 0.05, rivers at
+	 *  y + 0.1 - r (r = 0.25 inset, 0 centred, -0.25 outset). The FIRST water layer of the world (lowest Order) decides
+	 *  for all of them. */
+	UPROPERTY(EditAnywhere, Category = "MarchingBlocks")
+	EMarchingBlocksWaterFloor WaterFloor = EMarchingBlocksWaterFloor::Inset;
+
+	/** The floor r of WaterFloor: 0.25, 0 or -0.25. */
+	double FloorValue() const;
+
+	/** The floor value of world.json (0.25, 0, -0.25) as the enum. */
+	static EMarchingBlocksWaterFloor FloorFromValue(double R);
 
 	/** The sheet MarchingBlocks baked (water/<name>.glb, imported with the same glTF importer as tiles.glb). Shown until
 	 *  the water is rebuilt here. */

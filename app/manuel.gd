@@ -416,6 +416,13 @@ func _modeleur() -> String:
 		+ "keys (G, X, I…) do nothing: the screen sends you to Geometry (there, E is the paint eraser). What you "
 		+ "make is saved next to the project; [b]Reset to the computed witness[/b] (Geometry, « The modelled "
 		+ "witness ») starts the active layer's witness over.[/i]")
+	l.append(_titre("Witness surface"))
+	l.append("Where the computed witness puts its surface in each cell — [b]Inset[/b] (a quarter of a cell inside), "
+		+ "[b]Centred[/b] (on the cell boundaries, the default) or [b]Outset[/b] (a quarter beyond). A corner can only "
+		+ "be chamfered up to the cut plane: Inset leaves 0.25 of a cell to carve, Centred 0.5, Outset 0.75 — and the "
+		+ "opposite to bulge out. It is one setting for the whole world (Geometry, « Witness surface »): every computed "
+		+ "witness follows, so that layers which meet share their borders, and so does the water (lakes sit just under "
+		+ "the rim, rivers just above the ground). A layer whose witness you have modelled keeps its shape. One Ctrl+Z.")
 	l.append(_titre("One tile per class, linked copies"))
 	l.append(("The witness is made of the [b]%d tiles[/b] a world uses, and every place it shows a tile is a "
 		% (MB.pieces_a_sculpter().size() + MB.exterieures_a_sculpter().size()))

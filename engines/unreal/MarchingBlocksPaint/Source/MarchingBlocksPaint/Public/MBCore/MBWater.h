@@ -116,8 +116,10 @@ namespace MBPaint
 		constexpr int StepsMax = 4096;
 		constexpr int OverflowReach = 4;
 
-		/// Reads the "water" key of a decoded world.json. "" and Out filled, or the reason it is refused.
-		MARCHINGBLOCKSPAINT_API std::string Read(const FJsonValue& World, std::vector<FWaterLayer>& Out);
+		/// Reads the "water" key of a decoded world.json. "" and Out filled, or the reason it is refused. Floor (optional):
+		/// the top-level "water_floor" — where the ground of the tiles is drawn, 0.25 (inset), 0 (centred) or -0.25
+		/// (outset); absent: 0.25 (worlds exported before it); any other value refuses the world.
+		MARCHINGBLOCKSPAINT_API std::string Read(const FJsonValue& World, std::vector<FWaterLayer>& Out, double* Floor = nullptr);
 		MARCHINGBLOCKSPAINT_API FJsonValue ToJson(const std::vector<FWaterLayer>& Layers);
 
 		/// One source, against the water already there (Fixed: the sea).

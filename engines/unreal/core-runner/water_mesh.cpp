@@ -477,11 +477,13 @@ namespace
 				Cells.insert(FCell(static_cast<int>(Flat[I].AsInt()), static_cast<int>(Flat[I + 1].AsInt()), static_cast<int>(Flat[I + 2].AsInt())));
 		}
 		std::vector<FWaterLayer> Layers;
-		const std::string Refused = Water::Read(World, Layers);
+		double Floor = WaterMesh::FloorDefault;
+		const std::string Refused = Water::Read(World, Layers, &Floor);
 		if (!Refused.empty()) { T.Expect(false, Folder + ": water refused: " + Refused); return; }
 		std::vector<FCell> Sources;
 		for (const FWaterLayer& L : Layers) Sources.insert(Sources.end(), L.Sources.begin(), L.Sources.end());
-		std::printf("  %s: %zu full cells, %zu water layer(s), %zu source(s)\n", Folder.c_str(), Cells.size(), Layers.size(), Sources.size());
+		std::printf("  %s: %zu full cells, %zu water layer(s), %zu source(s), floor %g\n", Folder.c_str(), Cells.size(), Layers.size(),
+			Sources.size(), Floor);
 		// Twice: the first run pays its allocations.
 		double RuleMs = 1e30, SheetMs = 1e30, BoxMs = 1e30;
 		FWaterState State;
@@ -502,7 +504,7 @@ namespace
 				std::vector<const FWaterBody*> Bodies;
 				for (size_t I = 0; I < L.Sources.size(); ++I) Bodies.push_back(State.Bodies[K + I].get());
 				K += L.Sources.size();
-				Meshes.push_back(WaterMesh::Build(Bodies, Cells, Box, nullptr));
+				Meshes.push_back(WaterMesh::Build(Bodies, Cells, Box, nullptr, Floor));
 			}
 			SheetMs = std::min(SheetMs, WMs(T0));
 		}
@@ -539,7 +541,7 @@ namespace
 				std::vector<const FWaterBody*> Bodies;
 				for (size_t I = 0; I < Layers[L].Sources.size(); ++I) Bodies.push_back(State.Bodies[K + I].get());
 				K += Layers[L].Sources.size();
-				WaterMesh::Build(Bodies, Cells, State.Box, &Memories[L]);
+				WaterMesh::Build(Bodies, Cells, State.Box, &Memories[L], Floor);
 			}
 		}
 		const FWaterBox Box0 = Water::BoxOf(Cells);
@@ -577,7 +579,7 @@ namespace
 				std::vector<const FWaterBody*> Bodies;
 				for (size_t I = 0; I < Layers[L].Sources.size(); ++I) Bodies.push_back(Next.Bodies[K + I].get());
 				K += Layers[L].Sources.size();
-				Resumed.push_back(WaterMesh::Build(Bodies, Cells, Next.Box, &Memories[L]));
+				Resumed.push_back(WaterMesh::Build(Bodies, Cells, Next.Box, &Memories[L], Floor));
 				SheetsReused += Memories[L].Reused;
 			}
 			const double Sheets = WMs(T0);
@@ -591,7 +593,7 @@ namespace
 				std::vector<const FWaterBody*> Bodies;
 				for (size_t I = 0; I < Layers[L].Sources.size(); ++I) Bodies.push_back(Whole.Bodies[K + I].get());
 				K += Layers[L].Sources.size();
-				if (!WSameMesh(Resumed[L], WaterMesh::Build(Bodies, Cells, Whole.Box, nullptr))) Why = "the sheet of layer " + std::to_string(L);
+				if (!WSameMesh(Resumed[L], WaterMesh::Build(Bodies, Cells, Whole.Box, nullptr, Floor))) Why = "the sheet of layer " + std::to_string(L);
 			}
 			T.Expect(Why.empty(), Folder + ", " + Gesture.first + ": resumed != whole (" + Why + ")");
 			std::printf("  GESTURE — %s (%d, %d, %d): rule %.0f ms (%d of %zu sources taken back), sheets %.0f ms (%d sheets taken back), "
@@ -615,8 +617,9 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 	using namespace WaterMesh;
 	const std::pair<const char*, double> Constants[] = {{"arc", Arc}, {"churn", Churn}, {"flare", Flare}, {"flare_max", FlareMax},
 		{"foam_rise", FoamRise}, {"horizon", Horizon}, {"into_rock", IntoRock}, {"overhang", Overhang}, {"overlap", Overlap}, {"river", River},
-		{"rounding", Rounding}, {"sheet", Sheet}, {"spray", Spray}, {"spring", Spring}, {"spring_dome", SpringDome}, {"surface", Surface}};
-	T.Expect(K.Size() == sizeof(Constants) / sizeof(Constants[0]), "the file has " + std::to_string(K.Size()) + " constants, the plugin 16");
+		{"rounding", Rounding}, {"sheet", Sheet}, {"spray", Spray}, {"spring", Spring}, {"spring_dome", SpringDome}, {"surface", Surface},
+		{"floor_default", FloorDefault}, {"thin", Thin}, {"above_floor", AboveFloor}};
+	T.Expect(K.Size() == sizeof(Constants) / sizeof(Constants[0]), "the file has " + std::to_string(K.Size()) + " constants, the plugin 19");
 	for (const auto& C : Constants)
 		T.Expect(K.Find(C.first) && K[C.first].AsReal() == C.second, std::string("constant ") + C.first + " differs from the plugin's");
 	FTolerances Tol;
@@ -629,6 +632,7 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 	std::map<std::string, FCellSet> Worlds;
 	for (const auto& Entry : Conf["worlds"].Object) Worlds[Entry.first] = WCells(Entry.second);
 	int Cases = 0, CaseFailures = 0;
+	std::map<double, int> Floors;
 	std::vector<FTri> Basin;
 	for (const FJsonValue& C : Conf["cases"].Array)
 	{
@@ -639,7 +643,12 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 		if (World == Worlds.end()) { ++CaseFailures; T.Expect(false, Name + ": unknown world"); continue; }
 		std::vector<FWaterBody> Bodies;
 		for (const FJsonValue& B : C["input"]["bodies"].Array) Bodies.push_back(WBody(B));
-		const std::vector<FTri> Got = WUnfold(WaterMesh::Build(Bodies, World->second));
+		// THE FLOOR r of the case (0.25 inset, 0 centred, -0.25 outset).
+		const FJsonValue* Fj = C["input"].Find("floor");
+		if (!Fj || !Fj->IsNumber()) { ++CaseFailures; T.Expect(false, Name + ": no floor"); continue; }
+		const double Floor = Fj->AsReal();
+		++Floors[Floor];
+		const std::vector<FTri> Got = WUnfold(WaterMesh::Build(Bodies, World->second, Floor));
 		const std::vector<FTri> Want = WExpected(C["expected"]);
 		if (Want.size() > Basin.size()) Basin = Want;
 		const std::string Why = WSameBag(Want, Got, Tol);
@@ -647,7 +656,9 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 		T.Expect(Why.empty(), Name + " — " + Why + "\n    expected " + WSummary(Want) + "\n    got      " + WSummary(Got));
 	}
 	std::printf("water_mesh_conformance.json: %d cases, %d failure(s)\n", Cases, CaseFailures);
-	T.Expect(Cases == 15, "the file has " + std::to_string(Cases) + " cases, PARITE.md says 15");
+	T.Expect(Cases == 23, "the file has " + std::to_string(Cases) + " cases, PARITE.md says 23");
+	T.Expect(Floors.size() == 3 && Floors.count(0.25) && Floors.count(0.0) && Floors.count(-0.25),
+		"the cases do not exercise the three floors (inset, centred, outset)");
 	// The comparison, proven on the largest case (the basin).
 	const int Before = T.Failed;
 	WProveBag(Basin, Tol, T);
@@ -709,6 +720,39 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 		Stats.SheetsReused, T.Failed == ResumeBefore ? "resumed == whole" : "FAILED");
 	T.Expect(Stats.Reused > 0 && Stats.Reused < Stats.Bodies, "the gestures never (or always) take a body back: the resumption is not exercised");
 	T.Expect(Stats.SheetsReused > 0, "no sheet was ever taken back from the memory");
+	// THE FLOOR READ (world.json "water_floor", FormatMonde.lire_eau): absent 0.25; 0.25, 0, -0.25 kept; anything else refuses.
+	{
+		auto ReadFloor = [](const std::string& Text, double& Floor) -> std::string
+		{
+			FJsonValue J;
+			std::string Error;
+			if (!ParseJson(Text, J, Error)) return "json: " + Error;
+			std::vector<FWaterLayer> L;
+			return Water::Read(J, L, &Floor);
+		};
+		double F = 9.0;
+		T.Expect(ReadFloor("{\"water\": []}", F).empty() && F == 0.25, "an absent water_floor is not 0.25");
+		T.Expect(ReadFloor("{\"water\": [], \"water_floor\": 0}", F).empty() && F == 0.0, "water_floor 0 not read");
+		T.Expect(ReadFloor("{\"water_floor\": -0.25}", F).empty() && F == -0.25, "water_floor -0.25 (no water key) not read");
+		T.Expect(!ReadFloor("{\"water\": [], \"water_floor\": 0.1}", F).empty(), "water_floor 0.1 accepted");
+		T.Expect(!ReadFloor("{\"water\": [], \"water_floor\": \"0\"}", F).empty(), "water_floor as a string accepted");
+		T.Expect(!ReadFloor("{\"water_floor\": null}", F).empty(), "water_floor null accepted");
+	}
+	// ANOTHER FLOOR, THE SAME MEMORY: nothing is taken back (the heights changed) — the sheet is the fresh one.
+	{
+		const FCellSet& Island = Worlds["island"];
+		const std::vector<FCell> Sources = {FCell(-1, 2, -1), FCell(4, 4, 4)};
+		const FWaterState S = Water::WorldResumed(Island, Sources, nullptr, nullptr);
+		std::vector<const FWaterBody*> Bodies;
+		for (const auto& B : S.Bodies) Bodies.push_back(B.get());
+		FWaterMeshMemory Memory;
+		WaterMesh::Build(Bodies, Island, S.Box, &Memory, 0.25);
+		const FWaterMesh Centred = WaterMesh::Build(Bodies, Island, S.Box, &Memory, 0.0);
+		T.Expect(Memory.Reused == 0 && WSameMesh(Centred, WaterMesh::Build(Bodies, Island, S.Box, nullptr, 0.0)),
+			"another floor reused the sheets of the previous one");
+		WaterMesh::Build(Bodies, Island, S.Box, &Memory, 0.0);
+		T.Expect(Memory.Reused > 0, "the same floor took nothing back");
+	}
 	for (int I = 0; I < WorldCount; ++I) WEndToEnd(WorldDirs[I], T);
 	std::printf("water_mesh: %d checks, %d failure(s)\n", T.Checks, T.Failed);
 	return T.Failed;

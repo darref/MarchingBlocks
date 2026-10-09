@@ -59,7 +59,7 @@ func _initialize() -> void:
 	# puis base64) — petit-boutiste, x, y, z à la suite.
 	_vrai(texte_bloc.contains('"cases_b64": "AQAAAAIAAAADAAAA/P////v////6////"'),
 		"un tableau de cases s'écrit d'un bloc, en binaire (base64 des entiers 32 bits)")
-	_egal(int((JSON.parse_string(texte_bloc) as Dictionary).get("version", 0)), 2, "… dans un projet de version 2")
+	_egal(int((JSON.parse_string(texte_bloc) as Dictionary).get("version", 0)), 3, "… dans un projet de version 3 (les crans, 9 octobre 2026)")
 	var relu_bloc: Dictionary = Projet.depuis_texte(texte_bloc, [])
 	_egal(relu_bloc.get("couches", [{}])[0].get("cases", {}).keys(), [Vector3i(1, 2, 3), Vector3i(-4, -5, -6)],
 		"… et se relit case pour case")
@@ -204,6 +204,7 @@ func _initialize() -> void:
 	_les_durees()
 	_les_dossiers()
 	_le_feuillage()
+	_les_crans()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -433,6 +434,33 @@ func _le_feuillage() -> void:
 	var e: Array = []
 	_vrai(Projet.depuis_texte(JSON.stringify(abime), e).is_empty() and not e.is_empty(),
 		"un plant d'un modèle inconnu refuse le projet entier (%s)" % ("" if e.is_empty() else e[0]))
+
+
+## LES CRANS DU TÉMOIN ET DU SOL DE L'EAU (9 octobre 2026). Attendus écrits à la main : neutre (0) pour ce qui est neuf,
+## aminci (0,25) pour un projet d'avant qui n'en dit rien.
+func _les_crans() -> void:
+	_vrai(not Projet.couche("x").has("retrait"), "le cran n'est pas à la couche : un par monde")
+	var relu: Dictionary = Projet.depuis_texte(Projet.vers_texte([Projet.couche("a")], 0, [], [], {}, {}, -0.25), [])
+	_egal(relu.get("retrait", null), -0.25, "le cran du monde revient")
+	_egal(Projet.depuis_texte(Projet.vers_texte([Projet.couche("x")], 0), []).get("retrait", null), 0.0,
+		"un projet neuf est au cran neutre")
+	var avant: Dictionary = Projet.depuis_texte('{"format": "marchingblocks-project", "version": 2, "couches": '
+		+ '[{"nom": "old", "source": "witness", "cases_b64": ""}]}', [])
+	_vrai(not avant.is_empty() and avant["retrait"] == 0.25,
+		"un projet d'avant les crans se relit AMINCI (rien ne bouge sous ses pieds)")
+	var arrondi: Dictionary = Projet.depuis_texte('{"format": "marchingblocks-project", "version": 3, "couches": '
+		+ '[{"nom": "a"}], "retrait": -9}', [])
+	_vrai(not arrondi.is_empty() and arrondi["retrait"] == -0.25, "un cran hors des trois est ramené au plus proche")
+	var e: Array = []
+	_vrai(Projet.depuis_texte('{"format": "marchingblocks-project", "version": 3, "couches": [{}], "retrait": [1]}', e)
+		.is_empty() and not e.is_empty(), "refusé, avec sa raison : un cran abîmé")
+	# La source « témoin calculé » nomme son cran ; l'aminci garde « witness » (les caches d'avant).
+	_egal([Projet.source_du_temoin(0.25), Projet.source_du_temoin(0.0), Projet.source_du_temoin(-0.25)],
+		["witness", "witness@0.0", "witness@-0.25"], "la source du témoin calculé, par cran")
+	_egal([Projet.retrait_de_la_source("witness"), Projet.retrait_de_la_source("witness@0.0"),
+		Projet.retrait_de_la_source("witness@-0.25")], [0.25, 0.0, -0.25], "… et son cran relu")
+	_vrai(Projet.est_le_temoin("witness@0.0") and not Projet.est_le_temoin("D:/witness.glb"),
+		"… reconnue comme le témoin calculé, et un chemin ne l'est pas")
 
 
 func _vider(dossier: String) -> void:

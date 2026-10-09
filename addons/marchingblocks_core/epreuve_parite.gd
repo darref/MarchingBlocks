@@ -861,6 +861,14 @@ static func _mondes_maillage() -> Dictionary:
 	galerie.erase(Vector3i(3, 2, 1))
 	galerie.erase(Vector3i(4, 2, 1))
 	m["a cliff pierced by a gallery"] = galerie
+	# UN CHENAL SUR UN PLATEAU (9 octobre 2026, les flancs des rivières) : sol y = 0 (x −1..6, z −2..2), murs y = 1 en
+	# z = ±2 et en x = −1 ; la falaise en x = 7. Une rivière de (0, 1, 0) file vers la falaise entre deux bandes de sol
+	# SEC : chaque bande se referme par un flanc de chaque côté — le monde de `test_fluides` (`_crans_et_flancs`).
+	var chenal := {}
+	for c in _boite(Vector3i(-1, 0, -2), Vector3i(6, 0, 2)) + _boite(Vector3i(-1, 1, -2), Vector3i(6, 1, -2)) \
+			+ _boite(Vector3i(-1, 1, 2), Vector3i(6, 1, 2)) + _boite(Vector3i(-1, 1, -1), Vector3i(-1, 1, 1)):
+		chenal[c] = true
+	m["a channel on a plateau"] = chenal
 	return m
 
 
@@ -980,7 +988,8 @@ static func resume_des_triangles(tris: Array) -> Dictionary:
 static func _maillage_eau() -> Dictionary:
 	var mondes := _mondes_maillage()
 	var esc: Dictionary = mondes["stairs"]
-	# [nom, monde, sources (toutes les couches), les corps de LA couche maillée (indices) ou null : tous]
+	# [nom, monde, sources (toutes les couches), les corps de LA couche maillée (indices) ou null : tous, le cran du sol
+	# (absent : l'aminci, 0,25 — les cas d'avant le 9 octobre 2026)]
 	var essais := [
 		["a calm lake in a crater", "crater in a plain", [Vector3i(6, 3, 6)], null],
 		["a lake that overflows into a river", "crater near the edge", [Vector3i(2, 2, 6)], null],
@@ -999,6 +1008,16 @@ static func _maillage_eau() -> Dictionary:
 		["a refused source draws nothing", "stairs", [Vector3i(0, 1, 1)], null],
 		["two rivers in one place: one falls from the top, one leaves a gallery below, on the same cells",
 			"a cliff pierced by a gallery", [Vector3i(4, 6, 1), Vector3i(3, 2, 1)], null],
+		# LES CRANS DU SOL ET LES FLANCS (9 octobre 2026).
+		["a river in a channel on a plateau: bands closed by flanks (inset ground)", "a channel on a plateau",
+			[Vector3i(0, 1, 0)], null, 0.25],
+		["the same river, centred ground", "a channel on a plateau", [Vector3i(0, 1, 0)], null, 0.0],
+		["the same river, outset ground", "a channel on a plateau", [Vector3i(0, 1, 0)], null, -0.25],
+		["a river down the stairs, centred ground", "stairs", [Vector3i(0, 3, 1)], null, 0.0],
+		["a lake that overflows into a river, centred ground", "crater near the edge", [Vector3i(2, 2, 6)], null, 0.0],
+		["a sea around an island, centred ground", "island", [Vector3i(-1, 2, -1)], null, 0.0],
+		["the sea under a floating slab, outset ground", "a slab on a pillar", [Vector3i(10, 2, 10)], null, -0.25],
+		["a waterfall into a basin it fills, outset ground", "a cliff above a basin", [Vector3i(2, 5, 1)], null, -0.25],
 	]
 	var cas: Array = []
 	for e in essais:
@@ -1010,16 +1029,17 @@ static func _maillage_eau() -> Dictionary:
 		# Les corps passent par l'anglais et le JSON, comme chez un greffon ; le maillage part de CE qu'il lit.
 		var en: Array = JSON.parse_string(JSON.stringify(corps.map(func(r: Dictionary) -> Dictionary: return _corps_en(r))))
 		var relus: Array = en.map(func(b: Dictionary) -> Dictionary: return corps_depuis_en(b))
-		var tris := triangles_canoniques(EM.tableaux_du_maillage(relus, occ, FL.boite(occ)))
+		var sol: float = e[4] if e.size() > 4 else EM.RETRAIT_AMINCI
+		var tris := triangles_canoniques(EM.tableaux_du_maillage(relus, occ, FL.boite(occ), null, sol))
 		var ix := triangles_indexes(tris)
-		cas.append({"name": "mesh: " + e[0], "kind": "water_mesh", "input": {"world": e[1], "bodies": en},
+		cas.append({"name": "mesh: " + e[0], "kind": "water_mesh", "input": {"world": e[1], "bodies": en, "floor": sol},
 			"expected": {"summary": resume_des_triangles(tris), "vertices": ix["vertices"], "triangles": ix["triangles"]}})
 	var mondes_en := {}
 	for k in mondes:
 		mondes_en[k] = _cases(mondes[k])
 	return {"format": "marchingblocks-water-mesh-conformance", "version": VERSION,
 		"rules_text": COMMUN + _regle_du_maillage() + [
-			"CASES — water_mesh {world (a key of worlds), bodies (ONE water layer: water_world bodies, in order)} →",
+			"CASES — water_mesh {world (a key of worlds), bodies (ONE water layer: water_world bodies, in order), floor} →",
 			"{summary {still | river | foam | fall: {triangles, area}}, vertices, triangles}. vertices: distinct corners",
 			"[px, py, pz, nx, ny, nz, r, g, b, a, u, v] (COLOR_0 is r g b a, TEXCOORD_0 is u v); triangles: [i, j, k]",
 			"into vertices — only a compact storage: unfold each into its three corners and compare TRIANGLES, listed",
@@ -1033,7 +1053,8 @@ static func _maillage_eau() -> Dictionary:
 			"it differs, the bag will too. Compare the arrays you COMPUTE, before the engine stores them: nothing is",
 			"quantized here (Godot's ArrayMesh keeps colours in 8 bits and normals octahedral; the .glb colours are in",
 			"1/255)."],
-		"constants": {"surface": EM.NAPPE, "river": EM.RIVIERE, "overlap": EM.DEBORD, "sheet": EM.LAME, "arc": EM.ARC,
+		"constants": {"surface": EM.NAPPE, "river": EM.RIVIERE, "floor_default": EM.RETRAIT_AMINCI, "thin": EM.FIN,
+			"above_floor": EM.AU_DESSUS_DU_SOL, "overlap": EM.DEBORD, "sheet": EM.LAME, "arc": EM.ARC,
 			"flare": EM.EVASE, "flare_max": EM.EVASE_MAXI, "into_rock": EM.DANS_LA_ROCHE, "rounding": EM.ARRONDI,
 			"overhang": EM.DEPASSE, "churn": EM.REMOUS, "spray": EM.EMBRUN, "foam_rise": EM.MONTEE_D_ECUME,
 			"horizon": EM.LARGE, "spring": EM.SOURCE, "spring_dome": EM.SOURCE_DOME},
@@ -1048,11 +1069,16 @@ static func _regle_du_maillage() -> Array:
 		"  of the full cells grown by 1 (empty world: no box). A body with an error draws nothing; no triangle at all is",
 		"  an empty mesh. Floats: computed in DOUBLE, vertices stored in 32-bit floats (Godot's Vector3, Color).",
 		"  color(flow f, kind k, a) = (f.x * 0.5 + 0.5, f.z * 0.5 + 0.5, k, clamp(a, 0, 1)); kinds: still 0, river 0.5,",
-		"  foam 0.75, fall 1. Constants: see constants (surface 0.7, river -0.15, overlap 0.45, ...).",
+		"  foam 0.75, fall 1. Constants: see constants (overlap 0.45, sheet 0.35, ...).",
+		"THE FLOOR r (input floor; world.json water_floor; absent = 0.25): where the ground of the tiles is drawn — the",
+		"  top of a full cell y - 1 is seen at y - r, the bottom of a full cell y + 1 at y + 1 + r (the three witness",
+		"  surfaces: 0.25 inset, 0 centred, -0.25 outset). SURFACE(r) = 1 - |r| - 0.05 (0.7 inset, 0.95 centred, 0.7",
+		"  outset); RIVER(r) = 0.1 - r (-0.15, 0.1, 0.35); ADVANCE(r) = 0.25 - r (0, 0.25, 0.5). Below, every height",
+		"  written y + SURFACE or y + RIVER uses them; at r = 0.25 they are the values of the cases before the floor.",
 		"DORMANT waters: the sea's cells, a lake's cells, each lake of each river (cells), in body order.",
 		"FLAT RECTANGLES {x0, x1, z0, z1, h, color}, body by body:",
-		"  sea: SHEET(water, level, h forced to level + 0.7 when the box exists and level > box.hi.y), then the HORIZON",
-		"    at level + 0.7, color(0, still, 1): no box → [-2000, 2000] x [-2000, 2000]; else with the box lo..hi:",
+		"  sea: SHEET(water, level, h forced to level + SURFACE when the box exists and level > box.hi.y), then the",
+		"    HORIZON at level + SURFACE, color(0, still, 1): no box → [-2000, 2000] x [-2000, 2000]; else with the box lo..hi:",
 		"    x [-2000, 2000] z [-2000, lo.z]; x [-2000, 2000] z [hi.z + 1, 2000]; x [-2000, lo.x] z [lo.z, hi.z + 1];",
 		"    x [hi.x + 1, 2000] z [lo.z, hi.z + 1].   lake: SHEET(water, level).   river: SHEET(cells, level) of each of",
 		"    its lakes, then its BANDS and WATERFALLS (below).",
@@ -1064,20 +1090,30 @@ static func _regle_du_maillage() -> Array:
 		"    (then row end = x + 1, row xp = cell xp); else it starts a row {y, z, start x, end x + 1, xm, xp, zm, zp,",
 		"    color}. RECTANGLES, rows in order: x0 = start - xm, x1 = end + xp; if an OPEN rectangle has the key (y, z,",
 		"    x0, x1, color), it is closed and grows z1 = z + 1 + zp; else a new one {x0, x1, z - zm, z + 1 + zp, h = y +",
-		"    0.7 or the forced h, color}. If the row's zp == 0, the rectangle is open under the key (y, z + 1, x0, x1,",
+		"    SURFACE or the forced h, color}. If the row's zp == 0, the rectangle is open under the key (y, z + 1, x0, x1,",
 		"    color).",
 		"  RIVER (rivers of the layer share one SEEN set and one SPRINGS list): SPRING at course[0]'s cell if it is a",
 		"    flow cell on a full cell, not already a spring. BAND for each course cell c that is not a lake entry, has a",
 		"    full cell below and is not SEEN (then it is): flow d = (next cell - c) if next is a horizontal neighbour,",
-		"    else (c - previous) if horizontal, else 0; rectangle [c.x - xm, c.x + 1 + xp] x [c.z - zm, c.z + 1 + zp],",
-		"    overlaps as in SHEET at c's row, h = c.y - 0.15, color(d, river, 0.05). WATERFALL for each run of fall",
+		"    else (c - previous) if horizontal, else 0; h = c.y + RIVER, color(d, river, 0.05). WATER of the layer: the",
+		"    cells of every body without error (a sea's or a lake's water, each river's lake cells and course cells).",
+		"    EDGES, for the sides -x, +x, -z, +z in that order, n = c + side: n full → e = 0.45; n in WATER → e = 0 if",
+		"    n + down is full, else ADVANCE (the lip of a waterfall: the band reaches where the sheet starts); else DRY →",
+		"    e = 0 if n + down is full (the ground goes on), else 0.05 - r (a ledge: the band stops 0.05 outside the",
+		"    rock), and that side gets a FLANK. Rectangle [c.x - e(-x), c.x + 1 + e(+x)] x [c.z - e(-z), c.z + 1 + e(+z)].",
+		"    FLANK (a QUAD, posed when the band is made, in the order of the sides): on the side's edge of the",
+		"    rectangle (x = x0 or x1 from z0 to z1; z = z0 or z1 from x0 to x1), from h down to c.y - r - 0.05; corners",
+		"    P0 (edge start, h), P1 (edge end, h), P2 (edge end, low), P3 (edge start, low) — start = the smaller z (x",
+		"    sides) or x (z sides); normal = side, color = the band's, uv = (z or x along the edge, y). Two triangles",
+		"    turned to the normal: in the FORMAT's winding, (P0, P1, P2) and (P0, P2, P3) if (P1 - P0) x (P2 - P0) is on",
+		"    the side of the normal, else (P0, P2, P1) and (P0, P3, P2). WATERFALL for each run of fall",
 		"    entries i..j-1: lip = course[i-1] (c + up if i = 0); d = lip - course[i-2] if i >= 2 and horizontal, else",
-		"    the first f of +x, -x, +z, -z with (course[i] - f) full, else 0; bottom = course[j-1]. top = lip.y - 0.15;",
-		"    foot = bottom.y - 0.3; ground = bottom.y - 0.15 if bottom + down is full else foot; the FIRST dormant water",
-		"    holding bottom: h = its highest cell above bottom (contiguous), ground = h.y + 0.7, foot = min(foot, ground",
-		"    - 0.15). PLANE: axis x if d.x != 0 else z; sense = d.x or d.z; along = lip.z (axis x) or lip.x; d = 0:",
-		"    axis z, sense 1, along = lip.x, plane = lip.z + 0.5; else plane = lip.x (axis x) or lip.z, + 1 when sense",
-		"    < 0. Waterfalls with the same (axis, round(plane * 20), along) are ONE: top = max, foot = min, ground = min.",
+		"    the first f of +x, -x, +z, -z with (course[i] - f) full, else 0; bottom = course[j-1]. top = lip.y +",
+		"    RIVER; foot = bottom.y - 1 + SURFACE; ground = bottom.y + RIVER if bottom + down is full else foot; the",
+		"    FIRST dormant water holding bottom: h = its highest cell above bottom (contiguous), ground = h.y +",
+		"    SURFACE, foot = min(foot, ground - 0.15). PLANE: axis x if d.x != 0 else z; sense = d.x or d.z; along =",
+		"    lip.z (axis x) or lip.x; d = 0: axis z, sense 1, along = lip.x, plane = lip.z + 0.5; else plane = lip.x",
+		"    (axis x) or lip.z, + 1 when sense < 0, then + ADVANCE * sense. Waterfalls with the same (axis, round(plane * 20), along) are ONE: top = max, foot = min, ground = min.",
 		"  WATERFALL SHEET (after all rivers): straight = (d = 0); free0 = not straight and no waterfall at along - 1 on",
 		"    the same plane; free1 likewise at along + 1. u0 = along - (0.1 if free0), u1 = along + 1 + (0.1 if free1).",
 		"    ACROSS: u0 + f if free0 and u1 - f if free1 for f in 0, 0.05, 0.1, 0.2, 0.3, 0.35, plus along, along + 0.5,",
@@ -1098,7 +1134,7 @@ static func _regle_du_maillage() -> Array:
 		"    (flat ? 0.02 : 0), 0); normal flat ? up : dir; color(d, foam, foam_k * weight_i); uv flat ? (u, ground -",
 		"    1.5 offset_k) : (u, y). RING = CROWN(0 0.25 0.55 0.85, 0 0 0 0, 1 0.85 0.45 0, flat, 1). SPRAY = CROWN(0.06",
 		"    0.16 0.22 0.2, 0 0.3 0.6 0.9, 0.95 0.7 0.35 0, standing, straight ? 1 : profile(u)^3).",
-		"  SPRING at cell c: centre (c.x + 0.5, c.y - 0.15, c.z + 0.5), 17 columns i = 0..16, angle = 2 pi (i mod 16) /",
+		"  SPRING at cell c: centre (c.x + 0.5, c.y + RIVER, c.z + 0.5), 17 columns i = 0..16, angle = 2 pi (i mod 16) /",
 		"    16, dir (cos, 0, sin). DISC rows radius 0 0.2 0.42 0.7, lift 0.08 0.056 0.024 0.02, foam 1 0.95 0.6 0:",
 		"    centre + dir r + (0, lift, 0), normal up, color(0, foam, f), uv (angle * 0.6, centre.y - 1.5 r). VEIL rows",
 		"    radius 0.12 0.2 0.24, lift 0.02 0.18 0.34, foam 0.8 0.45 0: normal dir, uv (angle * 0.6, centre.y + lift).",

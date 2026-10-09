@@ -94,7 +94,8 @@ void AMarchingBlocksWorldImport::ImportWorld()
 	std::vector<MBPaint::FWaterLayer> Waters;
 	MBPaint::FTransitions Transitions;
 	MBPaint::FFoliage Foliage;
-	std::string Refused = MBPaint::Water::Read(Json, Waters);
+	double WaterFloor = MBPaint::WaterMesh::FloorDefault;
+	std::string Refused = MBPaint::Water::Read(Json, Waters, &WaterFloor);
 	if (Refused.empty()) Refused = MBPaint::Transitions::Read(Json, Transitions);
 	if (Refused.empty()) Refused = MBPaint::Foliage::Read(Json, Foliage);
 	if (!Refused.empty())
@@ -192,6 +193,7 @@ void AMarchingBlocksWorldImport::ImportWorld()
 		W->WorldName = FName(*WorldName);
 		W->Order = static_cast<int32>(I);
 		W->Look = UTF8_TO_TCHAR(L.Look.c_str());
+		W->WaterFloor = AMarchingBlocksWater::FloorFromValue(WaterFloor);
 		for (const MBPaint::FCell& S : L.Sources) W->Sources.Add(FIntVector(S.X, S.Y, S.Z));
 		if (L.bHasMesh)
 		{

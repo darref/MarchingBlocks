@@ -59,13 +59,26 @@ namespace MBPaint
 		std::vector<std::pair<uint64_t, std::vector<FWaterFlat>>> Sheets;
 		/// How many bodies' sheets the last Build took back.
 		int Reused = 0;
+		/// The floor the sheets were made for: another floor, nothing is taken back (the heights changed).
+		double Floor = 0.25;
 	};
 
 	namespace WaterMesh
 	{
 		// The constants (the conformance file's "constants" must be these).
-		constexpr double Surface = 0.7;      // a sheet at its row + 0.7
-		constexpr double River = -0.15;      // a band at its cell - 0.15
+		constexpr double Surface = 0.7;      // a sheet at its row + 0.7 (inset floor)
+		constexpr double River = -0.15;      // a band at its cell - 0.15 (inset floor)
+		// THE FLOOR r (world.json "water_floor"): where the ground of the tiles is drawn - the top of a full cell y - 1 is
+		// seen at y - r (0.25 inset, 0 centred, -0.25 outset). Every height follows it; at r = 0.25 they are the above.
+		constexpr double FloorDefault = 0.25;
+		constexpr double Thin = 0.05;
+		constexpr double AboveFloor = 0.1;
+		/// A still sheet at its top row + SurfaceAt(r).
+		inline double SurfaceAt(double R) { return 1.0 - (R < 0.0 ? -R : R) - Thin; }
+		/// A river band at its cell + RiverAt(r).
+		inline double RiverAt(double R) { return AboveFloor - R; }
+		/// A waterfall leaves the cliff's plane moved by AdvanceAt(r) (it keeps its place in front of inset rock).
+		inline double AdvanceAt(double R) { return FloorDefault - R; }
 		constexpr double Overlap = 0.45;     // a sheet runs that far under the rock beside it
 		constexpr double Sheet = 0.35;       // how far a waterfall leaves its cliff
 		constexpr double Arc = 0.7;          // over this drop it curves
@@ -89,11 +102,12 @@ namespace MBPaint
 		/// THE SHEET OF ONE WATER LAYER: its bodies (what Water::World made of its sources, in order; nullptr or an error
 		/// draws nothing) against the full cells of EVERY layer, Box being their box grown by 1 (Water::BoxOf).
 		/// Memory (optional): kept by the caller from one rebuild to the next — same result, fewer sheets recomputed.
+		/// Floor: the world's floor r (see FloorDefault).
 		MARCHINGBLOCKSPAINT_API FWaterMesh Build(const std::vector<const FWaterBody*>& Bodies, const FCellSet& Cells, const FWaterBox& Box,
-			FWaterMeshMemory* Memory = nullptr);
+			FWaterMeshMemory* Memory = nullptr, double Floor = FloorDefault);
 
 		/// The same, from bodies held by value (the box is computed).
-		MARCHINGBLOCKSPAINT_API FWaterMesh Build(const std::vector<FWaterBody>& Bodies, const FCellSet& Cells);
+		MARCHINGBLOCKSPAINT_API FWaterMesh Build(const std::vector<FWaterBody>& Bodies, const FCellSet& Cells, double Floor = FloorDefault);
 
 		/// The drawn surface of a still water W of level L: its cells whose cell above is neither water nor full, plus its
 		/// cells at row L under a full cell (under a floating storey or a ceiling).

@@ -175,6 +175,7 @@ static func build(world_json_path: String, parent: Node) -> Dictionary:
 		wn.visible = e["visible"]
 		wn.look = str(e["look"])
 		wn.sources = e["sources"]
+		wn.floor_kind = WaterNode.FLOORS.find(float(w.get("water_floor", 0.25)))
 		wn.mesh_path = base.path_join(str(e["mesh"])).simplify_path() if e["mesh"] is String else ""
 		wn.baked_for = WaterNode.fingerprint(all_cells)
 		parent.add_child(wn, true)

@@ -45,13 +45,15 @@ namespace MarchingBlocks.Paint.Tests
                     ["flare_max"] = MBWaterMesh.FlareMax, ["into_rock"] = MBWaterMesh.IntoRock, ["rounding"] = MBWaterMesh.Rounding,
                     ["overhang"] = MBWaterMesh.Overhang, ["churn"] = MBWaterMesh.Churn, ["spray"] = MBWaterMesh.Spray,
                     ["foam_rise"] = MBWaterMesh.FoamRise, ["horizon"] = MBWaterMesh.Horizon, ["spring"] = MBWaterMesh.Spring,
-                    ["spring_dome"] = MBWaterMesh.SpringDome,
+                    ["spring_dome"] = MBWaterMesh.SpringDome, ["floor_default"] = MBWaterMesh.FloorDefault,
+                    ["thin"] = MBWaterMesh.Thin, ["above_floor"] = MBWaterMesh.AboveFloor,
                 };
                 foreach (var kv in c)
                     if (!mine.TryGetValue(kv.Key, out var m)) pre.Add($"unknown constant '{kv.Key}': this bench must learn it");
                     else if (Math.Abs(m - D(kv.Value)) > 1e-12) pre.Add($"constant {kv.Key}: {F(m)}, the file says {F(D(kv.Value))}");
             }
             var kinds = new HashSet<double>();
+            var floors = new HashSet<double>();
             Dictionary<string, object> basin = null;
             var failures = ParityCheck.Run(conf, Format, Kinds, (kind, i, e) =>
             {
@@ -61,14 +63,36 @@ namespace MarchingBlocks.Paint.Tests
                 var want = Unfold((Dictionary<string, object>)e);
                 foreach (var t in want) kinds.Add(t[8]);
                 if (want.Count > 1000) basin = (Dictionary<string, object>)e;
-                var got = Triangles(MBWaterMesh.Arrays(bodies, cells));
+                // Le sol r de la case (absent : 0,25, en retrait).
+                double floor = i.TryGetValue("floor", out var fl) ? D(fl) : MBWaterMesh.FloorDefault;
+                floors.Add(floor);
+                var got = Triangles(MBWaterMesh.Arrays(bodies, cells, null, floor));
                 var why = SameBag(want, got);
-                if (why == null) return null;
-                return why + " — summary: " + Summary(got) + ", expected " + Summary(want);
+                if (why != null) return why + " — summary: " + Summary(got) + ", expected " + Summary(want);
+                // UNE MÉMOIRE FAITE POUR UN AUTRE SOL ne sert pas : les mêmes corps, l'autre sol d'abord, puis celui du cas.
+                var memory = new WaterMeshMemory();
+                MBWaterMesh.Arrays(bodies, cells, memory, floor == 0.25 ? -0.25 : 0.25);
+                var again = Triangles(MBWaterMesh.Arrays(bodies, cells, memory, floor));
+                why = SameBag(want, again);
+                return why == null ? null : "with a memory made for another floor: " + why;
             }, out cases, out _);
             failures.InsertRange(0, pre);
+            // LE SOL DU MONDE (water_floor) : absent 0,25 ; 0,25, 0, −0,25 lus ; toute autre valeur refuse le monde.
+            foreach (var (json, ok, want) in new[] { ("{}", true, 0.25), ("{\"water_floor\": 0.25}", true, 0.25),
+                ("{\"water_floor\": 0}", true, 0.0), ("{\"water_floor\": -0.25}", true, -0.25),
+                ("{\"water_floor\": 0.5}", false, 0.0), ("{\"water_floor\": \"0\"}", false, 0.0),
+                ("{\"water_floor\": null}", false, 0.0) })
+            {
+                var decoded = MBJson.Parse(json);
+                bool read = MBWater.ReadFloor(decoded, out double got, out _);
+                var file = MBWater.Read(decoded);
+                if (read != ok || file.Ok != ok) failures.Add($"water_floor {json}: read {read}, the water key {file.Ok}, expected {ok}");
+                else if (ok && (got != want || file.Floor != want)) failures.Add($"water_floor {json}: {got} / {file.Floor}, expected {want}");
+            }
             foreach (var k in new[] { 0.0, 0.5, 0.75, 1.0 })
                 if (!kinds.Contains(k)) failures.Add($"no water mesh case exercises the kind {k}");
+            foreach (var r in new[] { 0.25, 0.0, -0.25 })
+                if (!floors.Contains(r)) failures.Add($"no water mesh case exercises the floor {r}");
             // LA COMPARAISON ELLE-MÊME, éprouvée sur le plus grand cas.
             if (basin == null) failures.Add("no case of more than 1000 triangles to prove the matching on");
             else failures.AddRange(ProveTheMatching(Unfold(basin)));

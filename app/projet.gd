@@ -17,12 +17,16 @@ extends RefCounted
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const FORMAT := "marchingblocks-project"
 ## ⚠ 2 depuis le 4 octobre 2026 : les cases s'écrivent en BINAIRE (`cases_b64`, voir `vers_texte`). Un exe d'avant
 ## qui lirait ce fichier n'y trouverait pas `cases` et ouvrirait des couches VIDES — puis les enregistrerait : la
 ## version le lui fait refuser (« made by a newer MarchingBlocks »). La version 1 reste lue.
-const VERSION := 2
+## ⚠ 3 depuis le 9 octobre 2026 : le projet porte le CRAN de ses témoins calculés et du sol de son eau (`retrait`). Un exe
+## d'avant l'ignorerait — il montrerait le témoin aminci et réécrirait le projet sans lui, et le monde changerait de forme à
+## la réouverture suivante : la version le lui fait refuser.
+const VERSION := 3
 const EXTENSION := "mbproj"
 const DOSSIER_CACHE := "user://cache"
 ## LE FORMAT DU CACHE. ⚠ 2 depuis le 29 septembre 2026 : le lot porte la PROVENANCE de chaque tuile (le
@@ -33,7 +37,26 @@ const DOSSIER_CACHE := "user://cache"
 const FORMAT_DU_CACHE := 3
 
 ## La source « témoin calculé ». Toute autre source non vide est un chemin de `.glb`.
+## ⚠ « witness » est le témoin calculé AMINCI (le seul jusqu'au 9 octobre 2026 : les caches d'avant restent valables) ;
+## aux autres crans, « witness@<retrait> » (`source_du_temoin`) — son lot n'est pas le même, son cache non plus.
 const TEMOIN := "witness"
+
+
+static func source_du_temoin(retrait: float) -> String:
+	var r := BM.cran(retrait)
+	return TEMOIN if r == BM.RETRAIT_AMINCI else "%s@%s" % [TEMOIN, str(r)]
+
+
+## La source est-elle le témoin calculé (à un cran quelconque) ?
+static func est_le_temoin(source: String) -> bool:
+	return source == TEMOIN or source.begins_with(TEMOIN + "@")
+
+
+## Le cran d'une source « témoin calculé ».
+static func retrait_de_la_source(source: String) -> float:
+	if source.begins_with(TEMOIN + "@"):
+		return BM.cran(source.substr(TEMOIN.length() + 1).to_float())
+	return BM.RETRAIT_AMINCI
 
 
 ## Une couche neuve : aucune source, aucune case, aucun témoin à elle.
@@ -69,8 +92,11 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## `travaux` : les chemins des travaux importés (étape 2), dans l'ordre — la liste survit à la session (3 octobre 2026).
 ## `transitions` (6 octobre 2026, l'atelier Transitions) : {paires: {"idA|idB": {actif, couvre: {id: réglages}}},
 ## representants: {id: indice de matériau}, choix: {sommet: id de la couche qui y couvre}} — absent s'il est vide.
+## `retrait` — LE CRAN DU MONDE (`BM.RETRAITS`, Jordan, 9 octobre 2026 : « un cran par monde ») : la surface de tous
+## ses témoins calculés, et le sol que son eau suppose. UN pour tout le projet : deux couches qui se touchent doivent avoir
+## les mêmes bords (mesuré : une couche aminci à côté d'une neutre, 1 928 sommets de joint sans partenaire).
 static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {},
-		feuillage: Dictionary = {}) -> String:
+		feuillage: Dictionary = {}, retrait: float = BM.RETRAIT_PAR_DEFAUT) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -112,7 +138,8 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 			plat.append_array([v.x, v.y, v.z])
 		sorties_eau.append({"nom": e["nom"], "visible": e["visible"], "preset": e["preset"], "id": str(e["id"]),
 			"sources": plat})
-	var tout := {"format": FORMAT, "version": VERSION, "active": active, "couches": sorties, "eaux": sorties_eau}
+	var tout := {"format": FORMAT, "version": VERSION, "active": active, "couches": sorties, "eaux": sorties_eau,
+		"retrait": BM.cran(retrait)}
 	if not travaux.is_empty():
 		tout["travaux"] = travaux.map(func(t): return str(t))
 	var tr := transitions_vers_json(transitions)
@@ -275,8 +302,14 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 	var feuillage := FE.depuis_donnees(brut.get("feuillage", null), erreurs)
 	if feuillage.is_empty():
 		return {}
+	# LE CRAN DU MONDE (9 octobre 2026) : ⚠ un projet d'avant n'en écrit pas — ses témoins et son eau étaient AMINCIS, et le
+	# restent : rien ne bouge sous les pieds d'un monde déjà peint.
+	var retrait = brut.get("retrait", BM.RETRAIT_AMINCI)
+	if not (retrait is float or retrait is int):
+		erreurs.append("the witness surface is not a number")
+		return {}
 	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions,
-		"feuillage": feuillage}
+		"feuillage": feuillage, "retrait": BM.cran(float(retrait))}
 
 
 static func transitions_vides() -> Dictionary:

@@ -14,6 +14,7 @@ const MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
 const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const TR := preload("res://addons/marchingblocks_core/tranchage.gd")
 const Sections := preload("res://addons/marchingblocks_core/sections.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -33,6 +34,7 @@ func _initialize() -> void:
 	var t2: RefCounted = TL.depuis_le_temoin_calcule()
 	_boucher_les_trous(t2, Sections.new(t2))
 	_entre_deux_temoins(TL.depuis_le_temoin_calcule())
+	_les_trois_crans()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -589,6 +591,35 @@ func _une_voisine(m: RefCounted, f: int) -> int:
 		if n >= 2:
 			return g
 	return -1
+
+
+## LES TROIS CRANS DU TÉMOIN CALCULÉ (Jordan, 9 octobre 2026). Chacun est étanche à ses joints (l'autorité :
+## `_sans_partenaire`, hors de `sections.gd`) ; et deux crans DIFFÉRENTS ne se raccordent pas — la raison mesurée d'un
+## cran par MONDE, pas par couche. La paroi à l'air libre est un plan, à −r de son sommet le long de sa normale (attendu
+## à la main : 0 au neutre, ±0,25 de part et d'autre).
+func _les_trois_crans() -> void:
+	var temoins := {}
+	for r in BM.RETRAITS:
+		var t: RefCounted = TL.depuis_le_temoin_calcule(r)
+		temoins[r] = t
+		_dire(t.tuiles.size() == 52, "cran %s : 52 tuiles" % r)
+		_dire(_sans_partenaire(t) == 0, "cran %s : le témoin calculé est étanche, tout sommet de joint a son partenaire (%d)" % [r, _sans_partenaire(t)])
+	_dire(_sans_partenaire_entre(temoins[0.25], temoins[0.0]) > 0 and _sans_partenaire_entre(temoins[0.0], temoins[-0.25]) > 0,
+		"deux crans différents ne se raccordent pas (%d sommets de joint sans partenaire, aminci | neutre)"
+		% _sans_partenaire_entre(temoins[0.25], temoins[0.0]))
+	var plan := func(t: RefCounted) -> Variant:
+		var v: PackedVector3Array = (t.tuiles["mb_plaque_b2h2_dehors"].vers_array_mesh() as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		for axe in 3:
+			var x := v[0][axe]
+			if Array(v).all(func(p: Vector3) -> bool: return absf(p[axe] - x) < 1e-4):
+				return x
+		return null
+	var a = plan.call(temoins[0.25])
+	var n = plan.call(temoins[0.0])
+	var e = plan.call(temoins[-0.25])
+	_dire(a != null and n != null and e != null and absf(n) < 1e-4 and absf(absf(a) - 0.25) < 1e-4
+		and absf(a + e) < 1e-4, "la paroi à l'air libre : un plan à 0 au neutre, à ±0,25 aux deux autres crans, de part et "
+		+ "d'autre (%s, %s, %s)" % [a, n, e])
 
 
 func _sans_partenaire(t: RefCounted) -> int:
