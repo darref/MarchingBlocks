@@ -70,12 +70,29 @@ func _initialize() -> void:
 	_une_tuile_par_cle()
 	_le_temoin_prouve_tous_les_raccords()
 	_le_temoin_lie_fait_l_aller_retour()
+	_les_trois_crans()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
 	quit(1 if _echecs > 0 else 0)
+
+
+## LES TROIS CRANS (Jordan, 9 octobre 2026) : le trancheur rend le monde entier à chacun — 52 tuiles, aucune erreur (le
+## contrôle des octants regarde DERRIÈRE la face : au cran épais, la paroi est dans l'octant vide), aucune remarque ; la
+## boîte du témoin de 12 × 10 × 12 cases, écrite à la main, rentre ou déborde d'un quart.
+func _les_trois_crans() -> void:
+	for cr in [[0.25, Vector3(0.25, 0.25, 0.25), Vector3(11.5, 9.5, 11.5)], [0.0, Vector3.ZERO, Vector3(12, 10, 12)],
+			[-0.25, Vector3(-0.25, -0.25, -0.25), Vector3(12.5, 10.5, 12.5)]]:
+		var r: float = cr[0]
+		var b: AABB = BlocsMaitres.maillage_du_temoin(0, r).get_aabb()
+		_dire(b.position.is_equal_approx(cr[1]) and b.size.is_equal_approx(cr[2]), "cran %s : la boîte du témoin (%s)" % [r, b])
+		var bilan: Dictionary = BlocsMaitres.librairie(r)
+		_dire((bilan["lot"] as MeshLibrary).get_item_list().size() == 52 and (bilan["erreurs"] as Array).is_empty()
+			and (bilan["remarques"] as Array).is_empty() and (bilan["manquantes"] as Array).is_empty(),
+			"cran %s : 52 tuiles, 0 erreur, 0 remarque, rien de manquant (%s)" % [r, (bilan["erreurs"] as Array).slice(0, 2)])
+	_dire(BlocsMaitres.cran(0.1) == 0.0 and BlocsMaitres.cran(-9.0) == -0.25 and BlocsMaitres.cran(0.2) == 0.25, "un cran reçu est ramené au plus proche")
 
 
 func _dire(condition: bool, quoi: String) -> void:

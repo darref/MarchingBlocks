@@ -39,10 +39,11 @@ var occurrences: Array = []
 var affectation := {}
 
 
-## Le témoin calculé, en tuiles liées (~2 s : `BlocsMaitres.tuiles_du_temoin` ne découpe que 52 sommets).
-static func depuis_le_temoin_calcule() -> RefCounted:
+## Le témoin calculé, en tuiles liées (~2 s : `BlocsMaitres.tuiles_du_temoin` ne découpe que 52 sommets), au cran
+## `retrait` de sa couche (`BM.RETRAITS`, 9 octobre 2026).
+static func depuis_le_temoin_calcule(retrait: float = BM.RETRAIT_PAR_DEFAUT) -> RefCounted:
 	var t: RefCounted = load("res://addons/marchingblocks_core/temoin_lie.gd").new()
-	var calc: Dictionary = BM.tuiles_du_temoin()
+	var calc: Dictionary = BM.tuiles_du_temoin(retrait)
 	for cle in calc:
 		t.tuiles[cle] = ME.depuis(calc[cle]["mesh"])
 	t._partager()

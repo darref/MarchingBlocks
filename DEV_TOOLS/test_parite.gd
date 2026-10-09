@@ -696,15 +696,18 @@ func _maillage_de_l_eau(f: Dictionary) -> void:
 		for t: Array in tris:
 			genres[_genre_t(t)] = true
 		_dire(_jonctions_en_t(tris) == 0, "%s : aucune jonction en T entre plats (%d)" % [nom, _jonctions_en_t(tris)])
+		# Les hauteurs, par cran du sol (9 octobre 2026), écrites à la main : [nappe, bande] en fraction de case.
+		var sol := float(cas[nom]["input"].get("floor", 0.25))
+		var fracs: Array = {0.25: [0.7, 0.85], 0.0: [0.95, 0.1], -0.25: [0.7, 0.35]}[sol]
 		var hauteurs_justes := true
 		for t: Array in tris.filter(_plat_t):
 			var y := float(t[1])
 			var frac := y - floorf(y)
 			if _genre_t(t) == 0.0:
-				hauteurs_justes = hauteurs_justes and absf(frac - 0.7) < 1e-5
+				hauteurs_justes = hauteurs_justes and absf(frac - float(fracs[0])) < 1e-5
 			else:
-				hauteurs_justes = hauteurs_justes and absf(frac - 0.85) < 1e-5
-		_dire(hauteurs_justes, "%s : nappes à la rangée + 0,7, bandes à la case − 0,15" % nom)
+				hauteurs_justes = hauteurs_justes and absf(frac - float(fracs[1])) < 1e-5
+		_dire(hauteurs_justes, "%s : nappes à la rangée + %s, bandes à la case + %s (sol %s)" % [nom, fracs[0], fracs[1] - 1.0 if sol > 0.1 else fracs[1], sol])
 		# Les seuils : aire d'un triangle gardé, et le sens tranché par la normale du premier coin.
 		for t: Array in tris:
 			if _plat_t(t):

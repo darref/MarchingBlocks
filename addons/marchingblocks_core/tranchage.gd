@@ -478,6 +478,11 @@ static func cle_du_sommet(pleines: Dictionary, v: Vector3i, plafond: int) -> Dic
 ## Les deux seuls montages aveugles demandent une clé et une table DÉSACCORDÉES, ce qu'aucun appelant
 ## ne produit. Le repli sur `nom_nu` reste comme garde pour un appelant futur qui fournirait une table
 ## par nom de classe ; il ne change rien aujourd'hui.
+## De combien on recule une face contre sa normale avant de chercher son octant (`verifier_octants`) : plus que le
+## débord du cran épais (0,25), avec une marge pour le relief.
+const RECUL_D_ATTRIBUTION := 0.375
+
+
 static func verifier_octants(pieces: Dictionary, bits_par_nom: Dictionary, erreurs: Array) -> void:
 	for nom in pieces:
 		var bits: int = bits_par_nom.get(MB.nom_nu(nom), bits_par_nom.get(nom, 0))
@@ -524,7 +529,12 @@ static func verifier_octants(pieces: Dictionary, bits_par_nom: Dictionary, erreu
 				# plutôt que de perdre l'attribution.
 				var normale: Vector3 = geo.normalized() if geo.length_squared() > 0.000000001 \
 					else (n[i] if n.size() > i else Vector3.ZERO)
-				var t: int = octant_du_triangle(centre, normale)
+				# ⚠ **ON REGARDE DERRIÈRE LA FACE, PAS LÀ OÙ ELLE EST (9 octobre 2026, le cran épais).** Une surface est
+				# la peau de la matière qui est DERRIÈRE elle. Au cran épais (`BM.RETRAIT_EPAIS`), une paroi droite est à
+				# +0,25, dans l'octant VIDE : jugée là où elle est, chaque tuile perdait un octant plein (52 erreurs sur
+				# 52 tuiles, mesuré). Reculée de `RECUL_D_ATTRIBUTION` contre sa normale, elle retombe dans l'octant qui
+				# la porte. Une rotation fausse pose la matière derrière des octants VIDES : reculer ne la sauve pas.
+				var t: int = octant_du_triangle(centre - normale * RECUL_D_ATTRIBUTION, normale)
 				if t >= 0:
 					trouves[t] = true
 

@@ -2,7 +2,7 @@
 // (`tableaux_du_maillage`, `_nappes_du_corps`, `rectangles_de_nappe`, `surface_dessinee`, `_large`, `_riviere`,
 // `sens_du_cours`, `_lame`, `_poser_les_lames`, `_lame_calculee`, `_travers`, `_chutes`, `_sortie`, `_profil`, `_devant`,
 // `_point_de_lame`, `_normale_de_lame`, `_couronne`, `_source`, `_grille_compilee`, `_poser`, `_quad`, `_plat`,
-// `_case_plate`, `_poser_les_plats`). Éprouvée par Tests/water_mesh_conformance.json (15 cas, un SAC de triangles).
+// `_bande`, `_poser_les_plats`). Éprouvée par Tests/water_mesh_conformance.json (23 cas, un SAC de triangles).
 //
 // ⚠ LES FLOTTANTS COMME GODOT : les scalaires en double (GDScript), les Vector3 / Color / Vector2 en 32 bits — un point de
 // cascade est calculé en double puis rangé en float ; sa normale vient de différences de ces points 32 bits, en
@@ -233,23 +233,6 @@ namespace MBPaint
 		// `_k` : en vingtièmes, exactement (les coordonnées des plats sont des multiples de 0,05).
 		int WmK(double V) { return static_cast<int>(std::round(V * 20.0)); }
 
-		// `_case_plate` : la case C à la hauteur H, avancée de `DEBORD` sous chaque voisine pleine de son étage.
-		FWmRect WmCellFlat(const FCell& C, double H, const FCellSet& Cells, const FWmColor& Color)
-		{
-			const double Xm = WmHas(Cells, C + FCell(-1, 0, 0)) ? Overlap : 0.0;
-			const double Xp = WmHas(Cells, C + FCell(1, 0, 0)) ? Overlap : 0.0;
-			const double Zm = WmHas(Cells, C + FCell(0, 0, -1)) ? Overlap : 0.0;
-			const double Zp = WmHas(Cells, C + FCell(0, 0, 1)) ? Overlap : 0.0;
-			FWmRect R;
-			R.X0 = C.X - Xm;
-			R.X1 = C.X + 1 + Xp;
-			R.Z0 = C.Z - Zm;
-			R.Z1 = C.Z + 1 + Zp;
-			R.H = H;
-			R.C = Color;
-			return R;
-		}
-
 		// `FL.profondeur` : les cases d'eau jusqu'au fond (elle comprise) ; −1 sans fond.
 		int WmDepth(const FCellSet& W, const FCellSet& Cells, const FCell& C)
 		{
@@ -264,7 +247,7 @@ namespace MBPaint
 		}
 
 		// `rectangles_de_nappe` (la surface relue de l'eau, `surface_dessinee` : un greffon n'a pas les tronçons de la mer).
-		std::vector<FWmRect> WmSheet(const FCellSet& W, const FCellSet& Cells, int Level, bool bForced, double ForcedH)
+		std::vector<FWmRect> WmSheet(const FCellSet& W, const FCellSet& Cells, int Level, bool bForced, double ForcedH, double Floor)
 		{
 			std::vector<FCell> Cases = WaterMesh::DrawnSurface(W, Cells, Level);
 			std::sort(Cases.begin(), Cases.end(), [](const FCell& A, const FCell& B)
@@ -334,7 +317,7 @@ namespace MBPaint
 					R.X1 = X1;
 					R.Z0 = B.Z - B.Zm;
 					R.Z1 = B.Z + 1 + B.Zp;
-					R.H = bForced ? ForcedH : B.Y + Surface;
+					R.H = bForced ? ForcedH : B.Y + SurfaceAt(Floor);
 					R.C = B.C;
 					K = Rects.size();
 					Rects.push_back(R);
@@ -372,21 +355,22 @@ namespace MBPaint
 		}
 
 		// `_nappes_du_corps` : la mer (et son large), un lac, les lacs d'une rivière.
-		std::vector<FWmRect> WmBodySheets(const FWaterBody& R, const FCellSet& Cells, const FWaterBox& B)
+		std::vector<FWmRect> WmBodySheets(const FWaterBody& R, const FCellSet& Cells, const FWaterBox& B, double Floor)
 		{
 			std::vector<FWmRect> Out;
+			const double Top = SurfaceAt(Floor);
 			if (R.Kind == EWaterKind::Sea)
 			{
 				// Le monde noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau.
 				const bool bForced = !B.bEmpty && R.Level > B.Hi.Y;
-				Out = WmSheet(R.Water, Cells, R.Level, bForced, R.Level + Surface);
-				WmHorizon(B, R.Level + Surface, Out);
+				Out = WmSheet(R.Water, Cells, R.Level, bForced, R.Level + Top, Floor);
+				WmHorizon(B, R.Level + Top, Out);
 			}
-			else if (R.Kind == EWaterKind::Lake) Out = WmSheet(R.Water, Cells, R.Level, false, 0.0);
+			else if (R.Kind == EWaterKind::Lake) Out = WmSheet(R.Water, Cells, R.Level, false, 0.0, Floor);
 			else if (R.Kind == EWaterKind::River)
 				for (const FWaterLake& L : R.Lakes)
 				{
-					const std::vector<FWmRect> S = WmSheet(L.Cells, Cells, L.Level, false, 0.0);
+					const std::vector<FWmRect> S = WmSheet(L.Cells, Cells, L.Level, false, 0.0, Floor);
 					Out.insert(Out.end(), S.begin(), S.end());
 				}
 			return Out;
@@ -424,21 +408,26 @@ namespace MBPaint
 			std::map<std::tuple<int, int, int>, size_t> FallKeys;
 			std::vector<FWmFall> Falls;
 			std::vector<const FCellSet*> Dormant;
+			// TOUTE L'EAU de la couche (mer, lacs, lacs et cours de chaque rivière) : une bande ne se referme pas par un
+			// flanc du côté d'une autre eau (`_bande`).
+			FCellSet Waters;
+			// Le cran du sol (`retrait`).
+			double Floor = FloorDefault;
 		};
 
 		// `_lame` : la cascade de LIP à BOTTOM, sur le plan de la falaise qu'elle quitte (le côté −D).
 		void WmFall(const FCell& Lip, const FCell& Bottom, const FCell& D, const FCellSet& Cells, FWmSeen& Seen)
 		{
-			const double Top = Lip.Y + River;
-			double Foot = Bottom.Y - 0.3;
-			double Ground = WmHas(Cells, Bottom + WmDown) ? Bottom.Y + River : Foot;
+			const double Top = Lip.Y + RiverAt(Seen.Floor);
+			double Foot = Bottom.Y - 1 + SurfaceAt(Seen.Floor);
+			double Ground = WmHas(Cells, Bottom + WmDown) ? Bottom.Y + RiverAt(Seen.Floor) : Foot;
 			// Tombée dans une eau dormante, le remous est sur SA nappe.
 			for (const FCellSet* W : Seen.Dormant)
 				if (WmHas(*W, Bottom))
 				{
 					FCell H = Bottom;
 					while (WmHas(*W, H + WmUp)) H = H + WmUp;
-					Ground = H.Y + Surface;
+					Ground = H.Y + SurfaceAt(Seen.Floor);
 					Foot = std::min(Foot, Ground - 0.15);
 					break;
 				}
@@ -457,6 +446,8 @@ namespace MBPaint
 			{
 				const int Edge = Axis == 0 ? Lip.X : Lip.Z;
 				Plane = Sense > 0 ? static_cast<double>(Edge) : static_cast<double>(Edge + 1);
+				// La falaise est en plan − r (le cran du sol) : la cascade garde la place qu'elle a devant la roche amincie.
+				Plane += AdvanceAt(Seen.Floor) * Sense;
 			}
 			const std::tuple<int, int, int> Key(Axis, WmK(Plane), Along);
 			const auto Found = Seen.FallKeys.find(Key);
@@ -483,8 +474,65 @@ namespace MBPaint
 			}
 		}
 
+		// `_bande` : la bande d'une rivière sur la case C (un rectangle pour `_poser_les_plats`) et ses FLANCS, posés dans A
+		// tout de suite. Chaque côté (−x, +x, −z, +z), selon sa voisine N de même étage : PLEINE — la bande s'avance de
+		// `DEBORD` sous la roche ; de l'EAU — rien si elle repose sur la matière, sinon jusqu'où la cascade part
+		// (`avancee`) ; SÈCHE — elle s'arrête au bord de sa case (sol dessous) ou à `FIN` hors de la roche (une corniche),
+		// et y descend en un flanc jusque sous le sol.
+		FWmRect WmBand(FWmArrays& A, const FCell& C, const FCellSet& Cells, const FCellSet& Waters, double Floor, const FWmColor& Color)
+		{
+			const double H = C.Y + RiverAt(Floor);
+			const double Low = C.Y - Floor - Thin;
+			const FCell Sides[4] = {FCell(-1, 0, 0), FCell(1, 0, 0), FCell(0, 0, -1), FCell(0, 0, 1)};
+			double Edges[4] = {0.0, 0.0, 0.0, 0.0};
+			bool bFlank[4] = {false, false, false, false};
+			for (int K = 0; K < 4; ++K)
+			{
+				const FCell N = C + Sides[K];
+				if (WmHas(Cells, N)) Edges[K] = Overlap;
+				else if (WmHas(Waters, N)) Edges[K] = WmHas(Cells, N + WmDown) ? 0.0 : AdvanceAt(Floor);
+				else
+				{
+					Edges[K] = WmHas(Cells, N + WmDown) ? 0.0 : Thin - Floor;
+					bFlank[K] = true;
+				}
+			}
+			FWmRect R;
+			R.X0 = C.X - Edges[0];
+			R.X1 = C.X + 1 + Edges[1];
+			R.Z0 = C.Z - Edges[2];
+			R.Z1 = C.Z + 1 + Edges[3];
+			R.H = H;
+			R.C = Color;
+			const float Hf = static_cast<float>(H), Lf = static_cast<float>(Low);
+			for (int K = 0; K < 4; ++K)
+			{
+				if (!bFlank[K]) continue;
+				const FCell& D = Sides[K];
+				FWmV3 P0, P1;
+				if (D.X != 0)
+				{
+					const double X = D.X < 0 ? R.X0 : R.X1;
+					P0 = FWmV3::D(X, 0.0, R.Z0);
+					P1 = FWmV3::D(X, 0.0, R.Z1);
+				}
+				else
+				{
+					const double Z = D.Z < 0 ? R.Z0 : R.Z1;
+					P0 = FWmV3::D(R.X0, 0.0, Z);
+					P1 = FWmV3::D(R.X1, 0.0, Z);
+				}
+				const float U0 = D.X != 0 ? P0.Z : P0.X;
+				const float U1 = D.X != 0 ? P1.Z : P1.X;
+				const FWmV3 P[4] = {FWmV3(P0.X, Hf, P0.Z), FWmV3(P1.X, Hf, P1.Z), FWmV3(P1.X, Lf, P1.Z), FWmV3(P0.X, Lf, P0.Z)};
+				const FWmUV T[4] = {{U0, Hf}, {U1, Hf}, {U1, Lf}, {U0, Lf}};
+				WmQuad(A, P, FWmV3(static_cast<float>(D.X), static_cast<float>(D.Y), static_cast<float>(D.Z)), Color, T);
+			}
+			return R;
+		}
+
 		// `_riviere` : une bande par case du cours qui repose sur la matière, une cascade par suite de chutes, la source.
-		void WmRiver(const std::vector<FCourseStep>& Course, const FCellSet& Cells, std::vector<FWmRect>& Flats, FWmSeen& Seen,
+		void WmRiver(FWmArrays& A, const std::vector<FCourseStep>& Course, const FCellSet& Cells, std::vector<FWmRect>& Flats, FWmSeen& Seen,
 			std::vector<FCell>& Springs)
 		{
 			const size_t N = Course.size();
@@ -498,7 +546,7 @@ namespace MBPaint
 				if (E.Kind == ECourseKind::Lake || !WmHas(Cells, C + WmDown) || WmHas(Seen.Bands, C)) continue;
 				const FCell D = WmFlowAt(Course, I);
 				Seen.Bands.insert(C);
-				Flats.push_back(WmCellFlat(C, C.Y + River, Cells, WmColorOf(D.X, D.Z, KindRiver, 0.05)));
+				Flats.push_back(WmBand(A, C, Cells, Seen.Waters, Seen.Floor, WmColorOf(D.X, D.Z, KindRiver, 0.05)));
 			}
 			size_t I = 0;
 			while (I < N)
@@ -710,9 +758,9 @@ namespace MBPaint
 		}
 
 		// `_source` : le bouillon en disque, bombé au centre, et son petit voile d'embruns.
-		void WmSpring(const FCell& C, std::vector<FWmArrays>& Foam)
+		void WmSpring(const FCell& C, double Floor, std::vector<FWmArrays>& Foam)
 		{
-			const FWmV3 Centre = FWmV3::D(C.X + 0.5, C.Y + River, C.Z + 0.5);
+			const FWmV3 Centre = FWmV3::D(C.X + 0.5, C.Y + RiverAt(Floor), C.Z + 0.5);
 			const int Turns = 16;
 			const double Radii[4] = {0.0, 0.2, 0.42, Spring};
 			const double Domes[4] = {SpringDome, SpringDome * 0.7, SpringDome * 0.3, 0.02};
@@ -858,22 +906,39 @@ namespace MBPaint
 			return S;
 		}
 
-		FWaterMesh Build(const std::vector<const FWaterBody*>& Bodies, const FCellSet& Cells, const FWaterBox& Box, FWaterMeshMemory* Memory)
+		FWaterMesh Build(const std::vector<const FWaterBody*>& Bodies, const FCellSet& Cells, const FWaterBox& Box, FWaterMeshMemory* Memory,
+			double Floor)
 		{
 			FWmArrays A;
 			std::vector<FWmRect> Flats;
 			FWmSeen Seen;
+			Seen.Floor = Floor;
 			std::vector<FCell> Springs;
-			// Les eaux DORMANTES (mer, lacs, lacs des rivières) : une cascade qui y tombe pose son remous sur leur nappe.
+			// Les eaux DORMANTES (mer, lacs, lacs des rivières) : une cascade qui y tombe pose son remous sur leur nappe. Et
+			// TOUTE L'EAU de la couche : une bande ne se referme pas par un flanc du côté d'une autre eau.
 			for (const FWaterBody* R : Bodies)
 			{
 				if (!R || !R->Error.empty()) continue;
-				if (R->Kind == EWaterKind::Sea || R->Kind == EWaterKind::Lake) Seen.Dormant.push_back(&R->Water);
+				if (R->Kind == EWaterKind::Sea || R->Kind == EWaterKind::Lake)
+				{
+					Seen.Dormant.push_back(&R->Water);
+					Seen.Waters.insert(R->Water.begin(), R->Water.end());
+				}
 				else if (R->Kind == EWaterKind::River)
-					for (const FWaterLake& L : R->Lakes) Seen.Dormant.push_back(&L.Cells);
+				{
+					for (const FWaterLake& L : R->Lakes)
+					{
+						Seen.Dormant.push_back(&L.Cells);
+						Seen.Waters.insert(L.Cells.begin(), L.Cells.end());
+					}
+					for (const FCourseStep& E : R->Course) Seen.Waters.insert(E.Cell);
+				}
 			}
 			if (Memory)
 			{
+				// Tout ce que la mémoire garde dépend du cran (les hauteurs) : un autre cran, une mémoire neuve.
+				if (Memory->Floor != Floor) Memory->Sheets.clear();
+				Memory->Floor = Floor;
 				Memory->Reused = 0;
 				Memory->Sheets.resize(Bodies.size());
 			}
@@ -893,7 +958,7 @@ namespace MBPaint
 				}
 				else
 				{
-					const std::vector<FWmRect> Sheets = WmBodySheets(*R, Cells, Box);
+					const std::vector<FWmRect> Sheets = WmBodySheets(*R, Cells, Box, Floor);
 					Flats.insert(Flats.end(), Sheets.begin(), Sheets.end());
 					if (Memory)
 					{
@@ -902,7 +967,7 @@ namespace MBPaint
 						Memory->Sheets[J] = {R->Id, std::move(Kept)};
 					}
 				}
-				if (R->Kind == EWaterKind::River) WmRiver(R->Course, Cells, Flats, Seen, Springs);
+				if (R->Kind == EWaterKind::River) WmRiver(A, R->Course, Cells, Flats, Seen, Springs);
 			}
 			// Les cascades (opaques) tout de suite ; leur remous, transparent, en dernier.
 			std::vector<FWmV3> Points;
@@ -920,7 +985,7 @@ namespace MBPaint
 				Foam.push_back(std::move(Drawn.Ring));
 				Foam.push_back(std::move(Drawn.Spray));
 			}
-			for (const FCell& C : Springs) WmSpring(C, Foam);
+			for (const FCell& C : Springs) WmSpring(C, Floor, Foam);
 			WmPoseFlats(A, Flats, Points);
 			for (const FWmArrays& G : Foam) WmPose(A, G);
 			// Les tableaux de Godot (triangles horaires) → le format (anti-horaires) : chaque triangle retourné.
@@ -952,11 +1017,11 @@ namespace MBPaint
 			return Out;
 		}
 
-		FWaterMesh Build(const std::vector<FWaterBody>& Bodies, const FCellSet& Cells)
+		FWaterMesh Build(const std::vector<FWaterBody>& Bodies, const FCellSet& Cells, double Floor)
 		{
 			std::vector<const FWaterBody*> Pointers;
 			for (const FWaterBody& B : Bodies) Pointers.push_back(&B);
-			return Build(Pointers, Cells, Water::BoxOf(Cells), nullptr);
+			return Build(Pointers, Cells, Water::BoxOf(Cells), nullptr, Floor);
 		}
 	}
 }

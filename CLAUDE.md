@@ -2243,6 +2243,8 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
 - **Il part déjà AMINCI** — tuiles ramenées à la moitié de leur case — pour montrer à l'artiste la marge
   dont il dispose. ⚠ **On rétrécit AVANT le tranchage** : chaque cube reste fermé, et les pièces
   voisines se rebouchent. Rétrécir APRÈS les crève, puisqu'elles sont ouvertes sur leurs faces de coupe.
+- ⚠ **RENVERSÉ LE 9 OCTOBRE 2026 : TROIS CRANS, LE NEUTRE PAR DÉFAUT** (section suivante). Ce qui suit reste vrai pour
+  ce qu'il dit : export, catalogue et repli lisent le MÊME appel (`BM.maillage_du_temoin(i, retrait)`), au cran du monde.
 - ⚠ **L'AMINCI EST LE SEUL MODE — DÉCIDÉ (Jordan, 25 septembre 2026).** Une case à cocher offrait le
   solide brut à la place. Ce n'était pas un réglage mais une façon de mentir à l'artiste sur sa marge.
   ⚠ **Et le paramètre cachait un défaut réel** : l'export amincissait par défaut tandis que le repli de
@@ -2254,6 +2256,88 @@ celle du témoin — une autre clé, un autre exemplaire, un autre quart de tour
   144 faces enterrées sur 216. Et culler naïvement ouvrait **16 trous**, là où deux cellules voisines
   n'ont pas le même retrait. La coque ferme la surface sans culler ni boucher.
   ⚠ Coût mesuré : **×5 en triangles**, et la RÉCOLTE est identique (mêmes classes, 0 erreur d'octant).
+
+### LES TROIS CRANS DE LA SURFACE DU TÉMOIN — DÉCIDÉ (Jordan, 9 octobre 2026), ÉCRIT LE MÊME JOUR (branche `amincissement`)
+
+La question de Jordan : « est-ce le mode dual qui fait que les coins et arêtes d'un massif sont peu chanfreinables, ou parce
+que le témoin a été ramené plus loin qu'à mi-tuile ? » — **C'ÉTAIT L'AMINCISSEMENT, PAS LE DUAL.** Un chanfrein ne peut pas
+franchir un plan de coupe (sinon c'est la section de toutes les parois qui change, §3) : son budget est la distance de
+l'arête au plan, 0,5 − retrait de chaque côté. L'aminci (surface à −0,25 dans la tuile) ne laissait que **0,25** à raboter,
+et « on a l'impression que tout va rester presque cubique ». Le dual est au contraire ce qui met l'arête au MILIEU d'une
+tuile (en primal elle serait à cheval sur quatre). La marge pour bomber vers l'air est l'inverse (0,5 + retrait).
+
+- **DÉCIDÉ (Jordan) : trois crans, 0 par défaut** — Inset (retrait 0,25, l'aminci d'avant : 0,25 à raboter, 0,75 à bomber),
+  **Centred** (0 : la surface au bord des cases, à mi-chemin des plans de coupe, 0,5 et 0,5), Outset (−0,25 : 0,75 et
+  0,25). ⚠ **±0,5 SONT INTERDITS** : la surface tomberait SUR un plan de coupe (une case seule sans épaisseur, deux masses
+  séparées d'une case vide qui se touchent, des sections partagées indéfinies) ; ±0,75 sort de la tuile. Les trois crans
+  tombent sur la grille des sous-voxels (`SOUS` = 4). `BM.RETRAITS`, `BM.cran`, `BM.maillage_du_temoin(i, retrait)` ;
+  `librairie`, `tuiles_du_temoin`, `exporter_le_temoin_lie`, `exporter_le_bloc`, `librairie_depuis_glb` (son repli),
+  `ecart_au_temoin`, `TL.depuis_le_temoin_calcule` prennent le cran (défaut : le neutre). `maillage_moitie` reste l'aminci
+  par son nom (les sondes de `DEV_TOOLS/`).
+- **LE CRAN ÉPAIS FAIT DÉBORDER LA COQUE** dans les cases vides voisines (`sous_voxels`, retrait négatif) ; sans contact
+  diagonal rien ne se percute (l'écart le plus étroit, une case vide entre deux pleines, tombe à 0,5).
+  ⚠ **LE CONTRÔLE DES OCTANTS DU TRANCHEUR ROUGISSAIT À TORT** (52 erreurs, une par tuile, « la matière a été déplacée ») :
+  la paroi épaisse est dans l'octant VIDE. Il juge désormais une face RECULÉE contre sa normale de `RECUL_D_ATTRIBUTION`
+  (0,375) — la matière est derrière une surface ; une rotation fausse pose la matière derrière des octants vides, reculer
+  ne la sauve pas. **Mesuré : 52 tuiles, 0 erreur, 0 remarque de couture aux trois crans.**
+- **UN CRAN PAR MONDE, PAS PAR COUCHE — DÉCIDÉ (Jordan, 9 octobre 2026), APRÈS MESURE.** Écrit d'abord par couche : la fumée
+  a mesuré qu'une couche aminci à côté d'une neutre laisse **1 928 sommets de joint sans partenaire** à leur frontière
+  (leurs parois sont à −0,25 et 0), que « Match other layers » ne rattrape pas (il ne cale qu'à 0,1 près). `.mbproj`
+  **version 3**, clé `retrait` du projet (absente : l'AMINCI — un monde déjà peint ne bouge pas ; un exe d'avant refuse le
+  fichier plutôt que de le réécrire sans elle). Un projet neuf est au neutre. Le cran ne touche que les témoins CALCULÉS :
+  un témoin modelé (ou revenu de Blender) garde sa forme, et le panneau nomme ces couches (« a gap where they meet »).
+  Le lot du témoin calculé a sa source par cran : « witness » (l'aminci, les caches d'avant restent bons), « witness@0.0 »,
+  « witness@-0.25 » (`Projet.source_du_temoin`).
+- **L'ÉCRAN** : Witness geometry, section **Witness surface** (Inset · Centred · Outset, UNE annulation) ; changer de cran
+  refait le témoin calculé de chaque couche qui n'a pas le sien, son monde suit (son `.glb`, ou le lot au cran), la vue,
+  et l'eau. Le manuel (F1) a son paragraphe.
+- **L'EAU SUIT LE CRAN** (`EauMaillage.nappe`, `riviere`, `avancee`) — elle était réglée sur l'aminci : au neutre, une
+  rivière aurait coulé SOUS le sol. La règle, qui retombe EXACTEMENT sur les valeurs d'avant à l'aminci : la nappe d'un lac
+  0,05 sous le plus bas du dessus de sa rive (L + 1 − r) et du dessous d'un étage flottant (L + 1 + r) — L + 1 − |r| −
+  0,05 (0,70 · 0,95 · 0,70) ; la bande d'une rivière 0,10 au-dessus de son sol (y + 0,1 − r) ; une cascade part du plan de
+  la falaise décalé de 0,25 − r (la place qu'elle avait devant la roche amincie). Le Play test nage à la même hauteur.
+  `world.json` gagne **`water_floor`** (0,25 · 0 · −0,25 ; absent : 0,25 ; autre chose refuse le monde), lu par les
+  greffons qui refont la nappe.
+- **LES RIVIÈRES ONT UNE ÉPAISSEUR — DEMANDÉ PAR JORDAN, LE MÊME JOUR** (« la bande est un plan contre le sol sans
+  refermement sur les flancs ») : `EauMaillage._bande`. Chaque côté d'une bande, selon sa voisine du même étage : pleine,
+  la bande s'avance de 0,45 sous la roche ; de l'eau posée sur la matière, rien ; de l'eau au-dessus du vide (la lèvre
+  d'une cascade), jusqu'où la cascade part ; SÈCHE avec du sol dessous, la bande s'arrête au bord de sa case et descend en
+  un FLANC jusqu'à 0,05 sous le sol ; sèche au-dessus du vide (une corniche), elle s'arrête 0,05 hors de la roche et y
+  descend. ⚠ Les rivières des cas d'avant coulaient toutes dans des chenaux murés : aucune n'avait de côté sec — les
+  flancs n'y changent rien.
+- **LES CAS COMMUNS** : `water_mesh_conformance.json` passe de 15 à **23 cas** (chacun porte `floor` ; un chenal sur un
+  plateau aux trois crans, l'escalier, le lac qui déborde et l'île au neutre, la dalle flottante et le bassin à l'épais),
+  la règle écrite (`rules_text`) décrit le sol, les bandes et les flancs ; les 15 d'avant (à 0,25) inchangés en triangles
+  sauf là où un flanc apparaît. Régénérés dans les trois greffons.
+- **MESURÉ** : `test_blocs_maitres` 1 475 (+7 : boîte du témoin écrite à la main par cran, 52 / 0 / 0 aux trois crans),
+  `test_sections` 59 (+8 : chaque témoin calculé étanche à ses joints, deux crans différents NON, la paroi en −r),
+  `test_fluides` 293 (+41, attendus à la main : bandes, flancs, cascade, nappe, nage aux trois crans, la corniche, `water_floor` lu et refusé),
+  `test_projet` 143, `test_parite` 311 (hauteurs par cran), `fumee_appli` 946 (+21 et une SENTINELLE, par les vrais
+  boutons : Inset → Centred → Outset, la vue, le témoin lié de la couche, la paroi qui avance de 0,25, Ctrl+Z / Ctrl+Y,
+  trancher → « witness@-0.25 », changer de cran retranche, la mer à 2,95 / 2,7, le projet relu). ⚠ **LA FUMÉE EST AMINCIE**
+  (son monde d'essai écrit `retrait` 0,25) : ses hauteurs écrites à la main (10,75, 2,34, 20,75…) sont celles d'un sol
+  aminci. **Le greffon Godot** : la règle portée (`mb_water_mesh.gd` : `surface`, `river`, `advance`, `_band`),
+  `water_floor` lu (`mb_water.gd`), le nœud d'eau le garde (`floor_kind`) et ne reprend rien d'un autre sol ;
+  `test_greffon_peinture` 459 — **les 23 cas du premier coup**.
+- **UNITY** (`MBWaterMesh.cs` : `SheetHeight`, `BandHeight`, `Advance`, `Band` ; `MBWater.ReadFloor` ; le composant
+  `MarchingBlocksWater.waterFloor` ; l'importeur refuse un `water_floor` faux) : banc .NET **23 / 23** du premier coup
+  (et la mémoire bâtie pour un autre sol rend les mêmes triangles ; 7 lectures de `water_floor`), le monde d'eau exporté
+  2 147 triangles (2 103 avant les flancs) ; **Unity 6.6 : 65 tests sur 65** en Built-in ; 10 mutations rouges. ⚠ Les
+  préparateurs des mondes d'essai (`preparer_*_unity.gd`) sont désormais AMINCIS en le disant : leurs attendus (un plant à
+  1,75…) sont ceux d'un sol aminci — deux tests de plantation rougissaient au neutre. URP non relancé.
+- **UNREAL** (`MBCore/MBWaterMesh` : `SurfaceAt`, `RiverAt`, `AdvanceAt`, `WmBand` ; `Water::Read` lit `water_floor` ;
+  l'acteur `WaterFloor`, l'import le pose) : `core-runner` sous MSVC aux drapeaux d'Unreal **23 / 23** du premier coup,
+  un monde exporté aux trois crans = sa nappe cuite (mer, lac, rivières) ; **BuildPlugin 5.8.3 : BUILD SUCCESSFUL, aucun
+  avertissement** ; 7 mutations rouges. ⚠ **UN MONDE EXPORTÉ AVANT LES FLANCS** ne retrouve plus sa nappe cuite sur ses
+  RIVIÈRES (mer, lacs, cascades identiques) : la nappe refaite a des flancs que la cuite n'a pas — attendu. Rien mené dans
+  l'éditeur d'Unreal.
+- **ONZE MUTATIONS, TOUTES ROUGES** : le recul d'attribution nul et la coque qui ne déborde jamais (`test_blocs_maitres`),
+  le témoin calculé qui ignore son cran (`test_sections`), pas de flanc, la bande qui ignore le cran, la cascade sans
+  l'avancée, la nappe sans valeur absolue, la corniche sans retrait (`test_fluides`), un projet d'avant relu neutre
+  (`test_projet`), le greffon Godot sans flanc et qui ignore le sol (`test_greffon_peinture`). ⚠ Quatre ont d'abord RIEN
+  éprouvé (« motif absent ») : leur motif portait un retour à la ligne, et ces fichiers sont en CRLF — rejouées sur une ligne.
+- ⚠ **CE QUI A ÉTÉ TROUVÉ EN ROUTE** : à l'ouverture d'un projet, la vue du témoin ne suivait pas son cran (vu par la fumée).
+- ⚠ **PAS VU À L'IMAGE, PAS TENU EN MAIN.** Ni l'eau aux nouveaux crans ni les flancs n'ont été regardés avec fenêtre.
 
 ### Le CHANFREIN : un maillage DUAL à 0,35 — ESSAYÉ puis SUSPENDU (Jordan, 25 septembre 2026)
 

@@ -91,6 +91,9 @@ namespace MarchingBlocks.Paint
         /// <summary>"" when the key was read; otherwise why it was refused (and Layers is empty).</summary>
         public string Error = "";
         public List<WaterLayer> Layers = new List<WaterLayer>();
+        /// <summary>THE FLOOR the water sits on (world.json water_floor): 0.25 inset (absent: worlds exported before it),
+        /// 0 centred, −0.25 outset — the heights of the sheet follow it (MBWaterMesh).</summary>
+        public double Floor = 0.25;
         public bool Ok => Error == "";
     }
 
@@ -672,6 +675,7 @@ namespace MarchingBlocks.Paint
         {
             var result = new WaterFileResult();
             if (!(decodedWorld is Dictionary<string, object> world)) return Refuse("not a MarchingBlocks world");
+            if (!ReadFloor(world, out result.Floor, out var floorError)) return Refuse(floorError);
             if (!world.TryGetValue("water", out var list)) return result;
             if (!(list is List<object> layers)) return Refuse("water is not an array");
             foreach (var item in layers)
@@ -695,6 +699,22 @@ namespace MarchingBlocks.Paint
                 result.Layers.Add(layer);
             }
             return result;
+        }
+
+        /// <summary>Reads the optional "water_floor" key of a world.json decoded by MBJson: 0.25, 0 or −0.25; absent: 0.25.
+        /// False (and why) for any other value — the WORLD is refused (format_monde.gd, lire_eau).</summary>
+        public static bool ReadFloor(object decodedWorld, out double floor, out string error)
+        {
+            floor = 0.25;
+            error = "";
+            if (!(decodedWorld is Dictionary<string, object> world) || !world.TryGetValue("water_floor", out var f)) return true;
+            double d;
+            if (f is long l) d = l;
+            else if (f is double dd) d = dd;
+            else { error = "water_floor is not 0.25, 0 or -0.25"; return false; }
+            if (d != 0.25 && d != 0.0 && d != -0.25) { error = "water_floor is not 0.25, 0 or -0.25"; return false; }
+            floor = d;
+            return true;
         }
 
         static WaterFileResult Refuse(string why) => new WaterFileResult { Error = why };

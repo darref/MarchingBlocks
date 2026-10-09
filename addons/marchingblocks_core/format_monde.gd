@@ -89,6 +89,10 @@ static func regle_eau() -> PackedStringArray:
 		"            is deduced from them and from the cells of EVERY layer; a plugin may deduce it again.",
 		"            Only ONE sea: taking the sources of every water layer in order, the first source in the void",
 		"            is the sea; any other source in the void is refused (it makes no water).",
+		"water_floor  (optional, beside water) where the ground of the tiles is drawn, for the heights of the water:",
+		"            0.25 (inset: the top of a full cell y - 1 is seen at y - 0.25), 0 (centred: at y) or -0.25 (outset:",
+		"            at y + 0.25). Absent: 0.25 (worlds exported before it). Any other value refuses the world. A plugin",
+		"            that deduces the mesh again uses it (lakes at L + 1 - |floor| - 0.05, rivers at y + 0.1 - floor).",
 	])
 
 
@@ -164,8 +168,9 @@ static func regle_feuillage() -> PackedStringArray:
 ## chaque couche de `couches`, dans l'ordre, "representants": [{image (Image ou null), couleur, echelle, rugosite}] par
 ## couche, RÉSOLUS par l'écran} — {} : pas de transitions. `feuillage` : ce que le projet enregistre
 ## (`FE.vers_donnees` : modèles et plants à plat) — {} : pas de feuillage.
+## `retrait_eau` (9 octobre 2026) : le cran du sol que l'eau suppose (`EauMaillage.nappe`) — `water_floor`.
 static func exporter(couches: Array, dossier: String, nom: String, generateur: String, eaux: Array = [],
-		transitions: Dictionary = {}, feuillage: Dictionary = {}) -> Dictionary:
+		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau := 0.25) -> Dictionary:
 	if couches.is_empty():
 		return {"erreur": "this world has no layer"}
 	var cible := dossier.path_join(_propre(nom, "world") + ".mbworld")
@@ -238,7 +243,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 			"look": ASPECTS.get(str(e.get("preset", "")), "stylized"), "mesh": maillage,
 			"sources": _sources_a_plat(e.get("sources", []))})
 	var monde := {"format": FORMAT, "version": VERSION, "generator": generateur, "name": _propre(nom, "world"),
-		"layers": sorties, "water": sorties_eau}
+		"layers": sorties, "water": sorties_eau, "water_floor": retrait_eau}
 	# LES TRANSITIONS (l'atelier Transitions) : les ids de l'écran deviennent des INDICES de `layers`, les représentants
 	# partent RÉSOLUS (le défaut « le matériau le plus porté » demande le témoin, qu'un greffon n'a pas), leurs images
 	# recopiées dans `transitions/`.
@@ -549,7 +554,11 @@ static func lire_eau(monde: Variant) -> Dictionary:
 					return {"error": "water « %s »: a source coordinate is not an integer" % e["name"]}
 			sources.append([int(plat[i]), int(plat[i + 1]), int(plat[i + 2])])
 		sortie.append({"name": e["name"], "visible": e["visible"], "look": e["look"], "mesh": m, "sources": sources})
-	return {"water": sortie}
+	# LE SOL QUE L'EAU SUPPOSE (9 octobre 2026) : un monde d'avant n'en dit rien — il était aminci.
+	var sol = (monde as Dictionary).get("water_floor", 0.25)
+	if not _nombre(sol) or not float(sol) in [0.25, 0.0, -0.25]:
+		return {"error": "water_floor is not 0.25, 0 or -0.25"}
+	return {"water": sortie, "floor": float(sol)}
 
 
 static func _entier(x: Variant) -> bool:

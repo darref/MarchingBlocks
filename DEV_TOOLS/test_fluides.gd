@@ -42,6 +42,7 @@ func _initialize() -> void:
 	_memoire_des_cascades()
 	_refus()
 	_maillage()
+	_crans_et_flancs()
 	_nappes_fusionnees()
 	_surface_pour_nager()
 	_le_courant()
@@ -920,6 +921,77 @@ func _surface_pour_nager() -> void:
 ## Les MORCEAUX d'un maillage — chaque rectangle, lame ou lèvre est un groupe de sommets que ses triangles relient (un
 ## quad, ou un éventail autour de son centre quand des sommets voisins y sont insérés) : [{"p": ses sommets, "c": la
 ## couleur du premier, "n": sa normale}].
+## LES CRANS DU SOL ET LES FLANCS DES RIVIÈRES (Jordan, 9 octobre 2026). Attendus écrits à la main, aux trois crans r
+## (0,25 aminci, 0 neutre, −0,25 épais) : la bande à y + 0,1 − r, son flanc jusqu'à y − r − 0,05, la nappe d'un lac à
+## L + 1 − |r| − 0,05, la cascade qui part du plan de la falaise décalé de 0,25 − r.
+func _crans_et_flancs() -> void:
+	_vrai(is_equal_approx(EM.nappe(0.25), EM.NAPPE) and is_equal_approx(EM.riviere(0.25), EM.RIVIERE),
+		"à l'aminci, la nappe et la bande sont celles d'avant (0,7 et −0,15)")
+	# Un chenal sur un plateau : sol y = 0 (x −1..6, z −2..2), murs y = 1 en z = ±2 et en x = −1 ; la source en (0,1,0) ;
+	# la falaise en x = 7 (rien au-delà). Le cours : (0..6, 1, 0) sur le sol, la lèvre (7,1,0) au-dessus du vide.
+	var m := {}
+	_boite(m, Vector3i(-1, 0, -2), Vector3i(6, 0, 2))
+	_boite(m, Vector3i(-1, 1, -2), Vector3i(6, 1, -2))
+	_boite(m, Vector3i(-1, 1, 2), Vector3i(6, 1, 2))
+	_boite(m, Vector3i(-1, 1, -1), Vector3i(-1, 1, 1))
+	var riv := FL.source(m, Vector3i(0, 1, 0))
+	_egal([riv["genre"], (riv["cours"] as Array).slice(0, 8).map(func(e): return e["case"])],
+		["riviere", [Vector3i(0, 1, 0), Vector3i(1, 1, 0), Vector3i(2, 1, 0), Vector3i(3, 1, 0), Vector3i(4, 1, 0),
+			Vector3i(5, 1, 0), Vector3i(6, 1, 0), Vector3i(7, 1, 0)]], "le chenal : la rivière file tout droit vers la falaise")
+	for cr in [[0.25, 0.85, 0.7, 7.0], [0.0, 1.1, 0.95, 7.25], [-0.25, 1.35, 1.2, 7.5]]:
+		var r: float = cr[0]
+		var h: float = cr[1]
+		var bas: float = cr[2]
+		var plan: float = cr[3]
+		var q := _quads(EM.maillage([riv], m, null, null, r))
+		var bandes := q.filter(func(e): return _genre(e, 0.5) and _a_plat(e, h))
+		_egal(bandes.size(), 7, "r = %s : 7 bandes à %s" % [r, h])
+		_egal(bandes.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, h, 0), Vector3(1, h, 1)])).size(), 1,
+			"r = %s : la première sous le mur du fond (−0,45), rien de plus en z (le sol continue)" % r)
+		_egal(bandes.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(6, h, 0), Vector3(plan, h, 1)])).size(), 1,
+			"r = %s : la dernière va jusqu'où la cascade part (x = %s)" % [r, plan])
+		var flancs := q.filter(func(e): return _genre(e, 0.5) and not _a_plat(e, h))
+		_egal(flancs.size(), 14, "r = %s : un flanc de chaque côté de chaque bande, rien vers le mur ni vers la lèvre" % r)
+		var attendus := 0
+		for x in 7:
+			for z in [0.0, 1.0]:
+				var x0 := -0.45 if x == 0 else float(x)
+				var x1 := plan if x == 6 else float(x + 1)
+				attendus += flancs.filter(func(e): return _meme_boite(_boite_de([e]),
+					[Vector3(x0, bas, z), Vector3(x1, h, z)])).size()
+		_egal(attendus, 14, "r = %s : chaque flanc descend de la bande (%s) jusque sous le sol (%s), au bord de sa case" % [r, h, bas])
+		var nappe := q.filter(func(e): return _genre(e, 1.0) and absf(_boite_de([e])[1].y - h) < 1e-4)
+		_vrai(nappe.size() == 1 and (nappe[0]["p"] as Array).filter(func(p): return absf(p.y - h) < 1e-4)
+			.all(func(p): return absf(p.x - plan) < 1e-4), "r = %s : la cascade part du plan décalé, x = %s" % [r, plan])
+		_vrai(_bien_tournes(q), "r = %s : faces avant horaires, flancs compris" % r)
+		_vrai(_sans_jonction_en_t(EM.maillage([riv], m, null, null, r)), "r = %s : aucune jonction en T" % r)
+	# LE BORD D'UNE CORNICHE (le sol s'arrête à côté de la bande, l'eau n'y va pas) : la bande s'arrête 0,05 hors de la
+	# roche (en x = c.x + r − 0,05) et son flanc y descend. Construit directement : une case (0,1,0) sur son sol, la
+	# voisine (−1,1,0) sèche et sans sol, les trois autres pleines.
+	for cr in [[0.25, 0.2], [0.0, -0.05], [-0.25, -0.3]]:
+		var r: float = cr[0]
+		var occ := {Vector3i(0, 0, 0): true, Vector3i(1, 1, 0): true, Vector3i(0, 1, -1): true, Vector3i(0, 1, 1): true}
+		var a := EM._tableaux()
+		var rect: Dictionary = EM._bande(a, Vector3i(0, 1, 0), occ, {}, r, Color.WHITE)
+		_egal([rect["x0"], rect["x1"], rect["z0"], rect["z1"]], [cr[1], 1.45, -0.45, 1.45],
+			"r = %s : sur la corniche, la bande s'arrête en x = %s (0,05 hors de la roche), sous les trois murs" % [r, cr[1]])
+		var v: PackedVector3Array = a["v"]
+		_vrai(v.size() == 4 and Array(v).all(func(p): return is_equal_approx(p.x, cr[1]))
+			and is_equal_approx(_boite_de([{"p": Array(v)}])[0].y, 1 - r - 0.05)
+			and (a["n"] as PackedVector3Array)[0] == Vector3(-1, 0, 0),
+			"r = %s : … et UN flanc, tourné vers le vide, jusqu'à %s" % [r, 1 - r - 0.05])
+	# Un lac : sa nappe suit le cran — la cuvette de niveau 2 : 2,7 aminci, 2,95 neutre, 2,7 épais (sous un étage flottant).
+	var cuve := _monde_cuvette_calme()
+	for cr in [[0.25, 2.7], [0.0, 2.95], [-0.25, 2.7]]:
+		var q := _quads(EM.maillage([FL.source(cuve, Vector3i(2, 1, 2))], cuve, null, null, cr[0]))
+		_vrai(q.size() == 1 and _a_plat(q[0], cr[1]), "r = %s : la nappe du lac à %s" % cr)
+	# La nage lit la même hauteur.
+	var cases := {Vector3i(0, 0, 0): true}
+	_vrai(is_equal_approx(EM.niveau_au_point(cases, [], {}, Vector3(0.5, 0.2, 0.5), 0.0), 0.95)
+		and is_equal_approx(EM.niveau_au_point(cases, [], {}, Vector3(0.5, 0.2, 0.5)), 0.7),
+		"nager : la surface suit le cran (0,95 neutre, 0,7 aminci par défaut)")
+
+
 func _quads(mesh: ArrayMesh) -> Array:
 	var q: Array = []
 	if mesh == null:
@@ -1182,7 +1254,12 @@ func _export_du_monde() -> void:
 		_vrai(FMonde.lire_eau(cas[0]).has("error"), "refusé : " + cas[1])
 	_vrai(not FMonde.lire_eau({"water": [{"name": "a", "visible": true, "look": "lava", "mesh": null, "sources": []}]}).has("error"),
 		"un aspect inconnu est accepté : c'est une suggestion")
-	_egal(FMonde.lire_eau({}), {"water": []}, "un monde sans clé water n'a pas d'eau")
+	_egal(FMonde.lire_eau({}), {"water": [], "floor": 0.25}, "un monde sans clé water n'a pas d'eau (et son sol est l'aminci)")
+	# LE SOL QUE L'EAU SUPPOSE (`water_floor`, 9 octobre 2026) : les trois crans lus, le reste refusé.
+	_egal([FMonde.lire_eau({"water_floor": 0.25})["floor"], FMonde.lire_eau({"water_floor": 0})["floor"],
+		FMonde.lire_eau({"water_floor": -0.25})["floor"]], [0.25, 0.0, -0.25], "water_floor : les trois crans se lisent")
+	for faux in [0.5, "0", null, [0]]:
+		_vrai(FMonde.lire_eau({"water_floor": faux}).has("error"), "water_floor %s : refusé" % [faux])
 
 
 ## Le bloc JSON d'un .glb (en-tête de 12 octets, puis la longueur du bloc et son type).

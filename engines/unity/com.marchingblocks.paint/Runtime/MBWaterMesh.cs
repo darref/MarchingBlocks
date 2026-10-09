@@ -50,14 +50,26 @@ namespace MarchingBlocks.Paint
             new Dictionary<int, (WaterBody, List<MBWaterMesh.Flat>)>();
         internal Dictionary<MBWaterMesh.FallKey, MBWaterMesh.Grid[]> Falls = new Dictionary<MBWaterMesh.FallKey, MBWaterMesh.Grid[]>();
         internal Dictionary<Int3, MBWaterMesh.Grid[]> Springs = new Dictionary<Int3, MBWaterMesh.Grid[]>();
+        /// <summary>The floor r everything kept was made for: another floor, a fresh memory (the heights changed).</summary>
+        internal double Floor = MBWaterMesh.FloorDefault;
         /// <summary>How many bodies' sheets the last call took from the memory (a diagnosis).</summary>
         public int ReusedSheets { get; internal set; }
     }
 
     public static class MBWaterMesh
     {
+        /// <summary>A still sheet at its top row + Surface, a band at its cell + River — those of an INSET floor (0.25).</summary>
         public const double Surface = 0.7;       // NAPPE
         public const double River = -0.15;       // RIVIERE
+        /// <summary>THE FLOOR r (world.json water_floor): where the ground of the tiles is drawn — the top of a full cell
+        /// y − 1 is seen at y − r (0.25 inset, 0 centred, −0.25 outset). A sheet at L + SheetHeight(r), a band at
+        /// y + BandHeight(r), a waterfall's plane moved by Advance(r). At r = 0.25 they are Surface and River.</summary>
+        public const double FloorDefault = 0.25; // SOL_DEFAUT
+        public const double Thin = 0.05;         // MINCE
+        public const double AboveFloor = 0.1;    // AU_DESSUS_DU_SOL
+        public static double SheetHeight(double r) => 1.0 - Math.Abs(r) - Thin;
+        public static double BandHeight(double r) => AboveFloor - r;
+        public static double Advance(double r) => FloorDefault - r;
         public const double Overlap = 0.45;      // DEBORD
         public const double Sheet = 0.35;        // LAME
         public const double Arc = 0.7;           // ARC
@@ -151,6 +163,9 @@ namespace MarchingBlocks.Paint
             public HashSet<Int3> Bands = new HashSet<Int3>();
             public Dictionary<(int, long, int), Waterfall> Falls = new Dictionary<(int, long, int), Waterfall>();
             public List<(int, long, int)> FallOrder = new List<(int, long, int)>();
+            /// <summary>All the water of the layer: a band is not closed by a flank on the side of another water.</summary>
+            public HashSet<Int3> Waters = new HashSet<Int3>();
+            public double Floor = FloorDefault;
         }
 
         static Col Color(double fx, double fz, double kind, double a) => new Col
@@ -170,24 +185,39 @@ namespace MarchingBlocks.Paint
         /// <summary>The sheet of ONE water layer: its bodies (MBWater.World, in order — a body with an error draws nothing),
         /// against the full cells of EVERY tile layer. <paramref name="memory"/>: kept by the caller from one call to the
         /// next (one per water layer), or null.</summary>
-        public static WaterSheetArrays Arrays(IList<WaterBody> bodies, ICollection<Int3> cells, WaterMeshMemory memory = null) =>
-            Arrays(bodies, cells, MBWater.BoxOf(cells), memory);
+        public static WaterSheetArrays Arrays(IList<WaterBody> bodies, ICollection<Int3> cells, WaterMeshMemory memory = null,
+            double floor = FloorDefault) =>
+            Arrays(bodies, cells, MBWater.BoxOf(cells), memory, floor);
 
         /// <summary>The same, with the box of the world already known (MBWater.World returns it).</summary>
-        public static WaterSheetArrays Arrays(IList<WaterBody> bodies, ICollection<Int3> cells, WaterBox box, WaterMeshMemory memory)
+        /// <param name="floor">The floor r (FloorDefault: inset).</param>
+        public static WaterSheetArrays Arrays(IList<WaterBody> bodies, ICollection<Int3> cells, WaterBox box, WaterMeshMemory memory,
+            double floor = FloorDefault)
         {
             var a = new WaterSheetArrays();
             var flats = new List<Flat>();
-            var seen = new Seen();
+            var seen = new Seen { Floor = floor };
             var springs = new List<Int3>();
             // Les eaux DORMANTES (océan, lacs, lacs des rivières) : une cascade qui tombe dans l'une d'elles pose son remous
             // sur SA nappe, pas au fond.
             foreach (var r in bodies)
             {
                 if (r == null || r.Error != "") continue;
-                if (r.Kind == "sea" || r.Kind == "lake") seen.Dormant.Add(r.Water);
-                else if (r.Kind == "river") foreach (var lake in r.Lakes) seen.Dormant.Add(lake.Cells);
+                if (r.Kind == "sea" || r.Kind == "lake") { seen.Dormant.Add(r.Water); seen.Waters.UnionWith(r.Water); }
+                else if (r.Kind == "river")
+                {
+                    foreach (var lake in r.Lakes) { seen.Dormant.Add(lake.Cells); seen.Waters.UnionWith(lake.Cells); }
+                    foreach (var e in r.Course) seen.Waters.Add(e.Cell);
+                }
             }
+            // Tout ce que la mémoire garde dépend du sol (les hauteurs) : un autre sol, une mémoire neuve.
+            if (memory != null && memory.Floor != floor)
+            {
+                memory.Sheets.Clear();
+                memory.Falls.Clear();
+                memory.Springs.Clear();
+            }
+            if (memory != null) memory.Floor = floor;
             var keep = memory != null ? memory.Sheets : new Dictionary<int, (WaterBody, List<Flat>)>();
             var used = new HashSet<int>();
             int reused = 0;
@@ -202,12 +232,12 @@ namespace MarchingBlocks.Paint
                 }
                 else
                 {
-                    var sheets = SheetsOfBody(r, cells, box);
+                    var sheets = SheetsOfBody(r, cells, box, floor);
                     keep[j] = (r, sheets);
                     flats.AddRange(sheets);
                 }
                 used.Add(j);
-                if (r.Kind == "river") RiverOf(r.Course, cells, flats, seen, springs);
+                if (r.Kind == "river") RiverOf(a, r.Course, cells, flats, seen, springs);
             }
             foreach (var j in new List<int>(keep.Keys)) if (!used.Contains(j)) keep.Remove(j);
             var foam = new List<Grid>();
@@ -220,7 +250,7 @@ namespace MarchingBlocks.Paint
             {
                 if (!springsBefore.TryGetValue(c, out var gs))
                 {
-                    var raw = SpringOf(c);
+                    var raw = SpringOf(c, floor);
                     gs = new[] { Compile(raw[0]), Compile(raw[1]) };
                 }
                 springsNow[c] = gs;
@@ -238,25 +268,26 @@ namespace MarchingBlocks.Paint
         }
 
         /// <summary>The rectangles of a body's sheets: the sea (and its horizon), a lake, the lakes of a river.</summary>
-        static List<Flat> SheetsOfBody(WaterBody r, ICollection<Int3> cells, WaterBox b)
+        static List<Flat> SheetsOfBody(WaterBody r, ICollection<Int3> cells, WaterBox b, double floor)
         {
             var flats = new List<Flat>();
+            double top = SheetHeight(floor);
             switch (r.Kind)
             {
                 case "sea":
                 {
                     int level = r.Level;
                     double h = double.NaN;
-                    if (!b.Empty && level > b.Hi.y) h = level + Surface;   // le monde est noyé : l'eau s'arrête au-dessus
-                    flats.AddRange(SheetRectangles(r.Water, cells, level, h));
-                    flats.AddRange(OffShore(b, level + Surface));
+                    if (!b.Empty && level > b.Hi.y) h = level + top;   // le monde est noyé : l'eau s'arrête au-dessus
+                    flats.AddRange(SheetRectangles(r.Water, cells, level, h, floor));
+                    flats.AddRange(OffShore(b, level + top));
                     break;
                 }
                 case "lake":
-                    flats.AddRange(SheetRectangles(r.Water, cells, r.Level, double.NaN));
+                    flats.AddRange(SheetRectangles(r.Water, cells, r.Level, double.NaN, floor));
                     break;
                 case "river":
-                    foreach (var lake in r.Lakes) flats.AddRange(SheetRectangles(lake.Cells, cells, lake.Level, double.NaN));
+                    foreach (var lake in r.Lakes) flats.AddRange(SheetRectangles(lake.Cells, cells, lake.Level, double.NaN, floor));
                     break;
             }
             return flats;
@@ -274,8 +305,9 @@ namespace MarchingBlocks.Paint
 
         // LES RECTANGLES D'UNE NAPPE (rectangles_de_nappe) : chaque case de surface est le rectangle débordant sous ses
         // voisines pleines, à sa rangée + NAPPE ; unis par rangées (x), puis par bandes voisines en z de même étendue.
-        static List<Flat> SheetRectangles(ICollection<Int3> water, ICollection<Int3> cells, int level, double forcedH)
+        static List<Flat> SheetRectangles(ICollection<Int3> water, ICollection<Int3> cells, int level, double forcedH, double floor)
         {
+            double top = SheetHeight(floor);
             var depths = new Dictionary<Int3, int>();
             foreach (var c in DrawnSurface(water, cells, level)) depths[c] = MBWater.Depth(water, cells, c);
             var sorted = new List<Int3>(depths.Keys);
@@ -321,7 +353,7 @@ namespace MarchingBlocks.Paint
                     r = new Flat
                     {
                         X0 = x0, X1 = x1, Z0 = b.Z - b.Zm, Z1 = b.Z + 1 + b.Zp,
-                        H = !double.IsNaN(forcedH) ? forcedH : b.Y + Surface, Color = b.Color,
+                        H = !double.IsNaN(forcedH) ? forcedH : b.Y + top, Color = b.Color,
                     };
                     rects.Add(r);
                 }
@@ -361,6 +393,78 @@ namespace MarchingBlocks.Paint
             return new Flat { X0 = c.x - xm, X1 = c.x + 1 + xp, Z0 = c.z - zm, Z1 = c.z + 1 + zp, H = h, Color = colour };
         }
 
+        static readonly Int3[] Sides = { new Int3(-1, 0, 0), new Int3(1, 0, 0), new Int3(0, 0, -1), new Int3(0, 0, 1) };
+
+        // LA BANDE d'une rivière sur la case c (_bande) et ses FLANCS, posés dans `a` aussitôt. Chaque côté, par sa voisine n
+        // de la même rangée — PLEINE : la bande déborde de Overlap sous la roche ; EAU de la couche posée sur la matière :
+        // rien ; eau au-dessus du VIDE (la lèvre d'une cascade) : Advance ; SÈCHE sur un sol : la bande s'arrête au bord de
+        // sa case et descend en flanc sous le sol ; SÈCHE au-dessus du vide : elle s'arrête Thin − r hors de la roche.
+        static Flat Band(WaterSheetArrays a, Int3 c, ICollection<Int3> cells, HashSet<Int3> waters, double floor, Col colour)
+        {
+            double h = c.y + BandHeight(floor);
+            double low = c.y - floor - Thin;
+            var edges = new double[4];
+            var flanks = new List<int>();
+            for (int s = 0; s < 4; s++)
+            {
+                var n = c + Sides[s];
+                double e;
+                if (cells.Contains(n)) e = Overlap;
+                else if (waters.Contains(n)) e = cells.Contains(n + Down) ? 0.0 : Advance(floor);
+                else
+                {
+                    e = cells.Contains(n + Down) ? 0.0 : Thin - floor;
+                    flanks.Add(s);
+                }
+                edges[s] = e;
+            }
+            var r = new Flat { X0 = c.x - edges[0], X1 = c.x + 1 + edges[1], Z0 = c.z - edges[2], Z1 = c.z + 1 + edges[3], H = h, Color = colour };
+            foreach (var s in flanks)
+            {
+                var d = Sides[s];
+                WaterVec3 p0, p1;
+                if (d.x != 0)
+                {
+                    double x = d.x < 0 ? r.X0 : r.X1;
+                    p0 = V(x, 0, r.Z0);
+                    p1 = V(x, 0, r.Z1);
+                }
+                else
+                {
+                    double z = d.z < 0 ? r.Z0 : r.Z1;
+                    p0 = V(r.X0, 0, z);
+                    p1 = V(r.X1, 0, z);
+                }
+                double u0 = d.x != 0 ? p0.z : p0.x;
+                double u1 = d.x != 0 ? p1.z : p1.x;
+                Quad(a, new[] { V(p0.x, h, p0.z), V(p1.x, h, p1.z), V(p1.x, low, p1.z), V(p0.x, low, p0.z) }, V(d.x, d.y, d.z), colour,
+                    new[] { u0, h, u1, h, u1, low, u0, low });
+            }
+            return r;
+        }
+
+        /// <summary>A quad (_quad), corners in outline order, normal n: two triangles in the FORMAT's winding, (P0, P1, P2)
+        /// and (P0, P2, P3) if (P1 − P0) × (P2 − P0) is on the side of n, else (P0, P2, P1) and (P0, P3, P2).</summary>
+        static void Quad(WaterSheetArrays a, WaterVec3[] p, WaterVec3 n, Col c, double[] uv)
+        {
+            int b = a.Positions.Count;
+            for (int k = 0; k < 4; k++) AddVertex(a, p[k], n, c, uv[2 * k], uv[2 * k + 1]);
+            // (P1 − P0) × (P2 − P0), en 32 bits comme le Vector3 de Godot.
+            double ax = (float)(p[1].x - p[0].x), ay = (float)(p[1].y - p[0].y), az = (float)(p[1].z - p[0].z);
+            double bx = (float)(p[2].x - p[0].x), by = (float)(p[2].y - p[0].y), bz = (float)(p[2].z - p[0].z);
+            double xx = ay * bz - az * by, xy = az * bx - ax * bz, xz = ax * by - ay * bx;
+            if (xx * n.x + xy * n.y + xz * n.z > 0.0)
+            {
+                a.Triangles.Add(b); a.Triangles.Add(b + 1); a.Triangles.Add(b + 2);
+                a.Triangles.Add(b); a.Triangles.Add(b + 2); a.Triangles.Add(b + 3);
+            }
+            else
+            {
+                a.Triangles.Add(b); a.Triangles.Add(b + 2); a.Triangles.Add(b + 1);
+                a.Triangles.Add(b); a.Triangles.Add(b + 3); a.Triangles.Add(b + 2);
+            }
+        }
+
         static bool IsHorizontal(Int3 d) => d.y == 0 && Math.Abs(d.x) + Math.Abs(d.z) == 1;
 
         /// <summary>The FLOW at step i of a course (horizontal, or zero): towards the next cell if it is beside, else from the
@@ -375,7 +479,7 @@ namespace MarchingBlocks.Paint
 
         // UNE RIVIÈRE (_riviere) : une bande par case du cours qui repose sur la matière (une case, une bande, toutes rivières
         // de la couche réunies) ; une cascade par suite de chutes ; la SOURCE à la première case si elle coule sur la matière.
-        static void RiverOf(List<WaterStep> course, ICollection<Int3> cells, List<Flat> flats, Seen seen, List<Int3> springs)
+        static void RiverOf(WaterSheetArrays a, List<WaterStep> course, ICollection<Int3> cells, List<Flat> flats, Seen seen, List<Int3> springs)
         {
             int n = course.Count;
             if (n > 0 && course[0].Kind == "flow" && cells.Contains(course[0].Cell + Down) && !springs.Contains(course[0].Cell))
@@ -387,7 +491,7 @@ namespace MarchingBlocks.Paint
                 if (e.Kind == "lake" || !cells.Contains(c + Down) || seen.Bands.Contains(c)) continue;
                 var d = FlowOf(course, i);
                 seen.Bands.Add(c);
-                flats.Add(CellFlat(c, c.y + River, cells, Color(d.x, d.z, Flowing, 0.05)));
+                flats.Add(Band(a, c, cells, seen.Waters, seen.Floor, Color(d.x, d.z, Flowing, 0.05)));
             }
             int k = 0;
             while (k < n)
@@ -414,16 +518,17 @@ namespace MarchingBlocks.Paint
         // qu'une, de la plus haute lèvre au plus bas pied.
         static void Retain(Int3 lip, Int3 bottom, Int3 d, ICollection<Int3> cells, Seen seen)
         {
-            double top = lip.y + River;
-            double foot = bottom.y - 0.3;
-            double ground = cells.Contains(bottom + Down) ? bottom.y + River : foot;
+            double floor = seen.Floor;
+            double top = lip.y + BandHeight(floor);
+            double foot = (bottom.y - 1) + SheetHeight(floor);
+            double ground = cells.Contains(bottom + Down) ? bottom.y + BandHeight(floor) : foot;
             // Tombée dans un creux qu'elle remplit : le remous est sur la nappe de l'eau dormante qui noie `bottom`.
             foreach (var water in seen.Dormant)
                 if (water.Contains(bottom))
                 {
                     var h = bottom;
                     while (water.Contains(h + Up)) h += Up;
-                    ground = h.y + Surface;
+                    ground = h.y + SheetHeight(floor);
                     foot = Math.Min(foot, ground - 0.15);
                     break;
                 }
@@ -442,6 +547,8 @@ namespace MarchingBlocks.Paint
             {
                 int edge = axis == 0 ? lip.x : lip.z;
                 plane = sense > 0 ? edge : edge + 1;
+                // La falaise est au plan − r (le sol) : la cascade garde la place qu'elle a devant une roche en retrait.
+                plane += Advance(floor) * sense;
             }
             var key = (axis, RoundI(plane * 20.0), along);
             if (!seen.Falls.TryGetValue(key, out var l))
@@ -647,9 +754,9 @@ namespace MarchingBlocks.Paint
         }
 
         // LA SOURCE d'une rivière, sur la bande de la case c : un bouillon d'écume en disque, bombé au centre, et un voile.
-        static RawGrid[] SpringOf(Int3 c)
+        static RawGrid[] SpringOf(Int3 c, double floor)
         {
-            float cx = (float)(c.x + 0.5), cy = (float)(c.y + River), cz = (float)(c.z + 0.5);
+            float cx = (float)(c.x + 0.5), cy = (float)(c.y + BandHeight(floor)), cz = (float)(c.z + 0.5);
             const int turns = 16;
             var disc = new RawGrid();
             var radii = new[] { 0.0, 0.2, 0.42, Spring };

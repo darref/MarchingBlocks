@@ -27,9 +27,35 @@ extends RefCounted
 const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 
+## ⚠ CES DEUX HAUTEURS SONT CELLES DU SOL AMINCI (`BM.RETRAIT_AMINCI`) ; l'eau d'un monde suit le cran du sol qu'il
+## suppose (`nappe(r)`, `riviere(r)`, 9 octobre 2026). Elles restent ici parce que ce sont celles des cas d'épreuve d'avant.
 const NAPPE := 0.7
 const RIVIERE := -0.15
 const DEBORD := 0.45
+## LE CRAN DU SOL QUE L'EAU SUPPOSE — DÉCIDÉ (Jordan, 9 octobre 2026 : « un réglage par monde »). Le témoin calculé a trois
+## crans (`BM.RETRAITS`) : le dessus d'une case pleine `y − 1` se voit en y − r, le dessous d'une case pleine `y + 1` en
+## y + 1 + r. Toutes les hauteurs de l'eau en découlent, et retombent EXACTEMENT sur celles d'avant à l'aminci (r = 0,25) :
+##   - la nappe d'un lac de niveau L est 0,05 sous le plus bas du dessus de sa rive (L + 1 − r) et du dessous d'un étage
+##     flottant (L + 1 + r) : L + 1 − |r| − 0,05 (`nappe`) — 0,70 aminci, 0,95 neutre, 0,70 épais (sous l'étage) ;
+##   - la bande d'une rivière est 0,10 au-dessus de son sol : y + 0,10 − r (`riviere`) — −0,15, 0,10, 0,35 ;
+##   - une cascade part du plan de la falaise décalé de `avancee(r)` = 0,25 − r (la roche y est en plan − r) : elle garde
+##     la place qu'elle avait devant la roche amincie ;
+##   - une bande s'arrête au bord du sol qui la porte (`_bande`) et s'y referme par un FLANC.
+const FIN := 0.05
+const AU_DESSUS_DU_SOL := 0.1
+const RETRAIT_AMINCI := 0.25
+
+
+static func nappe(r: float) -> float:
+	return 1.0 - absf(r) - FIN
+
+
+static func riviere(r: float) -> float:
+	return AU_DESSUS_DU_SOL - r
+
+
+static func avancee(r: float) -> float:
+	return RETRAIT_AMINCI - r
 ## LA CASCADE EST UN RIDEAU EN VOLUME, REFERMÉ CONTRE LA FAÇADE (Jordan, 3 octobre 2026 : « trop carrées, sans remous,
 ## texture animée moche, sans volume, et pas refermées contre la façade »). Ce n'est plus une lame plate posée devant
 ## la falaise, mais une NAPPE COURBE :
@@ -82,8 +108,9 @@ const CASCADE := 1.0
 ## champs une fois ses voisines connues (`_poser_les_lames`) ; la même clé rend les mêmes grilles. Seules celles de
 ## l'appel courant restent. ⚠ Mesuré (4 octobre 2026, l'exemple) : 469 cascades, ~0,32 s des ~0,45 s d'un geste de l'eau.
 ## `memoire["sources"]` : {case : les grilles compilées de sa source} (`_source` ne lit que la case).
-static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> ArrayMesh:
-	var a := tableaux_du_maillage(corps, occupees, boite, memoire)
+static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null,
+		retrait := RETRAIT_AMINCI) -> ArrayMesh:
+	var a := tableaux_du_maillage(corps, occupees, boite, memoire, retrait)
 	if (a["v"] as PackedVector3Array).is_empty():
 		return null
 	var arr := []
@@ -101,7 +128,9 @@ static func maillage(corps: Array, occupees: Dictionary, boite: Variant = null, 
 ## LES TABLEAUX DU MAILLAGE, avant l'ArrayMesh : {v, n, c, uv, i}. ⚠ CE SONT EUX QUE LES CAS DES GREFFONS DÉCRIVENT
 ## (`epreuve_parite.gd`, 7 octobre 2026) : l'ArrayMesh de Godot range les couleurs sur 8 bits (0,5 → 127/255) et les
 ## normales en octaèdre (une normale (0, 1, 0) relue (0, 1, −1,5e−5)) — un stockage, pas la règle.
-static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null) -> Dictionary:
+## `retrait` : le cran du sol que l'eau suppose (voir `nappe`) — l'aminci par défaut, celui des cas d'épreuve d'avant.
+static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Variant = null, memoire: Variant = null,
+		retrait := RETRAIT_AMINCI) -> Dictionary:
 	var a := _tableaux()
 	var b: Dictionary = boite if boite != null else FL.boite(occupees)
 	var plats: Array = []
@@ -110,16 +139,28 @@ static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Vari
 	# Les eaux DORMANTES (océan, lacs, lacs des rivières) : une cascade qui tombe dans l'une d'elles pose son remous sur
 	# SA nappe, pas au fond (`_lame`).
 	var dormantes: Array = []
+	# TOUTE L'EAU DE LA COUCHE : une bande ne se referme pas par un flanc du côté d'une autre eau (`_bande`).
+	var eaux := {}
 	for r in corps:
 		if r == null or r["erreur"] != "":
 			continue
 		if r["genre"] == "ocean" or r["genre"] == "lac":
 			dormantes.append(r["eau"])
+			eaux.merge(r["eau"])
 		elif r["genre"] == "riviere":
 			for lac in r["lacs"]:
 				dormantes.append(lac["cases"])
+				eaux.merge(lac["cases"])
+			for e: Dictionary in r["cours"]:
+				eaux[e["case"]] = true
 	vus["dormantes"] = dormantes
+	vus["retrait"] = retrait
 	var garde: Dictionary = memoire if memoire != null else {}
+	# ⚠ TOUT CE QUE LA MÉMOIRE GARDE DÉPEND DU CRAN (les hauteurs) : un autre cran, une mémoire neuve.
+	if memoire != null and float(garde.get("retrait", RETRAIT_AMINCI)) != retrait:
+		garde.clear()
+	if memoire != null:
+		garde["retrait"] = retrait
 	var vue_memoire := {}
 	for j in corps.size():
 		var r: Variant = corps[j]
@@ -128,12 +169,12 @@ static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Vari
 		if garde.has(j) and is_same(garde[j][0], r):
 			plats.append_array(garde[j][1])
 		else:
-			var nappes := _nappes_du_corps(r, occupees, b)
+			var nappes := _nappes_du_corps(r, occupees, b, retrait)
 			garde[j] = [r, nappes]
 			plats.append_array(nappes)
 		vue_memoire[j] = true
 		if r["genre"] == "riviere":
-			_riviere(a, r["cours"], occupees, plats, vus, sources)
+			_riviere(a, r["cours"], occupees, plats, vus, sources, eaux)
 	for j in garde.keys():
 		if j is int and not vue_memoire.has(j):
 			garde.erase(j)
@@ -150,7 +191,7 @@ static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Vari
 	for c: Vector3i in sources:
 		var gs: Variant = bouillons_avant.get(c)
 		if gs == null:
-			gs = (_source(c) as Array).map(_grille_compilee)
+			gs = (_source(c, retrait) as Array).map(_grille_compilee)
 		bouillons[c] = gs
 		remous.append_array(gs)
 	if memoire != null:
@@ -164,22 +205,23 @@ static func tableaux_du_maillage(corps: Array, occupees: Dictionary, boite: Vari
 
 
 ## Les rectangles de nappe d'un corps : l'océan (et son large), un lac, les lacs d'une rivière.
-static func _nappes_du_corps(r: Dictionary, occupees: Dictionary, b: Dictionary) -> Array:
+static func _nappes_du_corps(r: Dictionary, occupees: Dictionary, b: Dictionary, retrait := RETRAIT_AMINCI) -> Array:
 	var plats: Array = []
+	var dessus := nappe(retrait)
 	match r["genre"]:
 		"ocean":
 			var niveau: int = r["niveau"]
 			var h := NAN
 			if not b.is_empty() and niveau > (b["hi"] as Vector3i).y:
-				h = niveau + NAPPE   # le monde est noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau
+				h = niveau + dessus   # le monde est noyé : les colonnes s'arrêtent au haut de la boîte, pas l'eau
 			plats.append_array(rectangles_de_nappe(r["eau"], occupees,
-				surface_des_colonnes(r.get("colonnes", null), occupees, b, niveau), niveau, h))
-			plats.append_array(_large(b, float(niveau) + NAPPE))
+				surface_des_colonnes(r.get("colonnes", null), occupees, b, niveau), niveau, h, retrait))
+			plats.append_array(_large(b, float(niveau) + dessus))
 		"lac":
-			plats.append_array(rectangles_de_nappe(r["eau"], occupees, null, r["niveau"]))
+			plats.append_array(rectangles_de_nappe(r["eau"], occupees, null, r["niveau"], NAN, retrait))
 		"riviere":
 			for lac in r["lacs"]:
-				plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"]))
+				plats.append_array(rectangles_de_nappe(lac["cases"], occupees, null, lac["niveau"], NAN, retrait))
 	return plats
 
 
@@ -317,6 +359,55 @@ static func _plat(a: Dictionary, x0: float, x1: float, z0: float, z1: float, h: 
 		[Vector2(x0, z0), Vector2(x1, z0), Vector2(x1, z1), Vector2(x0, z1)])
 
 
+## LA BANDE D'UNE RIVIÈRE sur la case `c` (un rectangle pour `_poser_les_plats`), et ses FLANCS posés dans `a`.
+## ⚠ **UNE RIVIÈRE A UNE ÉPAISSEUR (Jordan, 9 octobre 2026 : « pour le moment c'est un plan contre le sol sans
+## refermement sur les flancs »)** : la bande était un plan posé 0,1 au-dessus du sol, la case entière ; là où le sol
+## s'arrête (une rivière le long d'une corniche) elle dépassait de la roche dans le vide, et partout où elle borde le sec
+## on voyait sous elle. Chaque côté, selon sa voisine `n` de même étage :
+##   - PLEINE : la bande s'avance de `DEBORD` sous la roche (comme une nappe) — rien à refermer ;
+##   - de l'EAU (`eaux`) qui repose sur la matière : rien, l'eau continue ;
+##   - de l'eau AU-DESSUS DU VIDE (la lèvre d'une cascade) : la bande va jusqu'où la cascade part (`avancee`) ;
+##   - SÈCHE, le sol continuant dessous : la bande s'arrête au bord de sa case et descend en un flanc jusque sous le sol ;
+##   - SÈCHE, le sol s'arrêtant (une corniche) : la bande s'arrête au bord de la roche (r en retrait, + `FIN` dehors) et y
+##     descend en un flanc.
+## Les bornes sont des multiples de 0,05 (`_poser_les_plats` compare en vingtièmes).
+static func _bande(a: Dictionary, c: Vector3i, occupees: Dictionary, eaux: Dictionary, retrait: float,
+		couleur: Color) -> Dictionary:
+	var h: float = c.y + riviere(retrait)
+	var bas: float = c.y - retrait - FIN
+	var bords := {}
+	var flancs: Array = []
+	for d: Vector3i in [Vector3i(-1, 0, 0), Vector3i(1, 0, 0), Vector3i(0, 0, -1), Vector3i(0, 0, 1)]:
+		var n := c + d
+		var e := 0.0
+		if occupees.has(n):
+			e = DEBORD
+		elif eaux.has(n):
+			e = 0.0 if occupees.has(n + Vector3i.DOWN) else avancee(retrait)
+		else:
+			e = 0.0 if occupees.has(n + Vector3i.DOWN) else FIN - retrait
+			flancs.append(d)
+		bords[d] = e
+	var r := {"x0": c.x - bords[Vector3i(-1, 0, 0)], "x1": c.x + 1 + bords[Vector3i(1, 0, 0)],
+		"z0": c.z - bords[Vector3i(0, 0, -1)], "z1": c.z + 1 + bords[Vector3i(0, 0, 1)], "h": h, "couleur": couleur}
+	for d: Vector3i in flancs:
+		var p0: Vector3
+		var p1: Vector3
+		if d.x != 0:
+			var x: float = r["x0"] if d.x < 0 else r["x1"]
+			p0 = Vector3(x, 0, r["z0"])
+			p1 = Vector3(x, 0, r["z1"])
+		else:
+			var z: float = r["z0"] if d.z < 0 else r["z1"]
+			p0 = Vector3(r["x0"], 0, z)
+			p1 = Vector3(r["x1"], 0, z)
+		var u0: float = p0.z if d.x != 0 else p0.x
+		var u1: float = p1.z if d.x != 0 else p1.x
+		_quad(a, [Vector3(p0.x, h, p0.z), Vector3(p1.x, h, p1.z), Vector3(p1.x, bas, p1.z), Vector3(p0.x, bas, p0.z)],
+			Vector3(d), couleur, [Vector2(u0, h), Vector2(u1, h), Vector2(u1, bas), Vector2(u0, bas)])
+	return r
+
+
 ## La case `c` à la hauteur `h`, avancée de `DEBORD` sous chaque voisine pleine de son étage : un rectangle pour
 ## `_poser_les_plats`.
 static func _case_plate(c: Vector3i, h: float, occupees: Dictionary, couleur: Color) -> Dictionary:
@@ -354,7 +445,8 @@ static func surface_dessinee(eau: Dictionary, occupees: Dictionary, niveau: int)
 ## `FL.profondeur`). `h_forcee` : la hauteur de toute la nappe, si ce n'est pas la rangée + `NAPPE` (un océan qui noie
 ## le monde : ses colonnes s'arrêtent au haut de la boîte).
 static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: Variant = null, niveau: Variant = null,
-		h_forcee := NAN) -> Array:
+		h_forcee := NAN, retrait := RETRAIT_AMINCI) -> Array:
+	var dessus := nappe(retrait)
 	var profondeurs: Dictionary = {}
 	if surface == null:
 		for c: Vector3i in (FL.surface(eau, occupees) if niveau == null else surface_dessinee(eau, occupees, niveau)):
@@ -400,7 +492,7 @@ static func rectangles_de_nappe(eau: Dictionary, occupees: Dictionary, surface: 
 			r["z1"] = b["z"] + 1 + b["zp"]
 		else:
 			r = {"x0": x0, "x1": x1, "z0": b["z"] - b["zm"], "z1": b["z"] + 1 + b["zp"],
-				"h": h_forcee if not is_nan(h_forcee) else b["y"] + NAPPE,
+				"h": h_forcee if not is_nan(h_forcee) else b["y"] + dessus,
 				"couleur": b["couleur"]}
 			rects.append(r)
 		if b["zp"] == 0.0:
@@ -478,13 +570,15 @@ static func _large(b: Dictionary, h: float) -> Array:
 ## est en retrait d'un quart de case), donc un point d'une case PLEINE à moins de `DEBORD` d'une case d'eau est DANS
 ## cette eau. Sans ça, un nageur collé à la berge avait le centre du corps dans la case du mur : « hors de l'eau »,
 ## il retombait au fond et ne pouvait plus sortir (vu dans la fumée, par une mutation muette).
-static func niveau_au_point(cases: Dictionary, oceans: Array, boite: Dictionary, p: Vector3) -> float:
+static func niveau_au_point(cases: Dictionary, oceans: Array, boite: Dictionary, p: Vector3,
+		retrait := RETRAIT_AMINCI) -> float:
+	var dessus := nappe(retrait)
 	var k: Variant = case_d_eau_au_point(cases, p)
 	if k != null:
 		var h: Vector3i = k
 		while cases.has(h + Vector3i.UP):
 			h += Vector3i.UP
-		return h.y + NAPPE
+		return h.y + dessus
 	var c := Vector3i(floori(p.x), floori(p.y), floori(p.z))
 	if oceans.is_empty():
 		return -INF
@@ -494,7 +588,7 @@ static func niveau_au_point(cases: Dictionary, oceans: Array, boite: Dictionary,
 		var hi: Vector3i = boite["hi"]
 		dehors = c.x < lo.x or c.x > hi.x or c.z < lo.z or c.z > hi.z or c.y < lo.y
 	var plus_haut: int = oceans.max()
-	return plus_haut + NAPPE if dehors and c.y <= plus_haut else -INF
+	return plus_haut + dessus if dehors and c.y <= plus_haut else -INF
 
 
 ## LA CASE D'EAU QUI CONTIENT `p` (dans `cases`), ou null — la case de p, sinon une voisine dont p est à moins de
@@ -526,8 +620,9 @@ static func _horizontal(d: Vector3i) -> bool:
 ## (et deux lames) l'une dans l'autre — du scintillement, et une eau deux fois plus opaque. `vus` retient ce qui est
 ## posé, pour toutes les rivières d'une couche.
 static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: Array, vus: Dictionary,
-		sources: Array = []) -> void:
+		sources: Array = [], eaux: Dictionary = {}) -> void:
 	var n := cours.size()
+	var retrait: float = vus.get("retrait", RETRAIT_AMINCI)
 	# LA SOURCE (Jordan, 3 octobre 2026 : « il manque aussi la source ») : la première case d'une rivière qui coule sur la
 	# matière — l'eau n'y sort plus de nulle part, elle y SOURD (`_source`). Une rivière qui part d'un lac qui déborde
 	# n'en a pas : elle sort du lac. Une seule par case.
@@ -541,7 +636,7 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: A
 			continue
 		var d := sens_du_cours(cours, i)
 		vus[c] = true
-		plats.append(_case_plate(c, c.y + RIVIERE, occupees, _couleur(Vector2(d.x, d.z), COURANTE, 0.05)))
+		plats.append(_bande(a, c, occupees, eaux, retrait, _couleur(Vector2(d.x, d.z), COURANTE, 0.05)))
 	var i := 0
 	while i < n:
 		var e: Dictionary = cours[i]
@@ -599,9 +694,10 @@ static func courants(cours: Array, occupees: Dictionary) -> Dictionary:
 ## `sol` : la hauteur de l'eau où elle tombe — la bande de `bas` s'il repose sur la matière, sinon la nappe d'en dessous
 ## (`bas.y − 0,3` = rangée du dessous + `NAPPE`). Le pied de la nappe est 0,15 plus bas, sous l'eau.
 static func _lame(levre: Vector3i, bas: Vector3i, d: Vector3i, occupees: Dictionary, vus: Dictionary) -> void:
-	var haut := levre.y + RIVIERE
-	var pied := bas.y - 0.3
-	var sol := bas.y + RIVIERE if occupees.has(bas + Vector3i.DOWN) else pied
+	var retrait: float = vus.get("retrait", RETRAIT_AMINCI)
+	var haut := levre.y + riviere(retrait)
+	var pied := bas.y - 1 + nappe(retrait)
+	var sol := bas.y + riviere(retrait) if occupees.has(bas + Vector3i.DOWN) else pied
 	# ⚠ TOMBÉE DANS UN CREUX QU'ELLE REMPLIT, la chute finit au FOND (la case du bas repose sur la matière) : le remous y
 	# était posé sous la nappe, invisible (vu à l'image). Sur l'eau dormante qui noie `bas`, il est sur sa nappe.
 	for eau: Dictionary in vus.get("dormantes", []):
@@ -609,7 +705,7 @@ static func _lame(levre: Vector3i, bas: Vector3i, d: Vector3i, occupees: Diction
 			var h := bas
 			while eau.has(h + Vector3i.UP):
 				h += Vector3i.UP
-			sol = h.y + NAPPE
+			sol = h.y + nappe(retrait)
 			pied = minf(pied, sol - 0.15)
 			break
 	# Le plan : x = const (axe 0) ou z = const (axe 2) ; `a` la case le long du plan ; `plan` le plan de la falaise.
@@ -625,6 +721,8 @@ static func _lame(levre: Vector3i, bas: Vector3i, d: Vector3i, occupees: Diction
 	else:
 		var bord: int = levre.x if axe == 0 else levre.z
 		plan = float(bord) if sens > 0 else float(bord + 1)
+		# La falaise est en plan − r (le cran du sol) : la cascade garde la place qu'elle a devant la roche amincie.
+		plan += avancee(retrait) * sens
 	var cle := "%d|%d|%d" % [axe, roundi(plan * 20.0), a_le_long]
 	var l: Dictionary = vus.get(cle, {})
 	if l.is_empty():
@@ -704,7 +802,7 @@ static func _signe(l: Dictionary) -> int:
 static func _poser_les_lames(a: Dictionary, vus: Dictionary, remous: Array, plats: Array = [],
 		avant: Dictionary = {}, apres: Variant = null) -> void:
 	for cle in vus:
-		if not cle is String or cle == "dormantes":
+		if not cle is String or cle == "dormantes" or cle == "retrait":
 			continue
 		var l: Dictionary = vus[cle]
 		var u_case: int = l["a"]
@@ -837,8 +935,8 @@ const SOURCE := 0.7
 const SOURCE_DOME := 0.08
 
 
-static func _source(c: Vector3i) -> Array:
-	var centre := Vector3(c.x + 0.5, c.y + RIVIERE, c.z + 0.5)
+static func _source(c: Vector3i, retrait := RETRAIT_AMINCI) -> Array:
+	var centre := Vector3(c.x + 0.5, c.y + riviere(retrait), c.z + 0.5)
 	var tours := 16
 	var disque := {"p": [], "n": [], "c": [], "uv": []}
 	var rayons := [0.0, 0.2, 0.42, SOURCE]

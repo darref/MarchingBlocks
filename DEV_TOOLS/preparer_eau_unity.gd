@@ -203,7 +203,7 @@ func _exemple() -> bool:
 
 ## Un témoin lié à un seul matériau, toutes faces, écrit en .glb puis relu en lot (comme l'appli).
 func _lot(dossier: String, nom: String, materiau: Dictionary) -> MeshLibrary:
-	var t: RefCounted = TL.depuis_le_temoin_calcule()
+	var t: RefCounted = TL.depuis_le_temoin_calcule(BM.RETRAIT_AMINCI)
 	t.materiaux.append(materiau)
 	for c in t.tuiles:
 		t.tuiles[c].assigner(range(t.tuiles[c].faces.size()), 0)

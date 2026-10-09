@@ -92,6 +92,13 @@ namespace MarchingBlocks.Paint.EditorTools
             catch (System.Exception e) { result.Error = "world.json cannot be read: " + e.Message; return result; }
             var world = MBWorldFile.Read(text);
             if (!world.Ok) { result.Error = world.Error; return result; }
+            // THE FLOOR of the water (water_floor): any value but 0.25, 0 or -0.25 refuses the world.
+            var decoded = MBJson.Parse(text);
+            if (!MBWater.ReadFloor(decoded, out double waterFloor, out string floorError))
+            {
+                result.Error = floorError;
+                return result;
+            }
 
             string name = world.Name != "" ? world.Name
                 : Path.GetFileNameWithoutExtension(Path.GetDirectoryName(worldJsonAssetPath) ?? "world");
@@ -130,7 +137,6 @@ namespace MarchingBlocks.Paint.EditorTools
             }
             // TRANSITIONS (optional): how the layers blend where they meet — a component on the root, which dresses the
             // tiles of its children.
-            var decoded = MBJson.Parse(text);
             var transitions = MBTransitions.Read(decoded);
             if (!transitions.Ok) result.Warnings.Add("transitions ignored: " + transitions.Error);
             else if (transitions.Pairs.Count > 0)
@@ -226,6 +232,7 @@ namespace MarchingBlocks.Paint.EditorTools
                 go.SetActive(false);
                 var wc = go.AddComponent<MarchingBlocksWater>();
                 wc.frameFrom = frameFrom;
+                wc.waterFloor = MarchingBlocksWater.FloorKindOf(waterFloor);
                 foreach (var l in water.Layers)
                 {
                     GameObject sheet = null;

@@ -42,7 +42,10 @@ func _initialize() -> void:
 		_reglages_avant = FileAccess.get_file_as_string(REGLAGES)
 	DirAccess.make_dir_recursive_absolute("user://fumee")
 	var f := FileAccess.open(JETABLE, FileAccess.WRITE)
-	f.store_string(Projet.vers_texte([Projet.couche("Rock")], 0))
+	# ⚠ LE MONDE D'ESSAI EST AMINCI, TÉMOINS ET EAU (9 octobre 2026 : le neutre est devenu le défaut) : les hauteurs écrites
+	# à la main dans cette fumée (10,75 au Play test, 2,34 dans le lac, 20,75 pour un arbre…) sont celles d'un sol aminci.
+	# Les crans eux-mêmes sont menés par `_les_crans` (boutons, témoins, monde, eau).
+	f.store_string(Projet.vers_texte([Projet.couche("Rock")], 0, [], [], {}, {}, 0.25))
 	f.close()
 	var r := ConfigFile.new()
 	r.set_value("projet", "dernier", JETABLE)
@@ -508,6 +511,8 @@ func _mener() -> void:
 	_vrai(_transitions_finies, "SENTINELLE : l'atelier Transitions est allé JUSQU'AU BOUT")
 	await _le_feuillage(ed)
 	_vrai(_feuillage_fini, "le feuillage est allé JUSQU'AU BOUT")
+	await _les_crans(ed)
+	_vrai(_crans_finis, "SENTINELLE : les crans du témoin et de l'eau sont allés JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -2793,7 +2798,7 @@ func _play_test(ed: Control) -> void:
 	# tuiles restait MUET. L'aminci rentre d'un quart de case : là, les deux se séparent.
 	# ⚠ Le lot se pose SANS `_trancher_temoin` : son panneau d'attente guette `frame_post_draw`, qui
 	# ne vient jamais en headless — la fumée pendait sans un mot.
-	ed._vue.monde().lot = BM.librairie()["lot"]
+	ed._vue.monde().lot = BM.librairie(BM.RETRAIT_AMINCI)["lot"]
 	var avant: int = ed._vue.cases().get_used_cells().size()
 	ed._vue._cible = Vector3(24.5, 11, 24.5)
 	ed._aller_a("jeu")
@@ -5244,6 +5249,79 @@ func _touche_physique(touche: Key, appuyee: bool) -> void:
 	Input.flush_buffered_events()
 
 
+## LES CRANS DU TÉMOIN ET DU SOL DE L'EAU (Jordan, 9 octobre 2026 : « go pour les trois crans, 0 par défaut »), par les
+## VRAIS boutons. Attendus écrits à la main : le témoin calculé de 12 × 10 × 12 cases a sa boîte en (0, 0, 0) … (12, 10, 12)
+## au neutre, élargie de 0,25 de chaque côté à l'épais ; la nappe d'une mer de niveau 2 à 2,95 au neutre, 2,7 à l'épais.
+var _crans_finis := false
+
+
+func _les_crans(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._regler_edition(false)
+	# Le projet ouvert à ce point de la fumée n'est plus le monde d'essai : on part de l'aminci, posé par le vrai bouton.
+	if ed._retrait != 0.25:
+		(ed._boutons_cran["aminci"] as Button).pressed.emit()
+	_egal(ed._retrait, 0.25, "Inset : le monde est aminci")
+	var boite_aminci: AABB = (ed._vue._temoin.mesh as Mesh).get_aabb()
+	_vrai(boite_aminci.position.is_equal_approx(Vector3(0.25, 0.25, 0.25)) and boite_aminci.size.is_equal_approx(Vector3(11.5, 9.5, 11.5)),
+		"la vue montre le témoin aminci, rentré d'un quart de case (%s)" % boite_aminci)
+	ed._nouvelle_couche()
+	var c: Dictionary = ed._couches[ed._active]
+	_vrai((ed._boutons_cran["aminci"] as Button).button_pressed and not (ed._boutons_cran["neutre"] as Button).button_pressed,
+		"Witness surface : Inset enfoncé")
+	_vrai((ed._note_cran.text as String).contains("keep their shape") or ed._couches_hors_du_cran().is_empty(),
+		"… et la note nomme les couches au témoin modelé, s'il y en a (%s)" % ed._note_cran.text)
+	(ed._boutons_cran["neutre"] as Button).pressed.emit()
+	_egal(ed._retrait, 0.0, "Centred : le monde passe au neutre")
+	var boite: AABB = (ed._vue._temoin.mesh as Mesh).get_aabb()
+	_vrai(boite.position.is_equal_approx(Vector3.ZERO) and boite.size.is_equal_approx(Vector3(12, 10, 12)),
+		"la vue montre le témoin calculé neutre : sa surface au bord des cases (%s)" % boite)
+	(ed._boutons_cran["epais"] as Button).pressed.emit()
+	_egal(ed._retrait, -0.25, "Outset : le monde passe à l'épais")
+	boite = (ed._vue._temoin.mesh as Mesh).get_aabb()
+	_vrai(boite.position.is_equal_approx(Vector3(-0.25, -0.25, -0.25)) and boite.size.is_equal_approx(Vector3(12.5, 10.5, 12.5)),
+		"… la vue montre le témoin épais, débordant d'un quart de case (%s)" % boite)
+	var t_epais: RefCounted = ed._temoin_de(c)
+	_egal(t_epais.tuiles.size(), 52, "… le témoin lié de la couche neuve est refait à l'épais : 52 tuiles")
+	var plaque := "mb_plaque_b2h2_dehors"
+	# Une tuile est une surface ouverte : la paroi est un plan, c'est sa PLACE qui bouge (le centre de sa boîte).
+	var taille := func(t: RefCounted) -> Vector3:
+		return (t.tuiles[plaque].vers_array_mesh() as ArrayMesh).get_aabb().get_center() if t.tuiles.has(plaque) else Vector3.ZERO
+	var s_epais: Vector3 = taille.call(t_epais)
+	ed._histoire.undo()
+	_egal(ed._retrait, 0.0, "Ctrl+Z : rendu au neutre")
+	_vrai((ed._boutons_cran["neutre"] as Button).button_pressed and not (ed._boutons_cran["epais"] as Button).button_pressed,
+		"… et le bouton suit")
+	var s_neutre: Vector3 = taille.call(ed._temoin_de(c))
+	# La paroi à l'air libre est en −r dans sa tuile : elle avance de 0,25 du neutre à l'épais, le long de sa normale.
+	_vrai(is_equal_approx(s_epais.distance_to(s_neutre), 0.25) and is_equal_approx(s_epais.y, s_neutre.y),
+		"la paroi à l'air libre avance de 0,25 à l'épais (%s contre %s)" % [s_epais, s_neutre])
+	ed._histoire.redo()
+	_egal(ed._retrait, -0.25, "Ctrl+Y : de nouveau épais")
+	# Le monde de la couche suit : trancher son témoin (étape 3) prend le lot du témoin calculé à CE cran.
+	await ed._trancher_temoin_de_la_couche()
+	_egal(str(c["source"]), "witness@-0.25", "trancher le témoin de la couche : la source dit le cran")
+	(ed._boutons_cran["neutre"] as Button).pressed.emit()
+	_egal(str(c["source"]), "witness@0.0", "changer de cran retranche la couche : sa source suit")
+	# L'eau suit le cran : la nappe d'une mer de niveau 2.
+	ed._vue.montrer_plan_mer(2, {})
+	_vrai(is_equal_approx(ed._vue._plan_mer.position.y, 2.95), "Centred : la mer de niveau 2 à 2,95 (%s)"
+		% ed._vue._plan_mer.position.y)
+	(ed._boutons_cran["epais"] as Button).pressed.emit()
+	ed._vue.montrer_plan_mer(2, {})
+	_vrai(is_equal_approx(ed._vue._plan_mer.position.y, 2.7) and is_equal_approx(float(ed._vue.plan_mer_visible()), 2.0),
+		"Outset : à 2,7, sous un étage flottant (et la hauteur choisie relue : 2)")
+	ed._vue.montrer_plan_mer(null)
+	ed._enregistrer()
+	var relu: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(ed._projet), [])
+	_vrai(not relu.is_empty() and relu["retrait"] == -0.25, "enregistré : le cran du monde revient")
+	# Rendu à l'aminci, comme la fumée l'a trouvé.
+	(ed._boutons_cran["aminci"] as Button).pressed.emit()
+	_egal(ed._retrait, 0.25, "rendu à l'aminci")
+	ed._aller_a("monde")
+	_crans_finis = true
+
+
 func _rendre_les_reglages() -> void:
 	if _reglages_avant == "":
 		DirAccess.remove_absolute(REGLAGES)
@@ -5458,7 +5536,7 @@ func _le_feuillage(ed: Control) -> void:
 	ed._coup_commence()
 	ed._touche({"poser": sol, "effacer": {}}, "Add")
 	ed._coup_fini()
-	ed._vue.monde().lot = BM.librairie()["lot"]
+	ed._vue.monde().lot = BM.librairie(BM.RETRAIT_AMINCI)["lot"]
 	ed._aller_a("feuillage")
 	_vrai(ed._atelier == "feuillage" and ed._vue.outil == "feuillage" and ed._vue.mode == "monde",
 		"Foliage : le monde dans la vue, l'outil du feuillage")

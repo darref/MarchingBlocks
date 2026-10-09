@@ -1388,6 +1388,8 @@ func montrer_apercu(cases_: Array, teinte: Color) -> void:
 ## `hauteur` null : caché. `boite` : celle de `FL.boite` ({lo, hi}, vide sans monde).
 const MARGE_MER := 24
 var _plan_mer: MeshInstance3D
+## Le cran du sol que l'eau suppose (`EauMaillage.nappe`, 9 octobre 2026), donné par l'écran.
+var retrait_eau: float = BM.RETRAIT_PAR_DEFAUT
 
 
 func montrer_plan_mer(hauteur: Variant, boite: Dictionary = {}, teinte: Color = TEINTE_EAU) -> void:
@@ -1402,7 +1404,7 @@ func montrer_plan_mer(hauteur: Variant, boite: Dictionary = {}, teinte: Color = 
 		lo = Vector3(boite["lo"]) - Vector3(MARGE_MER, 0, MARGE_MER)
 		hi = Vector3(boite["hi"]) + Vector3.ONE + Vector3(MARGE_MER, 0, MARGE_MER)
 	(_plan_mer.mesh as PlaneMesh).size = Vector2(hi.x - lo.x, hi.z - lo.z)
-	_plan_mer.position = Vector3((lo.x + hi.x) * 0.5, float(hauteur) + EauMaillage.NAPPE, (lo.z + hi.z) * 0.5)
+	_plan_mer.position = Vector3((lo.x + hi.x) * 0.5, float(hauteur) + EauMaillage.nappe(retrait_eau), (lo.z + hi.z) * 0.5)
 	var c := teinte
 	c.a = maxf(c.a, 0.45)
 	(_plan_mer.material_override as StandardMaterial3D).albedo_color = c
@@ -1410,7 +1412,7 @@ func montrer_plan_mer(hauteur: Variant, boite: Dictionary = {}, teinte: Color = 
 
 
 func plan_mer_visible() -> Variant:
-	return _plan_mer.position.y - EauMaillage.NAPPE if _plan_mer != null and _plan_mer.visible else null
+	return _plan_mer.position.y - EauMaillage.nappe(retrait_eau) if _plan_mer != null and _plan_mer.visible else null
 
 
 ## Les nappes : [[maillage ou null, matériau, visible], …], une par couche d'eau, dans l'ordre.
@@ -2380,7 +2382,7 @@ func courant_au_point(p: Vector3) -> Vector3:
 func surface_eau_au_point(p: Vector3) -> float:
 	if eau_du_jeu.is_empty():
 		return -INF
-	return EauMaillage.niveau_au_point(eau_du_jeu["cases"], eau_du_jeu["oceans"], eau_du_jeu["boite"], p)
+	return EauMaillage.niveau_au_point(eau_du_jeu["cases"], eau_du_jeu["oceans"], eau_du_jeu["boite"], p, retrait_eau)
 
 
 ## LA CAMÉRA À LA TROISIÈME PERSONNE, TENUE PAR UN BRAS-RESSORT — DEMANDÉ PAR JORDAN (29 septembre 2026) :

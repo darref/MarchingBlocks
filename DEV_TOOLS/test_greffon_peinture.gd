@@ -685,7 +685,7 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
-const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 15}
+const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 23}
 ## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT : un fichier livré et jamais rejoué ne doit pas passer pour vert.
 ## `water_mesh` en est sorti le 7 octobre 2026 (branche `eau-godot`) : `mb_water_mesh.gd` maille la nappe, ses cas (14,
 ## puis 15 avec « deux rivières au même endroit », branche `cas-eau`) sont rejoués en SAC DE TRIANGLES (`eau_sac.gd`,
@@ -927,7 +927,7 @@ func _cas_de_parite(fichier: String, f: Dictionary, c: Dictionary) -> String:
 		# ── la nappe recalculée (PARITE.md §12) : un sac de triangles, sans ordre, rotations permises, réflexion refusée
 		"water_mesh/water_mesh":
 			var bodies: Array = (i["bodies"] as Array).map(_corps_du_cas)
-			var a := WaterMesh.arrays(bodies, _ensemble(f["worlds"][i["world"]]))
+			var a := WaterMesh.arrays(bodies, _ensemble(f["worlds"][i["world"]]), null, null, float(i.get("floor", 0.25)))
 			var obtenu := Sac.triangles(a)
 			var voulu := Sac.deplier(e)
 			var ecart := Sac.meme_sac(voulu, obtenu)
@@ -1490,7 +1490,7 @@ func _de_bout_en_bout() -> void:
 	_l_edition_de_parite_dans_la_vue()
 	_vrai(_edition_finie, "SENTINELLE : l'édition de la parité dans la vue s'est arrêtée en route (erreur d'exécution ?)")
 
-	var bilan: Dictionary = BM.librairie()
+	var bilan: Dictionary = BM.librairie(BM.RETRAIT_AMINCI)   # les attendus de ce monde sont ceux d'un sol aminci
 	var lot: MeshLibrary = bilan["lot"]
 	var dossier := ProjectSettings.globalize_path("user://test_format")
 	var sortie: Dictionary = FN.exporter(lot, dossier, "Witness Rock", "MarchingBlocks test")

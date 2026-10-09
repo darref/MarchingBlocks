@@ -47,6 +47,16 @@ namespace MarchingBlocks.Paint
         [Tooltip("The layer whose tileset gives the frame (the conversion of your glTF importer) and the cell size.")]
         public MarchingBlocksWorld frameFrom;
         public List<Layer> layers = new List<Layer>();
+
+        /// <summary>Where the ground of the tiles is drawn (world.json water_floor): the heights of the rebuilt sheet follow it.</summary>
+        public enum Floor { Inset, Centred, Outset }
+        [Tooltip("Where the ground of the tiles is drawn, for the heights of the rebuilt water (world.json water_floor): " +
+            "inset 0.25, centred 0, outset -0.25. Set by the import.")]
+        public Floor waterFloor = Floor.Inset;
+        /// <summary>The floor r of waterFloor: 0.25, 0 or −0.25.</summary>
+        public double FloorValue => waterFloor == Floor.Centred ? 0.0 : waterFloor == Floor.Outset ? -0.25 : 0.25;
+        /// <summary>The Floor of a water_floor value (0.25, 0, −0.25; anything else: inset).</summary>
+        public static Floor FloorKindOf(double r) => r == 0.0 ? Floor.Centred : r == -0.25 ? Floor.Outset : Floor.Inset;
         [Tooltip("Rebuild the water sheets half a second after each gesture (on a worker thread). Cuts itself when a rebuild " +
             "takes more than a second: then use Rebuild water.")]
         public bool followPainting = true;
@@ -159,9 +169,10 @@ namespace MarchingBlocks.Paint
             var sources = SourcesByLayer();
             var before = previous;
             var beforeCells = previousCells;
+            double floor = FloorValue;
             runningTicket = follow.Start();
             runningClock = Stopwatch.StartNew();
-            running = Task.Run(() => Compute(cells, sources, before, beforeCells, memories));
+            running = Task.Run(() => Compute(cells, sources, before, beforeCells, memories, floor));
         }
 
         void Collect()
@@ -188,7 +199,7 @@ namespace MarchingBlocks.Paint
             var clock = Stopwatch.StartNew();
             int ticket = follow.Start();
             Result r;
-            try { r = Compute(AllCells(), SourcesByLayer(), previous, previousCells, memories); }
+            try { r = Compute(AllCells(), SourcesByLayer(), previous, previousCells, memories, FloorValue); }
             catch { follow.Failed(); throw; }
             Swap(r, ticket, clock);
         }
@@ -256,7 +267,7 @@ namespace MarchingBlocks.Paint
         // ── pur C# : ce qui tourne sur le fil ──
 
         static Result Compute(HashSet<Int3> cells, List<List<Int3>> sources, WaterWorld before, HashSet<Int3> beforeCells,
-            List<WaterMeshMemory> memories)
+            List<WaterMeshMemory> memories, double floor = MBWaterMesh.FloorDefault)
         {
             var clock = Stopwatch.StartNew();
             var all = new List<Int3>();
@@ -273,7 +284,8 @@ namespace MarchingBlocks.Paint
                     for (int j = 0; j < bodies.Count; j++)
                         if (k + j < before.Bodies.Count && ReferenceEquals(bodies[j], before.Bodies[k + j])) r.Taken++;
                 k += sources[i].Count;
-                r.Sheets.Add(MBWaterMesh.Arrays(bodies, cells, w.Box, memories[i]));
+                // Le sol : un autre sol vide la mémoire de la couche (MBWaterMesh.Arrays), les hauteurs ont changé.
+                r.Sheets.Add(MBWaterMesh.Arrays(bodies, cells, w.Box, memories[i], floor));
             }
             r.WorkerSeconds = clock.Elapsed.TotalSeconds;
             return r;

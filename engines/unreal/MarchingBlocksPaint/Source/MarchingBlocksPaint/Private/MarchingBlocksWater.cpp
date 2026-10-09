@@ -97,6 +97,8 @@ namespace MarchingBlocksWaterDetail
 		std::shared_ptr<const MBPaint::FCellSet> CellsBefore;
 		std::vector<MBPaint::FWaterMeshMemory> Memories;
 		std::vector<std::vector<uint64_t>> ShownIds;
+		/** The floor r of the world (its first water layer's). */
+		double Floor = MBPaint::WaterMesh::FloorDefault;
 		bool bManual = false;
 		double Started = 0.0;
 		/** When the worker finished (FPlatformTime): the rebuild's own time is Computed - Started (gathering the cells on the
@@ -123,6 +125,8 @@ namespace MarchingBlocksWaterDetail
 		std::shared_ptr<const MBPaint::FCellSet> Cells;
 		std::vector<MBPaint::FWaterMeshMemory> Memories;
 		std::vector<std::vector<uint64_t>> ShownIds;
+		/** The floor the sheets shown were made for. */
+		double ShownFloor = MBPaint::WaterMesh::FloorDefault;
 		TArray<TWeakObjectPtr<AMarchingBlocksWater>> ShownLayers;
 		bool bStale = false;
 		bool bBusy = false;
@@ -223,7 +227,7 @@ namespace MarchingBlocksWaterDetail
 			{
 				for (const MBPaint::FWaterBody* B : Bodies)
 					if (B->Error.empty()) LayerCellsOfWater.insert(B->Water.begin(), B->Water.end());
-				J.Meshes.push_back(MBPaint::WaterMesh::Build(Bodies, *Cells, Box, &J.Memories[L]));
+				J.Meshes.push_back(MBPaint::WaterMesh::Build(Bodies, *Cells, Box, &J.Memories[L], J.Floor));
 			}
 			else J.Meshes.emplace_back();
 			J.LayerWater.push_back(std::move(LayerCellsOfWater));
@@ -244,6 +248,7 @@ namespace MarchingBlocksWaterDetail
 		F->Cells = J->Cells;
 		F->Memories = std::move(J->Memories);
 		F->ShownIds = J->Ids;
+		F->ShownFloor = J->Floor;
 		F->ShownLayers = Layers;
 		if (J->bManual) F->bAuto = Seconds <= TooLong();
 		else if (Seconds > TooLong()) F->bAuto = false;
@@ -291,8 +296,11 @@ namespace MarchingBlocksWaterDetail
 			for (AMarchingBlocksWorld* L : Any->GetLayers()) J->LayerCells.push_back(L->GetCellArray());
 		J->Before = F->State;
 		J->CellsBefore = F->Cells;
-		// The water layers changed (added, removed, reordered): the sheets start over (the rule still resumes by source).
-		if (Layers == F->ShownLayers)
+		// THE FLOOR: the first water layer's decides for all (the heights of every sheet).
+		J->Floor = Waters[0]->FloorValue();
+		// The water layers changed (added, removed, reordered) or another floor (every height changed): the sheets start
+		// over (the rule still resumes by source; the sheet memory also starts over by itself on another floor).
+		if (Layers == F->ShownLayers && J->Floor == F->ShownFloor)
 		{
 			J->Memories = F->Memories;
 			J->ShownIds = F->ShownIds;
@@ -724,6 +732,21 @@ void AMarchingBlocksWater::OnConstruction(const FTransform& Transform)
 	RecomputeWater();
 }
 
+double AMarchingBlocksWater::FloorValue() const
+{
+	switch (WaterFloor)
+	{
+	case EMarchingBlocksWaterFloor::Centred: return 0.0;
+	case EMarchingBlocksWaterFloor::Outset: return -0.25;
+	default: return MBPaint::WaterMesh::FloorDefault;
+	}
+}
+
+EMarchingBlocksWaterFloor AMarchingBlocksWater::FloorFromValue(double R)
+{
+	return R == 0.0 ? EMarchingBlocksWaterFloor::Centred : R < 0.0 ? EMarchingBlocksWaterFloor::Outset : EMarchingBlocksWaterFloor::Inset;
+}
+
 #if WITH_EDITOR
 void AMarchingBlocksWater::PostEditChangeProperty(FPropertyChangedEvent& Event)
 {
@@ -733,7 +756,8 @@ void AMarchingBlocksWater::PostEditChangeProperty(FPropertyChangedEvent& Event)
 	// New sources, another order or another world: the water is stale (a look or a material is only drawn again).
 	const FName Name = Event.GetMemberPropertyName();
 	if (Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWater, Sources) || Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWater, Order)
-		|| Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWater, WorldName))
+		|| Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWater, WorldName)
+		|| Name == GET_MEMBER_NAME_CHECKED(AMarchingBlocksWater, WaterFloor))
 		NoteWorldEdited(GetWorld(), WorldName);
 }
 

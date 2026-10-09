@@ -98,6 +98,34 @@ const COTE := 12
 ## sous-voxels par cellule représentent exactement les boîtes rentrées, sans le moindre arrondi.
 const SOUS := 4
 
+## LES TROIS CRANS DE LA SURFACE DU TÉMOIN — DÉCIDÉ (Jordan, 9 octobre 2026 : « go pour les trois crans, 0 par
+## défaut »). Le RETRAIT est de combien chaque face donnant sur du vide rentre dans sa case (positif) ou déborde
+## dans la case vide voisine (négatif). Dans le repère d'une tuile (−0,5 … +0,5 autour de son sommet), la surface
+## d'une paroi droite est à −retrait : 0 la pose au CENTRE de la tuile, à mi-chemin des deux plans de coupe.
+## ⚠ **POURQUOI 0 PAR DÉFAUT** : une arête saillante ne se chanfreine que jusqu'au plan de coupe — sinon c'est la
+## section de toutes les parois qui change. Le budget est 0,5 − retrait de chaque côté : 0,25 à l'aminci (le témoin
+## « reste presque cubique », Jordan), 0,5 au neutre, 0,75 à l'épais ; la marge pour bomber vers l'air est l'inverse
+## (0,5 + retrait). Le neutre ne prend parti pour rien.
+## ⚠ **LES BOUTS (±0,5) SONT INTERDITS** : la surface tomberait SUR un plan de coupe — une case seule n'aurait plus
+## d'épaisseur, deux masses séparées d'une case vide se toucheraient — et les sections partagées ne seraient plus
+## définies. ⚠ Les trois crans tombent sur la grille des sous-voxels (`SOUS` = 4) : aucun arrondi.
+const RETRAIT_AMINCI := 0.25
+const RETRAIT_NEUTRE := 0.0
+const RETRAIT_EPAIS := -0.25
+const RETRAITS := [RETRAIT_AMINCI, RETRAIT_NEUTRE, RETRAIT_EPAIS]
+## Le cran d'une couche NEUVE. ⚠ Un projet d'avant le 9 octobre 2026 n'écrit pas de cran : il était aminci, et se
+## relit tel (`Projet.depuis_texte`) — rien ne bouge sous les pieds d'un monde déjà peint.
+const RETRAIT_PAR_DEFAUT := RETRAIT_NEUTRE
+
+
+## Un cran reçu d'ailleurs (un fichier, un réglage) ramené au plus proche des trois.
+static func cran(retrait: float) -> float:
+	var meilleur: float = RETRAIT_PAR_DEFAUT
+	for r in RETRAITS:
+		if absf(float(r) - retrait) < absf(meilleur - retrait):
+			meilleur = r
+	return meilleur
+
 ## Les deux contextes. Un bloc d'INTÉRIEUR fournit les variantes de grotte des classes ambiguës.
 const EXTERIEUR := "exterieur"
 const INTERIEUR := "interieur"
@@ -463,7 +491,10 @@ static func sous_voxels(pleines: Dictionary, retrait: float) -> Dictionary:
 		var p: Vector3i = c
 		var mini := Vector3(p)
 		var maxi := Vector3(p) + Vector3.ONE
-		if retrait > 0.0:
+		# ⚠ UN RETRAIT NÉGATIF FAIT DÉBORDER la case dans ses voisines VIDES (le cran épais, 9 octobre 2026) : deux cases qui
+		# débordent dans la même case vide s'y rejoignent, et sans contact diagonal (§2) rien ne se percute — l'écart le
+		# plus étroit (une case vide entre deux pleines) tombe à 1 + 2 × retrait.
+		if retrait != 0.0:
 			for axe in 3:
 				var avant := Vector3i.ZERO
 				avant[axe] = -1
@@ -1044,6 +1075,13 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 	return _coque_sous_voxels(cases(i), clampf(cote, 0.05, 1.0) * 0.5)
 
 
+## LE TÉMOIN CALCULÉ AU CRAN `retrait` (`RETRAITS`) — ce qu'on exporte, tranche et montre pour une couche à ce cran.
+## ⚠ `maillage_moitie` reste l'AMINCI par son nom (les sondes de `DEV_TOOLS/` qui l'appellent le mesurent) ; tout ce
+## qui part chez l'artiste ou dans un monde passe par ici, avec le cran de sa couche.
+static func maillage_du_temoin(i: int, retrait: float = RETRAIT_PAR_DEFAUT) -> ArrayMesh:
+	return _coque_sous_voxels(cases(i), cran(retrait))
+
+
 ## LA BIBLIOTHÈQUE DU BLOC TÉMOIN — une `MeshLibrary` prête pour un `MassifPeint`.
 ##
 ## Rend {"lot": MeshLibrary, "erreurs": Array, "provenance": {classe: nom du bloc}, "manquantes": Array}.
@@ -1069,7 +1107,7 @@ static func maillage_moitie(i: int, cote := 0.5) -> ArrayMesh:
 ## ⚠ **ET CE BLOC EST FAIT DE CUBES : aucun réglage ne lui donnera des formes.** C'est un TÉMOIN, qui
 ## montre où sont les tuiles ; ce qui donnera des formes, c'est le relief sculpté par l'artiste, d'où
 ## l'aller-retour `.glb` (`exporter_le_bloc` / `librairie_depuis_glb`).
-static func librairie() -> Dictionary:
+static func librairie(retrait: float = RETRAIT_PAR_DEFAUT) -> Dictionary:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var pieces := {}
 	var provenance := {}
@@ -1085,7 +1123,7 @@ static func librairie() -> Dictionary:
 		# l'artiste va sculpter, sinon le témoin ment sur ce qu'on attend de lui. Les trois chemins —
 		# export, catalogue, repli — lisent donc le même appel, et changer de géométrie veut dire les
 		# changer tous les trois. Voir `maillage_lisse` pour le chanfrein, suspendu.
-		var solide: ArrayMesh = maillage_moitie(i)
+		var solide: ArrayMesh = maillage_du_temoin(i, retrait)
 		var fautes: Array = []
 		# ⚠ `peau = false` : on ne récolte que les sommets dont les huit cellules sont DANS le bloc.
 		var du_bloc := {}
@@ -1300,8 +1338,8 @@ static func par_teinte(mesh: ArrayMesh) -> ArrayMesh:
 ## Le TRAVAIL revient en .glb, avec tout ce que le glTF porte (textures, UV, normales, matériaux).
 ## ⚠ `.glb` reste accepté ici pour les outils de `DEV_TOOLS/` qui relisent leur propre export : même
 ## maillage, même appel — seule l'écriture change.
-static func exporter_le_bloc(chemin: String) -> String:
-	var brut: ArrayMesh = maillage_moitie(0)
+static func exporter_le_bloc(chemin: String, retrait: float = RETRAIT_PAR_DEFAUT) -> String:
+	var brut: ArrayMesh = maillage_du_temoin(0, retrait)
 	var mesh: ArrayMesh = par_teinte(sans_normales(souder(brut)))
 	if mesh.get_surface_count() == 0:
 		return "le bloc est vide"
@@ -1366,12 +1404,12 @@ static func occurrences_du_temoin(i := 0) -> Array:
 ## de choix, ici, finirait par livrer d'autres tuiles que le lot du témoin (charte §6).
 ## ⚠ Pourquoi le plus pur : dans le témoin aminci, une tuile porte les marches que ses VOISINS y ont
 ## taillées ; celle d'un pied de pilier montrerait ce pilier absent à chacune de ses 244 occurrences.
-static func tuiles_du_temoin() -> Dictionary:
+static func tuiles_du_temoin(retrait: float = RETRAIT_PAR_DEFAUT) -> Dictionary:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var fautes: Array = []
 	var remarques: Array = []
 	var sources := {}
-	Tranchage.trancher(maillage_moitie(0), Vector3i.ONE * COTE, 1.0, creuses(0), fautes, false, remarques,
+	Tranchage.trancher(maillage_du_temoin(0, retrait), Vector3i.ONE * COTE, 1.0, creuses(0), fautes, false, remarques,
 		sources, Vector3.ZERO)
 	return sources
 
@@ -1386,8 +1424,8 @@ static func tuiles_du_temoin() -> Dictionary:
 ## ⚠ **COUTURES AUX BORDS DE COULEUR, DANS UNE TUILE** : en glTF un matériau est une primitive (charte §4).
 ## Entre deux tuiles il n'y a de toute façon rien à souder — ce sont des objets. L'import de Blender
 ## « Merge Vertices » les recoud.
-static func exporter_le_temoin_lie(chemin: String) -> String:
-	var tuiles: Dictionary = tuiles_du_temoin()
+static func exporter_le_temoin_lie(chemin: String, retrait: float = RETRAIT_PAR_DEFAUT) -> String:
+	var tuiles: Dictionary = tuiles_du_temoin(retrait)
 	var atlas: Dictionary = atlas_du_temoin(0)
 	var rang := {}
 	for k in (atlas["cles"] as Array).size():
@@ -2068,7 +2106,7 @@ static func _lire_mtl(chemin: String) -> Dictionary:
 ## ⚠ **UN BLOC DONT LA BOÎTE RESSORT VIDE EST SIGNALÉ, pas remplacé en silence.** C'est le piège de
 ## toute cette boucle : si l'artiste déplace le bloc dans Blender, sa boîte se vide, le greffon retombe
 ## sur la version calculée, et tout semble marcher alors que son travail n'est pas dans le lot.
-static func librairie_depuis_glb(chemin: String) -> Dictionary:
+static func librairie_depuis_glb(chemin: String, retrait: float = RETRAIT_PAR_DEFAUT) -> Dictionary:
 	var Tranchage := load("res://addons/marchingblocks_core/tranchage.gd")
 	var journal: Array = []
 	var pieces := {}
@@ -2112,7 +2150,7 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 		# alors que le bloc était parti aminci : le témoin de secours n'avait donc pas la géométrie du
 		# témoin exporté, et la récolte pouvait différer sans qu'aucun compteur ne le signale. Les deux
 		# chemins sont maintenant le même appel, donc d'accord par construction et non par vigilance.
-		solide = maillage_moitie(0)
+		solide = maillage_du_temoin(0, retrait)
 
 	var fautes: Array = []
 	var remarques: Array = []
@@ -2161,9 +2199,9 @@ static func librairie_depuis_glb(chemin: String) -> Dictionary:
 ## 2026) : le fichier importé avait d'abord une géométrie IDENTIQUE au témoin (0 position nouvelle),
 ## puis, réexporté sept minutes plus tard avec un bevel, 7 123 positions nouvelles et 47 tuiles sur 52
 ## différentes. Sans ce chiffre à l'écran, rien ne distinguait les deux cas.
-static func ecart_au_temoin(travail: ArrayMesh) -> int:
+static func ecart_au_temoin(travail: ArrayMesh, retrait: float = RETRAIT_PAR_DEFAUT) -> int:
 	var temoin := {}
-	var ref: ArrayMesh = maillage_moitie(0)
+	var ref: ArrayMesh = maillage_du_temoin(0, retrait)
 	for s in ref.get_surface_count():
 		for p in (ref.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array):
 			temoin[Vector3i(roundi(p.x * 1000.0), roundi(p.y * 1000.0), roundi(p.z * 1000.0))] = true
