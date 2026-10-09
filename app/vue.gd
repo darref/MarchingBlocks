@@ -169,6 +169,29 @@ var collage: Array = []
 
 ## "temoin", "monde" ou "jeu".
 var mode := "temoin"
+## PLAY EDIT (Jordan, 9 octobre 2026) : en mode "jeu", on marche ET on peint avec les outils de World, depuis la
+## caméra du personnage. La caméra passe au clic du milieu ; les clics gauche et droit sont ceux de World.
+var edition_en_jeu := false
+var _camera_survolee := Transform3D()
+
+
+## La souris peint-elle ? Dans World, et en Play edit.
+func peint() -> bool:
+	return mode == "monde" or (mode == "jeu" and edition_en_jeu)
+
+
+func regler_edition_en_jeu(oui: bool) -> void:
+	edition_en_jeu = oui
+	_coup = -1
+	_coin_boite = null
+	_pose_du_coup = {}
+	_derniere_souris = Vector2(-1, -1)
+	_apercu.visible = false
+	_grille_locale.visible = false
+	if _boite_vue != null:
+		_boite_vue.visible = false
+	_grille.visible = mode == "monde" or (mode == "jeu" and oui)
+	_dessiner_selection()
 ## LE MODELEUR (`modeleur.gd`) : branché par l'écran. En mode témoin, `edition` le montre à la place du
 ## témoin figé, et lui donne la souris (Tab, comme dans Blender).
 var modeleur: Node3D
@@ -391,7 +414,7 @@ func montrer(quoi: String) -> void:
 	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_eaux.visible = quoi == "monde" or quoi == "jeu"
 	feuillage.visible = quoi == "monde" or quoi == "jeu"
-	_grille.visible = quoi == "monde"
+	_grille.visible = quoi == "monde" or (quoi == "jeu" and edition_en_jeu)
 	_apercu.visible = false
 	_grille_locale.visible = false
 	if _zone_vue != null:
@@ -490,6 +513,9 @@ func nombre_de_couches() -> int:
 func ajouter_couche() -> Node:
 	var massif := Massif.new()
 	massif.name = "Couche"
+	# ⚠ PAS DE COLLISION DANS LES GRILLES DE L'APPLI (`MassifPeint.collision_des_pieces`) : on n'y marche pas, et sur
+	# un monde étendu leurs formes faisaient planter le moteur physique de Godot.
+	massif.collision_des_pieces = false
 	massif.preparer()
 	# ⚠ LA GRILLE DES CASES NE SE MONTRE PAS : elle porte la palette de peinture (des cubes), et c'est
 	# le RENDU — les tuiles tranchées — qu'on veut voir. Les fautes, elles, restent visibles : un cube
@@ -729,9 +755,12 @@ func _gui_input(event: InputEvent) -> void:
 	# ⚠ LA SOURIS SEULEMENT : la vue a le clavier en Play test, et avaler ses touches ici priverait
 	# l'écran d'Échap et de Retour arrière.
 	if mode == "jeu" and event is InputEventMouse:
-		_souris_du_jeu(event)
-		accept_event()
-		return
+		# PLAY EDIT : la caméra au clic du milieu et à la molette seule ; les clics gauche et droit peignent, comme World.
+		if not edition_en_jeu or _camera_du_jeu_edit(event):
+			if not edition_en_jeu:
+				_souris_du_jeu(event)
+			accept_event()
+			return
 	if mode == "temoin" and edition and modeleur != null and modeleur.souris_entree(event):
 		accept_event()
 		return
@@ -760,14 +789,14 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		# ⚠ CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE, quel que soit l'outil : ce n'est pas un coup, rien
 		# n'est peint, et la visée n'y change rien — le rayon cherche toujours la matière visible.
-		if mode == "monde" and b.button_index == MOUSE_BUTTON_LEFT and b.ctrl_pressed and b.pressed \
+		if peint() and b.button_index == MOUSE_BUTTON_LEFT and b.ctrl_pressed and b.pressed \
 				and _coup < 0:
 			var r: Dictionary = Outils.rayon(_occupe_visible, _camera.project_ray_origin(b.position),
 				_camera.project_ray_normal(b.position), PORTEE, {})
 			etage_sur_la_matiere.emit(r["case"] if r["touche"] else null)
 			accept_event()
 			return
-		if mode == "monde" and (b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT):
+		if peint() and (b.button_index == MOUSE_BUTTON_LEFT or b.button_index == MOUSE_BUTTON_RIGHT):
 			if b.pressed and _coup < 0:
 				_commencer_coup(b.button_index, b.position, b.shift_pressed)
 			elif not b.pressed and b.button_index == _coup:
@@ -804,7 +833,7 @@ func _gui_input(event: InputEvent) -> void:
 			_caler()
 			accept_event()
 			return
-		if mode == "monde":
+		if peint():
 			_survoler(m.position)
 			if _coup >= 0:
 				_toucher(m.position)
@@ -1533,7 +1562,7 @@ func regler_selection(nouvelle: Dictionary) -> void:
 func _dessiner_selection() -> void:
 	if _selection_vue == null:
 		return
-	var vues: Array = selection.keys() if mode == "monde" else []
+	var vues: Array = selection.keys() if peint() else []
 	_remplir(_selection_vue, vues, TEINTE_SELECTION)
 
 
@@ -1541,7 +1570,7 @@ func _dessiner_selection() -> void:
 func rafraichir() -> void:
 	_cle_forme = ""   # le monde a pu changer : l'aperçu d'une forme se recalcule
 	_dessiner_selection()
-	if _derniere_souris.x >= 0.0 and mode == "monde":
+	if _derniere_souris.x >= 0.0 and peint():
 		_survoler(_derniere_souris)
 
 
@@ -1696,6 +1725,9 @@ func commencer_partie() -> String:
 	_morceaux_a_batir = {}
 	_morceaux_batis = {}
 	_faces_par_item = {}
+	_formes_du_decor = {}
+	_decor_perime = {}
+	_y_du_decor = Vector2i(1 << 30, -(1 << 30))
 	for m in _couches.get_children():
 		if not (m as Node3D).visible:
 			continue
@@ -1704,6 +1736,7 @@ func commencer_partie() -> String:
 			if g == null or g.mesh_library == null:
 				continue
 			for c in g.get_used_cells():
+				_y_du_decor = Vector2i(mini(_y_du_decor.x, c.y), maxi(_y_du_decor.y, c.y))
 				var k := Vector2i(floori(float(c.x) / MORCEAU_DECOR), floori(float(c.z) / MORCEAU_DECOR))
 				if not _morceaux_a_batir.has(k):
 					_morceaux_a_batir[k] = []
@@ -1771,6 +1804,8 @@ func finir_partie() -> void:
 	_morceaux_a_batir = {}
 	_morceaux_batis = {}
 	_faces_par_item = {}
+	_formes_du_decor = {}
+	_decor_perime = {}
 	if _meteo_noeud != null:
 		_meteo_noeud.queue_free()
 		_meteo_noeud = null
@@ -1837,6 +1872,9 @@ const BUDGET_DECOR_MS := 6
 var _morceaux_a_batir := {}   # Vector2i → [[grille, case], …] : les tuiles de chaque morceau pas encore bâti
 var _morceaux_batis := {}     # Vector2i → true
 var _faces_par_item := {}     # GridMap → {item: faces}
+var _formes_du_decor := {}    # Vector2i → la CollisionShape3D du morceau bâti
+var _decor_perime := {}       # Vector2i → true : les morceaux qu'un geste du Play edit a touchés
+var _y_du_decor := Vector2i.ZERO   # les rangées des grilles de rendu (plus basse, plus haute), élargies par les gestes
 
 
 ## Bâtit les morceaux du décor à moins de `rayon` morceaux de `p`, les plus proches d'abord, tant que `budget_ms`
@@ -1860,26 +1898,88 @@ func _tenir_le_decor(p: Vector3, rayon: int, budget_ms: int) -> int:
 	for k: Vector2i in voulus:
 		if budget_ms >= 0 and batis > 0 and Time.get_ticks_msec() - debut >= budget_ms:
 			break
-		var triangles := PackedVector3Array()
-		for gc in _morceaux_a_batir[k]:
-			var g: GridMap = gc[0]
-			if not _faces_par_item.has(g):
-				_faces_par_item[g] = {}
-			triangles.append_array(_triangles_de_la_case(g, gc[1], _faces_par_item[g]))
-		_morceaux_a_batir.erase(k)
-		_morceaux_batis[k] = true
+		_batir_morceau(k)
 		batis += 1
-		if triangles.is_empty():
-			continue
-		var forme := CollisionShape3D.new()
-		var concave := ConcavePolygonShape3D.new()
-		# ⚠ LES DEUX FACES : la découpe laisse les pièces OUVERTES sur leurs plans de coupe (charte §4), et
-		# un triangle vu de dos ne retiendrait rien.
-		concave.backface_collision = true
-		concave.set_faces(triangles)
-		forme.shape = concave
-		_decor.add_child(forme)
 	return batis
+
+
+## Bâtit la forme de collision d'un morceau en attente (ses tuiles lues dans `_morceaux_a_batir`).
+func _batir_morceau(k: Vector2i) -> void:
+	var triangles := PackedVector3Array()
+	for gc in _morceaux_a_batir[k]:
+		var g: GridMap = gc[0]
+		if not _faces_par_item.has(g):
+			_faces_par_item[g] = {}
+		triangles.append_array(_triangles_de_la_case(g, gc[1], _faces_par_item[g]))
+	_morceaux_a_batir.erase(k)
+	_morceaux_batis[k] = true
+	if triangles.is_empty():
+		return
+	var forme := CollisionShape3D.new()
+	var concave := ConcavePolygonShape3D.new()
+	# ⚠ LES DEUX FACES : la découpe laisse les pièces OUVERTES sur leurs plans de coupe (charte §4), et
+	# un triangle vu de dos ne retiendrait rien.
+	concave.backface_collision = true
+	concave.set_faces(triangles)
+	forme.shape = concave
+	_decor.add_child(forme)
+	_formes_du_decor[k] = forme
+
+
+## PLAY EDIT — LE DÉCOR SUIT LES GESTES (Jordan, 9 octobre 2026 : « un mode Play Edit […] pour éditer le monde depuis
+## la vue du personnage »). Le personnage foule les triangles des tuiles POSÉES : un geste qui change une case change
+## les tuiles des sommets autour (x − 1..x, z − 1..z), donc les morceaux qui les portent. Ils sont notés ici, et
+## rebâtis à l'image suivante (`_mener_le_jeu`), quand les grilles de rendu ont été refaites.
+func decor_perime(cases_: Array) -> void:
+	if _decor == null:
+		return
+	for c: Vector3i in cases_:
+		_y_du_decor = Vector2i(mini(_y_du_decor.x, c.y - 1), maxi(_y_du_decor.y, c.y))
+		for dx in [-1, 0]:
+			for dz in [-1, 0]:
+				_decor_perime[Vector2i(floori(float(c.x + dx) / MORCEAU_DECOR),
+					floori(float(c.z + dz) / MORCEAU_DECOR))] = true
+
+
+## Les morceaux qu'un geste a touchés : leur forme retirée, leurs tuiles relues dans les grilles (couches visibles),
+## rebâtis tout de suite s'ils l'étaient déjà ou s'ils sont près du personnage ; les autres attendent leur tour.
+func _rebatir_le_decor_perime() -> void:
+	if _decor == null or _decor_perime.is_empty():
+		return
+	var grilles: Array = []
+	for m in _couches.get_children():
+		if not (m as Node3D).visible:
+			continue
+		for nom in ["Rendu", "Fautes"]:
+			var g := m.get_node_or_null(nom) as GridMap
+			if g != null and g.mesh_library != null:
+				grilles.append(g)
+	var centre := Vector2i.ZERO
+	if personnage != null:
+		centre = Vector2i(floori(personnage.global_position.x / MORCEAU_DECOR),
+			floori(personnage.global_position.z / MORCEAU_DECOR))
+	for k: Vector2i in _decor_perime:
+		var etait_bati := _morceaux_batis.has(k)
+		if _formes_du_decor.has(k):
+			(_formes_du_decor[k] as Node).queue_free()
+			_formes_du_decor.erase(k)
+		_morceaux_batis.erase(k)
+		var tuiles: Array = []
+		for g: GridMap in grilles:
+			for x in range(k.x * MORCEAU_DECOR, (k.x + 1) * MORCEAU_DECOR):
+				for z in range(k.y * MORCEAU_DECOR, (k.y + 1) * MORCEAU_DECOR):
+					for y in range(_y_du_decor.x, _y_du_decor.y + 1):
+						var c := Vector3i(x, y, z)
+						if g.get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+							tuiles.append([g, c])
+		if tuiles.is_empty():
+			_morceaux_a_batir.erase(k)
+			_morceaux_batis[k] = true
+			continue
+		_morceaux_a_batir[k] = tuiles
+		if etait_bati or (absi(k.x - centre.x) <= RAYON_DECOR and absi(k.y - centre.y) <= RAYON_DECOR):
+			_batir_morceau(k)
+	_decor_perime = {}
 
 
 ## Le clavier se lit par la PLACE des touches (ZQSD / WASD, comme Navigate). ⚠ Un champ de texte qui a
@@ -1890,10 +1990,15 @@ func _mener_le_jeu() -> void:
 	_tenir_le_decor(personnage.global_position, RAYON_DECOR, BUDGET_DECOR_MS)
 	# ⚠ UN RELÂCHÉ PERDU (fenêtre qui perd la main, Alt+Tab) laisserait la souris capturée pour de bon.
 	if _souris_avant_capture != Vector2.INF and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) \
-			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT) \
+			and not Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE):
 		_rendre_la_souris()
+	_rebatir_le_decor_perime()
 	var focus := get_viewport().gui_get_focus_owner()
 	var libre :=not (focus is LineEdit or focus is TextEdit) and is_visible_in_tree()
+	# ⚠ EN PLAY EDIT, CTRL+Z (Z avance en AZERTY) annule SANS faire avancer le personnage.
+	if edition_en_jeu and Input.is_key_pressed(KEY_CTRL):
+		libre = false
 	var e := Vector2.ZERO
 	if libre:
 		if Input.is_physical_key_pressed(KEY_W):
@@ -1929,6 +2034,12 @@ func _mener_le_jeu() -> void:
 		_appliquer_brouillard()
 	if _meteo_noeud != null:
 		_meteo_noeud.global_position = _camera.global_position
+	# PLAY EDIT : la caméra suit le personnage, donc la souris immobile vise autre chose — l'aperçu suit. Pas pour les
+	# formes spéciales, l'eau ni le feuillage (leur aperçu coûte plus qu'une image).
+	if edition_en_jeu and _coup < 0 and _derniere_souris.x >= 0.0 and not outil in ["forme", "eau", "feuillage"] \
+			and not _camera.global_transform.is_equal_approx(_camera_survolee):
+		_camera_survolee = _camera.global_transform
+		_survoler(_derniere_souris)
 
 
 # ── LE RENDU DU PLAY TEST ────────────────────────────────────────────────────────────────────────────
@@ -2370,3 +2481,35 @@ func _souris_du_jeu(event: InputEvent) -> void:
 			_elevation = clampf(_elevation + m.relative.y * 0.006, ELEVATION_MINI, ELEVATION_MAXI)
 		elif (m.button_mask & MOUSE_BUTTON_MASK_RIGHT) != 0:
 			_azimut -= m.relative.x * 0.008
+
+
+## PLAY EDIT : la caméra au CLIC DU MILIEU glissé (lacet et hauteur, la souris capturée) et à la molette SEULE (plus
+## près, plus loin — jusqu'à 40 cases, pour voir ce qu'on bâtit) ; la molette avec Alt, Maj, Ctrl ou pendant un geste
+## reste la molette du contexte de World. Rend vrai si l'événement est pris ; sinon, c'est un geste de peinture.
+func _camera_du_jeu_edit(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var b := event as InputEventMouseButton
+		if b.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			if b.pressed and not (molette_contextuelle.is_valid()
+					and molette_contextuelle.call(1 if b.button_index == MOUSE_BUTTON_WHEEL_UP else -1, b)):
+				if b.button_index == MOUSE_BUTTON_WHEEL_UP:
+					_distance = maxf(1.5 * taille_personnage, _distance / 1.12)
+				else:
+					_distance = minf(40.0, _distance * 1.12)
+			return true
+		if b.pressed:
+			# ⚠ Le clic rend la main clavier à la vue : sinon Espace « clique » le dernier bouton touché.
+			grab_focus()
+		if b.button_index == MOUSE_BUTTON_MIDDLE:
+			if b.pressed:
+				_capturer_la_souris()
+			else:
+				_rendre_la_souris()
+			return true
+		return false
+	if event is InputEventMouseMotion and ((event as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_MIDDLE) != 0:
+		var m := event as InputEventMouseMotion
+		_azimut -= m.relative.x * 0.008
+		_elevation = clampf(_elevation + m.relative.y * 0.006, ELEVATION_MINI, ELEVATION_MAXI)
+		return true
+	return false

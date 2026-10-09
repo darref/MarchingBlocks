@@ -33,6 +33,7 @@ var _reglages_avant := ""
 ## ⚠ LA SENTINELLE : une erreur d'exécution ABANDONNE la fonction en cours sans rien dire, et la fumée
 ## concluait « OK » avec cinq vérifications de moins (vu le 29 septembre 2026, `world_3d` nul).
 var _play_test_fini := false
+var _play_edit_fini := false
 
 
 func _initialize() -> void:
@@ -480,6 +481,8 @@ func _mener() -> void:
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
+	await _play_edit(ed)
+	_vrai(_play_edit_fini, "SENTINELLE : le Play edit est allé JUSQU'AU BOUT")
 	_la_provenance(ed)
 	_vrai(_provenance_finie, "la provenance est allée JUSQU'AU BOUT")
 	await _les_fluides(ed)
@@ -5572,3 +5575,96 @@ func _le_feuillage(ed: Control) -> void:
 	_vrai(ed._atelier == "monde" and ed._vue.outil != "feuillage" and ed._vue.feuillage.visible,
 		"Échap rend World, son outil, et le feuillage reste visible dans le monde")
 	_feuillage_fini = true
+
+
+## PLAY EDIT (Jordan, 9 octobre 2026 : « contrôler le stickman pour se promener et avoir la barre de droite de l'atelier
+## World pour éditer le monde, mais depuis la vue du personnage »). Par de VRAIS clics à travers la caméra du personnage :
+## la case posée, ce qu'il foule qui suit (le décor rebâti), le clic droit qui creuse, Ctrl+Z, le clic du milieu qui
+## tourne sans peindre, une lettre du personnage qui ne choisit pas d'outil, Échap qui rend World et sa visée.
+## Attendus : le sol peint est la dalle y = 10 de `_play_test` (surface rendue à 10,75, une case de plus à 11,75).
+func _play_edit(ed: Control) -> void:
+	var vue = ed._vue
+	ed._choisir_visee("grille")
+	ed._choisir_outil("ajouter")
+	vue._cible = Vector3(24.5, 11, 24.5)
+	ed._aller_a("jeu")
+	var p: CharacterBody3D = vue.personnage
+	ed._aller_a("jeu_edit")
+	_vrai(ed._atelier == "jeu_edit" and vue.personnage != null and vue.personnage == p,
+		"Play edit depuis le Play test : le MÊME personnage, gardé où il est")
+	_vrai(ed._droite.visible and ed._section_jeu.visible and ed._note_jeu_edit.visible and not ed._droite_jeu.visible,
+		"Play edit : la barre de droite de World, les commandes du jeu et leur note")
+	_vrai(vue.edition_en_jeu and vue.peint() and vue.visee == "sculpt" and not ed._bouton_naviguer.visible,
+		"Play edit : la vue peint, en visée Sculpt, sans Navigate")
+	if p == null:
+		return
+	for i in 90:
+		await physics_frame
+	_vrai(p.is_on_floor(), "Play edit : il se pose sur la dalle")
+	# La case visée : deux cases devant lui, dans le sens où regarde la caméra.
+	var loin := Vector3(-sin(vue._azimut), 0, -cos(vue._azimut))
+	var pied: Vector3 = p.global_position + loin * 2.0
+	var c := Vector3i(floori(pied.x), 11, floori(pied.z))
+	var g: GridMap = vue.cases()
+	_vrai(g.get_cell_item(c) == -1 and g.get_cell_item(c + Vector3i.DOWN) != -1, "la case visée %s est vide, sur la dalle" % c)
+	var espace: PhysicsDirectSpaceState3D = vue._vue.find_world_3d().direct_space_state
+	var sol_avant := _sol_du_decor(espace, c)
+	for i in 3:
+		await process_frame
+	var ou: Vector2 = vue._camera.unproject_position(Vector3(c.x + 0.5, 11.0, c.z + 0.5))
+	var avant: int = g.get_used_cells().size()
+	_clic_vue(vue, ou)
+	_vrai(g.get_cell_item(c) != -1 and g.get_used_cells().size() == avant + 1,
+		"un clic gauche, vu du personnage, pose UNE case sur la dalle visée")
+	for i in 3:
+		await process_frame
+	await physics_frame
+	var sol_apres := _sol_du_decor(espace, c)
+	_vrai(absf(sol_avant - 10.75) < 0.05 and absf(sol_apres - 11.75) < 0.05,
+		"ce qu'il foule suit le geste : le décor rebâti (%.2f → %.2f)" % [sol_avant, sol_apres])
+	# Le clic du milieu glissé tourne la caméra, sans peindre.
+	var az: float = vue._azimut
+	var milieu := InputEventMouseMotion.new()
+	milieu.button_mask = MOUSE_BUTTON_MASK_MIDDLE
+	milieu.relative = Vector2(60, 0)
+	milieu.position = ou
+	vue._gui_input(milieu)
+	vue._rendre_la_souris()
+	_vrai(not is_equal_approx(vue._azimut, az) and g.get_used_cells().size() == avant + 1,
+		"le clic du milieu glissé tourne la caméra, et ne peint rien")
+	vue._azimut = az
+	for i in 3:
+		await process_frame
+	# Le clic droit fait l'inverse : il creuse la case posée.
+	ou = vue._camera.unproject_position(Vector3(c.x + 0.5, 12.0, c.z + 0.5))
+	_clic_vue(vue, ou, MOUSE_BUTTON_RIGHT)
+	_vrai(g.get_cell_item(c) == -1, "le clic droit creuse la case visée")
+	for i in 3:
+		await process_frame
+	await physics_frame
+	_vrai(absf(_sol_du_decor(espace, c) - 10.75) < 0.05, "… et le décor redescend")
+	ed._histoire.undo()
+	_vrai(g.get_cell_item(c) != -1, "Ctrl+Z rend la case creusée")
+	ed._histoire.undo()
+	_vrai(g.get_cell_item(c) == -1 and g.get_used_cells().size() == avant, "Ctrl+Z encore : le monde d'avant")
+	# Une lettre du personnage ne choisit pas d'outil (S est Select dans World), B oui.
+	_touche_physique(KEY_S, true)
+	_touche_physique(KEY_S, false)
+	_vrai(vue.outil == "ajouter", "Play edit : S fait reculer, il ne choisit pas Select")
+	_touche_physique(KEY_B, true)
+	_touche_physique(KEY_B, false)
+	_vrai(vue.outil == "boite", "Play edit : B choisit la boîte")
+	ed._choisir_outil("ajouter")
+	_touche_physique(KEY_ESCAPE, true)
+	_touche_physique(KEY_ESCAPE, false)
+	await process_frame
+	_vrai(ed._atelier == "monde" and vue.personnage == null and not vue.edition_en_jeu and vue.visee == "grille",
+		"Échap rend World, sans personnage, et sa visée d'avant (Grid)")
+	_play_edit_fini = true
+
+
+## Le dessus du décor foulé au-dessus d'une case (le rayon tombe de haut, couche de collision 2) ; −INF si rien.
+func _sol_du_decor(espace: PhysicsDirectSpaceState3D, c: Vector3i) -> float:
+	var q := PhysicsRayQueryParameters3D.create(Vector3(c.x + 0.5, 30, c.z + 0.5), Vector3(c.x + 0.5, 0, c.z + 0.5), 2)
+	var r := espace.intersect_ray(q)
+	return -INF if r.is_empty() else (r["position"] as Vector3).y

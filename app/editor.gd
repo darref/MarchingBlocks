@@ -149,6 +149,11 @@ var _atelier := "witness"
 ## LES MORCEAUX DE L'ÉCRAN QUI DÉPENDENT DU CONTEXTE — tous montrés ou cachés par `_contexte()`, et
 ## nulle part ailleurs (charte §6 : une règle vit à UN endroit).
 var _section_jeu: Control
+## PLAY EDIT (Jordan, 9 octobre 2026) : le personnage du Play test ET la barre de droite de World. Les deux ateliers
+## « de jeu » partagent le personnage : passer de l'un à l'autre le garde où il est.
+const JEUX := ["jeu", "jeu_edit"]
+var _note_jeu_edit: Control
+var _visee_avant_jeu_edit := ""
 var _taille_personnage: HSlider
 var _titre_projet: Control
 var _section_projet: Control
@@ -452,6 +457,10 @@ func _batir() -> void:
 	_vue.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_vue.coup_commence.connect(_coup_commence)
 	_vue.touche.connect(_touche)
+	# ⚠ RETIRÉ PAR MÉGARDE LE 27 SEPTEMBRE 2026 (eaf3a20), REMIS LE 9 OCTOBRE : sans lui, un coup de pinceau peint à la
+	# souris n'entrait jamais dans l'historique — Ctrl+Z défaisait l'action d'AVANT. Les tests appelaient `_coup_fini`
+	# à la main ; c'est le Play edit, mené par de vrais clics, qui l'a vu.
+	_vue.coup_fini.connect(_coup_fini)
 	_vue.selection_changee.connect(_selection_changee)
 	_vue.colle.connect(_colle)
 	_vue.forme_posee.connect(_forme_posee)
@@ -897,6 +906,8 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 			+ "pulse — on any map, emission included."],
 		["feuillage", "Foliage", "arbre", "Plant trees and bushes (.glb models) in the painted world. Esc goes back to "
 			+ "World."],
+		["jeu_edit", "Play edit", "ajouter", "Walk your world AND edit it: the character moves with Z Q S D, the World "
+			+ "tools paint where you click, seen from the character. Middle drag turns the camera."],
 	]:
 		var b := Button.new()
 		b.text = a[1]
@@ -932,6 +943,11 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		commandes.add_child(_touche_clavier(r[0]))
 		commandes.add_child(_texte(r[1], 11, Palette.GRIS))
 	_section_jeu.contenu.add_child(commandes)
+	_note_jeu_edit = _texte("PLAY EDIT — the World tools on the right paint where you click: left click does the tool, "
+		+ "right click the inverse. Middle drag turns the camera, the wheel brings it closer (with Alt, Shift or Ctrl it "
+		+ "is the World wheel). Ctrl+Z undoes. You paint in the active layer; what you change, you walk on at once.",
+		11, Palette.teinte("jeu_edit"))
+	_section_jeu.contenu.add_child(_note_jeu_edit)
 	_section_jeu.contenu.add_child(_rangee([
 		_bouton("Fly", "Fly on or off (F). In flight you still bump into the world.",
 			_basculer_vol, "visee_naviguer"),
@@ -1845,6 +1861,9 @@ var _eau_cases_inconnues := false
 func _noter_pour_l_eau(cases_: Array) -> void:
 	for c in cases_:
 		_eau_changees[c] = true
+	# PLAY EDIT : le personnage foule les tuiles posées — les morceaux de son décor qu'un geste touche se rebâtissent.
+	if _atelier == "jeu_edit" and _vue != null:
+		_vue.decor_perime(cases_)
 
 
 ## LES CASES DU MONDE À JOUR POUR L'EAU, SANS RECALCULER L'EAU (4 octobre 2026). ⚠ UN CLIC SE CLASSAIT CONTRE DES CASES
@@ -2054,6 +2073,8 @@ func _recalculer_eau(avec_barre := true) -> void:
 		nappes.append([m, _materiaux_eau[preset], bool(e["visible"])])
 	_maillages_eau = maillages
 	_vue.poser_eaux(nappes)
+	if _atelier in JEUX:
+		_vue.eau_du_jeu = _eau_pour_le_jeu()   # on nage dans l'eau qu'un geste du Play edit vient de déplacer
 	_eau_vide = toutes.is_empty()
 	_durees["eau"] = (Time.get_ticks_msec() - debut) / 1000.0
 	_cle_apercu_eau = ""
@@ -2731,10 +2752,10 @@ func _cle_du_geste(event: InputEvent) -> Array:
 			nom = str(sous.name)
 		return ["bouton:" + nom, nom]
 	if _vue != null and (sous == _vue or _vue.is_ancestor_of(sous)) and m.pressed:
-		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides", "transitions"] else ("edition" if _modeleur.maillage != null else "vue")
+		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides", "transitions", "jeu_edit"] else ("edition" if _modeleur.maillage != null else "vue")
 		return ["vue:%s:%s:%s" % [_atelier, outil, "droit" if m.button_index == MOUSE_BUTTON_RIGHT else "gauche"],
 			{"monde": "Painting", "fluides": "Water", "witness": "Geometry", "texture": "Texturing", "jeu": "Play test",
-				"projet": "Project", "transitions": "Transitions"}.get(_atelier, "Working")]
+				"jeu_edit": "Play edit", "projet": "Project", "transitions": "Transitions"}.get(_atelier, "Working")]
 	return []
 
 
@@ -2876,16 +2897,17 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides", "transitions", "feuillage"]:
-		await _rhabiller_avec_attente(atelier == "jeu")
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage"]:
+		await _rhabiller_avec_attente(atelier in JEUX)
 	var debut := Time.get_ticks_msec()
-	if atelier == "jeu" and _atelier != "jeu" and _ecran_vivant() and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
+	if atelier in JEUX and not _atelier in JEUX and _ecran_vivant() \
+			and float(_durees.get("jeu", 0.0)) >= SEUIL_ATTENTE:
 		await _attendre("Starting the Play test", "the ground you walk on, from the tiles", 0)
 		_aller_a(atelier)
 		_fin_attente()
 	else:
 		_aller_a(atelier)
-	if atelier == "jeu":
+	if atelier in JEUX:
 		_durees["jeu"] = (Time.get_ticks_msec() - debut) / 1000.0
 
 
@@ -2920,18 +2942,30 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "fluides", "transitions", "feuillage"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
-	if atelier == "jeu" and _atelier != "jeu":
+	if atelier in JEUX and not _atelier in JEUX:
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
 		var refus: String = _vue.commencer_partie()
 		if refus != "":
 			_dire("[color=#e0603c]%s[/color]" % refus)
 			atelier = "monde"
-	elif atelier != "jeu" and _atelier == "jeu":
+	elif not atelier in JEUX and _atelier in JEUX:
 		_vue.finir_partie()
 		# Le rapport disait encore les touches du jeu : on dit où l'on revient.
 		_dire("[i]Back from the Play test.[/i]")
+	# PLAY EDIT : on peint depuis la caméra du personnage — la visée Sculpt (la matière qu'on voit) par défaut, sans
+	# Navigate (ses touches sont celles du personnage). La visée de World revient en sortant.
+	if atelier == "jeu_edit" and _atelier != "jeu_edit":
+		_visee_avant_jeu_edit = _vue.visee
+		_basculer_navigation(false)
+		_choisir_visee("sculpt")
+	elif atelier != "jeu_edit" and _atelier == "jeu_edit":
+		_vue.annuler_collage()
+		_vue.oublier_ancre()
+		if _visee_avant_jeu_edit != "":
+			_choisir_visee(_visee_avant_jeu_edit)
+	_vue.regler_edition_en_jeu(atelier == "jeu_edit")
 	# FLUIDS SE DÉSACTIVE EN SORTANT : l'outil Water ne survit pas à l'atelier (Jordan, 2 octobre 2026).
 	if atelier != "fluides":
 		_sortir_des_fluides()
@@ -2943,7 +2977,7 @@ func _aller_a(atelier: String) -> void:
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
@@ -2952,6 +2986,12 @@ func _aller_a(atelier: String) -> void:
 		_animation.entrer()
 	if atelier == "feuillage":
 		_feuillage.entrer()
+	if atelier == "jeu_edit":
+		get_viewport().gui_release_focus()
+		_vue.grab_focus()
+		_dire(("[b]Play edit[/b] — walk with Z Q S D, Space to jump, F to fly; the World tools on the right paint "
+			+ "where you click (right click: the inverse), in layer « %s ». Middle drag turns the camera. Esc to go "
+			+ "back to World.") % _couches[_active]["nom"])
 	if atelier == "jeu":
 		# ⚠ Le bouton « Play test » garde sinon le clavier, et Espace le re-cliquerait au lieu de sauter.
 		get_viewport().gui_release_focus()
@@ -2996,7 +3036,11 @@ func _contexte() -> void:
 	var fluides := _atelier == "fluides"
 	var transitions := _atelier == "transitions"
 	var jeu := _atelier == "jeu"
-	_section_jeu.visible = jeu
+	var jeu_edit := _atelier == "jeu_edit"
+	_section_jeu.visible = jeu or jeu_edit
+	_note_jeu_edit.visible = jeu_edit
+	# Navigate ne sert à rien en Play edit : ses touches sont celles du personnage.
+	_bouton_naviguer.visible = not jeu_edit
 	_titre_projet.visible = projet
 	_section_projet.visible = projet
 	# La liste des couches dans Transitions aussi : son ORDRE dit qui couvre par défaut.
@@ -3011,7 +3055,7 @@ func _contexte() -> void:
 	_section_temoin.visible = temoin or projet
 	_section_raccourcis.visible = monde
 	_zone_reference.visible = temoin or monde or projet
-	_droite.visible = monde
+	_droite.visible = monde or jeu_edit
 	_droite_temoin.visible = geometrie
 	_droite_texture.visible = texturing
 	_droite_jeu.visible = jeu
@@ -3046,7 +3090,7 @@ func _temoin_pour_la_planche() -> RefCounted:
 ## LE VOL DU PLAY TEST (Jordan, 1er octobre 2026). Le bouton rend le clavier à la vue : sinon Espace, qui
 ## fait monter, re-cliquerait le bouton.
 func _basculer_vol() -> void:
-	if _atelier != "jeu":
+	if not _atelier in JEUX:
 		return
 	var vole := _vue.basculer_vol()
 	get_viewport().gui_release_focus()
@@ -5712,7 +5756,7 @@ func _molette(sens: int, b: InputEventMouseButton) -> bool:
 	var alt := b.alt_pressed
 	var maj := b.shift_pressed
 	var ctrl := b.ctrl_pressed or b.meta_pressed
-	if _atelier in ["monde", "fluides"]:
+	if _atelier in ["monde", "fluides", "jeu_edit"]:
 		return _molette_du_monde(sens, alt, maj, ctrl)
 	if _atelier == "transitions" and alt and not ctrl and not _vue.naviguer:
 		return _cran(_transitions.curseur_rayon, sens, "Brush radius")
@@ -5978,7 +6022,7 @@ func _selection_changee() -> void:
 		return
 	var n: int = _vue.selection.size()
 	# ⚠ VISIBLE AUSSI QUAND SEUL LE PRESSE-PAPIERS EST PLEIN : on colle souvent sans rien sélectionner.
-	_section_selection.visible = _atelier == "monde" and (n > 0 or not _presse_papiers.is_empty())
+	_section_selection.visible = _atelier in ["monde", "jeu_edit"] and (n > 0 or not _presse_papiers.is_empty())
 	_etiquette_selection.text = ("%d cell(s) selected" % n) if n > 0 else "nothing selected"
 	_bouton_coller.disabled = _presse_papiers.is_empty()
 	_etiquette_portee.text = ("acts on the selection (%d cells)" % n) if n > 0 \
@@ -7046,7 +7090,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			if _histoire.redo():
 				_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
 			get_viewport().set_input_as_handled()
-		elif _atelier == "monde" and k.keycode in [KEY_C, KEY_X, KEY_V]:
+		elif _atelier in ["monde", "jeu_edit"] and k.keycode in [KEY_C, KEY_X, KEY_V]:
 			match k.keycode:
 				KEY_C:
 					_copier()
@@ -7055,6 +7099,45 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				KEY_V:
 					_coller()
 			get_viewport().set_input_as_handled()
+		return
+	if _atelier == "jeu_edit":
+		# Les lettres sont au personnage (ZQSD, A, E, Espace, Maj) : seules les touches de World qui ne s'y heurtent pas.
+		match k.keycode:
+			KEY_ESCAPE:
+				if not _vue.collage.is_empty():
+					_vue.annuler_collage()
+					_dire("[i]Paste cancelled.[/i]")
+				elif not _vue.ancre_forme.is_empty():
+					_vue.oublier_ancre()
+				elif not _vue.selection.is_empty():
+					_vue.vider_selection()
+				else:
+					_changer_d_atelier("monde")
+			KEY_BACKSPACE:
+				_vue.reapparaitre()
+			KEY_F:
+				_basculer_vol()
+			KEY_B:
+				_choisir_outil("boite")
+			KEY_R:
+				_choisir_outil("rect")
+			KEY_PAGEUP:
+				_compteur_etage.value += 1
+			KEY_PAGEDOWN:
+				_compteur_etage.value -= 1
+			KEY_DELETE:
+				_operer_selection("supprimer")
+			KEY_BRACKETLEFT, KEY_BRACKETRIGHT:
+				var sens := 1 if k.keycode == KEY_BRACKETRIGHT else -1
+				if _vue.outil == "forme" and _vue.forme_speciale["quoi"] == "salle":
+					_etages_forme.value += sens
+				elif _vue.outil == "forme":
+					_taille_forme.value += sens
+				else:
+					_taille.value += sens
+			_:
+				return
+		get_viewport().set_input_as_handled()
 		return
 	if _atelier == "jeu":
 		match k.keycode:
@@ -7209,7 +7292,16 @@ func _input(event: InputEvent) -> void:
 	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage"] or k.ctrl_pressed or k.alt_pressed:
+	# PLAY EDIT : Espace saute (le personnage lit le clavier lui-même) — un bouton de la barre qui garde le clavier le
+	# prendrait pour un clic. On lui retire la main, et l'on avale l'événement.
+	if k != null and k.pressed and _atelier == "jeu_edit" and k.keycode == KEY_SPACE:
+		if get_viewport().gui_get_focus_owner() is BaseButton:
+			get_viewport().gui_release_focus()
+			_vue.grab_focus()
+			get_viewport().set_input_as_handled()
+		return
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "jeu_edit"] \
+			or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:

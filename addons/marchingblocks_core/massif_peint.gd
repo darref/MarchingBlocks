@@ -50,7 +50,7 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 		# (~3 s sur la couche de 196 091 cases de l'exemple). On ne change alors que le lot de la grille.
 		var rendu := _rendu()
 		if _pret and rendu != null and _lot_pose != null and _index_du_lot(lot_courant()) == _index:
-			rendu.mesh_library = lot_courant()
+			rendu.mesh_library = lot_de_la_grille()
 			_lot_pose = rendu.mesh_library
 			return
 		reconstruire()
@@ -62,6 +62,23 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 		var cases := _cases()
 		if cases != null:
 			cases.mesh_library = valeur
+
+## LA COLLISION DES PIÈCES (9 octobre 2026). Vrai (le défaut) : la grille `Rendu` porte le lot tel quel, ses formes
+## comprises — un jeu qui marche sur ses grilles. Faux : elle porte une COPIE SANS FORMES du lot (mêmes maillages,
+## mêmes noms, mêmes numéros : `lot_de_la_grille`). L'appli met faux : elle ne marche jamais sur ses grilles (son décor
+## de visite est à part, couche physique 2), et ces formes — une boîte par octant plein de chaque pièce, un corps par
+## octant de GridMap — faisaient PLANTER le moteur physique de Godot (GodotPhysics3D) au premier pas physique d'un
+## monde étendu : « FATAL: Index p_index = 4294967294 is out of bounds (count = 32771) ». MESURÉ (Resolve, la dalle
+## d'un monde de 784 × 784 colonnes) : planté avec, ouvert sans.
+@export var collision_des_pieces := true:
+	set(valeur):
+		if valeur == collision_des_pieces:
+			return
+		collision_des_pieces = valeur
+		var rendu := _rendu()
+		if _pret and rendu != null and rendu.mesh_library != null:
+			rendu.mesh_library = lot_de_la_grille()
+			_lot_pose = rendu.mesh_library
 
 @export var taille_de_case := 1.0:
 	set(valeur):
@@ -143,7 +160,7 @@ func _batir_les_enfants() -> void:
 		cases.mesh_library = lot_des_cases if lot_des_cases != null else palette()
 	var rendu := _rendu()
 	if rendu != null and rendu.mesh_library == null:
-		rendu.mesh_library = lot_courant()
+		rendu.mesh_library = lot_de_la_grille()
 
 
 ## ⚠ LE DÉCALAGE EST ICI, ET NULLE PART AILLEURS. Une pièce est centrée sur un SOMMET du réseau, donc
@@ -204,6 +221,25 @@ func lot_courant() -> MeshLibrary:
 
 
 var _repli: MeshLibrary
+
+
+## Le lot que porte la grille `Rendu` : `lot_courant()`, ou sa copie SANS FORMES de collision si
+## `collision_des_pieces` est faux. La copie est gardée tant que le lot ne change pas (le même objet, le même nombre
+## de pièces) : la grille garde le même lot d'un appel à l'autre, rien ne se reconstruit pour rien.
+func lot_de_la_grille() -> MeshLibrary:
+	var source := lot_courant()
+	if collision_des_pieces or source == null:
+		return source
+	if _sans_formes_de != source or _sans_formes.get_item_list().size() != source.get_item_list().size():
+		_sans_formes = source.duplicate()  # superficielle : les maillages sont partagés
+		for id in _sans_formes.get_item_list():
+			_sans_formes.set_item_shapes(id, [])
+		_sans_formes_de = source
+	return _sans_formes
+
+
+var _sans_formes_de: MeshLibrary
+var _sans_formes: MeshLibrary
 
 
 ## LA PALETTE DE CE QU'ON PEINT — deux tuiles, et deux seulement.
@@ -279,7 +315,7 @@ func reconstruire() -> Dictionary:
 	if not _au_monde():
 		rendu.clear()
 		fautes.clear()
-	var courant := lot_courant()
+	var courant := lot_de_la_grille()
 	if rendu.mesh_library != courant:
 		rendu.mesh_library = courant
 	if fautes.mesh_library == null:
@@ -465,7 +501,7 @@ var gardes_de_compte := 0   # combien de fois la garde a relu la grille (pour le
 func reconstruire_autour(changees, sur := false) -> Dictionary:
 	var cases := _cases()
 	var rendu := _rendu()
-	if not _pret or cases == null or rendu == null or rendu.mesh_library != lot_courant() \
+	if not _pret or cases == null or rendu == null or rendu.mesh_library != lot_de_la_grille() \
 			or rendu.mesh_library != _lot_pose:
 		return reconstruire()
 	# ⚠ UNE COUCHE BÂTIE AVANT D'AVOIR REÇU SON RANG (ou une autre union) lit encore ses seules cases : son état
@@ -590,7 +626,7 @@ func reconstruire_autour(changees, sur := false) -> Dictionary:
 ## changé : seule la tuile tirée peut changer. Hors d'état (jamais reconstruit, lot changé), tout est refait.
 func reconstruire_sommets(sommets) -> Dictionary:
 	var rendu := _rendu()
-	if not _pret or rendu == null or rendu.mesh_library != lot_courant() or rendu.mesh_library != _lot_pose:
+	if not _pret or rendu == null or rendu.mesh_library != lot_de_la_grille() or rendu.mesh_library != _lot_pose:
 		return reconstruire()
 	if _au_monde():
 		if monde.inscrire(self, rang, rendu, _fautes(), _id_faute, _etat, _compte):

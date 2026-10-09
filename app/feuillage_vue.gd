@@ -21,7 +21,16 @@ const SENS_DU_VENT := FE.SENS_DU_VENT
 static var _charges := {}
 static var _shaders := {}
 
-## id du modèle → [MultiMeshInstance3D, …] (une par partie).
+## ⚠ PAR MORCEAUX DE `MORCEAU` CASES (9 octobre 2026) : une MultiMesh pour TOUT le monde n'est jamais écartée du rendu
+## (sa boîte couvre la carte) — 3 350 arbres de 20 000 à 46 000 triangles dessinés à chaque passe, même de près :
+## 299 M primitives, 4 img/s (mesuré par Resolve, monde de 784²). Par morceaux, ce qui est hors champ n'est pas dessiné,
+## et chaque morceau prend le LOD de sa distance (`maillages_du_vent`) : 26 img/s de près.
+const MORCEAU := 32.0
+## Au-delà, un morceau d'arbres n'est plus dessiné (sans fondu : un fondu passe par la transparence, plus chère). Même
+## découpés, les morceaux jusqu'à l'horizon coûtaient 50 000 appels de dessin à 30 m de recul (mesuré, 784²).
+const PORTEE := 400.0
+
+## id du modèle → {morceau (Vector2i) → [MultiMeshInstance3D, …] (une par partie)}.
 var _multimeshes := {}
 var _fantome: Node3D
 var _anneaux: MeshInstance3D
@@ -238,11 +247,15 @@ static func maillages_du_vent(d: Dictionary) -> Array:
 		var sortie: Array = []
 		for partie in d["parties"]:
 			var source: Mesh = partie[0]
-			var copie := ArrayMesh.new()
+			# ⚠ AVEC SES LOD (9 octobre 2026) : un arbre de 40 000 triangles vu à 200 m n'en dessine plus que quelques
+			# centaines. Un `.glb` lu à l'exécution n'en a pas (l'import de l'éditeur les fait, pas `GLTFDocument`).
+			var copie := ImporterMesh.new()
 			for s in source.get_surface_count():
-				copie.add_surface_from_arrays(source.surface_get_primitive_type(s), source.surface_get_arrays(s))
-				copie.surface_set_material(s, materiau_du_vent(partie[2][s]))
-			sortie.append(copie)
+				copie.add_surface(source.surface_get_primitive_type(s), source.surface_get_arrays(s), [], {},
+					materiau_du_vent(partie[2][s]))
+			if source.surface_get_primitive_type(0) == Mesh.PRIMITIVE_TRIANGLES:
+				copie.generate_lods(25.0, 60.0, [])
+			sortie.append(copie.get_mesh())
 		d["vent"] = sortie
 	return d["vent"]
 
@@ -260,40 +273,59 @@ func poser(modeles: Array, plants: Array) -> void:
 			(par_modele[pl["modele"]] as Array).append(pl)
 	for id in _multimeshes.keys():
 		if not par_modele.has(id):
-			for mmi in _multimeshes[id]:
-				(mmi as Node).queue_free()
+			for cle in _multimeshes[id]:
+				for mmi in _multimeshes[id][cle]:
+					(mmi as Node).queue_free()
 			_multimeshes.erase(id)
 	for m in modeles:
 		poser_modele(m, par_modele[m["id"]])
 
 
-## Les plants d'UN modèle (un coup de pinceau ne refait que lui).
+## Les plants d'UN modèle (un coup de pinceau ne refait que lui), rangés par morceaux.
 func poser_modele(m: Dictionary, plants: Array) -> void:
 	var d := charger(str(m["chemin"]))
 	var id: int = m["id"]
 	var parties: Array = d["parties"]
-	var mmis: Array = _multimeshes.get(id, [])
-	while mmis.size() > parties.size():
-		(mmis.pop_back() as Node).queue_free()
 	var maillages := maillages_du_vent(d)
-	while mmis.size() < parties.size():
-		var mmi := MultiMeshInstance3D.new()
-		var mm := MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.use_custom_data = true
-		mm.mesh = maillages[mmis.size()]
-		mmi.multimesh = mm
-		add_child(mmi)
-		mmis.append(mmi)
-	_multimeshes[id] = mmis
-	for k in parties.size():
-		var mm := (mmis[k] as MultiMeshInstance3D).multimesh
-		mm.mesh = maillages[k]
-		var inst := instances(m, plants, parties[k][1])
-		mm.instance_count = plants.size()
-		for i in plants.size():
-			mm.set_instance_transform(i, inst[0][i])
-			mm.set_instance_custom_data(i, inst[1][i])
+	var par_morceau := {}
+	for pl in plants:
+		var p: Vector3 = pl["p"]
+		var cle := Vector2i(floori(p.x / MORCEAU), floori(p.z / MORCEAU))
+		if not par_morceau.has(cle):
+			par_morceau[cle] = []
+		(par_morceau[cle] as Array).append(pl)
+	var morceaux: Dictionary = _multimeshes.get(id, {})
+	for cle in morceaux.keys():
+		if not par_morceau.has(cle):
+			for mmi in morceaux[cle]:
+				(mmi as Node).queue_free()
+			morceaux.erase(cle)
+	for cle in par_morceau:
+		var mmis: Array = morceaux.get(cle, [])
+		while mmis.size() > parties.size():
+			(mmis.pop_back() as Node).queue_free()
+		while mmis.size() < parties.size():
+			var mmi := MultiMeshInstance3D.new()
+			var mm := MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.use_custom_data = true
+			mm.mesh = maillages[mmis.size()]
+			mmi.multimesh = mm
+			mmi.visibility_range_end = PORTEE
+			mmi.visibility_range_end_margin = MORCEAU
+			add_child(mmi)
+			mmis.append(mmi)
+		morceaux[cle] = mmis
+		var miens: Array = par_morceau[cle]
+		for k in parties.size():
+			var mm := (mmis[k] as MultiMeshInstance3D).multimesh
+			mm.mesh = maillages[k]
+			var inst := instances(m, miens, parties[k][1])
+			mm.instance_count = miens.size()
+			for i in miens.size():
+				mm.set_instance_transform(i, inst[0][i])
+				mm.set_instance_custom_data(i, inst[1][i])
+	_multimeshes[id] = morceaux
 
 
 ## CE QUE CHAQUE PLANT DONNE À LA MULTIMESH D'UNE PARTIE : [poses, données du vent]. La pose : celle du plant
@@ -311,13 +343,22 @@ static func instances(m: Dictionary, plants: Array, pose_partie: Transform3D) ->
 
 ## Combien de plants de ce modèle sont dessinés (pour les tests).
 func nombre_dessine(id: int) -> int:
-	if not _multimeshes.has(id) or (_multimeshes[id] as Array).is_empty():
-		return 0
-	return ((_multimeshes[id] as Array)[0] as MultiMeshInstance3D).multimesh.instance_count
+	var n := 0
+	for cle in _multimeshes.get(id, {}):
+		var mmis: Array = _multimeshes[id][cle]
+		if not mmis.is_empty():
+			n += (mmis[0] as MultiMeshInstance3D).multimesh.instance_count
+	return n
 
 
+## Les MultiMesh d'un modèle : une par partie et par morceau, les morceaux à la suite (un seul morceau : une par partie).
 func multimeshes(id: int) -> Array:
-	return _multimeshes.get(id, [])
+	var tout: Array = []
+	var cles: Array = (_multimeshes.get(id, {}) as Dictionary).keys()
+	cles.sort()
+	for cle in cles:
+		tout.append_array(_multimeshes[id][cle])
+	return tout
 
 
 # ── L'APERÇU ─────────────────────────────────────────────────────────────────────────────────────────

@@ -4907,6 +4907,42 @@ elles, dans une couche de la tuile qui garde l'étanchéité) est demandé ENSUI
   0,6 s, ~1 % des pixels de la vue changent (les couronnes bougent). ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN** : la
   force du vent, l'aspect sur de vrais arbres (feuillages en découpe alpha), le ressenti du pinceau.
 
+### PLAY EDIT — DEMANDÉ PAR JORDAN (9 octobre 2026), ÉCRIT LE MÊME JOUR
+
+« Un mode Play Edit qui permet de contrôler le stickman pour se promener, et d'avoir la barre de droite de l'atelier World
+pour éditer le monde, mais depuis la vue du personnage. » ⚠ Écrit malgré le GEL DES FONCTIONS du 7 octobre (§0) : c'est
+Jordan qui le demande. **Tout le détail est PROPOSÉ** (la demande tenait en une phrase).
+
+- **UN ATELIER DE PLUS, « Play edit »** (teinte turquoise, PROPOSÉE ; `JEUX` = « jeu », « jeu_edit » dans `editor.gd`) : le
+  personnage du Play test, la section Play test à gauche (avec une note), et **la barre de droite de World** à droite (outils,
+  pinceau, sélection, formes spéciales). Passer du Play test au Play edit GARDE le personnage où il est.
+- **LA SOURIS** (`Vue._camera_du_jeu_edit`) : clic gauche = l'outil de World, clic droit = l'inverse (comme World) ; la
+  caméra au **CLIC DU MILIEU** glissé (lacet et hauteur, souris capturée) ; la molette seule rapproche ou éloigne (jusqu'à 40
+  cases), avec Alt / Maj / Ctrl ou pendant un geste c'est la molette du contexte de World. `Vue.peint()` dit où la souris
+  peint (World, Play edit). En entrant, la visée passe en **Sculpt** (la matière qu'on voit), Navigate disparaît ; la visée
+  de World revient en sortant. L'aperçu suit la caméra qui suit le personnage (pas pour les formes spéciales, l'eau ni le
+  feuillage : leur aperçu coûte trop pour chaque image).
+- **LE CLAVIER EST AU PERSONNAGE** (ZQSD, A, E, Espace, Maj) : les lettres de World qui s'y heurtent (A, D, S) ne choisissent
+  pas d'outil ; restent B, R, [ ], PgUp / PgDn, Suppr, Tab (la visée), les flèches (la sélection), Ctrl+Z / Y / C / X / V, F
+  (le vol), Retour arrière. Échap annule d'abord collage, ancre ou sélection, puis rend World. Ctrl tenu n'avance pas
+  (Ctrl+Z en AZERTY). Espace sur un bouton de la barre qui a gardé le clavier : la main rendue à la vue, le saut a lieu.
+- **CE QU'IL FOULE SUIT LES GESTES** : `_noter_pour_l_eau` (le passage de chaque geste, l'historique compris) prévient la vue
+  (`decor_perime`) ; à l'image suivante, les morceaux du décor de collision touchés (x − 1..x, z − 1..z de chaque case) sont
+  relus dans les grilles de rendu et rebâtis (`_rebatir_le_decor_perime`, `_batir_morceau` sorti de `_tenir_le_decor`). L'eau
+  où l'on nage suit aussi (`eau_du_jeu` refaite après chaque recalcul de l'eau).
+- ⚠ **ON PEINT DANS LA COUCHE ACTIVE CHOISIE DANS WORLD** (la liste des couches n'est pas montrée : cacher une couche
+  laisserait le décor périmé). Le rapport la nomme en entrant.
+- ⚠ **UN DÉFAUT RÉEL DE WORLD, TROUVÉ PAR CETTE GARDE** : depuis `eaf3a20` (27 septembre 2026), `_vue.coup_fini` n'était plus
+  connecté à l'écran — un coup de pinceau peint À LA SOURIS n'entrait jamais dans l'historique, et Ctrl+Z défaisait l'action
+  d'AVANT. Les suites appelaient `_coup_fini()` à la main, d'où leur silence. Rebranché ; la fumée reste verte.
+- **MESURÉ** : `fumee_appli` 953 (+16 et une SENTINELLE, par de vrais clics à travers la caméra du personnage — le même
+  personnage depuis le Play test, la barre de World, Sculpt sans Navigate, une case posée deux cases devant lui, le décor
+  foulé qui monte de 10,75 à 11,75 et redescend, le clic du milieu qui tourne sans peindre, le clic droit qui creuse, deux
+  Ctrl+Z, S qui ne choisit pas Select, B la boîte, Échap qui rend World et la visée Grid). **Deux mutations rouges** : le
+  décor jamais prévenu (10,75 → 10,75), et `coup_fini` débranché (l'état d'avant la correction : les deux Ctrl+Z, et sept
+  échecs en cascade). ⚠ **PAS VU À L'IMAGE, PAS TENU EN MAIN.** Le coût du rebâtissage sur un grand monde n'est pas mesuré
+  (8 × 8 colonnes × la hauteur des grilles, par morceau touché, une fois par image).
+
 ### LA MÉTÉO DU PLAY TEST — DEMANDÉE PAR JORDAN (2 octobre 2026), ÉCRITE LE MÊME JOUR
 
 Transmise par une autre session. Dans le Play test, une **météo réglable**, dans la **barre de droite** (celle des
@@ -4943,6 +4979,39 @@ et **None** (rien).
   déjà sur l'œil ; il déplace désormais le personnage de six cases avant de regarder.
 - ⚠ **PAS TENU EN MAIN** : le ressenti, le coût des particules sur une petite carte graphique (12 000 traits pour
   l'ouragan), et le rendu de chaque temps se jugent à l'œil.
+
+### LES GRANDS MONDES NE PLANTENT PLUS — DEMANDÉ PAR JORDAN (9 octobre 2026, depuis le jeu Resolve : « règle le problème de MB
+### qui plante, il ne doit pas planter » ; « je ne veux pas avoir plusieurs sous-maps »), ÉCRIT LE MÊME JOUR
+
+Le monde de Resolve (`D:/Resolve/Resolve_MB_project/val_de_resolve.mbproj` : 784 × 784 colonnes, 11 couches, 1,36 M
+cases, 3 350 arbres) faisait planter l'appli juste après l'ouverture : « FATAL: Index p_index = 4294967294 is out of
+bounds (count = 32771) », puis signal 4. Mesuré par bissection (banc de Resolve, `outils/banc_ouverture_mb.gd`, qui
+ouvre un projet dans `app/editor.tscn` et remet les réglages) :
+
+- ⚠ **CE N'ÉTAIT NI LA MÉMOIRE, NI LE NOMBRE DE CASES, NI L'EAU, LE FEUILLAGE OU LES TRANSITIONS** : la dalle plate seule
+  (une case d'épaisseur sur 784²) plantait ; un morceau de 512 m à 494 000 cases aussi ; 400 m tenait. C'était l'ÉTENDUE
+  × les couches. Plante aussi `--headless` (pas le rendu) ; tient avec le serveur physique coupé, et avec Jolt : c'est
+  **le moteur physique de Godot (GodotPhysics3D)** qui déborde au premier pas. Les grilles `Rendu` portaient les FORMES
+  du lot (une boîte par octant plein de chaque pièce, `RP.collision`) : un corps par octant de GridMap, des centaines
+  de milliers de formes. Les mettre hors de toute couche physique ne suffit pas (elles restent dans la structure).
+- **LE REMÈDE** : `MassifPeint.collision_des_pieces` (vrai par défaut : le greffon, qui sert aux jeux, ne change pas) ;
+  faux, la grille `Rendu` porte une COPIE SANS FORMES du lot (`lot_de_la_grille` : mêmes maillages, noms, numéros ;
+  gardée tant que le lot ne change pas). **L'appli met faux** (`Vue.ajouter_couche`) : elle ne marche jamais sur ses
+  grilles — son décor de visite est à part (couche 2, `_decor`), et rien ne lit les formes du lot. Gardé par
+  `test_massif_peint` §15 (6 ; vu rougir : 544 formes sur la grille si le réglage est ignoré).
+- **LE FEUILLAGE PAR MORCEAUX** (`feuillage_vue.gd`, `MORCEAU` 32, `PORTEE` 400) : une MultiMesh par partie ET par
+  morceau — une seule pour tout le monde n'était jamais écartée du rendu (sa boîte couvre la carte) : 3 350 arbres de
+  20 000 à 46 000 triangles à chaque passe, **299 M primitives, 4 img/s même de près** ; plus loin que `PORTEE`, un
+  morceau n'est plus dessiné ; et les maillages du vent ont leurs LOD (`ImporterMesh.generate_lods` : un `.glb` lu à
+  l'exécution n'en a pas). `multimeshes(id)` rend les morceaux à la suite ; `test_feuillage` 70, `fumee_appli` 937.
+- **MESURÉ, le Val entier (RTX 2060)** : ouvert en 5,6 s ; bâti en ~50 s ; 4,1 Go. Vue d'ouverture (recul 26) :
+  **25 img/s** (7,2 M primitives, 8 600 appels) au lieu de 4 ; recul 60 : 12 ; recul 150 : 5 ; tout le monde cadré
+  (F) : 1. Avant : planté.
+- **OUVERT — LES VUES LOINTAINES** : ce sont les 1,7 M pièces des GridMap, dessinées SANS LOD (384 000 appels, 321 M
+  primitives tout cadré). Des octants plus grands (`cell_octant_size` 16, 32) divisent les appels par 2 et 4 sans
+  gagner d'images ; refaire chaque pièce du lot avec ses LOD (`ImporterMesh`) a été essayé depuis le banc : trop long sur
+  ce monde (arrêté à 15 min, 6,9 Go). La voie : une vue LOINTAINE cuite (un maillage simplifié par région, comme la
+  cuisson de Resolve), montrée au-delà d'une distance. À décider.
 
 ## 6. Méthode — ce qui a été payé cher
 

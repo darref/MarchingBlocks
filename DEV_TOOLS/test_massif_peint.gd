@@ -49,6 +49,7 @@ func _initialize() -> void:
 	_un_lot_aux_memes_noms()
 	_les_couches_exclusives()
 	_les_cases_tenues()
+	_sans_collision_des_pieces()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
@@ -533,6 +534,41 @@ func _les_cases_tenues() -> void:
 	m.remove_meta("_tout_refaire")
 	_dire(m.cases_tenues() != null, "… rendue une fois refaite")
 	m.queue_free()
+
+
+## LA COLLISION DES PIÈCES (9 octobre 2026) : faux, la grille Rendu porte une copie SANS FORMES du lot — mêmes pièces,
+## mêmes décisions ; le lot lui-même garde ses formes ; la copie ne change pas d'un appel à l'autre (rien ne se
+## reconstruit pour rien) ; revenu à vrai, le lot tel quel. (L'appli met faux : ces formes faisaient planter le moteur
+## physique de Godot sur un monde étendu.)
+func _sans_collision_des_pieces() -> void:
+	print("\n15. sans collision des pièces")
+	var avec := _massif()
+	var sans := _massif()
+	sans.collision_des_pieces = false
+	var cellules := _pave(0, 4, 0, 2, 0, 3)
+	_peindre(avec, cellules)
+	_peindre(sans, cellules)
+	avec.reconstruire()
+	sans.reconstruire()
+	var lot_sans: MeshLibrary = (sans.get_node("Rendu") as GridMap).mesh_library
+	var formes := 0
+	for id in lot_sans.get_item_list():
+		formes += lot_sans.get_item_shapes(id).size()
+	var source: MeshLibrary = sans.lot_courant()
+	var formes_source := 0
+	for id in source.get_item_list():
+		formes_source += source.get_item_shapes(id).size()
+	_dire(lot_sans != source and formes == 0, "la grille porte une copie sans formes (%d formes)" % formes)
+	_dire(formes_source > 0, "le lot lui-même garde ses formes (%d)" % formes_source)
+	_dire(lot_sans.get_item_list().size() == source.get_item_list().size(), "la copie a toutes les pièces")
+	var ecart := _grilles_identiques(avec, sans)
+	_dire(ecart == "", "mêmes pièces posées avec et sans collision : %s" % ecart)
+	_dire(sans.lot_de_la_grille() == lot_sans, "la copie est gardée d'un appel à l'autre")
+	sans.collision_des_pieces = true
+	_dire((sans.get_node("Rendu") as GridMap).mesh_library == source, "revenu à vrai : le lot tel quel")
+	avec.free()
+	sans.free()
+	print("   → la grille sans formes, le lot intact, les mêmes pièces")
 
 
 func _massif() -> Node3D:
