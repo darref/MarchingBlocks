@@ -2336,6 +2336,21 @@ tuile (en primal elle serait à cheval sur quatre). La marge pour bomber vers l'
   l'avancée, la nappe sans valeur absolue, la corniche sans retrait (`test_fluides`), un projet d'avant relu neutre
   (`test_projet`), le greffon Godot sans flanc et qui ignore le sol (`test_greffon_peinture`). ⚠ Quatre ont d'abord RIEN
   éprouvé (« motif absent ») : leur motif portait un retour à la ligne, et ces fichiers sont en CRLF — rejouées sur une ligne.
+- **LE NEUTRE RESTE LE DÉFAUT, ET LA CAGE DE LA TUILE MONTRE LA MARGE — DÉCIDÉ (Jordan, 10 octobre 2026)**, après une
+  question : « garder Outset par défaut et montrer la grille 3D en transparence pour montrer qu'on peut enfler ? ».
+  PROPOSÉ puis retenu : l'impression « ça va rester cubique » vient de ce qu'on VOIT (un tas de cubes, à tous les crans),
+  pas du cran ; Outset ne laisse que 0,25 pour enfler (une corniche, un rocher qui sort) et resserre les couloirs. La
+  cage montre la règle elle-même : « ta tuile, c'est cette boîte ». ÉCRIT LE MÊME JOUR (`vue.gd`, `_cage`,
+  `centre_de_la_cage`) : la boîte d'une case autour de la tuile — sous la souris hors édition (le rayon contre les cases
+  du témoin, puis `Outils.sommet_touche`, la règle de l'outil Variant), la tuile qu'on édite en édition (sa pose) —, un
+  voile et douze arêtes DORÉES vus à travers la matière ; « Show the tile's cage » (cochée) dans Witness surface ;
+  seulement dans Witness geometry. ⚠ **LA POSITION DE LA SOURIS VIENT DES MOUVEMENTS REÇUS PAR LA VUE** : avec une
+  fenêtre, `get_local_mouse_position` lit la souris de Windows, qu'un survol envoyé ne déplace pas (vu à l'image : pas de
+  cage). ⚠ **LA TEINTE PÂLE DES PLANS DE COUPE NE SE VOYAIT PAS** sur les sols verts : dorée franche. Gardé par
+  `fumee_appli` (un vrai survol du dessus de la case la plus haute : la cage centrée sur le point entier le plus proche,
+  écrit à la main ; décochée, rien ; en édition, le sommet de l'occurrence + 1 ; dans World, rien) ; mutation rouge (la
+  cage jamais montrée : 2 échecs). Vu à l'image (`DEV_TOOLS/capture_cage.gd` : Centred, Outset, Inset, en édition).
+  ⚠ Pas tenue en main.
 - ⚠ **CE QUI A ÉTÉ TROUVÉ EN ROUTE** : à l'ouverture d'un projet, la vue du témoin ne suivait pas son cran (vu par la fumée).
 - ⚠ **PAS VU À L'IMAGE, PAS TENU EN MAIN.** Ni l'eau aux nouveaux crans ni les flancs n'ont été regardés avec fenêtre.
 
