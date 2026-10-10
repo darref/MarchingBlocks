@@ -423,6 +423,9 @@ func _modeleur() -> String:
 		+ "opposite to bulge out. It is one setting for the whole world (Geometry, « Witness surface »): every computed "
 		+ "witness follows, so that layers which meet share their borders, and so does the water (lakes sit just under "
 		+ "the rim, rivers just above the ground). A layer whose witness you have modelled keeps its shape. One Ctrl+Z.")
+	l.append("The [b]cage[/b] (« Show the tile's cage », on by default) is the box of one cell around the tile under the "
+		+ "mouse — the tile you edit, in edit mode: its six cut planes, seen through the matter. Whatever you sculpt in "
+		+ "that tile fits in it, carved in or bulging out.")
 	l.append(_titre("One tile per class, linked copies"))
 	l.append(("The witness is made of the [b]%d tiles[/b] a world uses, and every place it shows a tile is a "
 		% (MB.pieces_a_sculpter().size() + MB.exterieures_a_sculpter().size()))

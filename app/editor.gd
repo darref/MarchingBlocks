@@ -351,6 +351,7 @@ func _ready() -> void:
 	_brancher_le_dev()
 	_regler_fenetre()
 	_batir()
+	_vue.cases_du_temoin = BM.cases(0)
 	_montrer_temoin()
 	_aller_a("witness")
 	_dire("[i]Look at the witness, open Project to exchange it with your artist, or open the World "
@@ -2949,6 +2950,11 @@ const CRANS := {"aminci": BM.RETRAIT_AMINCI, "neutre": BM.RETRAIT_NEUTRE, "epais
 const NOMS_CRANS := {"aminci": "Inset", "neutre": "Centred", "epais": "Outset"}
 var _boutons_cran := {}
 var _note_cran: Label
+var _case_cage: CheckBox
+
+
+func _cage_voulue() -> bool:
+	return _atelier == "witness" and (_case_cage == null or _case_cage.button_pressed)
 
 
 func _batir_cran(pile: VBoxContainer) -> void:
@@ -2971,6 +2977,16 @@ func _batir_cran(pile: VBoxContainer) -> void:
 	_note_cran = _texte("", 11, Palette.GRIS)
 	_note_cran.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sec.contenu.add_child(_note_cran)
+	# LA CAGE DE LA TUILE (Jordan, 10 octobre 2026) : la boîte où tient la tuile visée — on y voit la place pour raboter
+	# comme pour enfler.
+	_case_cage = CheckBox.new()
+	_case_cage.text = "Show the tile's cage"
+	_case_cage.tooltip_text = ("The box of one cell around the tile under the mouse (the tile you edit, in edit mode): its six "
+		+ "cut planes. Whatever you sculpt in this tile fits in it — carved in or bulging out.")
+	_case_cage.button_pressed = true
+	_case_cage.focus_mode = Control.FOCUS_NONE
+	_case_cage.toggled.connect(func(_v: bool) -> void: _vue.cage_voulue = _cage_voulue())
+	sec.contenu.add_child(_case_cage)
 
 
 ## Le nom d'un cran (`CRANS`) pour un retrait.
@@ -3153,6 +3169,7 @@ func _contexte() -> void:
 	# DEUX ATELIERS DU TÉMOIN (Jordan, 1er octobre 2026) : Geometry (le maillage) et Texturing (matériaux,
 	# projections, dépliage — et la peinture à venir). Ils montrent le même témoin ; seule la main change.
 	var geometrie := _atelier == "witness"
+	_vue.cage_voulue = _cage_voulue()
 	var texturing := _atelier == "texture"
 	var animation := _atelier == "anim"
 	var temoin := geometrie or texturing or animation

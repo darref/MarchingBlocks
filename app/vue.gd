@@ -99,6 +99,17 @@ var _temoin: MeshInstance3D
 ## LES PLANS DE COUPE du témoin — là où le trancheur coupe. Montrés à la demande (« Show the cells »).
 var _plans_de_coupe: MeshInstance3D
 var _plans_voulus := false
+## LA CAGE DE LA TUILE — DÉCIDÉ (Jordan, 10 octobre 2026 : « montrer la grille 3D en transparence pour montrer qu'on peut
+## enfler », la cage de la tuile visée plutôt que toute la grille). La boîte d'UNE case autour du sommet d'une tuile —
+## ses six plans de coupe : tout ce qu'on sculpte dans cette tuile y tient, en rabotant vers l'intérieur comme en enflant
+## vers l'air. En édition, la tuile qu'on édite ; hors édition, la tuile sous la souris. Vue à travers la matière.
+var _cage: MeshInstance3D
+var cage_voulue := true
+## Les cases du témoin calculé (`BM.cases(0)`) : le rayon de la souris les vise, hors édition (l'écran les donne).
+var cases_du_temoin: Dictionary = {}
+## Où est la souris sur la vue, d'après ses MOUVEMENTS (−1 : hors de la vue). ⚠ Pas `get_local_mouse_position` : avec une
+## fenêtre, elle lit la souris de Windows, qu'un survol envoyé (les captures, les tests) ne déplace pas.
+var _souris_cage := Vector2(-1, -1)
 ## Un `MassifPeint` par COUCHE du monde (`projet.gd`). On peint sur la couche ACTIVE ; les autres restent
 ## visibles, chacune rendue avec SON lot et selon SES cases seulement.
 var _couches: Node3D
@@ -322,6 +333,13 @@ func _ready() -> void:
 	_plans_de_coupe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_plans_de_coupe.visible = false
 	_vue.add_child(_plans_de_coupe)
+	_cage = MeshInstance3D.new()
+	_cage.name = "CageDeLaTuile"
+	_cage.mesh = _maillage_cage()
+	_cage.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_cage.visible = false
+	_vue.add_child(_cage)
+	mouse_exited.connect(func() -> void: _souris_cage = Vector2(-1, -1))
 
 	_couches = Node3D.new()
 	_couches.name = "MondeDeTest"
@@ -428,6 +446,70 @@ func montrer(quoi: String) -> void:
 		_boite_vue.visible = false
 	_dessiner_selection()
 	_placer_grille()
+
+
+## Le centre de la tuile dont on montre la cage, ou null : en édition, l'occurrence qu'on édite (sa pose) ; hors édition,
+## la tuile sous la souris — la case touchée par le rayon contre les cases du témoin, puis son sommet (`Outils.sommet_touche`,
+## la règle de l'outil Variant). Le centre d'une tuile est son sommet + (1, 1, 1) ; sa cage, ce centre ± ½.
+func centre_de_la_cage() -> Variant:
+	if mode != "temoin" or not cage_voulue or not is_visible_in_tree():
+		return null
+	if edition:
+		if modeleur != null and modeleur.occurrence >= 0:
+			return modeleur.pose.origin
+		return null
+	var m := _souris_cage
+	if m.x < 0.0 or not Rect2(Vector2.ZERO, size).has_point(m) or cases_du_temoin.is_empty():
+		return null
+	var origine: Vector3 = _camera.project_ray_origin(m)
+	var sens: Vector3 = _camera.project_ray_normal(m)
+	var r: Dictionary = Outils.rayon(func(c: Vector3i) -> bool: return cases_du_temoin.has(c), origine, sens, PORTEE)
+	if not r["touche"]:
+		return null
+	return Vector3(Outils.sommet_touche(origine, sens, r["case"], r["normale"])) + Vector3.ONE
+
+
+func _suivre_la_cage() -> void:
+	if _cage == null:
+		return
+	var c: Variant = centre_de_la_cage()
+	_cage.visible = c != null
+	if c != null:
+		_cage.position = c
+
+
+## UNE CAGE D'UNE CASE, centrée sur l'origine : un voile très léger sur ses six faces et ses douze arêtes plus nettes, vus
+## À TRAVERS la matière (`no_depth_test`), en DORÉ FRANC : de la teinte pâle des plans de coupe, elle ne se voyait pas sur
+## les sols verts (vu à l'image, 10 octobre 2026).
+static func _maillage_cage() -> ImmediateMesh:
+	var mesh := ImmediateMesh.new()
+	var voile := StandardMaterial3D.new()
+	voile.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	voile.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	voile.cull_mode = BaseMaterial3D.CULL_DISABLED
+	voile.no_depth_test = true
+	voile.albedo_color = Color(1.0, 0.8, 0.3, 0.13)
+	var arete := StandardMaterial3D.new()
+	arete.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	arete.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	arete.no_depth_test = true
+	arete.albedo_color = Color(1.0, 0.82, 0.32, 1.0)
+	var coin := func(i: int) -> Vector3:
+		return Vector3((i & 1) - 0.5, ((i >> 1) & 1) - 0.5, ((i >> 2) & 1) - 0.5)
+	mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, voile)
+	for f in [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]:
+		for i in [0, 1, 2, 0, 2, 3]:
+			mesh.surface_add_vertex(coin.call(f[i]))
+	mesh.surface_end()
+	mesh.surface_begin(Mesh.PRIMITIVE_LINES, arete)
+	for a in 8:
+		for axe in 3:
+			var b := a | (1 << axe)
+			if b != a:
+				mesh.surface_add_vertex(coin.call(a))
+				mesh.surface_add_vertex(coin.call(b))
+	mesh.surface_end()
+	return mesh
 
 
 func montrer_plans_de_coupe(oui: bool) -> void:
@@ -727,6 +809,7 @@ func voler(axes: Vector3, dt: float) -> void:
 ## reculent, Q D vont de côté, A descend, E monte — et Espace, qui montait, sert désormais à basculer.
 ## ⚠ Un champ de texte qui a la main garde ses touches : on tape le nom d'une couche avec des Z et des S.
 func _process(dt: float) -> void:
+	_suivre_la_cage()
 	if mode == "jeu":
 		_mener_le_jeu()
 		return
@@ -752,6 +835,8 @@ func _process(dt: float) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		_souris_cage = (event as InputEventMouseMotion).position
 	# ⚠ LA SOURIS SEULEMENT : la vue a le clavier en Play test, et avaler ses touches ici priverait
 	# l'écran d'Échap et de Retour arrière.
 	if mode == "jeu" and event is InputEventMouse:

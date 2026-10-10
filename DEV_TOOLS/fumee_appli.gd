@@ -513,6 +513,8 @@ func _mener() -> void:
 	_vrai(_feuillage_fini, "le feuillage est allé JUSQU'AU BOUT")
 	await _les_crans(ed)
 	_vrai(_crans_finis, "SENTINELLE : les crans du témoin et de l'eau sont allés JUSQU'AU BOUT")
+	await _la_cage(ed)
+	_vrai(_cage_finie, "SENTINELLE : la cage de la tuile est allée JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -5320,6 +5322,59 @@ func _les_crans(ed: Control) -> void:
 	_egal(ed._retrait, 0.25, "rendu à l'aminci")
 	ed._aller_a("monde")
 	_crans_finis = true
+
+
+## LA CAGE DE LA TUILE (Jordan, 10 octobre 2026), par un VRAI survol à travers la caméra. Attendu écrit à la main : un
+## point du DESSUS de la case la plus haute d'une colonne, (x + 0,3 ; y + 1 ; z + 0,6), est dans la tuile centrée sur le
+## point entier le plus proche, (x, y + 1, z + 1) — sa cage est ce centre ± ½.
+var _cage_finie := false
+
+
+func _la_cage(ed: Control) -> void:
+	ed._aller_a("witness")
+	ed._regler_edition(false)
+	await process_frame
+	var cam: Camera3D = ed._vue._camera
+	var cases: Dictionary = ed._vue.cases_du_temoin
+	_vrai(cases.size() == BM.cases(0).size(), "la vue a les cases du témoin (%d)" % cases.size())
+	# La colonne la plus haute du bloc, vue d'au-dessus.
+	var haut := Vector3i(0, -999, 0)
+	for c: Vector3i in cases:
+		if c.y > haut.y:
+			haut = c
+	var p := Vector3(haut.x + 0.3, haut.y + 1, haut.z + 0.6)
+	cam.global_position = p + Vector3(0.0, 6.0, 0.01)
+	cam.look_at(p)
+	await process_frame
+	var ecran: Vector2 = (ed._vue as Control).get_global_rect().position + cam.unproject_position(p)
+	var survol := InputEventMouseMotion.new()
+	survol.position = ecran
+	survol.global_position = ecran
+	root.push_input(survol)
+	await process_frame
+	await process_frame
+	var attendu := Vector3(haut.x, haut.y + 1, haut.z + 1)
+	_vrai(ed._vue._cage.visible and (ed._vue._cage.position as Vector3).is_equal_approx(attendu),
+		"survoler le dessus de la case %s montre la cage de la tuile centrée en %s (%s)" % [haut, attendu, ed._vue._cage.position])
+	ed._case_cage.button_pressed = false
+	await process_frame
+	_vrai(not ed._vue._cage.visible, "décochée, la cage disparaît")
+	ed._case_cage.button_pressed = true
+	# En édition : la cage est celle de la tuile qu'on édite, centrée sur le sommet de son occurrence + (1, 1, 1).
+	ed._regler_edition(true)
+	await process_frame
+	var mo: Node3D = ed._modeleur
+	_vrai(mo.occurrence >= 0, "en édition, une occurrence est active")
+	if mo.occurrence >= 0:
+		var s: Vector3i = mo.temoin.occurrences[mo.occurrence]["sommet"]
+		await process_frame
+		_vrai(ed._vue._cage.visible and (ed._vue._cage.position as Vector3).is_equal_approx(Vector3(s) + Vector3.ONE),
+			"en édition, la cage entoure la tuile qu'on édite (sommet %s + 1 = %s)" % [s, ed._vue._cage.position])
+	ed._regler_edition(false)
+	ed._aller_a("monde")
+	await process_frame
+	_vrai(not ed._vue._cage.visible, "dans World, pas de cage")
+	_cage_finie = true
 
 
 func _rendre_les_reglages() -> void:
