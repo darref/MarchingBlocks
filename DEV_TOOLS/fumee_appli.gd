@@ -5844,12 +5844,36 @@ func _la_retopo(ed: Control) -> bool:
 	for c in t.tuiles:
 		faces2 += t.tuiles[c].faces.size()
 	_egal(faces2, faces1, "Ctrl+Y refait Simplify")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	# La paroi subdivisée deux fois (UN geste chacune, ses points de bord reportés), puis Simplify sur elle seule : elle
+	# perd des faces ; Relax égalise ce qui reste ; aucun joint ne s'ouvre ; chaque bouton est UN Ctrl+Z.
+	for k in 2:
+		mo.choisir_mode("face")
+		mo.tout_choisir(false)
+		var toutes := {}
+		for f in mo.maillage.faces.size():
+			toutes[f] = true
+		mo.sel_f = toutes
+		mo.operer("subdiviser")
+	var subdivisee: int = mo.maillage.faces.size()
+	_egal(_sans_partenaire(t), 0, "retopo : la paroi subdivisée deux fois, joints fermés")
+	(boutons["Simplify"] as Button).pressed.emit()
+	var simplifiee: int = mo.maillage.faces.size()
+	_vrai(simplifiee < subdivisee and _sans_partenaire(t) == 0, "Simplify sur la paroi subdivisée : %d faces → %d, joints fermés"
+		% [subdivisee, simplifiee])
 	var avant: PackedVector3Array = mo.maillage.sommets.duplicate()
 	(boutons["Relax"] as Button).pressed.emit()
-	_vrai(_sans_partenaire(t) == 0 and ed._rapport.text.contains("Relax"),
-		"Relax sur la paroi : aucun joint ouvert, le rapport le dit (« %s »)" % ed._rapport.text.left(80))
-	if mo.maillage.sommets != avant:
-		ed._unhandled_key_input(_cle(KEY_Z, true))
-		_vrai(mo.maillage.sommets == avant, "UN Ctrl+Z défait Relax")
+	_vrai(mo.maillage.sommets != avant and _sans_partenaire(t) == 0 and ed._rapport.text.contains("Relax"),
+		"Relax sur la paroi : des sommets égalisés, aucun joint ouvert, le rapport le dit")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(mo.maillage.sommets == avant, "UN Ctrl+Z défait Relax")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_egal(mo.maillage.faces.size(), subdivisee, "UN Ctrl+Z défait Simplify")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues2 := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets == photo[c][0] and t.tuiles[c].faces.size() == photo[c][1]:
+			rendues2 += 1
+	_egal(rendues2, t.tuiles.size(), "… et deux Ctrl+Z défont les deux subdivisions : le témoin d'origine")
 	return true

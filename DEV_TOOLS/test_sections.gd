@@ -663,8 +663,23 @@ func _ouvertes(t: RefCounted, paires: Array) -> int:
 
 ## LA RETOPO (Jordan, 13 octobre 2026) — Simplify puis Relax sur les 52 tuiles du témoin. L'attendu ne passe pas par
 ## `retopo.gd` : les VRAIS joints du monde (`_sans_partenaire`) restent fermés, aucune face ne se replie (`_retournes`),
-## aucun trou ; et la complétion des sections n'a rien à reporter (le bord n'a pas bougé).
+## aucun trou ; et la complétion des sections n'a rien à reporter (le bord n'a pas bougé). Deux témoins : le calculé tel
+## quel (grossier : peu à simplifier), et le même subdivisé deux fois partout — ce qu'un artiste fait avant de sculpter —,
+## ses bords complétés par les sections (les points neufs des faces de bord reportés dans les tuiles d'en face).
 func _la_retopo(t: RefCounted) -> void:
+	_simplifier_puis_detendre(t, "le témoin calculé", false)
+	var t2: RefCounted = TL.depuis_le_temoin_calcule()
+	for c in t2.tuiles:
+		var m: RefCounted = t2.tuiles[c]
+		m.subdiviser(range(m.faces.size()))
+		m.subdiviser(range(m.faces.size()))
+	Sections.new(t2).completer()
+	_dire(_sans_partenaire(t2) == 0, "le témoin subdivisé deux fois, bords complétés : tout sommet de joint a son partenaire (%d)"
+		% _sans_partenaire(t2))
+	_simplifier_puis_detendre(t2, "le témoin subdivisé", true)
+
+
+func _simplifier_puis_detendre(t: RefCounted, quoi: String, doit_detendre: bool) -> void:
 	var faces_avant := 0
 	var faces_apres := 0
 	for c in t.tuiles:
@@ -675,8 +690,8 @@ func _la_retopo(t: RefCounted) -> void:
 	for c in t.tuiles:
 		trous += t.tuiles[c].trous()
 	_dire(faces_apres < faces_avant and _sans_partenaire(t) == 0 and _retournes(t) == 0 and trous == 0,
-		"Simplify sur tout le témoin (%d faces → %d) : %d sommet de joint sans partenaire, %d triangle retourné, %d trou"
-		% [faces_avant, faces_apres, _sans_partenaire(t), _retournes(t), trous])
+		"Simplify sur %s (%d faces → %d) : %d sommet de joint sans partenaire, %d triangle retourné, %d trou"
+		% [quoi, faces_avant, faces_apres, _sans_partenaire(t), _retournes(t), trous])
 	var s = Sections.new(t)
 	var r: Dictionary = s.completer()
 	_dire((r["touchees"] as Array).is_empty() and int(r["echecs"]) == 0,
@@ -684,6 +699,6 @@ func _la_retopo(t: RefCounted) -> void:
 	var deplaces := 0
 	for c in t.tuiles:
 		deplaces += int(RT.detendre(t.tuiles[c])["deplaces"])
-	_dire(deplaces > 0 and _sans_partenaire(t) == 0 and _retournes(t) == 0,
-		"Relax ensuite (%d sommets déplacés) : %d sommet de joint sans partenaire, %d triangle retourné"
-		% [deplaces, _sans_partenaire(t), _retournes(t)])
+	_dire((deplaces > 0 or not doit_detendre) and _sans_partenaire(t) == 0 and _retournes(t) == 0,
+		"Relax ensuite sur %s (%d sommets déplacés) : %d sommet de joint sans partenaire, %d triangle retourné"
+		% [quoi, deplaces, _sans_partenaire(t), _retournes(t)])
