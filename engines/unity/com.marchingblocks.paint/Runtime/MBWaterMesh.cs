@@ -60,13 +60,14 @@ namespace MarchingBlocks.Paint
     {
         /// <summary>A still sheet at its top row + Surface, a band at its cell + River — those of an INSET floor (0.25).</summary>
         public const double Surface = 0.7;       // NAPPE
-        public const double River = -0.15;       // RIVIERE
+        public const double River = 0.05;        // RIVIERE (a THICK band since 13 October 2026; -0.15 before)
         /// <summary>THE FLOOR r (world.json water_floor): where the ground of the tiles is drawn — the top of a full cell
         /// y − 1 is seen at y − r (0.25 inset, 0 centred, −0.25 outset). A sheet at L + SheetHeight(r), a band at
         /// y + BandHeight(r), a waterfall's plane moved by Advance(r). At r = 0.25 they are Surface and River.</summary>
         public const double FloorDefault = 0.25; // SOL_DEFAUT
         public const double Thin = 0.05;         // MINCE
-        public const double AboveFloor = 0.1;    // AU_DESSUS_DU_SOL
+        public const double AboveFloor = 0.3;    // AU_DESSUS_DU_SOL (0.1 before 13 October 2026: a sheet of paper)
+        public const double BandDepth = AboveFloor / 8.0;   // PROFONDEUR_DE_BANDE: a band's COLOR.a (its thickness / 8)
         public static double SheetHeight(double r) => 1.0 - Math.Abs(r) - Thin;
         public static double BandHeight(double r) => AboveFloor - r;
         public static double Advance(double r) => FloorDefault - r;
@@ -491,7 +492,7 @@ namespace MarchingBlocks.Paint
                 if (e.Kind == "lake" || !cells.Contains(c + Down) || seen.Bands.Contains(c)) continue;
                 var d = FlowOf(course, i);
                 seen.Bands.Add(c);
-                flats.Add(Band(a, c, cells, seen.Waters, seen.Floor, Color(d.x, d.z, Flowing, 0.05)));
+                flats.Add(Band(a, c, cells, seen.Waters, seen.Floor, Color(d.x, d.z, Flowing, BandDepth)));
             }
             int k = 0;
             while (k < n)

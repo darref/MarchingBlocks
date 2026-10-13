@@ -24,7 +24,7 @@ const Water := preload("res://addons/marchingblocks_paint/mb_water.gd")
 ## A still sheet is at its top row + SURFACE; a river band at its cell + RIVER; a sheet reaches OVERLAP under the
 ## full cell next to it (the rock hides the edge). SURFACE and RIVER are those of an INSET floor (0.25, the default).
 const SURFACE := 0.7
-const RIVER := -0.15
+const RIVER := 0.05
 const OVERLAP := 0.45
 ## THE FLOOR r (world.json `water_floor`): where the ground of the tiles is drawn — the top of a full cell y - 1 is seen
 ## at y - r, the bottom of a full cell y + 1 at y + 1 + r (0.25 inset, 0 centred, -0.25 outset). Every height follows:
@@ -32,7 +32,10 @@ const OVERLAP := 0.45
 ## plane moved by 0.25 - r (`advance`). At r = 0.25 they are SURFACE and RIVER.
 const FLOOR_DEFAULT := 0.25
 const THIN := 0.05
-const ABOVE_FLOOR := 0.1
+## A river band has a THICKNESS: 0.3 above the drawn ground (0.1 before 13 October 2026 — a sheet of paper), and its
+## depth in COLOR.a is that thickness (in cells / 8).
+const ABOVE_FLOOR := 0.3
+const BAND_DEPTH := ABOVE_FLOOR / 8.0
 
 
 static func surface(r: float) -> float:
@@ -500,7 +503,7 @@ static func _river(a: Dictionary, course: Array, cells: Dictionary, flats: Array
 			continue
 		var d := flow_of(course, i)
 		seen[c] = true
-		flats.append(_band(a, c, cells, waters, floor_, _color(Vector2(d.x, d.z), FLOWING, 0.05)))
+		flats.append(_band(a, c, cells, waters, floor_, _color(Vector2(d.x, d.z), FLOWING, BAND_DEPTH)))
 	var i := 0
 	while i < n:
 		var e: Dictionary = course[i]

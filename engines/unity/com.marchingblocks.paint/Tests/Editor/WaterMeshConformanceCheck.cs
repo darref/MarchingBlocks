@@ -46,7 +46,7 @@ namespace MarchingBlocks.Paint.Tests
                     ["overhang"] = MBWaterMesh.Overhang, ["churn"] = MBWaterMesh.Churn, ["spray"] = MBWaterMesh.Spray,
                     ["foam_rise"] = MBWaterMesh.FoamRise, ["horizon"] = MBWaterMesh.Horizon, ["spring"] = MBWaterMesh.Spring,
                     ["spring_dome"] = MBWaterMesh.SpringDome, ["floor_default"] = MBWaterMesh.FloorDefault,
-                    ["thin"] = MBWaterMesh.Thin, ["above_floor"] = MBWaterMesh.AboveFloor,
+                    ["thin"] = MBWaterMesh.Thin, ["above_floor"] = MBWaterMesh.AboveFloor, ["band_depth"] = MBWaterMesh.BandDepth,
                 };
                 foreach (var kv in c)
                     if (!mine.TryGetValue(kv.Key, out var m)) pre.Add($"unknown constant '{kv.Key}': this bench must learn it");

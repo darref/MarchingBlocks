@@ -67,12 +67,13 @@ namespace MBPaint
 	{
 		// The constants (the conformance file's "constants" must be these).
 		constexpr double Surface = 0.7;      // a sheet at its row + 0.7 (inset floor)
-		constexpr double River = -0.15;      // a band at its cell - 0.15 (inset floor)
+		constexpr double River = 0.05;       // a band at its cell + 0.05 (inset floor; -0.15 before the thick band)
 		// THE FLOOR r (world.json "water_floor"): where the ground of the tiles is drawn - the top of a full cell y - 1 is
 		// seen at y - r (0.25 inset, 0 centred, -0.25 outset). Every height follows it; at r = 0.25 they are the above.
 		constexpr double FloorDefault = 0.25;
 		constexpr double Thin = 0.05;
-		constexpr double AboveFloor = 0.1;
+		constexpr double AboveFloor = 0.3;   // a river band has a THICKNESS (0.1 before 13 October 2026)
+		constexpr double BandDepth = AboveFloor / 8.0;   // a band's COLOR.a: its thickness / 8
 		/// A still sheet at its top row + SurfaceAt(r).
 		inline double SurfaceAt(double R) { return 1.0 - (R < 0.0 ? -R : R) - Thin; }
 		/// A river band at its cell + RiverAt(r).

@@ -618,8 +618,8 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 	const std::pair<const char*, double> Constants[] = {{"arc", Arc}, {"churn", Churn}, {"flare", Flare}, {"flare_max", FlareMax},
 		{"foam_rise", FoamRise}, {"horizon", Horizon}, {"into_rock", IntoRock}, {"overhang", Overhang}, {"overlap", Overlap}, {"river", River},
 		{"rounding", Rounding}, {"sheet", Sheet}, {"spray", Spray}, {"spring", Spring}, {"spring_dome", SpringDome}, {"surface", Surface},
-		{"floor_default", FloorDefault}, {"thin", Thin}, {"above_floor", AboveFloor}};
-	T.Expect(K.Size() == sizeof(Constants) / sizeof(Constants[0]), "the file has " + std::to_string(K.Size()) + " constants, the plugin 19");
+		{"floor_default", FloorDefault}, {"thin", Thin}, {"above_floor", AboveFloor}, {"band_depth", BandDepth}};
+	T.Expect(K.Size() == sizeof(Constants) / sizeof(Constants[0]), "the file has " + std::to_string(K.Size()) + " constants, the plugin 20");
 	for (const auto& C : Constants)
 		T.Expect(K.Find(C.first) && K[C.first].AsReal() == C.second, std::string("constant ") + C.first + " differs from the plugin's");
 	FTolerances Tol;
