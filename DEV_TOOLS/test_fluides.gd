@@ -727,27 +727,28 @@ func _maillage() -> void:
 	# 6 bandes, 3 cascades, et à chacune son anneau d'écume et ses embruns ; la source : un disque et son voile.
 	_egal(q.size(), 17, "escalier : 6 bandes, 3 cascades, 3 anneaux, 3 embruns, la source et son voile")
 	for c in [Vector3i(2, 2, 0), Vector3i(4, 1, 0)]:
-		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y - 0.15, -0.45),
-			Vector3(c.x + 1, c.y - 0.15, 1.45)])).size(), 1,
+		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y + 0.05, -0.45),
+			Vector3(c.x + 1, c.y + 0.05, 1.45)])).size(), 1,
 			"escalier : la marche %s, où l'eau retombe, est mouillée (et s'avance sous la marche d'au-dessus)" % c)
 	# Sur une lèvre, aucune bande : la cascade part du plan de la falaise.
 	for c in [Vector3i(2, 3, 0), Vector3i(4, 2, 0), Vector3i(6, 1, 0)]:
-		_vrai(q.all(func(e): return not _genre(e, 0.5) or not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[1].x < c.x + 0.001),
+		_vrai(q.all(func(e): return not _genre(e, 0.5) or not is_equal_approx(_boite_de([e])[0].y, c.y + 0.05) or _boite_de([e])[1].x < c.x + 0.001),
 			"escalier : aucune bande ne flotte sur la lèvre %s" % c)
-	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 2,85,
-	# courant vers +X.
-	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 2.85, -0.45), Vector3(1, 2.85, 1.45)]))
+	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 3,05 (0,3
+	# au-dessus du sol dessiné en 2,75 — la rivière ÉPAISSE, 13 octobre 2026 ; 2,85 avant), courant vers +X, profondeur
+	# 0,3 / 8 = 0,0375.
+	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 3.05, -0.45), Vector3(1, 3.05, 1.45)]))
 	_egal(bande.size(), 1, "escalier : la bande de la première case, à sa place")
 	if bande.size() == 1:
-		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.05)), "… courant +X, genre rivière")
+		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.0375)), "… courant +X, genre rivière, profondeur 0,3 / 8")
 	# LES CASCADES (Jordan, 3 octobre 2026 : « trop carrées, sans remous, sans volume, pas refermées contre la façade »).
 	# Attendus à la main, depuis la règle écrite dans `eau_maillage.gd` : la nappe part du plan de la falaise (x = 2, 4, 6)
-	# à la hauteur de la bande (2,85 ; 1,85 ; 0,85), est à 0,35 devant le plan à 0,7 de chute, au milieu ; ses deux bouts
+	# à la hauteur de la bande (3,05 ; 2,05 ; 1,05), est à 0,35 devant le plan à 0,7 de chute, au milieu ; ses deux bouts
 	# (z = −0,1 et 1,1 : libres, la case dépasse de 0,1) sont à 0,4 DERRIÈRE le plan — dans la roche, dont la face amincie
 	# est à 0,25 ; l'écume vaut 0 en haut et 1 au pied. Son anneau d'écume est À PLAT sur l'eau où elle tombe (la bande de
-	# la marche, 1,85 et 0,85 ; hors du monde, son pied −1,3) + 0,02.
+	# la marche, 2,05 et 1,05 ; hors du monde, son pied −1,3) + 0,02.
 	# L'écume du haut : (1 − (haut − eau) / 1,3)², 0 au-delà — une case de chute : (1 − 1 / 1,3)² = 0,0533 ; 2,15 : 0.
-	for l in [[2.0, 2.85, 1.87, 0.0533], [4.0, 1.85, 0.87, 0.0533], [6.0, 0.85, -1.28, 0.0]]:
+	for l in [[2.0, 3.05, 2.07, 0.0533], [4.0, 2.05, 1.07, 0.0533], [6.0, 1.05, -1.28, 0.0]]:
 		var plan: float = l[0]
 		var haut: float = l[1]
 		var nappe := q.filter(func(e): return _genre(e, 1.0) and absf(_boite_de([e])[1].y - haut) < 1e-4)
@@ -778,7 +779,7 @@ func _maillage() -> void:
 		var embrun := q.filter(func(e): return _genre(e, 0.75) and absf(_boite_de([e])[0].y - (l[2] - 0.02)) < 1e-4 and absf(_boite_de([e])[1].y - (l[2] + 0.88)) < 1e-4)
 		_egal(embrun.size(), 1, "… x = %s : des embruns qui montent de 0,9 devant le pied" % plan)
 	# LA SOURCE (Jordan : « il manque aussi la source ») : un disque d'écume centré sur la case (0,3,0), bombé de 0,08.
-	var source := q.filter(func(e): return _genre(e, 0.75) and _meme_boite(_boite_de([e]), [Vector3(-0.2, 2.87, -0.2), Vector3(1.2, 2.93, 1.2)]))
+	var source := q.filter(func(e): return _genre(e, 0.75) and _meme_boite(_boite_de([e]), [Vector3(-0.2, 3.07, -0.2), Vector3(1.2, 3.13, 1.2)]))
 	_egal(source.size(), 1, "escalier : la source sourd en (0,3,0) — un disque d'écume de 0,7, bombé de 0,08")
 	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
 	_vrai(_sans_jonction_en_t(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc)),
