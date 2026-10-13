@@ -1034,6 +1034,10 @@ func _survoler(position: Vector2) -> void:
 		# ⚠ Calée sur les LIGNES de la grille, pas sur le centre de la case : la case `p` occupe
 		# `[p, p+1]`, donc son coin est en `p` et ses lignes tombent sur des entiers.
 		_grille_locale.position = Vector3(plan.x, etage + 0.002, plan.z)
+		var phase := Vector2i(posmod(plan.x, PAS_FORT), posmod(plan.z, PAS_FORT))
+		if _grille_locale.get_meta("phase", Vector2i(-1, -1)) != phase:
+			_grille_locale.set_meta("phase", phase)
+			_grille_locale.mesh = _maillage_grille_locale(phase)
 	if outil == "feuillage":
 		_apercu.visible = false
 		feuillage_survole.emit(position)
@@ -1233,6 +1237,24 @@ func glisse_en_cours() -> String:
 	if _coup < 0 or _coin_boite == null:
 		return ""
 	return "salle" if _est_salle() else outil
+
+
+## LES DIMENSIONS DU GLISSÉ EN COURS (Jordan, 13 octobre 2026 : les infos de la vue, `app/infos_vue.gd`) : en cases,
+## x × y × z — la boîte ou le Rect entre ses deux coins (hauteur de la molette comprise), la salle avec sa coque ;
+## `Vector3i.ZERO` hors d'un glissé. Une salle refusée (trop petite) rend l'étendue de ses deux coins.
+func dimensions_du_glisse() -> Vector3i:
+	var g := glisse_en_cours()
+	if g == "" or _coin_fin == null:
+		return Vector3i.ZERO
+	var a: Vector3i = _coin_boite
+	var b: Vector3i = _coin_fin
+	if g == "salle":
+		var r := _salle_entre(a, b)
+		if str(r.get("erreur", "")) == "" and r.has("boite"):
+			return (r["boite"][1] as Vector3i) - (r["boite"][0] as Vector3i) + Vector3i.ONE
+	else:
+		b = _fin_du_glisse()
+	return (a - b).abs() + Vector3i.ONE
 
 
 ## La molette pendant un glissé de boîte ou de Rect : son second coin monte ou descend d'une case.
@@ -1711,45 +1733,98 @@ static func sur_la_grille_centrale(c: Vector3i) -> bool:
 const DEMI_GRILLE := 24
 
 
-func _maillage_grille() -> ImmediateMesh:
-	var mesh := ImmediateMesh.new()
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.706, 0.741, 0.522, 0.18)
-	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
-	for i in range(-DEMI_GRILLE, DEMI_GRILLE + 1):
-		mesh.surface_add_vertex(Vector3(i, 0, -DEMI_GRILLE))
-		mesh.surface_add_vertex(Vector3(i, 0, DEMI_GRILLE))
-		mesh.surface_add_vertex(Vector3(-DEMI_GRILLE, 0, i))
-		mesh.surface_add_vertex(Vector3(DEMI_GRILLE, 0, i))
-	mesh.surface_end()
+## LES LIGNES MAJEURES — DEMANDÉ PAR JORDAN (13 octobre 2026 : « une grille plus lisible »). PROPOSÉ : une ligne
+## MARQUÉE toutes les 4 cases, une ligne FORTE toutes les 8, comptées depuis l'origine du monde (pas depuis la caméra) :
+## une salle de 8 cases se lit d'un trait fort à l'autre, et les marques ne glissent pas quand on bouge la vue.
+## `niveau_de_ligne(i)` : 0 fine, 1 marquée (multiple de `PAS_MARQUE`), 2 forte (multiple de `PAS_FORT`).
+const PAS_MARQUE := 4
+const PAS_FORT := 8
+## L'opacité de chaque niveau sur la grille centrale, et le facteur appliqué au fondu de la grille locale.
+const ALPHA_DES_LIGNES := [0.14, 0.3, 0.5]
+const FORCE_LOCALE := [1.0, 1.7, 2.6]
+const TEINTE_GRILLE := Color(0.706, 0.741, 0.522)
+
+
+static func niveau_de_ligne(i: int) -> int:
+	if posmod(i, PAS_FORT) == 0:
+		return 2
+	if posmod(i, PAS_MARQUE) == 0:
+		return 1
+	return 0
+
+
+## Des segments en `PRIMITIVE_LINES`, dans un `ArrayMesh` — ses tableaux se relisent (la fumée lit les lignes).
+static func _maillage_de_lignes(sommets: PackedVector3Array, couleurs: PackedColorArray, m: Material) -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	if sommets.is_empty():
+		return mesh
+	var a := []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = sommets
+	if not couleurs.is_empty():
+		a[Mesh.ARRAY_COLOR] = couleurs
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, a)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, m)
+	return mesh
+
+
+## La grille centrale : une SURFACE par niveau de ligne (fines, marquées, fortes), chacune son opacité.
+func _maillage_grille() -> ArrayMesh:
+	var mesh := ArrayMesh.new()
+	for niveau in 3:
+		var m := StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.albedo_color = Color(TEINTE_GRILLE, ALPHA_DES_LIGNES[niveau])
+		var v := PackedVector3Array()
+		for i in range(-DEMI_GRILLE, DEMI_GRILLE + 1):
+			if niveau_de_ligne(i) != niveau:
+				continue
+			v.append(Vector3(i, 0, -DEMI_GRILLE))
+			v.append(Vector3(i, 0, DEMI_GRILLE))
+			v.append(Vector3(-DEMI_GRILLE, 0, i))
+			v.append(Vector3(DEMI_GRILLE, 0, i))
+		var a := []
+		a.resize(Mesh.ARRAY_MAX)
+		a[Mesh.ARRAY_VERTEX] = v
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, a)
+		mesh.surface_set_material(niveau, m)
 	return mesh
 
 
 ## Un carré de grille autour de la case survolée, qui S'EFFACE vers ses bords : il dit où l'on est
-## sans prétendre être un plancher. ⚠ L'alpha vient de la couleur de SOMMET — un seul maillage, calé
-## une fois, déplacé à chaque survol ; rien ne se reconstruit en suivant la souris.
+## sans prétendre être un plancher. ⚠ L'alpha vient de la couleur de SOMMET — déplacé à chaque survol.
+## ⚠ LES LIGNES MAJEURES DÉPENDENT DE LA PLACE DANS LE MONDE : le maillage est bâti pour une PHASE (la case survolée
+## modulo `PAS_FORT` en x et en z) — 64 maillages au plus, bâtis à la demande et gardés ; rien ne se reconstruit en
+## suivant la souris.
 const RAYON_LOCAL := 6
+var _grilles_locales := {}
 
 
-func _maillage_grille_locale() -> ImmediateMesh:
-	var mesh := ImmediateMesh.new()
+func _maillage_grille_locale(phase := Vector2i.ZERO) -> ArrayMesh:
+	if _grilles_locales.has(phase):
+		return _grilles_locales[phase]
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.vertex_color_use_as_albedo = true
-	mesh.surface_begin(Mesh.PRIMITIVE_LINES, m)
+	var v := PackedVector3Array()
+	var c := PackedColorArray()
 	var r := float(RAYON_LOCAL)
 	# La case survolée va de 0 à 1 : le carré est centré sur son MILIEU, en (0,5 ; 0,5).
 	for i in range(-RAYON_LOCAL, RAYON_LOCAL + 2):
 		for k in range(-RAYON_LOCAL, RAYON_LOCAL + 1):
-			for seg in [[Vector3(i, 0, k), Vector3(i, 0, k + 1)], [Vector3(k, 0, i), Vector3(k + 1, 0, i)]]:
-				for sommet in seg:
+			# Le segment le long de z est sur la ligne x = i (sa place dans le monde : phase.x + i) ; celui le long de
+			# x est sur la ligne z = i.
+			for seg in [[Vector3(i, 0, k), Vector3(i, 0, k + 1), phase.x + i],
+					[Vector3(k, 0, i), Vector3(k + 1, 0, i), phase.y + i]]:
+				var force: float = FORCE_LOCALE[niveau_de_ligne(int(seg[2]))]
+				for sommet in [seg[0], seg[1]]:
 					var d: float = (Vector2(sommet.x, sommet.z) - Vector2(0.5, 0.5)).length() / (r + 0.5)
-					mesh.surface_set_color(Color(0.706, 0.741, 0.522, 0.3 * clampf(1.0 - d, 0.0, 1.0)))
-					mesh.surface_add_vertex(sommet)
-	mesh.surface_end()
+					c.append(Color(TEINTE_GRILLE, minf(1.0, 0.3 * force * clampf(1.0 - d, 0.0, 1.0))))
+					v.append(sommet)
+	var mesh := _maillage_de_lignes(v, c, m)
+	_grilles_locales[phase] = mesh
 	return mesh
 
 

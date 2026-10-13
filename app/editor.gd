@@ -38,6 +38,7 @@ const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd
 const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
 const Guide := preload("res://app/guide.gd")
+const InfosVue := preload("res://app/infos_vue.gd")
 const Section := preload("res://app/section.gd")
 const Variantes := preload("res://app/variantes.gd")
 const AtelierTransitions := preload("res://app/transitions.gd")
@@ -177,6 +178,8 @@ var _guide_texte: RichTextLabel
 var _grille_raccourcis: GridContainer
 var _case_guide: CheckBox
 var _guide_signature := ""
+## LES INFOS DE LA VUE ET LE REPÈRE DE TAILLE (Jordan, 13 octobre 2026 — `app/infos_vue.gd`), en haut à droite de la vue.
+var _infos_vue: PanelContainer
 var _reste_signature := ""
 var _zone_reference: Control
 var _bouton_revoir_temoin: Button
@@ -503,6 +506,8 @@ func _batir() -> void:
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
 	_batir_guide(corps)
+	_infos_vue = InfosVue.new()
+	_infos_vue.brancher(self, corps, _case_guide)
 	_modeleur = Modeleur.new()
 	_vue.brancher_modeleur(_modeleur)
 	_modeleur.change.connect(_geste_du_modeleur)
@@ -1328,7 +1333,10 @@ func _contexte_du_guide() -> Dictionary:
 		"selection": not _vue.selection.is_empty(), "naviguer": _vue.naviguer, "collage": _vue.collage,
 		"glisse": _vue.glisse_en_cours(), "mer": _mer_choisie != null, "edition": _vue.edition,
 		"modal": _modeleur.modal if _modeleur != null else "", "sculpt": _modeleur != null and _modeleur.sculpt,
-		"pinceau": _modeleur != null and _modeleur.pinceau}
+		"pinceau": _modeleur != null and _modeleur.pinceau,
+		# L'ÉTAGE EN TÊTE DU GUIDE (Jordan, 13 octobre 2026 : « l'étage en cours […] dans le guide ») : seulement là où la
+		# grille sert ; il entre dans la signature, donc le guide se réécrit quand l'étage change.
+		"etage": _vue.etage if _atelier in ["monde", "fluides", "feuillage", "jeu_edit"] else null}
 
 
 ## Une fois par image : le guide ne se réécrit que si le contexte ou le modificateur tenu a changé.
@@ -1364,6 +1372,8 @@ func texte_du_guide(c: Dictionary, modif: String) -> String:
 	var olive := Palette.OLIVE.to_html(false)
 	var gris := Palette.GRIS.to_html(false)
 	var l := PackedStringArray()
+	if c.get("etage") != null:
+		l.append("[b]Floor y = %d[/b]   [color=#%s]PgUp · PgDn[/color]" % [int(c["etage"]), gris])
 	if modif != "":
 		l.append("[color=#%s][b]%s ▸[/b][/color]" % [olive, Guide.NOMS[modif]])
 		if (p["lignes"] as Array).is_empty():

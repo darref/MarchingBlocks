@@ -521,6 +521,8 @@ func _mener() -> void:
 	_vrai(_crans_finis, "SENTINELLE : les crans du témoin et de l'eau sont allés JUSQU'AU BOUT")
 	await _la_cage(ed)
 	_vrai(_cage_finie, "SENTINELLE : la cage de la tuile est allée JUSQU'AU BOUT")
+	await _les_infos_de_la_vue(ed)
+	_vrai(_infos_finies, "SENTINELLE : les infos de la vue, l'étage du guide, le repère de taille et la grille sont allés JUSQU'AU BOUT")
 
 	# LA FERMETURE (2 octobre 2026) : sortie de l'arbre, l'écran ne relance plus de minuterie quand l'historique
 	# change — c'est ce que fait la libération de l'historique, et l'erreur sortait à chaque fermeture.
@@ -5916,13 +5918,13 @@ func _le_guide(ed: Control) -> void:
 	# CTRL TENU : sa branche seule.
 	_tenir(KEY_CTRL, true)
 	await process_frame
-	t = ed._guide_texte.get_parsed_text()
+	t = _sans_l_etage(ed._guide_texte.get_parsed_text())
 	_vrai(t.begins_with("Ctrl ▸") and t.contains("move the selection up") and not t.contains("Alt ▸"),
 		"Ctrl tenu : le guide montre la branche Ctrl, et elle seule (« %s »)" % t.left(60))
 	_tenir(KEY_CTRL, false)
 	_tenir(KEY_SHIFT, true)
 	await process_frame
-	t = ed._guide_texte.get_parsed_text()
+	t = _sans_l_etage(ed._guide_texte.get_parsed_text())
 	_vrai(t.begins_with("Shift ▸") and t.contains("extend it up"), "Maj tenue : la branche Maj")
 	_tenir(KEY_SHIFT, false)
 	await process_frame
@@ -6158,3 +6160,202 @@ func _montee_attendue(t: RefCounted, f: int, ps: Transform3D, h: float) -> float
 		var w: Vector3 = ps * t.sommets[i]
 		somme += 0.0 if absf(w.y - floorf(w.y) - 0.5) < 0.0005 else h
 	return somme / float((t.faces[f] as PackedInt32Array).size())
+
+
+## La première ligne du guide est l'étage, dans World (13 octobre 2026) : les branches viennent après.
+func _sans_l_etage(t: String) -> String:
+	if t.begins_with("Floor y ="):
+		return t.substr(t.find("\n") + 1)
+	return t
+
+
+## ── LES INFOS DE LA VUE, L'ÉTAGE DU GUIDE, LE REPÈRE DE TAILLE, LA GRILLE (Jordan, 13 octobre 2026) ─────────────────────
+## `app/infos_vue.gd`, `app/silhouette.gd`, les lignes majeures de `Vue`. ⚠ LES ATTENDUS SONT ÉCRITS ICI : la taille d'une
+## sélection comptée à la main, la hauteur du personnage relue sur les CONSTANTES de `personnage.gd`, les niveaux de
+## ligne écrits en dur.
+var _infos_finies := false
+
+
+func _les_infos_de_la_vue(ed: Control) -> void:
+	const Personnage := preload("res://app/personnage.gd")
+	var vue = ed._vue
+	ed._aller_a("monde")
+	ed._case_guide.button_pressed = true
+	ed._infos_vue.case_infos.button_pressed = true
+	ed._infos_vue.case_silhouette.button_pressed = true
+	ed._choisir_visee("grille")
+	ed._choisir_outil("ajouter")
+	vue.vider_selection()
+	ed._compteur_etage.value = 0
+	await process_frame
+	await process_frame
+	var infos: PanelContainer = ed._infos_vue
+	_vrai(infos.visible, "World : le panneau d'infos est à l'écran")
+	var t: String = infos._texte.get_parsed_text()
+	_vrai(t.contains("Layer") and t.contains("Floor  y = 0") and t.contains("Tool  Add"),
+		"il dit la couche, l'étage (y = 0) et l'outil (« %s »)" % t.replace("\n", " / "))
+	var droite: Control = ed._droite
+	_vrai(infos.position.x + infos.size.x <= droite.position.x + 0.5 and infos.position.x > ed.LARGEUR_GAUCHE,
+		"en haut à DROITE de la vue, à gauche de la barre de droite (%s, barre à %s)" % [infos.position, droite.position.x])
+	# L'ÉTAGE EN TÊTE DU GUIDE, et PgUp le change.
+	_vrai(ed._guide_texte.get_parsed_text().begins_with("Floor y = 0"), "le guide commence par l'étage : « Floor y = 0 »")
+	ed._unhandled_key_input(_cle(KEY_PAGEUP))
+	await process_frame
+	_egal(int(vue.etage), 1, "PgUp monte la grille d'un étage")
+	_vrai(ed._guide_texte.get_parsed_text().begins_with("Floor y = 1"),
+		"… et le guide le dit tout de suite : « Floor y = 1 » (« %s »)" % ed._guide_texte.get_parsed_text().left(30))
+	_vrai(infos._texte.get_parsed_text().contains("Floor  y = 1"), "… le panneau d'infos aussi")
+	ed._unhandled_key_input(_cle(KEY_PAGEDOWN))
+	await process_frame
+	_vrai(ed._guide_texte.get_parsed_text().begins_with("Floor y = 0"), "PgDn : « Floor y = 0 »")
+	ed._aller_a("witness")
+	await process_frame
+	_vrai(not ed._guide_texte.get_parsed_text().contains("Floor y"), "Geometry : pas d'étage dans le guide (pas de grille)")
+	_vrai(not infos.visible, "Geometry : pas de panneau d'infos")
+	ed._aller_a("monde")
+	await process_frame
+
+	# UNE SÉLECTION EN L, comptée à la main : un plancher de 12 × 8 (96 cases) à l'étage 0, et une colonne de 2 × 2 sur
+	# deux étages (8 cases) dans un coin — 104 cases, contenues dans 12 × 3 × 8.
+	var sel := {}
+	for x in 12:
+		for z in 8:
+			sel[Vector3i(400 + x, 0, 400 + z)] = true
+	for x in 2:
+		for y in [1, 2]:
+			for z in 2:
+				sel[Vector3i(400 + x, y, 400 + z)] = true
+	ed._choisir_outil("selectionner")
+	vue.regler_selection(sel)
+	await process_frame
+	t = infos._texte.get_parsed_text()
+	_vrai(t.contains("Selection  104 cells") and t.contains("12 × 3 × 8"),
+		"la sélection en L : 104 cases, 12 × 3 × 8 (« %s »)" % t.replace("\n", " / "))
+	vue.vider_selection()
+	await process_frame
+	_vrai(not infos._texte.get_parsed_text().contains("Selection"), "sans sélection, la ligne s'en va")
+
+	# UN VRAI GLISSÉ DE RECT, haussé de deux crans : 12 × 1 × 8 puis 12 × 3 × 8 ; relâché, il devient une sélection de
+	# 12 × 3 × 8 = 288 cases.
+	ed._choisir_outil("rect")
+	var cam: Camera3D = vue._camera
+	cam.global_position = Vector3(306.0, 30.0, 330.0)
+	cam.look_at(Vector3(306.0, 0.0, 304.0))
+	var p1: Vector2 = cam.unproject_position(Vector3(300.5, 0.0, 300.5))
+	var p2: Vector2 = cam.unproject_position(Vector3(311.5, 0.0, 307.5))
+	vue._commencer_coup(MOUSE_BUTTON_LEFT, p1, false)
+	vue._survoler(p2)
+	await process_frame
+	t = infos._texte.get_parsed_text()
+	_vrai(t.contains("Drag  12 × 1 × 8"), "pendant le glissé : « Drag 12 × 1 × 8 » (« %s »)" % t.replace("\n", " / "))
+	vue.hausser_le_glisse(1)
+	vue.hausser_le_glisse(1)
+	await process_frame
+	_vrai(infos._texte.get_parsed_text().contains("Drag  12 × 3 × 8"), "deux crans de molette : « Drag 12 × 3 × 8 »")
+	vue._coup = -1
+	vue._finir_boite(MOUSE_BUTTON_LEFT)
+	await process_frame
+	t = infos._texte.get_parsed_text()
+	_vrai(not t.contains("Drag") and t.contains("Selection  288 cells") and t.contains("12 × 3 × 8"),
+		"relâché : plus de glissé, une sélection de 288 cases, 12 × 3 × 8 (« %s »)" % t.replace("\n", " / "))
+	vue.vider_selection()
+
+	# LE REPÈRE DE TAILLE : la souris sur la case (303, 0, 304) de la grille → le fantôme debout dans cette case.
+	ed._choisir_outil("ajouter")
+	var ecran: Vector2 = cam.unproject_position(Vector3(303.5, 0.0, 304.5))
+	vue._survoler(ecran)
+	await process_frame
+	var fantome: Node3D = infos.silhouette
+	_vrai(fantome.visible and (fantome.global_position as Vector3).is_equal_approx(Vector3(303.5, 0.0, 304.5)),
+		"la silhouette se tient dans la case visée, sur la grille (%s)" % fantome.global_position)
+	for taille_p in [vue.taille_personnage, 1.0]:
+		vue.regler_taille_personnage(taille_p)
+		vue._survoler(ecran + Vector2(1, 0))
+		await process_frame
+		var h := _hauteur_visible(fantome)
+		var attendu: float = Personnage.HAUTEUR * float(taille_p)
+		_vrai(absf(h - attendu) < 0.04,
+			"à la taille %.2f, la silhouette a la hauteur du personnage : %.3f, pour HAUTEUR × taille = %.3f" % [taille_p, h, attendu])
+	vue.regler_taille_personnage(Personnage.TAILLE_DEFAUT)
+	vue._survoler(ecran)
+	await process_frame
+	ed._infos_vue.case_silhouette.button_pressed = false
+	await process_frame
+	_vrai(not fantome.visible, "décochée : plus de silhouette")
+	_vrai(_reglage("infos", "silhouette") == false, "… et c'est retenu dans reglages.cfg")
+	ed._infos_vue.case_silhouette.button_pressed = true
+	ed._infos_vue.case_infos.button_pressed = false
+	await process_frame
+	_vrai(not infos.visible, "décochée : plus de panneau d'infos")
+	_vrai(_reglage("infos", "visible") == false, "… et c'est retenu dans reglages.cfg")
+	ed._infos_vue.case_infos.button_pressed = true
+	await process_frame
+	_vrai(infos.visible, "recochée : il revient")
+
+	# LA GRILLE : des lignes marquées toutes les 4 cases, fortes toutes les 8 (attendus écrits à la main).
+	var niveaux_ok := true
+	for i in [-24, -16, -8, 0, 8, 16, 24]:
+		niveaux_ok = niveaux_ok and vue.niveau_de_ligne(i) == 2
+	for i in [-20, -12, -4, 4, 12, 20]:
+		niveaux_ok = niveaux_ok and vue.niveau_de_ligne(i) == 1
+	for i in [-23, -7, -1, 1, 2, 3, 5, 6, 7, 9, 13]:
+		niveaux_ok = niveaux_ok and vue.niveau_de_ligne(i) == 0
+	_vrai(niveaux_ok, "les niveaux de ligne : fortes aux multiples de 8, marquées aux multiples de 4, fines ailleurs")
+	var grille: Mesh = vue._grille.mesh
+	var alphas: Array = []
+	for s in grille.get_surface_count():
+		alphas.append((grille.surface_get_material(s) as StandardMaterial3D).albedo_color.a)
+	_vrai(grille.get_surface_count() == 3 and alphas[0] < alphas[1] and alphas[1] < alphas[2],
+		"la grille centrale : trois surfaces, de plus en plus marquées (%s)" % [alphas])
+	# 7 lignes fortes (−24 … 24) dans chaque sens, deux sommets chacune : 28 sommets.
+	_egal((grille.surface_get_arrays(2)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), 28,
+		"7 lignes fortes dans chaque sens (−24, −16 … 24)")
+	# La grille LOCALE suit la place dans le monde : survolée en (37, 0, −2), sa ligne x = 40 (locale 3) est forte, la
+	# ligne x = 36 (locale −1) marquée, la ligne x = 39 (locale 2) fine.
+	cam.global_position = Vector3(37.0, 20.0, 10.0)
+	cam.look_at(Vector3(37.0, 0.0, -2.0))
+	ecran = cam.unproject_position(Vector3(37.5, 0.0, -1.5))
+	vue._survoler(ecran)
+	await process_frame
+	_vrai(vue._grille_locale.visible and (vue._grille_locale.position as Vector3).x == 37.0,
+		"hors de la grille centrale, la grille locale suit la case survolée (%s)" % vue._grille_locale.position)
+	var arr: Array = (vue._grille_locale.mesh as Mesh).surface_get_arrays(0)
+	var a_forte := _alpha_du_segment(arr, Vector3(3, 0, 0), Vector3(3, 0, 1))
+	var a_marquee := _alpha_du_segment(arr, Vector3(-1, 0, 0), Vector3(-1, 0, 1))
+	var a_fine := _alpha_du_segment(arr, Vector3(2, 0, 0), Vector3(2, 0, 1))
+	_vrai(a_forte > a_marquee and a_marquee > a_fine and a_fine > 0.0,
+		"la grille locale : x = 40 forte (%.2f), x = 36 marquée (%.2f), x = 39 fine (%.2f)" % [a_forte, a_marquee, a_fine])
+	_infos_finies = true
+
+
+## L'alpha du segment a → b dans des tableaux de `PRIMITIVE_LINES` (−1 s'il n'y est pas).
+func _alpha_du_segment(arr: Array, a: Vector3, b: Vector3) -> float:
+	var v: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+	var c: PackedColorArray = arr[Mesh.ARRAY_COLOR]
+	for i in range(0, v.size(), 2):
+		if v[i].is_equal_approx(a) and v[i + 1].is_equal_approx(b):
+			return c[i].a
+	return -1.0
+
+
+## La hauteur VISIBLE d'un nœud : la boîte de tous ses maillages, en espace du monde (le bas des pieds au haut de la tête).
+func _hauteur_visible(n: Node3D) -> float:
+	var bas := INF
+	var haut := -INF
+	var pile: Array = [n]
+	while not pile.is_empty():
+		var x: Node = pile.pop_back()
+		pile.append_array(x.get_children())
+		var mi := x as MeshInstance3D
+		if mi == null or mi.mesh == null:
+			continue
+		var b: AABB = mi.global_transform * mi.mesh.get_aabb()
+		bas = minf(bas, b.position.y)
+		haut = maxf(haut, b.end.y)
+	return haut - bas
+
+
+func _reglage(section: String, cle: String) -> Variant:
+	var r := ConfigFile.new()
+	r.load(REGLAGES)
+	return r.get_value(section, cle, null)
