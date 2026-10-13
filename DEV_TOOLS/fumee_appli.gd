@@ -465,6 +465,8 @@ func _mener() -> void:
 	await _le_modeleur(ed)
 	await _lasso_et_cercle(ed)
 	_vrai(_lasso_fini, "le lasso et le cercle sont allés JUSQU'AU BOUT")
+	await _multi_tuiles(ed)
+	_vrai(_multi_fini, "SENTINELLE : la sélection sur plusieurs tuiles est allée JUSQU'AU BOUT")
 	_la_planche_des_tuiles(ed)
 	_vrai(_planche_finie, "la planche des tuiles est allée JUSQU'AU BOUT")
 	await _les_couches_et_leurs_temoins(ed)
@@ -5949,3 +5951,107 @@ func _le_guide(ed: Control) -> void:
 	_vrai(not ed._guide.visible, "Project : pas de guide (pas de vue à mener)")
 	ed._aller_a("monde")
 	_guide_fini = true
+
+
+## ── LA SÉLECTION SUR PLUSIEURS TUILES (Jordan, 13 octobre 2026) ────────────────────────────────────────────────────────
+## Un clic sur une face d'une tuile, Maj + clic sur une face d'une AUTRE tuile, G Z 0.05 Entrée : les deux faces montent
+## d'un vingtième de case DANS LE MONDE (attendu : leur centre relu sous la pose de leur copie, + 0,05 en y), aucun joint
+## ne s'ouvre (`_sans_partenaire`), UN Ctrl+Z rend les deux.
+var _multi_fini := false
+
+
+func _multi_tuiles(ed: Control) -> void:
+	var vue = ed._vue
+	ed._aller_a("witness")
+	if not vue.edition:
+		ed._input(_cle(KEY_TAB))
+	var mo: Node3D = ed._modeleur
+	if mo.temoin == null:
+		_vrai(false, "multi-tuiles : pas de témoin lié")
+		return
+	# ⚠ LA VUE EST RENDUE TELLE QU'ON L'A TROUVÉE À LA FIN : la suite (le couteau traversant) en dépend.
+	var vue_avant := [vue._camera.projection, vue._azimut, vue._elevation, vue._distance, vue._cible]
+	if vue._camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		vue.basculer_ortho()
+	vue._distance = 26.0
+	vue.vue_de("face")
+	vue.cadrer(Vector3(6, 6, 6))
+	for i in 3:
+		await process_frame
+	ed._input(_cle(KEY_3))
+	var cam: Camera3D = vue._camera
+	# Deux points de l'écran qui tombent sur deux TUILES différentes (cherchés sur une grille de l'écran).
+	var p1 := Vector2(-1, -1)
+	var p2 := Vector2(-1, -1)
+	var cle1 := ""
+	for gx in range(2, 18):
+		for gy in range(2, 18):
+			var p := Vector2(vue.size.x * gx / 20.0, vue.size.y * gy / 20.0)
+			var h: Dictionary = mo.temoin.rayon(cam.project_ray_origin(p), cam.project_ray_normal(p))
+			if h.is_empty():
+				continue
+			if cle1 == "":
+				cle1 = h["cle"]
+				p1 = p
+			elif h["cle"] != cle1 and p2.x < 0.0:
+				p2 = p
+	_vrai(p1.x >= 0.0 and p2.x >= 0.0, "deux tuiles différentes sont à l'écran")
+	if p2.x < 0.0:
+		return
+	_souris(vue, p1, MOUSE_BUTTON_LEFT, true)
+	_souris(vue, p1, MOUSE_BUTTON_LEFT, false)
+	var occ1: int = mo.occurrence
+	var f1: int = mo.sel_f.keys()[0] if mo.sel_f.size() == 1 else -1
+	_souris(vue, p2, MOUSE_BUTTON_LEFT, true, false, true)
+	_souris(vue, p2, MOUSE_BUTTON_LEFT, false, false, true)
+	var occ2: int = mo.occurrence
+	var cle2: String = mo.cle
+	var f2: int = mo.sel_f.keys()[0] if mo.sel_f.size() == 1 else -1
+	_vrai(cle2 != cle1 and mo.ailleurs.has(cle1) and (mo.ailleurs[cle1]["f"] as Dictionary).has(f1) and f2 >= 0,
+		"Maj + clic sur une autre tuile : la sélection de la première est gardée (« %s » et « %s »)" % [cle1, cle2])
+	var t1: RefCounted = mo.temoin.tuiles[cle1]
+	var t2: RefCounted = mo.temoin.tuiles[cle2]
+	var ps1: Transform3D = mo.temoin.occurrences[occ1]["pose"]
+	var ps2: Transform3D = mo.temoin.occurrences[occ2]["pose"]
+	var c1: Vector3 = ps1 * t1.centre(f1)
+	var c2: Vector3 = ps2 * t2.centre(f2)
+	for k in [KEY_G, KEY_Z, KEY_0, KEY_PERIOD, KEY_0, KEY_5, KEY_ENTER]:
+		ed._input(_cle(k))
+	t1 = mo.temoin.tuiles[cle1]
+	t2 = mo.temoin.tuiles[cle2]
+	var m1: Vector3 = ps1 * t1.centre(f1) - c1
+	var m2: Vector3 = ps2 * t2.centre(f2) - c2
+	var bride: float = mo.bride
+	# L'ATTENDU, ÉCRIT ICI : chaque sommet monte de 0,05, sauf s'il est posé sur un plan de coupe HORIZONTAL (y = k + ½
+	# dans le monde) — il y reste, sa section partagée l'y tient. Le centre monte de la moyenne.
+	var a1 := _montee_attendue(t1, f1, ps1, 0.05 * bride)
+	var a2 := _montee_attendue(t2, f2, ps2, 0.05 * bride)
+	_vrai(bride > 0.0 and absf(m1.y - a1) < 1e-4 and absf(m2.y - a2) < 1e-4 and a1 > 0.0 and a2 > 0.0
+		and Vector2(m1.x, m1.z).length() < 1e-4 and Vector2(m2.x, m2.z).length() < 1e-4,
+		"G Z 0.05 : les DEUX faces montent ensemble dans le monde (%.3f / %.3f, %.3f / %.3f attendus ; bride %.2f)" % [m1.y, a1, m2.y, a2, bride])
+	_egal(_sans_partenaire(mo.temoin), 0, "… sans ouvrir de joint")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	t1 = mo.temoin.tuiles[cle1]
+	t2 = mo.temoin.tuiles[cle2]
+	_vrai((ps1 * t1.centre(f1)).is_equal_approx(c1) and (ps2 * t2.centre(f2)).is_equal_approx(c2),
+		"UN Ctrl+Z rend les deux faces")
+	# Un clic simple oublie tout.
+	_souris(vue, p1, MOUSE_BUTTON_LEFT, true)
+	_souris(vue, p1, MOUSE_BUTTON_LEFT, false)
+	_vrai(mo.ailleurs.is_empty(), "un clic sans Maj oublie la sélection des autres tuiles")
+	mo.tout_choisir(false)
+	if vue._camera.projection != vue_avant[0]:
+		vue.basculer_ortho()
+	vue._azimut = vue_avant[1]
+	vue._elevation = vue_avant[2]
+	vue._distance = vue_avant[3]
+	vue.cadrer(vue_avant[4])
+	_multi_fini = true
+
+
+func _montee_attendue(t: RefCounted, f: int, ps: Transform3D, h: float) -> float:
+	var somme := 0.0
+	for i in t.faces[f]:
+		var w: Vector3 = ps * t.sommets[i]
+		somme += 0.0 if absf(w.y - floorf(w.y) - 0.5) < 0.0005 else h
+	return somme / float((t.faces[f] as PackedInt32Array).size())

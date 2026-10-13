@@ -112,6 +112,15 @@ var occurrence := -1
 var cle := ""
 var pose := Transform3D.IDENTITY
 var _edition: Node3D
+## LA SÉLECTION SUR PLUSIEURS TUILES (Jordan, 13 octobre 2026 : « la sélection multi-tuiles, go ») : Maj + clic sur une copie
+## d'une AUTRE tuile garde ce qui était choisi. `ailleurs` = {clé de tuile: {pose, s, a, f}} — la sélection de chaque tuile
+## qui n'est pas en édition, et la pose de la copie où on l'a faite (c'est là qu'elle se dessine, et c'est dans ce repère
+## que G, R et S la mènent). Revenir sur une copie d'une tuile mise de côté la reprend.
+var ailleurs := {}
+var _ailleurs_mi: MeshInstance3D
+var _ailleurs_lignes_mi: MeshInstance3D
+## Pendant G, R, S : {clé: {ids, depart, pose}} des tuiles d'`ailleurs` qui bougent avec la tuile en édition.
+var _autres_geste := {}
 var _occurrences: Node3D
 var _mm_de := {}          # clé → MultiMeshInstance3D
 ## ── LES SECTIONS PARTAGÉES (charte §3, point 2) ─────────────────────────────────────────────────────
@@ -160,6 +169,17 @@ func _init() -> void:
 	_faces_dyn_mi = MeshInstance3D.new()
 	_edition.add_child(_faces_dyn_mi)
 	_sel_mi = _instance_translucide(Color(ORANGE, 0.35))
+	# La sélection des AUTRES tuiles se dessine dans le repère du monde (chaque tuile à la pose de sa copie).
+	_ailleurs_mi = _instance_translucide(Color(ORANGE, 0.35))
+	_edition.remove_child(_ailleurs_mi)
+	add_child(_ailleurs_mi)
+	_ailleurs_lignes_mi = MeshInstance3D.new()
+	var ml := StandardMaterial3D.new()
+	ml.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ml.albedo_color = ORANGE
+	_ailleurs_lignes_mi.material_override = ml
+	_ailleurs_lignes_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(_ailleurs_lignes_mi)
 	_aretes_mi = MeshInstance3D.new()
 	var ma := StandardMaterial3D.new()
 	ma.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -286,12 +306,13 @@ func _exit_tree() -> void:
 
 ## L'occurrence `i` passe en édition : sa tuile devient `maillage`, et elle est dessinée par `_edition` (on
 ## la cache dans sa MultiMesh). Changer de TUILE vide la sélection ; une autre occurrence de la même la garde.
-func activer(i: int) -> void:
+func activer(i: int, garder := false) -> void:
 	if temoin == null or i < 0 or i >= temoin.occurrences.size():
 		return
 	if occurrence >= 0:
 		_montrer_l_occurrence(occurrence, true)
 	var ancienne := cle
+	var ancienne_pose := pose
 	occurrence = i
 	cle = temoin.occurrences[i]["cle"]
 	pose = temoin.occurrences[i]["pose"]
@@ -299,7 +320,18 @@ func activer(i: int) -> void:
 	_montrer_l_occurrence(i, false)
 	maillage = temoin.tuiles[cle]
 	if cle != ancienne:
+		# `garder` (Maj + clic) : la sélection de l'ancienne tuile est mise de côté, celle de la nouvelle reprise.
+		if garder and ancienne != "" and not _sommets_de(temoin.tuiles.get(ancienne), mode_sel, sel_s, sel_a, sel_f).is_empty():
+			ailleurs[ancienne] = {"pose": ancienne_pose, "s": sel_s, "a": sel_a, "f": sel_f}
+		elif not garder:
+			ailleurs.clear()
 		_vider_selection()
+		if ailleurs.has(cle):
+			var e: Dictionary = ailleurs[cle]
+			sel_s = e["s"]
+			sel_a = e["a"]
+			sel_f = e["f"]
+			ailleurs.erase(cle)
 		redessiner()
 	else:
 		_dessiner_selection()
@@ -522,6 +554,7 @@ func _redessiner_le_geste_topologique() -> void:
 
 
 func _redessiner_le_geste() -> void:
+	_dessiner_ailleurs()
 	_faces_dyn_mi.mesh = maillage.vers_array_mesh_de(_faces_mobiles)
 	_aretes_dyn_mi.mesh = _lignes(_aretes_mobiles, _aretes_choisies())
 	_dessiner_voile()
@@ -543,6 +576,7 @@ func _lignes(liste: Array, choisies: Dictionary) -> ArrayMesh:
 func _dessiner_selection() -> void:
 	if maillage == null:
 		return
+	_dessiner_ailleurs()
 	_dessiner_voile()
 	_aretes_mi.mesh = _lignes(_aretes(), _aretes_choisies())
 	_dessiner_sommets()
@@ -610,6 +644,84 @@ func sommets_choisis() -> Array:
 	return d.keys()
 
 
+## Les sommets que touche une sélection (s, a, f) d'un maillage `m`, dans le mode `mode` — la règle de `sommets_choisis`.
+static func _sommets_de(m: RefCounted, mode: String, s: Dictionary, a: Dictionary, f: Dictionary) -> Array:
+	if m == null:
+		return []
+	var d := {}
+	match mode:
+		"sommet":
+			d = s.duplicate()
+		"arete":
+			for e in a:
+				d[e.x] = true
+				d[e.y] = true
+		"face":
+			for g in f:
+				if g < m.faces.size():
+					for i in m.faces[g]:
+						d[i] = true
+	return d.keys()
+
+
+## Une sélection de sommets `ids` d'un maillage, exprimée dans le mode `vers` : [s, a, f] (la règle de `choisir_mode`).
+static func _convertir(m: RefCounted, ids: Array, vers: String) -> Array:
+	var d := {}
+	for i in ids:
+		d[i] = true
+	var s := {}
+	var a := {}
+	var f := {}
+	match vers:
+		"sommet":
+			s = d
+		"arete":
+			for e in m.aretes():
+				if d.has(e.x) and d.has(e.y):
+					a[e] = true
+		"face":
+			for g in m.faces.size():
+				var tous := true
+				for i in m.faces[g]:
+					tous = tous and d.has(i)
+				if tous:
+					f[g] = true
+	return [s, a, f]
+
+
+## La sélection des autres tuiles, à la pose de leur copie : un voile sur les faces choisies (toutes ses sommets
+## choisis), un trait sur les arêtes choisies.
+func _dessiner_ailleurs() -> void:
+	if _ailleurs_mi == null:
+		return
+	var tri := PackedVector3Array()
+	var lignes := PackedVector3Array()
+	for c in ailleurs:
+		var e: Dictionary = ailleurs[c]
+		var m: RefCounted = _tuile_indexee(c)
+		var ps: Transform3D = e["pose"]
+		var ids := {}
+		for i in _sommets_de(m, mode_sel, e["s"], e["a"], e["f"]):
+			ids[i] = true
+		for g in m.faces.size():
+			var face: PackedInt32Array = m.faces[g]
+			var tous := true
+			for i in face:
+				tous = tous and ids.has(i)
+			if not tous:
+				continue
+			var decal: Vector3 = m.normale(g) * 0.004
+			for t in m.trianguler(g):
+				for k in [0, 2, 1]:
+					tri.append(ps * (m.sommets[face[t[k]]] + decal))
+		for e2 in m.aretes():
+			if ids.has(e2.x) and ids.has(e2.y):
+				lignes.append(ps * m.sommets[e2.x])
+				lignes.append(ps * m.sommets[e2.y])
+	_ailleurs_mi.mesh = _mesh_de(tri, Mesh.PRIMITIVE_TRIANGLES)
+	_ailleurs_lignes_mi.mesh = _mesh_de(lignes, Mesh.PRIMITIVE_LINES)
+
+
 func _faces_choisies() -> Array:
 	if mode_sel == "face":
 		return sel_f.keys()
@@ -648,6 +760,13 @@ func choisir_mode(m: String) -> void:
 	if m == mode_sel or maillage == null:
 		mode_sel = m
 		return
+	for c in ailleurs:
+		var e: Dictionary = ailleurs[c]
+		var mc: RefCounted = _tuile_indexee(c)
+		var conv := _convertir(mc, _sommets_de(mc, mode_sel, e["s"], e["a"], e["f"]), m)
+		e["s"] = conv[0]
+		e["a"] = conv[1]
+		e["f"] = conv[2]
 	var s := sommets_choisis()
 	var d := {}
 	for i in s:
@@ -673,6 +792,7 @@ func choisir_mode(m: String) -> void:
 
 func tout_choisir(oui: bool) -> void:
 	_vider_selection()
+	ailleurs.clear()
 	if oui:
 		match mode_sel:
 			"sommet":
@@ -697,9 +817,10 @@ func cliquer(p: Vector2, ajouter: bool, boucle := false) -> void:
 	if temoin != null:
 		hit = temoin.rayon(camera.project_ray_origin(p), camera.project_ray_normal(p))
 		if not hit.is_empty() and int(hit["occurrence"]) != occurrence:
-			activer(int(hit["occurrence"]))
+			activer(int(hit["occurrence"]), ajouter)
 	if not ajouter:
 		_vider_selection()
+		ailleurs.clear()
 	if temoin == null:
 		hit = maillage.lancer_rayon_rapide(_origine(p), _direction(p))
 	if hit.is_empty():
@@ -919,6 +1040,9 @@ func commencer(geste: String) -> bool:
 	if ids.is_empty() and geste in ["G", "R", "S", "E", "I", "bevel"]:
 		dit.emit("[i]Nothing selected.[/i] Click a face (3), an edge (2) or a vertex (1) first.")
 		return false
+	if not ailleurs.is_empty() and geste in ["E", "I", "bevel"]:
+		dit.emit("[i]%s works on the tile in edit only[/i] — the selection on %d other tile(s) stays, untouched. G, R "
+			% [{"E": "Extrude", "I": "Inset", "bevel": "Bevel"}[geste], ailleurs.size()] + "and S move them all.")
 	_avant = maillage.copie()
 	_axe = ""
 	_saisie = ""
@@ -1003,6 +1127,28 @@ func commencer(geste: String) -> bool:
 	if _sections_du_geste:
 		sections.indexer()
 		_photo = sections.photo()
+	# LES AUTRES TUILES CHOISIES bougent avec elle (G, R, S seulement) : le pivot devient la moyenne de TOUT ce qui bouge,
+	# ramené dans le repère de la tuile en édition.
+	_autres_geste = {}
+	if _sections_du_geste and not ailleurs.is_empty():
+		var somme := Vector3.ZERO
+		var n := 0
+		for i in _ids:
+			somme += _depart[i]
+			n += 1
+		for ct in ailleurs:
+			var e: Dictionary = ailleurs[ct]
+			var mc: RefCounted = _tuile_indexee(ct)
+			# ⚠ Un Ctrl+Z topologique sur cette tuile a pu changer ses indices : ce qui n'existe plus est écarté.
+			var ids_c := _sommets_de(mc, mode_sel, e["s"], e["a"], e["f"]).filter(func(i: int) -> bool: return i < mc.sommets.size())
+			if ids_c.is_empty():
+				continue
+			var ps: Transform3D = e["pose"]
+			_autres_geste[ct] = {"ids": ids_c, "depart": (mc.sommets as PackedVector3Array).duplicate(), "pose": ps}
+			for i in ids_c:
+				somme += pose.affine_inverse() * (ps * mc.sommets[i])
+				n += 1
+		_pivot = somme / maxf(1.0, float(n))
 	if modal in ["G", "R", "S"]:
 		_preparer_le_geste()
 	if modal == "G" and _nom_geste == "Extrude" and _normale_extrusion != Vector3.ZERO:
@@ -1086,7 +1232,14 @@ func _mettre_a_jour() -> void:
 
 ## Applique le geste à l'amplitude `s` : la tuile en édition, puis les sections partagées (sans redessiner).
 func _appliquer_le_geste(faire: Callable, s: float) -> void:
-	maillage.transformer(_ids, faire.call(s), _depart, rayon_prop if proportionnel else 0.0, _candidats)
+	var t: Transform3D = faire.call(s)
+	maillage.transformer(_ids, t, _depart, rayon_prop if proportionnel else 0.0, _candidats)
+	# Les autres tuiles : la même transformation du MONDE, ramenée dans le repère de leur copie.
+	for c in _autres_geste:
+		var g: Dictionary = _autres_geste[c]
+		var ps: Transform3D = g["pose"]
+		var tc: Transform3D = ps.affine_inverse() * pose * t * pose.affine_inverse() * ps
+		_tuile_indexee(c).transformer(g["ids"], tc, g["depart"])
 	_contraindre_et_propager()
 
 
@@ -1204,7 +1357,20 @@ func _preparer_les_sections(mobiles: Dictionary) -> void:
 	for i in mobiles:
 		if sections.est_de_bord(cle, i):
 			sonde[i] = Vector3.ONE
-	var atteints: Dictionary = sections.propager(cle, sonde)
+	var sondes := {cle: sonde}
+	for c in _autres_geste:
+		var sc := {}
+		for i in _autres_geste[c]["ids"]:
+			if sections.est_de_bord(c, i):
+				sc[i] = Vector3.ONE
+		sondes[c] = sc
+	var atteints: Dictionary = sections.propager_plusieurs(sondes)
+	# Les autres tuiles choisies bougent toujours (leurs sommets intérieurs aussi) : dans le lot, et gardées par la bride.
+	for c in _autres_geste:
+		if not atteints.has(c):
+			atteints[c] = {}
+		for i in _autres_geste[c]["ids"]:
+			atteints[c][i] = Vector3.ONE
 	_atteints = {}
 	for c in atteints:
 		if c == cle:
@@ -1229,11 +1395,26 @@ func _contraindre_et_propager() -> void:
 			var d: Vector3 = sections.projeter(cle, i, maillage.sommets[i] - _depart[i])
 			maillage.sommets[i] = _depart[i] + d
 			deltas[i] = d
-	if deltas.is_empty():
+	var tous := {cle: deltas}
+	var vide := deltas.is_empty()
+	for c in _autres_geste:
+		var g: Dictionary = _autres_geste[c]
+		var mc: RefCounted = _tuile_indexee(c)
+		var dc := {}
+		for i in g["ids"]:
+			if sections.est_de_bord(c, i):
+				var d: Vector3 = sections.projeter(c, i, mc.sommets[i] - (g["depart"] as PackedVector3Array)[i])
+				mc.sommets[i] = (g["depart"] as PackedVector3Array)[i] + d
+				dc[i] = d
+		if not dc.is_empty():
+			tous[c] = dc
+			vide = false
+	if vide:
 		return
 	# UN GROUPE, UN MOUVEMENT : des sommets reliés par les sections reçoivent celui du plus déplacé — un pinceau ou
-	# l'édition proportionnelle leur en donnaient de différents (`Sections.propager_par_groupe`).
-	var r: Dictionary = sections.propager_par_groupe(cle, deltas)
+	# l'édition proportionnelle leur en donnaient de différents (`Sections.propager_par_groupe`) ; les sources peuvent être
+	# dans plusieurs tuiles (la sélection multi-tuiles).
+	var r: Dictionary = sections.propager_par_groupe_plusieurs(tous)
 	for i in r.get(cle, {}):
 		maillage.sommets[i] = _depart[i] + (r[cle][i] as Vector3)
 	r.erase(cle)
@@ -1303,6 +1484,7 @@ func confirmer() -> void:
 	elif not (_nom_geste in ["Extrude", "Inset", "Bevel"] and _completer_apres(avant, _nom_geste)):
 		_emettre(avant, _nom_geste)
 	_sections_du_geste = false
+	_autres_geste = {}
 	redessiner()
 
 
@@ -1316,6 +1498,7 @@ func annuler() -> void:
 			_tuile_indexee(c).sommets = (_photo[c] as PackedVector3Array).duplicate()
 			_rafraichir_tuile(c)
 		_sections_du_geste = false
+	_autres_geste = {}
 	modal = ""
 	_avant = null
 	_apercu_mi.mesh = null

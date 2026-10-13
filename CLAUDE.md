@@ -4917,8 +4917,23 @@ le lasso et le cercle ne regardaient que la copie EN ÉDITION. `Modeleur._choisi
 tuile sous sa pose (une copie dont le centre est hors du champ est sautée) : un élément entouré sur n'importe laquelle EST
 l'élément de la tuile. Gardé par `fumee_appli` (B autour d'une AUTRE copie, loin de l'active : ses faces sont prises, la
 copie en édition ne change pas ; les attendus du lasso et du cercle recomptés sur toutes les copies à l'écran).
-⚠ **OUVERT** : sélectionner ensemble des faces de tuiles DIFFÉRENTES (une paroi et un coin) — une sélection multi-tuiles,
-pas écrite.
+**LA SÉLECTION SUR PLUSIEURS TUILES — DEMANDÉE (Jordan, 13 octobre 2026 : « la sélection multi-tuiles, go »), ÉCRITE LE MÊME
+JOUR.** Maj + clic sur une copie d'une AUTRE tuile garde ce qui était choisi : la sélection de l'ancienne tuile est mise de
+côté (`Modeleur.ailleurs` = {clé: {pose de la copie où on l'a faite, s, a, f}}), dessinée à cette pose (un voile et ses
+arêtes, en orange), et reprise si l'on revient sur une copie de cette tuile ; un clic sans Maj, A ou Alt+A oublient tout ;
+1 2 3 convertissent aussi les sélections mises de côté.
+- **G, R, S les mènent toutes** : la même transformation du MONDE, ramenée dans le repère de chaque copie
+  (P⁻¹ · P_active · T · P_active⁻¹ · P) ; le pivot est la moyenne de TOUT ce qui bouge ; les sommets de bord sont projetés
+  dans leur plan, et la propagation prend des sources dans plusieurs tuiles (`Sections.propager_par_groupe_plusieurs` —
+  pour une seule tuile, l'ordre d'avant : `test_sections` 59 inchangé) ; la bride garde aussi les faces des autres tuiles ;
+  UN Ctrl+Z (un `TL.Lot`) rend tout. ⚠ **E, I, Ctrl+B ne portent que sur la tuile en édition** — l'écran le dit, les
+  autres sélections restent.
+- **MESURÉ** : `fumee_appli` 1 002 (un vrai clic, un Maj + clic sur une autre tuile — « mb_arete_b2h0_dehors » gardée —,
+  G Z 0.05 Entrée : les deux faces montent dans le monde de l'attendu calculé dans le test — 0,05 par sommet, 0 pour un
+  sommet posé sur un plan de coupe horizontal, que sa section y tient —, aucun joint ouvert, UN Ctrl+Z, un clic simple
+  oublie) ; mutation rouge (les autres tuiles immobiles). ⚠ Le premier attendu (« le centre monte de 0,05 ») était FAUX : la face choisie touchait un plan de coupe.
+  ⚠ Le test laissait la vue en orthographique, et le couteau traversant, éprouvé après, échouait : il rend la vue.
+- ⚠ **PAS TENU EN MAIN.** La boîte, le lasso et le cercle ne prennent que la tuile en édition (et ses copies).
 
 ### LA MOLETTE — DEMANDÉE PAR JORDAN (3 octobre 2026), DÉCIDÉE ET ÉCRITE LE MÊME JOUR
 

@@ -648,19 +648,32 @@ func projeter(cle: String, i: int, d: Vector3) -> Vector3:
 ## grand déplacement au plus petit, et chacune ne part que si la propagation des précédentes ne l'a pas atteinte :
 ## chaque groupe relié reçoit le mouvement de son membre le plus déplacé (le plus près du centre du pinceau).
 func propager_par_groupe(cle: String, deltas: Dictionary) -> Dictionary:
+	return propager_par_groupe_plusieurs({cle: deltas})
+
+
+## La même chose avec des sources dans PLUSIEURS tuiles — {clé: {i: déplacement}} (la sélection sur plusieurs tuiles,
+## 13 octobre 2026). Ordre : le plus déplacé d'abord, puis la clé, puis l'indice — pour une seule tuile, l'ordre d'avant.
+func propager_par_groupe_plusieurs(depart: Dictionary) -> Dictionary:
 	conflits = 0
-	var sources: Array = deltas.keys()
-	sources.sort_custom(func(a: int, b: int) -> bool:
-		var la: float = (deltas[a] as Vector3).length_squared()
-		var lb: float = (deltas[b] as Vector3).length_squared()
-		return la > lb or (la == lb and a < b))
+	var sources: Array = []
+	for c in depart:
+		for i in depart[c]:
+			sources.append([str(c), int(i), depart[c][i] as Vector3])
+	sources.sort_custom(func(a: Array, b: Array) -> bool:
+		var la: float = (a[2] as Vector3).length_squared()
+		var lb: float = (b[2] as Vector3).length_squared()
+		if la != lb:
+			return la > lb
+		if a[0] != b[0]:
+			return a[0] < b[0]
+		return a[1] < b[1])
 	var sortie := {}
 	var faits := {}
-	for i in sources:
-		if sortie.has(cle) and (sortie[cle] as Dictionary).has(i):
+	for x in sources:
+		if sortie.has(x[0]) and (sortie[x[0]] as Dictionary).has(x[1]):
 			continue
 		var file: Array = []
-		_poser(sortie, cle, i, deltas[i], file)
+		_poser(sortie, x[0], x[1], x[2], file)
 		_etendre(sortie, file, faits)
 	return sortie
 
