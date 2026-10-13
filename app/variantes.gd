@@ -535,7 +535,7 @@ func _dire_la_ligne() -> void:
 		b.value_changed.connect(regler_poids.bind(cle_designee, k))
 		ligne_poids.add_child(b)
 		_compteurs.append(b)
-		var compte := e._texte("×%d" % posees(nom, index), 11, Palette.GRIS)
+		var compte: Label = e._texte("×%d" % posees(nom, index), 11, Palette.GRIS)
 		compte.autowrap_mode = TextServer.AUTOWRAP_OFF
 		compte.tooltip_text = "How many tiles of the active layer show it."
 		ligne_poids.add_child(compte)
