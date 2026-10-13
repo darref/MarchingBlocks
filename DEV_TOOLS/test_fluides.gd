@@ -770,9 +770,12 @@ func _maillage() -> void:
 			# ⚠ Les sommets de la CASCADE seulement : le bout de la bande porte des sommets aux mêmes places (insérés).
 			if pts.has(v) and absf((a[Mesh.ARRAY_COLOR][k] as Color).b - 1.0) < 0.003:
 				alphas[v] = (a[Mesh.ARRAY_COLOR][k] as Color).a
+		# ⚠ « > 0,99 » ET NON 0,997 (13 octobre 2026) : l'ArrayMesh range l'écume sur 8 bits en TRONQUANT ; au pied de la
+		# cascade hors du monde (haut 1,05, 2,35 de chute) le point en 32 bits est à 5e−8 de l'eau — écume 0,9999999, relue
+		# 254/255. Le contrat (les tableaux, `test_parite`) l'a à 1e−4 près.
 		var bas: float = _boite_de(nappe)[0].y
 		_vrai(alphas.keys().all(func(p): return absf(p.y - haut) > 1e-4 or absf(alphas[p] - l[3]) < 0.003)
-			and alphas.keys().all(func(p): return absf(p.y - bas) > 1e-4 or alphas[p] > 0.997),
+			and alphas.keys().all(func(p): return absf(p.y - bas) > 1e-4 or alphas[p] > 0.99),
 			"… x = %s : l'écume vaut %s en haut, 1 au pied" % [plan, l[3]])
 		var anneau := q.filter(func(e): return _genre(e, 0.75) and _a_plat(e, l[2]) and _boite_de([e])[1].x > plan + 1.0)
 		_egal(anneau.size(), 1, "… x = %s : un anneau d'écume à plat, à %s, qui s'écarte du pied" % [plan, l[2]])
