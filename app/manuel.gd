@@ -242,7 +242,7 @@ func _outils() -> String:
 		+ "click again to keep going (Fill a Rect, then Extrude up to raise a wall). [b]Facing[/b] picks the "
 		+ "direction most cells face (air in front, matter behind): select a wall to thicken it, a cave ceiling "
 		+ "to lower it.")
-	l.append(_touche("Shift") + " + click [b]extends the selection[/b] one cell that way, " + _touche("Alt")
+	l.append(_touche("Shift") + " + click [b]extends the selection[/b] one cell that way, " + _touche("Ctrl")
 		+ " + click [b]moves it[/b] one cell — neither adds matter. Select a floor, Shift + Extrude up three "
 		+ "times, then Fill: a block three cells high.")
 	l.append("[b]Fix diagonal contacts[/b] — two cells that touch only by an edge have no tile (red cubes). [b]Fill[/b] "
@@ -693,22 +693,22 @@ func _raccourcis() -> String:
 	l.append(_titre("World"))
 	l.append(_table(_raccourcis_monde()))
 	l.append(_titre("The mouse wheel"))
-	l.append("[i]One rule everywhere: the wheel alone zooms — except during a gesture, where it sets that gesture's "
-		+ "size. " + _touche("Alt") + " + wheel sets the tool's main size, " + _touche("Shift") + " + wheel its second "
-		+ "one, " + _touche("Ctrl") + " + wheel the floor. A small label by the pointer tells the new value. Over the "
-		+ "side panels, the wheel only scrolls: it never changes a slider or a number.[/i]")
+	l.append("[i]One meaning per modifier, everywhere: " + _touche("Alt") + " is SIZE, " + _touche("Shift") + " is "
+		+ "HEIGHT (or « more »: add to a selection, run), " + _touche("Ctrl") + " MOVES what is in play (the selection, "
+		+ "otherwise the grid) or does the inverse. The wheel alone zooms — except during a gesture, where it sets that "
+		+ "gesture's size. A small label by the pointer tells the new value. The guide at the top left of the view shows "
+		+ "what each modifier does right now: hold it to see. Over the side panels, the wheel only scrolls.[/i]")
 	l.append(_table([
 		["Wheel", "Zoom"],
 		["Wheel while dragging a Rect or a Box", "Raise or lower its far corner: a flat Rect becomes a box"],
 		["Wheel while drawing a Room", "Floors"],
 		["Wheel while pasting", "Paste one cell higher or lower"],
-		["Ctrl + wheel", "Floor y (World, Fluids)"],
-		["Alt · Shift + wheel — Add, Dig, Select", "Brush size · brush shape"],
+		["Ctrl + wheel", "Move the selection up or down (Select, Rect, Box) — otherwise the floor y"],
+		["Alt + wheel — Add, Dig, Select", "Brush size"],
 		["Alt · Shift + wheel — with a selection (Select, Rect, Box)", "Widen or shrink it flat · extend it up or down "
 			+ "(empty cells included, no matter added)"],
 		["Alt · Shift + wheel — Tunnel, Well, Bridge, Stairs", "Size · Depth, Reach or Length"],
-		["Ctrl + Shift + wheel — Stairs", "Step"],
-		["Alt · Shift + wheel — Room", "Floors · up or down"],
+		["Shift + wheel — Room", "Floors"],
 		["Alt + wheel — Water", "River width"],
 		["Alt · Shift + wheel — Sculpt (Geometry)", "Radius · strength"],
 		["Alt · Shift + wheel — Paint (Texturing)", "Brush size · hardness"],

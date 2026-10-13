@@ -4875,6 +4875,51 @@ pour utiliser très peu Fill holes », puis « go pour 1 à 4 ».
 - ⚠ **PAS TENU EN MAIN.** ⚠ Un contour dissous CONCAVE à quatre sommets serait triangulé en éventail (`trianguler`
   n'appelle la découpe en oreilles qu'au-delà de quatre) — défaut d'avant, F l'a aussi, pas corrigé.
 
+### UN SENS PAR MODIFICATEUR, ET LE GUIDE EN ARBRE — DÉCIDÉ (Jordan, 13 octobre 2026), ÉCRIT LE MÊME JOUR
+
+Jordan : « Ctrl, Alt et Maj devraient être les modificateurs contextuels, une utilisation différente selon l'atelier et
+l'outil […] faire un état des lieux de tous les raccourcis, laisser les moins importants dans la section Shortcuts, afficher
+les plus courants en texte flottant en haut à gauche de la vue, qui se confirme au modificateur pressé […] peu de touches
+pour tous les raccourcis, selon le contexte », puis, sur l'état des lieux proposé : « d'accord pour ta répartition, mais il
+faut guider en arbre l'utilisateur en montrant des propositions de shortcuts selon le contexte ».
+
+- **LA RÉPARTITION (DÉCIDÉE)** : **Alt = la TAILLE** (pinceau, forme, rayon ; avec une sélection : élargir / Shrink à plat) ;
+  **Maj = la HAUTEUR ou « en plus »** (étendre ↑ ↓, étages, profondeur ; au clic : ajouter ; au jeu : courir) ; **Ctrl =
+  DÉPLACER ce qui est en jeu, ou l'INVERSE** (la sélection, sinon la grille ; au sculpt : creuser).
+- **CE QUI A CHANGÉ POUR LA TENIR** : Ctrl + molette, avec une sélection sous Select / Rect / Box, la DÉPLACE d'une case en
+  hauteur (le « grab ») — sinon l'étage, comme avant ; **Ctrl** + clic sur Extrude décale la sélection (c'était Alt, qui
+  voulait dire « élargir » à la molette) ; Room : Maj + molette = les étages (Alt ne règle plus rien ; Up / Down au
+  bouton) ; **retirés** : Maj + molette = la forme du pinceau (les boutons), Ctrl + Maj + molette = le pas de l'escalier
+  (le bouton) — la seule combinaison à deux modificateurs. Geometry et Texturing gardent les gestes de Blender (Maj ajoute,
+  Ctrl le lasso et l'inverse, Alt la boucle, la pipette) : ils tombent déjà dans la répartition, sauf Alt (la boucle, le
+  X-ray, la pipette), exception assumée.
+- **LE GUIDE** (`app/guide.gd`, PUR — `entrees(contexte)` est LA table : [modificateur, geste, effet, essentiel]) : en haut à
+  gauche de la vue (`_batir_guide`, à droite de la barre de gauche, sans souris), les gestes essentiels du contexte (atelier,
+  outil, forme, sélection, Navigate, collage, glissé, la mer en choix, l'édition, le geste du modeleur, sculpt, pinceau),
+  puis une BRANCHE par modificateur (« Ctrl ▸ move the selection up · down ») ; TENIR le modificateur déplie la sienne (ses
+  gestes essentiels, puis les autres). Réécrit seulement quand le contexte ou la touche tenue change. Case « Shortcut guide
+  in the view » (Shortcuts, `reglages.cfg` [guide]) ; caché dans Project et sous le manuel.
+- **LA SECTION SHORTCUTS** se remplit de la même table : tout ce qui n'est PAS au guide (`Guide.le_reste`), pour le contexte
+  — elle est désormais visible aussi dans Geometry et Texturing. ⚠ **LE MANUEL (F1) RESTE UNE SECONDE DESCRIPTION** : ses
+  tables ont été corrigées à la main (la molette, Extrude), pas dérivées de `Guide` — à faire.
+- **MESURÉ** : `fumee_appli` (le guide : Add au repos, Select + sélection et ses trois branches, Ctrl et Maj VRAIMENT tenus
+  qui déplient la leur, relâchés la racine, la section Shortcuts sans ce que le guide montre, Geometry, décoché, Project ; la
+  molette : Ctrl + molette monte la sélection sans bouger l'étage, Maj ne change plus la forme, Room à Maj, l'escalier sans
+  pas ; Ctrl + Extrude) — 995 vérifications, 0 échec. **Quatre mutations, rouges** : le modificateur tenu ignoré, la
+  boîte sur la seule copie active, Ctrl + molette toujours l'étage, Extrude décalé par Alt. ⚠ Le guide n'a pas été VU
+  À L'IMAGE ni tenu en main ; ses mots sont des propositions.
+
+### LA BOÎTE, LE LASSO ET LE CERCLE À TRAVERS LES COPIES — DEMANDÉ PAR JORDAN (13 octobre 2026), ÉCRIT LE MÊME JOUR
+
+« On ne peut pas sélectionner plusieurs faces du même bloc à travers des clones différents dans le witness pour les éditer
+ensemble. » Le clic le pouvait déjà (Maj + clic sur une autre copie de la MÊME tuile garde la sélection), mais la boîte B,
+le lasso et le cercle ne regardaient que la copie EN ÉDITION. `Modeleur._choisir_si` essaie désormais chaque copie de la
+tuile sous sa pose (une copie dont le centre est hors du champ est sautée) : un élément entouré sur n'importe laquelle EST
+l'élément de la tuile. Gardé par `fumee_appli` (B autour d'une AUTRE copie, loin de l'active : ses faces sont prises, la
+copie en édition ne change pas ; les attendus du lasso et du cercle recomptés sur toutes les copies à l'écran).
+⚠ **OUVERT** : sélectionner ensemble des faces de tuiles DIFFÉRENTES (une paroi et un coin) — une sélection multi-tuiles,
+pas écrite.
+
 ### LA MOLETTE — DEMANDÉE PAR JORDAN (3 octobre 2026), DÉCIDÉE ET ÉCRITE LE MÊME JOUR
 
 Jordan : « une utilisation du déroulement de la molette intelligemment pensée, et probablement différente pour les

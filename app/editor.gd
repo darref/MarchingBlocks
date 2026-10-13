@@ -37,6 +37,7 @@ const FS := preload("res://addons/marchingblocks_core/formes_speciales.gd")
 const FormatNeutre := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const FormatMonde := preload("res://addons/marchingblocks_core/format_monde.gd")
 const Palette := preload("res://app/palette.gd")
+const Guide := preload("res://app/guide.gd")
 const Section := preload("res://app/section.gd")
 const Variantes := preload("res://app/variantes.gd")
 const AtelierTransitions := preload("res://app/transitions.gd")
@@ -169,6 +170,14 @@ var _etapes_artiste: Array[Control] = []
 var _etapes_monde: Array[Control] = []
 var _section_temoin: Control
 var _section_raccourcis: Control
+## LE GUIDE DES RACCOURCIS (Jordan, 13 octobre 2026 — `app/guide.gd`) : en haut à gauche de la vue, ce qu'on peut faire
+## maintenant, en arbre (une branche par modificateur ; le tenir déplie la sienne). La section Shortcuts porte le reste.
+var _guide: PanelContainer
+var _guide_texte: RichTextLabel
+var _grille_raccourcis: GridContainer
+var _case_guide: CheckBox
+var _guide_signature := ""
+var _reste_signature := ""
 var _zone_reference: Control
 var _bouton_revoir_temoin: Button
 var _bouton_trancher_travail: Button
@@ -417,6 +426,7 @@ func _process(delta: float) -> void:
 	# Les cartes PBR suivent leur albedo, sur un autre fil, quand la main s'est posée (`peinture.gd`).
 	Peinture.suivre_les_cartes()
 	_dire_l_etat_pbr()
+	_suivre_le_guide()
 	_ecoule += delta
 	if _ecoule < SECONDES_CONSEIL:
 		return
@@ -488,6 +498,7 @@ func _batir() -> void:
 	_batir_rapport(_gauche.get_meta("pied"))
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
+	_batir_guide(corps)
 	_modeleur = Modeleur.new()
 	_vue.brancher_modeleur(_modeleur)
 	_modeleur.change.connect(_geste_du_modeleur)
@@ -1175,20 +1186,113 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var aide := Section.new("Shortcuts", true, Icones.icone("clavier"))
 	_section_raccourcis = aide
 	reference.add_child(aide)
-	var raccourcis := GridContainer.new()
-	raccourcis.columns = 2
-	raccourcis.add_theme_constant_override("h_separation", 10)
-	raccourcis.add_theme_constant_override("v_separation", 4)
-	for r in [["Tab", "Grid ↔ Sculpt"], ["Space", "Navigate on / off"], ["AZEQSD", "Fly (Navigate)"],
-			["Right drag", "Look (Navigate)"], ["A D S", "Add Dig Select"], ["R  B", "Rect  Box"], ["[  ]", "Brush size"],
-			["PgUp PgDn", "Floor y"], ["Ctrl+click", "Floor y to matter"], ["²", "Jump to matter"], ["Arrows", "Move selection"], ["Del · Esc", "Delete · clear"],
-			["Ctrl C X V", "Copy cut paste"], ["Ctrl Z · Y", "Undo · redo"], ["Middle drag", "Turn"],
-			["Shift+middle", "Slide"], ["Wheel", "Zoom"], ["F1", "User guide"]]:
-		raccourcis.add_child(_touche_clavier(r[0]))
-		raccourcis.add_child(_texte(r[1], 11, Palette.GRIS))
-	aide.contenu.add_child(raccourcis)
+	_case_guide = CheckBox.new()
+	_case_guide.text = "Shortcut guide in the view"
+	_case_guide.tooltip_text = ("The most useful shortcuts of the moment, at the top left of the view. Hold Ctrl, Alt or "
+		+ "Shift to see what each one does here. The others are listed below.")
+	_case_guide.button_pressed = _lire_reglage("guide", "visible", true)
+	_case_guide.toggled.connect(func(oui: bool) -> void:
+		_ecrire_reglage("guide", "visible", oui)
+		_guide_signature = "")
+	aide.contenu.add_child(_case_guide)
+	_grille_raccourcis = GridContainer.new()
+	_grille_raccourcis.columns = 2
+	_grille_raccourcis.add_theme_constant_override("h_separation", 10)
+	_grille_raccourcis.add_theme_constant_override("v_separation", 4)
+	aide.contenu.add_child(_grille_raccourcis)
 	aide.contenu.add_child(_bouton("Open the user guide", "Everything, explained (F1).",
 		func() -> void: _manuel.ouvrir(), "livre", Palette.DISCRET))
+
+
+## Un réglage de `reglages.cfg` (lu à la construction, écrit au geste).
+func _lire_reglage(section: String, cle: String, defaut: Variant) -> Variant:
+	var r := ConfigFile.new()
+	r.load(REGLAGES)
+	return r.get_value(section, cle, defaut)
+
+
+func _ecrire_reglage(section: String, cle: String, valeur: Variant) -> void:
+	var r := ConfigFile.new()
+	r.load(REGLAGES)
+	r.set_value(section, cle, valeur)
+	r.save(REGLAGES)
+
+
+## LE GUIDE FLOTTANT : en haut à gauche de la vue, juste à droite de la barre de gauche ; il ne prend pas la souris.
+func _batir_guide(parent: Control) -> void:
+	_guide = PanelContainer.new()
+	var st := Palette.fond(Color(Palette.PANNEAU, 0.78), 6, 8)
+	st.border_color = Color(Palette.FILET, 0.8)
+	st.set_border_width_all(1)
+	_guide.add_theme_stylebox_override("panel", st)
+	_guide.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide.position = Vector2(LARGEUR_GAUCHE + 12, 10)
+	_guide.custom_minimum_size = Vector2(250, 0)
+	_guide_texte = RichTextLabel.new()
+	_guide_texte.bbcode_enabled = true
+	_guide_texte.fit_content = true
+	_guide_texte.scroll_active = false
+	_guide_texte.autowrap_mode = TextServer.AUTOWRAP_OFF
+	_guide_texte.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_guide_texte.add_theme_font_size_override("normal_font_size", 12)
+	_guide_texte.add_theme_font_size_override("bold_font_size", 12)
+	_guide.add_child(_guide_texte)
+	parent.add_child(_guide)
+
+
+## Le contexte que lit le guide (`Guide.entrees`) : ce que l'écran sait de l'état du logiciel.
+func _contexte_du_guide() -> Dictionary:
+	if _vue == null:
+		return {}
+	return {"atelier": _atelier, "outil": str(_vue.outil), "quoi": str(_vue.forme_speciale.get("quoi", "")),
+		"selection": not _vue.selection.is_empty(), "naviguer": _vue.naviguer, "collage": _vue.collage,
+		"glisse": _vue.glisse_en_cours(), "mer": _mer_choisie != null, "edition": _vue.edition,
+		"modal": _modeleur.modal if _modeleur != null else "", "sculpt": _modeleur != null and _modeleur.sculpt,
+		"pinceau": _modeleur != null and _modeleur.pinceau}
+
+
+## Une fois par image : le guide ne se réécrit que si le contexte ou le modificateur tenu a changé.
+func _suivre_le_guide() -> void:
+	if _guide == null:
+		return
+	var c := _contexte_du_guide()
+	var montrer := _case_guide != null and _case_guide.button_pressed and _atelier != "projet" \
+		and not (_manuel != null and _manuel.visible)
+	var modif := Guide.modificateur_tenu() if montrer else ""
+	var sig := "%s|%s|%s" % [montrer, modif, str(c).hash()]
+	if sig != _guide_signature:
+		_guide_signature = sig
+		_guide.visible = montrer
+		if montrer:
+			_guide_texte.text = texte_du_guide(c, modif)
+			_guide.reset_size()
+	# LA SECTION SHORTCUTS : le reste, pour le contexte (sans le modificateur).
+	var sig_reste := str(c).hash()
+	if _grille_raccourcis != null and str(sig_reste) != _reste_signature:
+		_reste_signature = str(sig_reste)
+		for n in _grille_raccourcis.get_children():
+			_grille_raccourcis.remove_child(n)
+			n.queue_free()
+		for r in Guide.le_reste(c):
+			_grille_raccourcis.add_child(_touche_clavier(r[0]))
+			_grille_raccourcis.add_child(_texte(r[1], 11, Palette.GRIS))
+
+
+## Le texte du guide : au repos, les gestes essentiels puis une branche par modificateur ; un modificateur tenu, sa branche.
+func texte_du_guide(c: Dictionary, modif: String) -> String:
+	var p := Guide.propositions(c, modif)
+	var olive := Palette.OLIVE.to_html(false)
+	var gris := Palette.GRIS.to_html(false)
+	var l := PackedStringArray()
+	if modif != "":
+		l.append("[color=#%s][b]%s ▸[/b][/color]" % [olive, Guide.NOMS[modif]])
+		if (p["lignes"] as Array).is_empty():
+			l.append("[color=#%s]nothing here[/color]" % gris)
+	for r in p["lignes"]:
+		l.append("[b]%s[/b]   [color=#%s]%s[/color]" % [r[0], gris, r[1]])
+	for b in p["branches"]:
+		l.append("[color=#%s][b]%s ▸[/b][/color]  [color=#%s]%s[/color]" % [olive, Guide.NOMS[b[0]], gris, b[1]])
+	return "\n".join(l)
 
 
 ## Une touche de clavier, dessinée comme une touche.
@@ -1467,14 +1571,14 @@ func _batir_droite(pile: VBoxContainer) -> void:
 	_etiquette_portee = _texte("", 11, Palette.GRIS)
 	etage.contenu.add_child(_etiquette_portee)
 	# EXTRUDE, UNE SEULE FOIS (Jordan, 2 octobre 2026) : Extend up / down et Extrude ↑ ↓ de la sélection faisaient la
-	# même chose sous deux noms ; ils ne font plus qu'un, et Maj / Alt étendent ou décalent la sélection
+	# même chose sous deux noms ; ils ne font plus qu'un, et Maj / Ctrl étendent ou décalent la sélection (Alt jusqu'au 13 octobre 2026)
 	# (`Etages.extruder`).
 	var modes := ("
 Click: adds matter, the selection and the floor plane follow — click again to keep going."
 		+ "
 Shift+click: extends the selection one cell that way, without adding matter."
 		+ "
-Alt+click: moves the selection one cell that way, without adding matter."
+Ctrl+click: moves the selection one cell that way, without adding matter."
 		+ "
 Acts on the selection if there is one, otherwise on the matter of floor y.")
 	var ops: Array = []
@@ -3194,7 +3298,7 @@ func _contexte() -> void:
 	for e in _etapes_monde:
 		e.visible = projet
 	_section_temoin.visible = temoin or projet
-	_section_raccourcis.visible = monde
+	_section_raccourcis.visible = monde or temoin
 	_zone_reference.visible = temoin or monde or projet
 	_droite.visible = monde or jeu_edit
 	_droite_temoin.visible = geometrie
@@ -5633,12 +5737,13 @@ const NOMS_OPERATIONS := {"elargir": "Widen", "creuser": "Hollow", "evider": "Ho
 	"supprimer": "Delete", "grandir": "Grow", "retrecir_bord": "Shrink", "retrecir": "Shrink", "connexe": "Connected"}
 
 
-## Un clic sur Extrude up / down / facing : Maj étend la sélection, Alt la décale (Jordan, 2 octobre 2026).
+## Un clic sur Extrude up / down / facing : Maj étend la sélection (la hauteur), Ctrl la décale (déplacer) — Alt la
+## décalait jusqu'au 13 octobre 2026, quand Alt est devenu la taille partout (`app/guide.gd`).
 func _extruder_au_clic(quoi: String) -> void:
 	var mode := "poser"
 	if Input.is_key_pressed(KEY_SHIFT) or Input.is_physical_key_pressed(KEY_SHIFT):
 		mode = "etendre"
-	elif Input.is_key_pressed(KEY_ALT) or Input.is_physical_key_pressed(KEY_ALT):
+	elif Input.is_key_pressed(KEY_CTRL) or Input.is_physical_key_pressed(KEY_CTRL) or Input.is_key_pressed(KEY_META):
 		mode = "decaler"
 	_extruder(quoi, mode)
 
@@ -5669,7 +5774,7 @@ func _extruder(quoi: String, mode := "poser") -> void:
 				% [_nom_du_sens(sens), _vue.selection.size()])
 		_:
 			_dire(("[b]Extrude[/b] %s on %s — %d cell(s) added. [i]Click again to keep going; Shift+click extends "
-				+ "the selection, Alt+click moves it; Ctrl+Z undoes the cells.[/i]") % [_nom_du_sens(sens), sur, n])
+				+ "the selection, Ctrl+click moves it; Ctrl+Z undoes the cells.[/i]") % [_nom_du_sens(sens), sur, n])
 
 
 func _nom_du_sens(d: Vector3i) -> String:
@@ -5959,19 +6064,21 @@ func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
 			"salle":
 				return _cran(_etages_forme, sens, "Floors")
 		return false
-	if ctrl and maj and outil == "forme" and _vue.forme_speciale["quoi"] == "escalier":
-		return _cran(_pas_forme, sens, "Step")
+	# UN SENS PAR MODIFICATEUR (Jordan, 13 octobre 2026 — `app/guide.gd`) : CTRL DÉPLACE ce qui est en jeu — la
+	# sélection s'il y en a une sous un outil de sélection (le « grab »), sinon la grille. Le pas de l'escalier
+	# (Ctrl + Maj, la seule combinaison à deux modificateurs) ne se règle plus qu'au bouton.
 	if ctrl:
+		if not _vue.selection.is_empty() and outil in ["selectionner", "rect", "boite"]:
+			_deplacer(Vector3i(0, sens, 0))
+			_vue.montrer_valeur("Selection %s" % ("↑" if sens > 0 else "↓"))
+			return true
 		return _cran(_compteur_etage, sens, "Floor")
 	if outil == "eau":
 		return _cran(_largeur_eau, sens, "River width") if alt else false
 	if outil == "forme":
+		# LA SALLE : sa hauteur est à Maj (la hauteur), comme pendant qu'on la trace ; Up / Down au bouton.
 		if _vue.forme_speciale["quoi"] == "salle":
-			if alt:
-				return _cran(_etages_forme, sens, "Floors")
-			_regler_le_sens_de_salle("haut" if sens > 0 else "bas")
-			_vue.montrer_valeur("Rises" if sens > 0 else "Sinks")
-			return true
+			return _cran(_etages_forme, sens, "Floors") if maj else false
 		if alt:
 			return _cran(_taille_forme, sens, "Size")
 		if _ligne_longueur.visible:
@@ -5992,13 +6099,8 @@ func _molette_du_monde(sens: int, alt: bool, maj: bool, ctrl: bool) -> bool:
 			else "Selection unchanged")
 		return true
 	if outil in ["ajouter", "creuser", "selectionner"]:
-		if alt:
-			return _cran(_taille, sens, "Brush size")
-		var formes: Array = _boutons_forme.keys()
-		var f: String = formes[posmod(formes.find(_vue.forme) + sens, formes.size())]
-		_choisir_forme(f)
-		_vue.montrer_valeur((_boutons_forme[f] as Button).text)
-		return true
+		# Alt : la taille. La forme du pinceau (sphère, cube, disque) ne se choisit plus qu'aux boutons (13 octobre 2026).
+		return _cran(_taille, sens, "Brush size") if alt else false
 	return false
 
 

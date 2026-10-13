@@ -264,12 +264,12 @@ func _mener() -> void:
 	_egal(ed._vue.selection, etendue, "Maj + Extrude up : la sélection s'étend d'un cran (18 cases)")
 	_egal(cases0.get_used_cells().size(), avant + 18, "… sans poser de matière")
 	_egal(ed._vue.etage, avant_etage + 2, "… et l'étage suit")
-	# Alt + clic sur Extrude up : la sélection MONTE d'un cran, rien n'est posé. ⚠ PAS SUR « DOWN » : sous la
+	# CTRL + clic sur Extrude up (Alt jusqu'au 13 octobre 2026 : Alt est la taille) : la sélection MONTE d'un cran, rien n'est posé. ⚠ PAS SUR « DOWN » : sous la
 	# sélection tout est plein, un Extrude normal n'y posait rien non plus et décalait aussi la sélection — la
 	# mutation « Alt ignorée » restait MUETTE. Vers le haut, un Extrude normal poserait 9 cases.
 	var alt := InputEventKey.new()
-	alt.keycode = KEY_ALT
-	alt.physical_keycode = KEY_ALT
+	alt.keycode = KEY_CTRL
+	alt.physical_keycode = KEY_CTRL
 	alt.pressed = true
 	Input.parse_input_event(alt)
 	Input.flush_buffered_events()
@@ -281,7 +281,7 @@ func _mener() -> void:
 	var montee := {}
 	for c in etendue:
 		montee[c + Vector3i.UP] = true
-	_egal(ed._vue.selection, montee, "Alt + Extrude up : la sélection monte d'un cran")
+	_egal(ed._vue.selection, montee, "Ctrl + Extrude up : la sélection monte d'un cran")
 	_egal(cases0.get_used_cells().size(), avant + 18, "… sans poser de matière")
 	_egal(ed._vue.etage, avant_etage + 3, "… et l'étage suit")
 	ed._histoire.undo()
@@ -384,8 +384,8 @@ func _mener() -> void:
 	_vrai(not ed._droite.visible, "Witness : pas de barre d'outils de peinture")
 	# ⚠ LES COUCHES Y SONT (30 septembre 2026) : une couche est un témoin ET un monde peint — on la choisit
 	# dans les deux ateliers.
-	_vrai(ed._section_temoin.visible and not ed._section_raccourcis.visible and ed._section_couches.visible,
-		"Witness : la section Witness et les couches, sans raccourcis de peinture")
+	_vrai(ed._section_temoin.visible and ed._section_raccourcis.visible and ed._section_couches.visible,
+		"Witness : la section Witness, les couches, et les raccourcis du témoin (13 octobre 2026)")
 	_vrai(not ed._section_projet.visible and not ed._etapes_artiste.any(func(e): return e.visible)
 		and not ed._etapes_monde.any(func(e): return e.visible),
 		"Witness : ni Save · open ni aller-retour — ils vivent dans Project seul")
@@ -503,6 +503,8 @@ func _mener() -> void:
 	await _les_teintes_des_ateliers(ed)
 	await _la_molette(ed)
 	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
+	await _le_guide(ed)
+	_vrai(_guide_fini, "SENTINELLE : le guide des raccourcis est allé JUSQU'AU BOUT")
 	_les_variantes(ed)
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
 	_les_bords_entre_couches(ed)
@@ -3110,6 +3112,15 @@ func _le_modeleur(ed: Control) -> void:
 		var po: Transform3D = mo.temoin.occurrences[i]["pose"]
 		if not cam.is_position_in_frustum(po.origin) or not Rect2(Vector2.ZERO, ed._vue.size).has_point(cam.unproject_position(po.origin)):
 			continue
+		# ⚠ SEULE DE SA TUILE À L'ÉCRAN (13 octobre 2026) : la boîte prend désormais ce qu'on voit sur TOUTES les copies de
+		# la tuile — une face cachée ici et vue sur une autre copie serait prise, à juste titre. Pour juger l'occlusion,
+		# une tuile dont aucune autre copie n'a son centre dans le champ.
+		var seule := true
+		for j in mo.temoin.occurrences_de(mo.temoin.occurrences[i]["cle"]):
+			if j != i and cam.is_position_in_frustum((mo.temoin.occurrences[j]["pose"] as Transform3D).origin):
+				seule = false
+		if not seule:
+			continue
 		examinees += 1
 		# À DEMI : des faces tournées vers l'œil, dont certaines vues et d'autres cachées (par une autre copie).
 		var tu: RefCounted = mo.temoin.tuiles[mo.temoin.occurrences[i]["cle"]]
@@ -4881,8 +4892,9 @@ func _la_molette(ed: Control) -> void:
 	_vrai(vue.bulle_visible() == "Brush size 3", "… et la valeur est dite près de la souris (« %s »)" % vue.bulle_visible())
 	_cran(vue, -1, true)
 	_egal(int(ed._taille.value), 2, "Alt + molette vers le bas : 3 → 2")
+	# UN SENS PAR MODIFICATEUR (13 octobre 2026) : Maj ne change plus la forme du pinceau (les boutons seuls) — elle zoome.
 	_cran(vue, 1, false, true)
-	_egal(vue.forme, "cube", "Maj + molette : la forme du pinceau suivante (sphère → cube)")
+	_egal(vue.forme, "sphere", "Maj + molette ne change plus la forme du pinceau")
 	_cran(vue, 1, false, false, true)
 	_vrai(int(ed._compteur_etage.value) == 1 and vue.etage == 1, "Ctrl + molette : l'étage de la grille 0 → 1")
 	_cran(vue, -1, false, false, true)
@@ -4916,6 +4928,24 @@ func _la_molette(ed: Control) -> void:
 		and g.get_used_cells().size() == avant, "Alt + molette : la sélection s'élargit d'une couronne à plat, cases vides comprises (84 : %d)" % grandie)
 	_cran(vue, -1, true)
 	_vrai(vue.selection.size() < grandie, "Alt + molette vers le bas : elle rétrécit (%d)" % vue.selection.size())
+	# CTRL DÉPLACE (13 octobre 2026) : avec une sélection, Ctrl + molette la monte d'une case (le « grab »), l'étage ne
+	# bouge pas, rien n'est posé. Attendu : chaque case + (0, 1, 0), calculé ici.
+	# ⚠ LA RÈGLE EST CELLE DES FLÈCHES (`Outils.deplacer`) : c'est la MATIÈRE sélectionnée qui se déplace — on remplit donc
+	# d'abord la sélection (Fill), sinon une sélection d'air ne déplacerait rien.
+	ed._operer_selection("remplir")
+	avant = g.get_used_cells().size()
+	var avant_grab: Dictionary = vue.selection.duplicate()
+	var etage_grab: int = vue.etage
+	_cran(vue, 1, false, false, true)
+	var montee_grab := {}
+	for c: Vector3i in avant_grab:
+		montee_grab[c + Vector3i.UP] = true
+	_vrai(vue.selection.keys().all(func(c: Vector3i) -> bool: return montee_grab.has(c)) and vue.selection.size() == montee_grab.size(),
+		"Select + Ctrl + molette : la sélection monte d'une case (%d cases)" % vue.selection.size())
+	_vrai(vue.etage == etage_grab and g.get_used_cells().size() == avant, "… l'étage ne bouge pas, la matière ne fait que monter")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	avant = g.get_used_cells().size()
 	vue.vider_selection()
 	# LA SALLE QU'ON TRACE : 5 × 4, 2 étages, un cran vers le haut pendant le glissé → 3 étages. La coque d'un pavé de
 	# 5 × 4 × 5 moins son dedans de 3 × 2 × 3 : 100 − 18 = 82 cases (2 étages : 80 − 12 = 68).
@@ -4930,12 +4960,12 @@ func _la_molette(ed: Control) -> void:
 	_vrai(int(ed._etages_forme.value) == 3 and g.get_used_cells().size() == avant + 82,
 		"la molette pendant le tracé d'une salle : 3 étages, 82 cases de coque (%d)" % (g.get_used_cells().size() - avant))
 	ed._histoire.undo()
-	_cran(vue, -1, true)
-	_egal(int(ed._etages_forme.value), 2, "Room, Alt + molette : les étages 3 → 2")
 	_cran(vue, -1, false, true)
-	_vrai(not bool(vue.forme_speciale["vers_le_haut"]), "Room, Maj + molette vers le bas : elle descendra")
-	_cran(vue, 1, false, true)
-	_vrai(bool(vue.forme_speciale["vers_le_haut"]), "… vers le haut : elle montera")
+	_egal(int(ed._etages_forme.value), 2, "Room, Maj + molette (la hauteur) : les étages 3 → 2")
+	var haut_salle := bool(vue.forme_speciale["vers_le_haut"])
+	_cran(vue, -1, true)
+	_vrai(int(ed._etages_forme.value) == 2 and bool(vue.forme_speciale["vers_le_haut"]) == haut_salle,
+		"Room, Alt + molette ne règle plus rien (ni étages ni sens)")
 	# UNE FORME : Alt la taille, Maj la profondeur (Depth du tunnel).
 	ed._choisir_forme_speciale("tunnel")
 	var t0 := int(ed._taille_forme.value)
@@ -4947,8 +4977,10 @@ func _la_molette(ed: Control) -> void:
 		% [t0, t0 + 1, l0, l0 + 1])
 	ed._choisir_forme_speciale("escalier")
 	var p0 := int(ed._pas_forme.value)
-	_cran(vue, -1 if p0 > 1 else 1, false, true, true)
-	_vrai(int(ed._pas_forme.value) != p0, "escalier : Ctrl + Maj + molette règle le pas")
+	var e0: int = vue.etage
+	_cran(vue, 1, false, true, true)
+	_vrai(int(ed._pas_forme.value) == p0, "escalier : Ctrl + Maj + molette ne règle plus le pas (le bouton seul)")
+	ed._compteur_etage.value = e0
 	# LE COLLAGE : un cran le monte d'une case au-dessus de la face visée.
 	ed._choisir_outil("ajouter")
 	vue.commencer_collage([Vector3i.ZERO])
@@ -5118,12 +5150,16 @@ func _lasso_et_cercle(ed: Control) -> void:
 	var attendu_tri := {}
 	var dans_le_disque := {}
 	var rayon: float = mo.rayon_cercle
+	# ⚠ TOUTES LES COPIES DE LA TUILE À L'ÉCRAN COMPTENT (13 octobre 2026) : un sommet est pris s'il tombe dedans sous
+	# l'une de leurs poses — de près, les copies voisines de la paroi sont dans le tracé aussi.
+	var poses := _poses_de_la_tuile(mo, cam)
 	for i in mo.maillage.sommets.size():
-		var s: Vector2 = cam.unproject_position(mo.pose * mo.maillage.sommets[i])
-		if Geometry2D.is_point_in_polygon(s, tri):
-			attendu_tri[i] = true
-		if s.distance_to(c) <= rayon:
-			dans_le_disque[i] = true
+		for ps: Transform3D in poses:
+			var s: Vector2 = cam.unproject_position(ps * mo.maillage.sommets[i])
+			if Geometry2D.is_point_in_polygon(s, tri):
+				attendu_tri[i] = true
+			if s.distance_to(c) <= rayon:
+				dans_le_disque[i] = true
 	_vrai(attendu_tri.size() > 0 and attendu_tri.size() < mo.maillage.sommets.size(),
 		"le triangle tracé couvre une partie des sommets (%d sur %d)" % [attendu_tri.size(), mo.maillage.sommets.size()])
 
@@ -5162,7 +5198,7 @@ func _lasso_et_cercle(ed: Control) -> void:
 	_souris(vue, autour.position + Vector2(0, autour.size.y), MOUSE_BUTTON_LEFT, false)
 	var hors := 0
 	for i in mo.sel_s:
-		if not autour.has_point(cam.unproject_position(mo.pose * mo.maillage.sommets[i])):
+		if not poses.any(func(ps: Transform3D) -> bool: return autour.has_point(cam.unproject_position(ps * mo.maillage.sommets[i]))):
 			hors += 1
 	_vrai(mo.sel_s.size() > 0 and hors == 0 and mo.modal == "",
 		"le bouton Lasso au clic gauche, sans X-ray : %d sommets, tous dans le tracé" % mo.sel_s.size())
@@ -5204,9 +5240,10 @@ func _lasso_et_cercle(ed: Control) -> void:
 	for e in mo._aretes():
 		var pa: Vector3 = mo.maillage.sommets[e.x]
 		var pb: Vector3 = mo.maillage.sommets[e.y]
-		if cam.unproject_position(mo.pose * ((pa + pb) * 0.5)).distance_to(c) <= rayon:
+		if poses.any(func(ps: Transform3D) -> bool: return cam.unproject_position(ps * ((pa + pb) * 0.5)).distance_to(c) <= rayon):
 			aretes_au_milieu += 1
-		if cam.unproject_position(mo.pose * pa).distance_to(c) <= rayon and cam.unproject_position(mo.pose * pb).distance_to(c) <= rayon:
+		if poses.any(func(ps: Transform3D) -> bool: return cam.unproject_position(ps * pa).distance_to(c) <= rayon \
+				and cam.unproject_position(ps * pb).distance_to(c) <= rayon):
 			aretes_aux_deux_bouts += 1
 	_vrai(aretes_au_milieu > aretes_aux_deux_bouts, "le disque distingue les deux règles (%d par le milieu, %d par les deux bouts)"
 		% [aretes_au_milieu, aretes_aux_deux_bouts])
@@ -5220,17 +5257,61 @@ func _lasso_et_cercle(ed: Control) -> void:
 	mo.tout_choisir(false)
 	var faces_tri := 0
 	for f in mo.maillage.faces.size():
-		if Geometry2D.is_point_in_polygon(cam.unproject_position(mo.pose * mo.maillage.centre(f)), tri) \
-				and cam.is_position_in_frustum(mo.pose * mo.maillage.centre(f)):
+		if poses.any(func(ps: Transform3D) -> bool: return Geometry2D.is_point_in_polygon(cam.unproject_position(ps * mo.maillage.centre(f)), tri) \
+				and cam.is_position_in_frustum(ps * mo.maillage.centre(f))):
 			faces_tri += 1
 	_souris(vue, tri[0], MOUSE_BUTTON_RIGHT, true, true)
 	_bouge(vue, tri[1])
 	_bouge(vue, tri[2])
 	_souris(vue, tri[2], MOUSE_BUTTON_RIGHT, false, true)
 	_egal(mo.sel_f.size(), faces_tri, "lasso en mode face (X-ray) : les faces dont le centre est dans le triangle")
+	# UNE BOÎTE AUTOUR D'UNE AUTRE COPIE DE LA TUILE (Jordan, 13 octobre 2026 : « on ne peut pas sélectionner plusieurs
+	# faces du même bloc à travers des clones différents ») : elle prend les faces de la tuile, la copie en édition ne
+	# change pas. Attendu : les faces dont le centre, sous la pose de CETTE copie, tombe dans la boîte (X-ray).
+	mo.tout_choisir(false)
+	var autre := -1
+	var cadre_autre := Rect2()
+	var ecran_actif: Vector2 = cam.unproject_position(mo.pose.origin)
+	for i in mo.temoin.occurrences_de(mo.cle):
+		var ps: Transform3D = mo.temoin.occurrences[i]["pose"]
+		if i == mo.occurrence or not cam.is_position_in_frustum(ps.origin):
+			continue
+		var r := Rect2(cam.unproject_position(ps * mo.maillage.sommets[0]), Vector2.ZERO)
+		for q in mo.maillage.sommets:
+			r = r.expand(cam.unproject_position(ps * q))
+		if not r.grow(4.0).has_point(ecran_actif) and Rect2(Vector2.ZERO, vue.size).encloses(r):
+			autre = i
+			cadre_autre = r.grow(2.0)
+			break
+	_vrai(autre >= 0, "une autre copie de la tuile en édition est à l'écran, loin de la copie active")
+	if autre >= 0:
+		var ps_autre: Transform3D = mo.temoin.occurrences[autre]["pose"]
+		var faces_autre := {}
+		for f in mo.maillage.faces.size():
+			if cadre_autre.has_point(cam.unproject_position(ps_autre * mo.maillage.centre(f))) \
+					and cam.is_position_in_frustum(ps_autre * mo.maillage.centre(f)):
+				faces_autre[f] = true
+		var active := int(mo.occurrence)
+		mo.choisir_dans(cadre_autre)
+		_vrai(faces_autre.size() > 0 and faces_autre.keys().all(func(f: int) -> bool: return mo.sel_f.has(f)),
+			"B autour d'une AUTRE copie : ses faces sont prises (%d attendues, %d prises)" % [faces_autre.size(), mo.sel_f.size()])
+		_egal(int(mo.occurrence), active, "… sans changer la copie en édition")
 	mo.rayons_x = false
 	mo.tout_choisir(false)
 	_lasso_fini = true
+
+
+## Les poses des copies de la tuile en édition qui comptent pour un tracé : la copie active, et les autres dont le centre
+## est dans le champ de la caméra.
+func _poses_de_la_tuile(mo: Node3D, cam: Camera3D) -> Array:
+	var poses: Array = [mo.pose]
+	if mo.temoin == null:
+		return poses
+	for i in mo.temoin.occurrences_de(mo.cle):
+		var ps: Transform3D = mo.temoin.occurrences[i]["pose"]
+		if i != mo.occurrence and cam.is_position_in_frustum(ps.origin):
+			poses.append(ps)
+	return poses
 
 
 func _cle(k: Key, ctrl := false) -> InputEventKey:
@@ -5801,3 +5882,70 @@ func _sol_du_decor(espace: PhysicsDirectSpaceState3D, c: Vector3i) -> float:
 	var q := PhysicsRayQueryParameters3D.create(Vector3(c.x + 0.5, 30, c.z + 0.5), Vector3(c.x + 0.5, 0, c.z + 0.5), 2)
 	var r := espace.intersect_ray(q)
 	return -INF if r.is_empty() else (r["position"] as Vector3).y
+
+
+## ── LE GUIDE DES RACCOURCIS (Jordan, 13 octobre 2026 — `app/guide.gd`) ────────────────────────────────────────────────
+## Le guide flottant suit le contexte, et un modificateur VRAIMENT tenu (`Input.parse_input_event`) déplie sa branche.
+## La section Shortcuts porte le reste. ⚠ Les attendus sont des MOTS écrits ici, pas relus dans `Guide`.
+var _guide_fini := false
+
+
+func _le_guide(ed: Control) -> void:
+	var vue = ed._vue
+	ed._aller_a("monde")
+	ed._case_guide.button_pressed = true
+	ed._choisir_outil("ajouter")
+	vue.vider_selection()
+	await process_frame
+	_vrai(ed._guide.visible, "World : le guide est à l'écran")
+	var t: String = ed._guide_texte.get_parsed_text()
+	_vrai(t.contains("add matter") and t.contains("Alt ▸") and t.contains("brush size") and t.contains("Ctrl ▸")
+		and t.contains("move the grid"), "Add, au repos : poser, et les branches Alt (taille) et Ctrl (la grille)")
+	_vrai(ed._guide.position.x >= ed.LARGEUR_GAUCHE, "… en haut à gauche de la VUE, à droite de la barre de gauche")
+	# Une sélection sous Select : les trois branches parlent d'elle.
+	ed._choisir_outil("selectionner")
+	vue.regler_selection({Vector3i(300, 0, 300): true})
+	await process_frame
+	t = ed._guide_texte.get_parsed_text()
+	_vrai(t.contains("Ctrl ▸") and t.contains("move the selection") and t.contains("Alt ▸") and t.contains("widen")
+		and t.contains("Shift ▸") and t.contains("extend it up"), "Select + sélection : Ctrl déplace, Alt élargit, Maj étend")
+	# CTRL TENU : sa branche seule.
+	_tenir(KEY_CTRL, true)
+	await process_frame
+	t = ed._guide_texte.get_parsed_text()
+	_vrai(t.begins_with("Ctrl ▸") and t.contains("move the selection up") and not t.contains("Alt ▸"),
+		"Ctrl tenu : le guide montre la branche Ctrl, et elle seule (« %s »)" % t.left(60))
+	_tenir(KEY_CTRL, false)
+	_tenir(KEY_SHIFT, true)
+	await process_frame
+	t = ed._guide_texte.get_parsed_text()
+	_vrai(t.begins_with("Shift ▸") and t.contains("extend it up"), "Maj tenue : la branche Maj")
+	_tenir(KEY_SHIFT, false)
+	await process_frame
+	_vrai(ed._guide_texte.get_parsed_text().contains("Alt ▸"), "relâchée : la racine revient")
+	vue.vider_selection()
+	# La section Shortcuts : ce que le guide ne montre pas (Tab, F1…), et pas ce qu'il montre.
+	await process_frame
+	var reste := PackedStringArray()
+	for n in ed._grille_raccourcis.get_children():
+		if n is Label:
+			reste.append((n as Label).text)
+	var reste_t := " | ".join(reste)
+	_vrai(reste_t.contains("aim at the grid") and reste_t.contains("the user guide") and not reste_t.contains("add matter"),
+		"Shortcuts : le reste (Tab, F1), pas ce que montre le guide")
+	# Geometry : la section suit l'atelier, le guide aussi.
+	ed._aller_a("witness")
+	await process_frame
+	_vrai(ed._section_raccourcis.visible and ed._guide_texte.get_parsed_text().contains("Tab"),
+		"Geometry : le guide et les raccourcis du témoin")
+	# Décoché : plus de guide.
+	ed._aller_a("monde")
+	ed._case_guide.button_pressed = false
+	await process_frame
+	_vrai(not ed._guide.visible, "décoché : plus de guide")
+	ed._case_guide.button_pressed = true
+	ed._aller_a("projet")
+	await process_frame
+	_vrai(not ed._guide.visible, "Project : pas de guide (pas de vue à mener)")
+	ed._aller_a("monde")
+	_guide_fini = true

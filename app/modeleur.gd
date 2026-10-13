@@ -773,7 +773,26 @@ func choisir_dans(r: Rect2) -> void:
 ## DEDANS, si on le voit (ou en X-ray). Un sommet par son point, une face par son centre ; une arête par ses DEUX bouts
 ## (boîte, lasso) ou par son MILIEU (`arete_par_milieu` : le cercle, qu'on promène comme un pinceau, et dont les deux
 ## bouts d'une arête tombent rarement ensemble).
+## ⚠ À TRAVERS TOUTES LES COPIES DE LA TUILE (Jordan, 13 octobre 2026 : « on ne peut pas sélectionner plusieurs faces du
+## même bloc à travers des clones différents ») : la boîte, le lasso et le cercle ne regardaient que la copie EN ÉDITION,
+## et ce qu'on entourait sur une autre copie de la même tuile n'était pas pris. Ses copies partagent son maillage : un
+## élément entouré sur l'une EST l'élément de la tuile. On essaie donc chaque copie sous sa pose (hors de l'écran : sautée).
 func _choisir_si(dedans: Callable, retirer: bool, arete_par_milieu := false) -> void:
+	if temoin == null or cle == "":
+		_choisir_si_sous(dedans, retirer, arete_par_milieu)
+		_dessiner_selection()
+		return
+	var pose_active := pose
+	for i in temoin.occurrences_de(cle):
+		pose = temoin.occurrences[i]["pose"]
+		if i != occurrence and not camera.is_position_in_frustum(pose.origin):
+			continue
+		_choisir_si_sous(dedans, retirer, arete_par_milieu)
+	pose = pose_active
+	_dessiner_selection()
+
+
+func _choisir_si_sous(dedans: Callable, retirer: bool, arete_par_milieu: bool) -> void:
 	match mode_sel:
 		"sommet":
 			for i in maillage.sommets.size():
@@ -804,7 +823,6 @@ func _choisir_si(dedans: Callable, retirer: bool, arete_par_milieu := false) -> 
 						sel_f.erase(f)
 					else:
 						sel_f[f] = true
-	_dessiner_selection()
 
 
 ## LE LASSO : Ctrl + clic droit glissé (Maj + Ctrl : retire), comme Blender ; ou le bouton « Lasso », puis un glissé
