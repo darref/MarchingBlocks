@@ -20,6 +20,8 @@ const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const FN := preload("res://addons/marchingblocks_core/format_neutre.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
+const RT := preload("res://addons/marchingblocks_core/retopo.gd")
+const TLie := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -53,6 +55,7 @@ func _initialize() -> void:
 	_les_pinceaux_de_sculpt()
 	_boucher_les_trous()
 	_les_gestes_gardent_le_bord()
+	_la_retopo()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -1073,3 +1076,248 @@ func _les_gestes_gardent_le_bord() -> void:
 	t = _tuile_3x3()
 	r = t.dissoudre_faces([0, 1, 2, 3, 5, 6, 7, 8])
 	_vrai(r["refus"] == "anneau" and t.faces.size() == 9, "dissoudre un anneau (deux contours) : refusé, rien n'a changé")
+
+
+# ── LA RETOPO (Jordan, 13 octobre 2026) : Simplify et Relax, bord verrouillé ─────────────────────────────────────────
+#
+# Attendus écrits À LA MAIN, hors de `retopo.gd` :
+#   - une plaque plate de n × n quads à y = 0, x et z de −0,5 à 0,5 : son bord (4n sommets) est sur les plans de coupe ;
+#     un disque triangulé avec B sommets de bord et I intérieurs a T = B + 2I − 2 triangles (Euler) ;
+#   - un petit cube subdivisé, loin des plans : tout ce qui n'est pas un coin est plat — il revient à ses 8 coins, 12
+#     triangles, volume 0,3³ ;
+#   - une tuile du témoin réel : les positions de ses sommets posés sur un plan, et ses arêtes ouvertes, lues AVANT.
+
+## Une plaque de n × n quads (la tuile plate), x et z de −0,5 à 0,5, y = 0.
+func _plaque(n: int) -> RefCounted:
+	var t: RefCounted = ME.new()
+	for iz in n + 1:
+		for ix in n + 1:
+			t.sommets.append(Vector3(-0.5 + float(ix) / n, 0, -0.5 + float(iz) / n))
+	for iz in n:
+		for ix in n:
+			var a := iz * (n + 1) + ix
+			t.faces.append(PackedInt32Array([a, a + n + 1, a + n + 2, a + 1]))
+			t.teintes.append(Color.WHITE)
+	return t
+
+
+## L'aire et la plus petite composante y des normales (toutes vers le haut sur une plaque), par la triangulation du RENDU.
+func _aire_et_haut(m: RefCounted) -> Vector2:
+	var aire := 0.0
+	var haut := 1.0
+	for f in m.faces.size():
+		var fc: PackedInt32Array = m.faces[f]
+		for tri in m.trianguler(f):
+			var c: Vector3 = ((m.sommets[fc[tri[1]]] - m.sommets[fc[tri[0]]]) as Vector3).cross(
+				m.sommets[fc[tri[2]]] - m.sommets[fc[tri[0]]])
+			aire += c.length() / 2.0
+			haut = minf(haut, c.normalized().y if c.length() > 1e-12 else -1.0)
+	return Vector2(aire, haut)
+
+
+func _nb_triangles(m: RefCounted) -> int:
+	var n := 0
+	for f in m.faces:
+		n += (f as PackedInt32Array).size() - 2
+	return n
+
+
+## Les sommets posés sur un plan de coupe (|x|, |y| ou |z| = 0,5), en positions arrondies au cent-millième.
+func _sur_les_plans(m: RefCounted) -> Array:
+	var l: Array = []
+	for p: Vector3 in m.sommets:
+		if absf(absf(p.x) - 0.5) < 0.0005 or absf(absf(p.y) - 0.5) < 0.0005 or absf(absf(p.z) - 0.5) < 0.0005:
+			l.append(Vector3i((p * 100000.0).round()))
+	l.sort()
+	return l
+
+
+## Les arêtes ouvertes (une seule face), en paires de positions arrondies ; et les défauts : une arête parcourue deux fois
+## dans le même sens, ou bordée par plus de deux faces.
+func _ouvertes_et_defauts(m: RefCounted) -> Array:
+	var orientees := {}
+	var defauts := 0
+	for f in m.faces:
+		for i in (f as PackedInt32Array).size():
+			var e := Vector2i(f[i], f[(i + 1) % f.size()])
+			if orientees.has(e):
+				defauts += 1
+			orientees[e] = true
+	var usage := {}
+	for e: Vector2i in orientees:
+		var k := Vector2i(mini(e.x, e.y), maxi(e.x, e.y))
+		usage[k] = int(usage.get(k, 0)) + 1
+	var ouvertes: Array = []
+	for k: Vector2i in usage:
+		if usage[k] == 1:
+			var a := Vector3i((m.sommets[k.x] * 100000.0).round())
+			var b := Vector3i((m.sommets[k.y] * 100000.0).round())
+			ouvertes.append(str([a, b]) if str(a) < str(b) else str([b, a]))
+		elif usage[k] > 2:
+			defauts += 1
+	ouvertes.sort()
+	return [ouvertes, defauts]
+
+
+func _la_retopo() -> void:
+	# LA PLAQUE 2 × 2 : 8 sommets de bord, le centre seul est libre. Il ne peut rejoindre un coin (deux triangles du bord
+	# s'écraseraient sur une ligne droite) ; il rejoint un milieu de côté : 8 sommets, T = 8 − 2 = 6 triangles, aire 1.
+	var p := _plaque(2)
+	var r: Dictionary = RT.simplifier(p, 0.001)
+	var ah := _aire_et_haut(p)
+	_vrai(p.sommets.size() == 8 and _nb_triangles(p) == 6 and is_equal_approx(ah.x, 1.0) and ah.y > 0.99
+		and _sur_les_plans(p) == _sur_les_plans(_plaque(2)),
+		"Simplify, la plaque 2 × 2 : le centre disparaît, 8 sommets aux mêmes places, 6 triangles, aire 1, tous vers le haut (%s)" % r)
+	# LA PLAQUE 6 × 6 : 24 sommets de bord, 25 dedans. T = 24 + 2I − 2 ; il ne doit presque rien rester dedans.
+	p = _plaque(6)
+	var ouvertes0: Array = _ouvertes_et_defauts(p)[0]
+	r = RT.simplifier(p, 0.001)
+	ah = _aire_et_haut(p)
+	var interieurs: int = p.sommets.size() - 24
+	var od: Array = _ouvertes_et_defauts(p)
+	_vrai(interieurs <= 1 and _nb_triangles(p) == 22 + 2 * interieurs and is_equal_approx(ah.x, 1.0) and ah.y > 0.99,
+		"Simplify, la plaque 6 × 6 : %d sommet(s) intérieur(s) sur 25 restent, %d triangles (Euler : %d), aire %.4f, vers le haut %.3f (%s)"
+		% [interieurs, _nb_triangles(p), 22 + 2 * interieurs, ah.x, ah.y, r])
+	_vrai(_sur_les_plans(p) == _sur_les_plans(_plaque(6)) and od[0] == ouvertes0 and int(od[1]) == 0,
+		"… ses 24 sommets de bord aux mêmes places, ses 24 arêtes de bord les mêmes, aucune arête doublée")
+	_vrai(int(r["faces_apres"]) < _nb_triangles(p), "… des paires de triangles coplanaires regroupées en quads (%d faces)" % r["faces_apres"])
+	# LA TOLÉRANCE : une plaque bosselée (le centre levé de 0,05) ne perd PAS son centre sous 0,01, le perd sous 0,2.
+	p = _plaque(2)
+	p.sommets[4] = Vector3(0, 0.05, 0)
+	RT.simplifier(p, 0.01)
+	_egal(p.sommets.size(), 9, "Simplify à 0,01 : la bosse de 0,05 reste")
+	RT.simplifier(p, 0.2)
+	_egal(p.sommets.size(), 8, "Simplify à 0,2 : la bosse de 0,05 s'efface (la borne est une racine de somme de carrés sur 8 plans au plus : 0,05 × √8 ≈ 0,14)")
+	# LE PETIT CUBE subdivisé deux fois, loin des plans : il revient à ses 8 coins, 12 triangles, étanche, volume 0,3³.
+	var c := _cube()
+	for i in c.sommets.size():
+		c.sommets[i] = c.sommets[i] * 0.3 + Vector3(0.1, 0.1, 0.1)
+	c.subdiviser(range(c.faces.size()))
+	c.subdiviser(range(c.faces.size()))
+	var sommets_avant: int = c.sommets.size()
+	r = RT.simplifier(c, 0.0)
+	_vrai(c.sommets.size() == 8 and _nb_triangles(c) == 12 and _etanche(c) == "" and _euler(c) == 2
+		and is_equal_approx(_volume(c), 0.027),
+		"Simplify, le cube subdivisé (%d sommets) : ses 8 coins, 12 triangles, étanche et orienté (%s), volume %.4f (%s)"
+		% [sommets_avant, _etanche(c), _volume(c), r])
+	# LES MATÉRIAUX ET LES TEINTES SUIVENT : la plaque 4 × 4, moitié x < 0 matériau 0 rouge, moitié x > 0 matériau 1 bleu.
+	p = _plaque(4)
+	p.materiaux = [{"nom": "a"}, {"nom": "b"}]
+	for f in p.faces.size():
+		var gauche: bool = p.centre(f).x < 0.0
+		p.mats.append(0 if gauche else 1)
+		p.teintes[f] = Color.RED if gauche else Color.BLUE
+	RT.simplifier(p, 0.001)
+	var aires := {0: 0.0, 1: 0.0}
+	var justes := true
+	var couture := 0
+	for f in p.faces.size():
+		var fc: PackedInt32Array = p.faces[f]
+		var a := 0.0
+		for i in range(1, fc.size() - 1):
+			a += ((p.sommets[fc[i]] - p.sommets[fc[0]]) as Vector3).cross(p.sommets[fc[i + 1]] - p.sommets[fc[0]]).length() / 2.0
+		aires[p.mat(f)] = float(aires.get(p.mat(f), 0.0)) + a
+		justes = justes and (p.centre(f).x < 0.0) == (p.mat(f) == 0) and p.teintes[f] == (Color.RED if p.mat(f) == 0 else Color.BLUE)
+	for q: Vector3 in p.sommets:
+		if absf(q.x) < 1e-6:
+			couture += 1
+	_vrai(justes and is_equal_approx(aires[0], 0.5) and is_equal_approx(aires[1], 0.5) and couture == 5,
+		"Simplify, deux matériaux : chacun garde sa moitié (aires %.3f / %.3f), sa teinte, et les 5 sommets de la couture x = 0 restent (%d)"
+		% [aires[0], aires[1], couture])
+	# UNE FACE DÉPLIÉE reste telle quelle, UV compris.
+	p = _plaque(4)
+	var uv0 := PackedVector2Array([Vector2(0, 0), Vector2(0, 1), Vector2(1, 1), Vector2(1, 0)])
+	for f in p.faces.size():
+		p.uvs.append(uv0.duplicate() if f == 5 else PackedVector2Array())
+	var face5: Array = []
+	for i in p.faces[5]:
+		face5.append(p.sommets[i])
+	r = RT.simplifier(p, 0.001)
+	var gardee := false
+	for f in p.faces.size():
+		var l: Array = []
+		for i in p.faces[f]:
+			l.append(p.sommets[i])
+		if l == face5 and p.uv(f) == uv0:
+			gardee = true
+	_vrai(gardee and int(r["faces_uv"]) == 1 and int(r["effondrements"]) > 0,
+		"Simplify, une face dépliée : rendue telle quelle, mêmes sommets, mêmes UV, et le reste simplifié (%s)" % r)
+	# UNE TUILE DU TÉMOIN RÉEL : ses sommets de bord et ses arêtes ouvertes, exactement.
+	var t: RefCounted = TLie.depuis_le_temoin_calcule()
+	var faces_av := 0
+	var faces_ap := 0
+	var tuiles_ok := 0
+	var simplifiees := 0
+	var dits := 0
+	for k in t.tuiles:
+		var m: RefCounted = t.tuiles[k]
+		var bord0 := _sur_les_plans(m)
+		var od0 := _ouvertes_et_defauts(m)
+		var aire0: float = _aire_et_haut(m).x
+		faces_av += m.faces.size()
+		r = RT.simplifier(m, 0.01)
+		faces_ap += m.faces.size()
+		if int(r["effondrements"]) > 0:
+			simplifiees += 1
+		var od1 := _ouvertes_et_defauts(m)
+		if _sur_les_plans(m) == bord0 and od1[0] == od0[0] and int(od1[1]) == int(od0[1]) and m.trous() == 0 \
+				and absf(_aire_et_haut(m).x - aire0) < 0.02 * aire0:
+			tuiles_ok += 1
+		elif dits < 8:
+			dits += 1
+			print("    (tuile %s : bord %s, ouvertes %s, défauts %d → %d, trous %d, aire %.4f → %.4f)" % [k,
+				_sur_les_plans(m) == bord0, od1[0] == od0[0], od0[1], od1[1], m.trous(), aire0, _aire_et_haut(m).x])
+	print("    Simplify à 0,01 sur le témoin calculé : %d faces → %d, %d tuile(s) simplifiée(s) sur %d" % [faces_av, faces_ap,
+		simplifiees, t.tuiles.size()])
+	_egal(tuiles_ok, t.tuiles.size(), "Simplify, les 52 tuiles du témoin : sommets de bord et arêtes ouvertes inchangés, aucun trou, aire à 2 % près")
+	_vrai(faces_ap < faces_av, "… et le témoin a moins de faces (%d → %d)" % [faces_av, faces_ap])
+	# RELAX : la plaque 6 × 6 aux sommets intérieurs déplacés dans le plan (un motif fixe) revient à la grille régulière —
+	# le point fixe du laplacien d'une grille est la grille (attendu : (k / 6 − 0,5)) —, à plat, bord immobile.
+	p = _plaque(6)
+	var regulier: PackedVector3Array = p.sommets.duplicate()
+	for i in p.sommets.size():
+		var q: Vector3 = p.sommets[i]
+		if absf(absf(q.x) - 0.5) > 1e-6 and absf(absf(q.z) - 0.5) > 1e-6:
+			p.sommets[i] = q + Vector3(0.05 * sin(i * 1.7), 0, 0.05 * cos(i * 2.3))
+	r = RT.detendre(p, 300, 0.5)
+	var ecart := 0.0
+	var plat := true
+	for i in p.sommets.size():
+		ecart = maxf(ecart, (p.sommets[i] as Vector3).distance_to(regulier[i]))
+		plat = plat and absf(p.sommets[i].y) < 1e-6
+	_vrai(ecart < 0.005 and plat and _sur_les_plans(p) == _sur_les_plans(_plaque(6)) and int(r["libres"]) == 25,
+		"Relax, la plaque 6 × 6 dérangée : 25 sommets libres, revenus à la grille régulière (écart %.4f), à plat, bord immobile (%s)" % [ecart, r])
+	# RELAX SUR UN TOIT : deux pans y = 0,2 − 0,4 |x| (l'arête vive au faîte x = 0, 43° entre les pans). Les sommets restent
+	# sur le toit (la formule), ceux du faîte ne bougent pas.
+	p = _plaque(6)
+	for i in p.sommets.size():
+		var q: Vector3 = p.sommets[i]
+		var x := q.x
+		if absf(absf(q.x) - 0.5) > 1e-6 and absf(absf(q.z) - 0.5) > 1e-6 and absf(q.x) > 1e-6:
+			x += 0.04 * sin(i * 1.3)
+		p.sommets[i] = Vector3(x, 0.2 - 0.4 * absf(x), q.z)
+	var faite: Array = []
+	for i in p.sommets.size():
+		if absf(p.sommets[i].x) < 1e-6:
+			faite.append([i, p.sommets[i]])
+	r = RT.detendre(p, 50, 0.5)
+	var sur_le_toit := true
+	for q: Vector3 in p.sommets:
+		sur_le_toit = sur_le_toit and absf(q.y - (0.2 - 0.4 * absf(q.x))) < 1e-5
+	var faite_immobile := true
+	for e in faite:
+		faite_immobile = faite_immobile and (p.sommets[e[0]] as Vector3).is_equal_approx(e[1])
+	_vrai(sur_le_toit and faite_immobile and int(r["deplaces"]) > 0,
+		"Relax, le toit : les sommets restent sur les deux pans, le faîte (arête vive) ne bouge pas (%s)" % r)
+	# RELAX SUR LE TÉMOIN : le bord de chaque tuile immobile, aucun trou.
+	t = TLie.depuis_le_temoin_calcule()
+	tuiles_ok = 0
+	var deplaces := 0
+	for k in t.tuiles:
+		var m: RefCounted = t.tuiles[k]
+		var bord0 := _sur_les_plans(m)
+		r = RT.detendre(m)
+		deplaces += int(r["deplaces"])
+		if _sur_les_plans(m) == bord0 and m.trous() == 0:
+			tuiles_ok += 1
+	_egal(tuiles_ok, t.tuiles.size(), "Relax, les 52 tuiles du témoin : sommets de bord immobiles, aucun trou (%d sommets déplacés)" % deplaces)

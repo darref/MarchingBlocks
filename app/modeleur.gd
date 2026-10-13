@@ -25,6 +25,7 @@ const TL := preload("res://addons/marchingblocks_core/temoin_lie.gd")
 const Sections := preload("res://addons/marchingblocks_core/sections.gd")
 const Peinture := preload("res://addons/marchingblocks_core/peinture.gd")
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
+const Retopo := preload("res://addons/marchingblocks_core/retopo.gd")
 
 const AXES := {"x": Vector3(1, 0, 0), "y": Vector3(0, 0, -1), "z": Vector3(0, 1, 0)}
 const ORANGE := Color(1.0, 0.55, 0.1)
@@ -1355,6 +1356,63 @@ func boucher_les_trous(toutes: bool) -> Dictionary:
 	if int(bilan["restants"]) > 0:
 		texte += ("\n[color=#e0603c]%d border point(s) could not be rebuilt[/color] — the world will show a gap there. "
 			+ "Undo, and close that part by hand (F on the rim).") % int(bilan["restants"])
+	dit.emit(texte)
+	return bilan
+
+
+## LA RETOPO (Jordan, 13 octobre 2026) — « Simplify » (décimer, `genre` = "simplifier", jusqu'à `tolerance` cases) et
+## « Relax » (`genre` = "detendre"), sur la tuile en édition ou `toutes`. Le cœur (`retopo.gd`) verrouille le bord de la
+## tuile (sa section partagée), ses coutures de matériaux et ses faces dépliées ; on vérifie quand même par la complétion
+## des sections que rien ne s'est ouvert, et ce qui manquerait est DIT. UN geste, une annulation pour toutes les tuiles.
+## Rend le bilan additionné (ou {} hors d'édition).
+func retopo(genre: String, toutes: bool, tolerance := 0.01) -> Dictionary:
+	if maillage == null or modal != "":
+		return {}
+	var cles: Array = temoin.tuiles.keys() if toutes else [cle]
+	var avant := {}
+	var bilan := {"tuiles": 0, "faces_avant": 0, "faces_apres": 0, "deplaces": 0, "faces_uv": 0, "echecs": 0}
+	for c in cles:
+		var m: RefCounted = temoin.tuiles[c]
+		var copie: RefCounted = m.copie()
+		var r: Dictionary = Retopo.simplifier(m, tolerance) if genre == "simplifier" else Retopo.detendre(m)
+		bilan["faces_uv"] += int(r["faces_uv"])
+		var change_ici: bool = (int(r["effondrements"]) > 0) if genre == "simplifier" else (int(r["deplaces"]) > 0)
+		if not change_ici:
+			continue
+		avant[c] = copie
+		bilan["tuiles"] += 1
+		bilan["faces_avant"] += int(r.get("faces_avant", 0))
+		bilan["faces_apres"] += int(r.get("faces_apres", 0))
+		bilan["deplaces"] += int(r.get("deplaces", 0))
+	var nom := "Simplify" if genre == "simplifier" else "Relax"
+	if avant.is_empty():
+		dit.emit(("[i]%s: nothing to do in %s.[/i] Tile borders, material seams%s and unwrapped faces never move"
+			+ (" — and nothing here is flat enough for that tolerance." if genre == "simplifier" else ".")) % [nom,
+			"any tile" if toutes else "this tile", "" if genre == "simplifier" else ", sharp edges"])
+		return bilan
+	if sections != null:
+		var r: Dictionary = sections.completer(func(c: String) -> void:
+			if not avant.has(c):
+				avant[c] = _tuile_indexee(c).copie())
+		bilan["echecs"] = int(r["echecs"])
+	_vider_selection()
+	var lot_avant := TL.Lot.new()
+	var lot_apres := TL.Lot.new()
+	for c in avant:
+		_ranger(lot_avant, c, avant[c])
+		_ranger(lot_apres, c, _tuile_indexee(c).copie())
+		if c != cle:
+			_rafraichir_tuile(c)
+	change.emit(lot_avant, lot_apres, nom)
+	redessiner()
+	var texte := ("[b]Simplify[/b] — %d tile(s): %d faces → %d" % [bilan["tuiles"], bilan["faces_avant"], bilan["faces_apres"]]
+		if genre == "simplifier" else "[b]Relax[/b] — %d vertex(es) evened out in %d tile(s)" % [bilan["deplaces"], bilan["tuiles"]])
+	texte += ". Tile borders did not move. [i]Ctrl+Z undoes it.[/i]"
+	if int(bilan["faces_uv"]) > 0:
+		texte += ("\n[color=#f2ca79]%d unwrapped face(s) were left as they are[/color] — moving them would lose their "
+			+ "UVs and their paint.") % int(bilan["faces_uv"])
+	if int(bilan["echecs"]) > 0:
+		texte += ("\n[color=#e0603c]%d border point(s) are missing[/color] — the world will show a gap there.") % int(bilan["echecs"])
 	dit.emit(texte)
 	return bilan
 

@@ -493,6 +493,13 @@ func _modeleur() -> String:
 		+ "A hole that reaches a cut plane took a piece of that border away: Fill holes rebuilds it with the points the "
 		+ "next tiles share, then joins it to the rim — so no gap opens in the world. If some border point cannot be "
 		+ "rebuilt, the report says so: close that part by hand (" + _touche("F") + " on the rim).")
+	l.append("[b]Simplify[/b] gives a tile fewer faces where they add nothing: edges collapse, cheapest first, as long "
+		+ "as the surface stays within [b]Simplify up to[/b] (in cells; 0 removes only what is exactly flat). Coplanar "
+		+ "triangles are paired back into quads. [b]Relax[/b] evens out the spacing of the inner vertices by sliding them "
+		+ "on the surface, so the shape stays. Neither ever moves the tile border (the vertices on its cut planes, shared "
+		+ "with the next tiles), a seam between two colours or materials, or an unwrapped face — those would lose their "
+		+ "UVs and their paint, and the report counts them; Relax also keeps sharp edges. Both work on the tile you edit "
+		+ "or, with [b]· all tiles[/b], on the whole witness, in one " + _touche("Ctrl+Z") + ".")
 	l.append("[b]Borders are shared between layers.[/b] Two layers meet in the world: a tile of one stands against a tile "
 		+ "of the other. So every layer's witness keeps the same tile borders. Moving or cutting a border here moves or "
 		+ "cuts it in the other layers' witnesses too (their worlds follow when you open World), and one "

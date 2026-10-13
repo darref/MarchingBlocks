@@ -481,6 +481,7 @@ func _mener() -> void:
 	_les_sections_dans_le_modeleur(ed)
 	_les_gestes_topologiques_gardent_les_sections(ed)
 	_vrai(_les_gestes_gardent_le_bord(ed), "SENTINELLE : la section « les gestes gardent le bord » est allée jusqu'au bout")
+	_vrai(_la_retopo(ed), "SENTINELLE : la section « la retopo » est allée jusqu'au bout")
 	_vrai(_sections_finies, "les sections partagées sont allées JUSQU'AU BOUT")
 	await _play_test(ed)
 	_vrai(_play_test_fini, "le Play test est allé JUSQU'AU BOUT (sinon une erreur l'a abandonné en silence)")
@@ -5801,3 +5802,54 @@ func _sol_du_decor(espace: PhysicsDirectSpaceState3D, c: Vector3i) -> float:
 	var q := PhysicsRayQueryParameters3D.create(Vector3(c.x + 0.5, 30, c.z + 0.5), Vector3(c.x + 0.5, 0, c.z + 0.5), 2)
 	var r := espace.intersect_ray(q)
 	return -INF if r.is_empty() else (r["position"] as Vector3).y
+
+
+## LA RETOPO (Jordan, 13 octobre 2026) — par les VRAIS boutons de Geometry : « Simplify · all tiles » donne moins de
+## faces au témoin sans ouvrir un joint du monde (attendu hors du code éprouvé : `_sans_partenaire`), le rapport le dit ;
+## UN Ctrl+Z rend toutes les tuiles telles qu'elles étaient (sommets et faces), Ctrl+Y refait ; « Relax » sur la paroi,
+## un Ctrl+Z.
+func _la_retopo(ed: Control) -> bool:
+	ed._aller_a("witness")
+	ed._regler_edition(true)
+	var mo: Node3D = ed._modeleur
+	var t: RefCounted = mo.temoin
+	mo.activer(int(t.occurrences_de("mb_plaque_b2h2_dehors")[0]))
+	var boutons := {}
+	for b in ed.find_children("*", "Button", true, false):
+		boutons[(b as Button).text] = b
+	for nom in ["Simplify", "Simplify · all tiles", "Relax", "Relax · all tiles"]:
+		_vrai(boutons.has(nom), "retopo : le bouton « %s » existe dans Geometry" % nom)
+	if not boutons.has("Simplify · all tiles") or not boutons.has("Relax"):
+		return false
+	_egal(_sans_partenaire(t), 0, "retopo : avant, tout sommet de joint a son partenaire")
+	var photo := {}
+	var faces0 := 0
+	for c in t.tuiles:
+		photo[c] = [(t.tuiles[c].sommets as PackedVector3Array).duplicate(), t.tuiles[c].faces.size()]
+		faces0 += t.tuiles[c].faces.size()
+	(boutons["Simplify · all tiles"] as Button).pressed.emit()
+	var faces1 := 0
+	for c in t.tuiles:
+		faces1 += t.tuiles[c].faces.size()
+	_vrai(faces1 < faces0 and _sans_partenaire(t) == 0 and ed._rapport.text.contains("Simplify"),
+		"Simplify · all tiles : %d faces → %d, aucun joint ouvert (%d), le rapport le dit" % [faces0, faces1, _sans_partenaire(t)])
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	var rendues := 0
+	for c in t.tuiles:
+		if t.tuiles[c].sommets == photo[c][0] and t.tuiles[c].faces.size() == photo[c][1]:
+			rendues += 1
+	_egal(rendues, t.tuiles.size(), "UN Ctrl+Z rend toutes les tuiles d'avant Simplify")
+	ed._unhandled_key_input(_cle(KEY_Y, true))
+	var faces2 := 0
+	for c in t.tuiles:
+		faces2 += t.tuiles[c].faces.size()
+	_egal(faces2, faces1, "Ctrl+Y refait Simplify")
+	var avant: PackedVector3Array = mo.maillage.sommets.duplicate()
+	(boutons["Relax"] as Button).pressed.emit()
+	_vrai(_sans_partenaire(t) == 0 and ed._rapport.text.contains("Relax"),
+		"Relax sur la paroi : aucun joint ouvert, le rapport le dit (« %s »)" % ed._rapport.text.left(80))
+	if mo.maillage.sommets != avant:
+		ed._unhandled_key_input(_cle(KEY_Z, true))
+		_vrai(mo.maillage.sommets == avant, "UN Ctrl+Z défait Relax")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	return true
