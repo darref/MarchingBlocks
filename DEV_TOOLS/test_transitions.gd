@@ -33,7 +33,8 @@ func _initialize() -> void:
 	_la_table()
 	_la_texture()
 	_le_shader()
-	_dire(_finies == 6, "SENTINELLE : les six sections sont allées jusqu'au bout (%d) — une erreur d'exécution abandonne une fonction en silence" % _finies)
+	_le_representant()
+	_dire(_finies == 7, "SENTINELLE : les sept sections sont allées jusqu'au bout (%d) — une erreur d'exécution abandonne une fonction en silence" % _finies)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -272,4 +273,59 @@ func _le_shader() -> void:
 	_dire(img.get_pixel(2, 0).r > 0.5 and absf(img.get_pixel(2, 0).g - 0.2) < 1e-6,
 		"… et « 0 couvre 1 » (l'id 1) au texel (2·1, 0), sa largeur 0,2")
 	_dire(absf(img.get_pixel(3, 0).r - 0.1) < 1e-6, "… son creux au texel (2·1 + 1, 0)")
+	_finies += 1
+
+
+const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+const AppTR := preload("res://app/transitions.gd")
+
+
+## Un faux témoin : `tuiles` {nom: MaillageEdite}, `materiaux`, `occurrences` [{cle}] — ce que lit le représentant.
+class FauxTemoin extends RefCounted:
+	var tuiles := {}
+	var materiaux: Array = [{}, {}, {}]
+	var occurrences: Array = []
+
+
+## Une tuile : un carré de dessus (côté `d`, matériau `m_dessus`) et quatre parois de 1 × 1 (matériau `m_paroi`).
+func _tuile(d: float, m_dessus: int, m_paroi: int) -> RefCounted:
+	var m: RefCounted = ME.new()
+	var h := d * 0.5
+	var s := PackedVector3Array([Vector3(-h, 0, -h), Vector3(h, 0, -h), Vector3(h, 0, h), Vector3(-h, 0, h)])
+	m.sommets = s
+	m._ajouter(PackedInt32Array([0, 3, 2, 1]), Color.WHITE, m_dessus)   # vue de dehors, normale +Y (écrit à la main)
+	for i in 4:
+		var b: int = m.sommets.size()
+		var x := float(i)
+		m.sommets.append_array(PackedVector3Array([Vector3(x, -1, 5), Vector3(x + 1, -1, 5), Vector3(x + 1, 0, 5), Vector3(x, 0, 5)]))
+		m._ajouter(PackedInt32Array([b, b + 1, b + 2, b + 3]), Color.WHITE, m_paroi)  # normale +Z
+	return m
+
+
+## LE REPRÉSENTANT PAR DÉFAUT EST LE DESSUS (13 octobre 2026) — attendus écrits à la main. La paroi (matériau 2) porte
+## plus de FACES (4 contre 1) : l'ancienne règle la choisissait (la bande brune de `fonction_transitions.gif`).
+func _le_representant() -> void:
+	var t := FauxTemoin.new()
+	t.tuiles["a"] = _tuile(1.0, 1, 2)
+	t.occurrences = [{"cle": "a"}]
+	_dire(t.tuiles["a"].normale(0).normalized().y > 0.99, "le dessus du faux témoin regarde +Y (l'attendu dépend de lui)")
+	_dire(AppTR.representant_par_defaut(t) == 1, "le dessus (1) l'emporte sur la paroi (2), qui porte plus de faces : %d" % AppTR.representant_par_defaut(t))
+	# Deux dessus : le matériau 0 couvre 0,25 sur une tuile vue 3 fois (0,75), le 1 couvre 1 sur une tuile vue une fois.
+	var t2 := FauxTemoin.new()
+	t2.tuiles["a"] = _tuile(1.0, 1, 2)
+	t2.tuiles["b"] = _tuile(0.5, 0, 2)
+	t2.occurrences = [{"cle": "a"}, {"cle": "b"}, {"cle": "b"}, {"cle": "b"}]
+	_dire(AppTR.representant_par_defaut(t2) == 1, "aire × occurrences : 1 (1,0) devant 0 (0,75) — %d" % AppTR.representant_par_defaut(t2))
+	t2.occurrences = [{"cle": "a"}, {"cle": "b"}, {"cle": "b"}, {"cle": "b"}, {"cle": "b"}, {"cle": "b"}]
+	_dire(AppTR.representant_par_defaut(t2) == 0, "aire × occurrences : 0 (1,25) devant 1 (1,0) — %d" % AppTR.representant_par_defaut(t2))
+	# Une tuile jamais vue ne compte pas.
+	t2.occurrences = [{"cle": "a"}]
+	_dire(AppTR.representant_par_defaut(t2) == 1, "une tuile sans occurrence ne pèse rien")
+	# Aucun dessus porteur d'un matériau : l'ancienne règle (le plus de faces).
+	var t3 := FauxTemoin.new()
+	t3.tuiles["a"] = _tuile(1.0, -1, 2)
+	t3.occurrences = [{"cle": "a"}]
+	_dire(AppTR.representant_par_defaut(t3) == 2, "sans dessus matériau : le plus de faces (2)")
+	t3.materiaux = []
+	_dire(AppTR.representant_par_defaut(t3) == -1, "sans matériau : la légende (−1)")
 	_finies += 1

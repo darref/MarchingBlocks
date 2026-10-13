@@ -4342,6 +4342,15 @@ activées ; puis « un désert qui empiète sur la roche n'est pas la même chos
   POINTILLÉS CLAIRS À CERTAINS JOINTS DE LA BANDE, PAS EXPLIQUÉS** (ni la poussée le long de la normale, ni le sommet lu au
   point : essayés). ⚠ Une fausse piste notée dans le code : on a cru la carte aveugle au canal G d'une texture RG8 — la
   capture peignait des sommets enfouis.
+- **LE REPRÉSENTANT PAR DÉFAUT EST LE DESSUS — CORRIGÉ (13 octobre 2026)**, vu par Jordan sur `fonction_transitions.gif`
+  (`D:/SpannerGames/PROJETS/MarchingBlocks/04_exports/reddit/gif/`) : « les transitions sont parfois visibles sur le bord
+  droit de la ligne de démarcation ». Ce n'était PAS le filmage : une bande brune, nette du côté de la couche native —
+  le représentant par défaut, « le plus porté par les faces du témoin », était la FALAISE (Material 2) des trois couches
+  de l'exemple (relevé par `filmer_transitions_v2.gd -- --seulement=materiaux`) ; le tournage le corrigeait à la main.
+  Désormais (`representant_par_defaut`) : l'AIRE des faces tournées vers le haut × les occurrences de leur tuile ; sans
+  dessus, l'ancienne règle. Sur l'exemple : Material 1 (le dessus) pour les trois. Gardé par `test_transitions` (70, un
+  faux témoin écrit à la main) ; deux mutations rouges (l'ancienne règle, les occurrences ignorées). ⚠ Les GIF sont à
+  REFILMER. ⚠ **LES POINTILLÉS CLAIRS** le long de la bande (visibles aussi sur le GIF) restent NON EXPLIQUÉS.
 - ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.** Pas mesuré sur l'exemple (la texture fait ~10 Mo, sa construction parcourt
   l'union : ~740 000 cases). Pas exporté : dans la liste des greffons à faire (§0).
 

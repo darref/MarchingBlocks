@@ -214,23 +214,44 @@ func materiaux_de(c: Dictionary) -> Array:
 	return t.materiaux if t != null else []
 
 
-## Le matériau représentant d'une couche : celui qu'on a choisi, sinon le plus porté par les faces de son témoin, sinon
-## la légende (−1).
+## Le matériau représentant d'une couche : celui qu'on a choisi, sinon celui qui couvre le plus de DESSUS dans le monde
+## (`representant_par_defaut`), sinon la légende (−1).
 func indice_representant(c: Dictionary) -> int:
 	var id := str(c.get("id", ""))
 	if etat["representants"].has(id):
 		return int(etat["representants"][id])
-	var t: RefCounted = e._temoin_de(c)
+	return representant_par_defaut(e._temoin_de(c))
+
+
+## LE REPRÉSENTANT PAR DÉFAUT EST LE DESSUS (13 octobre 2026). C'était le matériau porté par le plus de FACES du témoin :
+## dans l'exemple, la FALAISE (Material 2) de chaque couche — une bande brune entre l'herbe et le sable, nette du côté de
+## la couche native (vu sur `fonction_transitions.gif` ; le tournage devait choisir « Material 1 » à la main pour chaque
+## couche). Une transition se voit surtout sur les sols : on pèse l'AIRE des faces tournées vers le haut (n.y > 0,7 —
+## une pose ne fait que tourner autour de +Y, le haut d'une tuile reste le haut du monde), multipliée par le nombre
+## d'occurrences de la tuile dans le témoin (ce que le monde montre). Sans aucun dessus porteur d'un matériau, l'ancienne
+## règle (le plus de faces). À égalité, le plus petit indice.
+static func representant_par_defaut(t: RefCounted) -> int:
 	if t == null or t.materiaux.is_empty():
 		return -1
+	var vues := {}
+	for o in t.occurrences:
+		vues[o["cle"]] = int(vues.get(o["cle"], 0)) + 1
+	var dessus := {}
 	var comptes := {}
 	for nom in t.tuiles:
-		for k in t.tuiles[nom].mats:
-			if int(k) >= 0:
-				comptes[int(k)] = int(comptes.get(int(k), 0)) + 1
+		var m: RefCounted = t.tuiles[nom]
+		var poids := float(vues.get(nom, 0))
+		for f in m.faces.size():
+			var k := int(m.mats[f]) if f < m.mats.size() else -1
+			if k < 0:
+				continue
+			comptes[k] = int(comptes.get(k, 0)) + 1
+			if poids > 0.0 and m.normale(f).normalized().y > 0.7:
+				dessus[k] = float(dessus.get(k, 0.0)) + m._aire(f) * poids
+	var source: Dictionary = dessus if not dessus.is_empty() else comptes
 	var meilleur := -1
-	for k in comptes:
-		if meilleur < 0 or comptes[k] > comptes[meilleur] or (comptes[k] == comptes[meilleur] and k < meilleur):
+	for k in source:
+		if meilleur < 0 or source[k] > source[meilleur] or (source[k] == source[meilleur] and k < meilleur):
 			meilleur = k
 	return meilleur
 
