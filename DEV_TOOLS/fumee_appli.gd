@@ -23,6 +23,7 @@ const Tranchage := preload("res://addons/marchingblocks_core/tranchage.gd")
 const PlancheTuiles := preload("res://app/planche_tuiles.gd")
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
 const ATPalette := preload("res://app/palette.gd")
+const Guide := preload("res://app/guide.gd")
 const REGLAGES := "user://reglages.cfg"
 const JETABLE := "user://fumee/fumee.mbproj"
 const RACINE_EXEMPLE := "user://fumee/example"
@@ -509,7 +510,7 @@ func _mener() -> void:
 	_vrai(_guide_fini, "SENTINELLE : le guide des raccourcis est allé JUSQU'AU BOUT")
 	await _tout_raccourci_a_son_bouton(ed)
 	_vrai(_boutons_raccourcis_finis, "SENTINELLE : « tout raccourci a son bouton » est allé JUSQU'AU BOUT")
-	_les_variantes(ed)
+	await _les_variantes(ed)
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
 	_les_bords_entre_couches(ed)
 	_vrai(_bords_finis, "SENTINELLE : les bords entre couches sont allés JUSQU'AU BOUT")
@@ -4600,9 +4601,9 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 	_vrai(rouge.r > rouge.g + 0.3 and rouge.r > rouge.b + 0.3, "World est ROUGE (%s)" % rouge.to_html(false))
 	_vrai(bleu.b > bleu.r + 0.3 and bleu.b > bleu.g, "Fluids est BLEU (%s)" % bleu.to_html(false))
 	var vues := {}
-	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu", "feuillage"]:
+	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu", "feuillage", "variantes"]:
 		vues[Palette.teinte(a).to_html(false)] = true
-	_egal(vues.size(), 7, "sept ateliers, sept teintes différentes")
+	_egal(vues.size(), 8, "huit ateliers, huit teintes différentes")
 	# CE QUI NAÎT PLUS TARD dans une barre (une liste rebâtie) prend sa teinte ; dans la barre de gauche, l'olive reste.
 	var tard := Label.new()
 	tard.add_theme_color_override("font_color", Palette.OLIVE)
@@ -4617,7 +4618,8 @@ func _les_teintes_des_ateliers(ed: Control) -> void:
 	gauche.queue_free()
 	_vrai(not vues.has(Palette.OLIVE.to_html(false)), "aucun atelier n'a l'olive de l'écran")
 	for b in [[ed._droite, "monde"], [ed._droite_temoin, "witness"], [ed._droite_texture, "texture"],
-			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"], [ed._droite_feuillage, "feuillage"]]:
+			[ed._droite_jeu, "jeu"], [ed._droite_fluides, "fluides"], [ed._droite_feuillage, "feuillage"],
+			[ed._droite_variantes, "variantes"]]:
 		var barre: Control = b[0]
 		var a: Color = Palette.teinte(b[1])
 		var enfonce := barre.get_theme_stylebox("pressed", "Button") as StyleBoxFlat
@@ -5517,7 +5519,9 @@ func _forme_de(mesh: Mesh) -> String:
 
 
 ## LES VARIANTES VOULUES (Jordan, 4 octobre 2026) — par les VRAIS boutons : dans Witness geometry, une variante de la
-## paroi naît d'une copie, Ctrl+Z / Ctrl+Y ; on sculpte son cœur ; dans World, le monde peint de la forme du témoin
+## paroi naît d'une copie, Ctrl+Z / Ctrl+Y ; on sculpte son cœur ; L'ATELIER VARIANTS (13 octobre 2026) : World n'a plus
+## qu'un renvoi, l'atelier prend l'outil Variant et Échap rend celui de World, la liste (photo, copies posées recomptées
+## ici dans la grille), « Sculpt » et « New variant of this tile » qui mènent à Geometry ; le monde peint de la forme du témoin
 ## pose base ET variante selon le tirage (attendu recalculé ici : hachage de Python écrit dans `test_variantes`, ici la
 ## même règle déroulée à la main sur les sommets de la paroi), l'outil Variant fait passer UNE tuile à la suivante
 ## (un Ctrl+Z), un poids à 0 l'écarte, la sélection impose la variante 1, le projet enregistre poids et choix.
@@ -5590,14 +5594,63 @@ func _les_variantes(ed: Control) -> void:
 		"la paroi du monde pose base et variante selon le tirage (%d / %d)" % [justes, parois])
 	if un_sommet == null:
 		return
+	# L'ATELIER VARIANTS (Jordan, 13 octobre 2026) : World n'a plus que le renvoi ; l'outil de World d'avant est Dig.
+	var dans_world := []
+	var renvoi: Button = null
+	for b in ed._droite.find_children("*", "Button", true, false):
+		if (b as Button).text in ["Variant tool", "Back to random everywhere", "Apply"]:
+			dans_world.append((b as Button).text)
+		if (b as Button).text == "Variants workspace":
+			renvoi = b
+	_vrai(dans_world.is_empty() and renvoi != null,
+		"World ne garde qu'un renvoi vers l'atelier Variants (outils de variantes restés dans World : %s)" % [dans_world])
+	if renvoi == null:
+		return
+	ed._choisir_outil("creuser")
+	renvoi.pressed.emit()
+	await process_frame
+	_vrai(ed._atelier == "variantes" and ed._vue.outil == "variante" and ed._vue.mode == "monde",
+		"le renvoi ouvre l'atelier Variants : le monde dans la vue, l'outil Variant")
+	_vrai(ed._droite_variantes.visible and not ed._droite.visible and ed._section_couches.visible,
+		"Variants : sa barre de droite, pas celle de World ; la liste des couches (poids et choix sont à la couche)")
+	_vrai(ed._variantes.bouton_outil.button_pressed and ed._droite_variantes.is_ancestor_of(ed._variantes.bouton_outil)
+		and not (ed._boutons_outil["creuser"] as Button).button_pressed, "l'outil Variant est enfoncé, seul, dans sa barre")
+	var teintes: Dictionary = ATPalette.TEINTES_ATELIER
+	var pareilles := 0
+	for a in teintes:
+		if a != "variantes" and (teintes[a] as Color).is_equal_approx(teintes.get("variantes", Color.BLACK)):
+			pareilles += 1
+	_vrai(teintes.has("variantes") and pareilles == 0, "une teinte à lui, qu'aucun autre atelier ne porte")
+	var guide: Array = []
+	for g in Guide.propositions(ed._contexte_du_guide())["lignes"]:
+		guide.append(g[1])
+	_vrai("the next variant of the tile" in guide and "back to the random draw" in guide,
+		"le guide dit les deux clics de l'atelier (%s)" % [guide])
+	# LA LISTE : les tuiles qui ont des variantes — la paroi seule ; ses copies posées recomptées ICI dans la grille.
+	var n_base := 0
+	var n_var1 := 0
+	for c in rendu.get_used_cells():
+		var nom: String = lot.get_item_name(rendu.get_cell_item(c))
+		n_base += 1 if nom == paroi else 0
+		n_var1 += 1 if nom == var1 else 0
+	var lignes: Dictionary = ed._variantes._lignes
+	_vrai(lignes.keys() == [paroi], "la liste : la paroi, seule tuile à variantes (%s)" % [lignes.keys()])
+	if lignes.has(paroi):
+		var texte: String = (lignes[paroi] as Button).text
+		_vrai(texte.contains("1 variant(s)") and texte.contains("placed %d / %d" % [n_base, n_var1]),
+			"… sa ligne dit 1 variante et les copies posées, base / variante 1 (%s ; attendu %d / %d)"
+			% [texte.replace("\n", " · "), n_base, n_var1])
+		_vrai((lignes[paroi] as Button).icon is Texture2D, "… avec la photo de la tuile")
+		(lignes[paroi] as Button).pressed.emit()
+		_vrai(ed._variantes.cle_designee == paroi and ed._variantes._compteurs.size() == 2
+			and ed._variantes._boutons_sculpter.size() == 2, "un clic sur la ligne : les poids de la paroi (base, variante 1)")
 	# L'OUTIL VARIANT : un clic, la suivante ; Ctrl+Z ; le clic droit rend le tirage.
-	ed._variantes.choisir_l_outil()
-	_vrai(ed._vue.outil == "variante" and ed._variantes.bouton_outil.button_pressed
-		and not (ed._boutons_outil["ajouter"] as Button).button_pressed, "l'outil Variant est choisi, seul")
 	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_LEFT)
 	_egal(lot.get_item_name(rendu.get_cell_item(un_sommet)), var1, "un clic : cette tuile passe à la variante 1")
 	_vrai(ed._variantes.cle_designee == paroi and ed._variantes._compteurs.size() == 2,
 		"la ligne des poids parle de sa clé (base et variante 1)")
+	_vrai((ed._variantes._lignes[paroi] as Button).text.contains("placed %d / %d" % [n_base - 1, n_var1 + 1]),
+		"la liste suit le clic (une paroi de plus en variante 1)")
 	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_LEFT)
 	_egal(lot.get_item_name(rendu.get_cell_item(un_sommet)), paroi, "un second clic : elle revient à la base")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
@@ -5605,15 +5658,23 @@ func _les_variantes(ed: Control) -> void:
 	ed._vue.variante_cliquee.emit({"sommet": un_sommet}, MOUSE_BUTTON_RIGHT)
 	_vrai(not (m.choix as Dictionary).has(un_sommet) and lot.get_item_name(rendu.get_cell_item(un_sommet)) == paroi,
 		"le clic droit rend le tirage (la base, ici)")
-	ed._choisir_outil("ajouter")
-	_vrai(not ed._variantes.bouton_outil.button_pressed, "choisir Add relâche l'outil Variant")
+	# ÉCHAP : World, et l'outil de World d'avant (Dig) revient ; plus aucun clic ne change de variante.
+	ed._unhandled_key_input(_cle(KEY_ESCAPE))
+	await process_frame
+	_vrai(ed._atelier == "monde" and ed._vue.outil == "creuser" and (ed._boutons_outil["creuser"] as Button).button_pressed
+		and not ed._variantes.bouton_outil.button_pressed, "Échap : World, avec Dig, l'outil d'avant (%s, %s)"
+		% [ed._atelier, ed._vue.outil])
+	ed._aller_a("variantes")
+	_egal(ed._vue.outil, "variante", "revenu dans l'atelier, l'outil Variant est repris")
 	# LES POIDS : la variante à 0, plus aucune ; Ctrl+Z.
+	ed._variantes.designer(paroi)
 	(ed._variantes._compteurs[1] as SpinBox).value = 0
 	var restantes := 0
 	for c in rendu.get_used_cells():
 		if lot.get_item_name(rendu.get_cell_item(c)) == var1:
 			restantes += 1
 	_egal(restantes, 0, "poids de la variante à 0 : le tirage ne la pose plus")
+	_egal((ed._variantes.ligne_poids.get_child(6) as Label).text, "×0", "… et sa ligne le compte (×0)")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	restantes = 0
 	for c in rendu.get_used_cells():
@@ -5643,6 +5704,29 @@ func _les_variantes(ed: Control) -> void:
 	_vrai(erreurs.is_empty() and (c_relue.get("poids", {}) as Dictionary).get(paroi, []) == [3, 1]
 		and (c_relue.get("choix", {}) as Dictionary).size() == (m.choix as Dictionary).size() and (m.choix as Dictionary).size() > 100,
 		"le projet enregistre poids et choix de la couche (%s, %d)" % [c_relue.get("poids", {}), (c_relue.get("choix", {}) as Dictionary).size()])
+	# « SCULPT » (variante 1) : Witness geometry, en édition, sur une copie qui MONTRE la variante 1. Aucun geste.
+	var version: int = ed._histoire.get_version()
+	(ed._variantes._boutons_sculpter[1] as Button).pressed.emit()
+	await process_frame
+	_vrai(ed._atelier == "witness" and ed._vue.edition and mo.temoin == t and mo.cle == var1
+		and t.affectation.has(t.occurrences[mo.occurrence]["sommet"]),
+		"« Sculpt » (variante 1) : Geometry, en édition, sur une copie qui la montre (%s, %s)" % [ed._atelier, mo.cle])
+	_egal(ed._histoire.get_version(), version, "… sans un geste dans l'historique")
+	_egal(ed._vue.outil, "creuser", "… et l'outil de World est rendu en quittant l'atelier")
+	# « NEW VARIANT OF THIS TILE » : la variante 2 naît d'une copie de la BASE, dans Geometry ; UN Ctrl+Z.
+	ed._aller_a("variantes")
+	ed._variantes.designer(paroi)
+	var var2 := paroi + "_var2"
+	ed._variantes.bouton_nouvelle.pressed.emit()
+	await process_frame
+	_vrai(ed._atelier == "witness" and ed._vue.edition and t.tuiles.has(var2) and mo.cle == var2
+		and t.occurrences_de(var2).size() == 1, "« New variant of this tile » : Geometry, la copie en édition montre la variante 2")
+	_vrai(t.tuiles.has(var2) and (t.tuiles[var2].sommets as PackedVector3Array) == base_avant,
+		"… copiée de la BASE (pas de la variante 1)")
+	_egal(_sans_partenaire(t), 0, "… aucun joint ouvert")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai(not t.tuiles.has(var2), "UN Ctrl+Z la défait")
+	ed._aller_a("monde")
 	# Tout défaire, puis la couche supprimée : la suite retrouve le monde d'avant.
 	while ed._histoire.get_version() > v0 and ed._histoire.has_undo():
 		ed._histoire.undo()

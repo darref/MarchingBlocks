@@ -76,6 +76,8 @@ func _derouler() -> void:
 	await _images(10)
 	_photo("variantes_1_temoin")
 	e._peindre_la_forme_du_temoin()
+	# L'ATELIER VARIANTS (13 octobre 2026) : le monde dans la vue, sa barre à droite.
+	e._aller_a("variantes")
 	var vue = e._vue
 	vue._cible = Vector3(6.0, 5.0, 6.0)
 	vue._azimut = 0.8
@@ -95,7 +97,9 @@ func _derouler() -> void:
 	await _images(10)
 	_photo("variantes_3_tout_en_variante")
 	e._variantes.tout_au_hasard()
-	e._variantes.choisir_l_outil()
+	# La liste et la ligne des poids de la première tuile à variantes (la photo, les copies posées, « Sculpt »).
+	if not e._variantes._lignes.is_empty():
+		e._variantes.designer(e._variantes._lignes.keys()[0])
 	await _images(10)
 	_photo("variantes_4_outil")
 	print("RAPPORT :\n", e._rapport.text)

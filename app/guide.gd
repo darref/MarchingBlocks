@@ -27,7 +27,7 @@ static func entrees(c: Dictionary) -> Array:
 	var atelier := str(c.get("atelier", ""))
 	var outil := str(c.get("outil", ""))
 	var sel := bool(c.get("selection", false))
-	if bool(c.get("naviguer", false)) and atelier in ["monde", "fluides", "transitions", "feuillage"]:
+	if bool(c.get("naviguer", false)) and atelier in ["monde", "fluides", "transitions", "feuillage", "variantes"]:
 		l.append(["", "Z Q S D · A E", "fly (W A S D · Q E on QWERTY)", true])
 		l.append(["", "Right drag", "look around", true])
 		l.append(["", "Space", "stop flying", true])
@@ -52,6 +52,13 @@ static func entrees(c: Dictionary) -> Array:
 			l.append(["", "Right drag", "back to the layer order", true])
 			l.append(["alt", "Wheel", "brush radius", true])
 			_vue_monde(l)
+			l.append(["", "Esc", "back to World", false])
+		"variantes":
+			l.append(["", "Click", "the next variant of the tile", true])
+			l.append(["", "Right click", "back to the random draw", true])
+			l.append(["", "Space", "Navigate (fly)", false])
+			l.append(["", "F · ²", "frame all the matter · jump to the matter", false])
+			l.append(["", "Middle drag · Shift+middle", "turn · slide the view", false])
 			l.append(["", "Esc", "back to World", false])
 		"feuillage":
 			l.append(["", "Drag", "plant", true])
@@ -124,9 +131,6 @@ static func _monde(l: Array, c: Dictionary, outil: String, sel: bool, jeu: bool)
 				l.append(["shift", "Wheel", "step length" if quoi == "escalier" else "depth · reach · length", true])
 		"eau":
 			l.append(["", "Click", "a water source", true])
-		"variante":
-			l.append(["", "Click", "the next variant", true])
-			l.append(["", "Right click", "back to the random draw", true])
 	if sel and outil_de_selection:
 		l.append(["ctrl", "Wheel", "move the selection up · down", true])
 		l.append(["alt", "Wheel", "widen · shrink it (flat)", true])
