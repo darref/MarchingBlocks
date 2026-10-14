@@ -282,12 +282,19 @@ func _outils() -> String:
 		+ "leaves it at 45°. Where a slanted shape would make two cells touch by an edge only — which the "
 		+ "tiles forbid — it adds the missing cells itself, and says how many."))
 	l.append(_titre("Variants"))
-	l.append("Where a tile has variants (made in Witness geometry), World mixes them by a [b]random draw[/b] — the "
-		+ "same at every rebuild, never shuffled. The [b]Variant tool[/b] (section Variants): click a tile to show its "
-		+ "next variant (base, 1, 2…), right click to give it back to the draw. [b]Weights[/b] set how often each "
-		+ "one is drawn for the tile you last pointed at (0: never). [b]On the selection[/b] picks Random, Base or a "
-		+ "variant for every tile touching the selected cells. Weights and picks belong to the layer and travel "
-		+ "in the exported world; every change is one " + _touche("Ctrl+Z") + ".")
+	l.append("Variants is a workshop of its own, next to World: the painted world in the view, and on the right "
+		+ "everything about the variants of your tiles. Where a tile has variants, the world mixes them by a [b]random "
+		+ "draw[/b] — the same at every rebuild, never shuffled. The [b]Variant tool[/b] is taken when you open the "
+		+ "workshop: click a tile to show its next variant (base, 1, 2…), right click to give it back to the draw. "
+		+ "[b]Tiles with variants[/b] lists them, with a photo and how many copies the active layer places (base / "
+		+ "variant 1 / …); click one, or point at a tile, and [b]The tile[/b] shows its [b]weights[/b] — how often "
+		+ "each one is drawn (0: never). [b]On the selection[/b] picks Random, Base or a variant for every tile "
+		+ "touching the cells selected in World. Weights and picks belong to the layer and travel in the exported "
+		+ "world; every change is one " + _touche("Ctrl+Z") + ".")
+	l.append("Variants are [b]sculpted in Witness geometry[/b]: [b]Sculpt[/b], next to a weight, takes you there, in "
+		+ "edit mode on the clearest copy that shows it; [b]New variant of this tile[/b] makes one from a copy of the "
+		+ "base and takes you there too. " + _touche("Esc") + " or [b]Leave[/b] goes back to World, with the "
+		+ "painting tool you had.")
 	l.append(_titre("Fluids"))
 	l.append("Fluids is a workshop of its own, next to World. Open it and click once: the world decides what the water becomes. In a hollow, of any "
 		+ "size, a [b]lake[/b] fills it to its brim. On a slope or a ledge, a [b]river[/b] runs down the "
@@ -504,7 +511,8 @@ func _modeleur() -> String:
 		+ "tiles stays), in one " + _touche("Ctrl+Z") + ". What cannot be matched is said: a gap stays there.")
 	l.append(_titre("Variants"))
 	l.append("A tile that repeats a lot — a cliff, a ground, a run of corners — can have [b]variants[/b]: other "
-		+ "sculptures of the same tile. Click a copy, then [b]New variant from this copy[/b] (section Variants): that "
+		+ "sculptures of the same tile. Click a copy, then [b]New variant from this copy[/b] (section Variants — or [b]New variant of "
+		+ "this tile[/b] in the Variants workshop): that "
 		+ "copy now shows the variant, and only the copies that show it follow when you sculpt it. [b]This copy "
 		+ "shows[/b] switches any copy between the base and its variants, so you judge a variant next to its "
 		+ "real neighbours. A variant keeps the borders of its tile — move a border point and every tile follows, "

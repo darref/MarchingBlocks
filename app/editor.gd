@@ -312,6 +312,7 @@ var _mer_case := Vector3i.ZERO   # la case cliquée : sa colonne porte la source
 var _eau_barre_forcee := false   # le prochain recalcul de l'eau montre l'attente (la mer posée : tout est refait)
 var _droite_fluides: Panneau
 var _droite_transitions: Panneau
+var _droite_variantes: Panneau   # L'ATELIER VARIANTS (13 octobre 2026) — sa logique vit dans `variantes.gd`
 var _droite_animation: Panneau
 ## L'outil de World qu'on avait en entrant dans Fluids (`_vue.outil`, et la forme si c'en était une) : rendu en sortant.
 var _outil_avant_fluides := "ajouter"
@@ -526,6 +527,8 @@ func _batir() -> void:
 	_batir_fluides(_droite_fluides.get_meta("pile"))
 	_droite_transitions = _panneau(corps, false, LARGEUR_DROITE)
 	_transitions.batir(_droite_transitions.get_meta("pile"))
+	_droite_variantes = _panneau(corps, false, LARGEUR_DROITE)
+	_variantes.batir_atelier(_droite_variantes.get_meta("pile"))
 	_droite_animation = _panneau(corps, false, LARGEUR_DROITE)
 	_animation.batir(_droite_animation.get_meta("pile"))
 	_feuillage.brancher(_vue.feuillage)
@@ -534,6 +537,7 @@ func _batir() -> void:
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
 			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"], [_droite_animation, "anim"],
+			[_droite_variantes, "variantes"],
 			[_droite_feuillage, "feuillage"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
@@ -939,6 +943,9 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 			+ "of the witness tiles."],
 		["transitions", "Transitions", "couches", "Where two layers meet, blend the look of one over the other. Esc "
 			+ "goes back to World."],
+		["variantes", "Variants", "variante", "Mix the variants of your tiles in the painted world: the Variant tool, the "
+			+ "weights of the random draw, the picks on a selection; « Sculpt » takes you to Witness geometry. Esc goes "
+			+ "back to World."],
 		["anim", "Animation", "film", "Animated textures on the witness materials: scroll, frames (a texture video), "
 			+ "pulse — on any map, emission included."],
 		["feuillage", "Foliage", "arbre", "Plant trees and bushes (.glb models) in the painted world. Esc goes back to "
@@ -1708,7 +1715,7 @@ Acts on the selection if there is one, otherwise on the matter of floor y.")
 	etage.contenu.add_child(_bouton("Clear the layer", "Erases every cell of this layer (Ctrl+Z "
 		+ "brings them back).", _effacer_tout, "gomme", Palette.DANGER))
 	_batir_formes_speciales(pile)
-	_variantes.batir_monde(pile)
+	_variantes.batir_renvoi(pile)
 
 
 ## ── 4. LES FORMES SPÉCIALES (Jordan, 1er octobre 2026) — la règle vit dans `formes_speciales.gd`.
@@ -2981,10 +2988,10 @@ func _cle_du_geste(event: InputEvent) -> Array:
 			nom = str(sous.name)
 		return ["bouton:" + nom, nom]
 	if _vue != null and (sous == _vue or _vue.is_ancestor_of(sous)) and m.pressed:
-		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides", "transitions", "jeu_edit"] else ("edition" if _modeleur.maillage != null else "vue")
+		var outil: String = str(_vue.outil) if _atelier in ["monde", "fluides", "transitions", "jeu_edit", "variantes"] else ("edition" if _modeleur.maillage != null else "vue")
 		return ["vue:%s:%s:%s" % [_atelier, outil, "droit" if m.button_index == MOUSE_BUTTON_RIGHT else "gauche"],
 			{"monde": "Painting", "fluides": "Water", "witness": "Geometry", "texture": "Texturing", "jeu": "Play test",
-				"jeu_edit": "Play edit", "projet": "Project", "transitions": "Transitions"}.get(_atelier, "Working")]
+				"jeu_edit": "Play edit", "projet": "Project", "transitions": "Transitions", "variantes": "Variants"}.get(_atelier, "Working")]
 	return []
 
 
@@ -3126,7 +3133,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes"]:
 		await _rhabiller_avec_attente(atelier in JEUX)
 	var debut := Time.get_ticks_msec()
 	if atelier in JEUX and not _atelier in JEUX and _ecran_vivant() \
@@ -3301,7 +3308,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier in JEUX and not _atelier in JEUX:
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -3330,17 +3337,21 @@ func _aller_a(atelier: String) -> void:
 		_sortir_des_fluides()
 	if atelier != "transitions":
 		_sortir_des_transitions()
+	if atelier != "variantes":
+		_variantes.sortir()
 	if atelier != "feuillage":
 		_feuillage.sortir()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "variantes": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
 		_entrer_dans_les_transitions()
+	if atelier == "variantes":
+		_variantes.entrer()
 	if atelier == "anim":
 		_animation.entrer()
 	if atelier == "feuillage":
@@ -3404,7 +3415,7 @@ func _contexte() -> void:
 	_titre_projet.visible = projet
 	_section_projet.visible = projet
 	# La liste des couches dans Transitions aussi : son ORDRE dit qui couvre par défaut.
-	_section_couches.visible = monde or temoin or transitions
+	_section_couches.visible = monde or temoin or transitions or _atelier == "variantes"
 	_section_monde_peint.visible = monde
 	_section_choix_monde.visible = monde and Exemple.disponible()
 	_titre_aller_retour.visible = projet
@@ -3421,6 +3432,7 @@ func _contexte() -> void:
 	_droite_jeu.visible = jeu
 	_droite_fluides.visible = fluides
 	_droite_transitions.visible = transitions
+	_droite_variantes.visible = _atelier == "variantes"
 	_droite_animation.visible = animation
 	_droite_feuillage.visible = _atelier == "feuillage"
 	_modeleur.geometrie = not (texturing or animation)
@@ -6535,7 +6547,7 @@ func _nouvelle_couche() -> void:
 	_activer(_ajouter_couche(Projet.couche("Layer %d" % (_couches.size() + 1))))
 	# ⚠ ON RESTE OÙ L'ON EST (3 octobre 2026) : créée depuis Witness pour en sculpter le témoin, ou depuis Fluids, la
 	# couche renvoyait dans World. Seuls Project et Play test, qui ne montrent pas les couches, mènent à World.
-	if not _atelier in ["monde", "witness", "texture", "fluides"]:
+	if not _atelier in ["monde", "witness", "texture", "fluides", "variantes"]:
 		_aller_a("monde")
 	_dire("[b]New layer[/b] — empty and active: paint its cells in World, sculpt its witness in Witness.\n"
 		+ "[i]Slice the witness or your work into it to give it tiles.[/i]")
@@ -7557,7 +7569,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
-	if _atelier == "transitions":
+	if _atelier in ["transitions", "variantes"]:
 		if k.physical_keycode == KEY_QUOTELEFT:
 			_teleporter()
 			get_viewport().set_input_as_handled()
@@ -7706,14 +7718,14 @@ func _input(event: InputEvent) -> void:
 			_vue.grab_focus()
 			get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "jeu_edit"] \
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "jeu_edit", "variantes"] \
 			or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
 	# DANS FLUIDS, TRANSITIONS ET FOLIAGE, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
-	if _atelier in ["fluides", "transitions", "feuillage"] and k.keycode != KEY_SPACE:
+	if _atelier in ["fluides", "transitions", "feuillage", "variantes"] and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

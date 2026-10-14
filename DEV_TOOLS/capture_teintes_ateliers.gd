@@ -11,7 +11,7 @@ func _derouler() -> void:
 	_ecran._aller_a("monde")
 	_ecran._appliquer({"poser": _paysage(), "effacer": {}}, "Landscape")
 	await _images(5)
-	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu"]:
+	for a in ["projet", "monde", "fluides", "witness", "texture", "jeu", "variantes"]:
 		_ecran._aller_a(a)
 		await _images(25)
 		_photo("atelier_" + a)
