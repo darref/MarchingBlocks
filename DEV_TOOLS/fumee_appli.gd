@@ -6499,16 +6499,33 @@ func _la_retopo(ed: Control) -> bool:
 		mo.operer("subdiviser")
 	var subdivisee: int = mo.maillage.faces.size()
 	_egal(_sans_partenaire(t), 0, "retopo : la paroi subdivisée deux fois, joints fermés")
-	(boutons["Simplify"] as Button).pressed.emit()
-	var simplifiee: int = mo.maillage.faces.size()
-	_vrai(simplifiee < subdivisee and _sans_partenaire(t) == 0, "Simplify sur la paroi subdivisée : %d faces → %d, joints fermés"
-		% [subdivisee, simplifiee])
+	# Une grille subdivisée est déjà régulière, et Simplify replie une paroi plate jusqu'à ne plus laisser de sommet
+	# intérieur (mesuré sous Windows : Relax n'y trouvait rien) : un sommet intérieur est décalé DANS le plan de la
+	# paroi (la forme ne change pas), Relax doit le ramener, puis Simplify.
+	var libres := (preload("res://addons/marchingblocks_core/retopo.gd").verrous(mo.maillage)["verrous"] as Dictionary)
+	var decale := -1
+	var n_paroi := Vector3.ZERO
+	for f in mo.maillage.faces.size():
+		for i in mo.maillage.faces[f]:
+			if decale < 0 and not libres.has(int(i)):
+				decale = int(i)
+				n_paroi = mo.maillage.normale(f)
+	_vrai(decale >= 0, "retopo : la paroi subdivisée a un sommet intérieur libre")
+	if decale < 0:
+		return false
+	var tangente := n_paroi.cross(Vector3.UP if absf(n_paroi.y) < 0.9 else Vector3.RIGHT).normalized()
+	mo.maillage.sommets[decale] += tangente * 0.04
+	mo.redessiner()
 	var avant: PackedVector3Array = mo.maillage.sommets.duplicate()
 	(boutons["Relax"] as Button).pressed.emit()
 	_vrai(mo.maillage.sommets != avant and _sans_partenaire(t) == 0 and ed._rapport.text.contains("Relax"),
 		"Relax sur la paroi : des sommets égalisés, aucun joint ouvert, le rapport le dit")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_vrai(mo.maillage.sommets == avant, "UN Ctrl+Z défait Relax")
+	(boutons["Simplify"] as Button).pressed.emit()
+	var simplifiee: int = mo.maillage.faces.size()
+	_vrai(simplifiee < subdivisee and _sans_partenaire(t) == 0, "Simplify sur la paroi subdivisée : %d faces → %d, joints fermés"
+		% [subdivisee, simplifiee])
 	ed._unhandled_key_input(_cle(KEY_Z, true))
 	_egal(mo.maillage.faces.size(), subdivisee, "UN Ctrl+Z défait Simplify")
 	ed._unhandled_key_input(_cle(KEY_Z, true))
