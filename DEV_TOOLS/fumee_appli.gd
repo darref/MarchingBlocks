@@ -6058,7 +6058,7 @@ func _tout_raccourci_a_son_bouton(ed: Control) -> void:
 	var textes := PackedStringArray()
 	_textes_des_boutons(ed, textes)
 	var contextes: Array = [{"atelier": "jeu"}, {"atelier": "fluides"}, {"atelier": "fluides", "mer": true},
-		{"atelier": "transitions"}, {"atelier": "feuillage"}, {"atelier": "monde", "naviguer": true},
+		{"atelier": "transitions"}, {"atelier": "feuillage"}, {"atelier": "variantes"}, {"atelier": "monde", "naviguer": true},
 		{"atelier": "monde", "collage": [Vector3i.ZERO]}, {"atelier": "monde", "glisse": "rect"},
 		{"atelier": "monde", "glisse": "salle"}]
 	for a in ["monde", "jeu_edit"]:

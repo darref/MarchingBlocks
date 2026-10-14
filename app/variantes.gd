@@ -249,6 +249,8 @@ func batir_atelier(pile: VBoxContainer) -> void:
 		+ "Ctrl+Z brings them back.", tout_au_hasard, "gomme"))
 	sel.contenu.add_child(e._bouton("Leave", "Back to World (Esc), with the tool you had there.",
 		func() -> void: e._changer_d_atelier("monde"), "gauche"))
+	# F et ² ont leurs boutons (TOUT RACCOURCI A SON BOUTON, 13 octobre 2026), comme dans Fluids et Transitions.
+	sel.contenu.add_child(e._rangee_vue())
 	dire_poids()
 
 
