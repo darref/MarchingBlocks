@@ -523,7 +523,9 @@ func _dire_la_ligne() -> void:
 	var w: Array = (m.poids as Dictionary).get(cle_designee, [])
 	for k in n + 1:
 		var nom := MB.nom_de_variante(cle_designee, k)
-		ligne_poids.add_child(e._texte("Base" if k == 0 else "Variant %d" % k, 11, Palette.TEXTE))
+		var nom_ligne: Label = e._texte("Base" if k == 0 else "Variant %d" % k, 11, Palette.TEXTE)
+		nom_ligne.autowrap_mode = TextServer.AUTOWRAP_OFF   # « Variant 1 » se coupait en deux (vu à l'image)
+		ligne_poids.add_child(nom_ligne)
 		var b := SpinBox.new()
 		b.min_value = 0
 		b.max_value = POIDS_MAXI
