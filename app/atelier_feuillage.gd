@@ -98,6 +98,7 @@ func batir(pile: VBoxContainer) -> void:
 	sec.contenu.add_child(aide)
 	sec.contenu.add_child(e._bouton("Leave", "Back to World and its painting tools (Esc).",
 		e._changer_d_atelier.bind("monde"), "croix"))
+	sec.contenu.add_child(e._rangee_vue())
 	sec.contenu.add_child(e._petit_titre("MODELS"))
 	liste = VBoxContainer.new()
 	liste.add_theme_constant_override("separation", 4)

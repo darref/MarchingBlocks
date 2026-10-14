@@ -266,6 +266,7 @@ func batir(pile: VBoxContainer) -> void:
 		+ "material. Which layer covers is the higher one in the layer list, unless you paint it otherwise.", 11,
 		Palette.GRIS))
 	sec.contenu.add_child(e._bouton("Leave", "Back to World (Esc).", e._changer_d_atelier.bind("monde"), "croix"))
+	sec.contenu.add_child(e._rangee_vue())
 	sec.contenu.add_child(e._petit_titre("PAIRS OF LAYERS"))
 	_liste = VBoxContainer.new()
 	_liste.add_theme_constant_override("separation", 4)

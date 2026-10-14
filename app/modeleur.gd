@@ -2164,7 +2164,8 @@ func souris_entree(event: InputEvent) -> bool:
 					choisir_dans(Rect2(_coin_boite, b.position - _coin_boite))
 					dit.emit("[i]Box selection.[/i]")
 			else:
-				cliquer(b.position, b.shift_pressed, b.alt_pressed)
+				cliquer(b.position, b.shift_pressed, b.alt_pressed or boucle_armee)
+				boucle_armee = false
 			return true
 		MOUSE_BUTTON_RIGHT:
 			if modal != "":
@@ -2349,6 +2350,11 @@ var _trait := {}
 # dans Blender. Le pinceau n'agit que sur la tuile du point où le trait a commencé.
 
 var sculpt := false
+## LES BOUTONS DES GESTES À MODIFICATEUR (« tout raccourci a son bouton », 13 octobre 2026) : `sculpt_inverse` est le Ctrl
+## du sculpt tenu ; `pipette_armee` et `boucle_armee` font du PROCHAIN clic un Alt + clic (la pipette, la boucle).
+var sculpt_inverse := false
+var pipette_armee := false
+var boucle_armee := false
 var sculpt_genre := "draw"
 ## En cases.
 var sculpt_rayon := 0.2
@@ -2422,6 +2428,7 @@ func _commencer_le_sculpt(p: Vector2) -> void:
 
 ## UN COUP DE PINCEAU au point visé : le déplacement du cœur, appliqué, propagé, bridé.
 func _coup_de_sculpt(p: Vector2, ctrl: bool, maj: bool) -> void:
+	ctrl = ctrl != sculpt_inverse
 	if _sculpt_trait.is_empty():
 		return
 	var i := _impact(p)
@@ -2809,9 +2816,11 @@ func _peindre_a_la_souris(event: InputEvent) -> bool:
 		if b.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		souris = b.position
-		_appui = b.pressed and not b.alt_pressed
+		var alt := b.alt_pressed or (pipette_armee and b.pressed)
+		_appui = b.pressed and not alt
 		if b.pressed:
-			if b.alt_pressed:
+			if alt:
+				pipette_armee = false
 				_pipette(b.position)
 			else:
 				_commencer_le_trait(b.position)

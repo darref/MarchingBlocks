@@ -4909,6 +4909,34 @@ faut guider en arbre l'utilisateur en montrant des propositions de shortcuts sel
   boîte sur la seule copie active, Ctrl + molette toujours l'étage, Extrude décalé par Alt. ⚠ Le guide n'a pas été VU
   À L'IMAGE ni tenu en main ; ses mots sont des propositions.
 
+### TOUT RACCOURCI A SON BOUTON — DEMANDÉ PAR JORDAN (13 octobre 2026), ÉCRIT LE 14
+
+« Rien qui est faisable en shortcut ne doit être pas faisable en bouton dans le soft. »
+
+- **LA TABLE** (`Guide.BOUTONS`, `app/guide.gd`) : pour chaque raccourci CLAVIER de `Guide.entrees` (une seule table de
+  raccourcis, celle du guide), le début du texte des boutons qui font la même chose ; `Guide.SANS_BOUTON` dit ce qui n'en a
+  pas, et pourquoi — les touches PENDANT un geste (X Y Z, les nombres, Entrée, Échap : aller chercher un bouton déplacerait
+  le geste), les touches de MOUVEMENT tenues (marcher, voler, courir), et [ ] (le curseur de taille est là).
+- **LES BOUTONS NEUFS** : **Undo / Redo** dans la barre de titre (tous les ateliers) ; une rangée **Frame all · Jump to
+  matter · Grid to matter · Floor ↓ · Floor ↑** dans World, Fluids, Transitions et Foliage ; **Cancel paste** (Selection),
+  **Forget the anchor** (Special shapes) ; la mer en choix dans Fluids (**Sea ↓ · Sea ↑ · Lay the sea · Cancel the sea**,
+  actifs seulement quand une mer est épinglée) ; Geometry : **Back · Left · Bottom** (Ctrl + pavé), **X-ray**, **Loop
+  select** ; Sculpt : **Invert** (le Ctrl tenu) ; Paint : **Pick colour**.
+- ⚠ **CE QUI DÉPEND DU CURSEUR (², Ctrl + clic, Alt + clic) A UN BOUTON QUI ARME LE PROCHAIN CLIC** (`Vue.clic_arme`,
+  `Modeleur.boucle_armee`, `pipette_armee`) ; une bascule qu'une touche peut aussi changer (X-ray, Invert…) est relue à
+  chaque image (`_bascules_suivies`).
+- ⚠ **UN DÉFAUT PAYÉ, VU PAR LA FUMÉE** : `_bouton` replie son texte ; réduits à leur largeur minimale dans la barre de titre,
+  « Undo · Ctrl+Z » passait sur plusieurs lignes, la barre grandissait, les panneaux descendaient sous la bande du bas et le
+  centre de la vue bougeait (deux échecs). Undo / Redo sont sur une ligne, sans le raccourci dans le texte (il est dans la bulle).
+- **MESURÉ (14 octobre 2026, sur pcjordan, Windows, headless)** : `fumee_appli` **1011, 0 échec** (+8, une SENTINELLE :
+  chaque raccourci au clavier de ~60 contextes — World, Play edit avec chaque outil, avec et sans sélection, les formes, le
+  collage, les glissés, Navigate, Fluids et la mer, Transitions, Foliage, Geometry et Texturing, leurs gestes modaux, le
+  sculpt, le pinceau, le Play test — a son bouton dans l'écran ou son exemption ; Grid to matter arme un vrai clic, qui met la
+  grille à la matière cliquée sans rien peindre et désarme ; Undo et Redo sont dans la barre de titre). Sans le diff : 1003, 0.
+  ⚠ Le premier attendu du clic armé était faux (une matière à y = 66, hors de −64..64 : refusée à bon droit).
+- ⚠ **PAS VU À L'IMAGE, PAS TENU EN MAIN** : la place des boutons, la longueur des barres de droite qui en ont reçu. Les
+  bascules X-ray, Invert, Pick colour et la mer aux boutons n'ont pas de garde propre (la table dit seulement qu'ils existent).
+
 ### LA BOÎTE, LE LASSO ET LE CERCLE À TRAVERS LES COPIES — DEMANDÉ PAR JORDAN (13 octobre 2026), ÉCRIT LE MÊME JOUR
 
 « On ne peut pas sélectionner plusieurs faces du même bloc à travers des clones différents dans le witness pour les éditer

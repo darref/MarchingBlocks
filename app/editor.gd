@@ -427,6 +427,7 @@ func _process(delta: float) -> void:
 	Peinture.suivre_les_cartes()
 	_dire_l_etat_pbr()
 	_suivre_le_guide()
+	_suivre_les_boutons_des_raccourcis()
 	_ecoule += delta
 	if _ecoule < SECONDES_CONSEIL:
 		return
@@ -487,6 +488,9 @@ func _batir() -> void:
 	_vue.variante_cliquee.connect(_variantes.cliquer)
 	_vue.transition_peinte.connect(_transitions.peindre)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
+	_vue.saut_fait.connect(func(ok: bool) -> void:
+		if not ok:
+			_dire("[i]No matter under the click — the view stays where it is.[/i]"))
 	_vue.molette_contextuelle = _molette
 	_vue.boite_trop_grande.connect(func() -> void:
 		_dire("[color=#e0603c]Box too large[/color] — more than %d cells. Draw a smaller one." \
@@ -645,6 +649,18 @@ func _barre_titre() -> Control:
 		+ "« Save as » (Project) puts the project where you want; it keeps saving itself there.")
 	ligne.add_child(_etat_enregistre)
 	_dire_enregistre("enregistre")
+	# TOUT RACCOURCI A SON BOUTON (Jordan, 13 octobre 2026 : « rien qui est faisable en shortcut ne doit être pas faisable
+	# en bouton ») : Ctrl+Z / Ctrl+Y, ici, pour tous les ateliers.
+	# ⚠ SUR UNE LIGNE : `_bouton` replie son texte, et réduit à sa largeur minimale dans la barre de titre il passait sur
+	# plusieurs lignes — la barre grandissait, les panneaux descendaient sous la bande du bas (vu par la fumée).
+	for u in [["Undo", "Undo the last change (Ctrl+Z).", _annuler_geste],
+			["Redo", "Redo what was undone (Ctrl+Y).", _refaire_geste]]:
+		var bu := _bouton(u[0], u[1], u[2])
+		bu.theme_type_variation = Palette.DISCRET
+		bu.autowrap_mode = TextServer.AUTOWRAP_OFF
+		bu.custom_minimum_size = Vector2(0, 24)
+		bu.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+		ligne.add_child(bu)
 
 	# ⚠ LE BANDEAU EST UN BOUTON : il ouvre le manuel (Jordan). Il le DIT dans son texte — un bandeau
 	# cliquable qui ne se présente pas comme tel ne serait jamais cliqué.
@@ -1204,6 +1220,70 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 		func() -> void: _manuel.ouvrir(), "livre", Palette.DISCRET))
 
 
+# ── TOUT RACCOURCI A SON BOUTON (Jordan, 13 octobre 2026 : « rien qui est faisable en shortcut ne doit être pas faisable
+# en bouton dans le soft ») — la table `Guide.BOUTONS` dit, pour chaque raccourci, le bouton qui fait la même chose, et la
+# fumée exige qu'il existe. Ce qui dépend du curseur (², Ctrl + clic, Alt + clic) a un bouton qui ARME le prochain clic.
+
+var _boutons_mer: Array = []
+## [bouton, Callable qui dit son état] : les bascules qu'une touche peut aussi changer, resynchronisées à chaque image.
+var _bascules_suivies: Array = []
+
+
+func _annuler_geste() -> void:
+	if _histoire.undo():
+		_dire("[i]Undone: %s[/i]" % _histoire.get_current_action_name())
+
+
+func _refaire_geste() -> void:
+	if _histoire.redo():
+		_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
+
+
+## Un bouton à bascule (sans focus), qui appelle `quand(v)`.
+func _bascule(texte: String, aide: String, quand: Callable) -> Button:
+	var b := Button.new()
+	b.text = texte
+	b.tooltip_text = aide
+	b.toggle_mode = true
+	b.focus_mode = Control.FOCUS_NONE
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.clip_text = true
+	b.toggled.connect(quand)
+	return b
+
+
+## LA RANGÉE DE LA VUE ET DE L'ÉTAGE (World, Fluids, Transitions, Foliage) : F, ², Ctrl + clic, PgUp / PgDn.
+func _rangee_vue() -> Control:
+	var l: Array = [
+		_bouton("Frame all  ·  F", "F — the view frames all the matter of the visible layers.", _cadrer_tout_le_monde, "oeil"),
+		_bouton("Jump to matter  ·  ²", "² (` on QWERTY) — then click: the view jumps to the matter clicked.",
+			func() -> void:
+				_vue.clic_arme = "saut"
+				_dire("[i]Click the matter to jump to.[/i]"), "oeil"),
+		_bouton("Grid to matter  ·  Ctrl+click", "Ctrl+click — then click: the floor grid goes to the height of the "
+			+ "matter clicked.", func() -> void:
+				_vue.clic_arme = "etage"
+				_dire("[i]Click the matter: the grid goes to its height.[/i]"), "etage"),
+		_bouton("Floor ↓  ·  PgDn", "PgDn — the floor grid one cell lower.", func() -> void: _compteur_etage.value -= 1,
+			"extruder_bas"),
+		_bouton("Floor ↑  ·  PgUp", "PgUp — the floor grid one cell higher.", func() -> void: _compteur_etage.value += 1,
+			"extruder_haut"),
+	]
+	for b in l:
+		(b as Button).clip_text = true
+	return _grille(l, 2)
+
+
+func _suivre_les_boutons_des_raccourcis() -> void:
+	for b in _boutons_mer:
+		(b as Button).disabled = _mer_choisie == null
+	if _modeleur != null:
+		for x in _bascules_suivies:
+			var etat: bool = (x[1] as Callable).call()
+			if (x[0] as Button).button_pressed != etat:
+				(x[0] as Button).set_pressed_no_signal(etat)
+
+
 ## Un réglage de `reglages.cfg` (lu à la construction, écrit au geste).
 func _lire_reglage(section: String, cle: String, defaut: Variant) -> Variant:
 	var r := ConfigFile.new()
@@ -1395,6 +1475,7 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		+ "A down, E up.\nRight drag looks around. No click paints.")
 	_bouton_naviguer.toggled.connect(_basculer_navigation)
 	outils.contenu.add_child(_bouton_naviguer)
+	outils.contenu.add_child(_rangee_vue())
 	outils.contenu.add_child(_petit_titre("TOOL"))
 	outils.contenu.add_child(_rangee_de_choix(_boutons_outil, [
 		["ajouter", "Add", "ajouter", "A — adds matter. Right click digs."],
@@ -1563,6 +1644,11 @@ func _batir_droite(pile: VBoxContainer) -> void:
 		_bouton("Cut", "Ctrl+X — copies, then deletes.", _couper, "couper"),
 		_bouton_coller,
 	], 4))
+	sel.contenu.add_child(_bouton("Cancel paste  ·  Esc", "Esc — drops the copy that follows the mouse; nothing is placed.",
+		func() -> void:
+			if not _vue.collage.is_empty():
+				_vue.annuler_collage()
+				_dire("[i]Paste cancelled.[/i]"), "croix"))
 
 	# ── 3. LES OPÉRATIONS DE FORME — repliées : on s'en sert moins que du pinceau.
 	# ⚠ OUVERTE AU DÉPART, comme toute la barre de droite (Jordan, 29 septembre 2026).
@@ -1621,6 +1707,8 @@ Acts on the selection if there is one, otherwise on the matter of floor y.")
 func _batir_formes_speciales(pile: VBoxContainer) -> void:
 	var sec := Section.new("Special shapes", true, Icones.icone("tunnel"))
 	pile.add_child(sec)
+	sec.contenu.add_child(_bouton("Forget the anchor  ·  Esc", "Connect: forgets the first wall clicked (right click or Esc).",
+		func() -> void: _vue.oublier_ancre(), "croix"))
 	var choix := _rangee_de_choix(_boutons_forme_speciale, [
 		["tunnel", "Tunnel", "tunnel", "Digs a tunnel into a WALL, straight in from it. Click a wall: it goes "
 			+ "through to the next cave, or Depth cells deep.\nConnect: click a wall in one room, then a wall "
@@ -1775,6 +1863,23 @@ func _batir_fluides(pile: VBoxContainer) -> void:
 	sec.contenu.add_child(_aide_eau)
 	sec.contenu.add_child(_bouton("Leave", "Back to World and its painting tools (Esc).",
 		_changer_d_atelier.bind("monde"), "croix"))
+	sec.contenu.add_child(_rangee_vue())
+	# LA MER EN CHOIX, AUX BOUTONS (ses touches : PgUp / PgDn, Entrée, Échap) — actifs pendant qu'une mer est épinglée.
+	_boutons_mer = [
+		_bouton("Sea ↓  ·  PgDn", "Lowers the sea being placed by one cell.", func() -> void:
+			if _mer_choisie != null:
+				_hausser_la_mer(-1), "extruder_bas"),
+		_bouton("Sea ↑  ·  PgUp", "Raises the sea being placed by one cell.", func() -> void:
+			if _mer_choisie != null:
+				_hausser_la_mer(1), "extruder_haut"),
+		_bouton("Lay the sea  ·  Enter", "Places the sea at the height shown — the water is computed only then.",
+			func() -> void:
+				if _mer_choisie != null:
+					_valider_la_mer(), "eau"),
+		_bouton("Cancel the sea  ·  Esc", "Forgets the sea being placed: nothing is placed.",
+			func() -> void: _annuler_la_mer(), "croix"),
+	]
+	sec.contenu.add_child(_grille(_boutons_mer, 2))
 	# LA LARGEUR D'UNE RIVIÈRE À LA POSE (Jordan, 3 octobre 2026) : plusieurs sources côte à côte, en travers du courant.
 	var ligne_largeur := HBoxContainer.new()
 	ligne_largeur.add_theme_constant_override("separation", 8)
@@ -3541,6 +3646,9 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Frame  ·  .", "Numpad . — center the view on the selection.", _cadrer_la_selection),
 		_bouton("Ortho  ·  5", "Numpad 5 — perspective or orthographic.",
 			func() -> void: _dire("[i]%s view.[/i]" % ("Orthographic" if _vue.basculer_ortho() else "Perspective"))),
+		_bouton("Back  ·  Ctrl+1", "Ctrl + numpad 1.", func() -> void: _vue.vue_de("face", true)),
+		_bouton("Left  ·  Ctrl+3", "Ctrl + numpad 3.", func() -> void: _vue.vue_de("droite", true)),
+		_bouton("Bottom  ·  Ctrl+7", "Ctrl + numpad 7.", func() -> void: _vue.vue_de("dessus", true)),
 	], 2))
 
 	var tem := Section.new("The modelled witness", true, Icones.icone("enregistrer"))
@@ -3600,6 +3708,13 @@ func _sections_d_edition(pile: VBoxContainer, titre: String, selmode: Dictionary
 			+ "removes, the wheel sizes it; right click, Esc or Enter ends.",
 			func() -> void: _geste_modeleur("cercle"), "sphere"),
 	], 2))
+	var xray := _bascule("X-ray  ·  Alt+Z", "Alt+Z — box, lasso and circle also take what is hidden behind.",
+		func(v: bool) -> void: _modeleur.rayons_x = v)
+	var boucle := _bascule("Loop select  ·  Alt+click", "The next click selects a loop (a ring of faces in Face mode), "
+		+ "like Alt+click.", func(v: bool) -> void: _modeleur.boucle_armee = v)
+	_bascules_suivies.append([xray, func() -> bool: return _modeleur.rayons_x])
+	_bascules_suivies.append([boucle, func() -> bool: return _modeleur.boucle_armee])
+	sel.contenu.add_child(_grille([xray, boucle], 2))
 	return edition
 
 
@@ -3857,6 +3972,10 @@ func _batir_sculpt(pile: VBoxContainer) -> void:
 		pinceaux.append(b)
 		_boutons_sculpt[genre] = b
 	sec.contenu.add_child(_grille(pinceaux, 3))
+	var inverse := _bascule("Invert  ·  Ctrl", "Ctrl held while sculpting: Draw digs in, Inflate shrinks.",
+		func(v: bool) -> void: _modeleur.sculpt_inverse = v)
+	_bascules_suivies.append([inverse, func() -> bool: return _modeleur.sculpt_inverse])
+	sec.contenu.add_child(inverse)
 	for r in [["Radius", 0.03, 1.0, 0.01, "sculpt_rayon", "The brush radius, in cells."],
 			["Strength", 0.05, 1.0, 0.01, "sculpt_force", "How far one dab moves the shape."],
 			["Hardness", 0.0, 1.0, 0.01, "sculpt_durete", "Full strength up to this part of the radius, then softer."]]:
@@ -4006,6 +4125,13 @@ func _batir_peinture(pile: VBoxContainer) -> void:
 			_modeleur.regler_gomme(v))
 	_modeleur.gomme_changee.connect(func(v: bool) -> void: _bouton_gomme.set_pressed_no_signal(v))
 	sec.contenu.add_child(_bouton_gomme)
+	var pipette := _bascule("Pick colour  ·  Alt+click", "The next click on the witness reads its colour, like Alt+click.",
+		func(v: bool) -> void:
+			if v and not _modeleur.pinceau:
+				_bouton_pinceau.button_pressed = true
+			_modeleur.pipette_armee = v)
+	_bascules_suivies.append([pipette, func() -> bool: return _modeleur.pipette_armee])
+	sec.contenu.add_child(pipette)
 	_couleur_pinceau = ColorPickerButton.new()
 	_couleur_pinceau.text = "Colour"
 	_couleur_pinceau.color = _modeleur.pinceau_couleur
@@ -7355,12 +7481,10 @@ func _unhandled_key_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if k.keycode == KEY_Z and not k.shift_pressed:
-			if _histoire.undo():
-				_dire("[i]Undone: %s[/i]" % _histoire.get_current_action_name())
+			_annuler_geste()
 			get_viewport().set_input_as_handled()
 		elif k.keycode == KEY_Y or (k.keycode == KEY_Z and k.shift_pressed):
-			if _histoire.redo():
-				_dire("[i]Redone: %s[/i]" % _histoire.get_current_action_name())
+			_refaire_geste()
 			get_viewport().set_input_as_handled()
 		elif _atelier in ["monde", "jeu_edit"] and k.keycode in [KEY_C, KEY_X, KEY_V]:
 			match k.keycode:

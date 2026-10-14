@@ -63,8 +63,7 @@ static func entrees(c: Dictionary) -> Array:
 		"witness", "texture":
 			_temoin(l, c, atelier == "texture")
 		"jeu":
-			l.append(["", "Z Q S D", "walk (W A S D on QWERTY)", true])
-			l.append(["", "Space", "jump", true])
+			l.append(["", "Z Q S D · Space", "walk (W A S D on QWERTY) · jump", true])
 			l.append(["shift", "Z Q S D", "run", true])
 			l.append(["", "F", "fly on · off", true])
 			l.append(["", "Left drag · right drag", "orbit · turn level", false])
@@ -241,6 +240,71 @@ static func le_reste(c: Dictionary) -> Array:
 		if not e[3]:
 			l.append([(NOMS[e[0]] + " + " if e[0] != "" else "") + str(e[1]), e[2]])
 	return l
+
+
+## TOUT RACCOURCI A SON BOUTON (Jordan, 13 octobre 2026 : « rien qui est faisable en shortcut ne doit être pas faisable en
+## bouton dans le soft ») — pour chaque raccourci CLAVIER de la table, le(s) bouton(s) qui font la même chose (le début de
+## leur texte à l'écran). La fumée exige que chacun existe. Clé : « modificateur|geste ».
+const BOUTONS := {
+	"|A · D · S · R · B": ["Add", "Dig", "Select", "Rect", "Box"],
+	"|R · B": ["Rect", "Box"],
+	"|Tab": ["Grid", "Sculpt", "Edit the witness"],
+	"|Space": ["Navigate"],
+	"|F · ²": ["Frame all", "Jump to matter"],
+	"|PgUp PgDn": ["Floor ↑", "Floor ↓"],
+	"|Arrows": ["X +", "Z +"],
+	"shift|↑ ↓": ["Y +", "Y −"],
+	"|Del · Esc": ["Delete", "Clear"],
+	"ctrl|C · X · V": ["Copy", "Cut", "Paste"],
+	"ctrl|Z · Y": ["Undo", "Redo"],
+	"|F1": ["Open the user guide"],
+	"|Esc": ["Leave", "Cancel paste"],
+	"|Backspace · Esc": ["Back to start", "Leave"],
+	"|F": ["Fly"],
+	"|Wheel · PgUp PgDn": ["Sea ↑", "Sea ↓"],
+	"|Click · Enter": ["Lay the sea"],
+	"|Right click · Esc": ["Cancel the sea", "Forget the anchor"],
+	"|Numpad 1 3 7 · 5": ["Front", "Right", "Top", "Ortho"],
+	"|Numpad 1 3 7 · 5 · .": ["Front", "Right", "Top", "Ortho", "Frame  ·  ."],
+	"|1 · 2 · 3": ["Vertex", "Edge", "Face"],
+	"|A · B · C": ["All", "Box", "Circle"],
+	"alt|A · Z": ["None", "X-ray"],
+	"alt|Click": ["Loop select", "Pick colour"],
+	"|U · P": ["Unwrap", "Paint"],
+	"|G · R · S": ["Move", "Rotate", "Scale"],
+	"|E · I · K": ["Extrude", "Inset", "Knife"],
+	"ctrl|B · R · X": ["Bevel", "Loop cut", "Dissolve"],
+	"|X · M · F · O": ["Delete  ·  X", "Merge", "Fill  ·  F", "Proportional"],
+	"|E · P": ["Eraser", "Paint"],
+	"ctrl|Drag": ["Invert"],
+	"shift|Drag": ["Smooth"],
+	"ctrl|Click": ["Grid to matter"],
+	"|Right click": ["Forget the anchor"],
+}
+## Ce qui n'a pas de bouton, et pourquoi : les touches PENDANT un geste (X Y Z, nombres, Entrée, Échap — la souris qui
+## irait chercher un bouton déplacerait le geste), les touches de MOUVEMENT tenues (marcher, voler, courir), et [ ] (le
+## curseur de taille est là).
+const SANS_BOUTON := ["X · Y · Z", "Numbers", "Enter · click", "Esc · right click", "Enter · Esc", "Z Q S D · A E",
+	"Z Q S D", "Z Q S D · Space", "[ ]", "Space"]
+
+
+## Le raccourci `e` est-il au CLAVIER (une touche, pas seulement la souris) ?
+static func est_au_clavier(e: Array) -> bool:
+	var g := str(e[1])
+	if BOUTONS.has(str(e[0]) + "|" + g):
+		return true
+	for souris in ["Click", "Drag", "drag", "Wheel", "Release", "click", "Right", "Left", "Middle"]:
+		if g.begins_with(souris):
+			return false
+	return true
+
+
+## Les boutons d'un raccourci au clavier ([] s'il en est exempté).
+static func boutons_de(e: Array) -> Array:
+	var cle := str(e[0]) + "|" + str(e[1])
+	if BOUTONS.has(cle):
+		return BOUTONS[cle]
+	return []
 
 
 ## Le modificateur tenu, lu au clavier : Ctrl (ou Cmd), puis Alt, puis Maj — le premier l'emporte.

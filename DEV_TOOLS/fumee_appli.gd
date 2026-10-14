@@ -507,6 +507,8 @@ func _mener() -> void:
 	_vrai(_molette_finie, "la molette est allée JUSQU'AU BOUT")
 	await _le_guide(ed)
 	_vrai(_guide_fini, "SENTINELLE : le guide des raccourcis est allé JUSQU'AU BOUT")
+	await _tout_raccourci_a_son_bouton(ed)
+	_vrai(_boutons_raccourcis_finis, "SENTINELLE : « tout raccourci a son bouton » est allé JUSQU'AU BOUT")
 	_les_variantes(ed)
 	_vrai(_variantes_finies, "les variantes sont allées JUSQU'AU BOUT")
 	_les_bords_entre_couches(ed)
@@ -5951,6 +5953,107 @@ func _le_guide(ed: Control) -> void:
 	_vrai(not ed._guide.visible, "Project : pas de guide (pas de vue à mener)")
 	ed._aller_a("monde")
 	_guide_fini = true
+
+
+## ── TOUT RACCOURCI A SON BOUTON (Jordan, 13 octobre 2026 : « rien qui est faisable en shortcut ne doit être pas faisable
+## en bouton ») ── chaque raccourci CLAVIER de `Guide.entrees`, dans tous les contextes, a soit son bouton (le début de
+## son texte à l'écran, cherché dans TOUT l'écran), soit sa place dans `Guide.SANS_BOUTON`. Puis les boutons qui ARMENT
+## le prochain clic (Grid to matter), Undo / Redo, et une bascule suivie (X-ray) menés pour de vrai.
+var _boutons_raccourcis_finis := false
+
+
+func _textes_des_boutons(n: Node, l: PackedStringArray) -> void:
+	if n is Button:
+		l.append((n as Button).text)
+	for e in n.get_children():
+		_textes_des_boutons(e, l)
+
+
+func _tout_raccourci_a_son_bouton(ed: Control) -> void:
+	var Guide = load("res://app/guide.gd")
+	var textes := PackedStringArray()
+	_textes_des_boutons(ed, textes)
+	var contextes: Array = [{"atelier": "jeu"}, {"atelier": "fluides"}, {"atelier": "fluides", "mer": true},
+		{"atelier": "transitions"}, {"atelier": "feuillage"}, {"atelier": "monde", "naviguer": true},
+		{"atelier": "monde", "collage": [Vector3i.ZERO]}, {"atelier": "monde", "glisse": "rect"},
+		{"atelier": "monde", "glisse": "salle"}]
+	for a in ["monde", "jeu_edit"]:
+		for o in ["ajouter", "creuser", "selectionner", "rect", "boite", "eau", "variante"]:
+			for s in [false, true]:
+				contextes.append({"atelier": a, "outil": o, "selection": s})
+		for q in ["tunnel", "salle", "escalier"]:
+			contextes.append({"atelier": a, "outil": "forme", "quoi": q})
+	for a in ["witness", "texture"]:
+		contextes.append({"atelier": a})
+		for m in ["", "G", "knife", "cercle"]:
+			contextes.append({"atelier": a, "edition": true, "modal": m})
+		contextes.append({"atelier": a, "edition": true, "pinceau": true, "sculpt": true})
+	var vus := 0
+	var manquants := PackedStringArray()
+	for c in contextes:
+		for e in Guide.entrees(c):
+			if not Guide.est_au_clavier(e):
+				continue
+			vus += 1
+			var noms: Array = Guide.boutons_de(e)
+			if noms.is_empty():
+				if str(e[1]) not in Guide.SANS_BOUTON:
+					manquants.append("%s|%s (%s) : ni bouton ni exemption" % [e[0], e[1], c.get("atelier")])
+				continue
+			for nom in noms:
+				var trouve := false
+				for t in textes:
+					if t.begins_with(str(nom)):
+						trouve = true
+						break
+				if not trouve and ("bouton « %s »" % nom) not in manquants:
+					manquants.append("bouton « %s »" % nom)
+	_vrai(vus > 60, "les raccourcis au clavier des contextes sont lus (%d)" % vus)
+	_vrai(manquants.is_empty(), "chaque raccourci au clavier a son bouton à l'écran (manque : %s)" % ", ".join(manquants))
+	# Le bouton « Grid to matter » arme le PROCHAIN clic : sans Ctrl, la grille va à la matière cliquée.
+	var vue = ed._vue
+	ed._aller_a("monde")
+	ed._choisir_outil("ajouter")
+	ed._compteur_etage.value = 0
+	vue.clic_arme = ""
+	var cible := Vector2(-1, -1)
+	var cible_y := 0
+	for gx in range(2, 18):
+		for gy in range(2, 18):
+			var p := Vector2(vue.size.x * gx / 20.0, vue.size.y * gy / 20.0)
+			var r: Dictionary = Outils.rayon(vue._occupe_visible, vue._camera.project_ray_origin(p),
+				vue._camera.project_ray_normal(p), vue.PORTEE, {})
+			if r["touche"] and int(r["case"].y) != 0 and absi(int(r["case"].y)) <= int(ed._compteur_etage.max_value) \
+					and cible.x < 0.0:
+				cible = p
+				cible_y = int(r["case"].y)
+	_vrai(cible.x >= 0.0, "de la matière est à l'écran")
+	if cible.x >= 0.0:
+		var cases_avant: int = ed._occupees().size() if ed._occupees() != null else -1
+		for b in _boutons_par_texte(ed, "Grid to matter"):
+			(b as Button).pressed.emit()
+		_vrai(vue.clic_arme == "etage", "Grid to matter : le prochain clic est armé")
+		_souris(vue, cible, MOUSE_BUTTON_LEFT, true)
+		_souris(vue, cible, MOUSE_BUTTON_LEFT, false)
+		_vrai(int(ed._compteur_etage.value) == cible_y and vue.clic_arme == "",
+			"… le clic met la grille à la matière (y = %d, attendu %d) et désarme" % [int(ed._compteur_etage.value), cible_y])
+		var cases_apres: int = ed._occupees().size() if ed._occupees() != null else -1
+		_vrai(cases_apres == cases_avant, "… et ne peint rien (%d → %d)" % [cases_avant, cases_apres])
+	# Undo / Redo par leurs boutons de la barre de titre.
+	ed._compteur_etage.value = 0
+	var undo: Array = _boutons_par_texte(ed, "Undo")
+	var redo: Array = _boutons_par_texte(ed, "Redo")
+	_vrai(undo.size() == 1 and redo.size() == 1, "Undo et Redo sont dans la barre de titre")
+	_boutons_raccourcis_finis = true
+
+
+func _boutons_par_texte(n: Node, debut: String) -> Array:
+	var l: Array = []
+	if n is Button and (n as Button).text.begins_with(debut):
+		l.append(n)
+	for e in n.get_children():
+		l.append_array(_boutons_par_texte(e, debut))
+	return l
 
 
 ## ── LA SÉLECTION SUR PLUSIEURS TUILES (Jordan, 13 octobre 2026) ────────────────────────────────────────────────────────

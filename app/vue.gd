@@ -43,6 +43,10 @@ signal variante_cliquee(info: Dictionary, bouton: int)
 signal transition_peinte(sommet: Variant, bouton: int, phase: String)
 ## Ctrl+clic en World : la case de matière touchée (couches visibles), ou `null` si le rayon ne touche rien.
 signal etage_sur_la_matiere(case: Variant)
+## Un clic ARMÉ par un bouton (« tout raccourci a son bouton », Jordan, 13 octobre 2026) : « etage » (le bouton du Ctrl + clic)
+## ou « saut » (le bouton de ²) — le prochain clic gauche dans la vue fait ce que la touche fait sous la souris.
+signal saut_fait(ok: bool)
+var clic_arme := ""
 ## L'atelier Foliage (6 octobre 2026) : la souris survole, ou un coup (phase 0 appui, 1 glissé, 2 relâché).
 signal feuillage_survole(position: Vector2)
 signal feuillage_coup(position: Vector2, bouton: int, phase: int)
@@ -874,8 +878,14 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		# ⚠ CTRL+CLIC CALE LA GRILLE SUR LA MATIÈRE, quel que soit l'outil : ce n'est pas un coup, rien
 		# n'est peint, et la visée n'y change rien — le rayon cherche toujours la matière visible.
-		if peint() and b.button_index == MOUSE_BUTTON_LEFT and b.ctrl_pressed and b.pressed \
+		if peint() and b.button_index == MOUSE_BUTTON_LEFT and b.pressed and _coup < 0 and clic_arme == "saut":
+			clic_arme = ""
+			saut_fait.emit(teleporter_vers(b.position))
+			accept_event()
+			return
+		if peint() and b.button_index == MOUSE_BUTTON_LEFT and (b.ctrl_pressed or clic_arme == "etage") and b.pressed \
 				and _coup < 0:
+			clic_arme = ""
 			var r: Dictionary = Outils.rayon(_occupe_visible, _camera.project_ray_origin(b.position),
 				_camera.project_ray_normal(b.position), PORTEE, {})
 			etage_sur_la_matiere.emit(r["case"] if r["touche"] else null)
