@@ -3645,6 +3645,31 @@ func _batir_droite_temoin(pile: VBoxContainer) -> void:
 		_bouton("Fill holes · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
 			func() -> void: _boucher_les_trous(true), "remplir"),
 	], 2))
+	# LA RETOPO (Jordan, 13 octobre 2026) : simplifier (décimer) et détendre, bord de la tuile verrouillé (`retopo.gd`).
+	var ligne_retopo := HBoxContainer.new()
+	ligne_retopo.add_child(_texte("Simplify up to", 11, Palette.GRIS))
+	_tolerance_retopo = SpinBox.new()
+	_tolerance_retopo.min_value = 0.0
+	_tolerance_retopo.max_value = 0.2
+	_tolerance_retopo.step = 0.001
+	_tolerance_retopo.value = 0.01
+	_tolerance_retopo.suffix = "cell"
+	_tolerance_retopo.tooltip_text = ("How far the simplified surface may stray from the one you modelled, in cells. 0 "
+		+ "only removes what is exactly flat.")
+	ligne_retopo.add_child(_tolerance_retopo)
+	mesh.contenu.add_child(ligne_retopo)
+	mesh.contenu.add_child(_grille([
+		_bouton("Simplify", "Fewer faces where they add nothing: edges collapse while the surface stays within the "
+			+ "tolerance. The tile border (its cut planes), material seams and unwrapped faces never move. One Ctrl+Z.",
+			func() -> void: _retopo("simplifier", false), "remplir"),
+		_bouton("Simplify · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
+			func() -> void: _retopo("simplifier", true), "remplir"),
+		_bouton("Relax", "Evens out the spacing of the inner vertices, sliding them on the surface: the shape stays. "
+			+ "Tile borders, sharp edges, material seams and unwrapped faces stay. One Ctrl+Z.",
+			func() -> void: _retopo("detendre", false), "remplir"),
+		_bouton("Relax · all tiles", "The same in every tile of the witness. One Ctrl+Z.",
+			func() -> void: _retopo("detendre", true), "remplir"),
+	], 2))
 	# LES BORDS ENTRE COUCHES (Jordan, 6 octobre 2026 : « il y a des fentes, je les ai vues ») : deux couches se touchent
 	# dans le monde ; leurs témoins doivent avoir les mêmes bords. Les gestes les tiennent ensemble ; ce bouton rattrape ce
 	# qui diverge déjà (un projet d'avant, un témoin revenu de Blender, une couche neuve sur le témoin calculé).
@@ -4494,6 +4519,15 @@ func _dire_les_ecarts() -> void:
 func _boucher_les_trous(toutes: bool) -> void:
 	_regler_edition(true)
 	_modeleur.boucher_les_trous(toutes)
+	_dire_les_trous(true)
+
+
+## LA RETOPO (13 octobre 2026) : « Simplify » et « Relax », sur la tuile en édition ou toutes (`Modeleur.retopo`).
+var _tolerance_retopo: SpinBox
+
+func _retopo(genre: String, toutes: bool) -> void:
+	_regler_edition(true)
+	_modeleur.retopo(genre, toutes, _tolerance_retopo.value if _tolerance_retopo != null else 0.01)
 	_dire_les_trous(true)
 
 
