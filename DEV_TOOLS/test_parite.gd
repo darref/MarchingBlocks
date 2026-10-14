@@ -696,9 +696,10 @@ func _maillage_de_l_eau(f: Dictionary) -> void:
 		for t: Array in tris:
 			genres[_genre_t(t)] = true
 		_dire(_jonctions_en_t(tris) == 0, "%s : aucune jonction en T entre plats (%d)" % [nom, _jonctions_en_t(tris)])
-		# Les hauteurs, par cran du sol (9 octobre 2026), écrites à la main : [nappe, bande] en fraction de case.
+		# Les hauteurs, par cran du sol (9 octobre 2026), écrites à la main : [nappe, bande] en fraction de case. La bande
+		# ÉPAISSE (13 octobre 2026) : 0,3 au-dessus du sol dessiné — 0,05 · 0,3 · 0,55 (0,85 · 0,1 · 0,35 avant).
 		var sol := float(cas[nom]["input"].get("floor", 0.25))
-		var fracs: Array = {0.25: [0.7, 0.85], 0.0: [0.95, 0.1], -0.25: [0.7, 0.35]}[sol]
+		var fracs: Array = {0.25: [0.7, 0.05], 0.0: [0.95, 0.3], -0.25: [0.7, 0.55]}[sol]
 		var hauteurs_justes := true
 		for t: Array in tris.filter(_plat_t):
 			var y := float(t[1])
@@ -707,7 +708,7 @@ func _maillage_de_l_eau(f: Dictionary) -> void:
 				hauteurs_justes = hauteurs_justes and absf(frac - float(fracs[0])) < 1e-5
 			else:
 				hauteurs_justes = hauteurs_justes and absf(frac - float(fracs[1])) < 1e-5
-		_dire(hauteurs_justes, "%s : nappes à la rangée + %s, bandes à la case + %s (sol %s)" % [nom, fracs[0], fracs[1] - 1.0 if sol > 0.1 else fracs[1], sol])
+		_dire(hauteurs_justes, "%s : nappes à la rangée + %s, bandes à la case + %s (sol %s)" % [nom, fracs[0], fracs[1], sol])
 		# Les seuils : aire d'un triangle gardé, et le sens tranché par la normale du premier coin.
 		for t: Array in tris:
 			if _plat_t(t):
@@ -769,10 +770,11 @@ func _maillage_de_l_eau(f: Dictionary) -> void:
 	_dire(not ecumes.is_empty() and ecumes.min() == 0.0 and ecumes.max() == 1.0, "la cascade : écume de 0 en haut à 1 au pied")
 	_dire(bassin.any(func(t): return _genre_t(t) == 0.75 and absf(float(t[1]) - 1.72) < 1e-5 and absf(float(t[4]) - 1.0) < 1e-6),
 		"le remous du bassin : un anneau à plat sur sa nappe, à 1,72")
-	# La source de la rivière de l'escalier : elle naît en (0, 3, 1) — le bouillon bombé en (0,5 ; 2,93 ; 1,5).
+	# La source de la rivière de l'escalier : elle naît en (0, 3, 1) — le bouillon bombé en (0,5 ; 3,13 ; 1,5) (la bande à
+	# 3,05, + 0,08 ; 2,93 avant la bande épaisse).
 	var esc: Array = soupe.call("a river down the stairs: bands, three waterfalls, a spring")
-	_dire(esc.any(func(t): return (_genre_t(t) == 0.75 and absf(float(t[0]) - 0.5) < 1e-5 and absf(float(t[1]) - 2.93) < 1e-5
-		and absf(float(t[2]) - 1.5) < 1e-5 and float(t[9]) == 1.0)), "la source : le bouillon bombé en (0,5 ; 2,93 ; 1,5), écume 1")
+	_dire(esc.any(func(t): return (_genre_t(t) == 0.75 and absf(float(t[0]) - 0.5) < 1e-5 and absf(float(t[1]) - 3.13) < 1e-5
+		and absf(float(t[2]) - 1.5) < 1e-5 and float(t[9]) == 1.0)), "la source : le bouillon bombé en (0,5 ; 3,13 ; 1,5), écume 1")
 	# La rivière large de trois : trois cascades côte à côte ne font qu'une par marche — ses bouts libres seulement aux
 	# deux extrémités (z de −0,1 à 3,1), donc moins de triangles que trois rivières seules.
 	var large: Array = soupe.call("a river three cells wide down the stairs (river_width 3)")
@@ -834,13 +836,13 @@ func _deux_rivieres_au_meme_endroit(f: Dictionary, cas: Dictionary) -> void:
 		for k in 3:
 			ys.append(float(t[12 * k + 1]))
 	var plus_haute: float = (jointes[0] as Array).max() if jointes.size() == 1 else INF
-	_dire(not ys.is_empty() and absf(ys.max() - (plus_haute - 0.15)) < 1e-5,
+	_dire(not ys.is_empty() and absf(ys.max() - (plus_haute + 0.05)) < 1e-5,
 		"deux rivières au même endroit : une seule nappe, depuis la PLUS HAUTE lèvre (haut à %s, attendu %s)" % [
-		ys.max() if not ys.is_empty() else null, plus_haute - 0.15])
+		ys.max() if not ys.is_empty() else null, plus_haute + 0.05])
 	var une_fois := true
 	for k: Vector3i in communes:
 		# Un point quelconque de la case (pas sur une diagonale ni un rayon d'éventail), à la hauteur des bandes.
-		var p := Vector3(k.x + 0.37, k.y - 0.15, k.z + 0.61)
+		var p := Vector3(k.x + 0.37, k.y + 0.05, k.z + 0.61)
 		var n := tris.filter(func(t): return _genre_t(t) == 0.5 and _plat_t(t) and _couvre_t(t, p)).size()
 		une_fois = une_fois and n == 1
 	_dire(une_fois and not communes.is_empty(), "deux rivières au même endroit : une bande par case commune, pas deux")

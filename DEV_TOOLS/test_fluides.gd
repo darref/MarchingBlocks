@@ -727,27 +727,28 @@ func _maillage() -> void:
 	# 6 bandes, 3 cascades, et à chacune son anneau d'écume et ses embruns ; la source : un disque et son voile.
 	_egal(q.size(), 17, "escalier : 6 bandes, 3 cascades, 3 anneaux, 3 embruns, la source et son voile")
 	for c in [Vector3i(2, 2, 0), Vector3i(4, 1, 0)]:
-		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y - 0.15, -0.45),
-			Vector3(c.x + 1, c.y - 0.15, 1.45)])).size(), 1,
+		_egal(q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(c.x - 0.45, c.y + 0.05, -0.45),
+			Vector3(c.x + 1, c.y + 0.05, 1.45)])).size(), 1,
 			"escalier : la marche %s, où l'eau retombe, est mouillée (et s'avance sous la marche d'au-dessus)" % c)
 	# Sur une lèvre, aucune bande : la cascade part du plan de la falaise.
 	for c in [Vector3i(2, 3, 0), Vector3i(4, 2, 0), Vector3i(6, 1, 0)]:
-		_vrai(q.all(func(e): return not _genre(e, 0.5) or not is_equal_approx(_boite_de([e])[0].y, c.y - 0.15) or _boite_de([e])[1].x < c.x + 0.001),
+		_vrai(q.all(func(e): return not _genre(e, 0.5) or not is_equal_approx(_boite_de([e])[0].y, c.y + 0.05) or _boite_de([e])[1].x < c.x + 0.001),
 			"escalier : aucune bande ne flotte sur la lèvre %s" % c)
-	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 2,85,
-	# courant vers +X.
-	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 2.85, -0.45), Vector3(1, 2.85, 1.45)]))
+	# La bande de (0,3,0) : sous le mur du fond (x −0,45) et les deux murs du chenal (z −0,45 … 1,45), à 3,05 (0,3
+	# au-dessus du sol dessiné en 2,75 — la rivière ÉPAISSE, 13 octobre 2026 ; 2,85 avant), courant vers +X, profondeur
+	# 0,3 / 8 = 0,0375.
+	var bande := q.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, 3.05, -0.45), Vector3(1, 3.05, 1.45)]))
 	_egal(bande.size(), 1, "escalier : la bande de la première case, à sa place")
 	if bande.size() == 1:
-		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.05)), "… courant +X, genre rivière")
+		_vrai(_couleur_proche(bande[0]["c"], Color(1.0, 0.5, 0.5, 0.0375)), "… courant +X, genre rivière, profondeur 0,3 / 8")
 	# LES CASCADES (Jordan, 3 octobre 2026 : « trop carrées, sans remous, sans volume, pas refermées contre la façade »).
 	# Attendus à la main, depuis la règle écrite dans `eau_maillage.gd` : la nappe part du plan de la falaise (x = 2, 4, 6)
-	# à la hauteur de la bande (2,85 ; 1,85 ; 0,85), est à 0,35 devant le plan à 0,7 de chute, au milieu ; ses deux bouts
+	# à la hauteur de la bande (3,05 ; 2,05 ; 1,05), est à 0,35 devant le plan à 0,7 de chute, au milieu ; ses deux bouts
 	# (z = −0,1 et 1,1 : libres, la case dépasse de 0,1) sont à 0,4 DERRIÈRE le plan — dans la roche, dont la face amincie
 	# est à 0,25 ; l'écume vaut 0 en haut et 1 au pied. Son anneau d'écume est À PLAT sur l'eau où elle tombe (la bande de
-	# la marche, 1,85 et 0,85 ; hors du monde, son pied −1,3) + 0,02.
+	# la marche, 2,05 et 1,05 ; hors du monde, son pied −1,3) + 0,02.
 	# L'écume du haut : (1 − (haut − eau) / 1,3)², 0 au-delà — une case de chute : (1 − 1 / 1,3)² = 0,0533 ; 2,15 : 0.
-	for l in [[2.0, 2.85, 1.87, 0.0533], [4.0, 1.85, 0.87, 0.0533], [6.0, 0.85, -1.28, 0.0]]:
+	for l in [[2.0, 3.05, 2.07, 0.0533], [4.0, 2.05, 1.07, 0.0533], [6.0, 1.05, -1.28, 0.0]]:
 		var plan: float = l[0]
 		var haut: float = l[1]
 		var nappe := q.filter(func(e): return _genre(e, 1.0) and absf(_boite_de([e])[1].y - haut) < 1e-4)
@@ -769,16 +770,19 @@ func _maillage() -> void:
 			# ⚠ Les sommets de la CASCADE seulement : le bout de la bande porte des sommets aux mêmes places (insérés).
 			if pts.has(v) and absf((a[Mesh.ARRAY_COLOR][k] as Color).b - 1.0) < 0.003:
 				alphas[v] = (a[Mesh.ARRAY_COLOR][k] as Color).a
+		# ⚠ « > 0,99 » ET NON 0,997 (13 octobre 2026) : l'ArrayMesh range l'écume sur 8 bits en TRONQUANT ; au pied de la
+		# cascade hors du monde (haut 1,05, 2,35 de chute) le point en 32 bits est à 5e−8 de l'eau — écume 0,9999999, relue
+		# 254/255. Le contrat (les tableaux, `test_parite`) l'a à 1e−4 près.
 		var bas: float = _boite_de(nappe)[0].y
 		_vrai(alphas.keys().all(func(p): return absf(p.y - haut) > 1e-4 or absf(alphas[p] - l[3]) < 0.003)
-			and alphas.keys().all(func(p): return absf(p.y - bas) > 1e-4 or alphas[p] > 0.997),
+			and alphas.keys().all(func(p): return absf(p.y - bas) > 1e-4 or alphas[p] > 0.99),
 			"… x = %s : l'écume vaut %s en haut, 1 au pied" % [plan, l[3]])
 		var anneau := q.filter(func(e): return _genre(e, 0.75) and _a_plat(e, l[2]) and _boite_de([e])[1].x > plan + 1.0)
 		_egal(anneau.size(), 1, "… x = %s : un anneau d'écume à plat, à %s, qui s'écarte du pied" % [plan, l[2]])
 		var embrun := q.filter(func(e): return _genre(e, 0.75) and absf(_boite_de([e])[0].y - (l[2] - 0.02)) < 1e-4 and absf(_boite_de([e])[1].y - (l[2] + 0.88)) < 1e-4)
 		_egal(embrun.size(), 1, "… x = %s : des embruns qui montent de 0,9 devant le pied" % plan)
 	# LA SOURCE (Jordan : « il manque aussi la source ») : un disque d'écume centré sur la case (0,3,0), bombé de 0,08.
-	var source := q.filter(func(e): return _genre(e, 0.75) and _meme_boite(_boite_de([e]), [Vector3(-0.2, 2.87, -0.2), Vector3(1.2, 2.93, 1.2)]))
+	var source := q.filter(func(e): return _genre(e, 0.75) and _meme_boite(_boite_de([e]), [Vector3(-0.2, 3.07, -0.2), Vector3(1.2, 3.13, 1.2)]))
 	_egal(source.size(), 1, "escalier : la source sourd en (0,3,0) — un disque d'écume de 0,7, bombé de 0,08")
 	_vrai(_bien_tournes(q), "escalier : faces avant horaires")
 	_vrai(_sans_jonction_en_t(EM.maillage([FL.source(esc, Vector3i(0, 3, 0))], esc)),
@@ -922,11 +926,13 @@ func _surface_pour_nager() -> void:
 ## quad, ou un éventail autour de son centre quand des sommets voisins y sont insérés) : [{"p": ses sommets, "c": la
 ## couleur du premier, "n": sa normale}].
 ## LES CRANS DU SOL ET LES FLANCS DES RIVIÈRES (Jordan, 9 octobre 2026). Attendus écrits à la main, aux trois crans r
-## (0,25 aminci, 0 neutre, −0,25 épais) : la bande à y + 0,1 − r, son flanc jusqu'à y − r − 0,05, la nappe d'un lac à
+## (0,25 aminci, 0 neutre, −0,25 épais) : la bande à y + 0,3 − r (ÉPAISSE depuis le 13 octobre 2026 : 0,1 avant), son
+## flanc jusqu'à y − r − 0,05, la nappe d'un lac à
 ## L + 1 − |r| − 0,05, la cascade qui part du plan de la falaise décalé de 0,25 − r.
 func _crans_et_flancs() -> void:
 	_vrai(is_equal_approx(EM.nappe(0.25), EM.NAPPE) and is_equal_approx(EM.riviere(0.25), EM.RIVIERE),
-		"à l'aminci, la nappe et la bande sont celles d'avant (0,7 et −0,15)")
+		"à l'aminci, la nappe et la bande sont celles des constantes (0,7 et 0,05)")
+	_vrai(is_equal_approx(EM.RIVIERE, 0.05), "la bande aminci est à 0,05 au-dessus de sa case (0,3 au-dessus du sol en −0,25)")
 	# Un chenal sur un plateau : sol y = 0 (x −1..6, z −2..2), murs y = 1 en z = ±2 et en x = −1 ; la source en (0,1,0) ;
 	# la falaise en x = 7 (rien au-delà). Le cours : (0..6, 1, 0) sur le sol, la lèvre (7,1,0) au-dessus du vide.
 	var m := {}
@@ -938,7 +944,7 @@ func _crans_et_flancs() -> void:
 	_egal([riv["genre"], (riv["cours"] as Array).slice(0, 8).map(func(e): return e["case"])],
 		["riviere", [Vector3i(0, 1, 0), Vector3i(1, 1, 0), Vector3i(2, 1, 0), Vector3i(3, 1, 0), Vector3i(4, 1, 0),
 			Vector3i(5, 1, 0), Vector3i(6, 1, 0), Vector3i(7, 1, 0)]], "le chenal : la rivière file tout droit vers la falaise")
-	for cr in [[0.25, 0.85, 0.7, 7.0], [0.0, 1.1, 0.95, 7.25], [-0.25, 1.35, 1.2, 7.5]]:
+	for cr in [[0.25, 1.05, 0.7, 7.0], [0.0, 1.3, 0.95, 7.25], [-0.25, 1.55, 1.2, 7.5]]:
 		var r: float = cr[0]
 		var h: float = cr[1]
 		var bas: float = cr[2]
@@ -946,6 +952,12 @@ func _crans_et_flancs() -> void:
 		var q := _quads(EM.maillage([riv], m, null, null, r))
 		var bandes := q.filter(func(e): return _genre(e, 0.5) and _a_plat(e, h))
 		_egal(bandes.size(), 7, "r = %s : 7 bandes à %s" % [r, h])
+		# L'ÉPAISSEUR (13 octobre 2026) : 0,3 au-dessus du sol dessiné (1 − r), et sa profondeur dans COLOR.a = 0,3 / 8.
+		_vrai(bandes.all(func(e): return absf((e["c"] as Color).a - 0.0375) < 0.004),
+			"r = %s : la profondeur d'une bande, COLOR.a = 0,3 / 8 = 0,0375 au 1/255 près (son épaisseur)" % r)
+		_vrai(is_equal_approx(h - (1.0 - r), 0.3), "r = %s : la bande est 0,3 au-dessus du sol dessiné" % r)
+		# ⚠ ET JAMAIS AU-DESSUS DU DESSOUS D'UNE CASE PLEINE QUI LA COIFFERAIT (y + 1 + r : 2,25 · 2 · 1,75).
+		_vrai(h < 2.0 + r - 0.1, "r = %s : la bande (%s) reste sous le dessous d'une case pleine au-dessus (%s)" % [r, h, 2.0 + r])
 		_egal(bandes.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(-0.45, h, 0), Vector3(1, h, 1)])).size(), 1,
 			"r = %s : la première sous le mur du fond (−0,45), rien de plus en z (le sol continue)" % r)
 		_egal(bandes.filter(func(e): return _meme_boite(_boite_de([e]), [Vector3(6, h, 0), Vector3(plan, h, 1)])).size(), 1,

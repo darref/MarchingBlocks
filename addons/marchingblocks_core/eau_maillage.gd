@@ -28,21 +28,31 @@ const FL := preload("res://addons/marchingblocks_core/fluides.gd")
 const Natif := preload("res://addons/marchingblocks_core/natif.gd")
 
 ## ⚠ CES DEUX HAUTEURS SONT CELLES DU SOL AMINCI (`BM.RETRAIT_AMINCI`) ; l'eau d'un monde suit le cran du sol qu'il
-## suppose (`nappe(r)`, `riviere(r)`, 9 octobre 2026). Elles restent ici parce que ce sont celles des cas d'épreuve d'avant.
+## suppose (`nappe(r)`, `riviere(r)`, 9 octobre 2026). Elles restent ici parce que ce sont celles des cas d'épreuve d'avant
+## (la bande : 0,05 depuis le 13 octobre 2026, la rivière épaissie — −0,15 avant).
 const NAPPE := 0.7
-const RIVIERE := -0.15
+const RIVIERE := 0.05
 const DEBORD := 0.45
 ## LE CRAN DU SOL QUE L'EAU SUPPOSE — DÉCIDÉ (Jordan, 9 octobre 2026 : « un réglage par monde »). Le témoin calculé a trois
 ## crans (`BM.RETRAITS`) : le dessus d'une case pleine `y − 1` se voit en y − r, le dessous d'une case pleine `y + 1` en
 ## y + 1 + r. Toutes les hauteurs de l'eau en découlent, et retombent EXACTEMENT sur celles d'avant à l'aminci (r = 0,25) :
 ##   - la nappe d'un lac de niveau L est 0,05 sous le plus bas du dessus de sa rive (L + 1 − r) et du dessous d'un étage
 ##     flottant (L + 1 + r) : L + 1 − |r| − 0,05 (`nappe`) — 0,70 aminci, 0,95 neutre, 0,70 épais (sous l'étage) ;
-##   - la bande d'une rivière est 0,10 au-dessus de son sol : y + 0,10 − r (`riviere`) — −0,15, 0,10, 0,35 ;
+##   - la bande d'une rivière est 0,30 au-dessus de son sol : y + 0,30 − r (`riviere`) — 0,05, 0,30, 0,55 ;
+##     ⚠ **0,30 ET NON PLUS 0,10 (Jordan, 13 octobre 2026 : « donner une épaisseur au plan d'eau qui sort de la source et
+##     file jusqu'à la première chute, c'est trop un papier »)** : à 0,10 la bande n'était qu'une pellicule — le rendu lit
+##     la profondeur sous elle (0,1 case : toute la bande dans l'écume de rive, presque sans absorption) et ses flancs ne
+##     faisaient que 0,15 de haut. À 0,30 elle reste sous le dessous d'une case pleine au-dessus d'elle à tous les crans
+##     (y + 1 + r : 1,25 · 1 · 0,75, contre 0,05 · 0,30 · 0,55) et sous le dessus d'une voisine pleine (y + 1 − r) ;
+##     sa profondeur dans COLOR.a suit (`PROFONDEUR_DE_BANDE` = 0,30 / 8) ;
 ##   - une cascade part du plan de la falaise décalé de `avancee(r)` = 0,25 − r (la roche y est en plan − r) : elle garde
 ##     la place qu'elle avait devant la roche amincie ;
 ##   - une bande s'arrête au bord du sol qui la porte (`_bande`) et s'y referme par un FLANC.
 const FIN := 0.05
-const AU_DESSUS_DU_SOL := 0.1
+const AU_DESSUS_DU_SOL := 0.3
+## La profondeur d'une bande de rivière dans COLOR.a (le contrat : en cases / 8) — l'eau qu'elle a sous elle jusqu'au sol
+## dessiné. ⚠ 0,05 avant le 13 octobre 2026 (0,4 case), qui ne valait ni 0,1 ni rien de mesuré.
+const PROFONDEUR_DE_BANDE := AU_DESSUS_DU_SOL / 8.0
 const RETRAIT_AMINCI := 0.25
 
 
@@ -564,7 +574,7 @@ static func _large(b: Dictionary, h: float) -> Array:
 ## LA SURFACE DE L'EAU AU-DESSUS DU POINT `p` — pour nager au Play test. `cases` : les cases d'eau DORMANTE (lacs,
 ## lacs des rivières, océans) ; `oceans` : leurs niveaux, pour le large hors de `boite` (`FL.boite`). Rend la hauteur
 ## de la nappe de la colonne d'eau qui contient p (la même que celle qu'on DESSINE : rangée du haut + `NAPPE`), ou
-## −INF si p n'est dans aucune eau. ⚠ Une rivière n'en est pas : sa bande est une lame de 0,1 case, on y marche.
+## −INF si p n'est dans aucune eau. ⚠ Une rivière n'en est pas : sa bande est une lame de 0,3 case, on y marche.
 ## ⚠ L'appelant compare : p peut être dans la case du haut mais AU-DESSUS de la nappe (entre L + 0,7 et L + 1).
 ## ⚠ LA RÈGLE DIT CE QUE LE DESSIN MONTRE : la nappe s'avance de `DEBORD` sous la roche voisine (et la paroi amincie
 ## est en retrait d'un quart de case), donc un point d'une case PLEINE à moins de `DEBORD` d'une case d'eau est DANS
@@ -636,7 +646,7 @@ static func _riviere(a: Dictionary, cours: Array, occupees: Dictionary, plats: A
 			continue
 		var d := sens_du_cours(cours, i)
 		vus[c] = true
-		plats.append(_bande(a, c, occupees, eaux, retrait, _couleur(Vector2(d.x, d.z), COURANTE, 0.05)))
+		plats.append(_bande(a, c, occupees, eaux, retrait, _couleur(Vector2(d.x, d.z), COURANTE, PROFONDEUR_DE_BANDE)))
 	var i := 0
 	while i < n:
 		var e: Dictionary = cours[i]

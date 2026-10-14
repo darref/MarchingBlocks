@@ -65,7 +65,7 @@ public:
 	TArray<FIntVector> Sources;
 
 	/** The floor the water sits on (world.json "water_floor", set at import): lakes at L + 1 - |r| - 0.05, rivers at
-	 *  y + 0.1 - r (r = 0.25 inset, 0 centred, -0.25 outset). The FIRST water layer of the world (lowest Order) decides
+	 *  y + 0.3 - r (r = 0.25 inset, 0 centred, -0.25 outset). The FIRST water layer of the world (lowest Order) decides
 	 *  for all of them. */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks")
 	EMarchingBlocksWaterFloor WaterFloor = EMarchingBlocksWaterFloor::Inset;

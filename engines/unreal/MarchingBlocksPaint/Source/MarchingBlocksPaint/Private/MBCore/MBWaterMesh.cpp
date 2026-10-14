@@ -546,7 +546,7 @@ namespace MBPaint
 				if (E.Kind == ECourseKind::Lake || !WmHas(Cells, C + WmDown) || WmHas(Seen.Bands, C)) continue;
 				const FCell D = WmFlowAt(Course, I);
 				Seen.Bands.insert(C);
-				Flats.push_back(WmBand(A, C, Cells, Seen.Waters, Seen.Floor, WmColorOf(D.X, D.Z, KindRiver, 0.05)));
+				Flats.push_back(WmBand(A, C, Cells, Seen.Waters, Seen.Floor, WmColorOf(D.X, D.Z, KindRiver, WaterMesh::BandDepth)));
 			}
 			size_t I = 0;
 			while (I < N)

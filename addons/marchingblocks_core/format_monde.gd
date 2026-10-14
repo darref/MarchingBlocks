@@ -92,7 +92,7 @@ static func regle_eau() -> PackedStringArray:
 		"water_floor  (optional, beside water) where the ground of the tiles is drawn, for the heights of the water:",
 		"            0.25 (inset: the top of a full cell y - 1 is seen at y - 0.25), 0 (centred: at y) or -0.25 (outset:",
 		"            at y + 0.25). Absent: 0.25 (worlds exported before it). Any other value refuses the world. A plugin",
-		"            that deduces the mesh again uses it (lakes at L + 1 - |floor| - 0.05, rivers at y + 0.1 - floor).",
+		"            that deduces the mesh again uses it (lakes at L + 1 - |floor| - 0.05, rivers at y + 0.3 - floor).",
 	])
 
 
