@@ -4,7 +4,7 @@ extends RefCounted
 ## `OS.has_feature`. Rien ne se décide sur la ligne de commande : une balise d'export est cuite dans le PCK chiffré.
 ##   • "site"  — vendu sur le site : la clé de licence est EXIGÉE (`licence.gd`), les mises à jour se vérifient ;
 ##   • "steam" — vendu sur Steam : sans clé (le compte Steam tient lieu de licence), Steam livre les mises à jour ;
-##   • "demo"  — gratuite : tout le logiciel, sans enregistrer ni exporter (`demo.gd`) ;
+##   • "demo"  — gratuite : tout le logiciel, enregistrement compris, sans exporter (`demo.gd`, 16 octobre 2026) ;
 ##   • "dev"   — l'éditeur Godot et les suites : rien de tout cela.
 ## ⚠ UN EXE EXPORTÉ SANS BALISE EST UN EXE DU SITE (clé exigée) : un préréglage oublié ou recopié ne doit JAMAIS
 ## livrer le logiciel complet sans clé.

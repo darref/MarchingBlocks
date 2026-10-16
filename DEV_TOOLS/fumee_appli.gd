@@ -6115,6 +6115,13 @@ func _tout_raccourci_a_son_bouton(ed: Control) -> void:
 	ed._choisir_outil("ajouter")
 	ed._compteur_etage.value = 0
 	vue.clic_arme = ""
+	# ⚠ LE MONDE ET LA CAMÉRA SONT CE QUE LES SECTIONS D'AVANT ONT LAISSÉ (16 octobre 2026 : rouge sur main aussi — deux
+	# cases, toutes à l'étage 0) : le test pose sa colonne de quatre cases au-dessus du sol, puis cadre toute la matière (F).
+	var colonne := {}
+	for y in range(1, 5):
+		colonne[Vector3i(3, y, 3)] = true
+	ed._appliquer({"poser": colonne, "effacer": {}}, "Add")
+	vue.cadrer_toute_la_matiere()
 	var cible := Vector2(-1, -1)
 	var cible_y := 0
 	for gx in range(2, 18):

@@ -342,10 +342,6 @@ func _notification(quoi: int) -> void:
 		if _dev != null:
 			_attendre_l_ecriture()
 			_dev.a_la_fermeture(_projet)
-		# LA DÉMO NE GARDE RIEN : ce qu'elle a écrit dans son bac part avec elle.
-		if Edition.est_demo():
-			_attendre_l_ecriture()
-			Demo.vider_le_bac()
 	if quoi == NOTIFICATION_PREDELETE:
 		_attendre_l_ecriture()
 		# Les cartes PBR en route sur un autre fil : on ne démonte pas le moteur sous elles.
@@ -379,9 +375,6 @@ func _ready() -> void:
 	if not await _vente.au_lancement():
 		get_tree().quit()
 		return
-	if Edition.est_demo():
-		Demo.vider_le_bac()
-		racine_exemple = Demo.BAC.path_join("example")
 	await _ouvrir_au_lancement()
 	if Edition.est_demo():
 		_dire(Demo.MESSAGE)
@@ -720,7 +713,7 @@ func _barre_titre() -> Control:
 	ligne.add_child(_bouton_maj)
 	if Edition.est_demo():
 		var demo := Label.new()
-		demo.text = "FREE DEMO — no saving, no export"
+		demo.text = "FREE DEMO — no export"
 		demo.add_theme_font_size_override("font_size", 12)
 		demo.add_theme_color_override("font_color", Palette.AMBRE)
 		ligne.add_child(demo)
@@ -5298,7 +5291,7 @@ func _dire_la_cible() -> void:
 
 
 func _demander(quoi: String) -> void:
-	# LA DÉMO (`demo.gd`) : ni ouvrir un projet d'ailleurs, ni « Save as », ni aucune sortie.
+	# LA DÉMO (`demo.gd`) : aucune sortie.
 	if Edition.est_demo() and Demo.refuse(quoi):
 		_dire(Demo.MESSAGE)
 		return
@@ -6883,10 +6876,6 @@ func _ouvrir_au_lancement() -> void:
 		var exemple := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
 		if exemple != "" and await _ouvrir(exemple):
 			return
-	# LA DÉMO n'ouvre que ce qui est dans son bac (vidé au lancement) : ni un projet passé en argument, ni « ton monde ».
-	if Edition.est_demo():
-		_nouveau_projet()
-		return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
 	if passe != "" and await _ouvrir(passe):
 		return
@@ -6980,8 +6969,6 @@ func _nouveau_projet() -> void:
 ## puis `untitled 2/…` — ses témoins s'écrivent à côté de lui, pas en vrac. Si ce dossier ne peut pas être écrit (Documents
 ## en lecture seule), les données de l'appli, comme avant.
 func _chemin_libre() -> String:
-	if Edition.est_demo():   # la démo travaille dans son bac, vidé à chaque lancement
-		return Dossiers.projet_libre(Projet.EXTENSION, Demo.BAC)
 	var chemin := Dossiers.projet_libre(Projet.EXTENSION)
 	if chemin == "":
 		chemin = Dossiers.projet_libre(Projet.EXTENSION, "user://")
@@ -7329,14 +7316,6 @@ func _attendre_l_ecriture() -> void:
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
 		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT) -> void:
 	var raison := ""
-	# LA DÉMO N'ÉCRIT QUE DANS SON BAC (`demo.gd`) — la dernière porte, si un chemin d'ailleurs arrivait jusqu'ici.
-	if Edition.est_demo() and not Demo.dans_le_bac(chemin):
-		raison = "the free demo does not save (%s)." % chemin.get_file()
-		if en_fond:
-			_ecriture_finie.call_deferred(raison)
-		else:
-			_ecriture_finie(raison)
-		return
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:

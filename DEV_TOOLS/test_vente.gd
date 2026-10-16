@@ -61,8 +61,7 @@ func _initialize() -> void:
 func _mener() -> void:
 	# ⚠ LE DOSSIER JETABLE REPART VIDE : un essai d'avant (une mutation qui a écrit dans `dehors`) faussait les suivants
 	# — vu le 7 octobre 2026, trois mutations « rouges » pour la mauvaise raison.
-	Demo._effacer(ProjectSettings.globalize_path(JETABLES))
-	Demo.vider_le_bac()
+	_effacer(ProjectSettings.globalize_path(JETABLES))
 	_v = Licence.verificateur()
 	_vrai(_v != null, "la bibliothèque native porte MBLicence (sinon, rien d'autre de la clé n'est éprouvé)")
 	if _v != null:
@@ -323,28 +322,25 @@ func _contrat_et_avis() -> void:
 
 func _demo() -> void:
 	print("— la démo —")
-	for q in ["ouvrir", "enregistrer", "exporter", "tileset", "monde", "patron"]:
-		_vrai(Demo.refuse(q), "la démo refuse « %s »" % q)
-	for q in ["importer", "texture", "feuillage"]:
-		_vrai(not Demo.refuse(q), "la démo permet « %s » (rien n'en sort)" % q)
-	_vrai(Demo.dans_le_bac(Demo.BAC + "/untitled/untitled.mbproj"), "un projet du bac est dans le bac")
-	_vrai(not Demo.dans_le_bac("user://demo_scratch2/x.mbproj") and not Demo.dans_le_bac("user://x.mbproj")
-		and not Demo.dans_le_bac(""), "un chemin voisin, ailleurs, vide : pas dans le bac")
-	_vrai(Demo.dans_le_bac(ProjectSettings.globalize_path(Demo.BAC).to_upper() + "/A.MBPROJ"),
-		"… la casse de Windows ne compte pas")
-	DirAccess.make_dir_recursive_absolute(Demo.BAC + "/a/b")
-	var f := FileAccess.open(Demo.BAC + "/a/b/x.txt", FileAccess.WRITE)
-	_vrai(f != null, "un fichier s'écrit dans le bac")
-	if f == null:
+	# 16 octobre 2026 (Jordan : « tout sauf exporter », « quelque chose d'utilitaire ») : elle enregistre, elle n'exporte pas.
+	for q in ["exporter", "tileset", "monde", "patron"]:
+		_vrai(Demo.refuse(q), "la démo refuse la sortie « %s »" % q)
+	for q in ["ouvrir", "enregistrer", "importer", "texture", "feuillage"]:
+		_vrai(not Demo.refuse(q), "la démo permet « %s »" % q)
+
+
+static func _effacer(dossier: String) -> void:
+	var d := DirAccess.open(dossier)
+	if d == null:
 		return
-	f.store_string("x")
-	f.close()
-	FileAccess.set_hidden_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a/b/x.txt"), true)
-	FileAccess.set_read_only_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a/b/x.txt"), true)
-	FileAccess.set_read_only_attribute(ProjectSettings.globalize_path(Demo.BAC + "/a"), true)
-	Demo.vider_le_bac()
-	_vrai(not DirAccess.dir_exists_absolute(Demo.BAC + "/a") and DirAccess.dir_exists_absolute(Demo.BAC),
-		"vider le bac emporte tout (caché, lecture seule compris), et le laisse vide")
+	d.include_hidden = true
+	for f in d.get_files():
+		FileAccess.set_read_only_attribute(dossier.path_join(f), false)
+		d.remove(f)
+	for sd in d.get_directories():
+		_effacer(dossier.path_join(sd))
+	FileAccess.set_read_only_attribute(dossier, false)
+	DirAccess.remove_absolute(dossier)
 
 
 func _associations() -> void:
@@ -494,41 +490,50 @@ func _appli_demo() -> void:
 	var ed := _ecran()
 	for i in 10:
 		await process_frame
-	_vrai(Demo.dans_le_bac(ed._projet), "la démo ne rouvre pas « ton monde » : un projet neuf, dans le bac (%s)" % ed._projet)
+	_egal(ProjectSettings.globalize_path(ed._projet), ProjectSettings.globalize_path(jetable),
+		"la démo rouvre « ton monde », comme la version complète")
 	_vrai(ed._rapport.text.contains("Free demo"), "… et le rapport dit ce qu'est la démo")
 	_vrai(not ed._case_maj.visible, "démo : pas de case des mises à jour")
-	for q in ["tileset", "monde", "exporter", "enregistrer", "ouvrir", "patron"]:
+	for q in ["tileset", "monde", "exporter", "patron"]:
 		ed._rapport.text = ""
 		ed._demander(q)
-		_vrai(not ed._dialogue.visible and ed._rapport.text.contains("Free demo"), "démo : « %s » refusé, et dit" % q)
-	# La seconde porte : un choix de fichier qui arriverait quand même.
-	for q in ["tileset", "monde"]:
+		_vrai(not ed._dialogue.visible and ed._rapport.text.contains("Free demo"), "démo : la sortie « %s » refusée, et dite" % q)
+	for q in ["enregistrer", "ouvrir"]:
+		ed._rapport.text = ""
+		ed._demander(q)
+		_vrai(ed._dialogue.visible and not ed._rapport.text.contains("Free demo"), "démo : « %s » ouvre son dialogue" % q)
+		ed._dialogue.hide()
+	# La seconde porte : un choix de fichier de sortie qui arriverait quand même.
+	for q in ["tileset", "monde", "patron", "exporter"]:
 		ed._action_fichier = q
 		ed._rapport.text = ""
-		ed._fichier_choisi(dehors)
+		var cible := dehors if q in ["tileset", "monde"] else dehors.path_join("sortie." + ("png" if q == "patron" else "glb"))
+		ed._fichier_choisi(cible)
 		await process_frame
 		_vrai(DirAccess.get_directories_at(dehors).is_empty() and DirAccess.get_files_at(dehors).is_empty()
-			and ed._rapport.text.contains("Free demo"), "démo : « %s » choisi quand même — rien n'est écrit" % q)
-	ed._action_fichier = "enregistrer"
-	ed._fichier_choisi(dehors.path_join("vole.mbproj"))
-	_vrai(not FileAccess.file_exists(dehors.path_join("vole.mbproj")), "démo : « Save as » choisi quand même — rien n'est écrit")
-	# La dernière porte : l'écriture d'un projet hors du bac.
-	ed._ecrire_le_projet(dehors.path_join("ailleurs.mbproj"), [], 0, [], [], false)
-	_vrai(not FileAccess.file_exists(dehors.path_join("ailleurs.mbproj")) and ed._etat_enregistre.text == "⚠ Not saved",
-		"démo : un projet hors du bac n'est jamais écrit (et la barre le dit)")
-	# Un geste : l'enregistrement automatique écrit, mais dans le bac.
+			and ed._rapport.text.contains("Free demo"), "démo : la sortie « %s » choisie quand même — rien n'est écrit" % q)
+	# Un geste : l'enregistrement automatique écrit le projet, là où il est.
 	ed._aller_a("monde")
 	ed._coup_commence()
 	ed._touche({"poser": {Vector3i(0, 0, 0): true}, "effacer": {}}, "Add")
 	ed._coup_fini()
 	ed._toujours_ecrire()
 	ed._attendre_l_ecriture()
-	_vrai(FileAccess.file_exists(ed._projet) and Demo.dans_le_bac(ed._projet), "démo : le geste s'écrit dans le bac")
-	_egal(FileAccess.get_md5(jetable), md5_avant, "démo : « ton monde » n'a pas été touché")
-	# La fermeture vide le bac.
+	_vrai(FileAccess.get_md5(jetable) != md5_avant and ed._etat_enregistre.text == "✓ Saved",
+		"démo : le geste est enregistré dans le projet (✓ Saved)")
+	# « Save as » : le projet s'écrit ailleurs, et se relit.
+	ed._action_fichier = "enregistrer"
+	var copie := dehors.path_join("garde.mbproj")
+	ed._fichier_choisi(copie)
+	ed._attendre_l_ecriture()
+	var err: Array = []
+	_vrai(FileAccess.file_exists(copie) and not Projet.depuis_texte(FileAccess.get_file_as_string(copie), err).is_empty()
+		and err.is_empty(),
+		"démo : « Save as » écrit le projet, lisible")
+	DirAccess.remove_absolute(copie)
+	# La fermeture ne détruit rien.
 	ed._notification(Node.NOTIFICATION_WM_CLOSE_REQUEST)
-	_vrai(DirAccess.get_directories_at(Demo.BAC).is_empty() and DirAccess.get_files_at(Demo.BAC).is_empty(),
-		"démo : la fermeture vide le bac")
+	_vrai(FileAccess.file_exists(jetable), "démo : la fermeture garde le projet")
 	root.remove_child(ed)
 	ed.free()
 	await process_frame

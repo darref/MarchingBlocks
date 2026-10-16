@@ -168,7 +168,7 @@ func _remplir_about() -> void:
 		Edition.STEAM:
 			col.add_child(_mot("Licensed through your Steam account."))
 		Edition.DEMO:
-			col.add_child(_mot("Free demo — saving, opening your own projects and exporting are in the full version."))
+			col.add_child(_mot("Free demo — everything works and saves; exporting is in the full version."))
 	var rangee := HBoxContainer.new()
 	var contrat := Button.new()
 	contrat.text = "License agreement"
