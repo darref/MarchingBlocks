@@ -5214,6 +5214,26 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
 - **SUR LE PC** : le projet `C:/Users/jorda/Documents/MarchingBlocks/monde_client/` (photos, `rapport.json`), les mesures
   `mesure_n0|n1|n2/`, le worktree `D:/MB_wt_monde_client`, la tâche planifiée `MBMondeClient` (lance `C:/Users/jorda/mc.cmd`
   dans la session de Jordan : un processus lancé par ssh n'a pas de fenêtre). Une construction complète : ~4 min.
+- **LE VERRE ET LE TUNNEL — DEMANDÉS PAR JORDAN (16 octobre 2026), ÉCRITS LE MÊME JOUR.** ⚠ **L'ALPHA D'UN MATÉRIAU DU TÉMOIN
+  ÉTAIT GARDÉ, JAMAIS RENDU** (le sélecteur le réglait, le `.mbtiles` l'écrivait) : `MaillageEdite.materiau_godot` se mélange
+  désormais quand l'alpha de la couleur est sous `OPAQUE` (0,995) — rien à déclarer ; le glTF le porte (alphaMode BLEND), le
+  monde et les moteurs le reçoivent. Un curseur **Opacity** dans Materials (l'alpha de la couleur, une donnée, un endroit).
+  Gardé par `test_temoin_lie` 54 (+8, lus dans le JSON du `.glb` et dans le lot relu ; une pierre reste opaque) — rouge sans
+  la correction (3) — et `fumee_appli` (le vrai curseur, Ctrl+Z). ⚠ Un matériau ANIMÉ ignore l'alpha (son shader). Dans le
+  monde client : une 13e couche **Glass** (la base lisse, alpha 0,34) ; un îlot au sud, un tube de verre qui plonge, file sous
+  la mer sur un fond marin en pente (la bande du tunnel descend à −9), entre sous la plage, traverse une salle de 19 × 9 × 15
+  (quatre piliers de pierre, un puits de lumière en verre), remonte et débouche sous une coupole de verre près du village.
+  `sonde_tunnel_client.gd` (PC, 3 s) : 0 case du creux noyée, 0 contact par une arête, l'axe toujours dans le creux. Le GIF :
+  `filmer_tunnel_client.gd` (l'axe lu dans `tunnel.json`), `01_scripts/gif_tunnel_client.py` → `04_exports/gif/
+  monde_client_tunnel.{gif,mp4}` (20 s ; le GIF en 480 px à 10 i/s, 18,8 Mo). Pas jugé par Jordan.
+- **L'INTRO DE CHAQUE GIF — DÉCIDÉ (Jordan, 16 octobre 2026 : « une demi-seconde au début où l'on voit le soft en entier avec
+  son UI et une petite manipulation qui passe du witness de base à celui sculpté, pour chaque prochain gif »).** Le rush :
+  `DEV_TOOLS/filmer_intro_temoin.gd` (Witness, en édition : une couche neuve montre le témoin calculé, un vrai clic sur
+  « Meadow » montre le sculpté). ⚠ **HORS ÉDITION, WITNESS MONTRE TOUJOURS LE TÉMOIN CALCULÉ**, quelle que soit la couche
+  (les photos `temoin_*.png` du bâtisseur le montrent aussi). ⚠ **L'APPLI MET ~0,45 s ENTRE LE CLIC ET LE NOUVEAU TÉMOIN** :
+  l'intro garde le geste (×2) et le basculement, pas l'attente. ⚠ **FENÊTRE MAXIMISÉE = 1 038 px : L'ENREGISTREUR (1 080) ROGNE
+  ~40 px DE CHAQUE CÔTÉ DE L'UI** — l'intro se tourne en `--fullscreen`. Montage : `01_scripts/intro_gif.py` (`avec_intro`,
+  l'icône Tripo de la barre de titre masquée).
 - ⚠ **PAS FAIT** : l'export `.mbworld` du monde vers les greffons ; aucune garde dans les suites (la forge est mesurée par
   `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
   (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**

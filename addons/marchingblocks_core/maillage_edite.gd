@@ -22,6 +22,8 @@ extends RefCounted
 ## prend celle de la face dont elle sort.
 
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
+## Au-dessus de cet alpha, un matériau reste opaque (un sélecteur de couleur rend 0,999… pour « plein »).
+const OPAQUE := 0.995
 
 var sommets := PackedVector3Array()
 ## Array de PackedInt32Array.
@@ -369,6 +371,12 @@ func materiau_godot(m: int) -> StandardMaterial3D:
 	var sm := StandardMaterial3D.new()
 	sm.resource_name = str(d.get("nom", "material"))
 	sm.albedo_color = d.get("couleur", Color.WHITE)
+	# LA TRANSPARENCE (16 octobre 2026, Jordan : « un witness peut-il avoir de l'alpha, pour du verre ou de la glace ? ») :
+	# l'alpha de la couleur était gardé (le sélecteur le réglait, le .mbtiles l'écrivait) mais jamais rendu. Elle se
+	# DÉDUIT de lui, rien à déclarer : sous 1, le matériau se mélange. Le glTF la porte (alphaMode « BLEND »,
+	# baseColorFactor), donc le monde et les moteurs la reçoivent.
+	if sm.albedo_color.a < OPAQUE:
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	sm.roughness = float(d.get("rugosite", 0.8))
 	sm.metallic = float(d.get("metal", 0.0))
 	var chemin: String = str(d.get("texture", ""))

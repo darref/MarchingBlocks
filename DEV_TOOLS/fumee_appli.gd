@@ -3229,6 +3229,18 @@ func _le_modeleur(ed: Control) -> void:
 	_vrai((mo.maillage.materiaux[0]["couleur"] as Color).is_equal_approx(couleur0),
 		"trois retouches de couleur : UN Ctrl+Z les défait toutes")
 	ed._unhandled_key_input(_cle(KEY_Y, true))
+	# L'OPACITÉ (16 octobre 2026) : le VRAI curseur règle l'alpha de la couleur, le sélecteur le suit, la tuile dessinée
+	# se mélange ; Ctrl+Z la rend opaque.
+	ed._opacite_materiau.value = 0.3
+	ed._inscrire_les_retouches()
+	var mat_vu: Material = mo.maillage.materiau_godot(0)
+	_vrai(absf((mo.maillage.materiaux[0]["couleur"] as Color).a - 0.3) < 1e-3 and absf(ed._couleur_materiau.color.a - 0.3) < 1e-3
+		and (mat_vu as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED,
+		"Opacity 0,3 : l'alpha de la couleur, le sélecteur suit, le matériau se mélange")
+	ed._unhandled_key_input(_cle(KEY_Z, true))
+	_vrai((mo.maillage.materiaux[0]["couleur"] as Color).a > 0.999
+		and (mo.maillage.materiau_godot(0) as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED,
+		"Ctrl+Z : opaque de nouveau")
 	# U : la face visée dépliée ; le matériau en projection « UV » ; le patron écrit.
 	ed._vue._gui_input(clic)
 	ed._input(_cle(KEY_U))

@@ -63,6 +63,9 @@ const THEMES := [
 		"paroi": ["biome_highpeaks/cliff_rocks_04_2k/cliff_rocks_04_baseColor_2k.png", Color(0.9, 0.92, 0.95), 0.9]},
 	{"nom": "Ice", "sol": ["biome_taiga/snow_01_2k/snow_01_color_2k.png", Color(0.7, 0.9, 1.0), 0.2],
 		"paroi": ["biome_taiga/snow_01_2k/snow_01_color_2k.png", Color(0.5, 0.78, 0.98), 0.15]},
+	# LE VERRE (16 octobre 2026, Jordan : « rajoute du verre à monde client ») : un matériau sans image, dont l'ALPHA dit
+	# la transparence (`MaillageEdite.materiau_godot`). Le dernier : là où il touche la roche, c'est la roche qui pose.
+	{"nom": "Glass", "verre": Color(0.7, 0.9, 1.0, 0.34), "rugosite": 0.04},
 ]
 
 ## Les clés qui reçoivent deux variantes (les plus posées d'un monde : le sol, la paroi, la lèvre de falaise), tirées 2 : 1 : 1.
@@ -205,15 +208,22 @@ func _mc_temoins() -> void:
 		var t1 := Time.get_ticks_msec()
 		var t: RefCounted = base.copie()
 		var cles: Array = t.tuiles.keys()
-		for c in cles:
-			_relief(th["nom"], t.tuiles[c], c)
-		var v: Dictionary = F.creer_variantes(t, CLES_VARIEES, 2, func(m: RefCounted, k: int) -> void:
-			_relief_de_variante(th["nom"], m, k))
 		var c: Dictionary = _ecran._couches[_couche[th["nom"]]]
-		var dossier: String = _ecran._chemin_temoin_de(c).get_basename() + "_images"
-		var k_sol := _materiau(t, th, "sol", dossier)
-		var k_paroi := _materiau(t, th, "paroi", dossier)
-		F.assigner_par_orientation(t, k_sol, k_paroi, 0.55)
+		var v := {}
+		if th.has("verre"):
+			# Le verre : la base telle quelle (lisse, chanfreinée), sans variante, UN matériau translucide.
+			t.materiaux.append({"nom": "glass", "couleur": th["verre"], "rugosite": th["rugosite"], "metal": 0.0,
+				"texture": "", "echelle": 1.0, "projection": "boite"})
+			F.assigner_par_orientation(t, t.materiaux.size() - 1, t.materiaux.size() - 1, 0.55)
+		else:
+			for cle in cles:
+				_relief(th["nom"], t.tuiles[cle], cle)
+			v = F.creer_variantes(t, CLES_VARIEES, 2, func(m: RefCounted, k: int) -> void:
+				_relief_de_variante(th["nom"], m, k))
+			var dossier: String = _ecran._chemin_temoin_de(c).get_basename() + "_images"
+			var k_sol := _materiau(t, th, "sol", dossier)
+			var k_paroi := _materiau(t, th, "paroi", dossier)
+			F.assigner_par_orientation(t, k_sol, k_paroi, 0.55)
 		c["_temoin"] = t
 		var raison: String = _ecran._enregistrer_temoin(c, true)
 		print("%s : %d tuiles, %d triangles, variantes %s %s(%d ms)" % [th["nom"], t.tuiles.size(), F.triangles(t),
@@ -321,6 +331,23 @@ var _bruit_foret := FastNoiseLite.new()
 var _h := {}       # Vector2i → hauteur du dessus (−1 : rien)
 var _m := {}       # Vector2i → thème
 var _mares: Array = []
+var _bas := {}     # Vector2i → bas de la colonne (absent : 0)
+var _air := {}     # Vector3i → case creusée (le tunnel, la salle)
+var _verre := {}   # Vector3i → case de verre (la couche « Glass »)
+var _axe_tunnel: Array = []   # l'axe du tunnel, points au centre des cases (Vector3)
+
+## LE TUNNEL DE VERRE (16 octobre 2026, Jordan : « un tunnel commençant dehors, qui s'enfonce dans la mer puis dans le
+## sol, traverse une grande salle et ressort dans l'île ») : il part d'un îlot au sud, plonge, file sous la mer dans un
+## tube de verre posé sur un fond marin creusé pour lui, entre dans l'île sous la plage, traverse une salle sous la
+## prairie (un puits de lumière en verre dans son plafond), puis remonte et débouche sur la prairie.
+const TUNNEL_X := 14
+const ILOT := Vector2(14, 108)
+const ILOT_RAYON := 5.5
+const FOND_MARIN := -7     # le dessus du fond marin, autour du tube
+const BAS_PROFOND := -9    # le bas des colonnes de la bande du tunnel
+const TUBE_Y := -4         # le milieu du tube sous la mer et sous l'île
+const SALLE := [Vector3i(5, -5, 37), Vector3i(23, 3, 51)]   # le creux de la salle (coins inclus)
+const PUITS := [Vector2i(10, 40), Vector2i(18, 48)]          # le puits de lumière (colonnes, coins inclus)
 
 
 func _mc_monde() -> void:
@@ -331,8 +358,18 @@ func _mc_monde() -> void:
 	for th in THEMES:
 		par[th["nom"]] = {}
 	for k in _h:
-		for y in range(0, int(_h[k]) + 1):
-			par[_m[k]][Vector3i(k.x, y, k.y)] = true
+		for y in range(int(_bas.get(k, 0)), int(_h[k]) + 1):
+			var c := Vector3i(k.x, y, k.y)
+			if not _air.has(c) and not _verre.has(c):
+				par[_m[k]][c] = true
+	par["Glass"] = _verre.duplicate()
+	# Quatre piliers de pierre dans la salle, du sol au plafond, de part et d'autre du passage.
+	for px in [TUNNEL_X - 6, TUNNEL_X + 5]:
+		for pz in [SALLE[0].z + 2, SALLE[1].z - 3]:
+			for dx in 2:
+				for dz in 2:
+					for y in range(SALLE[0].y, SALLE[1].y + 1):
+						par["StoneWall"][Vector3i(px + dx, y, pz + dz)] = true
 	var total := 0
 	_rapport["cases"] = {}
 	for nom in par:
@@ -371,7 +408,9 @@ func _relief_monde() -> void:
 				_h[k] = mini(_h[k], 19 - (z - LAC_MONTAGNE.y - 3) / 2)
 	_le_village()
 	_les_chemins()
+	_le_fond_marin()
 	_sans_damier()
+	_le_tunnel()
 
 
 func _colonne(x: int, z: int) -> void:
@@ -505,6 +544,153 @@ func _les_chemins() -> void:
 							_m[k] = "Gravel"
 
 
+## LE FOND MARIN DU TUNNEL : la bande du tunnel descend à BAS_PROFOND (la salle et le tube passent sous y = 0), un fond
+## de sable à FOND_MARIN là où il n'y avait que la mer, et l'îlot de roche d'où part le tunnel.
+func _le_fond_marin() -> void:
+	for x in range(TUNNEL_X - 20, TUNNEL_X + 21):
+		for z in range(-30, 119):
+			var k := Vector2i(x, z)
+			# ⚠ LE FOND DESCEND EN PENTE, la règle de la plage prolongée (`_colonne`) : posé à plat à FOND_MARIN, la plage
+			# finissait en un MUR de sable de dix cases, vu sous la mer (photo `tunnel_sous_la_mer`, 16 octobre 2026).
+			if not _h.has(k) or (int(_h[k]) < MER and _m[k] == "Beach"):
+				if not _h.has(k) and z < 50:
+					continue
+				var b := _bruit.get_noise_2d(x, z)
+				var continu := (1.0 - Vector2(x, z).length() / RAYON_ILE - b * 0.15) * 18.0 + b * 3.0
+				_h[k] = clampi(int(round(MER - 2 + continu * 2.0)), FOND_MARIN, MER - 1)
+				_m[k] = "Beach"
+			_bas[k] = BAS_PROFOND
+	for x in range(int(ILOT.x - ILOT_RAYON) - 1, int(ILOT.x + ILOT_RAYON) + 2):
+		for z in range(int(ILOT.y - ILOT_RAYON) - 1, int(ILOT.y + ILOT_RAYON) + 2):
+			if Vector2(x + 0.5, z + 0.5).distance_to(ILOT) < ILOT_RAYON:
+				_h[Vector2i(x, z)] = MER + 2
+				_m[Vector2i(x, z)] = "Rock"
+
+
+func _plein_terrain(c: Vector3i) -> bool:
+	var k := Vector2i(c.x, c.z)
+	return _h.has(k) and c.y >= int(_bas.get(k, 0)) and c.y <= int(_h[k]) and not _air.has(c)
+
+
+func _plein(c: Vector3i) -> bool:
+	return _verre.has(c) or _plein_terrain(c)
+
+
+func _dans_la_salle(c: Vector3i) -> bool:
+	return c.x >= SALLE[0].x and c.x <= SALLE[1].x and c.y >= SALLE[0].y and c.y <= SALLE[1].y \
+		and c.z >= SALLE[0].z and c.z <= SALLE[1].z
+
+
+## La distance d'un point à l'axe du tunnel, ses deux BOUTS OUVERTS (au-delà du premier et du dernier point : rien).
+func _distance_a_l_axe(p: Vector3) -> float:
+	var d := INF
+	for i in _axe_tunnel.size() - 1:
+		var a: Vector3 = _axe_tunnel[i]
+		var b: Vector3 = _axe_tunnel[i + 1]
+		var ab := b - a
+		var t := (p - a).dot(ab) / ab.length_squared()
+		if (i == 0 and t < 0.0) or (i == _axe_tunnel.size() - 2 and t > 1.0):
+			continue
+		d = minf(d, p.distance_to(a + ab * clampf(t, 0.0, 1.0)))
+	return d
+
+
+func _le_tunnel() -> void:
+	var x := TUNNEL_X + 0.5
+	_axe_tunnel = [Vector3(x, 8.5, ILOT.y + ILOT_RAYON + 1.0), Vector3(x, 8.5, ILOT.y + 1.5),
+		Vector3(x, TUBE_Y + 0.5, ILOT.y - 8.5), Vector3(x, TUBE_Y + 0.5, SALLE[0].z - 1.5)]
+	# La remontée vers le nord, une case par deux, jusqu'à déboucher deux cases au-dessus de la prairie.
+	var z := SALLE[0].z - 2
+	var y := TUBE_Y
+	while z > -20:
+		z -= 2
+		y += 1
+		if y >= int(_h.get(Vector2i(TUNNEL_X, z), -99)) + 2 and y >= int(_h.get(Vector2i(TUNNEL_X, z - 1), -99)) + 2:
+			break
+	_axe_tunnel.append(Vector3(x, y + 0.5, z + 0.5))
+	# La salle : son creux, et du verre là où sa coque ne serait pas dans la matière.
+	for cx in range(SALLE[0].x, SALLE[1].x + 1):
+		for cy in range(SALLE[0].y, SALLE[1].y + 1):
+			for cz in range(SALLE[0].z, SALLE[1].z + 1):
+				_air[Vector3i(cx, cy, cz)] = true
+	for cx in range(SALLE[0].x - 1, SALLE[1].x + 2):
+		for cy in range(SALLE[0].y - 1, SALLE[1].y + 2):
+			for cz in range(SALLE[0].z - 1, SALLE[1].z + 2):
+				var c := Vector3i(cx, cy, cz)
+				if not _air.has(c) and not _plein_terrain(c):
+					_verre[c] = true
+	# Le tube : creux à 1,5 de l'axe, sa coque à 2,9 (le carré de 5 × 5 d'un tube droit), en verre hors de la matière.
+	var lo := Vector3i(1 << 20, 1 << 20, 1 << 20)
+	var hi := -lo
+	for p in _axe_tunnel:
+		lo = lo.min(Vector3i(floori(p.x), floori(p.y), floori(p.z)))
+		hi = hi.max(Vector3i(floori(p.x), floori(p.y), floori(p.z)))
+	for cx in range(lo.x - 3, hi.x + 4):
+		for cy in range(lo.y - 3, hi.y + 4):
+			for cz in range(lo.z - 3, hi.z + 4):
+				var c := Vector3i(cx, cy, cz)
+				if _dans_la_salle(c):
+					continue
+				var d := _distance_a_l_axe(Vector3(c) + Vector3(0.5, 0.5, 0.5))
+				if d <= 1.5:
+					_air[c] = true
+					_verre.erase(c)
+				elif d <= 2.9 and not _air.has(c) and not _plein_terrain(c):
+					_verre[c] = true
+	# Le puits de lumière : la roche au-dessus de la salle devient du verre, jusqu'à la prairie.
+	for cx in range(PUITS[0].x, PUITS[1].x + 1):
+		for cz in range(PUITS[0].y, PUITS[1].y + 1):
+			for cy in range(SALLE[1].y + 1, int(_h.get(Vector2i(cx, cz), 0)) + 1):
+				_verre[Vector3i(cx, cy, cz)] = true
+	var reparees := _sans_contact_autour(lo - Vector3i(4, 4, 4), hi + Vector3i(4, 4, 4))
+	reparees += _sans_contact_autour(SALLE[0] - Vector3i(3, 3, 3), Vector3i(SALLE[1].x, 16, SALLE[1].z) + Vector3i(3, 3, 3))
+	print("tunnel : %d points d'axe, %d cases creusées, %d de verre, %d ajoutées contre les contacts par une arête, sortie en z = %d"
+		% [_axe_tunnel.size(), _air.size(), _verre.size(), reparees, z])
+	_rapport["tunnel"] = {"creusees": _air.size(), "verre": _verre.size(), "reparees": reparees,
+		"chemin": _axe_tunnel.map(func(p: Vector3) -> Array: return [p.x, p.y, p.z])}
+	var f := FileAccess.open(_dossier_mc.path_join("tunnel.json"), FileAccess.WRITE)
+	if f != null:
+		f.store_string(JSON.stringify({"chemin": _rapport["tunnel"]["chemin"], "salle": [[SALLE[0].x, SALLE[0].y,
+			SALLE[0].z], [SALLE[1].x, SALLE[1].y, SALLE[1].z]], "puits": [[PUITS[0].x, PUITS[0].y], [PUITS[1].x, PUITS[1].y]]}, "\t"))
+		f.close()
+
+
+## Aucun contact par une arête dans une boîte (charte §2) : dans chaque carré de quatre cases des trois plans, deux pleines
+## en diagonale et deux vides, une des vides devient du verre (pas une case du creux, si l'autre ne l'est pas).
+func _sans_contact_autour(lo: Vector3i, hi: Vector3i) -> int:
+	var ajoutees := 0
+	var plans := [[Vector3i(1, 0, 0), Vector3i(0, 1, 0)], [Vector3i(1, 0, 0), Vector3i(0, 0, 1)],
+		[Vector3i(0, 1, 0), Vector3i(0, 0, 1)]]
+	for tour in 30:
+		var change := 0
+		for cx in range(lo.x, hi.x):
+			for cy in range(lo.y, hi.y):
+				for cz in range(lo.z, hi.z):
+					var a := Vector3i(cx, cy, cz)
+					for pl in plans:
+						var b: Vector3i = a + pl[0]
+						var d: Vector3i = a + pl[1]
+						var e: Vector3i = a + pl[0] + pl[1]
+						var pa := _plein(a)
+						if pa != _plein(e) or _plein(b) != _plein(d) or pa == _plein(b):
+							continue
+						var vides: Array = [b, d] if pa else [a, e]
+						var choix: Vector3i = vides[1] if _air.has(vides[0]) and not _air.has(vides[1]) else vides[0]
+						_air.erase(choix)
+						_verre[choix] = true
+						change += 1
+		ajoutees += change
+		if change == 0:
+			break
+	return ajoutees
+
+
+## La caméra à l'ŒIL donné, qui regarde `cible` (le modèle d'orbite de la vue : cible, azimut, élévation, distance).
+func _poser_oeil(oeil: Vector3, cible: Vector3) -> void:
+	var d := oeil - cible
+	_poser_camera(cible, atan2(d.x, d.z), asin(clampf(d.y / d.length(), -1.0, 1.0)), d.length())
+
+
 ## Aucun contact par une arête (charte §2) : dans chaque carré de quatre colonnes, si une diagonale est plus haute que
 ## l'autre entière, la plus haute de l'autre monte jusqu'à elle.
 func _sans_damier() -> void:
@@ -620,6 +806,9 @@ func _feuillage() -> void:
 			for k in par_theme.get(nom, []):
 				if rng.randf() > float(d[2]) or int(_h[k]) <= MER:
 					continue
+				# Rien sur l'îlot du tunnel : un plant y tiendrait sur le verre, ou flotterait au-dessus du creux.
+				if Vector2(k).distance_to(ILOT) < ILOT_RAYON + 1.5:
+					continue
 				var dessus := Vector3(k.x + 0.5, int(_h[k]) + 1.0, k.y + 0.5)
 				_poser_camera(dessus, 0.0, 1.45, 18.0)
 				var ecran: Vector2 = _vue.camera().unproject_position(dessus + Vector3(rng.randf_range(-0.3, 0.3), 0,
@@ -697,5 +886,14 @@ func _mc_photos() -> void:
 		_rapport["vues"][v[0]] = {"ips": snappedf(ips, 0.1), "pire_ms": snappedf(pire / 1000.0, 0.1),
 			"primitives": prims, "appels": appels}
 		print("vue %s : %.1f img/s (pire %.1f ms), %d primitives, %d appels" % [v[0], ips, pire / 1000.0, prims, appels])
+	# LE TUNNEL DE VERRE : l'entrée sur l'îlot, le tube sous la mer, la salle et son puits de lumière, la sortie.
+	var x := TUNNEL_X + 0.5
+	for v in [["tunnel_entree", Vector3(x + 7, 13, 126), Vector3(x, 8.5, 112)],
+			["tunnel_sous_la_mer", Vector3(x, TUBE_Y + 0.6, 94), Vector3(x + 2.5, TUBE_Y + 1.6, 84)],
+			["tunnel_salle", Vector3(x - 6, 1.5, SALLE[1].z - 1.0), Vector3(x + 2, -3.0, SALLE[0].z + 3.0)],
+			["tunnel_sortie", Vector3(x + 9, 22, (_axe_tunnel.back() as Vector3).z - 12), _axe_tunnel.back()]]:
+		_poser_oeil(v[1], v[2])
+		await _images(45)
+		_photo(v[0])
 	_rapport["memoire_video_mo"] = int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0)
 	_rapport["memoire_mo"] = int(Performance.get_monitor(Performance.MEMORY_STATIC) / 1048576.0)

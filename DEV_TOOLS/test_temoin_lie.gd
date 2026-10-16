@@ -33,6 +33,7 @@ func _initialize() -> void:
 	_l_ecriture_ne_fuit_pas(t)
 	_les_png_sont_gardes(t)
 	_les_images_relues(t)
+	_le_verre_traverse_tout(t)
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	if _echecs > 0:
 		print("PREMIER ÉCHEC — %s" % _premier)
@@ -515,3 +516,70 @@ func _json_glb(chemin: String) -> Dictionary:
 	var longueur := f.get_32()
 	f.get_32()
 	return JSON.parse_string(f.get_buffer(longueur).get_string_from_utf8())
+
+
+## LE VERRE (16 octobre 2026, Jordan : « un witness peut-il avoir de l'alpha, pour du verre ou de la glace ? ») : l'alpha
+## de la couleur d'un matériau était écrit et relu, jamais RENDU. Attendu, lu à chaque étape sans passer par la règle :
+## le matériau du modeleur se mélange, le .glb dit « BLEND » et l'alpha (lu dans le JSON du FICHIER), le lot du monde
+## relu se mélange avec le même alpha, le témoin relu le garde ; un matériau plein reste opaque partout.
+func _le_verre_traverse_tout(t0: RefCounted) -> void:
+	var t: RefCounted = t0.copie()
+	var cle: String = t.tuiles.keys()[0]
+	var m: RefCounted = t.tuiles[cle]
+	var verre := Color(0.6, 0.85, 1.0, 0.3)
+	t.materiaux.append({"nom": "glass", "couleur": verre, "rugosite": 0.05, "metal": 0.0, "texture": "",
+		"echelle": 1.0, "projection": "boite"})
+	var kv: int = t.materiaux.size() - 1
+	t.materiaux.append({"nom": "stone", "couleur": Color(0.5, 0.5, 0.5, 1.0), "rugosite": 0.9, "metal": 0.0,
+		"texture": "", "echelle": 1.0, "projection": "boite"})
+	var kp: int = t.materiaux.size() - 1
+	var moitie: int = (m.faces as Array).size() / 2
+	m.assigner(range(moitie), kv)
+	m.assigner(range(moitie, (m.faces as Array).size()), kp)
+	_dire((m.materiau_godot(kv) as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED,
+		"verre : le matériau du modeleur se mélange")
+	_dire((m.materiau_godot(kp) as BaseMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_DISABLED,
+		"verre : un matériau plein reste opaque")
+	var chemin := ProjectSettings.globalize_path("user://test_temoin_lie/verre/verre.glb")
+	DirAccess.make_dir_recursive_absolute(chemin.get_base_dir())
+	_dire(t.vers_glb(chemin) == "", "verre : le témoin s'écrit")
+	var json := _json_du_glb(chemin)
+	var lu := {}
+	for mat in json.get("materials", []):
+		lu[str(mat.get("name", ""))] = mat
+	var gv: Dictionary = lu.get("glass", {})
+	var facteur: Array = gv.get("pbrMetallicRoughness", {}).get("baseColorFactor", [1, 1, 1, 1])
+	_dire(str(gv.get("alphaMode", "")) == "BLEND" and absf(float(facteur[3]) - 0.3) < 1e-3,
+		"verre : le .glb dit BLEND et alpha 0,3 (%s, %s)" % [gv.get("alphaMode", "OPAQUE"), facteur])
+	_dire(str(lu.get("stone", {}).get("alphaMode", "OPAQUE")) == "OPAQUE", "verre : la pierre part opaque")
+	var b: Dictionary = BM.librairie_depuis_glb(chemin)
+	var lot: MeshLibrary = b["lot"]
+	var tuile: Mesh = lot.get_item_mesh(lot.find_item_by_name(cle))
+	var vu := {}
+	for s in tuile.get_surface_count():
+		var sm := tuile.surface_get_material(s) as BaseMaterial3D
+		if sm != null:
+			vu[sm.resource_name] = sm
+	var mv: BaseMaterial3D = vu.get("glass")
+	_dire(mv != null and mv.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED and absf(mv.albedo_color.a - 0.3) < 1e-3,
+		"verre : le lot du monde le mélange, alpha 0,3 (%s)" % [[mv.transparency, mv.albedo_color.a] if mv != null else "absent"])
+	var mp: BaseMaterial3D = vu.get("stone")
+	_dire(mp != null and mp.transparency == BaseMaterial3D.TRANSPARENCY_DISABLED, "verre : la pierre du lot est opaque")
+	var r: RefCounted = TL.depuis_glb(chemin, chemin.get_base_dir().path_join("images"))
+	var relu := -1.0
+	for d in r.materiaux:
+		if str(d.get("nom", "")) == "glass":
+			relu = (d["couleur"] as Color).a
+	_dire(absf(relu - 0.3) < 1e-3, "verre : le témoin relu garde l'alpha (%.3f)" % relu)
+
+
+func _json_du_glb(chemin: String) -> Dictionary:
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	if f == null:
+		return {}
+	f.seek(12)
+	var longueur := f.get_32()
+	f.get_32()
+	var texte := f.get_buffer(longueur).get_string_from_utf8()
+	var d: Variant = JSON.parse_string(texte)
+	return d if d is Dictionary else {}

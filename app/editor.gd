@@ -121,6 +121,7 @@ var _nom_materiau: LineEdit
 var _couleur_materiau: ColorPickerButton
 var _rugosite_materiau: HSlider
 var _metal_materiau: HSlider
+var _opacite_materiau: HSlider
 var _echelle_materiau: SpinBox
 var _projection_materiau: OptionButton
 var _etat_uv: Label
@@ -3807,6 +3808,9 @@ func _batir_droite_texture(pile: VBoxContainer) -> void:
 	_edition_materiau.add_child(_couleur_materiau)
 	_rugosite_materiau = _curseur(_edition_materiau, "Roughness", 0.0, 1.0, 0.01, "rugosite")
 	_metal_materiau = _curseur(_edition_materiau, "Metallic", 0.0, 1.0, 0.01, "metal")
+	# L'OPACITÉ (16 octobre 2026) : l'alpha de la couleur, en clair — sous 1, le matériau se mélange (du verre, de la glace).
+	_opacite_materiau = _curseur(_edition_materiau, "Opacity", 0.05, 1.0, 0.01, "opacite")
+	_opacite_materiau.tooltip_text = "Below 1 the material is see-through (glass, ice). It travels to the world and the engines."
 	var ligne_echelle := HBoxContainer.new()
 	ligne_echelle.add_child(_texte("Repeat every", 11, Palette.GRIS))
 	_echelle_materiau = SpinBox.new()
@@ -4718,6 +4722,7 @@ func _redire_les_materiaux() -> void:
 		_couleur_materiau.color = d.get("couleur", Color.WHITE)
 		_rugosite_materiau.value = float(d.get("rugosite", 0.8))
 		_metal_materiau.value = float(d.get("metal", 0.0))
+		_opacite_materiau.value = (d.get("couleur", Color.WHITE) as Color).a
 		_echelle_materiau.value = float(d.get("echelle", 1.0))
 		var proj: String = str(d.get("projection", "boite"))
 		for i in _projection_materiau.item_count:
@@ -4766,6 +4771,14 @@ func _retoucher(cle: String, valeur: Variant) -> void:
 		return
 	if _materiau_avant == null:
 		_materiau_avant = _modeleur.instantane()
+	# L'opacité est l'alpha de la couleur (une donnée, un endroit) ; le sélecteur et le curseur se suivent.
+	if cle == "opacite":
+		var c: Color = _modeleur.maillage.materiaux[_modeleur.materiau_courant].get("couleur", Color.WHITE)
+		cle = "couleur"
+		valeur = Color(c.r, c.g, c.b, float(valeur))
+		_couleur_materiau.color = valeur
+	elif cle == "couleur":
+		_opacite_materiau.set_value_no_signal((valeur as Color).a)
 	_modeleur.regler_materiau(_modeleur.materiau_courant, cle, valeur)
 	if cle in ["nom", "texture"]:
 		_redire_les_materiaux()
