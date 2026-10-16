@@ -115,7 +115,9 @@ func _hp_temoins() -> void:
 		await _images(5)
 		var mo = _ecran._modeleur
 		var t = mo.temoin
-		_subdiviser_tout(mo, t)
+		# ⚠ PAS DE SUBDIVISION (mesuré le 16 octobre 2026 : 10 min et 2,6 Go sans finir) — chaque face de bord subdivisée
+		# reporte ses points chez les voisines, qui les re-subdivisent ensuite. Le témoin calculé est déjà une coque fine
+		# (sous-voxels d'un quart de case) : le Smooth y suffit.
 		var bilan := _arrondir_tout(mo, t, int(d["passes"]))
 		print("%s : subdivisé et arrondi — %s (%d ms)" % [d["nom"], bilan, Time.get_ticks_msec() - debut])
 		await _images(2)
@@ -144,6 +146,8 @@ func _arrondir_tout(mo, t, passes: int) -> Dictionary:
 		for c in t.tuiles.keys():
 			mo.activer(int(t.occurrences_de(c)[0]))
 			var force := 0.6
+			if bilan["coups"] % 13 == 0:
+				print("  passe %d, tuile %s" % [p + 1, c])
 			while true:
 				var ok: bool = _coup_lisse(mo, t, force)
 				if ok:
