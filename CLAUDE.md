@@ -409,6 +409,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     (`export_presets.cfg`, 0.9.0.0). ⚠ La version entre dans l'empreinte du témoin calculé (`Projet.empreinte`) : à
     la première ouverture, son lot est retranché une fois ; et l'exe se réinscrit dans Windows (version changée). Un 1.x se lit « fini », ce qu'un accès anticipé
     dit justement ne pas être ; et un 1.1.0 sans 1.0 publié fait demander où est passée la 1.0.
+  - **0.9.2 (Jordan, 16 octobre 2026 : « monte en 0.9.2 et exporte »)** : `config/version` et les propriétés des trois
+    préréglages (0.9.2.0). Les devlogs de cette version montrent les fonctions venues après l'export du 10 octobre.
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
