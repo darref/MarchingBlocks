@@ -6116,12 +6116,17 @@ func _tout_raccourci_a_son_bouton(ed: Control) -> void:
 	ed._compteur_etage.value = 0
 	vue.clic_arme = ""
 	# ⚠ LE MONDE ET LA CAMÉRA SONT CE QUE LES SECTIONS D'AVANT ONT LAISSÉ (16 octobre 2026 : rouge sur main aussi — deux
-	# cases, toutes à l'étage 0) : le test pose sa colonne de quatre cases au-dessus du sol, puis cadre toute la matière (F).
+	# cases, toutes à l'étage 0) : le test pose sa colonne de quatre cases au-dessus du sol et la regarde de près. ⚠ PAS
+	# « cadrer toute la matière » : sur l'exemple (un grand monde), la caméra reculait à 826 cases, hors de portée des rayons.
 	var colonne := {}
 	for y in range(1, 5):
 		colonne[Vector3i(3, y, 3)] = true
 	ed._appliquer({"poser": colonne, "effacer": {}}, "Add")
-	vue.cadrer_toute_la_matiere()
+	vue._cible = Vector3(3.5, 3.0, 3.5)
+	vue._azimut = 0.6
+	vue._elevation = 0.5
+	vue._distance = 14.0
+	vue._caler()
 	var cible := Vector2(-1, -1)
 	var cible_y := 0
 	for gx in range(2, 18):
@@ -6133,6 +6138,19 @@ func _tout_raccourci_a_son_bouton(ed: Control) -> void:
 					and cible.x < 0.0:
 				cible = p
 				cible_y = int(r["case"].y)
+	if cible.x < 0.0:
+		var vus_y := {}
+		var touches := 0
+		for gx in range(2, 18):
+			for gy in range(2, 18):
+				var p2 := Vector2(vue.size.x * gx / 20.0, vue.size.y * gy / 20.0)
+				var r2: Dictionary = Outils.rayon(vue._occupe_visible, vue._camera.project_ray_origin(p2),
+					vue._camera.project_ray_normal(p2), vue.PORTEE, {})
+				if r2["touche"]:
+					touches += 1
+					vus_y[int(r2["case"].y)] = true
+		print("  (« Grid to matter » : %d rayons touchent, étages %s, couche active %d / %d, cible %s, distance %.1f)"
+			% [touches, vus_y.keys(), ed._active, ed._couches.size(), vue._cible, vue._distance])
 	_vrai(cible.x >= 0.0, "de la matière est à l'écran")
 	if cible.x >= 0.0:
 		var cases_avant: int = ed._occupees().size() if ed._occupees() != null else -1
