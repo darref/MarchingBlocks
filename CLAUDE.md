@@ -5178,6 +5178,46 @@ et **None** (rien).
 - ⚠ **PAS TENU EN MAIN** : le ressenti, le coût des particules sur une petite carte graphique (12 000 traits pour
   l'ouragan), et le rendu de chaque temps se jugent à l'œil.
 
+### LE MONDE D'UN CLIENT, DOUZE TÉMOINS À THÈME — DEMANDÉ PAR JORDAN (16 octobre 2026), ÉCRIT LE MÊME JOUR (branche `monde-client`)
+
+« Modéliser et peindre des témoins avec leur thème (plaine, désert, roche, volcan, plage, boue, gravier, rocaille, mur de
+pierre, glace, neige…), avec un niveau de subdivision sweet spot pour qu'un monde tienne sans lagger, et toutes les
+fonctions du soft — variantes, transitions, feuillage —, un monde tel qu'il sera dans le jeu d'un client », puis « ça manque
+de gros chanfreins, c'est trop blocky ». Rien n'est ajouté au logiciel (gel du 7 octobre) : `DEV_TOOLS/forge_temoins.gd`
+mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_monde_client.gd` bâtit et mesure le monde.
+
+- **LA SUBDIVISION PAR LOT — MESURÉ** : subdiviser tuile après tuile en complétant après chacune s'emballait (10 min,
+  2,6 Go). TOUTES les tuiles d'abord, puis UNE complétion : 0 coupe à reporter, 0 absence, 0,6 s (niveau 1), 2,6 s (niveau 2).
+- **LE CHANFREIN FRANC — MESURÉ, PUIS VU À L'IMAGE** : le Laplacien n'arrondit presque rien (15 passes au niveau 1, 30 au
+  niveau 2 : un rayon d'environ 0,2 case — les plats retiennent les arêtes). Chaque sommet est projeté (Newton) sur la surface
+  iso-0,5 du champ TRILINÉAIRE des huit cases de sa tuile (le profil « marching cubes »). ⚠ **LE RACCORD TIENT PAR
+  CONSTRUCTION** : sur un plan de coupe, ce champ ne dépend que des quatre cases du plan, que la tuile d'en face partage, et
+  un sommet de bord n'y glisse que dans le plan. Mesuré : 0 sommet de joint sans partenaire, dans un témoin et entre deux
+  thèmes ; contrôle : deux témoins chanfreinés à 0,85 et 0,5 → 20 104. **0,85 du chemin (PROPOSÉ)** : 1,0 fait une pointe
+  sur chaque case isolée, 0,65 des biseaux secs.
+- **UNE BASE COMMUNE, DES DEDANS PAR THÈME (PROPOSÉ)** : les couches partagent leurs bords (§3) ; la base (subdivisée,
+  chanfreinée) est la même pour les douze, chaque thème ne retouche que le DEDANS (bruit le long de la normale, poids nul sur
+  un plan de coupe), ses deux variantes du sol, de la paroi et de la lèvre aussi (poids 2 : 1 : 1). Deux matériaux par thème
+  (n.y > 0,55 : le sol), les ensembles PBR de Spirit3D projetés en boîte (une répétition par case), copiés dans le projet et
+  ramenés à 1 024².
+- **LE SWEET SPOT : NIVEAU 1 — MESURÉ** (PC, RTX 2060, avec fenêtre, synchro coupée ; île de 19 130 colonnes, ~176 000 cases,
+  12 couches, sans feuillage ; images/s par plan) : niveau 0 (37 triangles par tuile en moyenne) 18 à 125 ; **niveau 1 (151)
+  18 à 93** — presque partout les mêmes images que le niveau 0 ; niveau 2 (605) 9 à 36 — divisé par deux. ⚠ **CE QUI LIMITE
+  N'EST PAS LA GÉOMÉTRIE MAIS LES APPELS DE DESSIN** : ~40 000 dans la vue d'ensemble aux trois niveaux (12 couches × ~58
+  maillages × deux surfaces × les octants des GridMap), 18 images/s même au niveau 0. Le feuillage (545 plants Tripo) coûte
+  de 10 à 30 % selon le plan. **OUVERT** : réduire les appels (moins de couches visibles, un matériau par couche, un rendu
+  lointain cuit, les octants) — à mesurer, pas fait.
+- **LE RELIEF** : une pente d'une case par case n'est qu'un escalier, que le chanfrein ne fond pas (une marche entière est
+  dans l'occupation) — vu à l'image sur la première île. Montagnes et volcan en **corniches de trois cases**, dunes à deux
+  niveaux. Eau : la mer (« transparent »), un lac de montagne qui part en rivière et en cascade, un lac de lave et sa coulée,
+  25 mares de marais ; 20 paires de transitions ; 27 modèles de feuillage.
+- **SUR LE PC** : le projet `C:/Users/jorda/Documents/MarchingBlocks/monde_client/` (photos, `rapport.json`), les mesures
+  `mesure_n0|n1|n2/`, le worktree `D:/MB_wt_monde_client`, la tâche planifiée `MBMondeClient` (lance `C:/Users/jorda/mc.cmd`
+  dans la session de Jordan : un processus lancé par ssh n'a pas de fenêtre). Une construction complète : ~4 min.
+- ⚠ **PAS FAIT** : l'export `.mbworld` du monde vers les greffons ; aucune garde dans les suites (la forge est mesurée par
+  `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
+  (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**
+
 ### LES GRANDS MONDES NE PLANTENT PLUS — DEMANDÉ PAR JORDAN (9 octobre 2026, depuis le jeu Resolve : « règle le problème de MB
 ### qui plante, il ne doit pas planter » ; « je ne veux pas avoir plusieurs sous-maps »), ÉCRIT LE MÊME JOUR
 
