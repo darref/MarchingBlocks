@@ -274,8 +274,8 @@ Début : ____ Fin : ____
   - Geste : fermer l'appli, double-cliquer `untitled.mbproj`.
   - Attendu : MarchingBlocks s'ouvre SUR ce projet.
   - Noté :
-- [ ] ⚠ **« Which world » : My world / Very simple example** (jamais éprouvé dans l'exe)
-  - Geste : atelier World, section « Which world », cocher « Very simple example ».
+- [ ] ⚠ **« Which world » : My world / Example world** (jamais éprouvé dans l'exe)
+  - Geste : atelier World, section « Which world », cocher « Example world ».
   - Attendu : une barre d'attente nommée (l'exemple pèse ~80 Mo, son ouverture prend 6 à 9 s), puis l'exemple : trois
     couches texturées, AUCUN cube rouge, de l'eau. Il s'installe dans `Documents\MarchingBlocks\Example\<date>\`.
     UNE seule des deux cases est cochée (défaut déjà vu : les deux restaient enfoncées).
@@ -285,7 +285,7 @@ Début : ____ Fin : ____
   - Attendu : l'appli rouvre TON monde (untitled), jamais l'exemple ; « Which world » coche « My world ».
   - Noté :
 - [ ] **Retour à l'exemple : tes changements y sont**
-  - Geste : ouvrir l'exemple, poser une case visible, fermer, relancer, rouvrir « Very simple example ».
+  - Geste : ouvrir l'exemple, poser une case visible, fermer, relancer, rouvrir « Example world ».
   - Attendu : la case est toujours là (l'exemple garde tes changements, il n'est jamais écrasé).
   - Noté :
 - [ ] ⚠ **« ✓ Saved » / « ● Saving… » / Ctrl+S**

@@ -400,7 +400,7 @@ func _couches() -> String:
 		+ "untitled 2…), its witnesses beside it; [b]Open[/b] opens one, [b]Save as[/b] puts it where you want; it "
 		+ "keeps saving itself there. [b]Recent[/b], under them, reopens the last projects in one click. "
 		+ "The cache and the settings stay out of sight, in the app data.")
-	l.append("[b]Very simple example[/b], in World, opens a small world made with MarchingBlocks: walk it in Play test, "
+	l.append("[b]Example world[/b], in World, opens a world made with MarchingBlocks — an island, its biomes and the caves under it: walk it in Play test, "
 		+ "open its witnesses, change anything. It lives in its own folder (Documents/MarchingBlocks/Example) and keeps your changes. [b]My world[/b] "
 		+ "takes you back to yours. MarchingBlocks always starts on your world, never on the example.")
 	l.append("The sliced tiles are cached. If the artist saved the .glb again, the layer is sliced "

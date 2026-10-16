@@ -4677,7 +4677,7 @@ func _l_exemple(ed: Control) -> void:
 	var avant: String = ed._projet
 	var bouton: Button = null
 	for b in ed.find_children("*", "Button", true, false):
-		if (b as Button).text == "Very simple example":
+		if (b as Button).text == "Example world":
 			bouton = b
 	_vrai(bouton != null, "World porte le choix « The example » (le seul : plus de bouton à part dans Project)")
 	var double := false

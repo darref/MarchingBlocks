@@ -1116,7 +1116,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var groupe_monde := ButtonGroup.new()
 	for b in [["My world", "Your own world: the last project you opened that is not the example.",
 				_ouvrir_mon_monde],
-			["Very simple example", "A very simple example world that comes with MarchingBlocks, in its own folder. Your changes "
+			["Example world", "An example world that comes with MarchingBlocks — an island, its biomes, its caves — in its own folder. Your changes "
 				+ "to it are kept there.", _ouvrir_l_exemple]]:
 		var choix := CheckBox.new()
 		choix.text = b[0]

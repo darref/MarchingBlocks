@@ -5278,7 +5278,7 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
   **1117 vérifications, 0 échec** (l'exemple s'ouvre, ses 13 couches, aucun cube rouge). ⚠ **DEUX DÉFAUTS DE LA FUMÉE,
   pas de l'appli** : elle lisait les cases de l'archive dans `cases` (un projet de format 2+ les porte en `cases_b64`), et
   laissait l'exemple ouvert pour les sections suivantes, qui passaient tant qu'il était petit (30 rouges sur le monde
-  client) — elle rouvre le projet d'avant. ⚠ Le choix dans World dit encore « Very simple example ».
+  client) — elle rouvre le projet d'avant. Le choix dans World s'appelle désormais **« Example world »** (Jordan, 16 octobre 2026), le manuel aussi.
 - ⚠ **PAS FAIT** : l'export `.mbworld` du monde vers les greffons ; aucune garde dans les suites (la forge est mesurée par
   `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
   (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**
