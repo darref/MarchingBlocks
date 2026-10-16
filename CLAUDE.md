@@ -5271,6 +5271,14 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
   émergée (l'îlot, la côte, la sortie dans la prairie) est en mur de pierre (`_jonction`, couche StoneWall) ; le verre ne
   reste qu'en pleine mer (614 cases, 293 de pierre) et au puits de lumière. `sonde_tunnel_client` : 0 noyée, 0 contact.
   ⚠ Pas vu à l'image ni parcouru au Play test.
+  **L'EXEMPLE** : `~/.marchingblocks/exemple_source.txt` désigne désormais `Documents/MarchingBlocks/monde_client/
+  monde_client.mbproj` (avant : `test/test.mbproj`) — le prochain export emballe le monde client. **MESURÉ** : 77 fichiers,
+  archive de **223 Mo** (252,7 Mo décompressés : le feuillage Spirit3D 133 Mo, dont trois modèles 59 Mo ; les 13 couches
+  ~95 Mo) contre 81 Mo avant — l'exe grossit d'autant (OUVERT, à Jordan). `fumee_appli` sur le PC avec cette archive :
+  **1117 vérifications, 0 échec** (l'exemple s'ouvre, ses 13 couches, aucun cube rouge). ⚠ **DEUX DÉFAUTS DE LA FUMÉE,
+  pas de l'appli** : elle lisait les cases de l'archive dans `cases` (un projet de format 2+ les porte en `cases_b64`), et
+  laissait l'exemple ouvert pour les sections suivantes, qui passaient tant qu'il était petit (30 rouges sur le monde
+  client) — elle rouvre le projet d'avant. ⚠ Le choix dans World dit encore « Very simple example ».
 - ⚠ **PAS FAIT** : l'export `.mbworld` du monde vers les greffons ; aucune garde dans les suites (la forge est mesurée par
   `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
   (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**

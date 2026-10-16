@@ -4674,6 +4674,7 @@ func _l_exemple(ed: Control) -> void:
 	z.open(Exemple.ARCHIVE)
 	var attendu = JSON.parse_string(z.read_file("example.mbproj").get_string_from_utf8())
 	z.close()
+	var avant: String = ed._projet
 	var bouton: Button = null
 	for b in ed.find_children("*", "Button", true, false):
 		if (b as Button).text == "Very simple example":
@@ -4699,7 +4700,10 @@ func _l_exemple(ed: Control) -> void:
 	for i in mini(ed._couches.size(), (attendu["couches"] as Array).size()):
 		var c: Dictionary = attendu["couches"][i]
 		var m: Node = ed._vue.couche(i)
-		var plat: Array = c["cases"]
+		# ⚠ UN PROJET DE FORMAT 2 OU PLUS porte ses cases en binaire (`cases_b64` : les octets d'un PackedInt32Array, x y z,
+		# petit-boutiste) — le monde client, devenu l'exemple le 16 octobre 2026. Décodé ici, sans `Projet`.
+		var plat: Array = Array(Marshalls.base64_to_raw(str(c["cases_b64"])).to_int32_array()) if c.has("cases_b64") \
+			else c["cases"]
 		var siennes := {}
 		for k in range(0, plat.size(), 3):
 			var v := Vector3i(int(plat[k]), int(plat[k + 1]), int(plat[k + 2]))
@@ -4715,6 +4719,14 @@ func _l_exemple(ed: Control) -> void:
 		_vrai((poses > 0 or siennes.is_empty()) and fautes == 0, "« %s » : ses tuiles, sans un cube rouge (%d posées, %d fautes)"
 			% [c["nom"], poses, fautes])
 	_vrai(not ed._rapport.text.contains("missing"), "rien ne manque à l'ouverture")
+	# ⚠ LES SECTIONS SUIVANTES TRAVAILLENT SUR LE PROJET JETABLE (16 octobre 2026) : laissées dans l'exemple, elles
+	# passaient tant qu'il était petit, et rougissaient par trente sur le monde client (27 modèles de feuillage, 543 plants
+	# là où elles en attendent un). On y retourne.
+	await ed._ouvrir(avant)
+	for i in 600:
+		await process_frame
+		if not ed._ouverture:
+			break
 
 
 ## « LA BARRE DE DROITE DÉBORDE À DROITE EN WORLD » (Jordan, 3 octobre 2026) : avec une sélection, la barre passait à
