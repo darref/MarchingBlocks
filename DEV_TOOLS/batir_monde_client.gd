@@ -404,8 +404,8 @@ func _colonne(x: int, z: int) -> void:
 			_mares.append(k)
 	# LE DÉSERT (est) : des dunes douces, et ses mesas de rocaille.
 	if x > 22 and m != "Beach":
-		var dune := sin(x * 0.22 + b * 2.0) * 1.6 + sin(z * 0.17) * 1.2
-		h = MER + 3 + int(round(dune + 1.5))
+		var dune := sin(x * 0.16 + b * 2.0) * 0.9 + sin(z * 0.11) * 0.7
+		h = MER + 3 + (1 if dune > 0.4 else 0)
 		m = "Desert"
 		for c in MESAS:
 			var dm := p.distance_to(c) + b * 3.0
@@ -423,7 +423,9 @@ func _colonne(x: int, z: int) -> void:
 			if dp < pic.w:
 				hm = maxf(hm, pic.z * pow(1.0 - dp / pic.w, 1.25))
 		if hm > 0.5:
-			var hh := MER + 2 + int(round(hm + b * 2.0))
+			# EN CORNICHES : des falaises de trois cases et des replats — une pente d'une case par case n'est qu'un
+			# escalier, que le chanfrein ne fond pas (une marche entière est dans l'occupation, charte §4).
+			var hh := MER + 2 + 3 * int(floor((hm + b * 2.0) / 3.0))
 			if hh > h:
 				h = hh
 				m = "Snow" if h >= 25 else "Rock"
@@ -432,9 +434,14 @@ func _colonne(x: int, z: int) -> void:
 	if dg < 10.0:
 		h = 20
 		m = "Ice"
-	elif dg < 12.0 and h < 22:
-		h = 22
+	elif dg < 11.5:
+		h = 21
 		m = "Snow"
+	elif dg < 22.0:
+		var hs := 21 - 3 * int(ceil((dg - 11.5) / 2.5))
+		if hs > h:
+			h = hs
+			m = "Snow" if hs >= 15 else "Rock"
 	# LE LAC DE MONTAGNE : une cuvette, échancrée au sud.
 	var dl := p.distance_to(Vector2(LAC_MONTAGNE))
 	if dl < 3.5:
@@ -445,10 +452,10 @@ func _colonne(x: int, z: int) -> void:
 		m = "Rock"
 	# LE VOLCAN (ouest) : un cône, un cratère de lave.
 	var dv := p.distance_to(VOLCAN) + b * 2.0
-	if dv < 20.0:
-		var hv := MER + 3 + int(round((1.0 - dv / 20.0) * 24.0))
-		if dv < 4.5:
-			hv = MER + 20
+	if dv < 24.0:
+		var hv := MER + 3 + 3 * int(floor((1.0 - dv / 24.0) * 22.0 / 3.0))
+		if dv < 5.0:
+			hv = MER + 18
 		if hv >= h:
 			h = hv
 			m = "Volcano"
@@ -631,28 +638,48 @@ func _feuillage() -> void:
 
 # ── 3. LES PHOTOS ET LA MESURE ─────────────────────────────────────────────────────────────────────
 
+## Les plans : [nom, thème dont on vise le centre (ou "" : la position donnée), position, azimut, élévation, distance].
+## La cible est posée sur le DESSUS du relief (sinon une caméra fixée à la main finit sous une terrasse — vu).
 const VUES := [
-	["ensemble", Vector3(0, 8, 0), 0.7, 0.75, 150.0],
-	["village", Vector3(0, 11, 9), 0.5, 0.45, 32.0],
-	["volcan", Vector3(-46, 18, 6), 1.2, 0.42, 48.0],
-	["desert", Vector3(40, 10, 8), -0.5, 0.38, 42.0],
-	["montagnes", Vector3(0, 20, -38), 0.3, 0.4, 52.0],
-	["glacier", Vector3(26, 22, -46), -0.9, 0.5, 30.0],
-	["marais", Vector3(-30, 6, 38), 0.9, 0.42, 30.0],
-	["plage", Vector3(8, 6, 58), 0.2, 0.3, 28.0],
-	["foret", Vector3(-14, 10, -6), 0.4, 0.32, 26.0],
-	["au_sol", Vector3(0, 10, 22), 3.14, 0.12, 14.0],
+	["ensemble", "", Vector2(0, 0), 0.7, 0.75, 150.0],
+	["village", "StoneWall", Vector2.ZERO, 0.5, 0.45, 32.0],
+	["volcan", "Volcano", Vector2.ZERO, 1.2, 0.42, 52.0],
+	["desert", "Scree", Vector2.ZERO, -0.5, 0.38, 42.0],
+	["montagnes", "Rock", Vector2.ZERO, 0.3, 0.4, 56.0],
+	["glacier", "Ice", Vector2.ZERO, -0.9, 0.55, 34.0],
+	["marais", "Mud", Vector2.ZERO, 0.9, 0.42, 30.0],
+	["plage", "", Vector2(6, 60), 0.2, 0.3, 26.0],
+	["foret", "Forest", Vector2.ZERO, 0.4, 0.35, 24.0],
+	["au_sol", "", Vector2(0, 30), 0.0, 0.1, 12.0],
 ]
+
+
+## La cible d'un plan : le centre des colonnes du thème (ou la position), sur le dessus du relief.
+func _cible(theme: String, pos: Vector2) -> Vector3:
+	var c := pos
+	if theme != "":
+		var somme := Vector2.ZERO
+		var n := 0
+		for k in _m:
+			if _m[k] == theme:
+				somme += Vector2(k)
+				n += 1
+		if n > 0:
+			c = somme / n
+	var k := Vector2i(int(round(c.x)), int(round(c.y)))
+	return Vector3(c.x + 0.5, float(_h.get(k, MER)) + 1.5, c.y + 0.5)
 
 
 func _mc_photos() -> void:
 	await _ecran._changer_d_atelier("monde")
+	if _h.is_empty():
+		_relief_monde()
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = 0
 	await _images(60)
 	_rapport["vues"] = {}
 	for v in VUES:
-		_poser_camera(v[1], v[2], v[3], v[4])
+		_poser_camera(_cible(v[1], v[2]), v[3], v[4], v[5])
 		await _images(45)
 		var t0 := Time.get_ticks_usec()
 		var prims := 0
