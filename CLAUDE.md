@@ -419,6 +419,12 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     (~290 px de haut rendus à la barre). La légende des formes et le guide partent de `BORD_GAUCHE`. Gardé par
     `fumee_appli` (au bord, la barre juste après, sa largeur gardée, le dernier atelier tient, aucun atelier dans la barre).
     ⚠ Ni vu à l'image ni tenu en main ; à 680 px de haut, les onze tiennent de justesse (11 × 51 px).
+    **EXPORTÉE (16 octobre 2026, sur le PC, `D:/MarchingBlocks/build`)** : 28 suites vertes (`fumee_appli` 1117, avec
+    l'exemple = le monde client), les trois exe de 334,6 Mo (l'exemple pèse : il était à ~175 Mo), chiffrés (0 chaîne
+    sur 7), la sonde « natif=1 licence=1 edition=site|steam|demo version=0.9.3 » et la DLL dans les modules, la clé signée
+    acceptée et la trafiquée refusée, l'installeur `MarchingBlocks-0.9.3-setup.exe` (285 Mo), les `.vdf`. Le zip de la
+    démo : `04_exports/demo/MarchingBlocks_Demo_0.9.3_Windows.zip` (278,6 Mo, contre 132,6 Mo en 0.9.2). ⚠ Aucun des exe
+    n'a été lancé à la main ; le contrat a toujours ses blancs.
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
