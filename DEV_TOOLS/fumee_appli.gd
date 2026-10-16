@@ -79,9 +79,21 @@ func _mener() -> void:
 	_vrai(ed._bouton_supprimer_couche.disabled, "une seule couche : « Delete » est grisé")
 	var atelier_btn: Control = ed._boutons_atelier["witness"]
 	var ancetre := atelier_btn.get_parent()
-	while ancetre != null and not (ancetre is ScrollContainer) and ancetre != ed._gauche:
+	while ancetre != null and not (ancetre is ScrollContainer) and ancetre != ed._rail:
 		ancetre = ancetre.get_parent()
-	_vrai(ancetre == ed._gauche, "les ateliers sont ÉPINGLÉS : aucun défilement au-dessus d'eux")
+	_vrai(ancetre == ed._rail, "les ateliers sont ÉPINGLÉS dans leur bande : aucun défilement au-dessus d'eux")
+	# LA BANDE DES ATELIERS (Jordan, 16 octobre 2026) : à gauche de la barre de gauche, qui commence après elle ; les
+	# onze ateliers y tiennent sans défiler, et elle ne mange pas la barre.
+	_egal(ed._rail.get_global_rect().position.x, ed.get_global_rect().position.x, "la bande des ateliers est au bord gauche")
+	_vrai(absf(ed._gauche.get_global_rect().position.x - ed._rail.get_global_rect().end.x) < 0.5,
+		"la barre de gauche commence juste après elle")
+	_vrai(absf(ed._gauche.size.x - ed.LARGEUR_GAUCHE) < 0.5, "… et garde toute sa largeur (%s)" % ed._gauche.size.x)
+	var dernier: Control = ed._boutons_atelier["jeu_edit"]
+	_vrai(dernier.get_global_rect().end.y <= ed._rail.get_global_rect().end.y + 0.5,
+		"le dernier atelier tient dans la bande (%s ≤ %s)" % [dernier.get_global_rect().end.y, ed._rail.get_global_rect().end.y])
+	_vrai(ed._rail.size.x <= ed.LARGEUR_RAIL + 0.5, "la bande ne s'élargit pas (%s)" % ed._rail.size.x)
+	for cle in ed._boutons_atelier:
+		_vrai(not ed._gauche.is_ancestor_of(ed._boutons_atelier[cle]), "« %s » n'est plus dans la barre de gauche" % cle)
 	# ── Play test : un monde vide est REFUSÉ, et on reste dans World ───────────────────────────────
 	ed._aller_a("jeu")
 	_vrai(ed._atelier == "monde" and ed._vue.personnage == null and ed._rapport.text.contains("empty"),
@@ -2151,7 +2163,7 @@ func _la_bande_du_bas(ed: Control) -> void:
 		return
 	var bas := ed.get_global_rect().end.y
 	_vrai(absf(bande.get_global_rect().end.y - bas) < 1.0, "elle touche le bas de la fenêtre")
-	for p in [ed._gauche, ed._droite]:
+	for p in [ed._rail, ed._gauche, ed._droite]:
 		_vrai(p.get_global_rect().end.y <= bande.get_global_rect().position.y + 0.5,
 			"le panneau %s s'arrête au-dessus d'elle" % p.name)
 
@@ -6004,7 +6016,7 @@ func _le_guide(ed: Control) -> void:
 	var t: String = ed._guide_texte.get_parsed_text()
 	_vrai(t.contains("add matter") and t.contains("Alt ▸") and t.contains("brush size") and t.contains("Ctrl ▸")
 		and t.contains("move the grid"), "Add, au repos : poser, et les branches Alt (taille) et Ctrl (la grille)")
-	_vrai(ed._guide.position.x >= ed.LARGEUR_GAUCHE, "… en haut à gauche de la VUE, à droite de la barre de gauche")
+	_vrai(ed._guide.position.x >= ed.BORD_GAUCHE, "… en haut à gauche de la VUE, à droite de la barre de gauche")
 	# Une sélection sous Select : les trois branches parlent d'elle.
 	ed._choisir_outil("selectionner")
 	vue.regler_selection({Vector3i(300, 0, 300): true})
@@ -6317,7 +6329,7 @@ func _les_infos_de_la_vue(ed: Control) -> void:
 	_vrai(t.contains("Layer") and t.contains("Floor  y = 0") and t.contains("Tool  Add"),
 		"il dit la couche, l'étage (y = 0) et l'outil (« %s »)" % t.replace("\n", " / "))
 	var droite: Control = ed._droite
-	_vrai(infos.position.x + infos.size.x <= droite.position.x + 0.5 and infos.position.x > ed.LARGEUR_GAUCHE,
+	_vrai(infos.position.x + infos.size.x <= droite.position.x + 0.5 and infos.position.x > ed.BORD_GAUCHE,
 		"en haut à DROITE de la vue, à gauche de la barre de droite (%s, barre à %s)" % [infos.position, droite.position.x])
 	# L'ÉTAGE EN TÊTE DU GUIDE, et PgUp le change.
 	_vrai(ed._guide_texte.get_parsed_text().begins_with("Floor y = 0"), "le guide commence par l'étage : « Floor y = 0 »")

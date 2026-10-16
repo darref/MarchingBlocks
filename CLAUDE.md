@@ -411,6 +411,14 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     dit justement ne pas être ; et un 1.1.0 sans 1.0 publié fait demander où est passée la 1.0.
   - **0.9.2 (Jordan, 16 octobre 2026 : « monte en 0.9.2 et exporte »)** : `config/version` et les propriétés des trois
     préréglages (0.9.2.0). Les devlogs de cette version montrent les fonctions venues après l'export du 10 octobre.
+  - **0.9.3 (Jordan, 16 octobre 2026 : « passer à la 0.9.3 après avoir mis tous les boutons d'atelier dans une bande à
+    gauche de la barre de gauche, afin de libérer de l'espace pour la barre de gauche elle-même, qui est trop remplie »)** :
+    `config/version` et les trois préréglages (0.9.3.0). **LA BANDE DES ATELIERS** (`editor._batir_rail`, `LARGEUR_RAIL`
+    76) : les onze ateliers, icône au-dessus du nom, l'un sous l'autre dans l'ordre d'avant, épinglés, au bord de la
+    fenêtre ; la barre de gauche commence après elle (300 px gardés), sans le titre WORKSPACE ni la grille de deux
+    (~290 px de haut rendus à la barre). La légende des formes et le guide partent de `BORD_GAUCHE`. Gardé par
+    `fumee_appli` (au bord, la barre juste après, sa largeur gardée, le dernier atelier tient, aucun atelier dans la barre).
+    ⚠ Ni vu à l'image ni tenu en main ; à 680 px de haut, les onze tiennent de justesse (11 × 51 px).
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce
@@ -5244,6 +5252,25 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
   l'intro garde le geste (×2) et le basculement, pas l'attente. ⚠ **FENÊTRE MAXIMISÉE = 1 038 px : L'ENREGISTREUR (1 080) ROGNE
   ~40 px DE CHAQUE CÔTÉ DE L'UI** — l'intro se tourne en `--fullscreen`. Montage : `01_scripts/intro_gif.py` (`avec_intro`,
   l'icône Tripo de la barre de titre masquée).
+- **LES GROTTES SOUS L'ÎLE, ET LE MONDE CLIENT DEVIENT L'EXEMPLE — DEMANDÉ PAR JORDAN (16 octobre 2026 : « prendre le monde
+  client comme exemple fourni dans le soft à la place de celui qui est moche actuellement, en lui ajoutant un réseau de
+  galeries et de grandes salles de toutes tailles et formes originales en dessous de l'île »), ÉCRIT LE MÊME JOUR**
+  (`batir_monde_client.gd`, `_les_grottes`). Huit salles, chacune sa forme et sa roche (la paroi prend le thème de la salle
+  sur une case d'épaisseur — un sommet de paroi n'a que du creux et cette couronne) : une **cathédrale** (pilier central,
+  stalactites ; Rock), une **salle hypostyle** (super-ellipse, piliers tous les cinq ; StoneWall), un **anneau** (un tore
+  autour d'un noyau ; Desert), un **puits en spirale** (rampe hélicoïdale de douze cases par tour, pilier ; Rock), une
+  **lentille** plate au sol bosselé (Mud), une **géode** hérissée de cristaux (Ice), une **chambre de lave** (Volcano),
+  une **salle des arches** (trois arches de pierre ; Scree) ; dix galeries qui serpentent (pente ≤ 1 pour 2). On y entre par
+  un **gouffre** dans la prairie, une **rampe** qui monte au désert, et la salle du tunnel de verre. Sous le niveau de la mer :
+  les colonnes descendent de trois cases sous le creux, aucun contact par une arête (une case de grotte rebouchée, jamais
+  du verre), les poches que rien n'atteint sont rebouchées. **MESURÉ** (`DEV_TOOLS/sonde_grottes_client.gd`, recompté hors
+  du bâtisseur) : 15 993 cases creusées, 0 noyée par la mer, 0 contact par une arête, 0 case non atteinte depuis le ciel du
+  gouffre, la salle du tunnel atteinte ; ~267 000 cases pleines.
+  **LA JONCTION EN PIERRE (Jordan, le même jour : « la jonction extérieur intérieur en autre chose que du verre afin qu'on
+  ne voie pas le décor à travers le verre, sous la map »)** : la coque du tube à moins de quatre colonnes d'une terre
+  émergée (l'îlot, la côte, la sortie dans la prairie) est en mur de pierre (`_jonction`, couche StoneWall) ; le verre ne
+  reste qu'en pleine mer (614 cases, 293 de pierre) et au puits de lumière. `sonde_tunnel_client` : 0 noyée, 0 contact.
+  ⚠ Pas vu à l'image ni parcouru au Play test.
 - ⚠ **PAS FAIT** : l'export `.mbworld` du monde vers les greffons ; aucune garde dans les suites (la forge est mesurée par
   `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
   (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**

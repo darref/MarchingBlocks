@@ -334,7 +334,11 @@ var _mares: Array = []
 var _bas := {}     # Vector2i → bas de la colonne (absent : 0)
 var _air := {}     # Vector3i → case creusée (le tunnel, la salle)
 var _verre := {}   # Vector3i → case de verre (la couche « Glass »)
+var _jonction := {}   # Vector3i → coque du tube en PIERRE (« StoneWall ») là où elle borde la terre (pas du verre)
 var _axe_tunnel: Array = []   # l'axe du tunnel, points au centre des cases (Vector3)
+var _grotte := {}       # Vector3i → thème du creux (les grottes ; ces cases sont aussi dans `_air`)
+var _theme_case := {}   # Vector3i → thème d'une case PLEINE qui borde une grotte (sa paroi), à la place de celui de la colonne
+var _trou_ciel := {}    # Vector2i → colonne dont le dessus est ouvert sur une grotte (le gouffre, la rampe) : pas de plant
 
 ## LE TUNNEL DE VERRE (16 octobre 2026, Jordan : « un tunnel commençant dehors, qui s'enfonce dans la mer puis dans le
 ## sol, traverse une grande salle et ressort dans l'île ») : il part d'un îlot au sud, plonge, file sous la mer dans un
@@ -360,9 +364,11 @@ func _mc_monde() -> void:
 	for k in _h:
 		for y in range(int(_bas.get(k, 0)), int(_h[k]) + 1):
 			var c := Vector3i(k.x, y, k.y)
-			if not _air.has(c) and not _verre.has(c):
-				par[_m[k]][c] = true
+			if not _air.has(c) and not _verre.has(c) and not _jonction.has(c):
+				par[_theme_case.get(c, _m[k])][c] = true
 	par["Glass"] = _verre.duplicate()
+	for c in _jonction:
+		par["StoneWall"][c] = true
 	# Quatre piliers de pierre dans la salle, du sol au plafond, de part et d'autre du passage.
 	for px in [TUNNEL_X - 6, TUNNEL_X + 5]:
 		for pz in [SALLE[0].z + 2, SALLE[1].z - 3]:
@@ -411,6 +417,7 @@ func _relief_monde() -> void:
 	_le_fond_marin()
 	_sans_damier()
 	_le_tunnel()
+	_les_grottes()
 
 
 func _colonne(x: int, z: int) -> void:
@@ -573,7 +580,7 @@ func _plein_terrain(c: Vector3i) -> bool:
 
 
 func _plein(c: Vector3i) -> bool:
-	return _verre.has(c) or _plein_terrain(c)
+	return _verre.has(c) or _jonction.has(c) or _plein_terrain(c)
 
 
 func _dans_la_salle(c: Vector3i) -> bool:
@@ -637,22 +644,371 @@ func _le_tunnel() -> void:
 					_verre.erase(c)
 				elif d <= 2.9 and not _air.has(c) and not _plein_terrain(c):
 					_verre[c] = true
+	# LA JONCTION EN PIERRE (Jordan, 16 octobre 2026 : « la jonction extérieur intérieur en autre chose que du verre, afin
+	# qu'on ne voie pas le décor à travers le verre, sous la map ») : la coque du tube qui n'est pas en pleine mer — à
+	# moins de quatre colonnes d'une terre émergée (l'îlot, la côte, la prairie de la sortie) — est en mur de pierre.
+	# Le verre ne reste que là où le tube file sous la mer, loin des terres.
+	for c in _verre.keys():
+		if _dans_la_salle_ou_sa_coque(c):
+			continue
+		var pres_de_la_terre := false
+		for dx in range(-4, 5):
+			for dz in range(-4, 5):
+				if int(_h.get(Vector2i(c.x + dx, c.z + dz), -99)) >= MER:
+					pres_de_la_terre = true
+					break
+			if pres_de_la_terre:
+				break
+		if pres_de_la_terre:
+			_verre.erase(c)
+			_jonction[c] = true
 	# Le puits de lumière : la roche au-dessus de la salle devient du verre, jusqu'à la prairie.
 	for cx in range(PUITS[0].x, PUITS[1].x + 1):
 		for cz in range(PUITS[0].y, PUITS[1].y + 1):
 			for cy in range(SALLE[1].y + 1, int(_h.get(Vector2i(cx, cz), 0)) + 1):
 				_verre[Vector3i(cx, cy, cz)] = true
 	var reparees := _sans_contact_autour(lo - Vector3i(4, 4, 4), hi + Vector3i(4, 4, 4))
+	# (un vide comblé contre un contact par une arête, près des terres, est de la pierre lui aussi)
+	for c in _verre.keys():
+		if not _dans_la_salle_ou_sa_coque(c) and _jonction_voisine(c):
+			_verre.erase(c)
+			_jonction[c] = true
 	reparees += _sans_contact_autour(SALLE[0] - Vector3i(3, 3, 3), Vector3i(SALLE[1].x, 16, SALLE[1].z) + Vector3i(3, 3, 3))
-	print("tunnel : %d points d'axe, %d cases creusées, %d de verre, %d ajoutées contre les contacts par une arête, sortie en z = %d"
-		% [_axe_tunnel.size(), _air.size(), _verre.size(), reparees, z])
-	_rapport["tunnel"] = {"creusees": _air.size(), "verre": _verre.size(), "reparees": reparees,
+	print("tunnel : %d points d'axe, %d cases creusées, %d de verre, %d de pierre à la jonction, %d ajoutées contre les contacts par une arête, sortie en z = %d"
+		% [_axe_tunnel.size(), _air.size(), _verre.size(), _jonction.size(), reparees, z])
+	_rapport["tunnel"] = {"creusees": _air.size(), "verre": _verre.size(), "jonction": _jonction.size(), "reparees": reparees,
 		"chemin": _axe_tunnel.map(func(p: Vector3) -> Array: return [p.x, p.y, p.z])}
 	var f := FileAccess.open(_dossier_mc.path_join("tunnel.json"), FileAccess.WRITE)
 	if f != null:
 		f.store_string(JSON.stringify({"chemin": _rapport["tunnel"]["chemin"], "salle": [[SALLE[0].x, SALLE[0].y,
 			SALLE[0].z], [SALLE[1].x, SALLE[1].y, SALLE[1].z]], "puits": [[PUITS[0].x, PUITS[0].y], [PUITS[1].x, PUITS[1].y]]}, "\t"))
 		f.close()
+
+# ── LES GROTTES SOUS L'ÎLE ──────────────────────────────────────────────────────────────────────────
+## Demandé par Jordan (16 octobre 2026) : « le monde client comme exemple fourni dans le soft, en lui ajoutant un réseau
+## de galeries et de grandes salles de toutes tailles et formes originales en dessous de l'île ». Huit salles, chacune sa
+## forme et sa roche (la paroi prend le thème de la salle sur une case d'épaisseur : un sommet de la paroi n'a que des
+## cases du creux et de cette couronne), reliées par des galeries qui serpentent (pente ≤ 1 pour 2, à pied) ; on y entre
+## par un gouffre dans la prairie, par une rampe qui descend du désert, et par la salle du tunnel de verre.
+## Tout est SOUS LE NIVEAU DE LA MER : la coque est fermée (colonnes approfondies autour du creux, aucun contact par une
+## arête), sinon la mer s'y engouffrerait. Jamais à moins de trois cases du dessus (sauf le gouffre et la rampe), ni à
+## moins de 3,5 de l'axe du tunnel.
+const GROTTE_SALLES := [
+	# [nom, forme, centre, rayons / taille, thème de la paroi]
+	["cathedrale", "cathedrale", Vector3(-22, -6, 8), Vector3(10, 7, 9), "Rock"],
+	["hypostyle", "hypostyle", Vector3(2, -6, -12), Vector3(11, 2.5, 7), "StoneWall"],
+	["anneau", "tore", Vector3(30, -6, 0), Vector3(9, 2.6, 0), "Desert"],
+	["spirale", "spirale", Vector3(-6, -10, 22), Vector3(6.5, 8, 12), "Rock"],
+	["lentille", "lentille", Vector3(-10, -15, 42), Vector3(14, 3.5, 11), "Mud"],
+	["geode", "geode", Vector3(36, -12, -28), Vector3(7, 7, 7), "Ice"],
+	["chambre_de_lave", "ellipsoide", Vector3(-42, -9, 8), Vector3(7, 6, 9), "Volcano"],
+	["arches", "arches", Vector3(-12, -12, -30), Vector3(13, 6, 9), "Scree"],
+]
+## Les galeries : l'axe passe à 1,5 au-dessus du sol (le creux va de l'axe − rayon à l'axe + rayon).
+const GROTTE_GALERIES := [
+	[Vector3(4, -3.5, 44), Vector3(-1, -3.5, 36), Vector3(-6, -4.5, 29)],          # salle du tunnel → spirale (haut)
+	[Vector3(-6, -16.5, 22), Vector3(-12, -15, 16), Vector3(-18, -11.5, 11)],      # spirale (bas) → cathédrale
+	[Vector3(-6, -16.5, 22), Vector3(-7, -16.5, 32)],                              # spirale (bas) → lentille
+	[Vector3(-26, -11.5, 6), Vector3(-31, -12, 9), Vector3(-37, -12.5, 8)],        # cathédrale → chambre de lave
+	[Vector3(-20, -11.5, 2), Vector3(-14, -9, -4), Vector3(-6, -6.5, -9)],         # cathédrale → hypostyle
+	[Vector3(-4, -6.5, -17), Vector3(2, -8.5, -24), Vector3(-2, -11, -29)],        # hypostyle → arches
+	[Vector3(12, -6.5, -8), Vector3(17, -6.5, -4), Vector3(22, -6.5, -2)],         # hypostyle → anneau
+	[Vector3(33, -6.5, -8), Vector3(35, -8.5, -16), Vector3(36, -12, -23)],        # anneau → géode
+	[Vector3(0, -13, -31), Vector3(14, -14, -35), Vector3(30, -15, -30)],          # arches → géode (la boucle)
+]
+const GROTTE_GOUFFRE := Vector3(-20, 15, 3.2)    # x, z, rayon : un gouffre de la prairie dans la cathédrale
+const GROTTE_RAMPE := Vector3(30, -6.5, 9)        # le départ de la rampe, sur l'anneau ; elle monte vers le sud
+
+
+func _les_grottes() -> void:
+	var t0 := Time.get_ticks_msec()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242
+	var bruit := FastNoiseLite.new()
+	bruit.seed = 99
+	bruit.frequency = 0.12
+	var creux := {}   # Vector3i → thème
+	var plein := {}   # Vector3i → vrai : gardé plein dans une salle (pilier, arche, rampe, cristal)
+	for g in GROTTE_GALERIES:
+		_galerie(g, creux, bruit, "Rock")
+	for sa in GROTTE_SALLES:
+		_salle(sa, creux, plein, bruit, rng)
+	# Le gouffre : de la cathédrale jusqu'au ciel.
+	var gx := GROTTE_GOUFFRE
+	for x in range(int(gx.x - gx.z) - 1, int(gx.x + gx.z) + 2):
+		for z in range(int(gx.y - gx.z) - 1, int(gx.y + gx.z) + 2):
+			var k := Vector2i(x, z)
+			var rr := gx.z + bruit.get_noise_2d(x * 3.0, z * 3.0) * 0.8
+			if not _h.has(k) or Vector2(x + 0.5, z + 0.5).distance_to(Vector2(gx.x, gx.y)) > rr:
+				continue
+			_trou_ciel[k] = true
+			for y in range(-6, int(_h[k]) + 1):
+				creux[Vector3i(x, y, z)] = "Rock"
+	# La rampe : de l'anneau vers le sud, une case de haut pour deux de long, jusqu'au jour.
+	var pts := [GROTTE_RAMPE]
+	var p: Vector3 = GROTTE_RAMPE
+	while p.z < 70:
+		p += Vector3(0, 1, 2)
+		pts.append(p)
+		var k := Vector2i(floori(p.x), floori(p.z))
+		if p.y - 1.5 >= int(_h.get(k, -99)) + 1:
+			break
+	_galerie(pts, creux, bruit, "Rock", true)
+	# Le creux pris : jamais dans le tube, jamais hors de l'île.
+	var pris := 0
+	for c in creux:
+		var k := Vector2i(c.x, c.z)
+		if not _h.has(k) or plein.has(c):
+			continue
+		if _distance_a_l_axe(Vector3(c) + Vector3(0.5, 0.5, 0.5)) < 3.5:
+			continue
+		_air[c] = true
+		_verre.erase(c)
+		_jonction.erase(c)
+		_grotte[c] = creux[c]
+		pris += 1
+	var poches := _reboucher_les_poches()
+	# Les colonnes autour du creux descendent sous lui : la coque est fermée par en dessous et sur les côtés.
+	var bas_du_creux := {}
+	for c in _grotte:
+		var k := Vector2i(c.x, c.z)
+		bas_du_creux[k] = mini(int(bas_du_creux.get(k, c.y)), c.y)
+	for k in bas_du_creux:
+		for dx in range(-3, 4):
+			for dz in range(-3, 4):
+				var q := Vector2i(k.x + dx, k.y + dz)
+				if _h.has(q):
+					_bas[q] = mini(int(_bas.get(q, 0)), int(bas_du_creux[k]) - 3)
+	var reparees := _sans_contact_des_grottes()
+	poches += _reboucher_les_poches()
+	reparees += _sans_contact_des_grottes()
+	# La paroi : la couronne d'une case autour du creux prend le thème de la salle (pas les trois cases du dessus).
+	for c in _grotte:
+		for dx in range(-1, 2):
+			for dy in range(-1, 2):
+				for dz in range(-1, 2):
+					var q := Vector3i(c.x + dx, c.y + dy, c.z + dz)
+					if _grotte.has(q) or not _plein_terrain(q) or q.y > int(_h[Vector2i(q.x, q.z)]) - 2:
+						continue
+					var deja: String = _theme_case.get(q, "")
+					if deja == "" or deja == "Rock":
+						_theme_case[q] = _grotte[c]
+	print("grottes : %d salles, %d galeries, %d cases creusées, %d rebouchées contre les contacts par une arête, %d en poches isolées, %d de paroi (%d ms)"
+		% [GROTTE_SALLES.size(), GROTTE_GALERIES.size() + 1, _grotte.size(), reparees, poches, _theme_case.size(),
+		Time.get_ticks_msec() - t0])
+	_rapport["grottes"] = {"salles": GROTTE_SALLES.map(func(sa: Array) -> String: return sa[0]),
+		"creusees": _grotte.size(), "rebouchees": reparees, "poches": poches, "paroi": _theme_case.size()}
+
+
+## Les POCHES : un morceau de creux qui ne rejoint ni le ciel ni la salle du tunnel par le vide (un reste de galerie coupé
+## par un pilier, un trou entre deux cristaux) est rebouché — on ne livre pas de vide qu'aucun joueur n'atteindra.
+func _reboucher_les_poches() -> int:
+	var relie := {}
+	var pile: Array = []
+	for c in _grotte:
+		var k := Vector2i(c.x, c.z)
+		if _trou_ciel.has(k) or c.y >= int(_h.get(k, -99)) or (_air.has(c) and not _grotte.has(c)):
+			pile.append(c)
+		for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+			var q: Vector3i = c + d
+			if not _grotte.has(q) and not _plein(q):
+				pile.append(c)   # elle touche un vide qui n'est pas de la grotte : le tunnel, le ciel
+	while not pile.is_empty():
+		var c: Vector3i = pile.pop_back()
+		if relie.has(c) or not _grotte.has(c):
+			continue
+		relie[c] = true
+		for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+			pile.append(c + d)
+	var n := 0
+	for c in _grotte.keys():
+		if not relie.has(c):
+			_grotte.erase(c)
+			_air.erase(c)
+			n += 1
+	return n
+
+
+## Une galerie : l'axe serpente un peu (un bruit de côté), le rayon respire entre 1,6 et 2,3, le creux est un peu plus
+## large que haut (un sol à peu près plat). `ouvert` : elle a le droit de percer le dessus (la rampe).
+func _galerie(points: Array, creux: Dictionary, bruit: FastNoiseLite, theme: String, ouvert := false) -> void:
+	for i in points.size() - 1:
+		var a: Vector3 = points[i]
+		var b: Vector3 = points[i + 1]
+		var n := maxi(int(a.distance_to(b) * 2.0), 1)
+		var cote := Vector3(-(b - a).z, 0, (b - a).x).normalized()
+		for j in n + 1:
+			var t := float(j) / n
+			var q := a.lerp(b, t)
+			# Le serpentement s'éteint aux bouts (les galeries se raccordent pile à leurs salles).
+			var s := sin(t * PI)
+			q += cote * bruit.get_noise_3d(q.x, q.y, q.z) * 2.2 * s
+			var rayon := 1.95 + bruit.get_noise_3d(q.z * 2.0, q.x * 2.0, 7.0) * 0.35
+			_creuser_boule(q, rayon, creux, theme, ouvert)
+
+
+func _creuser_boule(q: Vector3, rayon: float, creux: Dictionary, theme: String, ouvert: bool) -> void:
+	for x in range(floori(q.x - rayon - 1), ceili(q.x + rayon + 1)):
+		for y in range(floori(q.y - rayon), ceili(q.y + rayon + 1)):
+			for z in range(floori(q.z - rayon - 1), ceili(q.z + rayon + 1)):
+				var d := Vector3(x + 0.5 - q.x, (y + 0.5 - q.y) * 1.25, z + 0.5 - q.z)
+				if d.length() > rayon:
+					continue
+				var c := Vector3i(x, y, z)
+				if not ouvert and y > int(_h.get(Vector2i(x, z), -99)) - 3:
+					continue
+				if not creux.has(c):
+					creux[c] = theme
+
+
+## Une salle : sa forme, son thème ; ce qu'elle garde plein (piliers, arches, rampe, cristaux) va dans `plein`.
+func _salle(sa: Array, creux: Dictionary, plein: Dictionary, bruit: FastNoiseLite, rng: RandomNumberGenerator) -> void:
+	var forme: String = sa[1]
+	var o: Vector3 = sa[2]
+	var r: Vector3 = sa[3]
+	var theme: String = sa[4]
+	var etendue := Vector3(r.x, r.y, r.z)
+	if forme == "tore":
+		etendue = Vector3(r.x + r.y + 1, r.y + 1, r.x + r.y + 1)
+	elif forme == "spirale":
+		etendue = Vector3(r.x + 1, r.y, r.x + 1)
+	var cristaux: Array = []
+	if forme == "geode":
+		for i in 26:
+			var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
+			cristaux.append([o + dir * r.x, -dir, rng.randf_range(2.5, 4.5)])
+	var stalactites: Array = []
+	if forme == "cathedrale":
+		for i in 14:
+			var ang := rng.randf() * TAU
+			var rad := rng.randf_range(2.5, 7.5)
+			stalactites.append([Vector2(o.x + cos(ang) * rad, o.z + sin(ang) * rad), rng.randf_range(2.0, 4.5)])
+	for x in range(floori(o.x - etendue.x) - 1, ceili(o.x + etendue.x) + 2):
+		for y in range(floori(o.y - etendue.y) - 1, ceili(o.y + etendue.y) + 2):
+			for z in range(floori(o.z - etendue.z) - 1, ceili(o.z + etendue.z) + 2):
+				var c := Vector3i(x, y, z)
+				var p := Vector3(x + 0.5, y + 0.5, z + 0.5)
+				var n := bruit.get_noise_3d(p.x, p.y, p.z)
+				var d := p - o
+				var dedans := false
+				var garde := false
+				match forme:
+					"ellipsoide", "geode", "cathedrale", "arches":
+						dedans = (d / r).length() <= 1.0 + n * 0.18
+					"lentille":
+						# Une lentille plate, au sol bosselé.
+						var e := Vector3(d.x / r.x, d.y / r.y, d.z / r.z)
+						dedans = e.length() <= 1.0 + n * 0.2 and d.y > -r.y + 1.0 + maxf(n, 0.0) * 2.0
+					"hypostyle":
+						# Un plan en super-ellipse, plafond plat, des piliers carrés tous les cinq.
+						var sx := absf(d.x) / r.x
+						var sz := absf(d.z) / r.z
+						dedans = pow(sx, 4) + pow(sz, 4) <= 1.0 and d.y >= -r.y and d.y < r.y
+						garde = dedans and posmod(x - int(o.x) + 1, 5) < 2 and posmod(z - int(o.z) + 1, 5) < 2 \
+							and pow(sx, 4) + pow(sz, 4) < 0.8
+					"tore":
+						var rh := Vector2(d.x, d.z).length() - r.x
+						dedans = Vector2(rh, d.y).length() <= r.y + n * 0.4
+					"spirale":
+						# Un puits rond, un pilier au centre, une rampe hélicoïdale contre la paroi : douze cases par tour.
+						var rad := Vector2(d.x, d.z).length()
+						dedans = rad <= r.x + n * 0.5 and absf(d.y) <= r.y
+						if dedans and rad <= 1.6:
+							garde = true
+						elif dedans and rad >= 3.2:
+							var ang := fposmod(atan2(d.z, d.x), TAU)
+							var hy := (o.y - r.y) + ang / TAU * r.z
+							var e := fposmod(p.y - hy, r.z)
+							garde = e > r.z - 1.0 and p.y > o.y - r.y + 0.5
+				if forme == "cathedrale" and dedans:
+					# Le pilier du milieu, du sol à la voûte, et des stalactites qui pendent de la voûte.
+					if Vector2(d.x, d.z).length() <= 1.7 + n:
+						garde = true
+					for st in stalactites:
+						var hz: float = (o.y + r.y * 0.75) - p.y
+						var rs: float = 0.9 * (1.0 - hz / float(st[1]))
+						if hz >= 0.0 and hz <= st[1] and Vector2(p.x, p.z).distance_to(st[0]) <= rs + 0.3:
+							garde = true
+				if forme == "arches" and dedans:
+					# Trois arches de pierre qui traversent la salle d'est en ouest.
+					for i in 3:
+						var az := o.z - 5.0 + i * 5.0
+						var ay := o.y + 2.0 - pow(d.x / r.x, 2) * 5.0 - i * 1.0
+						if Vector2(p.y - ay, p.z - az).length() <= 1.15:
+							garde = true
+				if forme == "geode" and dedans:
+					for cr in cristaux:
+						var base: Vector3 = cr[0]
+						var dir: Vector3 = cr[1]
+						var t := (p - base).dot(dir)
+						if t >= 0.0 and t <= cr[2] and (p - base - dir * t).length() <= 1.1 * (1.0 - t / cr[2]) + 0.35:
+							garde = true
+				if not dedans:
+					continue
+				if y > int(_h.get(Vector2i(x, z), -99)) - 3:
+					continue
+				if garde:
+					plein[c] = true
+					creux.erase(c)
+				else:
+					creux[c] = theme
+
+
+## Aucun contact par une arête autour des grottes (charte §2) : dans un carré de quatre cases à deux pleines en
+## diagonale, une des deux vides de la grotte est REBOUCHÉE (de la roche, pas du verre : on est sous terre).
+func _sans_contact_des_grottes() -> int:
+	var plans := [[Vector3i(1, 0, 0), Vector3i(0, 1, 0)], [Vector3i(1, 0, 0), Vector3i(0, 0, 1)],
+		[Vector3i(0, 1, 0), Vector3i(0, 0, 1)]]
+	var a_voir := {}
+	for c in _grotte:
+		for pl in plans:
+			for u in [Vector3i.ZERO, -pl[0]]:
+				for v in [Vector3i.ZERO, -pl[1]]:
+					a_voir[[c + u + v, pl]] = true
+	var total := 0
+	for tour in 40:
+		var suivants := {}
+		for cle in a_voir:
+			var a: Vector3i = cle[0]
+			var pl: Array = cle[1]
+			var b: Vector3i = a + pl[0]
+			var d: Vector3i = a + pl[1]
+			var e: Vector3i = a + pl[0] + pl[1]
+			var pa := _plein(a)
+			if pa != _plein(e) or _plein(b) != _plein(d) or pa == _plein(b):
+				continue
+			var vides: Array = [b, d] if pa else [a, e]
+			var choix := Vector3i(1 << 20, 0, 0)
+			for vv in vides:
+				if _grotte.has(vv):
+					choix = vv
+					break
+			if choix.x == 1 << 20:
+				continue
+			_grotte.erase(choix)
+			_air.erase(choix)
+			_bas[Vector2i(choix.x, choix.z)] = mini(int(_bas.get(Vector2i(choix.x, choix.z), 0)), choix.y)
+			total += 1
+			for pl2 in plans:
+				for u in [Vector3i.ZERO, -pl2[0]]:
+					for v in [Vector3i.ZERO, -pl2[1]]:
+						suivants[[choix + u + v, pl2]] = true
+		if suivants.is_empty():
+			break
+		a_voir = suivants
+	return total
+
+
+func _dans_la_salle_ou_sa_coque(c: Vector3i) -> bool:
+	return c.x >= SALLE[0].x - 1 and c.x <= SALLE[1].x + 1 and c.y >= SALLE[0].y - 1 and c.z >= SALLE[0].z - 1 \
+		and c.z <= SALLE[1].z + 1
+
+
+func _jonction_voisine(c: Vector3i) -> bool:
+	for d in [Vector3i(1, 0, 0), Vector3i(-1, 0, 0), Vector3i(0, 1, 0), Vector3i(0, -1, 0), Vector3i(0, 0, 1), Vector3i(0, 0, -1)]:
+		if _jonction.has(c + d):
+			return true
+	return false
 
 
 ## Aucun contact par une arête dans une boîte (charte §2) : dans chaque carré de quatre cases des trois plans, deux pleines
@@ -807,7 +1163,7 @@ func _feuillage() -> void:
 				if rng.randf() > float(d[2]) or int(_h[k]) <= MER:
 					continue
 				# Rien sur l'îlot du tunnel : un plant y tiendrait sur le verre, ou flotterait au-dessus du creux.
-				if Vector2(k).distance_to(ILOT) < ILOT_RAYON + 1.5:
+				if Vector2(k).distance_to(ILOT) < ILOT_RAYON + 1.5 or _trou_ciel.has(k):
 					continue
 				var dessus := Vector3(k.x + 0.5, int(_h[k]) + 1.0, k.y + 0.5)
 				_poser_camera(dessus, 0.0, 1.45, 18.0)
@@ -891,7 +1247,14 @@ func _mc_photos() -> void:
 	for v in [["tunnel_entree", Vector3(x + 7, 13, 126), Vector3(x, 8.5, 112)],
 			["tunnel_sous_la_mer", Vector3(x, TUBE_Y + 0.6, 94), Vector3(x + 2.5, TUBE_Y + 1.6, 84)],
 			["tunnel_salle", Vector3(x - 6, 1.5, SALLE[1].z - 1.0), Vector3(x + 2, -3.0, SALLE[0].z + 3.0)],
-			["tunnel_sortie", Vector3(x + 9, 22, (_axe_tunnel.back() as Vector3).z - 12), _axe_tunnel.back()]]:
+			["tunnel_sortie", Vector3(x + 9, 22, (_axe_tunnel.back() as Vector3).z - 12), _axe_tunnel.back()],
+			["grotte_cathedrale", Vector3(-28, -7, 14), Vector3(-20, -9, 4)],
+			["grotte_hypostyle", Vector3(-6, -6, -7), Vector3(8, -7, -16)],
+			["grotte_spirale", Vector3(-6, -3, 22), Vector3(-3, -15, 20)],
+			["grotte_geode", Vector3(33, -13, -24), Vector3(38, -12, -31)],
+			["grotte_arches", Vector3(-22, -11, -27), Vector3(-4, -12, -30)],
+			["grotte_anneau", Vector3(22, -6, -1), Vector3(29, -6, -9)],
+			["grotte_gouffre", Vector3(-28, 16, 22), Vector3(-20, 0, 15)]]:
 		_poser_oeil(v[1], v[2])
 		await _images(45)
 		_photo(v[0])

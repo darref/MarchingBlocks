@@ -72,6 +72,12 @@ const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 const REGLAGES := "user://reglages.cfg"
 
 const LARGEUR_GAUCHE := 300
+## LA BANDE DES ATELIERS (Jordan, 16 octobre 2026 : « tous les boutons d'atelier dans une bande à gauche de la barre de
+## gauche, afin de libérer de l'espace pour la barre de gauche elle-même, qui est trop remplie ») : une colonne d'icônes
+## nommées, ÉPINGLÉE, collée au bord de la fenêtre ; la barre de gauche commence après elle.
+const LARGEUR_RAIL := 76
+## Où commence la vue libre, à gauche : la bande des ateliers et la barre de gauche.
+const BORD_GAUCHE := LARGEUR_RAIL + LARGEUR_GAUCHE
 const LARGEUR_DROITE := 308
 const SECONDES_CONSEIL := 7.0
 
@@ -96,6 +102,7 @@ const CONSEILS: Array[String] = [
 
 var _vue: Vue
 var _gauche: Panneau
+var _rail: PanelContainer
 var _droite: Panneau
 ## LA BARRE DU MODELEUR — la barre de droite de l'atelier Witness (Jordan, 29 septembre 2026).
 var _droite_temoin: Panneau
@@ -495,8 +502,9 @@ func _batir() -> void:
 			% Outils.VOLUME_MAXI))
 	corps.add_child(_vue)
 
-	_gauche = _panneau(corps, true, LARGEUR_GAUCHE)
-	_batir_gauche(_gauche.get_meta("tete"), _gauche.get_meta("pile"), _gauche.get_meta("reference"))
+	_rail = _batir_rail(corps)
+	_gauche = _panneau(corps, true, LARGEUR_GAUCHE, LARGEUR_RAIL)
+	_batir_gauche(_gauche.get_meta("pile"), _gauche.get_meta("reference"))
 	_batir_rapport(_gauche.get_meta("pied"))
 	_droite = _panneau(corps, false, LARGEUR_DROITE)
 	_batir_droite(_droite.get_meta("pile"))
@@ -542,7 +550,7 @@ func _batir() -> void:
 	_legende_formes = LegendeFormes.new()
 	_legende_formes.anchor_left = 0.0
 	_legende_formes.anchor_right = 1.0
-	_legende_formes.offset_left = LARGEUR_GAUCHE
+	_legende_formes.offset_left = BORD_GAUCHE
 	_legende_formes.offset_right = -LARGEUR_DROITE
 	corps.add_child(_legende_formes)
 	_legende_formes.zone_survolee.connect(_vue.montrer_zone)
@@ -739,7 +747,7 @@ func _barre_titre() -> Control:
 ## est ÉPINGLÉ sous elle et ne défile jamais (le rapport).
 ## ⚠ LES QUATRE ANCRES, pas deux (leçon de SoluTiles) : ancrer seulement le haut laisse le panneau à sa
 ## taille minimale et coupe ce qui dépasse.
-func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
+func _panneau(parent: Control, a_gauche: bool, largeur: int, decalage := 0) -> Panneau:
 	var p := Panneau.new()
 	var style := Palette.fond(Palette.PANNEAU, 0, 10)
 	style.content_margin_right = 6
@@ -753,8 +761,8 @@ func _panneau(parent: Control, a_gauche: bool, largeur: int) -> Panneau:
 	p.anchor_bottom = 1.0
 	p.anchor_left = 0.0 if a_gauche else 1.0
 	p.anchor_right = 0.0 if a_gauche else 1.0
-	p.offset_left = 0.0 if a_gauche else -largeur
-	p.offset_right = largeur if a_gauche else 0.0
+	p.offset_left = decalage if a_gauche else -largeur
+	p.offset_right = (decalage + largeur) if a_gauche else 0.0
 	# ⚠ SI UN CONTENU LA FORÇAIT À S'ÉLARGIR, LA BARRE DE DROITE GRANDIRAIT VERS LA DROITE, HORS DE L'ÉCRAN (vu par Jordan,
 	# 3 octobre 2026) : elle grandit vers la gauche, sur la vue. La garde de la fumée exige qu'elle ne grandisse pas.
 	if not a_gauche:
@@ -808,13 +816,6 @@ func _zone_de_reference(p: Control, colonne: VBoxContainer, defile: ScrollContai
 	haut.size_flags_stretch_ratio = 3.0
 	colonne.remove_child(defile)
 	colonne.remove_child(pied)
-	var tete := VBoxContainer.new()
-	tete.add_theme_constant_override("separation", 8)
-	var marge_tete := MarginContainer.new()
-	marge_tete.add_theme_constant_override("margin_right", 8)
-	marge_tete.add_child(tete)
-	haut.add_child(marge_tete)
-	p.set_meta("tete", tete)
 	haut.add_child(defile)
 	haut.add_child(pied)
 	colonne.add_child(haut)
@@ -921,11 +922,26 @@ func _grille(boutons: Array, colonnes := 2) -> GridContainer:
 	return g
 
 
-func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxContainer) -> void:
-	# L'ATELIER : la décision la plus haute de l'écran, donc tout en haut, en grand — et ÉPINGLÉ.
-	tete.add_child(_grand_titre("WORKSPACE"))
+## LA BANDE DES ATELIERS : une icône et son nom par atelier, l'un sous l'autre, dans l'ordre d'avant (les paires
+## ensemble : Project · Play test, World · Fluids, Geometry · Texturing…). Elle ne défile pas : à la fenêtre la plus
+## petite (680 px), les onze tiennent.
+func _batir_rail(parent: Control) -> PanelContainer:
+	var rail := PanelContainer.new()
+	var style := Palette.fond(Palette.PANNEAU, 0, 6)
+	style.border_color = Palette.FILET
+	style.border_width_right = 1
+	rail.add_theme_stylebox_override("panel", style)
+	rail.anchor_top = 0.0
+	rail.anchor_bottom = 1.0
+	rail.anchor_left = 0.0
+	rail.anchor_right = 0.0
+	rail.offset_left = 0.0
+	rail.offset_right = LARGEUR_RAIL
+	parent.add_child(rail)
+	var colonne := VBoxContainer.new()
+	colonne.add_theme_constant_override("separation", 3)
+	rail.add_child(colonne)
 	var groupe := ButtonGroup.new()
-	var ateliers: Array = []
 	for a in [
 		["projet", "Project", "enregistrer", "Save, open, and the round trip with your artist: export, "
 			+ "import, slice, export to engines."],
@@ -950,21 +966,37 @@ func _batir_gauche(tete: VBoxContainer, pile: VBoxContainer, reference: VBoxCont
 		var b := Button.new()
 		b.text = a[1]
 		b.icon = Icones.icone(a[2])
-		b.tooltip_text = a[3]
+		b.tooltip_text = a[1] + " — " + a[3]
 		b.toggle_mode = true
 		b.button_group = groupe
 		b.custom_minimum_size = Vector2(0, 40)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+		b.expand_icon = false
+		b.autowrap_mode = TextServer.AUTOWRAP_OFF
+		b.clip_text = true
 		b.add_theme_font_override("font", Palette.gras())
-		b.add_theme_constant_override("icon_max_width", 20)
+		b.add_theme_font_size_override("font_size", 10)
+		b.add_theme_constant_override("icon_max_width", 18)
 		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		Palette.habiller_bouton_d_atelier(b, a[0])   # chaque atelier se reconnaît à sa teinte (Jordan, 2 octobre 2026)
-		ateliers.append(b)
-	# ⚠ SIX ATELIERS (1er octobre 2026 : Witness coupé en Geometry et Texturing ; 2 octobre : Fluids sorti de World,
-	# Jordan) : en grille de deux, une rangée ne tient pas dans 300 px. Les paires vont ensemble : Project · Play test,
-	# World · Fluids (le même monde), Geometry · Texturing (le même témoin).
-	tete.add_child(_grille(ateliers, 2))
+		# ⚠ À LA FENÊTRE LA PLUS PETITE (1100 × 680), la vue a 632 px : avec les marges du thème, un bouton faisait 60 px
+		# et les onze 702 (vu par la fumée, la bande passait sous la bande du bas). Marges verticales resserrées : ~42 px.
+		for etat in ["normal", "hover", "pressed", "hover_pressed"]:
+			var boite := (b.get_theme_stylebox(etat) as StyleBox).duplicate() as StyleBox
+			boite.content_margin_top = 4
+			boite.content_margin_bottom = 3
+			boite.content_margin_left = 2
+			boite.content_margin_right = 2
+			b.add_theme_stylebox_override(etat, boite)
+		b.add_theme_constant_override("h_separation", 2)
+		colonne.add_child(b)
+	return rail
 
+
+func _batir_gauche(pile: VBoxContainer, reference: VBoxContainer) -> void:
 	# LE PLAY TEST : ses commandes, visibles dans cet atelier seulement.
 	_section_jeu = Section.new("Play test", true, Icones.icone("jouer"))
 	pile.add_child(_section_jeu)
@@ -1312,7 +1344,7 @@ func _batir_guide(parent: Control) -> void:
 	st.set_border_width_all(1)
 	_guide.add_theme_stylebox_override("panel", st)
 	_guide.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_guide.position = Vector2(LARGEUR_GAUCHE + 12, 10)
+	_guide.position = Vector2(BORD_GAUCHE + 12, 10)
 	_guide.custom_minimum_size = Vector2(250, 0)
 	_guide_texte = RichTextLabel.new()
 	_guide_texte.bbcode_enabled = true
