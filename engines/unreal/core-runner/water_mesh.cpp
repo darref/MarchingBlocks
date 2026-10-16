@@ -666,7 +666,7 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 	// TWO WATERFALLS ON ONE PLACE (rules_text: "Waterfalls with the same (axis, round(plane * 20), along) are ONE: top = max,
 	// foot = min, ground = min"). ⚠ MEASURED: no case merges two waterfalls (none of the 14, none of the random gestures) —
 	// the "lowest lip kept" mutation stayed green without this check. Two rivers leave the same cliff plane (x = 2,
-	// heading -x) at z = 0, one from row 5, one from row 3: one sheet, from 4.85 down to the lower foot.
+	// heading -x) at z = 0, one from row 5, one from row 3: one sheet, from 5.05 down (the band 0.3 above the floor; 4.85 before the thick band) to the lower foot.
 	{
 		auto RiverFrom = [](int Y)
 		{
@@ -700,8 +700,8 @@ int RunWaterMesh(const std::string& Dir, int WorldCount, char** WorldDirs)
 		const FWaterMesh One = WaterMesh::Build(std::vector<FWaterBody>{RiverFrom(5)}, FCellSet());
 		int FallsOne = 0;
 		for (const FWaterVertex& V : One.Vertices) FallsOne += V.Color[2] == WaterMesh::KindFall ? 1 : 0;
-		T.Expect(std::fabs(High - 4.85f) < 1e-5f && std::fabs(Low - 0.7f) < 1e-5f && Falls > FallsOne,
-			"two waterfalls on one place: one sheet from the HIGHER lip (4.85) to the LOWER foot (0.7); got " + std::to_string(High) + " .. "
+		T.Expect(std::fabs(High - 5.05f) < 1e-5f && std::fabs(Low - 0.7f) < 1e-5f && Falls > FallsOne,
+			"two waterfalls on one place: one sheet from the HIGHER lip (5.05) to the LOWER foot (0.7); got " + std::to_string(High) + " .. "
 			+ std::to_string(Low));
 	}
 	// The resumption, on random gestures: the worlds of the cases, with their sources.
