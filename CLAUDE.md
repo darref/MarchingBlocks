@@ -520,6 +520,16 @@ licence.*` ; `DEV_TOOLS/exporter_marchingblocks.sh`, `preparer_livraison.gd`, `i
   `_fichier_choisi`, `_ecrire_le_projet`). Ni associations de fichiers, ni « ton monde » rouvert. La barre de titre dit
   « FREE DEMO — no saving, no export ». ⚠ PAS UN VERROU : le bac est un dossier ordinaire pendant la séance (ce qui y vaut
   pour un moteur, le `.mbset`, ne s'y écrit jamais).
+- **LA DÉMO ENREGISTRE — DÉCIDÉ (Jordan, 16 octobre 2026 : « une démo 0.9.2 qui peut tout faire sauf exporter », « il faut
+  proposer quelque chose d'utilitaire maintenant »), ÉCRIT LE MÊME JOUR. RENVERSE le bac jetable ci-dessus.** Ses projets vont
+  dans `Documents/MarchingBlocks` comme ceux de la version complète, qui les ouvre tels quels ; elle rouvre « ton monde »,
+  « Open », « Save as », importe de Blender. Seules les SORTIES sont refusées, en le disant : le témoin pour Blender, le
+  `.mbset`, le `.mbworld`, le patron UV (`Demo.REFUSEES`, deux portes : `_demander`, `_fichier_choisi`). Ses réglages restent
+  à part (`MarchingBlocks Demo`). ⚠ Le `.glb` lié écrit à côté d'un projet porte les tuiles (sans règle ni manifeste). Gardé
+  par `test_vente` 148 (rouge, 8, si le monde et le patron passent). **MESURÉ** : l'export complet (28 suites vertes, sonde
+  `edition=demo version=0.9.2`, DLL chargée), le zip `04_exports/demo/MarchingBlocks_Demo_0.9.2_Windows.zip` (132,6 Mo), la
+  page itch.io `06_boutique/itch_demo.md` (SpannerGames). ⚠ L'exe de la démo n'a PAS été lancé à la main ; le contrat montré
+  au premier lancement a encore ses blancs.
 - **LES MISES À JOUR (site) — ÉCRITES ET MESURÉES.** Au lancement, un JSON du site (`{"version", "date", "notes",
   "download"}`, `MisesAJour.URL`) ; plus récente (les NOMBRES comparés : 0.9.10 > 0.9.9), la barre de titre dit « Update
   0.9.1 available », un clic ouvre « My downloads » ; rien ne se télécharge. Case « Check for updates at launch » dans
