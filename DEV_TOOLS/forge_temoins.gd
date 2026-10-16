@@ -220,3 +220,112 @@ static func creer_variantes(t: RefCounted, cles: Array, combien: int, retouche: 
 			retouche.call(t.tuiles[nom], k)
 			sortie[c].append(nom)
 	return sortie
+
+
+## ── LE CHANFREIN FRANC (16 octobre 2026, Jordan : « ça manque de gros chanfreins, c'est trop blocky ») ───────────────
+##
+## MESURÉ : le Laplacien n'arrondit presque rien (15 passes au niveau 1, 30 au niveau 2 : un rayon d'environ 0,2 case) —
+## les grands plats retiennent les arêtes. On projette donc chaque sommet sur la surface iso-0,5 du champ TRILINÉAIRE des
+## huit cases de la tuile (occupation 1 / 0 aux centres des cases, à (±½)³ dans le repère de la tuile) : le profil
+## « marching cubes », arêtes et coins taillés en grand. ⚠ LE RACCORD TIENT PAR CONSTRUCTION : sur un plan de coupe
+## (x = ±½), le champ ne dépend que des QUATRE cases de ce plan, que la tuile d'en face partage ; un sommet de bord n'y
+## glisse que dans le plan ; il part du même point (les sections partagées) et suit la même règle — il arrive au même
+## endroit des deux côtés. `quantite` (0..1) : la part du chemin vers la surface iso.
+
+const CENTRES := [Vector3(-0.5, -0.5, -0.5), Vector3(0.5, -0.5, -0.5), Vector3(-0.5, 0.5, -0.5), Vector3(0.5, 0.5, -0.5),
+	Vector3(-0.5, -0.5, 0.5), Vector3(0.5, -0.5, 0.5), Vector3(-0.5, 0.5, 0.5), Vector3(0.5, 0.5, 0.5)]
+
+
+## L'occupation des huit cases de chaque CLÉ, dans le repère de sa tuile : lue au témoin (ses cases, `BM.cases(0)`) par
+## la pose de chaque occurrence. Rend {clé: [8 × 0/1]} et, sous "incoherences", les occurrences qui ne s'accordent pas
+## avec la première de leur clé (0 attendu : la pose est juste).
+static func occupation_des_cles(t: RefCounted) -> Dictionary:
+	var BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
+	var MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+	var cases: Dictionary = BM.cases(0)
+	var sortie := {}
+	var incoherences := 0
+	for o in t.occurrences:
+		var cle: String = MB.cle_de_tuile(str(o["modele"]))
+		var occ: Array = []
+		for c in CENTRES:
+			var w: Vector3 = (o["pose"] as Transform3D) * (c as Vector3)
+			occ.append(1.0 if cases.has(Vector3i(w.floor())) else 0.0)
+		if not sortie.has(cle):
+			sortie[cle] = occ
+		elif sortie[cle] != occ:
+			incoherences += 1
+	sortie["incoherences"] = incoherences
+	return sortie
+
+
+static func _champ(occ: Array, p: Vector3) -> Array:
+	var f := 0.0
+	var g := Vector3.ZERO
+	for k in 8:
+		if float(occ[k]) == 0.0:
+			continue
+		var s: Vector3 = (CENTRES[k] as Vector3) * 2.0
+		var wx := 0.5 + s.x * p.x
+		var wy := 0.5 + s.y * p.y
+		var wz := 0.5 + s.z * p.z
+		f += wx * wy * wz
+		g += Vector3(s.x * wy * wz, s.y * wx * wz, s.z * wx * wy)
+	return [f, g]
+
+
+## Le point de la surface iso-0,5 atteint depuis `p` en suivant le gradient (Newton), sans quitter les plans de coupe sur
+## lesquels `p` est posé. Rend `p` si le champ y est plat.
+static func vers_l_iso(occ: Array, p: Vector3) -> Vector3:
+	var bloque := [absf(absf(p.x) - 0.5) < EPS, absf(absf(p.y) - 0.5) < EPS, absf(absf(p.z) - 0.5) < EPS]
+	var q := p
+	for it in 24:
+		var r := _champ(occ, q)
+		var g: Vector3 = r[1]
+		for a in 3:
+			if bloque[a]:
+				g[a] = 0.0
+		var g2 := g.length_squared()
+		if g2 < 1e-10:
+			return q
+		var pas: Vector3 = g * ((0.5 - float(r[0])) / g2)
+		if pas.length() > 0.2:
+			pas = pas.normalized() * 0.2
+		q += pas
+		for a in 3:
+			q[a] = clampf(q[a], -0.5, 0.5)
+		if absf(0.5 - float(r[0])) < 1e-6:
+			break
+	return q
+
+
+## Le chanfrein sur toutes les tuiles (variantes comprises). Rend {replis: tuiles dont une face s'est repliée (leur DEDANS
+## rejoué à moitié, jusqu'à 1/8 — le bord jamais : il doit rester le même partout), absentes: clés sans occupation}.
+static func chanfreiner(t: RefCounted, quantite: float) -> Dictionary:
+	var MB := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+	var occs := occupation_des_cles(t)
+	var bilan := {"replis": 0, "absentes": 0, "incoherences": occs["incoherences"]}
+	for c in t.tuiles:
+		var cle: String = MB.cle_de_tuile(c)
+		if not occs.has(cle):
+			bilan["absentes"] += 1
+			continue
+		var m: RefCounted = t.tuiles[c]
+		var depart: PackedVector3Array = (m.sommets as PackedVector3Array).duplicate()
+		var gardes: Array = m.gardes_de_repli(range(m.faces.size()))
+		var cibles := PackedVector3Array()
+		for p in depart:
+			cibles.append(vers_l_iso(occs[cle], p))
+		var k := 1.0
+		while true:
+			for i in depart.size():
+				var p: Vector3 = depart[i]
+				var kk := 1.0 if sur_un_plan(p) else k
+				m.sommets[i] = p.lerp(cibles[i], quantite * kk)
+			if not m.replie(gardes):
+				break
+			if k < 0.125:
+				bilan["replis"] += 1
+				break
+			k *= 0.5
+	return bilan

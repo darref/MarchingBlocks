@@ -13,7 +13,7 @@ func _initialize() -> void:
 	var base = TL.depuis_le_temoin_calcule(0.0)
 	print("calcul %d ms" % (Time.get_ticks_msec() - t0)); t0 = Time.get_ticks_msec()
 	print("subdivision : ", F.subdiviser_tout(base, niveau), " %d tris %d ms" % [F.triangles(base), Time.get_ticks_msec() - t0]); t0 = Time.get_ticks_msec()
-	print("lissage : ", F.lisser_base(base, 3, 0.6), " %d ms" % (Time.get_ticks_msec() - t0)); t0 = Time.get_ticks_msec()
+	print("chanfrein : ", F.chanfreiner(base, 0.85), " %d ms" % (Time.get_ticks_msec() - t0)); t0 = Time.get_ticks_msec()
 	print("joints sans partenaire (base) : %d" % _sans_partenaire_entre(base, base))
 	var a = base.copie()
 	var b = base.copie()

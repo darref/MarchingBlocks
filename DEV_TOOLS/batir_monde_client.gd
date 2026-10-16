@@ -109,6 +109,7 @@ var _projet_mc := ""
 var _photos := ""
 var _niveau := 1
 var _sans_feuillage := false
+var _chanfrein := 0.85
 var _rapport := {}
 
 
@@ -121,6 +122,8 @@ func _initialize() -> void:
 			_dossier_mc = a.substr("--dossier=".length())
 		elif a.begins_with("--niveau="):
 			_niveau = int(a.substr("--niveau=".length()))
+		elif a.begins_with("--chanfrein="):
+			_chanfrein = float(a.substr("--chanfrein=".length()))
 		elif a == "--sans-feuillage":
 			_sans_feuillage = true
 		elif a == "--refaire":
@@ -191,10 +194,11 @@ func _mc_temoins() -> void:
 	var t0 := Time.get_ticks_msec()
 	var base: RefCounted = TL_.depuis_le_temoin_calcule(0.0)
 	var b1 := F.subdiviser_tout(base, _niveau)
-	var b2 := F.lisser_base(base, 3, 0.6)
+	var b2 := F.chanfreiner(base, _chanfrein)
 	print("base : niveau %d, %d triangles, %s, %s (%d ms)" % [_niveau, F.triangles(base), b1, b2,
 		Time.get_ticks_msec() - t0])
-	_rapport["base"] = {"niveau": _niveau, "triangles_par_52_tuiles": F.triangles(base), "subdivision": b1, "lissage": b2}
+	_rapport["base"] = {"niveau": _niveau, "chanfrein": _chanfrein, "triangles_par_52_tuiles": F.triangles(base),
+		"subdivision": b1, "chanfreinage": b2}
 	_rapport["temoins"] = {}
 	for i in THEMES.size():
 		var th: Dictionary = THEMES[i]
@@ -229,13 +233,10 @@ func _relief(nom: String, m: RefCounted, cle: String) -> void:
 		"Forest":
 			F.bosseler(m, F.bruit(12, 2.6), 0.07, dec)
 		"Desert", "Beach":
-			F.lisser_dedans(m, 4, 0.7)
 			F.bosseler(m, F.bruit(13, 1.2, 2), 0.06, dec, false, Vector3.UP)
 		"Snow":
-			F.lisser_dedans(m, 4, 0.7)
 			F.bosseler(m, F.bruit(14, 1.6, 2), 0.05, dec, true)
 		"Mud":
-			F.lisser_dedans(m, 2, 0.6)
 			F.bosseler(m, F.bruit(15, 3.5), 0.04, dec)
 		"Gravel":
 			F.bosseler(m, F.bruit(16, 7.0, 2), 0.025, dec, true)
@@ -310,6 +311,9 @@ const VOLCAN := Vector2(-46, 6)
 const LAC_MONTAGNE := Vector2i(-12, -40)
 const GLACIER := Vector2(26, -46)
 const VILLAGE := Rect2i(-9, 2, 18, 14)
+## Les pics du nord : (x, z, hauteur au-dessus de la plaine, rayon).
+const PICS := [Vector4(-24, -46, 26, 18), Vector4(4, -52, 30, 20), Vector4(-42, -30, 16, 13), Vector4(14, -32, 16, 13),
+	Vector4(44, -40, 20, 15), Vector4(-6, -30, 10, 10)]
 const MESAS := [Vector2(40, -8), Vector2(52, 14), Vector2(34, 22)]
 
 var _bruit := FastNoiseLite.new()
@@ -411,16 +415,18 @@ func _colonne(x: int, z: int) -> void:
 			elif dm < 8.0:
 				h = maxi(h, MER + 6)
 				m = "Scree"
-	# LES MONTAGNES (nord) : de la roche, la neige au-dessus de 26.
-	if z < -18 and r < 1.0:
-		var crete := -(z + 18) * 0.7 + (b + 0.4) * 10.0
-		if crete > 0.0:
-			var hm := MER + 3 + int(round(crete))
-			if hm > h:
-				h = hm
-				m = "Rock"
-				if h >= 26:
-					m = "Snow"
+	# LES MONTAGNES (nord) : des pics de roche, la neige au-dessus de 25.
+	if z < -14 and r < 1.02:
+		var hm := 0.0
+		for pic in PICS:
+			var dp := p.distance_to(Vector2(pic.x, pic.y)) + b * 5.0
+			if dp < pic.w:
+				hm = maxf(hm, pic.z * pow(1.0 - dp / pic.w, 1.25))
+		if hm > 0.5:
+			var hh := MER + 2 + int(round(hm + b * 2.0))
+			if hh > h:
+				h = hh
+				m = "Snow" if h >= 25 else "Rock"
 	# LE GLACIER (nord-est) : un plateau de glace.
 	var dg := p.distance_to(GLACIER) + b * 4.0
 	if dg < 10.0:
