@@ -400,7 +400,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     lancement », section « La clôture de la 1.1.0 et le trailer », et son calendrier) : gel le 13 novembre, les
     greffons rattrapent du 16 novembre au 4 décembre, le monde filmé du 7 au 13 décembre, le montage du 14 au 18,
     et RIEN DE PUBLIC avant : la communication commence avec la page Steam et le trailer le 21 décembre, lancement
-    le 12 janvier 2027. Une île d'environ 64 × 24 × 64 cases ; Jordan à la souris (les plans de caméra peuvent être
+    le 12 janvier 2027.
+  - ⚠ **LE 21 DÉCEMBRE EST ABANDONNÉ — DÉCIDÉ (Jordan, 17 octobre 2026 : « oublie le 21, je sors ça dès que j'ai
+    l'argent pour Steam et l'INPI »)** : rien de public avant le dépôt de la marque et l'AppID, puis sortie TOUT DE SUITE
+    (page Steam, trailer, publications). Les « 21 décembre » de cette charte sont l'ancien plan. L'état global :
+    `D:/SpannerGames/ETAT.md`. Une île d'environ 64 × 24 × 64 cases ; Jordan à la souris (les plans de caméra peuvent être
     scriptés) ; OBS Studio et DaVinci Resolve ; 60 s, et une version de 2 min.
   - ⚠ **OUVERT, À JORDAN** : la charte dit « 1.1.0 », l'appli affiche v0.1.0 et le document numérotait l'accès
     anticipé 0.1 ; le document propose que la 1.1.0 soit la version de lancement.
