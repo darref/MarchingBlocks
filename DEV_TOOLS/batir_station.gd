@@ -51,11 +51,11 @@ const THEMES := [
 		"relief": "panneaux", "anim": {"reactor_conduit": ["defilement", 0.0, 0.35]}},
 	{"nom": "Lab", "sol": ["lab_floor", 2.0], "mur": ["lab_wall", 4.0], "plafond": ["lab_ceiling", 3.0], "relief": "carreaux"},
 	{"nom": "Hydroponics", "sol": ["hydro_floor", 2.0], "mur": ["hydro_wall", 2.0], "plafond": ["hydro_ceiling", 4.0],
-		"relief": "panneaux", "anim": {"hydro_ceiling": ["pulsation", 0.2, 0.55]}},
+		"relief": "panneaux", "anim": {"hydro_ceiling": ["pulsation", 0.2, 0.85]}},
 	{"nom": "Habitat", "sol": ["habitat_floor", 2.0], "mur": ["habitat_wall", 4.0], "plafond": ["lab_ceiling", 2.5],
 		"relief": "carreaux"},
 	{"nom": "Hangar", "sol": ["hangar_floor", 2.0], "mur": ["hangar_wall", 5.0], "plafond": ["hangar_ceiling", 2.0],
-		"relief": "panneaux", "anim": {"hangar_wall": ["pulsation", 0.9, 0.08]}},
+		"relief": "panneaux", "anim": {"hangar_wall": ["pulsation", 0.9, 0.45]}},
 	{"nom": "Deck", "sol": ["deck_floor", 3.0], "mur": ["deck_wall", 4.0], "plafond": ["deck_ceiling", 3.0], "relief": "panneaux"},
 	{"nom": "Solar", "sol": ["solar", 1.0], "mur": ["truss", 1.0], "plafond": ["solar", 1.0], "relief": "lisse"},
 	{"nom": "Truss", "sol": ["truss", 1.0], "mur": ["truss", 1.0], "plafond": ["truss", 1.0], "relief": "lisse"},
@@ -451,7 +451,9 @@ func _le_reacteur() -> void:
 
 ## L'HYDROPONIE : une verrière sur tout le toit, trois rigoles d'eau dans le sol, des bacs.
 func _l_hydroponie() -> void:
-	for x in range(-29, -16):
+	# Une BANDE de verrière au milieu ; le reste du plafond porte les lampes de culture (vu au tournage : tout en verre,
+	# la salle était noire — le verre fait de l'ombre, et SDFGI éteint l'ambiante sous un toit).
+	for x in range(-26, -19):
 		for z in range(10, 23):
 			for y in [6, 7]:
 				_cases[Vector3i(x, y, z)] = "Glass"

@@ -5306,6 +5306,46 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
   `sonde_forge.gd`, pas par un test qu'on a vu rougir) ; la frontière sol / paroi en dents de scie sur les lèvres chanfreinées
   (le seuil de normale) ; **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.**
 
+### LA STATION SPATIALE — DEMANDÉE PAR JORDAN (17 octobre 2026), ÉCRITE LE MÊME JOUR (`DEV_TOOLS/batir_station.gd`, `filmer_station.gd`)
+
+« Un projet entier nouveau comme monde client, mais en sci-fi, dans la modélisation comme dans le texturing, avec une partie
+texture fixe, texture émissive et texture animée de très haute qualité ; beaucoup de layers, une station spatiale riche ; à la
+fin un play test en vidéo de deux minutes et une autre de 2 minutes en play edit », puis « de la lumière ambiante suffisante
+avec du SDFGI quand tu filmes » et « une musique sci-fi CC0 du style Metroid ». Ses réponses : textures **CC0 + calculées**,
+un projet **neuf** (`Documents/MarchingBlocks/station/`, « scifi » du 6 octobre intact), **musique seule**, le monde client
+**reste** l'exemple livré. Rien n'est ajouté au logiciel (gel du 7 octobre) : ce sont des scripts de `DEV_TOOLS/`.
+
+- **LES TEXTURES** (`SpannerGames/PROJETS/MarchingBlocks/01_scripts/textures_station.py` → `BIBLIOTHEQUE/textures/station/`,
+  hors git, refaites par le script) : 23 bases **ambientCG (CC0)** en 2K ramenées à 1 024², et par-dessus des finitions
+  CALCULÉES (caissons, bandes lumineuses, plaques, chevrons de danger, hexagones) fondues dans la normale ; 25 matières fixes
+  dont la plupart émissives ; trois SÉQUENCES de 32 images (plasma du cœur, écrans du commandement, hologramme) ; des
+  défilements (conduits, colonnes de données) et des pulsations (lampes de culture, gyrophares). ⚠ **JUGÉES À L'IMAGE, DEUX
+  PASSES** : des bases sales écartées (`MetalPlates008` en camouflage, `DiamondPlate006C` rouillé, `PaintedMetal016`), la teinte
+  posée sur la luminance (une tôle bleue × beige virait au menthe), la cage du plasma calculée (la base n'avait pas de jours : le
+  plasma restait noir), les grilles lues par leur carte d'opacité, plus de feux de position sur la coque (un semis qui
+  scintille de loin).
+- **LE BÂTISSEUR** : la forge du monde client (base subdivisée au niveau 1, chanfrein 0,55, dedans en tôle, deux variantes
+  2 : 1 : 1) ; **14 couches** (Core, Holo, Command, Datacore, Reactor, Lab, Hydroponics, Habitat, Hangar, Deck, Solar, Truss,
+  Hull, Glass), trois matériaux chacune par l'orientation des faces, les pistes animées posées par `Anim.importer_sequence`
+  et `Anim.ajouter` (la route de l'atelier). La station : des modules à coque de DEUX peaux (le thème dedans, Hull dehors) —
+  un hangar à ciel ouvert (on y naît) et sa navette, la coursive et ses hublots, le commandement (baie, hologramme, verrière),
+  le labo, le réacteur (cœur de plasma, fosse de refroidissement), l'hydroponie (102 plants Spirit3D, rigoles), les
+  quartiers, un belvédère de verre ; dehors ailes solaires, antenne, radiateurs. **25 148 cases. MESURÉ (RTX 2060)** : 52 à
+  163 img/s selon la vue, 2,7 Go de mémoire vidéo ; 0 absence, 0 repli à la forge.
+  - ⚠ **UN LIQUIDE OUVERT DANS UNE STATION LA NOIE** (vu deux fois à l'image) : la fosse du réacteur, puis les rigoles,
+    débordaient par leur seuil jusqu'au hangar (la règle des lacs). Elles sont **sous un plancher de verre** : des cavités
+    closes, le liquide reste dans sa rangée. Et un sol noyé refusait le feuillage (7 plants au lieu de 102).
+- **LES VIDÉOS** (`filmer_station.gd --prise=jeu|edit`, sur une COPIE du projet ; ciel noir, SDFGI, ambiante 3,0,
+  exposition 1,4, halo) : `04_exports/station_playtest_v2.mp4` (**120 s**, du hangar à l'hydroponie, au labo, au
+  commandement, aux quartiers et au réacteur) et `station_playedit_v2.mp4` (**81 s** : muret et Ctrl+Z, tunnel, salle,
+  escalier gravi, verre, toit creusé, recul), musique **« Galactic Temple » de yd (OpenGameArt, CC0)** — `verifier` OK pour les
+  deux (1080p, −14 LUFS). ⚠ **LE PLAY EDIT FAIT 81 s, PAS 2 min** : le personnage piétinait 37 s au seuil du tunnel, coupé.
+  ⚠ **SDFGI ÉTEINT L'AMBIANTE SOUS UN TOIT** : la lumière vient de l'émission des matières (des tubes et rampes ajoutés pour ça).
+  ⚠ **TROIS PIÈGES DU PILOTE, PAYÉS** : `filmer_haut._images` ne règle la caméra qu'en atelier « jeu » (pas « jeu_edit ») ; un
+  point du monde choisi d'avance tombait hors de la vue (le clic ouvrait le manuel) — `_viser` cadre d'abord ; un bouton
+  d'une barre qui défile se manque — outils et formes choisis par l'écran, la carte le dit.
+- ⚠ **PAS JUGÉ PAR JORDAN** : les textures, la station, les deux vidéos. Des modèles Tripo (feuillage Spirit3D) sont à l'image.
+
 ### LES GRANDS MONDES NE PLANTENT PLUS — DEMANDÉ PAR JORDAN (9 octobre 2026, depuis le jeu Resolve : « règle le problème de MB
 ### qui plante, il ne doit pas planter » ; « je ne veux pas avoir plusieurs sous-maps »), ÉCRIT LE MÊME JOUR
 
