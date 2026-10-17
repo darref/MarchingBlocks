@@ -421,6 +421,9 @@ func _le_commandement() -> void:
 
 
 ## LE RÉACTEUR : le pilier de plasma, la fosse de refroidissement autour (une passerelle au sud y mène), des colonnes.
+## ⚠ LA FOSSE EST SOUS UN PLANCHER DE VERRE (vu à l'image, 17 octobre 2026) : ouverte, le liquide débordait de son seuil et
+## couvrait le sol jusqu'au hangar (la règle des lacs : un seuil près d'une chute, une rivière). Fermée, c'est une cavité
+## close : le liquide reste dans sa rangée, sous le verre, et l'on marche au-dessus.
 func _le_reacteur() -> void:
 	for x in range(FOSSE[0].x, FOSSE[1].x + 1):
 		for z in range(FOSSE[0].z, FOSSE[1].z + 1):
@@ -430,6 +433,7 @@ func _le_reacteur() -> void:
 				if not passerelle:
 					_cases.erase(c)
 			if not passerelle:
+				_cases[Vector3i(x, FOSSE[1].y, z)] = "Glass"
 				_cases[Vector3i(x, FOSSE[0].y - 1, z)] = "Reactor"
 				_cases[Vector3i(x, FOSSE[0].y - 2, z)] = "Hull"
 	# La fosse est plus large que le plancher à deux peaux : ses bords sont refermés par la coque.
@@ -451,19 +455,21 @@ func _l_hydroponie() -> void:
 		for z in range(10, 23):
 			for y in [6, 7]:
 				_cases[Vector3i(x, y, z)] = "Glass"
+	# ⚠ LES RIGOLES SONT COUVERTES DE VERRE (vu à l'image, 17 octobre 2026) : ouvertes, leur eau débordait et noyait le
+	# hangar. Couvertes, chacune est une cavité close : l'eau en y = −2, le verre en y = −1, au ras du sol.
 	for z in RIGOLES:
 		for x in range(-29, -16):
-			_cases.erase(Vector3i(x, -1, z))
-			_cases[Vector3i(x, -2, z)] = "Hydroponics"
-			_cases[Vector3i(x, -3, z)] = "Hull"
-	# Les rigoles traversent la peau du plancher : on referme leurs bouts et leurs flancs sous le sol.
-	for z in RIGOLES:
+			_cases[Vector3i(x, -1, z)] = "Glass"
+			_cases.erase(Vector3i(x, -2, z))
+			_cases[Vector3i(x, -3, z)] = "Hydroponics"
+			_cases[Vector3i(x, -4, z)] = "Hull"
 		for x in range(-30, -15):
 			for dz in [-1, 0, 1]:
-				var c := Vector3i(x, -3, z + dz)
-				if not _cases.has(c):
-					_cases[c] = "Hull"
-		for y in [-1, -2]:
+				for y in [-3, -4]:
+					var c := Vector3i(x, y, z + dz)
+					if not _cases.has(c):
+						_cases[c] = "Hull"
+		for y in [-1, -2, -3]:
 			for x in [-30, -16]:
 				_cases[Vector3i(x, y, z)] = "Hydroponics"
 
@@ -516,12 +522,12 @@ func _eau() -> void:
 	await _ecran._changer_d_atelier("fluides")
 	_ecran._eaux[_ecran._eau_active]["preset"] = "acide"
 	_ecran._eaux[_ecran._eau_active]["nom"] = "Coolant"
-	_ecran._eau_cliquee(Vector3i(FOSSE[0].x, FOSSE[1].y, FOSSE[0].z), MOUSE_BUTTON_LEFT)
+	_ecran._eau_cliquee(Vector3i(FOSSE[0].x, FOSSE[0].y, FOSSE[0].z), MOUSE_BUTTON_LEFT)
 	_ecran._nouvelle_eau()
 	_ecran._eaux[_ecran._eau_active]["preset"] = "transparent"
 	_ecran._eaux[_ecran._eau_active]["nom"] = "Irrigation"
 	for z in RIGOLES:
-		_ecran._eau_cliquee(Vector3i(-23, -1, z), MOUSE_BUTTON_LEFT)
+		_ecran._eau_cliquee(Vector3i(-23, -2, z), MOUSE_BUTTON_LEFT)
 	await _ecran._recalculer_eau(false)
 	_rapport["eau"] = {}
 	for e in _ecran._eaux:
@@ -564,7 +570,8 @@ func _feuillage() -> void:
 		var m: Dictionary = af.modele_actif()
 		var haut := maxf(float(m["hauteur"]) + float(m["decalage"]), 0.01)
 		af._regle("echelle", float(d[1]) / haut)
-		af._choisir_mode("sol_libre")
+		# « Planted · overflow » : la pente et l'eau seules comptent (la rangée régulière de l'hydroponie fait l'espacement).
+		af._choisir_mode("sol_debord")
 		var poses := 0
 		for x in range(-29, -16):
 			for z in range(9, 24):
