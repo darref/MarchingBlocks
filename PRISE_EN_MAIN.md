@@ -57,15 +57,15 @@ le remettre à la fin.
     bash DEV_TOOLS/exporter_marchingblocks.sh
     ```
     (≈ 15 min : toute la batterie de tests passe d'abord). Un autre dossier de sortie se donne en argument :
-    `bash DEV_TOOLS/exporter_marchingblocks.sh D:/MB_essai`.
+    `bash DEV_TOOLS/exporter_marchingblocks.sh D:/SpannerGames/ATELIER/MarchingBlocks/builds/essai`.
   - Attendu : la commande finit sans « stop » et rappelle (sans refuser) les blancs du contrat et l'adresse du site à
-    remplir. Dans `D:\MarchingBlocks\build\` :
+    remplir. Dans `D:\SpannerGames\ATELIER\MarchingBlocks\builds\<version>\` (hors du dépôt depuis le 17 octobre
+    2026 ; l'export 0.9.3 y est déjà, dans `builds\0.9.3\`) :
     - `site\MarchingBlocks.exe` (+ `libmb_natif.windows.template_release.x86_64.dll`, `LICENSE.txt`, `THIRD_PARTY_NOTICES.txt`)
     - `installeur\MarchingBlocks-0.9.0-setup.exe` — **c'est lui qu'on teste en premier**
     - `steam\MarchingBlocks.exe`, `demo\MarchingBlocks.exe`, `steampipe\`, `journal_export\` (les journaux).
-  - ⚠ Ne pas lancer `build\MarchingBlocks.exe` (à la racine de `build`) : c'est un export ancien, d'avant la vente.
   - Si la commande refuse : elle dit pourquoi (clé absente, une suite rouge, exe lisible en clair, DLL absente…). Le
-    détail est dans `build\journal_export\`.
+    détail est dans `builds\<version>\journal_export\`.
   - Noté :
 
 ### 0.3 Les clés de licence de test
@@ -119,7 +119,7 @@ Ce que l'acheteur du site fait en tout premier. L'installeur n'a **jamais tourn�
 aucune de ses pages n'a été vue par un humain.
 
 - [ ] ⚠ **L'avertissement de Windows (SmartScreen)**
-  - Geste : double-cliquer `build\installeur\MarchingBlocks-0.9.0-setup.exe`.
+  - Geste : double-cliquer `builds\<version>\installeur\MarchingBlocks-0.9.0-setup.exe`.
   - Attendu : Windows avertit « Windows a protégé votre ordinateur » / éditeur inconnu — c'est NORMAL (l'installeur
     n'est pas signé, OUVERT). « Informations complémentaires » → « Exécuter quand même » doit suffire. Note
     exactement ce que Windows affiche : c'est ce que verra chaque acheteur.
@@ -298,7 +298,7 @@ Début : ____ Fin : ____
   - Attendu : la case est là (la fermeture écrit ce qui attendait).
   - Noté :
 - [ ] **New / Open / Save as / Recent** (atelier Project, section Save · open)
-  - Geste : « New » deux fois ; « Save as » vers `D:\MB_essais\mon_monde.mbproj` ; « Open » d'un autre ; la rangée « Recent ».
+  - Geste : « New » deux fois ; « Save as » vers `D:\SpannerGames\ATELIER\MarchingBlocks\essais\mon_monde.mbproj` ; « Open » d'un autre ; la rangée « Recent ».
   - Attendu : « New » crée `untitled 2\`, `untitled 3\`… chacun dans son dossier sous `Documents\MarchingBlocks` ;
     « Save as » écrit là où tu dis et continue d'enregistrer là ; « Recent » rouvre en un clic, sans le projet ouvert ni
     l'exemple.
@@ -587,7 +587,7 @@ fait douter pendant ce temps est prioritaire.
 
 Début : ____ Fin : ____
 
-Sur une copie de l'exemple (« Save as » vers `D:\MB_essais\eau.mbproj`) et sur un petit monde à toi.
+Sur une copie de l'exemple (« Save as » vers `D:\SpannerGames\ATELIER\MarchingBlocks\essais\eau.mbproj`) et sur un petit monde à toi.
 
 - [ ] ⚠ **La mer : le plan, l'épingle, la pose** (décidé le 4 octobre, jamais tenu)
   - Geste : atelier Fluids ; survoler le VIDE ; clic ; molette, `PgUp`/`PgDn` ; second clic (ou `Entrée`).
@@ -864,7 +864,7 @@ Début : ____ Fin : ____
   - Attendu : barre d'attente, l'écran reste vivant pendant le tranchage.
   - Noté :
 - [ ] ⚠ **« Export the tileset… » (étape 4)**
-  - Geste : exporter la couche active de l'exemple vers `D:\MB_essais\exports\`.
+  - Geste : exporter la couche active de l'exemple vers `D:\SpannerGames\ATELIER\MarchingBlocks\essais\exports\`.
   - Attendu : un dossier `.mbset` avec `tileset.json`, `tiles.glb`, `README.txt` ; ⚠ son icône de dossier dans
     l'Explorateur (jamais vue depuis le bouton d'export).
   - Noté :
@@ -885,7 +885,7 @@ Début : ____ Fin : ____
 
 Début : ____ Fin : ____
 
-Lancer `build\demo\MarchingBlocks.exe` (de préférence dans la session Windows « Essai »).
+Lancer `builds\<version>\demo\MarchingBlocks.exe` (de préférence dans la session Windows « Essai »).
 
 - [ ] ⚠ **Le contrat, pas de clé**
   - Geste : premier lancement.
@@ -918,7 +918,7 @@ Lancer `build\demo\MarchingBlocks.exe` (de préférence dans la session Windows 
 
 Début : ____ Fin : ____
 
-Lancer `build\steam\MarchingBlocks.exe` (sans passer par Steam : aucun DRM aujourd'hui).
+Lancer `builds\<version>\steam\MarchingBlocks.exe` (sans passer par Steam : aucun DRM aujourd'hui).
 
 - [ ] ⚠ **Contrat, pas de clé**
   - Geste : premier lancement (réglages mis de côté).

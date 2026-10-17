@@ -12,6 +12,19 @@ arrive six mois plus tard avec une bonne idée.
 
 Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préférence, jamais par ancienneté.
 
+## SpannerGames pilote — DÉCIDÉ (Jordan, 17 octobre 2026)
+
+- **L'ÉTAT DE TOUS LES PROJETS DE `D:/` VIT DANS `D:/SpannerGames/ETAT.md`** : une session de MarchingBlocks le lit en
+  arrivant et met à jour SA ligne (celle de MarchingBlocks, pas les autres) quand l'état du produit change. Le détail
+  technique reste ici. La charte des médias (vidéos, GIF, posts) est `D:/SpannerGames/CLAUDE.md` et
+  `D:/SpannerGames/PROJETS/MarchingBlocks/CLAUDE.md` ; on se sert de `D:/SpannerGames/OUTILS/` plutôt que d'en réécrire.
+- **CE DÉPÔT NE CONTIENT QUE LE PROJET.** Tout ce qui en dérive vit sous `D:/SpannerGames` : les médias dans
+  `PROJETS/MarchingBlocks/` (`01_scripts` … `07_publication`), le reste, hors git, dans `ATELIER/MarchingBlocks/` —
+  `builds/<version>` (la sortie par défaut de `exporter_marchingblocks.sh` depuis le 17 octobre 2026 ; l'export 0.9.3 y
+  est rangé), `worktrees/` (les tournages), `agents/`, `unity/` (les projets URP d'essai), `copies/`, `sauvegarde/`,
+  `essais/`. `MARQUE/` reste ici : l'appli l'embarque. ⚠ Un chemin `D:/MB_*`, `D:/MarchingBlocks_*` ou
+  `D:/MarchingBlocks/build` écrit plus bas date d'avant ce rangement (le tableau de `ETAT.md` dit où il est allé).
+
 ---
 
 ## 0. Le produit : le logiciel MarchingBlocks — DÉCIDÉ (Jordan, 27 septembre 2026)
@@ -423,7 +436,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     (~290 px de haut rendus à la barre). La légende des formes et le guide partent de `BORD_GAUCHE`. Gardé par
     `fumee_appli` (au bord, la barre juste après, sa largeur gardée, le dernier atelier tient, aucun atelier dans la barre).
     ⚠ Ni vu à l'image ni tenu en main ; à 680 px de haut, les onze tiennent de justesse (11 × 51 px).
-    **EXPORTÉE (16 octobre 2026, sur le PC, `D:/MarchingBlocks/build`)** : 28 suites vertes (`fumee_appli` 1117, avec
+    **EXPORTÉE (16 octobre 2026, sur le PC, `D:/MarchingBlocks/build`, rangée le 17 dans `D:/SpannerGames/ATELIER/MarchingBlocks/builds/0.9.3`)** : 28 suites vertes (`fumee_appli` 1117, avec
     l'exemple = le monde client), les trois exe de 334,6 Mo (l'exemple pèse : il était à ~175 Mo), chiffrés (0 chaîne
     sur 7), la sonde « natif=1 licence=1 edition=site|steam|demo version=0.9.3 » et la DLL dans les modules, la clé signée
     acceptée et la trafiquée refusée, l'installeur `MarchingBlocks-0.9.3-setup.exe` (285 Mo), les `.vdf`. Le zip de la
@@ -584,7 +597,7 @@ licence.*` ; `DEV_TOOLS/exporter_marchingblocks.sh`, `preparer_livraison.gd`, `i
 - **STEAM : LE DOSSIER TEL QUEL** (exe + DLL + LICENSE.txt + avis), et la démo de même ; `steampipe/app_build_steam.vdf`
   et `app_build_demo.vdf` écrits par l'export, AppID et dépôts À REMPLIR (`steamcmd +run_app_build`). Sans installeur,
   l'exe Steam s'inscrit lui-même (comme avant).
-- **LA COMMANDE UNIQUE** : `bash DEV_TOOLS/exporter_marchingblocks.sh [sortie]` (défaut `build/`). Elle REFUSE : clé du PCK
+- **LA COMMANDE UNIQUE** : `bash DEV_TOOLS/exporter_marchingblocks.sh [sortie]` (défaut `D:/SpannerGames/ATELIER/MarchingBlocks/builds/<version>`, hors du dépôt). Elle REFUSE : clé du PCK
   absente ; clé publique de l'appli ≠ clé privée de licence ; exemple non pris ; DLL release absente ; UNE suite rouge
   (`lancer_les_suites.sh`, les 26) ; un exe lisible en clair (les 7 chaînes, dans chacun des trois) ; une DLL absente ou
   différente de celle du dépôt ; un exe qui ne charge pas sa DLL — la SONDE (`MarchingBlocks.exe --headless --
@@ -616,7 +629,7 @@ licence.*` ; `DEV_TOOLS/exporter_marchingblocks.sh`, `preparer_livraison.gd`, `i
     (un essai d'avant avait écrit dans le dossier jetable — il repart vide désormais) ; « le bac en lecture seule » et
     « les tailles non gardées » étaient MUETTES (aucun fichier en lecture seule ; des tableaux vides au lieu d'une signature
     de 65 octets) — le test les fait rougir.
-  - **L'EXPORT, LANCÉ POUR DE VRAI** (sortie `D:/MB_wt_vente_sorties`, pas `build/`) : la batterie verte, les trois exe
+  - **L'EXPORT, LANCÉ POUR DE VRAI** (sortie `D:/MB_wt_vente_sorties`, pas le défaut) : la batterie verte, les trois exe
     (~175 Mo : l'exemple pèse aujourd'hui 81 Mo), chiffrés (0 chaîne sur 7 dans chacun), la DLL à côté, identique à celle
     du dépôt ; la sonde dit « natif=1 licence=1 edition=site|steam|demo version=0.9.0 » et la DLL est dans les modules de
     chaque processus — **ROUGE VU** : la DLL retirée du dossier, la sonde dit « natif=0 licence=0 » et « MODULE_ABSENT ».
@@ -5296,7 +5309,8 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
 ### LES GRANDS MONDES NE PLANTENT PLUS — DEMANDÉ PAR JORDAN (9 octobre 2026, depuis le jeu Resolve : « règle le problème de MB
 ### qui plante, il ne doit pas planter » ; « je ne veux pas avoir plusieurs sous-maps »), ÉCRIT LE MÊME JOUR
 
-Le monde de Resolve (`D:/Resolve/Resolve_MB_project/val_de_resolve.mbproj` : 784 × 784 colonnes, 11 couches, 1,36 M
+Le monde de Resolve (`D:/Resolve/Resolve_MB_project/val_de_resolve.mbproj` — le jeu s'appelle désormais The Story of Knil,
+`D:/TheStoryOfKnil/Knil_MB_project/monde_knil.mbproj` : 784 × 784 colonnes, 11 couches, 1,36 M
 cases, 3 350 arbres) faisait planter l'appli juste après l'ouverture : « FATAL: Index p_index = 4294967294 is out of
 bounds (count = 32771) », puis signal 4. Mesuré par bissection (banc de Resolve, `outils/banc_ouverture_mb.gd`, qui
 ouvre un projet dans `app/editor.tscn` et remet les réglages) :

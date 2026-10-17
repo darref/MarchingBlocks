@@ -8,7 +8,9 @@
 ##   <sortie>/steampipe/   les scripts SteamPipe (app_build_*.vdf) du logiciel et de la démo — AppID et dépôts À REMPLIR
 ##
 ## LANCEMENT (Git Bash, éditeur Godot FERMÉ — l'export réimporte le projet) :
-##   bash DEV_TOOLS/exporter_marchingblocks.sh [sortie]        (défaut : <projet>/build)
+##   bash DEV_TOOLS/exporter_marchingblocks.sh [sortie]        (défaut : D:/SpannerGames/ATELIER/MarchingBlocks/builds/<version>)
+## ⚠ **LES BUILDS NE VIVENT PLUS DANS LE DÉPÔT** (Jordan, 17 octobre 2026 : SpannerGames pilote tous les projets, un dossier
+## de projet ne contient que le projet) : `MB_ATELIER` change l'atelier, `D:/SpannerGames/ETAT.md` dit où vit quoi.
 ##
 ## CE QU'ELLE REFUSE (et rien ne sort) : la clé du PCK absente ; la clé privée de licence absente, ou qui ne va pas avec
 ## la clé publique de l'appli ; l'exemple qui ne se prend pas ; la DLL release absente ; UNE SEULE SUITE ROUGE
@@ -28,7 +30,9 @@ set -u
 ICI="$(cd "$(dirname "$0")" && pwd)"
 PROJET="$(cd "$ICI/.." && pwd)"
 PROJET_W="$(cygpath -m "$PROJET")"
-SORTIE="${1:-$PROJET/build}"
+VERSION="$(grep -E '^config/version=' "$PROJET/project.godot" | sed -E 's/.*"(.*)"/\1/')"
+ATELIER="${MB_ATELIER:-$(dirname "$PROJET")/SpannerGames/ATELIER/MarchingBlocks}"
+SORTIE="${1:-$ATELIER/builds/$VERSION}"
 mkdir -p "$SORTIE"
 SORTIE="$(cd "$SORTIE" && pwd)"
 SORTIE_W="$(cygpath -m "$SORTIE")"
@@ -39,7 +43,6 @@ ISCC="${ISCC:-$(cygpath -u "$LOCALAPPDATA")/Programs/Inno Setup 6/ISCC.exe}"
 [ -f "$ISCC" ] || ISCC="/c/Program Files (x86)/Inno Setup 6/ISCC.exe"
 JOURNAL="$SORTIE/journal_export"
 mkdir -p "$JOURNAL"
-VERSION="$(grep -E '^config/version=' "$PROJET/project.godot" | sed -E 's/.*"(.*)"/\1/')"
 DLL_NOM=libmb_natif.windows.template_release.x86_64.dll
 
 stop() { echo "⚠ $* — EXPORT ARRÊTÉ."; exit 1; }
