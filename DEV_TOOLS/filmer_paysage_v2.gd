@@ -16,7 +16,7 @@ extends "res://DEV_TOOLS/filmer_paysage.gd"
 ##   3. LA MÉTÉO PASSE PAR LA LISTE « WEATHER » du panneau (l'item choisi, puis son signal) : la liste montre le temps filmé.
 ##
 ## LANCEMENT — dans une COPIE de tournage (worktree de `main`, `custom_user_dir`) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_refilm --fixed-fps 30 \
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_refilm --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/paysage_v2.avi \
 ##       --script res://DEV_TOOLS/filmer_paysage_v2.gd
 

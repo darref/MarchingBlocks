@@ -22,8 +22,8 @@ extends "res://DEV_TOOLS/filmer_formes.gd"
 ##   - il ne gravit pas une case sans sauter (1,45 de saut) : un saut par marche, un saut par-dessus le rebord du balcon.
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/haut.avi --script res://DEV_TOOLS/filmer_haut.gd
 ##   `-- --seulement=<partie>` : exemple, terre, collines, grottes, jeu (la terre et les formes sont toujours faites).
 

@@ -9,8 +9,8 @@ extends SceneTree
 ## LA TOUCHE en bas de l'image (« Tab · Sculpt aim »). Elles ne font pas partie de l'appli et ne le prétendent pas.
 ##
 ## LANCEMENT — dans la COPIE de tournage, comme filmer_trailer.gd :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/ui.avi --script res://DEV_TOOLS/filmer_ui.gd
 ##   `-- --seulement=<partie>` ne tourne qu'une partie (camera, peindre, selection, formes, eau, geometrie, jeu, manuel).
 ## ⚠ Ne jamais l'interrompre : il rend les réglages à la fin.

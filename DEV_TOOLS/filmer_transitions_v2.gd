@@ -14,8 +14,8 @@ extends "res://DEV_TOOLS/filmer_transitions.gd"
 ##   - aucun réglage final n'est « net » (Softness au plus bas) : un trait net serait une frontière franche.
 ##
 ## LANCEMENT — dans la COPIE de tournage (worktree à part, `custom_user_dir_name="MB_tournage_transitions2"`) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_transitions_v2.gd D:/MB_tournage_transitions2/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_transitions2 --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_transitions_v2.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_transitions2/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_transitions2 --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/transitions_v2.avi \
 ##       --script res://DEV_TOOLS/filmer_transitions_v2.gd
 ##   `-- --seulement=materiaux` : les couches, leurs matériaux, les frontières de chaque paire, puis quitte.

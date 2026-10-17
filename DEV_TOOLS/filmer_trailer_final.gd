@@ -16,9 +16,9 @@ extends "res://DEV_TOOLS/filmer_animation.gd"
 ## `filmer_ui.gd`, le pilotage du stickman de `filmer_haut.gd`, le vol de `filmer_feuillage.gd` (refait ici, sur l'île),
 ## et la station animée de `filmer_animation.gd` (partie « station », dans un projet À NOUS).
 ##
-## LANCEMENT — dans la COPIE de tournage D:/MB_tournage_trailer (1920 × 1080, `custom_user_dir_name="MB_tournage_trailer"`) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_trailer_final.gd D:/MB_tournage_trailer/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_trailer --fixed-fps 30 \
+## LANCEMENT — dans la COPIE de tournage D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_trailer (1920 × 1080, `custom_user_dir_name="MB_tournage_trailer"`) :
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_trailer_final.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_trailer/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_trailer --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/trailer_final_ile.avi \
 ##       --script res://DEV_TOOLS/filmer_trailer_final.gd -- --partie=ile
 ##   `--partie=` : ile (tout le monde de l'île, d'une traite), station (la station animée), carte (le relief en PNG).

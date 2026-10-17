@@ -12,8 +12,8 @@ extends "res://DEV_TOOLS/filmer_galeries.gd"
 ## Hérite des gestes (filmer_ui) et du pilotage du stickman (filmer_galeries : `_marcher`).
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/paysage.avi --script res://DEV_TOOLS/filmer_paysage.gd
 
 ## LE PAYSAGE — une règle, un endroit. Le nord (z < 0) est montagne, le sud (z > 0) descend à la mer.

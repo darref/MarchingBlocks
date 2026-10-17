@@ -872,7 +872,7 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   - Une mutation ÉQUIVALENTE : le vote « prioritaire » remplacé par « propriétaire » — la propriétaire est déjà le plus
     petit rang.
 - **LE RENDU, DEUX PIPELINES — FAIT, VU À L'IMAGE** (Built-in : le projet d'essai ; URP 17.6 : un projet d'essai HORS
-  DÉPÔT, `D:/MB_wt_unity_urp`, copie de celui-ci avec URP, monté par un script `MBUrpSetup`). **HDRP : NON PRIS EN CHARGE,
+  DÉPÔT, `D:/SpannerGames/ATELIER/MarchingBlocks/unity/unity_urp`, copie de celui-ci avec URP, monté par un script `MBUrpSetup`). **HDRP : NON PRIS EN CHARGE,
   NON MESURÉ** (aucune SubShader HDRP). Les shaders portent une SubShader URP (`PackageRequirements` : rien ne casse dans
   un projet sans URP — 0 message de compilation mesuré dans les deux) et une Built-in.
   - **Transitions** : Unity n'a pas de passage par-dessus un matériau, et un matériau ajouté ne redessine que le dernier
@@ -973,7 +973,7 @@ La spécification : `engines/PARITE.md`. Ici, entrée par entrée, ce qui est fa
   test était dans l'emprise de la mer (niveau + 1), la reprise avait raison.
 - **VU À L'IMAGE** (`WaterCaptures.CaptureAll`, Built-in et URP) : nappe cuite et nappe refaite sous les six aspects, la
   cascade fusionnée, l'escalier, le lac, la mer sous la dalle — **indiscernables** (0,00 à 0,25 d'écart moyen par pixel, des
-  bords de 8 bits). URP : un projet hors dépôt, `D:/MB_wt_eau_unity_urp` (comme `D:/MB_wt_unity_urp`).
+  bords de 8 bits). URP : un projet hors dépôt, `D:/SpannerGames/ATELIER/MarchingBlocks/unity/eau_unity_urp` (comme `D:/SpannerGames/ATELIER/MarchingBlocks/unity/unity_urp`).
 - **CE QUI N'EST PAS FAIT** : poser une source d'eau dans l'éditeur Unity ; tenir le pinceau en main (la reprise et le fil
   sont menés par les tests, jamais à la souris).
 
@@ -5236,7 +5236,7 @@ mène les gestes du modeleur sur toutes les tuiles à la fois, `DEV_TOOLS/batir_
   niveaux. Eau : la mer (« transparent »), un lac de montagne qui part en rivière et en cascade, un lac de lave et sa coulée,
   25 mares de marais ; 20 paires de transitions ; 27 modèles de feuillage.
 - **SUR LE PC** : le projet `C:/Users/jorda/Documents/MarchingBlocks/monde_client/` (photos, `rapport.json`), les mesures
-  `mesure_n0|n1|n2/`, le worktree `D:/MB_wt_monde_client`, la tâche planifiée `MBMondeClient` (lance `C:/Users/jorda/mc.cmd`
+  `mesure_n0|n1|n2/`, le worktree `D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_wt_monde_client`, la tâche planifiée `MBMondeClient` (lance `C:/Users/jorda/mc.cmd`
   dans la session de Jordan : un processus lancé par ssh n'a pas de fenêtre). Une construction complète : ~4 min.
 - **LE VERRE ET LE TUNNEL — DEMANDÉS PAR JORDAN (16 octobre 2026), ÉCRITS LE MÊME JOUR.** ⚠ **L'ALPHA D'UN MATÉRIAU DU TÉMOIN
   ÉTAIT GARDÉ, JAMAIS RENDU** (le sélecteur le réglait, le `.mbtiles` l'écrivait) : `MaillageEdite.materiau_godot` se mélange

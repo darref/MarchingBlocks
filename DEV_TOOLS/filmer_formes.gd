@@ -12,8 +12,8 @@ extends "res://DEV_TOOLS/filmer_ui.gd"
 ## et l'herbe ne coiffe que la prairie (un puits sous un toit d'herbe s'arrêterait sous l'herbe).
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/formes.avi --script res://DEV_TOOLS/filmer_formes.gd
 ##   `-- --seulement=<partie>` : monde, isolees, montagne, secrets.
 

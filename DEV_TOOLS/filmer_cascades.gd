@@ -15,8 +15,8 @@ extends "res://DEV_TOOLS/filmer_formes.gd"
 ## Les gestes sont ceux de filmer_ui.gd (vrais événements ; curseur et carte de touche dessinés par-dessus).
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/cascades.avi --script res://DEV_TOOLS/filmer_cascades.gd
 
 ## L'ÎLE — une règle, un endroit.

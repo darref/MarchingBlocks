@@ -17,8 +17,8 @@ extends "res://DEV_TOOLS/filmer_haut.gd"
 ## de `filmer_ui.gd`.
 ##
 ## LANCEMENT — dans la COPIE de tournage (worktree à part, `custom_user_dir_name="MB_tournage_transitions"`) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_transitions.gd D:/MB_tournage_transitions/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_transitions --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_transitions.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_transitions/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_transitions --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/transitions.avi \
 ##       --script res://DEV_TOOLS/filmer_transitions.gd
 ##   `-- --seulement=<partie>` : franc, paires, reglages, sens, ordre, monde, jeu (le monde est toujours bâti).

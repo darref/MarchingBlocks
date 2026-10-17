@@ -9,9 +9,9 @@ extends "res://DEV_TOOLS/filmer_haut.gd"
 ## disparaît. Ce script tourne en TEMPS RÉEL ; la fenêtre (titre `MB_COEUR_CAPTURE`) est filmée de l'extérieur par
 ## `D:/SpannerGames/PROJETS/MarchingBlocks/01_scripts/capture_coeur.py` (ffmpeg gfxcapture, 30 images/s).
 ##
-## LANCEMENT — dans la COPIE `D:/MB_tournage_coeur` (1920 × 1080, sans bord, données à part) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_coeur.gd D:/MB_tournage_coeur/DEV_TOOLS/
-##   1. une fois : Godot…_console.exe --path D:/MB_tournage_coeur --script res://DEV_TOOLS/filmer_coeur.gd -- --preparer
+## LANCEMENT — dans la COPIE `D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_coeur` (1920 × 1080, sans bord, données à part) :
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_coeur.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_coeur/DEV_TOOLS/
+##   1. une fois : Godot…_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_coeur --script res://DEV_TOOLS/filmer_coeur.gd -- --preparer
 ##      (le monde de ~120 000 cases, en trois couches, bâti avec le natif et enregistré, puis sa sauvegarde) ;
 ##   2. chaque prise : la même commande sans `--preparer` ; `MB_NATIF=0` dans l'environnement pour la prise GDScript.
 ##   Les lignes `MARQUE <nom> <ms unix>` disent où couper ; `MESURE <geste> <ms>` ce qui a été mesuré.

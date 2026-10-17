@@ -20,8 +20,8 @@ extends "res://DEV_TOOLS/filmer_haut.gd"
 ##     donc sur une PLATEFORME D'AMARRAGE à ciel ouvert, et entre par le sas.
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/scifi.avi --script res://DEV_TOOLS/filmer_scifi.gd
 ##   `-- --seulement=<partie>` : textures, station, jeu (le projet est toujours refait : textures et station).
 ##   ⚠ `-- --refaire` est OBLIGATOIRE si `Documents/MarchingBlocks/scifi/` existe déjà : le projet est celui de Jordan.

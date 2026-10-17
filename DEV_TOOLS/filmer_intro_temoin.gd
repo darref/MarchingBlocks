@@ -10,7 +10,7 @@ extends "res://DEV_TOOLS/filmer_ui.gd"
 ## ⚠ La couche neuve est ENREGISTRÉE dans la copie : recopier le monde avant un autre tournage.
 ##
 ## LANCEMENT (copie de tournage, user:// à part) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_monde_client --fixed-fps 30 \
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_monde_client --fixed-fps 30 \
 ##       --write-movie <rush>.avi --script res://DEV_TOOLS/filmer_intro_temoin.gd [-- --projet=<.mbproj>]
 
 const PROJET_DEFAUT := "C:/Users/jorda/AppData/Roaming/MB_tournage_monde_client/monde_client/monde_client.mbproj"

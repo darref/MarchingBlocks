@@ -22,8 +22,8 @@ extends "res://DEV_TOOLS/filmer_ui.gd"
 ## Hérite des gestes et des aides de tournage de filmer_ui.gd (vrais événements ; curseur et carte de touche dessinés).
 ##
 ## LANCEMENT — dans une COPIE de tournage (worktree à dossier de données à part, 1920 × 1080) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_bords.gd D:/MB_tournage_bords/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_bords --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_bords.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_bords/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_bords --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/bords.avi --script res://DEV_TOOLS/filmer_bords.gd
 
 ## LA SCÈNE — une règle, un endroit. Loin de l'exemple (qui s'étend jusqu'à x = 153), au-dessus de la mer : la mer se

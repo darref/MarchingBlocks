@@ -20,9 +20,9 @@ extends "res://DEV_TOOLS/filmer_haut.gd"
 ##   - le beau rendu n'existe qu'au Play test (soleil doré, glow : le réglage du devlog du paysage) ;
 ##   - une matière ne change que là où la hauteur change (devlog vu de haut) : `_sans_damier`, `_un_niveau_une_matiere`.
 ##
-## LANCEMENT — dans la COPIE de tournage `D:/MB_tournage_feuillage` (1920 × 1080, `use_custom_user_dir`) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MB_tournage_feuillage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_feuillage --fixed-fps 30 \
+## LANCEMENT — dans la COPIE de tournage `D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_feuillage` (1920 × 1080, `use_custom_user_dir`) :
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_feuillage/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_feuillage --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/feuillage.avi --script res://DEV_TOOLS/filmer_feuillage.gd
 ##   `-- --seulement=carte` : la carte du relief en PNG (juger le monde avant de filmer).
 

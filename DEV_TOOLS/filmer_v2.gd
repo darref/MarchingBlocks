@@ -11,8 +11,8 @@ extends "res://DEV_TOOLS/filmer_paysage.gd"
 ## lissé suivi en poursuite — la leçon de « il tourne en rond »).
 ##
 ## LANCEMENT — dans la COPIE de tournage :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_*.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/v2.avi --script res://DEV_TOOLS/filmer_v2.gd
 
 const SOURCE_V2 := "C:/Users/jorda/Documents/MarchingBlocks/v2notartist"

@@ -27,11 +27,11 @@ L'exe exporté et l'éditeur Godot partagent le même dossier de réglages, et l
 peut rouvrir et réécrire ton vrai projet (c'est arrivé le 2 octobre 2026, à 07:11 — `test.mbproj` rouvert et réécrit).
 
 - [ ] **Sauvegarder les réglages de l'appli**
-  - Geste : copier le dossier `%APPDATA%\Godot\app_userdata\MarchingBlocks` entier vers `D:\MB_sauvegarde\app_userdata\`.
+  - Geste : copier le dossier `%APPDATA%\Godot\app_userdata\MarchingBlocks` entier vers `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\app_userdata\`.
   - Attendu : le dossier contient `reglages.cfg`, `cache\`, `icones\`.
   - Noté :
 - [ ] **Sauvegarder la source de l'exemple**
-  - Geste : copier `C:\Users\jorda\Documents\MarchingBlocks\test\` vers `D:\MB_sauvegarde\test\` (c'est la source de
+  - Geste : copier `C:\Users\jorda\Documents\MarchingBlocks\test\` vers `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\test\` (c'est la source de
     l'exemple livré ; ne l'ouvre jamais avec l'exe d'essai : un projet enregistré par une version plus récente ne
     s'ouvre plus dans une plus ancienne).
   - Attendu : `test.mbproj` et ses fichiers copiés.
@@ -77,7 +77,7 @@ Il faut `pip install cryptography` une fois.
     ```
     python DEV_TOOLS/licence_signer.py signer --nom "Jördan Tèst" --email jordan.ferrad@gmail.com --id TEST-001
     ```
-  - Attendu : une ligne `MBK1.…….……` (≈ 200 caractères). Colle-la dans un fichier `D:\MB_sauvegarde\cles_de_test.txt`.
+  - Attendu : une ligne `MBK1.…….……` (≈ 200 caractères). Colle-la dans un fichier `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\cles_de_test.txt`.
     ⚠ Elle est notée dans `C:\Users\jorda\.marchingblocks\licences_emises.csv` : l'id `TEST-` dit que ce n'est pas une vente.
   - Noté :
 - [ ] **Vérifier la clé hors de l'appli**
@@ -1100,7 +1100,7 @@ Début : ____ Fin : ____
     double-click » les remet. Note si c'est gênant.
   - Noté :
 - [ ] **Remettre tes réglages**
-  - Geste : remettre `D:\MB_sauvegarde\app_userdata\` et `D:\MB_sauvegarde\test\` à leur place (ou renommer
+  - Geste : remettre `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\app_userdata\` et `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\test\` à leur place (ou renommer
     `…MarchingBlocks_mis_de_cote`).
   - Attendu : l'éditeur Godot et l'exemple retrouvés tels quels.
   - Noté :

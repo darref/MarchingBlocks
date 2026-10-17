@@ -14,7 +14,7 @@ extends "res://DEV_TOOLS/filmer_ui.gd"
 ## ⚠ ON FILME UNE COPIE (voir `filmer_monde_client.gd`) : `dernier` pointe nulle part, seul le script ouvre la copie.
 ##
 ## LANCEMENT (copie de tournage, user:// à part) :
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_monde_client --fixed-fps 30 \
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_monde_client --fixed-fps 30 \
 ##       --write-movie <rush>.avi --script res://DEV_TOOLS/filmer_tunnel_client.gd [-- --projet=<.mbproj>]
 
 const PROJET_DEFAUT := "C:/Users/jorda/AppData/Roaming/MB_tournage_monde_client/monde_client/monde_client.mbproj"

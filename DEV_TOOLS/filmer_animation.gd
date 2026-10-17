@@ -20,9 +20,9 @@ extends "res://DEV_TOOLS/filmer_scifi.gd"
 ## puis donne au dialogue ce que la main y aurait choisi (`_fichiers_choisis`, le chemin du produit APRÈS le dialogue) ;
 ## la carte de touche dit ce qui est choisi.
 ##
-## LANCEMENT — dans la COPIE de tournage D:/MB_tournage_animation (`custom_user_dir_name="MB_tournage_animation"`) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_animation.gd D:/MB_tournage_animation/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MB_tournage_animation --fixed-fps 30 \
+## LANCEMENT — dans la COPIE de tournage D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_animation (`custom_user_dir_name="MB_tournage_animation"`) :
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_animation.gd D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_animation/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/worktrees/MB_tournage_animation --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/animation.avi \
 ##       --script res://DEV_TOOLS/filmer_animation.gd
 ##   `-- --seulement=<partie>` : atelier, monde, jeu (le projet, ses textures et la station sont toujours refaits).

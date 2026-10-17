@@ -9,8 +9,8 @@ extends SceneTree
 ## lac de lave, un plateau et son lac retenu par un bouchon de roche, un marais, des plages, la mer.
 ##
 ## LANCEMENT — dans la COPIE de tournage (1920 × 1080, données à part ; le dépôt et l'exe de Jordan n'y sont pour rien) :
-##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_trailer.gd D:/MarchingBlocks_tournage/DEV_TOOLS/
-##   Godot_v4.7-stable_win64_console.exe --path D:/MarchingBlocks_tournage --fixed-fps 30 \
+##   cp D:/MarchingBlocks/DEV_TOOLS/filmer_trailer.gd D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee/DEV_TOOLS/
+##   Godot_v4.7-stable_win64_console.exe --path D:/SpannerGames/ATELIER/MarchingBlocks/copies/tournage_figee --fixed-fps 30 \
 ##       --write-movie D:/SpannerGames/PROJETS/MarchingBlocks/02_rushes/trailer.avi \
 ##       --script res://DEV_TOOLS/filmer_trailer.gd
 ## ⚠ Ne jamais l'interrompre : il rend les réglages à la fin.
