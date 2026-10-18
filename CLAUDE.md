@@ -463,6 +463,14 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     --sortie=… --nom=…` → `builds/0.9.4/exemples/` (client 174 Mo, cartoon 246 Mo, station 204 Mo) ; chacun installé dans un
     dossier jetable et ouvert dans l'appli (17, 13, 14 couches ; 0 chemin cité absent). L'upload : `C:/Users/jorda/
     pousser_itch.cmd` (butler, après `butler login` par Jordan).
+  - **0.9.4.1 — LE CORRECTIF DES EXEMPLES DÉZIPPÉS (Jordan, 18 octobre 2026 : « le build 0.9.4 installé n'arrive pas à
+    ouvrir le projet exemple cartoon »)**. Le zip décompressé sur le Bureau, son `.mbproj` ouvert : les 17 couches en cubes
+    rouges (« {EXEMPLE}/… is missing ») — seul « Open… » sur le .zip remplaçait la marque. `Exemple.installer_sur_place`,
+    appelé par `_ouvrir` : un projet qui contient encore `{EXEMPLE}` voit ses `.mbproj` et `.mbtiles` réécrits vers son
+    propre dossier. **EXPORTÉE ET POUSSÉE (18 octobre 2026)** : 28 suites vertes (`test_projet` 147), sonde « version=0.9.4.1 »,
+    l'installeur `builds/0.9.4.1/installeur/MarchingBlocks-0.9.4.1-setup.exe` ; les trois zips de la 0.9.4 décompressés à la
+    main puis réécrits : 0 marque restante, 0 chemin absent (114, 76, 161 cités). La démo sur itch (`windows-demo`) ; les
+    exemples inchangés. ⚠ La page itch s'appelle désormais `spannergames/marchingblocks-free-demo`.
     - **LE RELIEF DES TEXTURES EN PLAY TEST ET EN PLAY EDIT** (Jordan, 18 octobre 2026 : « on peut rajouter du parallax
       activable en play test et play edit ? »). **LE POM — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »), FAIT ET MESURÉ**
       (détail plus bas). Le choix, proposé par Claude : le POM plutôt que le parallax simple. Le parallax
