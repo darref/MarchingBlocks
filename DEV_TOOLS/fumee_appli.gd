@@ -531,6 +531,8 @@ func _mener() -> void:
 	_vrai(_transitions_finies, "SENTINELLE : l'atelier Transitions est allé JUSQU'AU BOUT")
 	await _le_feuillage(ed)
 	_vrai(_feuillage_fini, "le feuillage est allé JUSQU'AU BOUT")
+	await _la_generation(ed)
+	_vrai(_generation_finie, "SENTINELLE : l'atelier Generate est allé JUSQU'AU BOUT")
 	await _les_crans(ed)
 	_vrai(_crans_finis, "SENTINELLE : les crans du témoin et de l'eau sont allés JUSQU'AU BOUT")
 	await _la_cage(ed)
@@ -5811,6 +5813,120 @@ func _les_variantes(ed: Control) -> void:
 ## ⚠ CE QUI EST ATTENDU NE PASSE PAS PAR LA RÈGLE : le sol vu à 0,75 (mesuré par le Play test sur le même lot), les
 ## distances entre plants recalculées ici, le plateau et ses bords écrits ici.
 var _feuillage_fini := false
+
+
+## L'ATELIER GENERATE (19 octobre 2026, la 1.0.0) : par l'écran, comme l'artiste — l'atelier, sa barre, l'aperçu, le
+## croquis par la route du dialogue, puis « Generate the world » : les cases de la boîte sont celles du générateur (toutes
+## couches confondues), rien ne bouge hors de la boîte, l'eau est remplacée, et deux Ctrl+Z rendent l'ancien monde.
+var _generation_finie := false
+
+
+func _la_generation(ed: Control) -> void:
+	const Gen := preload("res://app/generateur.gd")
+	var ag: RefCounted = ed._generation
+	ed._aller_a("generer")
+	_vrai(ed._atelier == "generer" and ed._vue.mode == "monde", "Generate : le monde dans la vue")
+	_vrai(ed._droite_generer.visible and not ed._droite.visible and not ed._droite_feuillage.visible,
+		"Generate : sa barre de droite, et pas celles de World ni de Foliage")
+	ag.champs = Gen.champs({"largeur": 24, "profondeur": 20, "hauteur": 12, "mer": 3, "lieux": 2, "souterrains": 0.5,
+		"lacs": 1, "sources": 0, "lave": 0, "graine": 3, "tout_remplacer": false})
+	ag.apercu()
+	_vrai(ag._image.texture != null and ag._image.texture.get_width() >= 24, "l'aperçu vu de haut se dessine")
+	# Le croquis par la route du dialogue : la forme passe à « Sketch ».
+	var img := Image.create(24, 20, false, Image.FORMAT_RGB8)
+	img.fill(Color("#2a5fd0"))
+	img.fill_rect(Rect2i(4, 4, 16, 12), Color("#4caf50"))
+	var croquis := "user://fumee/croquis.png"
+	img.save_png(croquis)
+	ed._action_fichier = "croquis"
+	ed._fichier_choisi(croquis)
+	_egal(ag.champs["forme"], "croquis", "« Sketch image… » : la forme passe au croquis")
+	_egal(ag.champs["croquis"], croquis, "et le croquis est retenu")
+	# L'état d'avant, par couche : dans la boîte (x −12…11, z −10…9) et hors d'elle.
+	var avant := []
+	var hors_avant := []
+	for i in ed._vue.nombre_de_couches():
+		var g := ed._vue.couche(i).get_node("Cases") as GridMap
+		var cases := {}
+		var hors := {}
+		for c in g.get_used_cells():
+			if c.x >= -12 and c.x < 12 and c.z >= -10 and c.z < 10:
+				cases[c] = g.get_cell_item(c)
+			else:
+				hors[c] = g.get_cell_item(c)
+		avant.append(cases)
+		hors_avant.append(hors)
+	var eaux_avant: int = ed._eaux.size()
+	var attendu := Gen.generer(ag.champs)
+	var cible: Dictionary = ag.couches_par_role()
+	await ag.generer()
+	var dans := {}
+	var hors_ok := true
+	var doublons := 0
+	for i in ed._vue.nombre_de_couches():
+		var g := ed._vue.couche(i).get_node("Cases") as GridMap
+		var hors := {}
+		for c in g.get_used_cells():
+			if c.x >= -12 and c.x < 12 and c.z >= -10 and c.z < 10:
+				if dans.has(c):
+					doublons += 1
+				dans[c] = i
+			else:
+				hors[c] = g.get_cell_item(c)
+		if hors != hors_avant[i]:
+			hors_ok = false
+	var voulu := {}
+	for r in attendu["cases"]:
+		for c in attendu["cases"][r]:
+			voulu[c] = cible[r]
+	_egal(dans.size(), voulu.size(), "Generate : la boîte porte exactement les cases du générateur (%d)" % voulu.size())
+	var mal_rangees := 0
+	for c in voulu:
+		if dans.get(c, -1) != voulu[c]:
+			mal_rangees += 1
+	_egal(mal_rangees, 0, "chaque case est dans la couche de son rôle")
+	_egal(doublons, 0, "une case n'appartient qu'à une couche")
+	_vrai(hors_ok, "rien n'a bougé hors de la boîte")
+	_egal(ed._eaux.size(), (attendu["eaux"] as Array).size(), "l'eau du projet est celle du monde généré")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	var rendu := true
+	for i in ed._vue.nombre_de_couches():
+		var g := ed._vue.couche(i).get_node("Cases") as GridMap
+		var cases := {}
+		for c in g.get_used_cells():
+			if c.x >= -12 and c.x < 12 and c.z >= -10 and c.z < 10:
+				cases[c] = g.get_cell_item(c)
+		if cases != avant[i]:
+			rendu = false
+	_vrai(rendu, "deux Ctrl+Z rendent l'ancien monde, case pour case")
+	_egal(ed._eaux.size(), eaux_avant, "et son eau")
+	# « Replace the whole world » : hors de la boîte, plus rien ; deux Ctrl+Z rendent le dehors aussi.
+	ag.champs["tout_remplacer"] = true
+	await ag.generer()
+	var dehors := 0
+	for i in ed._vue.nombre_de_couches():
+		for c in (ed._vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
+			if not (c.x >= -12 and c.x < 12 and c.z >= -10 and c.z < 10):
+				dehors += 1
+	_egal(dehors, 0, "« Replace the whole world » : plus une case hors du monde généré")
+	ed._histoire.undo()
+	ed._histoire.undo()
+	var hors_rendu := true
+	for i in ed._vue.nombre_de_couches():
+		var g := ed._vue.couche(i).get_node("Cases") as GridMap
+		var hors := {}
+		for c in g.get_used_cells():
+			if not (c.x >= -12 and c.x < 12 and c.z >= -10 and c.z < 10):
+				hors[c] = g.get_cell_item(c)
+		if hors != hors_avant[i]:
+			hors_rendu = false
+	_vrai(hors_rendu, "et deux Ctrl+Z rendent le dehors, case pour case")
+	# Les champs partent avec le projet, et reviennent.
+	var d: Dictionary = ag.vers_donnees()
+	_egal(d["champs"]["graine"], 3, "les champs du générateur partent avec le projet")
+	ed._aller_a("monde")
+	_generation_finie = true
 
 
 func _le_feuillage(ed: Control) -> void:

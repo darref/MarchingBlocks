@@ -44,6 +44,8 @@ const Variantes := preload("res://app/variantes.gd")
 const AtelierTransitions := preload("res://app/transitions.gd")
 const AtelierAnimation := preload("res://app/animation.gd")
 const AtelierFeuillage := preload("res://app/atelier_feuillage.gd")
+const AtelierGeneration := preload("res://app/atelier_generation.gd")
+const TRC := preload("res://addons/marchingblocks_core/transitions.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
 const Projet := preload("res://app/projet.gd")
@@ -250,6 +252,9 @@ var _animation: RefCounted = AtelierAnimation.new(self)
 ## L'atelier Foliage (6 octobre 2026) : tout vit dans `atelier_feuillage.gd`, ici les branchements.
 var _feuillage: RefCounted = AtelierFeuillage.new(self)
 var _droite_feuillage: Panneau
+## L'atelier Generate (19 octobre 2026, la 1.0.0) : tout vit dans `atelier_generation.gd` et `generateur.gd`.
+var _generation: RefCounted = AtelierGeneration.new(self)
+var _droite_generer: Panneau
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -538,11 +543,13 @@ func _batir() -> void:
 	_feuillage.brancher(_vue.feuillage)
 	_droite_feuillage = _panneau(corps, false, LARGEUR_DROITE)
 	_feuillage.batir(_droite_feuillage.get_meta("pile"))
+	_droite_generer = _panneau(corps, false, LARGEUR_DROITE)
+	_generation.batir(_droite_generer.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
 			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"], [_droite_animation, "anim"],
 			[_droite_variantes, "variantes"],
-			[_droite_feuillage, "feuillage"]]:
+			[_droite_feuillage, "feuillage"], [_droite_generer, "generer"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -950,6 +957,8 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		["jeu", "Play test", "jouer", "Walk and jump through your world, at the height of a player."],
 		["monde", "World", "monde", "Paint worlds with the sliced tiles."],
 		["fluides", "Fluids", "eau", "Place water in the painted world: lakes, rivers, seas. Esc goes back to World."],
+		["generer", "Generate", "generer", "A whole world from a few fields and a seed: size, shape, relief, paths, "
+			+ "caves, water, look — painted with this project's layers. Esc goes back to World."],
 		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
 		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
 			+ "of the witness tiles."],
@@ -980,16 +989,18 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		b.clip_text = true
 		b.add_theme_font_override("font", Palette.gras())
 		b.add_theme_font_size_override("font_size", 10)
-		b.add_theme_constant_override("icon_max_width", 18)
+		b.add_theme_constant_override("icon_max_width", 16)
 		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		Palette.habiller_bouton_d_atelier(b, a[0])   # chaque atelier se reconnaît à sa teinte (Jordan, 2 octobre 2026)
 		# ⚠ À LA FENÊTRE LA PLUS PETITE (1100 × 680), la vue a 632 px : avec les marges du thème, un bouton faisait 60 px
 		# et les onze 702 (vu par la fumée, la bande passait sous la bande du bas). Marges verticales resserrées : ~42 px.
+		# ⚠ DOUZE DEPUIS GENERATE (19 octobre 2026) : 53 px chacun débordaient encore (669 px, vu par la fumée) ; icône de
+		# 16 et marges de 2 et 1.
 		for etat in ["normal", "hover", "pressed", "hover_pressed"]:
 			var boite := (b.get_theme_stylebox(etat) as StyleBox).duplicate() as StyleBox
-			boite.content_margin_top = 4
-			boite.content_margin_bottom = 3
+			boite.content_margin_top = 2
+			boite.content_margin_bottom = 1
 			boite.content_margin_left = 2
 			boite.content_margin_right = 2
 			b.add_theme_stylebox_override(etat, boite)
@@ -3162,7 +3173,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes", "generer"]:
 		await _rhabiller_avec_attente(atelier in JEUX)
 	var debut := Time.get_ticks_msec()
 	if atelier in JEUX and not _atelier in JEUX and _ecran_vivant() \
@@ -3337,7 +3348,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes", "generer"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier in JEUX and not _atelier in JEUX:
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -3370,11 +3381,13 @@ func _aller_a(atelier: String) -> void:
 		_variantes.sortir()
 	if atelier != "feuillage":
 		_feuillage.sortir()
+	if atelier != "generer":
+		_generation.sortir()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "variantes": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "variantes": "monde", "generer": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
@@ -3385,6 +3398,8 @@ func _aller_a(atelier: String) -> void:
 		_animation.entrer()
 	if atelier == "feuillage":
 		_feuillage.entrer()
+	if atelier == "generer":
+		_generation.entrer()
 	if atelier == "jeu_edit":
 		get_viewport().gui_release_focus()
 		_vue.grab_focus()
@@ -3464,6 +3479,7 @@ func _contexte() -> void:
 	_droite_variantes.visible = _atelier == "variantes"
 	_droite_animation.visible = animation
 	_droite_feuillage.visible = _atelier == "feuillage"
+	_droite_generer.visible = _atelier == "generer"
 	_modeleur.geometrie = not (texturing or animation)
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -5366,6 +5382,11 @@ func _demander(quoi: String) -> void:
 		_dialogue.add_filter("*.png", "PNG image")
 		_dialogue.title = "Export the UV layout"
 		_dialogue.current_file = "uv_layout.png"
+	elif quoi == "croquis":
+		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+		_dialogue.add_filter("*.png, *.jpg, *.jpeg", "Image (blue sea, green land, gray mountains, red places)")
+		_dialogue.title = "Pick a sketch of the world"
+		_dialogue.current_file = ""
 	elif quoi == "feuillage":
 		_dialogue.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 		_dialogue.add_filter("*.glb", "glTF binary (a tree, a bush…)")
@@ -5439,6 +5460,8 @@ func _fichier_choisi(fichier: String) -> void:
 			_exporter_le_patron(fichier)
 		"feuillage":
 			_feuillage.importer(fichier)
+		"croquis":
+			_generation.croquis_choisi(fichier)
 
 
 ## ⚠ IL REFUSE si le témoin est en faute : sculpter des jours sur une base fausse coûte bien plus qu'un
@@ -5923,6 +5946,102 @@ func _remplacer_le_monde(nouvelles: Dictionary, nom: String) -> void:
 		if not nouvelles.has(c):
 			effacer[c] = true
 	_appliquer({"poser": nouvelles, "effacer": effacer}, nom)
+
+
+## LE MONDE GÉNÉRÉ (l'atelier Generate, 19 octobre 2026) : chaque couche prend les cases de ses rôles et perd les autres
+## — partout (« Replace the whole world », par défaut), ou dans la boîte du générateur seulement —, en UNE action (Ctrl+Z
+## rend l'ancien monde entier) ; puis l'eau et, en remplaçant tout, les plants du feuillage (une seconde action), et les
+## transitions que le monde demande. `cible` : rôle → indice de couche.
+func _poser_le_monde_genere(monde: Dictionary, cible: Dictionary) -> void:
+	await _attendre("Painting the generated world", "every layer, in one undoable step", 0)
+	var o: Vector2i = monde["origine"]
+	var w: int = monde["largeur"]
+	var d: int = monde["profondeur"]
+	var tout: bool = monde["champs"].get("tout_remplacer", true)
+	var voulu := {}   # indice de couche → {case: true}
+	for r in monde["cases"]:
+		var i: int = cible.get(r, -1)
+		if i < 0:
+			continue
+		if not voulu.has(i):
+			voulu[i] = {}
+		(voulu[i] as Dictionary).merge(monde["cases"][r])
+	var par_grille := {}
+	var sans_tuiles: Array = []
+	var total := 0
+	for i in _vue.nombre_de_couches():
+		var g := _vue.couche(i).get_node("Cases") as GridMap
+		var id: int = g.mesh_library.find_item_by_name("case") if g.mesh_library != null else -1
+		var ch := {}
+		for c in g.get_used_cells():
+			if (tout or (c.x >= o.x and c.x < o.x + w and c.z >= o.y and c.z < o.y + d)) 					and not (voulu.get(i, {}) as Dictionary).has(c):
+				ch[c] = [g.get_cell_item(c), GridMap.INVALID_CELL_ITEM]
+		if voulu.has(i):
+			if id < 0:
+				sans_tuiles.append(str(_couches[i]["nom"]))
+			else:
+				for c in voulu[i]:
+					var avant: int = g.get_cell_item(c)
+					if avant != id:
+						ch[c] = [avant, id]
+		if not ch.is_empty():
+			par_grille[g] = ch
+			total += ch.size()
+	_histoire.create_action("Generate the world")
+	var touchees: Array = []
+	for g in par_grille:
+		for c in par_grille[g]:
+			_histoire.add_do_method((g as GridMap).set_cell_item.bind(c, par_grille[g][c][1]))
+			_histoire.add_undo_method((g as GridMap).set_cell_item.bind(c, par_grille[g][c][0]))
+		touchees.append_array((par_grille[g] as Dictionary).keys())
+	_histoire.add_do_method(_reconstruire.bind(null, touchees))
+	_histoire.add_undo_method(_reconstruire.bind(null, touchees))
+	_histoire.commit_action()
+	# L'EAU : toutes les eaux du projet sont remplacées par celles du monde.
+	var avant_eaux: Array = _eaux.duplicate(true)
+	var apres_eaux: Array = []
+	for e in monde["eaux"]:
+		var etat := Projet.couche_d_eau(str(e["nom"]), str(apres_eaux.size() + 1))
+		etat["preset"] = e["preset"]
+		etat["sources"] = (e["sources"] as Array).duplicate()
+		apres_eaux.append(etat)
+	var plants: Array = (_feuillage.plants as Array).duplicate() if tout else []
+	_histoire.create_action("Generate the world: water" + (" and foliage" if tout else ""))
+	_histoire.add_do_method(_remettre_les_eaux.bind(apres_eaux))
+	_histoire.add_undo_method(_remettre_les_eaux.bind(avant_eaux))
+	if not plants.is_empty():
+		_histoire.add_do_method(_feuillage._faire.bind([], plants))
+		_histoire.add_undo_method(_feuillage._defaire.bind([], plants))
+	_histoire.commit_action()
+	# LES TRANSITIONS que le monde demande (les chemins, ou tout ce qui se touche avec « Blend materials »).
+	var allumees := 0
+	for paire in monde["transitions"]:
+		var a: int = cible.get(paire[0], -1)
+		var b: int = cible.get(paire[1], -1)
+		if a < 0 or b < 0 or a == b:
+			continue
+		_transitions.allumer(TRC.cle_de_paire(str(_couches[a]["id"]), str(_couches[b]["id"])), true)
+		allumees += 1
+	_fin_attente()
+	_cadrer_tout_le_monde()
+	_enregistrer_plus_tard()
+	var texte := ("[b]World generated[/b] — %d cells changed, %d water layer(s), %d transition(s) switched on%s. "
+		+ "[i]Ctrl+Z twice gives the old world back.[/i]") % [total, apres_eaux.size(), allumees,
+		", %d plant(s) removed" % plants.size() if not plants.is_empty() else ""]
+	if not sans_tuiles.is_empty():
+		texte += ("
+[color=#e0603c]%s has no tiles yet[/color]: its cells were not painted. Slice its witness in "
+			+ "Project, or give its part to another layer under LAYERS.") % ", ".join(PackedStringArray(sans_tuiles))
+	_dire(texte)
+
+
+func _remettre_les_eaux(liste: Array) -> void:
+	_eaux.clear()
+	for e in liste:
+		_eaux.append((e as Dictionary).duplicate(true))
+	_eau_active = 0
+	_rafraichir_eaux()
+	_eau_perimee()
 
 
 var _boutons_diagonales: Array = []
@@ -6816,6 +6935,7 @@ func _rafraichir_couches() -> void:
 	if _liste_couches == null:
 		return
 	_transitions.dire()   # une couche ajoutée, renommée, déplacée : les paires suivent
+	_generation.rafraichir_couches()
 	_dire_le_cran()
 	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
 	_bouton_supprimer_couche.disabled = _couches.size() <= 1
@@ -7150,6 +7270,7 @@ func _vider_le_projet() -> void:
 	if _vue != null:
 		_vue.poser_eaux([])
 		_feuillage.vider()
+		_generation.charger({})
 
 
 ## Rend vrai si le projet est ouvert. ⚠ Chaque couche est habillée de son lot EN CACHE s'il est à jour,
@@ -7214,6 +7335,7 @@ func _ouvrir(chemin: String) -> bool:
 		_ajouter_eau(e)
 	_transitions.poser_etat(etat.get("transitions", {}))
 	_feuillage.charger(etat.get("feuillage", {}))
+	_generation.charger(etat.get("generateur", {}))
 	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
 	# en choisit un. Un fichier disparu depuis n'y revient pas.
 	for t in etat.get("travaux", []):
@@ -7429,15 +7551,16 @@ func _enregistrer(en_fond := false) -> void:
 	var travaux := _chemins_des_travaux()
 	var transitions: Dictionary = (_transitions.etat as Dictionary).duplicate(true)
 	var feuillage: Dictionary = _feuillage.vers_donnees()
+	var generateur: Dictionary = _generation.vers_donnees()
 	if en_fond:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
 		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions, feuillage,
-			_retrait),
+			_retrait, generateur),
 			true, "Saving the project")
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait, generateur)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -7458,14 +7581,15 @@ func _attendre_l_ecriture() -> void:
 ## Le texte et le fichier — sur un autre fil quand `en_fond` (rien n'y touche à l'écran : le résultat revient par
 ## `_ecriture_finie`, sur le fil principal).
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
-		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT) -> void:
+		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT,
+		generateur: Dictionary = {}) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau, generateur))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -7739,7 +7863,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
-	if _atelier in ["transitions", "variantes"]:
+	if _atelier in ["transitions", "variantes", "generer"]:
 		if k.physical_keycode == KEY_QUOTELEFT:
 			_teleporter()
 			get_viewport().set_input_as_handled()

@@ -10,6 +10,7 @@ extends SceneTree
 ## cru à jour alors que l'artiste a réenregistré son `.glb`. Les attendus sont écrits à la main.
 
 const Projet := preload("res://app/projet.gd")
+const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 const Vue := preload("res://app/vue.gd")
 const Exemple := preload("res://app/exemple.gd")
 const Dossiers := preload("res://app/dossiers.gd")
@@ -205,6 +206,7 @@ func _initialize() -> void:
 	_les_dossiers()
 	_le_feuillage()
 	_les_crans()
+	_le_generateur()
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
@@ -639,3 +641,19 @@ class _Capte extends Logger:
 	func _log_error(_function: String, _file: String, _line: int, _code: String, _rationale: String,
 			_editor_notify: bool, _error_type: int, _script_backtraces: Array[ScriptBacktrace]) -> void:
 		erreurs += 1
+
+
+## LES CHAMPS DU GÉNÉRATEUR (19 octobre 2026) partent avec le projet et reviennent ; un projet d'avant n'en a pas.
+func _le_generateur() -> void:
+	var c := Projet.couche("Sol")
+	var gen := {"champs": {"graine": 42, "forme": "archipel"}, "couches": {"sol": "3"}}
+	var erreurs: Array = []
+	var texte := Projet.vers_texte([c], 0, [], [], {}, {}, 0.0, gen)
+	var relu: Dictionary = Projet.depuis_texte(texte, erreurs)
+	_vrai(erreurs.is_empty(), "un projet avec son générateur se relit")
+	var rg: Dictionary = relu.get("generateur", {})
+	_egal(int(rg.get("champs", {}).get("graine", -1)), 42, "la graine du générateur revient (le JSON la relit en flottant)")
+	_egal(rg.get("champs", {}).get("forme", ""), "archipel", "sa forme revient")
+	_egal(rg.get("couches", {}), {"sol": "3"}, "la couche de chaque rôle revient")
+	var vieux: Dictionary = Projet.depuis_texte(Projet.vers_texte([c], 0), erreurs)
+	_egal(vieux.get("generateur", null), {}, "un projet d'avant revient avec un générateur vide")
