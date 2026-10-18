@@ -125,6 +125,11 @@ var _minuterie_temoin: Timer
 var _minuterie_projet: Timer
 ## LES MATÉRIAUX DU MODELEUR : la liste, et l'éditeur du matériau courant.
 var _liste_materiaux: VBoxContainer
+## LE SMOOTH SHADING (19 octobre 2026, la 1.0.0) : la case et l'angle de coupure du témoin, dans Texturing.
+var _case_lissage: CheckBox
+var _angle_lissage: HSlider
+var _valeur_lissage: Label
+var _lissage_en_cours := false
 var _edition_materiau: VBoxContainer
 var _nom_materiau: LineEdit
 var _couleur_materiau: ColorPickerButton
@@ -3832,6 +3837,7 @@ func _batir_droite_texture(pile: VBoxContainer) -> void:
 	_liste_materiaux = VBoxContainer.new()
 	_liste_materiaux.add_theme_constant_override("separation", 4)
 	mats.contenu.add_child(_liste_materiaux)
+	_batir_le_lissage(pile)
 	mats.contenu.add_child(_grille([
 		_bouton("New material", "Adds a material and makes it the one you assign.", _nouveau_materiau, "plus"),
 		_bouton("Assign", "Gives the chosen material to the selected faces.", _assigner_materiau, "remplir",
@@ -4719,8 +4725,90 @@ func _curseur(parent: Control, nom: String, mini: float, maxi: float, pas: float
 	return c
 
 
+## LE SMOOTH SHADING — la 1.0.0 (Jordan, 19 octobre 2026). Tout le témoin de la couche active : ses tuiles se lissent
+## autour de chaque sommet, sauf aux arêtes plus vives que l'angle (`MaillageEdite.normales_des_coins`) ; aux bords des
+## tuiles, la normale vient de la coupe partagée, et le monde n'a pas de couture d'ombre.
+const LISSAGE_PAR_DEFAUT := 40.0
+
+
+func _batir_le_lissage(pile: VBoxContainer) -> void:
+	var sec := Section.new("Shading", true, Icones.icone("sphere"))
+	pile.add_child(sec)
+	sec.contenu.add_child(_texte("Flat: one normal per face, every facet shows. Smooth: the tiles are shaded round, "
+		+ "edges sharper than the angle stay sharp. The whole witness of this layer; the world, the export and the "
+		+ "engine plugins follow.", 11, Palette.GRIS))
+	_case_lissage = CheckBox.new()
+	_case_lissage.text = "Smooth shading"
+	_case_lissage.focus_mode = Control.FOCUS_NONE
+	_case_lissage.tooltip_text = "Shades the witness round instead of faceted. Ctrl+Z undoes it."
+	_case_lissage.toggled.connect(func(oui: bool) -> void:
+		if not _lissage_en_cours:
+			_regler_le_lissage(_angle_lissage.value if oui else 0.0))
+	sec.contenu.add_child(_case_lissage)
+	var ligne := HBoxContainer.new()
+	var l := _texte("Sharp above", 11, Palette.GRIS)
+	l.custom_minimum_size = Vector2(80, 0)
+	l.tooltip_text = "Edges sharper than this angle stay sharp (Blender's auto smooth). 30 to 60 suits most tiles."
+	ligne.add_child(l)
+	_angle_lissage = HSlider.new()
+	_angle_lissage.min_value = 5.0
+	_angle_lissage.max_value = 180.0
+	_angle_lissage.step = 1.0
+	_angle_lissage.value = LISSAGE_PAR_DEFAUT
+	_angle_lissage.focus_mode = Control.FOCUS_NONE
+	_angle_lissage.tooltip_text = l.tooltip_text
+	_angle_lissage.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_angle_lissage.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	ligne.add_child(_angle_lissage)
+	_valeur_lissage = _texte("%d°" % int(LISSAGE_PAR_DEFAUT), 11, Palette.TEXTE)
+	_valeur_lissage.custom_minimum_size = Vector2(36, 0)
+	ligne.add_child(_valeur_lissage)
+	_angle_lissage.value_changed.connect(func(v: float) -> void:
+		_valeur_lissage.text = "%d°" % int(v))
+	# L'angle s'applique au LÂCHER (un cran par image rebâtirait tout le témoin à chaque pixel).
+	_angle_lissage.drag_ended.connect(func(_change: bool) -> void:
+		if _case_lissage.button_pressed and not _lissage_en_cours:
+			_regler_le_lissage(_angle_lissage.value))
+	sec.contenu.add_child(ligne)
+
+
+func _regler_le_lissage(angle: float) -> void:
+	var t: RefCounted = _modeleur.temoin
+	if t == null or is_equal_approx(float(t.lissage), angle):
+		return
+	_histoire.create_action("Smooth shading %s" % ("off" if angle <= 0.0 else "%d°" % int(angle)))
+	_histoire.add_do_method(_poser_le_lissage.bind(t, angle))
+	_histoire.add_undo_method(_poser_le_lissage.bind(t, float(t.lissage)))
+	_histoire.commit_action()
+	_dire(("[b]Smooth shading[/b] — edges sharper than %d° stay sharp. The world follows when you go back to it."
+		% int(angle)) if angle > 0.0 else "[b]Flat shading[/b] — one normal per face.")
+
+
+func _poser_le_lissage(t: RefCounted, angle: float) -> void:
+	t.lissage = angle
+	t._partager()
+	if _modeleur.temoin == t:
+		_modeleur.redessiner()
+	_temoin_modifie(t)
+	_dire_le_lissage()
+
+
+func _dire_le_lissage() -> void:
+	if _case_lissage == null:
+		return
+	var t: RefCounted = _modeleur.temoin
+	_lissage_en_cours = true
+	var a: float = float(t.lissage) if t != null else 0.0
+	_case_lissage.button_pressed = a > 0.0
+	_case_lissage.disabled = t == null
+	if a > 0.0:
+		_angle_lissage.value = a
+	_lissage_en_cours = false
+
+
 ## La liste : la légende, puis chaque matériau ; le courant est enfoncé. Et l'éditeur du courant.
 func _redire_les_materiaux() -> void:
+	_dire_le_lissage()
 	if _liste_materiaux == null:
 		return
 	for enfant in _liste_materiaux.get_children():

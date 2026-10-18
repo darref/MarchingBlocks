@@ -136,12 +136,28 @@ static func _meshes_of(glb: String) -> Dictionary:
 	return out
 
 
+## The tile mesh rebuilt from the ImporterMesh arrays, surface by surface, materials included.
+## NOT ImporterMesh.get_mesh(): measured in the app (1 October 2026), its conversion bends normals by up to 14°,
+## and with smooth-shaded tiles (MarchingBlocks 1.0) the world would show a shading seam at every tile joint.
+static func _from_importer(im: ImporterMesh) -> ArrayMesh:
+	var out := ArrayMesh.new()
+	for s in im.get_surface_count():
+		var arrays: Array = im.get_surface_arrays(s)
+		if arrays.is_empty():
+			continue
+		out.add_surface_from_arrays(im.get_surface_primitive_type(s), arrays)
+		var mat: Material = im.get_surface_material(s)
+		if mat != null:
+			out.surface_set_material(out.get_surface_count() - 1, mat)
+	return out
+
+
 ## A node is recognised by what it CARRIES, not by its class: the editor import yields
 ## ImporterMeshInstance3D, which does not inherit MeshInstance3D.
 static func _collect(node: Node, out: Dictionary) -> void:
 	var m = node.get("mesh")
 	if m is ImporterMesh:
-		m = (m as ImporterMesh).get_mesh()
+		m = _from_importer(m)
 	if m is Mesh:
 		out[str(node.name)] = m
 	for child in node.get_children():

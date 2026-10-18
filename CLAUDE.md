@@ -533,7 +533,8 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       19 octobre 2026 : « des mondes de taille / forme / réseaux de chemins / souterrains / aspects différents ?
       contrôlables ? » — « fais-le »)** :
       - **Taille** (cases en x, y, z ; la borne est la mémoire et le temps, l'exemple fait 739 481 cases) ; **forme**
-        (île, archipel, continent, vallée, plateau, station fermée, ou un masque noir et blanc) ; **relief** (hauteur,
+        (île, archipel, continent, vallée, plateau, ou un croquis en image ; la « station fermée » proposée n'est pas
+        écrite : ce n'est pas un relief) ; **relief** (hauteur,
         falaises franches ou douces, étages, bosses 3D qui débordent comme la montagne de `filmer_formes`) ;
       - **chemins** : des lieux posés (village, ruines…) reliés par des routes CALCULÉES sur le relief, jamais plus
         d'une case à monter (le `_route` de `filmer_haut`), ponts et escaliers taillés ;
@@ -548,11 +549,52 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
         même étage, sauf transition cochée) ; « Fix diagonal contacts » sur chaque monde ; marches d'une case et
         tunnels d'au moins 3 cases (le stickman passe) ; un bassin ne déborde que par son point le plus bas. Un monde
         généré est donc JOUABLE d'office.
+      **ÉCRIT ET MESURÉ (19 octobre 2026, commit `b19338d`) — l'atelier « Generate »** (rail, entre Fluids et Geometry) :
+      - `app/generateur.gd` (pur) : formes île, archipel, continent, vallée, plateau et CROQUIS (une image peinte
+        ailleurs : bleu mer, vert terre, gris montagne, blanc pics, jaune rivages, taches rouges = places) ; massifs par un
+        bruit lent, élévation ÉTIRÉE (la colonne du 99,5e centile touche le haut) ; falaises = palier ET marche maximale
+        (1 à 4) ; neige et roche en PARTS de la terre (15 % et 35 % à fond), pas en hauteur fixe ; places reliées par
+        `AStarGrid2D` (pente chère, mer fermée), tranchées et remblais d'une case par pas ; souterrain : salles, galeries
+        3 × 3, escaliers et puits, parois « souterrain », fermé hors des entrées ; mer (source dans le vide), lacs et mares
+        de lave en cuvettes à digue FIGÉE, sources sur un haut près d'une chute ; contacts réparés (colonnes, puis sous
+        terre en creusant d'abord) ; un rôle par plat. 160 × 160 × 40 : ~195 000 cases en 1 à 2 s.
+      - `app/atelier_generation.gd` : les champs (sliders, graine, « New seed », forme, « Sketch image… », « Blend
+        materials », « Rock under the surface », « Replace the whole world » — par défaut : toutes les cases de toutes les
+        couches et tous les plants partent), l'aperçu vu de haut (0,3 s après le dernier cran), la COUCHE DE CHAQUE RÔLE
+        (proposée par son nom : grass, rock, sand, snow, path, cave… ; sinon le repli). `editor._poser_le_monde_genere` :
+        les cases en UNE action, l'eau et les plants dans une seconde ; les transitions demandées allumées. Les champs
+        partent avec le `.mbproj` (`"generateur"`).
+      - **MESURÉ** : `test_generateur` (72 : graine, formes, contacts sur TOUTES les cases, chemins atteints à pied,
+        plafonds de trois cases, souterrain fermé, cuvettes qui ne fuient pas — chacun VU ROUGIR par mutation), fumée
+        (1137 : l'atelier par l'écran, la boîte, le monde entier, deux Ctrl+Z case pour case), `test_projet` (155). À
+        L'IMAGE : `DEV_TOOLS/sonde_generation.gd` sur une copie du monde cartoon (`SpannerGames/ATELIER/MarchingBlocks/
+        essais/generation/`) : 112 × 112 posé en 6 s, île, lacs, mare de lave, chemins, roche, neige, Play test sur une place.
+      - ⚠ VU À L'IMAGE ET CORRIGÉ : une mare de lave semblait couvrir la mer (l'ancien monde restait autour de la boîte et
+        la source de mer tombait sur sa terre → « Replace the whole world » par défaut) ; la digue d'une cuvette était
+        rabotée par `_relacher` (elle est figée) ; le rail débordait avec douze ateliers (icône 16, marges 2 et 1).
+      - **PAS ENCORE** : le feuillage n'est pas généré ; le croquis se peint AILLEURS (pas de toile dans l'atelier) ;
+        « verrouiller une zone » n'existe que comme « Replace the whole world » décoché (seule la boîte change) ; pas de
+        page au manuel (F1) ni au site ; les arches et étages en surplomb ne sont pas générés.
       **LE SMOOTH SHADING DES TUILES — DÉCIDÉ (Jordan, 19 octobre 2026), À ÉCRIRE.** Aujourd'hui tout est en normales
       PAR FACE (le .glb part sans normales : ombrage plat imposé par glTF ; le manuel dit « ne pas lisser »). ⚠ Lisser
       demande des normales qui S'ACCORDENT d'une tuile à l'autre et d'une couche à l'autre (les bords sont partagés,
       §« bords partagés ») — sinon chaque joint se voit en ligne d'ombre ; et un angle de coupure pour garder les
       arêtes vives. Le .glb, les trois greffons et la page 6 du manuel suivent.
+      **ÉCRIT ET MESURÉ (19 octobre 2026)** : `TemoinLie.lissage` (angle de coupure, 0 = plat, dans le `.mbtiles`, rien
+      d'écrit s'il est plat), donné à chaque tuile ; `MaillageEdite.normales_des_coins` : éventails autour de chaque
+      sommet coupés aux arêtes plus vives que l'angle, moyenne pondérée par l'angle du coin ; la projection des UV garde
+      la normale de la FACE. **LE BORD** (une face de la case, ±0,5) : la normale ne vient que de la COUPE partagée —
+      dans le plan de la case, perpendiculaire aux deux sommets de coupe voisins, du côté de l'éventail ; sur une arête
+      de la case, l'axe restant. Les deux tuiles voisines calculent donc la même, quelle que soit la voisine que le monde
+      pose (plus simple que la moyenne par classes de `sections.gd` que proposait l'exploration : les cartes 2D y
+      auraient dû passer en 3D). Prix connu : une pente qui traverse un bord y paraît un peu plus droite, sur une bande.
+      Interface : Texturing › Shading (« Smooth shading », « Sharp above », 40° par défaut, annulable). Le greffon Godot
+      ne passe plus par `ImporterMesh.get_mesh()` (14° de travers : une couture à chaque joint). **MESURÉ** :
+      `test_lissage` (12 : arête vive gardée, courbe lisse, normales unitaires, BORD COMMUN entre deux tuiles au relief
+      différent — VU ROUGIR sans la règle du bord —, le témoin le garde), batterie 30 suites vertes ; à l'image
+      (`DEV_TOOLS/sonde_ombrage_lisse.gd`, copie du monde cartoon, `SpannerGames/ATELIER/MarchingBlocks/essais/
+      lissage/photos/`) : à 45°, chanfreins et bosses arrondis, aucune ligne d'ombre aux joints. ⚠ PAS VU dans Unity ni
+      Unreal (ils doivent importer les normales du fichier, le manuel le dit).
       **L'ancien plan (PROPOSÉ par Claude le 18 octobre), dont l'étape 1 est retenue :**
       1. **D'abord un générateur procédural SANS IA.** Une liste de champs (taille, biomes, relief et falaises,
          rivières, mer, étages, densité du feuillage, textures par couche, graine), et des règles écrites par nous qui

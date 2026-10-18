@@ -37,6 +37,10 @@ var occurrences: Array = []
 ## classes de sa clé). ⚠ LE TÉMOIN MONTRE CE QUE LE MONDE MONTRERA : une variante y est posée à côté de ses voisines
 ## du témoin, et c'est là qu'on juge ses raccords.
 var affectation := {}
+## LE SMOOTH SHADING DU TÉMOIN (Jordan, 19 octobre 2026, la 1.0.0) : l'angle de coupure en degrés (0 = plat), donné à
+## toutes ses tuiles par `_partager` (`MaillageEdite.normales_des_coins`). Il part dans le `.mbtiles` et, par les
+## normales du `.glb`, dans le monde, l'export et les greffons.
+var lissage := 0.0
 
 
 ## Le témoin calculé, en tuiles liées (~2 s : `BlocsMaitres.tuiles_du_temoin` ne découpe que 52 sommets), au cran
@@ -309,6 +313,7 @@ func poser_etat_des_variantes(e: Dictionary) -> void:
 func _partager() -> void:
 	for cle in tuiles:
 		tuiles[cle].materiaux = materiaux
+		tuiles[cle].lissage = lissage
 		# ⚠ ET LE MÊME CACHE DE MATÉRIAUX GODOT (mesuré le 1er octobre 2026) : chaque tuile fabriquait le sien, donc
 		# sa propre copie d'un matériau du témoin — le .glb en portait une par tuile (« Green », « Green2 »…), et
 		# un témoin relu de Blender en aurait fait autant d'entrées.
@@ -330,6 +335,7 @@ func poser_tuile(cle: String, m: RefCounted) -> void:
 func copie() -> RefCounted:
 	var t: RefCounted = get_script().new()
 	t.materiaux = materiaux.duplicate(true)
+	t.lissage = lissage
 	for cle in tuiles:
 		t.tuiles[cle] = tuiles[cle].copie()
 	t._partager()
@@ -681,7 +687,10 @@ func vers_dictionnaire() -> Dictionary:
 	for s in affectation:
 		var v: Vector3i = s
 		aff.append_array([v.x, v.y, v.z, int(affectation[s])])
-	return {"format": FORMAT, "version": VERSION, "materiaux": mt, "tuiles": t, "affectation": aff}
+	var d := {"format": FORMAT, "version": VERSION, "materiaux": mt, "tuiles": t, "affectation": aff}
+	if lissage > 0.0:
+		d["lissage"] = lissage
+	return d
 
 
 ## null si ce n'est pas un témoin lié, ou s'il vient d'une version plus récente.
@@ -705,6 +714,9 @@ static func depuis_dictionnaire(d: Dictionary) -> RefCounted:
 		return null
 	for k in range(0, (aff as Array).size(), 4):
 		t.affectation[Vector3i(int(aff[k]), int(aff[k + 1]), int(aff[k + 2]))] = int(aff[k + 3])
+	# Le lissage (19 octobre 2026) : un témoin d'avant n'en a pas — il reste plat.
+	var l = d.get("lissage", 0.0)
+	t.lissage = clampf(float(l), 0.0, 180.0) if (l is float or l is int) else 0.0
 	t._partager()
 	t._deduire_les_occurrences()
 	return t

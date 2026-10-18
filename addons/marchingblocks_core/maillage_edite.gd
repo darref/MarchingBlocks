@@ -46,6 +46,9 @@ var uvs: Array = []
 ## est donc texturée sans rien déplier ; et une texture tuilable dont la période divise la case se raccorde
 ## d'une tuile à l'autre — la discipline de l'artiste (§3), servie par construction là où c'est possible.
 var materiaux: Array = []
+## LE SMOOTH SHADING (Jordan, 19 octobre 2026, la 1.0.0) : l'angle de coupure en degrés, 0 = plat (une normale par face,
+## le rendu d'avant). Réglé sur tout le témoin (`TemoinLie.lissage`, partagé comme `materiaux`). Voir `normales_des_coins`.
+var lissage := 0.0
 
 
 func copie() -> RefCounted:
@@ -58,6 +61,7 @@ func copie() -> RefCounted:
 	for u in uvs:
 		m.uvs.append((u as PackedVector2Array).duplicate())
 	m.materiaux = materiaux.duplicate(true)
+	m.lissage = lissage
 	return m
 
 
@@ -236,6 +240,7 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 	var cles: Array = groupes.keys()
 	cles.sort()
 	var mesh := ArrayMesh.new()
+	var coins := normales_des_coins(lissage) if lissage > 0.0 and avec_normales else {}
 	for m in cles:
 		var pos := PackedVector3Array()
 		var nor := PackedVector3Array()
@@ -246,12 +251,15 @@ func vers_array_mesh_de(choix: Array, avec_normales := true) -> ArrayMesh:
 		for f in groupes[m]:
 			var face: PackedInt32Array = faces[f]
 			var n := normale(f)
+			var lisses: PackedVector3Array = coins.get(f, PackedVector3Array())
 			for t in trianguler(f):
 				# Horaire pour Godot : le triangle trigonométrique [a,b,c] s'écrit [a,c,b].
 				for k in [0, 2, 1]:
 					var p: Vector3 = sommets[face[t[k]]]
 					pos.append(p)
-					nor.append(n)
+					# ⚠ LA PROJECTION DES UV GARDE LA NORMALE DE LA FACE : lissée, une face changerait d'axe de boîte
+					# d'un coin à l'autre et sa texture se déchirerait.
+					nor.append(lisses[t[k]] if not lisses.is_empty() else n)
 					col.append(teintes[f] if f < teintes.size() else Color.WHITE)
 					if m >= 0:
 						var depl := uv(f) if mode == "uv" else PackedVector2Array()
@@ -1095,6 +1103,123 @@ func pinceau_sculpt(genre: String, centre: Vector3, normale_vis: Vector3, rayon:
 			for i in poids:
 				sortie[i] = glisse * poids[i]
 	return sortie
+
+
+## LES NORMALES LISSÉES, coin par coin : {face: PackedVector3Array, une par coin}. Autour de chaque sommet, les faces se
+## rangent en ÉVENTAILS que coupe toute arête plus vive que `angle` (l'« auto smooth » de Blender) ; chaque éventail
+## prend la moyenne de ses normales, pondérée par l'angle du coin.
+## ⚠ SUR LE BORD D'UNE TUILE (une face de sa case, x, y ou z = ±0,5), LA NORMALE NE VIENT QUE DE LA COUPE : la tuile
+## voisine dans le monde n'est pas celle du témoin, mais sa coupe est la même (les bords partagés). La normale d'un
+## sommet de bord est dans le plan de la case, perpendiculaire à la coupe (les deux sommets de coupe qui l'entourent),
+## du côté de l'éventail ; sur une arête de la case, l'axe des deux plans. Les deux tuiles calculent ainsi la MÊME
+## normale, quelle que soit la voisine : pas de couture d'ombre. Prix connu : une pente qui traverse le bord y paraît
+## un peu plus droite, sur une bande étroite.
+const BORD := 0.5
+const EPS_BORD := 5e-4
+
+
+func normales_des_coins(angle: float) -> Dictionary:
+	var cos_coupe := cos(deg_to_rad(clampf(angle, 0.0, 180.0)))
+	var fn: Array = []
+	for f in faces.size():
+		fn.append(normale(f))
+	# Les coins de chaque sommet : [face, rang dans la face].
+	var coins_de := {}
+	for f in faces.size():
+		var face: PackedInt32Array = faces[f]
+		for k in face.size():
+			if not coins_de.has(face[k]):
+				coins_de[face[k]] = []
+			coins_de[face[k]].append([f, k])
+	var par_arete := faces_par_arete()
+	var sortie := {}
+	for f in faces.size():
+		var vide := PackedVector3Array()
+		vide.resize((faces[f] as PackedInt32Array).size())
+		sortie[f] = vide
+	for v in coins_de:
+		var liste: Array = coins_de[v]
+		# Les éventails : deux faces du sommet qui partagent une arête douce sont du même.
+		var parent := {}
+		for c in liste:
+			parent[c[0]] = c[0]
+		for c in liste:
+			var face: PackedInt32Array = faces[c[0]]
+			for voisin in [face[(c[1] + 1) % face.size()], face[(c[1] - 1 + face.size()) % face.size()]]:
+				for g in par_arete.get(arete(v, voisin), []):
+					if g != c[0] and parent.has(g) and (fn[c[0]] as Vector3).dot(fn[g]) >= cos_coupe:
+						var a := _racine(parent, c[0])
+						var b := _racine(parent, g)
+						if a != b:
+							parent[a] = b
+		var somme := {}
+		for c in liste:
+			var r := _racine(parent, c[0])
+			somme[r] = (somme.get(r, Vector3.ZERO) as Vector3) + (fn[c[0]] as Vector3) * _angle_du_coin(c[0], c[1])
+		var p: Vector3 = sommets[v]
+		for c in liste:
+			var n := (somme[_racine(parent, c[0])] as Vector3).normalized()
+			if n == Vector3.ZERO:
+				n = fn[c[0]]
+			# ⚠ Un tableau compact se COPIE à la lecture : on le relit, on l'écrit, on le rend.
+			var coin: PackedVector3Array = sortie[c[0]]
+			coin[c[1]] = _sur_le_bord(v, p, n, coins_de)
+			sortie[c[0]] = coin
+	return sortie
+
+
+func _racine(parent: Dictionary, f: int) -> int:
+	while parent[f] != f:
+		parent[f] = parent[parent[f]]
+		f = parent[f]
+	return f
+
+
+func _angle_du_coin(f: int, k: int) -> float:
+	var face: PackedInt32Array = faces[f]
+	var p: Vector3 = sommets[face[k]]
+	var a: Vector3 = sommets[face[(k + 1) % face.size()]] - p
+	var b: Vector3 = sommets[face[(k - 1 + face.size()) % face.size()]] - p
+	if a.length_squared() < 1e-14 or b.length_squared() < 1e-14:
+		return 0.0
+	return a.angle_to(b)
+
+
+## La normale d'un sommet de bord, tirée de la seule coupe (voir `normales_des_coins`) ; ailleurs, `n` telle quelle.
+func _sur_le_bord(v: int, p: Vector3, n: Vector3, coins_de: Dictionary) -> Vector3:
+	var plans: Array = []
+	for axe in 3:
+		if absf(absf(p[axe]) - BORD) <= EPS_BORD:
+			plans.append(axe)
+	if plans.is_empty() or plans.size() >= 3:
+		return n
+	if plans.size() == 2:
+		var reste := Vector3.ZERO
+		reste[3 - plans[0] - plans[1]] = 1.0
+		return reste * (1.0 if n.dot(reste) >= 0.0 else -1.0) if absf(n.dot(reste)) > 1e-6 else n
+	var axe: int = plans[0]
+	# Les sommets de coupe voisins : reliés à `v` par une arête, sur le même plan.
+	var voisins := {}
+	for c in coins_de[v]:
+		var face: PackedInt32Array = faces[c[0]]
+		for w in [face[(c[1] + 1) % face.size()], face[(c[1] - 1 + face.size()) % face.size()]]:
+			var q: Vector3 = sommets[w]
+			if absf(q[axe] - p[axe]) <= EPS_BORD:
+				voisins[w] = q
+	var pts: Array = voisins.values()
+	if pts.is_empty():
+		return n
+	var tangente: Vector3 = (pts[1] - pts[0]) if pts.size() >= 2 else (p - pts[0])
+	var plan := Vector3.ZERO
+	plan[axe] = 1.0
+	var u := tangente.cross(plan)
+	if u.length_squared() < 1e-12:
+		return n
+	u = u.normalized()
+	var d := n.dot(u)
+	if absf(d) < 1e-6:
+		return n
+	return u * signf(d)
 
 
 ## La normale d'un sommet : la moyenne des normales des faces qui le portent (pondérée par leur aire).

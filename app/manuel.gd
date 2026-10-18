@@ -359,6 +359,24 @@ func _outils() -> String:
 	l.append(_note("A plant does not follow the ground if you dig under it later. Foliage travels in the exported "
 		+ "world (.mbworld), models included: the Godot, Unity and Unreal plugins show it swaying in the wind, and plant "
 		+ "more with the same three ways and brush."))
+	l.append(_titre("Generate"))
+	l.append("Generate makes a whole world from a few fields and a [b]seed[/b] — no AI, rules and noise: the same "
+		+ "seed and the same fields always make the same world, and [b]New seed[/b] another one. The map on the right "
+		+ "shows it from above as you move the sliders. [b]Size and shape[/b]: island, archipelago, continent, valley, "
+		+ "plateau, or a [b]sketch[/b] — an image painted in any app: blue sea, green land, gray mountains, white "
+		+ "peaks, yellow shores, red dots for places. [b]Relief[/b], [b]Ruggedness[/b], [b]Cliffs[/b] (one-cell slopes "
+		+ "to four-cell cliffs) and the [b]Sea level[/b] (0: the land floats). [b]Places[/b] are joined by paths that "
+		+ "never climb more than one cell at a time, [b]Loops[/b] adds more of them. [b]Caves[/b]: rooms joined by "
+		+ "galleries three cells high, opening by stairs, or by [b]Wells[/b] you fly up. [b]Lakes[/b], [b]Rivers[/b] "
+		+ "and [b]Lava pools[/b] are filled by the Fluids rules.")
+	l.append("Under [b]LAYERS[/b], each part of the world — ground, second ground, shores, rock, snow, paths, cave "
+		+ "walls — is painted with one layer of your project (proposed by its name). One material per level: two "
+		+ "materials never meet on the same flat ground unless you tick [b]Blend materials[/b], which switches their "
+		+ "transitions on. [b]Generate the world[/b] replaces every cell, the water and the plants ([b]Replace the "
+		+ "whole world[/b]; untick it to change only the generator's box). " + _touche("Ctrl+Z") + " twice gives the "
+		+ "old world back; the world is then an ordinary world, to paint, dig and plant. " + _touche("Esc")
+		+ " goes back to World.")
+	l.append(_note("Foliage is not generated yet. The generator's fields are saved with the project."))
 	return "\n".join(l)
 
 
@@ -664,9 +682,12 @@ func _rendu() -> String:
 		+ "to see in your game what you see here, set up the same scene. Every value below is the one this "
 		+ "app uses right now.")
 	l.append(_titre("Shading"))
-	l.append("[b]Flat, one normal per face[/b] — no smoothing. The tiles leave with the normals the modeller "
-		+ "shows: [b]import the normals from the file[/b]; do not let the engine recompute or smooth them "
-		+ "(Unity: Normals → Import; Unreal: Import Normals; Godot keeps them by default).")
+	l.append("[b]Flat[/b] (one normal per face) by default, or [b]smooth[/b]: Texturing › Shading › « Smooth "
+		+ "shading » rounds the whole witness of a layer, keeping edges sharper than its angle sharp. At the "
+		+ "border of a tile the normal comes from the cut both neighbours share, so the world shows no shading seam "
+		+ "between tiles. The tiles leave with the normals the modeller shows: [b]import the normals from the "
+		+ "file[/b]; do not let the engine recompute or smooth them (Unity: Normals → Import; Unreal: Import "
+		+ "Normals; Godot keeps them by default).")
 	l.append("Materials are standard PBR (base colour, roughness, metallic, texture). The legend colours of "
 		+ "the witness are [b]vertex colours[/b] on one material: enable « vertex colour as albedo » for it.")
 	l.append(_titre("Sun — a directional light"))
