@@ -37,8 +37,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 - **LES DÉCISIONS DU 7 OCTOBRE 2026 — DÉCIDÉ (Jordan, en réponse à l'inventaire du lancement).** Le but : amener
   MarchingBlocks à « il ne reste vraiment plus rien à faire à part publier sur Steam après avoir payé la marque et poster
   partout » (la marque ~190 €, l'AppID 100 $ et le domaine attendent l'argent ; la playlist YouTube est en PRIVÉ).
-  - **GEL DES FONCTIONS, MAINTENANT** : plus aucun atelier ni fonction neuve avant la 0.9.0 — corrections, finition, vente
-    seulement. Props, Houses et toute idée neuve partent à la 1.0. Le logiciel est fini : **les greffons commencent**.
+  - ~~**GEL DES FONCTIONS, MAINTENANT** : plus aucun atelier ni fonction neuve avant la 0.9.0 — corrections, finition, vente
+    seulement. Props, Houses et toute idée neuve partent à la 1.0. Le logiciel est fini : **les greffons commencent**.~~
+    **LEVÉ — DÉCIDÉ (Jordan, 18 octobre 2026 : « on a déjà dégelé et on est déjà en démo 0.9.3, et les prochaines modifs
+    passeront en 0.9.4 »)**. Les fonctions neuves reviennent, version par version (0.9.x → 1.0) ; voir « 0.9.4 » plus bas.
+    ⚠ Les mentions « malgré le gel » ou « gel du 7 octobre » écrites plus loin datent d'avant cette levée.
   - **PARITÉ COMPLÈTE DES GREFFONS À LA 0.9.0** : toute la LISTE DES GREFFONS À FAIRE (ci-dessous) est livrée dans
     Godot, Unity et Unreal pour le lancement — fluides et leurs presets, molette, transitions, demandes du 3 octobre,
     Extrude / Shrink, textures animées, feuillage —, chacune avec ses cas d'épreuve communs.
@@ -53,6 +56,13 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   abandonné : un changement du logiciel ne doit pas les CASSER (un format lu par eux reste lisible, les gardes
   de `test_greffon_peinture` et des bancs restent vertes) — il ne les fait simplement plus AVANCER.
 - **LA LISTE DES GREFFONS À FAIRE** (à tenir à jour à chaque fonction ajoutée au logiciel) :
+  - **le relief (POM)** (Jordan, 18 octobre 2026 : le relief du Play test part aussi dans les jeux ; §0, « 0.9.4 »). Le
+    glTF ne porte pas de carte de hauteur : **le contrat est à écrire d'abord, dans le logiciel** (PROPOSÉ : la hauteur
+    de chaque matériau écrite à côté du .glb du monde, et citée par NOM de matériau dans `world.json`, avec une
+    profondeur conseillée ; `regle()` et `world_conformance.json` la portent). Puis chaque moteur la pose : Godot
+    (`heightmap_*` + deep parallax de StandardMaterial3D, comme le Play test), Unity (le Lit d'URP n'a qu'un parallax
+    simple : un POM à écrire dans les presets, ou le simple assumé — OUVERT), Unreal (la fonction de matériau
+    `ParallaxOcclusionMapping`). Désactivable dans chaque moteur, avec ses cas d'épreuve communs.
   - **les fluides** (§5, « le mode Fluids ») : lire la clé `water` de `world.json` (règle `regle_eau()`, et la
     porter dans `regle()` et `world_conformance.json`) ; poser chaque nappe `water/<nom>.glb` avec un matériau
     choisi par l'artiste, et les SIX presets réécrits dans chaque moteur (stylisé, clair, réfléchissant, et depuis
@@ -442,6 +452,65 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     acceptée et la trafiquée refusée, l'installeur `MarchingBlocks-0.9.3-setup.exe` (285 Mo), les `.vdf`. Le zip de la
     démo : `04_exports/demo/MarchingBlocks_Demo_0.9.3_Windows.zip` (278,6 Mo, contre 132,6 Mo en 0.9.2). ⚠ Aucun des exe
     n'a été lancé à la main ; le contrat a toujours ses blancs.
+  - **0.9.4 — DÉCIDÉ (Jordan, 18 octobre 2026)** : la prochaine version. Toute modification du logiciel faite après
+    l'export 0.9.3 y part. Au moment d'exporter : `config/version` et les trois préréglages (0.9.4.0), comme pour la
+    0.9.3. **Pas encore posé dans `project.godot`** (il dit encore 0.9.3).
+    - **LE RELIEF DES TEXTURES EN PLAY TEST ET EN PLAY EDIT** (Jordan, 18 octobre 2026 : « on peut rajouter du parallax
+      activable en play test et play edit ? »). **LE POM — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »), FAIT ET MESURÉ**
+      (détail plus bas). Le choix, proposé par Claude : le POM plutôt que le parallax simple. Le parallax
+      simple décale la texture d'un seul cran : ça fait illusion de face, mais ça glisse et se déforme dès qu'on regarde
+      de biais, ce qui est justement la vue du personnage. Le POM (parallax occlusion mapping, le « deep parallax » de
+      `StandardMaterial3D` : `heightmap_enabled`, `heightmap_deep_parallax`, couches mini/maxi) marche la carte de hauteur
+      par pas et masque les creux : des joints de dalles et des pavés qui ont l'air vraiment creusés. Le coût est par
+      pixel ; une RTX 2060 le tient, et une case qui le coupe garde les petites machines. Rien ne manque côté données :
+      les cartes de hauteur existent déjà (`cartes_pbr.gd` les calcule depuis l'albedo et les reconnaît à l'import :
+      `height`, `displacement`, `disp`, `bump`). Les matériaux sont en UV et non en triplanaire, or le relief de Godot ne
+      marche pas en triplanaire. Où le poser : une case « Relief (POM) » et un curseur de profondeur dans
+      `REGLAGES_RENDU` (`vue.gd`), qui sert déjà au Play test et au Play edit ; décochée par défaut, et non enregistrée,
+      comme les autres réglages de cette barre. ⚠ Ce que le POM ne fait pas : la silhouette reste plate (un bord de
+      falaise ne se dentelle pas), et aux angles rasants il se tasse.
+      **COMMENT C'EST FAIT (18 octobre 2026).** ⚠ Les tuiles du Play test ne sont PAS les matériaux de
+      `MaillageEdite.materiau_godot` : elles sont TRANCHÉES DU .glb du témoin (et relues du cache `user://cache/*.res`),
+      et le glTF ne porte pas la hauteur. Une méta posée sur le matériau du témoin n'arrivait donc jamais jusqu'au jeu ;
+      la sonde l'a montré. L'écran retrouve la hauteur par le NOM du matériau (le nom que le .glb a gardé), dans le
+      témoin de la couche : `Vue.fournisseur_de_hauteur` → `editor._hauteur_du_materiau` → `MaillageEdite.hauteur_de`
+      (même choix que `materiau_godot` : l'ensemble PBR s'il donne le relief et qu'il a une normale, sinon la carte
+      déduite, `Peinture.cartes_de(…)["texture_hauteur"]`, tenue à jour avec les autres cartes). `Vue._appliquer_relief`
+      allume le POM (couches 8 → 32, profondeur du curseur, 4 par défaut) sur les matériaux à hauteur ET à normale (le POM
+      lit les tangentes), et l'éteint en quittant le Play test : ces matériaux sont aussi ceux du travail.
+      **MESURÉ** : la fumée (le monde n'a que la légende : cocher n'allume rien, contrôle négatif) ; et
+      `DEV_TOOLS/sonde_relief.gd`, avec fenêtre, sur une COPIE du monde client (`SpannerGames/ATELIER/MarchingBlocks/
+      essais/relief/`) : **40 matériaux à hauteur sur 42, les 40 allumés**, photos sans/avec à la même pose
+      (`essais/relief/photos/`) : les briques du rempart et les galets de l'herbe prennent du creux, sans artefact
+      visible à la profondeur 4. ⚠ Pas encore tenu en main par Jordan ; un matériau ANIMÉ (shader) n'a pas de POM.
+      ⚠ La sonde rouvre un projet que l'appli vient d'ouvrir d'elle-même : deux erreurs « previously freed » dans
+      `_habiller_couche` (un tranchage en fond de la première ouverture). Elles sont dues à la sonde, mais elles montrent
+      qu'ouvrir un projet pendant le tranchage en fond du précédent n'est pas gardé (OUVERT).
+      **LE RELIEF PART AUSSI DANS LES JEUX — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »)** : une ligne de plus dans la
+      LISTE DES GREFFONS À FAIRE (« le relief »).
+    - **UN ATELIER DE GÉNÉRATION DE MONDE** (Jordan, 18 octobre 2026 : « un workshop AI avec un modèle à nous, pour faire
+      ce que tu es en train de faire en créant un monde, avec une liste de champs à remplir et le modèle fait tout »).
+      **PROPOSÉ (Claude), en deux temps, pas avant la 1.x :**
+      1. **D'abord un générateur procédural SANS IA.** Une liste de champs (taille, biomes, relief et falaises,
+         rivières, mer, étages, densité du feuillage, textures par couche, graine), et des règles écrites par nous qui
+         bâtissent le monde avec les vrais outils du cœur, comme le font `batir_station.gd` et `batir_monde_client.gd`.
+         C'est l'essentiel de ce qu'on veut, ça tourne sur toutes les machines, et un monde se refait à l'identique
+         depuis sa graine.
+      2. **Ensuite, en option, un modèle ouvert local** (Qwen ou Mistral sous Apache 2.0, de 2 à 5 Go, via llama.cpp)
+         qui transforme une phrase (« une île volcanique avec un lac en altitude ») en valeurs pour ces champs ; le
+         générateur fait le reste. « Notre modèle » = ce modèle ré-entraîné (LoRA) sur nos propres mondes d'exemple ;
+         en créer un de zéro est hors de portée. ⚠ Un petit modèle embarqué ne saura pas écrire le script entier comme
+         le fait Claude : il remplit des champs, il ne construit pas.
+      ⚠ Ce que coûte l'étape 2 : plusieurs Go de plus dans l'exe, une carte graphique correcte chez l'acheteur, du
+      contenu « généré en direct » à déclarer sur Steam (avec ses garde-fous), et une partie des développeurs
+      indépendants qui rejettent l'IA générative. « Generator, no AI » se vend peut-être mieux. **OUVERT, À JORDAN.**
+    - **UN JEU EN VUE DE DESSUS AVEC UN MONDE DE MARCHINGBLOCKS — PAR LE PRINCIPE, pas encore vu à l'image**
+      (question de Jordan, 18 octobre 2026). Le monde exporté est de la vraie géométrie : une caméra en perspective qui
+      regarde droit vers le bas montre les flancs des falaises de plus en plus vers les bords de l'écran (aucun au
+      centre), et d'autant plus que le FOV grandit ; ils glissent quand la caméra se déplace (le parallax naturel). En
+      orthographique, jamais. Les réglages courants : un petit FOV (20 à 35°) et une caméra lointaine pour un léger
+      relief sans déformation, ou une caméra inclinée de 50 à 70° qui montre toujours les flancs sud. Les textures
+      « mur » des falaises comptent donc autant que celles du sol.
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce

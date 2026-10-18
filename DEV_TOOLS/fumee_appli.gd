@@ -3931,6 +3931,13 @@ func _le_rendu_du_play_test(ed: Control) -> void:
 		and vue._soleil.sky_mode == DirectionalLight3D.SKY_MODE_LIGHT_ONLY and disque.get_parent() == vue._soleil
 		and is_equal_approx(disque.light_angular_distance, 2.0) and is_equal_approx(disque.light_energy, 4.0),
 		"au Play test, le disque solaire se voit : 2°, éclat 4, enfant du soleil, ciel seulement")
+	# LE RELIEF (POM, Jordan, 18 octobre 2026). Ce monde n'a que la légende, sans carte de hauteur : cocher n'allume RIEN
+	# (le contrôle négatif ; la preuve positive, sur l'exemple texturé, est `DEV_TOOLS/sonde_relief.gd`).
+	_egal(vue._appliquer_relief(false), 0, "le monde de la fumée n'a aucun matériau à hauteur")
+	(ed._controles_rendu["relief"] as CheckButton).button_pressed = true
+	(ed._controles_rendu["relief_profondeur"] as HSlider).value = 6.0
+	_vrai(_materiaux_en_relief(vue).is_empty(), "Relief coché sur un monde sans hauteur : rien ne s'allume")
+	(ed._controles_rendu["relief"] as CheckButton).button_pressed = false
 	(ed._controles_rendu["soleil_disque_taille"] as HSlider).value = 6.0
 	(ed._controles_rendu["soleil_disque_eclat"] as HSlider).value = 9.0
 	_vrai(is_equal_approx(disque.light_angular_distance, 6.0) and is_equal_approx(disque.light_energy, 9.0)
@@ -3964,6 +3971,22 @@ func _le_rendu_du_play_test(ed: Control) -> void:
 		and is_equal_approx(vue._soleil.light_energy, vue.SOLEIL_ENERGIE), "de retour dans World : l'éclairage du travail")
 	_vrai(not vue._disque_solaire.visible, "… et pas de disque solaire (il marquerait les reflets des métaux)")
 	ed._remettre_le_rendu()
+
+
+## Les matériaux des tuiles posées dont le relief (POM) est allumé.
+func _materiaux_en_relief(vue) -> Array:
+	var sortie: Array = []
+	for m in vue._couches.get_children():
+		var g := m.get_node_or_null("Rendu") as GridMap
+		if g == null or g.mesh_library == null:
+			continue
+		for id in g.mesh_library.get_item_list():
+			var mesh := g.mesh_library.get_item_mesh(id)
+			for s in (mesh.get_surface_count() if mesh != null else 0):
+				var sm := mesh.surface_get_material(s) as StandardMaterial3D
+				if sm != null and sm.heightmap_enabled and not sortie.has(sm):
+					sortie.append(sm)
+	return sortie
 
 
 ## LA MÉTÉO DU PLAY TEST (Jordan, 2 octobre 2026), menée par la liste déroulante. Attendus écrits à la main (les

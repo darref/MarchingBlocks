@@ -362,6 +362,24 @@ func uv_au_point(f: int, p: Vector3) -> Vector2:
 	return meilleur
 
 
+## LA CARTE DE HAUTEUR du matériau `d` (18 octobre 2026), pour le RELIEF (POM) du Play test (`Vue._appliquer_relief`) :
+## celle de l'ensemble PBR quand c'est lui qui donne le relief (et qu'il a une normale), sinon la déduite — le même choix
+## que `materiau_godot`. null sans carte. ⚠ Elle ne se pose pas sur le matériau : les tuiles du Play test sont TRANCHÉES
+## DU .glb du témoin, et le glTF ne porte pas la hauteur ; l'écran la retrouve par le NOM du matériau.
+static func hauteur_de(d: Dictionary) -> Texture2D:
+	var chemin: String = str(d.get("texture", ""))
+	if chemin == "":
+		return null
+	var Peinture: Script = load("res://addons/marchingblocks_core/peinture.gd")
+	var ens: Dictionary = Peinture.ensemble_de(chemin) if bool(d.get("ensemble", true)) else {}
+	if not ens.is_empty() and (ens["normale"] != null or ens["orm"] != null):
+		return ens.get("hauteur") if ens["normale"] != null else null
+	if d.get("pbr") is Dictionary and Anim.images_de(d.get("animation"), "albedo").is_empty():
+		var c: Dictionary = Peinture.cartes_de(chemin, d["pbr"], str(d.get("projection", "boite")) != "uv")
+		return c.get("texture_hauteur")
+	return null
+
+
 ## Le StandardMaterial3D d'un matériau (gardé tant que sa définition ne change pas).
 func materiau_godot(m: int) -> StandardMaterial3D:
 	var d: Dictionary = materiaux[m]

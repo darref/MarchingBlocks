@@ -485,6 +485,7 @@ func _batir() -> void:
 	_vue.selection_changee.connect(_selection_changee)
 	_vue.colle.connect(_colle)
 	_vue.forme_posee.connect(_forme_posee)
+	_vue.fournisseur_de_hauteur = _hauteur_du_materiau
 	_vue.forme_dite.connect(_forme_dite)
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
@@ -4897,6 +4898,17 @@ func _chemin_temoin_de(c: Dictionary) -> String:
 
 func _glb_du_temoin(c: Dictionary) -> String:
 	return _chemin_temoin_de(c).get_basename() + ".glb"
+
+
+## LE RELIEF (POM) DU PLAY TEST : la carte de hauteur du matériau `nom` du témoin de la couche `i` (le nom que le
+## .glb a gardé aux tuiles tranchées), ou null.
+func _hauteur_du_materiau(i: int, nom: String) -> Texture2D:
+	if i < 0 or i >= _couches.size():
+		return null
+	for d in _temoin_de(_couches[i]).materiaux:
+		if str(d.get("nom", "")) == nom:
+			return ME.hauteur_de(d)
+	return null
 
 
 func _temoin_de(c: Dictionary) -> RefCounted:

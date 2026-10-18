@@ -524,13 +524,14 @@ static func oublier() -> void:
 # ⚠ Une génération demandée pendant qu'une autre tourne attend la fin de la première (un fil par toile).
 # ⚠ Les cartes s'écrivent à côté de l'image (`<image>.pbr/` : normal.png, orm.png, height.png, et `pbr.json`, la
 # SIGNATURE — MD5 de l'image écrite, réglages, bouclage) ; à la réouverture, une signature identique les relit sans
-# rien recalculer. La hauteur n'est lue par aucun moteur (le glTF n'en porte pas) : elle est là pour l'artiste.
+# rien recalculer. La hauteur n'est lue par aucun moteur (le glTF n'en porte pas) : elle sert au RELIEF (POM) du Play
+# test (`texture_hauteur`, 18 octobre 2026), et elle est là pour l'artiste.
 
 const Cartes := preload("res://addons/marchingblocks_core/cartes_pbr.gd")
 const CALME_MS := 350
 
 ## clé (chemin|boucle) → {"chemin", "boucle", "reglages", "normale": ImageTexture, "orm": ImageTexture,
-##   "images": {normale, orm} (les dernières posées), "hauteur": Image, "source": [id de l'image, version] des cartes posées, "tache": id ou −1, "voulue": [id, version,
+##   "images": {normale, orm} (les dernières posées), "hauteur": Image, "texture_hauteur": ImageTexture (le POM), "source": [id de l'image, version] des cartes posées, "tache": id ou −1, "voulue": [id, version,
 ##   réglages] de la génération en cours, "resultat": Array (rempli par le fil), "ecrites": bool}
 static var _cartes := {}
 
@@ -560,6 +561,7 @@ static func cartes_de(chemin: String, reglages: Variant, boucle: bool) -> Dictio
 		e["orm"] = ImageTexture.create_from_image(lues["orm"])
 		e["images"] = {"normale": lues["normale"], "orm": lues["orm"]}
 		e["hauteur"] = lues["hauteur"]
+		e["texture_hauteur"] = ImageTexture.create_from_image(lues["hauteur"])
 		_cartes[cle] = e
 	var e: Dictionary = _cartes[cle]
 	if JSON.stringify(e["reglages"]) != JSON.stringify(g):
@@ -652,6 +654,7 @@ static func _poser(e: Dictionary) -> void:
 		(e[nom] as ImageTexture).set_image(cartes[nom])
 		e["images"][nom] = cartes[nom]
 	e["hauteur"] = cartes["hauteur"]
+	(e["texture_hauteur"] as ImageTexture).set_image(cartes["hauteur"])
 	e["source"] = [voulue[0], voulue[1]] if a_jour else []
 	e["ecrites"] = false
 
@@ -797,7 +800,8 @@ static func fichiers_de_l_ensemble(chemin: String) -> Dictionary:
 	return sortie
 
 
-## Les textures de l'ensemble d'un albedo (relues une fois) : {"normale", "orm", "emission", "fichiers"}, chacune
+## Les textures de l'ensemble d'un albedo (relues une fois) : {"normale", "orm", "emission", "fichiers"} (et
+## « hauteur » quand l'ensemble en a une, à côté d'une normale), chacune
 ## une ImageTexture ou null ; {} sans ensemble, ou quand l'ensemble ne porte ni normale ni rugosité ni occlusion ni
 ## émission. ⚠ Une émission SEULE ne porte pas de relief : `normale` et `orm` y sont nulles, et les cartes déduites
 ## (si le matériau les demande) restent (`MaillageEdite.materiau_godot`).
@@ -833,6 +837,13 @@ static func ensemble_de(chemin: String) -> Dictionary:
 			if lues.has("rugosite") or lues.has("occlusion") or lues.has("orm") or lues.has("metal"):
 				e["orm"] = ImageTexture.create_from_image(Cartes.orm_de_l_ensemble(taille, lues.get("occlusion"),
 					lues.get("rugosite"), lues.get("metal"), lues.get("orm")))
+	# LA HAUTEUR DE L'ENSEMBLE (18 octobre 2026) : seulement pour le RELIEF (POM) du Play test, et seulement à côté
+	# d'une normale (le POM lit les tangentes, qu'un matériau sans normale n'a pas).
+	if not e.is_empty() and e.get("normale") != null and f.has("hauteur"):
+		var img := Image.load_from_file(f["hauteur"])
+		if img != null and not img.is_empty():
+			img.convert(Image.FORMAT_L8)
+			e["hauteur"] = ImageTexture.create_from_image(img)
 	_ensembles[chemin] = e
 	return e
 

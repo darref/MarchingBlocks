@@ -125,6 +125,9 @@ var _disque_solaire: DirectionalLight3D
 ## L'EAU DU PLAY TEST, posée par l'écran avant de jouer : {"cases" (l'eau dormante des couches d'eau VISIBLES),
 ## "oceans" (leurs niveaux), "boite" (`FL.boite` du monde)}. Vide : on ne nage nulle part.
 var eau_du_jeu := {}
+## LA HAUTEUR D'UN MATÉRIAU DES TUILES POSÉES (le relief, POM) : (indice de couche, nom du matériau) → Texture2D ou
+## null. L'écran la pose : seul lui connaît le témoin de chaque couche.
+var fournisseur_de_hauteur: Callable = Callable()
 ## Le voile sous l'eau : la couleur de l'eau vue de dedans, et sa densité.
 const VOILE_COULEUR := Color("#1d5a6e")
 const VOILE_DENSITE := 0.18
@@ -1966,6 +1969,7 @@ func commencer_partie() -> String:
 
 func finir_partie() -> void:
 	_rendre_la_souris()
+	_appliquer_relief(false)
 	if personnage != null:
 		personnage.queue_free()
 		personnage = null
@@ -2222,6 +2226,16 @@ func _mener_le_jeu() -> void:
 ## VALENT QU'AU PLAY TEST : en le quittant, `_rendre_le_travail` rend l'éclairage du travail, quels qu'ils soient —
 ## World et Witness s'éclairent comme le dit la page 6 du manuel. ⚠ Le SDFGI, écarté du travail (il ne voit pas une
 ## géométrie qui change), est proposé ici : au Play test, rien ne change pendant qu'on joue.
+## LE RELIEF DES TEXTURES (Jordan, 18 octobre 2026 : « on peut rajouter du parallax activable en play test et play
+## edit ? », puis « oui » au POM plutôt qu'au parallax simple) : le « deep parallax » de StandardMaterial3D marche la
+## carte de hauteur par couches (de RELIEF_COUCHES[0] de face à RELIEF_COUCHES[1] de biais) et masque les creux. La
+## hauteur vient du témoin de la couche (`MaillageEdite.hauteur_de` : ensemble PBR, sinon déduite) ; un matériau sans
+## normale n'en a pas (pas de tangentes), un matériau animé non plus (son shader n'a pas de POM). Décoché par défaut,
+## et ÉTEINT EN QUITTANT LE PLAY TEST : les matériaux sont ceux du travail, et du .glb.
+## ⚠ La silhouette reste plate, et l'effet se tasse aux angles rasants.
+const RELIEF_PROFONDEUR := 4.0
+const RELIEF_COUCHES := Vector2i(8, 32)
+
 const REGLAGES_RENDU := [
 	{"cle": "soleil_azimut", "groupe": "Light", "nom": "Sun direction", "genre": "curseur", "min": -180.0, "max": 180.0, "pas": 1.0, "defaut": SOLEIL_ROTATION.y},
 	{"cle": "soleil_hauteur", "groupe": "Light", "nom": "Sun height", "genre": "curseur", "min": 2.0, "max": 90.0, "pas": 1.0, "defaut": -SOLEIL_ROTATION.x},
@@ -2241,6 +2255,8 @@ const REGLAGES_RENDU := [
 	{"cle": "ssil", "groupe": "Effects", "nom": "SSIL — light bouncing nearby", "genre": "case", "defaut": true},
 	{"cle": "sdfgi", "groupe": "Effects", "nom": "SDFGI — global illumination", "genre": "case", "defaut": false},
 	{"cle": "ssr", "groupe": "Effects", "nom": "SSR — screen reflections", "genre": "case", "defaut": false},
+	{"cle": "relief", "groupe": "Effects", "nom": "Relief (POM) — depth in the textures", "genre": "case", "defaut": false},
+	{"cle": "relief_profondeur", "groupe": "Effects", "nom": "Relief depth", "genre": "curseur", "min": 0.5, "max": 16.0, "pas": 0.5, "defaut": RELIEF_PROFONDEUR},
 	{"cle": "glow", "groupe": "Effects", "nom": "Glow", "genre": "case", "defaut": true},
 	{"cle": "glow_intensite", "groupe": "Effects", "nom": "Glow strength", "genre": "curseur", "min": 0.0, "max": 3.0, "pas": 0.05, "defaut": 0.9},
 	{"cle": "brouillard", "groupe": "Effects", "nom": "Fog", "genre": "case", "defaut": false},
@@ -2468,6 +2484,8 @@ func _appliquer_rendu(cle: String) -> void:
 			_env.sdfgi_enabled = v
 		"ssr":
 			_env.ssr_enabled = v
+		"relief", "relief_profondeur":
+			_appliquer_relief(bool(rendu.get("relief", false)) and personnage != null)
 		"glow":
 			_env.glow_enabled = v
 		"glow_intensite":
@@ -2487,6 +2505,38 @@ func _appliquer_rendu(cle: String) -> void:
 			_env.adjustment_brightness = rendu.get("luminosite", 1.0)
 			_env.adjustment_contrast = rendu.get("contraste", 1.0)
 			_env.adjustment_saturation = rendu.get("saturation", 1.0)
+
+
+## Allume (ou éteint) le RELIEF sur les matériaux des tuiles posées qui ont une hauteur (`fournisseur_de_hauteur`).
+## Rend combien en ont une (allumés ou non) : la fumée le compte.
+func _appliquer_relief(oui: bool) -> int:
+	var vus := {}
+	var avec_hauteur := 0
+	for i in _couches.get_child_count():
+		var g := _couches.get_child(i).get_node_or_null("Rendu") as GridMap
+		if g == null or g.mesh_library == null:
+			continue
+		for id in g.mesh_library.get_item_list():
+			var mesh := g.mesh_library.get_item_mesh(id)
+			if mesh == null:
+				continue
+			for s in mesh.get_surface_count():
+				var sm := mesh.surface_get_material(s) as StandardMaterial3D
+				if sm == null or vus.has(sm):
+					continue
+				vus[sm] = true
+				var hauteur: Texture2D = fournisseur_de_hauteur.call(i, sm.resource_name) 					if fournisseur_de_hauteur.is_valid() else null
+				if hauteur != null:
+					avec_hauteur += 1
+				var actif := oui and hauteur != null and sm.normal_enabled
+				sm.heightmap_enabled = actif
+				sm.heightmap_texture = hauteur if actif else null
+				if actif:
+					sm.heightmap_scale = float(rendu.get("relief_profondeur", RELIEF_PROFONDEUR))
+					sm.heightmap_deep_parallax = true
+					sm.heightmap_min_layers = RELIEF_COUCHES.x
+					sm.heightmap_max_layers = RELIEF_COUCHES.y
+	return avec_hauteur
 
 
 ## ⚠ LE VOILE SOUS L'EAU L'EMPORTE SUR LE BROUILLARD CHOISI, et le rend en remontant : un seul endroit décide du
