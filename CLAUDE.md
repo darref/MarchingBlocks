@@ -455,7 +455,14 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - **0.9.4 — DÉCIDÉ (Jordan, 18 octobre 2026)** : la prochaine version. Toute modification du logiciel faite après
     l'export 0.9.3 y part. Au moment d'exporter : `config/version` et les trois préréglages (0.9.4.0), comme pour la
     0.9.3. **POSÉE le 18 octobre 2026** (Jordan : « aligne tout ce qui a été fait dans MB sur le PC et ici, POM etc., 0.9.4 ») :
-    `config/version` et les trois préréglages (0.9.4.0). Pas encore exportée.
+    `config/version` et les trois préréglages (0.9.4.0). **EXPORTÉE LE 18 OCTOBRE 2026** (`ATELIER/MarchingBlocks/builds/0.9.4`) :
+    28 suites vertes, les trois exe de **79 Mo** (334,6 en 0.9.3 : l'exemple n'est plus dedans), chiffrés, la sonde
+    « natif=1 licence=1 version=0.9.4 », la clé signée acceptée et la trafiquée refusée, l'installeur (29 Mo) ; le zip de la
+    démo `04_exports/demo/MarchingBlocks_Demo_0.9.4_Windows.zip` (36,6 Mo). **TROIS EXEMPLES À TÉLÉCHARGER** (Jordan : « l'exemple
+    monde client, l'exemple cartoon et l'exemple station v2, tous les trois sur itch ») : `prendre_l_exemple.gd -- --projet=…
+    --sortie=… --nom=…` → `builds/0.9.4/exemples/` (client 174 Mo, cartoon 246 Mo, station 204 Mo) ; chacun installé dans un
+    dossier jetable et ouvert dans l'appli (17, 13, 14 couches ; 0 chemin cité absent). L'upload : `C:/Users/jorda/
+    pousser_itch.cmd` (butler, après `butler login` par Jordan).
     - **LE RELIEF DES TEXTURES EN PLAY TEST ET EN PLAY EDIT** (Jordan, 18 octobre 2026 : « on peut rajouter du parallax
       activable en play test et play edit ? »). **LE POM — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »), FAIT ET MESURÉ**
       (détail plus bas). Le choix, proposé par Claude : le POM plutôt que le parallax simple. Le parallax
