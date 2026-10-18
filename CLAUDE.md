@@ -485,7 +485,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       visible à la profondeur 4. ⚠ Pas encore tenu en main par Jordan ; un matériau ANIMÉ (shader) n'a pas de POM.
       ⚠ La sonde rouvre un projet que l'appli vient d'ouvrir d'elle-même : deux erreurs « previously freed » dans
       `_habiller_couche` (un tranchage en fond de la première ouverture). Elles sont dues à la sonde, mais elles montrent
-      qu'ouvrir un projet pendant le tranchage en fond du précédent n'est pas gardé (OUVERT).
+      qu'ouvrir un projet pendant le tranchage en fond du précédent n'est pas gardé — CORRIGÉ le même jour (« une ouverture de projet à la fois », plus bas).
       **LE RELIEF PART AUSSI DANS LES JEUX — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »)** : une ligne de plus dans la
       LISTE DES GREFFONS À FAIRE (« le relief »).
     - **UN ATELIER DE GÉNÉRATION DE MONDE** (Jordan, 18 octobre 2026 : « un workshop AI avec un modèle à nous, pour faire
@@ -511,6 +511,43 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       orthographique, jamais. Les réglages courants : un petit FOV (20 à 35°) et une caméra lointaine pour un léger
       relief sans déformation, ou une caméra inclinée de 50 à 70° qui montre toujours les flancs sud. Les textures
       « mur » des falaises comptent donc autant que celles du sol.
+    - **L'EXE ALLÉGÉ — DÉCIDÉ (Jordan, 18 octobre 2026 : « alléger l'exécutable en supprimant les foliages vraiment trop
+      lourds, en passant l'exemple fourni avec le soft en téléchargeable depuis le soft ouvert avec un bouton, et en
+      remplaçant les essences d'arbres trop lourdes par des CC0 optimisés », puis « dans SpannerGames, seulement les plus
+      lourds, maintenant »).** MESURÉ, l'exe 0.9.3 (334,6 Mo) : l'exemple embarqué 234 Mo, le modèle Godot 68 Mo, les
+      images importées 26 Mo, dont 19 Mo qui ne servaient à rien (`MARQUE/reseaux/`, le `.mbset` d'essai à la racine).
+      1. **L'EXPORT N'EMBARQUE PLUS L'EXEMPLE** (`exemple/*` exclu des trois préréglages, et les deux dossiers inutiles).
+         `exporter_marchingblocks.sh` le met dans `<build>/exemple/` : `MarchingBlocks-<version>-example.zip` et
+         `example.json` (nom, taille, SHA-256). Attendu : l'exe vers ~80 Mo (à MESURER au prochain export).
+         `res://exemple/exemple.zip` reste dans le dépôt pour le développement (bancs, fumée, mode dev).
+      2. **LE BOUTON « Example world » LE TÉLÉCHARGE** (`app/exemple.gd`, `editor._telecharger_l_exemple`) : il lit
+         `example.json` sur le site de SpannerGames, à côté de `latest.json` (même domaine, une seule URL à remplir :
+         `MisesAJour.URL`), télécharge le zip qu'il nomme par `/api/example` (un lien R2 présigné, sans compte,
+         `SITE/functions/api/example.js`), la barre d'attente suit l'avancée, et le fichier n'est gardé que si sa taille
+         et son SHA-256 sont les annoncés. Une fois téléchargé, il ne se retélécharge plus. **Tant que le site n'est pas
+         en ligne** (URL à A-REMPLIR) : le bouton le dit, et « Open… » accepte un `.zip` d'exemple téléchargé à la main
+         (à mettre sur la page itch.io de la démo, à côté de l'exe). Le bouton n'est plus caché quand l'exe n'a pas
+         l'exemple. MESURÉ : `test_vente` (161 vérifications), dont la description fausse refusée et un SHA-256
+         différent refusé, **vu rougir** (`conforme` sans le SHA). ⚠ Le téléchargement réel n'a pas tourné : le site
+         n'est pas en ligne.
+      3. **LES TROIS MODÈLES DE FEUILLAGE LES PLUS LOURDS DE L'EXEMPLE SONT DES CC0** (au-delà de 10 Mo chacun ; tous des
+         Tripo, donc de l'IA générative à déclarer) : l'arbre du marais `tree+3d+model` (26 Mo, image 4096²) →
+         `DeadTree_1` de Quaternius (2 Mo) ; le palmier (24 Mo) → `tree_palmTall` de Kenney (20 Ko) ; l'herbe de savane
+         `savanna_grass_01` (12 Mo) → `Grass_Wispy_Tall` de Quaternius (40 Ko). Allégés par
+         `SpannerGames/OUTILS/alleger_glb.py` (images ≤ 1024 px, chacune une fois), posés dans le monde client par
+         `SpannerGames/OUTILS/remplacer_feuillage.py` (même modèle, mêmes plants : 9 arbres, 5 palmiers, 48 touffes ;
+         la hauteur voulue en cases gardée ; sauvegarde dans `ATELIER/MarchingBlocks/sauvegarde/
+         monde_client_feuillage_2026-10-18/`), et `batir_monde_client.gd` les nomme. **MESURÉ** : l'exemple passe de
+         234 à **174 Mo** (le feuillage de 140 à 79 Mo). Vu à l'image (`batir_monde_client.gd --seulement=photos` sur
+         une copie) : les arbres morts vont au marais ; ⚠ **le palmier de Kenney, en low-poly à aplats, jure avec les
+         textures réalistes** (OUVERT, à Jordan). Restent au-dessus de 5 Mo : `jungle_plant` (7,7), `ice_crystal_01`
+         (6,8), `starfish` (5,5), `desert_cactus_01` et `saltflat_rock_01` (5,0) ; et `plains_tree_01` / `_04` ont
+         46 000 triangles chacun (4 Mo).
+      4. **UNE OUVERTURE DE PROJET À LA FOIS** (`editor._ouvrir`), trouvé en chemin : une seconde ouverture demandée
+         pendant les `await` de la première (l'appli rouvre son dernier projet au lancement, et un script en ouvre un
+         autre) vidait le projet puis ajoutait les couches DEUX fois — une copie du monde client est passée de 13 à 22
+         puis 43 couches, enregistrées. Corrigé (la seconde attend la première), MESURÉ : la même suite ne donne plus
+         d'erreur « previously freed », et la copie garde ses 13 couches.
 
 - **L'écran vit dans `app/`** (`editor.tscn`, `editor.gd`, `vue.gd`) : barre de titre avec bandeau de
   conseils, vue 3D en plein cadre, deux panneaux POSÉS dessus et translucides au repos (gauche = ce

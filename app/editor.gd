@@ -1117,8 +1117,9 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	var groupe_monde := ButtonGroup.new()
 	for b in [["My world", "Your own world: the last project you opened that is not the example.",
 				_ouvrir_mon_monde],
-			["Example world", "An example world that comes with MarchingBlocks — an island, its biomes, its caves — in its own folder. Your changes "
-				+ "to it are kept there.", _ouvrir_l_exemple]]:
+			["Example world", "An example world for MarchingBlocks — an island, its biomes, its caves — in its own folder. Your changes "
+				+ "to it are kept there. Downloaded once from the SpannerGames site the first time you open it.",
+				_ouvrir_l_exemple]]:
 		var choix := CheckBox.new()
 		choix.text = b[0]
 		choix.tooltip_text = b[1]
@@ -3444,7 +3445,7 @@ func _contexte() -> void:
 	# La liste des couches dans Transitions aussi : son ORDRE dit qui couvre par défaut.
 	_section_couches.visible = monde or temoin or transitions or _atelier == "variantes"
 	_section_monde_peint.visible = monde
-	_section_choix_monde.visible = monde and Exemple.disponible()
+	_section_choix_monde.visible = monde   # l'exemple se télécharge s'il n'est pas là (`_ouvrir_l_exemple`)
 	_titre_aller_retour.visible = projet
 	for e in _etapes_artiste:
 		e.visible = projet
@@ -5364,6 +5365,8 @@ func _demander(quoi: String) -> void:
 		_dialogue.current_file = ""
 	elif quoi in ["ouvrir", "enregistrer"]:
 		_dialogue.add_filter("*." + Projet.EXTENSION, "MarchingBlocks project")
+		if quoi == "ouvrir":
+			_dialogue.add_filter("*.zip", "MarchingBlocks example world (downloaded .zip)")
 		_dialogue.title = "Open a project" if quoi == "ouvrir" else "Save the project as"
 		_dialogue.current_file = _projet.get_file() if quoi == "enregistrer" else ""
 	else:
@@ -5388,7 +5391,11 @@ func _fichier_choisi(fichier: String) -> void:
 		"importer":
 			_importer(fichier)
 		"ouvrir":
-			_ouvrir(fichier)
+			# Un .zip : un exemple téléchargé à la main (hors ligne, ou avant que le site ne le propose).
+			if fichier.get_extension().to_lower() == "zip":
+				_ouvrir_l_archive_d_exemple(fichier)
+			else:
+				_ouvrir(fichier)
 		"enregistrer":
 			_enregistrer_sous(fichier)
 		"tileset":
@@ -6917,7 +6924,8 @@ func _ouvrir_au_lancement() -> void:
 	# `--open-example` : l'exemple livré, directement (une démo, et l'épreuve de l'exe sans clic).
 	if OS.get_cmdline_args().has("--open-example") or OS.get_cmdline_user_args().has("--open-example"):
 		var erreurs: Array = []
-		var exemple := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
+		var archive := Exemple.archive_locale()
+		var exemple := Exemple.installer(archive, racine_exemple, erreurs) if archive != "" else ""
 		if exemple != "" and await _ouvrir(exemple):
 			return
 	var passe: String = Associations.projet_en_argument(OS.get_cmdline_args())
@@ -6990,14 +6998,86 @@ func _ouvrir_l_exemple() -> void:
 	if _dev != null:   # en mode dev, « The example » est sa SOURCE, qu'on édite
 		await dev_ouvrir_la_source()
 		return
+	var archive := Exemple.archive_locale()
+	if archive == "":
+		archive = await _telecharger_l_exemple()
+		if archive == "":
+			_dire_le_projet()
+			return
+	await _ouvrir_l_archive_d_exemple(archive)
+
+
+## Installe une archive d'exemple (l'embarquée, la téléchargée, ou un .zip choisi par « Open… ») et l'ouvre.
+func _ouvrir_l_archive_d_exemple(archive: String) -> void:
 	var erreurs: Array = []
-	var chemin := Exemple.installer(Exemple.ARCHIVE, racine_exemple, erreurs)
+	var chemin := Exemple.installer(archive, racine_exemple, erreurs)
 	if chemin == "":
 		_dire("[color=#e0603c]Cannot open the example[/color] — %s" % ", ".join(PackedStringArray(erreurs)))
 		_dire_le_projet()
 		return
 	if not await _ouvrir(chemin):
 		_dire_le_projet()
+
+
+## L'EXEMPLE TÉLÉCHARGÉ (`Exemple`, Jordan, 18 octobre 2026) : `example.json` sur le site, puis le zip qu'il nomme, dans
+## un `.part` qui ne devient l'archive que si sa taille et son SHA-256 sont les annoncés. Rend le chemin de l'archive, ou
+## "" en disant pourquoi. ⚠ JAMAIS BLOQUANT : l'écran vit pendant le téléchargement (la barre d'attente le suit).
+func _telecharger_l_exemple() -> String:
+	var url := Exemple.url_description()
+	if not MisesAJour.url_remplie(url):
+		_dire("[color=#e0603c]The example world is not online yet[/color] — download its .zip from the page where you "
+			+ "got MarchingBlocks, then open it with [b]Open…[/b].")
+		return ""
+	await _attendre("Downloading the example world", "Asking the SpannerGames site what to download…", 0)
+	var r: Array = await _http(url, "", 0, 15.0)
+	var description := Exemple.lire_la_description((r[2] as PackedByteArray).get_string_from_utf8()) 		if r[0] == HTTPRequest.RESULT_SUCCESS and r[1] == 200 else {}
+	if description.is_empty():
+		_fin_attente()
+		_dire("[color=#e0603c]The example world could not be downloaded[/color] — the SpannerGames site did not answer "
+			+ "(offline?). Try again later, or open a downloaded example .zip with [b]Open…[/b].")
+		return ""
+	var partiel := ProjectSettings.globalize_path(Exemple.TELECHARGEE + ".part")
+	var final := ProjectSettings.globalize_path(Exemple.TELECHARGEE)
+	DirAccess.make_dir_recursive_absolute(partiel.get_base_dir())
+	r = await _http(description["url"], partiel, int(description["taille"]), 0.0)
+	var bon: bool = r[0] == HTTPRequest.RESULT_SUCCESS and r[1] == 200 and Exemple.conforme(partiel, description)
+	if bon:
+		DirAccess.remove_absolute(final)
+		bon = DirAccess.rename_absolute(partiel, final) == OK
+	DirAccess.remove_absolute(partiel)
+	_fin_attente()
+	if not bon:
+		_dire("[color=#e0603c]The example world could not be downloaded[/color] — the download stopped or did not match "
+			+ "what the site announced (error %d, HTTP %d). Try again." % [r[0], r[1]])
+		return ""
+	return Exemple.TELECHARGEE
+
+
+## Une requête HTTP qu'on attend en laissant l'écran vivre : [résultat, code HTTP, corps]. `fichier` : le corps va sur
+## le disque ; `taille` (connue) : la barre d'attente montre l'avancée ; `delai` 0 = pas de limite (un gros fichier).
+func _http(url: String, fichier: String, taille: int, delai: float) -> Array:
+	var h := HTTPRequest.new()
+	h.timeout = delai
+	h.body_size_limit = Exemple.TAILLE_MAXI
+	h.download_file = fichier
+	add_child(h)
+	var fin: Array = []
+	h.request_completed.connect(func(resultat: int, code: int, _entetes: PackedStringArray, corps: PackedByteArray) -> void:
+		fin.append_array([resultat, code, corps]))
+	if h.request(url) != OK:
+		h.queue_free()
+		return [HTTPRequest.RESULT_CANT_CONNECT, 0, PackedByteArray()]
+	while fin.is_empty():
+		if taille > 0 and not _pile_attente.is_empty():
+			var e: Array = _pile_attente[-1]
+			var recu := h.get_downloaded_bytes()
+			e[1] = "%.0f MB of %.0f MB" % [recu / 1e6, taille / 1e6]
+			e[2] = 100
+			e[3] = clampi(int(100.0 * recu / taille), 0, 100)
+			_montrer_attente()
+		await get_tree().process_frame
+	h.queue_free()
+	return fin
 
 
 func _nouveau_projet() -> void:
@@ -7063,6 +7143,12 @@ func _vider_le_projet() -> void:
 ## sinon RETRANCHÉE depuis sa source : c'est ce qui suit un `.glb` réenregistré dans Blender entre deux
 ## sessions.
 func _ouvrir(chemin: String) -> bool:
+	# ⚠ UNE OUVERTURE À LA FOIS (18 octobre 2026). Une seconde demandée pendant les `await` de la première (l'appli
+	# rouvre son dernier projet au lancement, et un script ou un clic en ouvre un autre) vidait le projet, puis les DEUX
+	# boucles ajoutaient leurs couches à la même liste : 13 couches devenaient 22, puis 43, et l'enregistrement
+	# automatique l'écrivait. Vu sur une copie du monde client, ouverte par `sonde_relief.gd` puis `batir_monde_client.gd`.
+	while _ouverture:
+		await get_tree().process_frame
 	if not _couches.is_empty() and not _ouverture:
 		_toujours_ecrire()   # le projet qu'on quitte garde son dernier geste et son monde
 	var erreurs: Array = []

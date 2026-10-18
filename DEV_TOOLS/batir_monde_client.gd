@@ -71,7 +71,13 @@ const THEMES := [
 ## Les clés qui reçoivent deux variantes (les plus posées d'un monde : le sol, la paroi, la lèvre de falaise), tirées 2 : 1 : 1.
 const CLES_VARIEES := ["mb_plaque_b4h0_dehors", "mb_plaque_b2h2_dehors", "mb_arete_b2h0_dehors"]
 
-## LE FEUILLAGE par thème : [fichier sous SPIRIT, hauteur voulue en cases, part des colonnes du thème].
+## LE FEUILLAGE par thème : [fichier sous SPIRIT (ou chemin absolu), hauteur voulue en cases, part des colonnes du thème].
+## ⚠ LES TROIS PLUS LOURDS SONT DES CC0 DEPUIS LE 18 OCTOBRE 2026 (Jordan : « remplacer les essences trop lourdes par des
+## CC0 optimisés comme dans le monde cartoon », « seulement les plus lourds ») : l'arbre du marais (26 Mo, Tripo) →
+## DeadTree_1 de Quaternius (2 Mo), le palmier (24 Mo) → tree_palmTall de Kenney (20 Ko), l'herbe de savane 01 (12 Mo)
+## → Grass_Wispy_Tall de Quaternius (40 Ko). Allégés par `D:/SpannerGames/OUTILS/alleger_glb.py` (images ≤ 1024 px,
+## une fois chacune) ; le projet en place a été changé par `OUTILS/remplacer_feuillage.py`, plants gardés.
+const CC0 := "D:/SpannerGames/BIBLIOTHEQUE/modeles/cc0_optimises/"
 const FEUILLAGE := {
 	"Meadow": [["biome_plains/obstacles/plains_tree_01/plains_tree_01.glb", 4.5, 0.012],
 		["biome_plains/obstacles/plains_tree_02/plains_tree_02.glb", 4.0, 0.012],
@@ -85,9 +91,9 @@ const FEUILLAGE := {
 		["biome_desert/obstacles/desert_cactus_08/desert_cactus_08.glb", 1.2, 0.008]],
 	"Beach": [["biome_lakeshore/obstacles/spiral+seashell+3d+model.glb", 0.3, 0.02],
 		["biome_lakeshore/obstacles/starfish+3d+model.glb", 0.2, 0.02],
-		["biome_desert/resources/obstacles/palm+tree+3d+model_Clone1.glb", 6.0, 0.006]],
-	"Mud": [["biome_swamps/obstacles/tree+3d+model.glb", 5.5, 0.02],
-		["biome_savanna/obstacles/savanna_grass_01/savanna_grass_01.glb", 0.8, 0.05]],
+		[CC0 + "tree_palmTall.glb", 6.0, 0.006]],
+	"Mud": [[CC0 + "DeadTree_1.glb", 5.5, 0.02],
+		[CC0 + "Grass_Wispy_Tall.glb", 0.8, 0.05]],
 	"Rock": [["biome_waterfalls/obstacles/waterfall_boulder_01/waterfall_boulder_01.glb", 1.2, 0.015],
 		["biome_waterfalls/obstacles/waterfall_rock_02/waterfall_rock_02.glb", 0.9, 0.015]],
 	"Scree": [["biome_saltflats/obstacles/saltflat_rock_01/saltflat_rock_01.glb", 0.9, 0.03],
@@ -1143,7 +1149,7 @@ func _feuillage() -> void:
 	var total := 0
 	for nom in FEUILLAGE:
 		for d in FEUILLAGE[nom]:
-			var fichier: String = SPIRIT + str(d[0])
+			var fichier: String = str(d[0]) if str(d[0]).is_absolute_path() else SPIRIT + str(d[0])
 			if not FileAccess.file_exists(fichier):
 				print("feuillage : %s absent, sauté" % fichier)
 				continue

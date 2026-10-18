@@ -5,6 +5,7 @@
 ##   <sortie>/installeur/  MarchingBlocks-<version>-setup.exe — l'installeur Inno Setup du site (ce qu'on met en vente)
 ##   <sortie>/steam/       l'exe STEAM (sans clé) et sa DLL : le dossier que SteamPipe envoie tel quel
 ##   <sortie>/demo/        la DÉMO (tout, sans enregistrer ni exporter) : l'appli Steam « Demo », et le zip du site
+##   <sortie>/exemple/     l'exemple À METTRE EN LIGNE (l'exe ne l'embarque plus) : son zip et example.json
 ##   <sortie>/steampipe/   les scripts SteamPipe (app_build_*.vdf) du logiciel et de la démo — AppID et dépôts À REMPLIR
 ##
 ## LANCEMENT (Git Bash, éditeur Godot FERMÉ — l'export réimporte le projet) :
@@ -71,6 +72,18 @@ grep -q "A-REMPLIR" "$PROJET/app/mises_a_jour.gd" \
 code_exemple=$?
 grep -E "EXEMPLE|⚠" "$JOURNAL/exemple.log"
 [ $code_exemple -eq 0 ] && [ -f "$PROJET/exemple/exemple.zip" ] || stop "l'exemple n'a pas pu être pris (voir $JOURNAL/exemple.log)"
+#    ⚠ L'EXE NE L'EMBARQUE PLUS (Jordan, 18 octobre 2026 : téléchargé depuis l'appli, hébergé chez SpannerGames) :
+#    `exemple/*` est exclu des préréglages. Il part dans <sortie>/exemple/ : le zip, À TÉLÉVERSER dans R2 sous
+#    `marchingblocks/example/`, et `example.json` (nom, taille, SHA-256), À COPIER dans `SITE/contenu/exemple.json`.
+#    Le même zip va sur la page itch.io de la démo, à côté de l'exe (« Open… » accepte un .zip d'exemple).
+EXEMPLE_NOM="MarchingBlocks-$VERSION-example.zip"
+rm -rf "$SORTIE/exemple"
+mkdir -p "$SORTIE/exemple"
+cp "$PROJET/exemple/exemple.zip" "$SORTIE/exemple/$EXEMPLE_NOM"
+printf '{\n "file": "%s",\n "size": %s,\n "sha256": "%s"\n}\n' "$EXEMPLE_NOM" \
+	"$(stat -c %s "$SORTIE/exemple/$EXEMPLE_NOM")" "$(sha256sum "$SORTIE/exemple/$EXEMPLE_NOM" | cut -d' ' -f1)" \
+	> "$SORTIE/exemple/example.json"
+echo "✓ l'exemple à mettre en ligne : $SORTIE_W/exemple/ ($(stat -c %s "$SORTIE/exemple/$EXEMPLE_NOM") octets)"
 
 # 3. LE CŒUR NATIF : la DLL release doit être là (sans elle l'exe marcherait plus lentement, et la version SITE ne
 #    vérifierait aucune clé : on ne livre pas ça).

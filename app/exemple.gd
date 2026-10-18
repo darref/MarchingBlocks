@@ -13,6 +13,8 @@ extends RefCounted
 ## récent (un autre `STAMP`) va dans un autre dossier.
 
 const Projet := preload("res://app/projet.gd")
+const MisesAJour := preload("res://app/mises_a_jour.gd")
+## L'archive EMBARQUÉE : en développement seulement depuis le 18 octobre 2026 (l'export ne la prend plus, voir plus bas).
 const ARCHIVE := "res://exemple/exemple.zip"
 const MARQUE := "{EXEMPLE}"
 const RACINE := "user://example"
@@ -64,3 +66,53 @@ static func installer(archive := ARCHIVE, racine := RACINE, erreurs: Array = [])
 	z.close()
 	return projet
 
+
+
+# ── L'EXEMPLE TÉLÉCHARGÉ — DÉCIDÉ (Jordan, 18 octobre 2026 : « passer l'exemple fourni avec le soft en téléchargeable
+# depuis le soft ouvert avec un bouton », hébergé « dans SpannerGames ») ──────────────────────────────────────────────
+# L'exe ne l'embarque plus (234 Mo sur 335). Le bouton « Example world » lit `example.json` sur le site, à côté de
+# `latest.json` (même domaine : une seule URL à remplir, `MisesAJour.URL`), télécharge le zip qu'il nomme, vérifie sa
+# TAILLE et son SHA-256, le garde dans `TELECHARGEE`, puis l'installe comme avant. Une fois téléchargé, il ne se
+# retélécharge plus. Hors ligne, ou le site pas encore en ligne : « Open… » accepte aussi un zip d'exemple téléchargé à
+# la main (la page itch.io de la démo le propose à côté de l'exe).
+
+const TELECHARGEE := "user://example/example.zip"
+## La plus grosse archive acceptée (une réponse détournée ne remplira pas le disque).
+const TAILLE_MAXI := 1024 * 1024 * 1024
+
+
+static func url_description(url_maj := MisesAJour.URL) -> String:
+	return url_maj.get_base_dir() + "/example.json"
+
+
+## L'archive à installer sans réseau : l'embarquée (développement), sinon celle déjà téléchargée ; "" sinon.
+static func archive_locale() -> String:
+	if disponible(ARCHIVE):
+		return ARCHIVE
+	return TELECHARGEE if FileAccess.file_exists(TELECHARGEE) else ""
+
+
+## Ce que dit `example.json` : {"url", "taille", "sha256"}, ou {} si la réponse est fausse. ⚠ L'URL n'est gardée qu'en
+## https, l'empreinte qu'en 64 chiffres hexadécimaux, la taille qu'entre 1 octet et `TAILLE_MAXI`.
+static func lire_la_description(texte: String) -> Dictionary:
+	var j := JSON.new()   # (pas `JSON.parse_string` : une page d'erreur l'écrirait en rouge dans la console)
+	if j.parse(texte) != OK or not j.data is Dictionary:
+		return {}
+	var d: Dictionary = j.data
+	var url := str(d.get("url", ""))
+	var sha := str(d.get("sha256", "")).to_lower()
+	var taille: Variant = d.get("size", 0)
+	if not url.begins_with("https://") or sha.length() != 64 or not sha.is_valid_hex_number() 			or not (taille is float or taille is int) or int(taille) <= 0 or int(taille) > TAILLE_MAXI:
+		return {}
+	return {"url": url, "taille": int(taille), "sha256": sha}
+
+
+## Le fichier reçu est-il celui que la description annonce ?
+static func conforme(chemin: String, description: Dictionary) -> bool:
+	if not FileAccess.file_exists(chemin):
+		return false
+	var f := FileAccess.open(chemin, FileAccess.READ)
+	var taille := f.get_length() if f != null else -1
+	if f != null:
+		f.close()
+	return taille == int(description["taille"]) and FileAccess.get_sha256(chemin) == str(description["sha256"])

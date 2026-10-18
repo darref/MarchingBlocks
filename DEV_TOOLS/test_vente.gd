@@ -22,6 +22,7 @@ const Demo := preload("res://app/demo.gd")
 const Vente := preload("res://app/vente.gd")
 const Associations := preload("res://app/associations.gd")
 const Projet := preload("res://app/projet.gd")
+const Exemple := preload("res://app/exemple.gd")
 
 const VECTEURS := "res://DEV_TOOLS/vecteurs_ed25519.json"
 const REGLAGES := "user://reglages.cfg"
@@ -69,6 +70,7 @@ func _mener() -> void:
 		_cles()
 	_editions()
 	_mises_a_jour()
+	_exemple_telecharge()
 	await _mise_a_jour_hors_ligne()
 	_contrat_et_avis()
 	_demo()
@@ -248,6 +250,34 @@ func _editions() -> void:
 
 
 # ── 4. LES MISES À JOUR ────────────────────────────────────────────────────────────────────────────────
+
+## L'EXEMPLE TÉLÉCHARGÉ (Jordan, 18 octobre 2026) : `example.json` lu comme `lire_la_reponse` (rien de faux ne passe),
+## et le fichier reçu comparé à sa taille et à son SHA-256 (un octet changé est refusé). Attendus écrits à la main.
+func _exemple_telecharge() -> void:
+	_egal(Exemple.url_description("https://spannergames.com/marchingblocks/latest.json"),
+		"https://spannergames.com/marchingblocks/example.json", "example.json vit à côté de latest.json")
+	var sha := "a".repeat(64)
+	_egal(Exemple.lire_la_description('{"file": "x.zip", "size": 12, "sha256": "%s", "url": "https://x.test/api/example?f=x.zip"}' % sha),
+		{"url": "https://x.test/api/example?f=x.zip", "taille": 12, "sha256": sha}, "une description juste est lue")
+	for faux in ['{"size": 12, "sha256": "%s", "url": "http://x.test/e.zip"}' % sha,
+			'{"size": 12, "sha256": "abc", "url": "https://x.test/e.zip"}',
+			'{"size": 0, "sha256": "%s", "url": "https://x.test/e.zip"}' % sha,
+			'{"size": 99999999999, "sha256": "%s", "url": "https://x.test/e.zip"}' % sha,
+			'{"size": 12, "sha256": "%s", "url": "https://x.test/e.zip"}' % "g".repeat(64),
+			"<html>404</html>", "[]"]:
+		_egal(Exemple.lire_la_description(faux), {}, "une description fausse est refusée : %s" % faux.left(40))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(JETABLES))
+	var chemin := ProjectSettings.globalize_path(JETABLES).path_join("exemple_essai.zip")
+	var f := FileAccess.open(chemin, FileAccess.WRITE)
+	f.store_string("hello world\n")
+	f.close()
+	# SHA-256 de « hello world » suivi d'un saut de ligne, calculé hors de Godot (sha256sum).
+	var bon := {"taille": 12, "sha256": "a948904f2f0f479b8f8197694b30184b0d2ed1c1cd2a1ec0fb85d299a192a447"}
+	_vrai(Exemple.conforme(chemin, bon), "le fichier annoncé est reconnu (taille et SHA-256)")
+	_vrai(not Exemple.conforme(chemin, {"taille": 12, "sha256": "b" + bon["sha256"].substr(1)}), "un SHA-256 différent est refusé")
+	_vrai(not Exemple.conforme(chemin, {"taille": 13, "sha256": bon["sha256"]}), "une taille différente est refusée")
+	_vrai(not Exemple.conforme(chemin + ".absent", bon), "un fichier absent est refusé")
+
 
 func _mises_a_jour() -> void:
 	print("— les mises à jour —")
