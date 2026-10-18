@@ -262,6 +262,18 @@ func _l_exemple() -> void:
 	erreurs = []
 	_vrai(Exemple.installer(DOSSIER + "/absente.zip", racine, erreurs) == "" and not erreurs.is_empty(),
 		"pas d'archive : refusé, et dit")
+	# Un exemple DÉCOMPRESSÉ À LA MAIN (la 0.9.4, 18 octobre 2026) : ses chemins pointent vers son propre dossier.
+	var main_ := ProjectSettings.globalize_path(DOSSIER + "/exemple_dezippe")
+	_vider(DOSSIER + "/exemple_dezippe")
+	DirAccess.make_dir_recursive_absolute(main_)
+	_ecrire(main_.path_join("example.mbproj"), '{"source": "{EXEMPLE}/example_witness.glb"}')
+	_ecrire(main_.path_join("example_witness.mbtiles"), '{"image": "{EXEMPLE}/example_witness_images/a.png"}')
+	_egal(Exemple.installer_sur_place(main_.path_join("example.mbproj")), 2, "un exemple dézippé : ses deux textes réécrits")
+	_egal(FileAccess.get_file_as_string(main_.path_join("example.mbproj")), '{"source": "%s/example_witness.glb"}' % main_,
+		"… le projet pointe vers son dossier")
+	_egal(FileAccess.get_file_as_string(main_.path_join("example_witness.mbtiles")),
+		'{"image": "%s/example_witness_images/a.png"}' % main_, "… et son témoin aussi")
+	_egal(Exemple.installer_sur_place(main_.path_join("example.mbproj")), 0, "un projet ordinaire n'est pas touché")
 
 
 ## LA LISTE DES TRAVAUX IMPORTÉS survit à la session (3 octobre 2026).

@@ -67,6 +67,31 @@ static func installer(archive := ARCHIVE, racine := RACINE, erreurs: Array = [])
 	return projet
 
 
+## ⚠ **UN EXEMPLE DÉCOMPRESSÉ À LA MAIN** (18 octobre 2026 : la 0.9.4 installée n'ouvrait pas l'île cartoon dézippée sur
+## le Bureau — 17 couches en cubes rouges, « {EXEMPLE}/… is missing ») : ses chemins disent encore `MARQUE`. On fait sur
+## place ce que fait `installer` : chaque `.mbproj` et `.mbtiles` du dossier du projet pointe vers ce dossier. Rend le
+## nombre de fichiers réécrits (0 pour un projet ordinaire, qui n'est pas touché).
+static func installer_sur_place(projet: String) -> int:
+	if not FileAccess.get_file_as_string(projet).contains(MARQUE):
+		return 0
+	var dossier := projet.get_base_dir()
+	var n := 0
+	for f in DirAccess.get_files_at(dossier):
+		if not TEXTES.has(f.get_extension()):
+			continue
+		var chemin := dossier.path_join(f)
+		var texte := FileAccess.get_file_as_string(chemin)
+		if not texte.contains(MARQUE):
+			continue
+		var sortie := FileAccess.open(chemin, FileAccess.WRITE)
+		if sortie == null:
+			continue
+		sortie.store_string(texte.replace(MARQUE, dossier))
+		sortie.close()
+		n += 1
+	return n
+
+
 
 # ── L'EXEMPLE TÉLÉCHARGÉ — DÉCIDÉ (Jordan, 18 octobre 2026 : « passer l'exemple fourni avec le soft en téléchargeable
 # depuis le soft ouvert avec un bouton », hébergé « dans SpannerGames ») ──────────────────────────────────────────────

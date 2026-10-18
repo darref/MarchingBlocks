@@ -12,7 +12,7 @@ config_version=5
 
 config/name="MarchingBlocks"
 config/description="Sculpt one block. Paint a world. Non-cubic 3D tiles for Godot, Unity and Unreal."
-config/version="0.9.4"
+config/version="0.9.4.1"
 run/main_scene="res://app/editor.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://MARQUE/icone.png"

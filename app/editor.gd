@@ -7152,6 +7152,7 @@ func _ouvrir(chemin: String) -> bool:
 	if not _couches.is_empty() and not _ouverture:
 		_toujours_ecrire()   # le projet qu'on quitte garde son dernier geste et son monde
 	var erreurs: Array = []
+	Exemple.installer_sur_place(chemin)   # un exemple dézippé à la main : ses chemins `{EXEMPLE}/…` vers son dossier
 	var etat: Dictionary = Projet.depuis_texte(FileAccess.get_file_as_string(chemin), erreurs)
 	if etat.is_empty():
 		_dire("[color=#e0603c]Cannot open[/color] %s\n  %s" % [chemin, "\n  ".join(PackedStringArray(erreurs))])
