@@ -324,6 +324,11 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   ⚠ **PRÉCISÉ (Jordan, 6 octobre 2026)** : la 1.0.0, vendue au prix plein, apportera DEUX ATELIERS NEUFS — **Props**
   (objets en tout genre, végétaux compris) et **Houses** — offerts aux acheteurs de la 0.9.0, ce qu'il faut ANNONCER dès
   le lancement (document de stratégie). **OUVERT** : leur lien avec les props rattachés du §3.
+  ⚠ **REMPLACÉ (Jordan, 19 octobre 2026 : « la 1.0.0 va être juste après avoir fini cela, et après avoir ajouté le
+  smooth shading des tuiles »)** — **LA 1.0.0 = L'ATELIER DE GÉNÉRATION DE MONDE (sans IA) + LE SMOOTH SHADING DES
+  TUILES, et elle sort juste après eux.** **Props et Houses passent APRÈS la 1.0** (Jordan, même jour), en mises à jour
+  toujours offertes aux acheteurs de l'accès anticipé (le contrat couvre déjà « la 1.0 et toute mise à jour
+  ultérieure »). Le détail : « UN ATELIER DE GÉNÉRATION DE MONDE », plus bas.
 - **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
   projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
   continuer de faire tant que le dev n'est pas clos, figé ensuite ».
@@ -523,7 +528,32 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       LISTE DES GREFFONS À FAIRE (« le relief »).
     - **UN ATELIER DE GÉNÉRATION DE MONDE** (Jordan, 18 octobre 2026 : « un workshop AI avec un modèle à nous, pour faire
       ce que tu es en train de faire en créant un monde, avec une liste de champs à remplir et le modèle fait tout »).
-      **PROPOSÉ (Claude), en deux temps, pas avant la 1.x :**
+      **C'EST LA 1.0.0, SANS IA — DÉCIDÉ (Jordan, 19 octobre 2026)** : l'étape 1 ci-dessous, avec le smooth shading des
+      tuiles ; l'étape 2 (le modèle local) reste OUVERTE, après la 1.0. **Ce que le générateur règle — DÉCIDÉ (Jordan,
+      19 octobre 2026 : « des mondes de taille / forme / réseaux de chemins / souterrains / aspects différents ?
+      contrôlables ? » — « fais-le »)** :
+      - **Taille** (cases en x, y, z ; la borne est la mémoire et le temps, l'exemple fait 739 481 cases) ; **forme**
+        (île, archipel, continent, vallée, plateau, station fermée, ou un masque noir et blanc) ; **relief** (hauteur,
+        falaises franches ou douces, étages, bosses 3D qui débordent comme la montagne de `filmer_formes`) ;
+      - **chemins** : des lieux posés (village, ruines…) reliés par des routes CALCULÉES sur le relief, jamais plus
+        d'une case à monter (le `_route` de `filmer_haut`), ponts et escaliers taillés ;
+      - **souterrains** : galeries, salles, puits, entrées cachées, salles noyées, par les VRAIES formes spéciales sur
+        un graphe de salles (comme `filmer_galeries`) ;
+      - **eau** : mer, sources, lacs en altitude, cascades (bassins échancrés), lave, marais — le calcul de l'appli
+        fait couler ; **aspect** : biomes et leurs parts, textures par couche, feuillage, transitions, météo.
+      - **Trois niveaux de contrôle** : (1) des curseurs et une GRAINE (même graine, même monde) ; (2) un CROQUIS peint
+        à plat (mer, montagne, village, trait de rivière) que le générateur remplit ; (3) VERROUILLER une zone et
+        regénérer le reste. Le monde généré est un monde ordinaire : on le reprend aux outils habituels.
+      - **Les règles qu'il tient (payées par les tournages)** : une matière par niveau (pas deux couches côte à côte au
+        même étage, sauf transition cochée) ; « Fix diagonal contacts » sur chaque monde ; marches d'une case et
+        tunnels d'au moins 3 cases (le stickman passe) ; un bassin ne déborde que par son point le plus bas. Un monde
+        généré est donc JOUABLE d'office.
+      **LE SMOOTH SHADING DES TUILES — DÉCIDÉ (Jordan, 19 octobre 2026), À ÉCRIRE.** Aujourd'hui tout est en normales
+      PAR FACE (le .glb part sans normales : ombrage plat imposé par glTF ; le manuel dit « ne pas lisser »). ⚠ Lisser
+      demande des normales qui S'ACCORDENT d'une tuile à l'autre et d'une couche à l'autre (les bords sont partagés,
+      §« bords partagés ») — sinon chaque joint se voit en ligne d'ombre ; et un angle de coupure pour garder les
+      arêtes vives. Le .glb, les trois greffons et la page 6 du manuel suivent.
+      **L'ancien plan (PROPOSÉ par Claude le 18 octobre), dont l'étape 1 est retenue :**
       1. **D'abord un générateur procédural SANS IA.** Une liste de champs (taille, biomes, relief et falaises,
          rivières, mer, étages, densité du feuillage, textures par couche, graine), et des règles écrites par nous qui
          bâtissent le monde avec les vrais outils du cœur, comme le font `batir_station.gd` et `batir_monde_client.gd`.
