@@ -50,6 +50,9 @@ var clic_arme := ""
 ## L'atelier Foliage (6 octobre 2026) : la souris survole, ou un coup (phase 0 appui, 1 glissé, 2 relâché).
 signal feuillage_survole(position: Vector2)
 signal feuillage_coup(position: Vector2, bouton: int, phase: int)
+## Le RELIEF (POM) vient d'être allumé au Play test : sur combien de matériaux des tuiles posées, et combien ont une
+## hauteur (18 octobre 2026 : cocher la case sur le monde cartoon n'allumait rien, SANS UN MOT — l'écran le dit).
+signal relief_compte(allumes: int, avec_hauteur: int, materiaux: int)
 
 const Massif := preload("res://addons/marchingblocks_core/massif_peint.gd")
 const Outils := preload("res://addons/marchingblocks_core/outils.gd")
@@ -2485,7 +2488,10 @@ func _appliquer_rendu(cle: String) -> void:
 		"ssr":
 			_env.ssr_enabled = v
 		"relief", "relief_profondeur":
-			_appliquer_relief(bool(rendu.get("relief", false)) and personnage != null)
+			var allume := bool(rendu.get("relief", false)) and personnage != null
+			_appliquer_relief(allume)
+			if allume and cle == "relief":
+				relief_compte.emit(_relief_allumes, _relief_avec_hauteur, _relief_materiaux)
 		"glow":
 			_env.glow_enabled = v
 		"glow_intensite":
@@ -2509,9 +2515,15 @@ func _appliquer_rendu(cle: String) -> void:
 
 ## Allume (ou éteint) le RELIEF sur les matériaux des tuiles posées qui ont une hauteur (`fournisseur_de_hauteur`).
 ## Rend combien en ont une (allumés ou non) : la fumée le compte.
+var _relief_allumes := 0
+var _relief_avec_hauteur := 0
+var _relief_materiaux := 0
+
+
 func _appliquer_relief(oui: bool) -> int:
 	var vus := {}
 	var avec_hauteur := 0
+	var allumes := 0
 	for i in _couches.get_child_count():
 		var g := _couches.get_child(i).get_node_or_null("Rendu") as GridMap
 		if g == null or g.mesh_library == null:
@@ -2532,10 +2544,14 @@ func _appliquer_relief(oui: bool) -> int:
 				sm.heightmap_enabled = actif
 				sm.heightmap_texture = hauteur if actif else null
 				if actif:
+					allumes += 1
 					sm.heightmap_scale = float(rendu.get("relief_profondeur", RELIEF_PROFONDEUR))
 					sm.heightmap_deep_parallax = true
 					sm.heightmap_min_layers = RELIEF_COUCHES.x
 					sm.heightmap_max_layers = RELIEF_COUCHES.y
+	_relief_allumes = allumes
+	_relief_avec_hauteur = avec_hauteur
+	_relief_materiaux = vus.size()
 	return avec_hauteur
 
 

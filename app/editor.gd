@@ -486,6 +486,7 @@ func _batir() -> void:
 	_vue.colle.connect(_colle)
 	_vue.forme_posee.connect(_forme_posee)
 	_vue.fournisseur_de_hauteur = _hauteur_du_materiau
+	_vue.relief_compte.connect(_dire_le_relief)
 	_vue.forme_dite.connect(_forme_dite)
 	_vue.eau_survolee.connect(_eau_survolee)
 	_vue.eau_cliquee.connect(_eau_cliquee)
@@ -4903,6 +4904,18 @@ func _glb_du_temoin(c: Dictionary) -> String:
 
 ## LE RELIEF (POM) DU PLAY TEST : la carte de hauteur du matériau `nom` du témoin de la couche `i` (le nom que le
 ## .glb a gardé aux tuiles tranchées), ou null.
+## LE RELIEF DIT CE QU'IL ALLUME (18 octobre 2026, Jordan : « il n'y en a aucun effet visible quand on l'active dans
+## cartoon » — 0 matériau à hauteur sur 34, et la case n'en disait rien). Un matériau prend le relief s'il a une carte
+## de hauteur ET une normale : celles de son ensemble (à côté de l'image), ou les cartes déduites (« PBR maps »).
+func _dire_le_relief(allumes: int, avec_hauteur: int, materiaux: int) -> void:
+	if allumes > 0:
+		_dire("Relief (POM) on %d of %d material(s)." % [allumes, materiaux])
+		return
+	_dire(("[color=#f2ca79]Relief (POM): no material of this world has a height map[/color] (%d material(s), %d with "
+		+ "height but no normal map). Put a [b]height[/b] and a [b]normal[/b] map next to a texture (…_height.png, "
+		+ "…_normal_gl.png), or tick [b]PBR maps[/b] on its material.") % [materiaux, avec_hauteur])
+
+
 func _hauteur_du_materiau(i: int, nom: String) -> Texture2D:
 	if i < 0 or i >= _couches.size():
 		return null

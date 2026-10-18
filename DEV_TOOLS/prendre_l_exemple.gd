@@ -110,6 +110,22 @@ static func prendre(source: String, sortie: String, nom := NOM) -> String:
 				fichiers[p] = FileAccess.get_file_as_bytes(p)
 			else:
 				print("  ⚠ chemin cité absent, laissé tel quel : ", p)
+	# ⚠ **LES CARTES QUI ACCOMPAGNENT UNE IMAGE PARTENT AVEC ELLE** (18 octobre 2026 : le POM sans effet sur l'exemple
+	# cartoon). Le témoin ne cite que l'albedo ; normale, rugosité, occlusion, métal, hauteur et émission sont trouvées
+	# À CÔTÉ de lui, par leur nom (`Peinture.fichiers_de_l_ensemble`). Sans elles, l'exemple perdait tout son relief, et
+	# la station sa lueur et ses normales.
+	var Peinture: Script = load("res://addons/marchingblocks_core/peinture.gd")
+	var compagnons := 0
+	for p in fichiers.keys():
+		if not str(p).get_extension().to_lower() in ["png", "jpg", "jpeg", "webp", "tga", "bmp"]:
+			continue
+		var ens: Dictionary = Peinture.fichiers_de_l_ensemble(p)
+		for carte in ens:
+			var f = ens[carte]
+			if f is String and not fichiers.has(f) and FileAccess.file_exists(f):
+				fichiers[f] = FileAccess.get_file_as_bytes(f)
+				compagnons += 1
+	print("EXEMPLE : %d carte(s) d'ensembles PBR emportées à côté de leurs images" % compagnons)
 	# Le nom de chaque fichier dans l'archive, et la table de réécriture.
 	var noms := {}
 	for p in fichiers:

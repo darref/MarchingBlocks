@@ -3937,6 +3937,9 @@ func _le_rendu_du_play_test(ed: Control) -> void:
 	(ed._controles_rendu["relief"] as CheckButton).button_pressed = true
 	(ed._controles_rendu["relief_profondeur"] as HSlider).value = 6.0
 	_vrai(_materiaux_en_relief(vue).is_empty(), "Relief coché sur un monde sans hauteur : rien ne s'allume")
+	# … et l'écran le DIT (18 octobre 2026 : sur le monde cartoon, la case n'allumait rien sans un mot).
+	_vrai(ed._rapport.text.contains("no material of this world has a height map"),
+		"Relief coché sur un monde sans hauteur : l'écran dit pourquoi rien ne s'allume")
 	(ed._controles_rendu["relief"] as CheckButton).button_pressed = false
 	(ed._controles_rendu["soleil_disque_taille"] as HSlider).value = 6.0
 	(ed._controles_rendu["soleil_disque_eclat"] as HSlider).value = 9.0

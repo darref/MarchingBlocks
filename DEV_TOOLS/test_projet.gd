@@ -375,6 +375,27 @@ func _le_dev_de_l_exemple() -> void:
 	_vrai(dedans != "" and not dedans.contains("travaux") and Projet.depuis_texte(dedans, []).get("couches", []).size() == 1,
 		"… sans la liste des travaux, et toujours lisible")
 	z.close()
+	# Les cartes qui ACCOMPAGNENT une image citée partent avec elle (18 octobre 2026 : le POM sans effet sur l'exemple
+	# cartoon — ni normale ni hauteur dans le zip, seulement l'albedo que le projet cite).
+	var images := ProjectSettings.globalize_path(DOSSIER + "/preuve_images/pierre")
+	DirAccess.make_dir_recursive_absolute(images)
+	var png := Image.create(4, 4, false, Image.FORMAT_RGB8)
+	for carte in ["color", "normal_gl", "height", "roughness", "ao", "metallic", "emission"]:
+		png.save_png(images.path_join("pierre_%s.png" % carte))
+	png.save_png(images.path_join("autre_chose.png"))
+	var c := Projet.couche("A")
+	c["source"] = images.path_join("pierre_color.png")
+	_ecrire(projet, Projet.vers_texte([c], 0))
+	_egal(D.reemballer(projet, archive), "", "réemballer un projet qui cite une image à cartes")
+	var z2 := ZIPReader.new()
+	var dans: PackedStringArray = z2.get_files() if z2.open(archive) == OK else PackedStringArray()
+	z2.close()
+	var manquent: Array = []
+	for carte in ["color", "normal_gl", "height", "roughness", "ao", "metallic", "emission"]:
+		if not dans.has("example_images/pierre/pierre_%s.png" % carte):
+			manquent.append(carte)
+	_egal(manquent, [], "l'albedo ET ses six cartes sont dans l'archive")
+	_vrai(not dans.has("example_images/pierre/autre_chose.png"), "… mais pas une image voisine qui n'en est pas une")
 
 
 ## CE QUE DURE CHAQUE GESTE (3 octobre 2026, `app/durees.gd`). Attendus à la main : une mesure d'1,1 s sur un monde

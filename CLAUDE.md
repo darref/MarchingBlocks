@@ -471,6 +471,23 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     l'installeur `builds/0.9.4.1/installeur/MarchingBlocks-0.9.4.1-setup.exe` ; les trois zips de la 0.9.4 décompressés à la
     main puis réécrits : 0 marque restante, 0 chemin absent (114, 76, 161 cités). La démo sur itch (`windows-demo`) ; les
     exemples inchangés. ⚠ La page itch s'appelle désormais `spannergames/marchingblocks-free-demo`.
+  - **0.9.4.2 — LE RELIEF QUI MARCHE SUR LES TROIS EXEMPLES (Jordan, 18 octobre 2026 : « il n'y en a aucun effet visible
+    quand on l'active dans cartoon », puis « passe les 3 exemples en leur produisant toutes les maps PBR possibles y compris
+    la hauteur »)**. MESURÉ par `sonde_relief.gd` sur l'exemple cartoon dézippé : **0 matériau à hauteur sur 34**. Deux causes :
+    - ⚠ **L'EMBALLEUR NE PRENAIT QUE LES IMAGES CITÉES** : le témoin cite l'albedo ; normale, rugosité, occlusion, métal,
+      hauteur et ÉMISSION se trouvent À CÔTÉ par leur nom. La station perdait ainsi ses normales et sa lueur, le monde client
+      ses ensembles Poly Haven complets. `prendre_l_exemple.gd` emporte désormais les compagnons de chaque image
+      (`Peinture.fichiers_de_l_ensemble`) ; gardé par `test_projet` (vu rouge sans : seul l'albedo partait).
+    - Le cartoon n'avait QUE la couleur, la station tout SAUF la hauteur : `SpannerGames/PROJETS/MarchingBlocks/01_scripts/
+      cartes_pbr_exemples.py` les calcule (bibliothèque ET copies dans les projets, sans rien écraser). Cartoon : hauteur =
+      détail fin de la luminance (un aplat reste plat ; ce qui LUIT est un creux), normale, AO, rugosité par matière, métal
+      noir. Station (usinée) : plaques plates, JOINTS creusés là où sa normale change d'un coup. ⚠ Vu au Play test : la
+      hauteur intégrée de la normale (Frankot-Chellappa, corrélation 0,84-0,99) faisait onduler la coque — abandonnée.
+    - **L'ÉCRAN DIT CE QUE LE RELIEF ALLUME** (`Vue.relief_compte` → `editor._dire_le_relief`) : « Relief (POM) on N of M
+      material(s) », ou pourquoi rien ne s'allume. Gardé par `fumee_appli`.
+    - **MESURÉ, exemples dézippés à la main** : cartoon **34 / 34**, monde client **24 / 25**, station **27 / 28** (le
+      matériau restant de chacun : NON IDENTIFIÉ, probablement animé, sans POM) ; photos sans / avec regardées
+      (les pavés, les briques, les joints de coque se creusent, les lignes de la coque restent droites).
     - **LE RELIEF DES TEXTURES EN PLAY TEST ET EN PLAY EDIT** (Jordan, 18 octobre 2026 : « on peut rajouter du parallax
       activable en play test et play edit ? »). **LE POM — DÉCIDÉ (Jordan, 18 octobre 2026 : « oui »), FAIT ET MESURÉ**
       (détail plus bas). Le choix, proposé par Claude : le POM plutôt que le parallax simple. Le parallax
