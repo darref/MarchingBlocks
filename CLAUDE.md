@@ -5452,6 +5452,40 @@ un projet **neuf** (`Documents/MarchingBlocks/station/`, « scifi » du 6 octobr
   d'une barre qui défile se manque — outils et formes choisis par l'écran, la carte le dit.
 - ⚠ **PAS JUGÉ PAR JORDAN** : les textures, la station, les deux vidéos. Des modèles Tripo (feuillage Spirit3D) sont à l'image.
 
+### LE MONDE CARTOON — DEMANDÉ PAR JORDAN (18 octobre 2026), ÉCRIT LE MÊME JOUR (`DEV_TOOLS/batir_monde_cartoon.gd`, `modeles_cartoon.gd`, `filmer_monde_cartoon.gd`)
+
+« Un monde avec autant voire plus de matières que monde client, style chanfreiné et relief simple sauf des petits morceaux
+sculptés qui sortent du lot et donnent un aspect caractéristique à chaque matière, de la peinture handpainted (pas de texture
+toute prête), un aspect cartoon minimaliste genre Pokémon, une grande map carrée avec un réseau souterrain large et des
+reliefs qui sortent de la heightmap (arches, corridors, enfoncements dans les falaises) », puis « pas de motif répétitif sur
+toutes les textures, certaines presque unies », « du foliage CC0 de haute qualité et pas trop lourd pour en mettre
+beaucoup », « la SDFGI au tournage, une torche pour les intérieurs ». Rien n'est ajouté au logiciel (gel du 7 octobre).
+
+- **LES TEXTURES SONT PEINTES PAR SCRIPT** (`SpannerGames/PROJETS/MarchingBlocks/01_scripts/textures_cartoon.py` →
+  `BIBLIOTHEQUE/textures/cartoon/`) : aplats posterisés, motifs cernés, sans couture ; herbe, fleurs, automne, chemin,
+  sable, plage, neige, glace, boue PRESQUE UNIES ; motifs aux pavés, à la roche, au canyon, à la lave (émission), aux
+  berges en strates. ⚠ **LE CRISTAL ET LA CAVERNE SONT PRESQUE UNIS AUSSI** : des facettes répétées à chaque case
+  faisaient un damier dans une salle entière (vu deux fois à l'image).
+- **17 COUCHES** (Crystal, Mushroom, Cavern, Cobble, Path, Flowers, Grass, Autumn, Forest, Sand, Beach, Canyon, Mud, Snow,
+  Ice, Rock, Volcano) sur la base du monde client (niveau 1, chanfrein 0,85) ; un dedans par matière (coussins, rides,
+  facettes, strates, craquelures) et des VARIANTES RARES (6 : 1 : 1) à UN morceau sculpté franc (butte, bloc taillé,
+  corniche, pointe, bouche de lave), sur cinq clés dont le sol et la paroi sous roche. ⚠ **LES COUCHES SOUTERRAINES EN
+  TÊTE DE PRIORITÉ** : derrière l'herbe, le plafond d'une galerie était posé par l'herbe (des berges pendaient sous terre) ;
+  et une case de grotte REBOUCHÉE contre un contact par une arête garde la matière de sa grotte.
+- **LE MONDE** : une île carrée de 160 × 160 en terrasses de trois cases, huit régions, un bourg pavé, 6 arches (prairie,
+  canyon, une arche de mer), un corridor dans la montagne, 16 alcôves au pied des falaises, un réseau de galeries larges
+  (six cases) et cinq salles, au-dessus de la mer, où mènent 10 alcôves ; mer, lac, lave, 46 mares ; 27 paires de
+  transitions. **331 467 cases. MESURÉ (RTX 2060)** : 8 img/s la vue d'ensemble (73 000 appels), 17 à 97 ailleurs.
+  ⚠ **PAS DE RIVIÈRE** : celle de la montagne entrait par une alcôve et noyait le réseau ; aucune alcôve au marais ni au lac.
+- **LE FEUILLAGE CC0** (`BIBLIOTHEQUE/modeles/`) : Quaternius, Stylized Nature MegaKit [Standard] (glTF converti en .glb
+  par le bâtisseur), et Kenney, Nature Kit 2.1 ; les cristaux calculés. **3 889 plants**, sans perte d'images par seconde
+  mesurable. ⚠ Aucun modèle Tripo dans ce monde.
+- **LA VIDÉO** (`filmer_monde_cartoon.gd`, plein écran, l'UI masquée, SDFGI, une torche et une lueur avant accrochées à la
+  caméra sous terre) et `01_scripts/montage_cartoon.py` : `04_exports/monde_cartoon.mp4` et le GIF du tour de l'île, sur
+  « Happy Adventure (Loop) » de TinyWorlds (CC0). ⚠ **LA PREMIÈRE PRISE ÉTAIT NOIRE SOUS TERRE** (torche à 3,2) ; un mode
+  `--seulement=sous_terre` en fait l'essai en photos.
+- ⚠ **PAS JUGÉ PAR JORDAN.**
+
 ### LES GRANDS MONDES NE PLANTENT PLUS — DEMANDÉ PAR JORDAN (9 octobre 2026, depuis le jeu Resolve : « règle le problème de MB
 ### qui plante, il ne doit pas planter » ; « je ne veux pas avoir plusieurs sous-maps »), ÉCRIT LE MÊME JOUR
 
