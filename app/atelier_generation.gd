@@ -12,6 +12,7 @@ extends RefCounted
 ## sans couche prend celle de son repli (`Generateur.REPLI` : le sable sans couche devient du sol…).
 
 const G := preload("res://app/generateur.gd")
+const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
 const Palette := preload("res://app/palette.gd")
 const Icones := preload("res://app/icones.gd")
 const Section := preload("res://app/section.gd")
@@ -25,6 +26,13 @@ const MOTS := {
 	"neige": ["snow", "ice", "neige", "glace", "glacier"],
 	"chemin": ["path", "cobble", "road", "gravel", "chemin", "pave", "brick"],
 	"souterrain": ["cave", "cavern", "crystal", "grotte", "mushroom", "underground"],
+}
+## Les mots qui envoient un modèle de feuillage sur un rôle (son nom, en minuscules) ; un modèle qu'aucun mot ne range
+## pousse sur les deux sols. ⚠ En français aussi (vu à l'image : les « cristal » du monde cartoon poussaient dans l'herbe).
+const MOTS_FEUILLAGE := {
+	"sable": ["cactus", "palm", "dune", "desert", "beach", "agave", "palmier", "plage"],
+	"roche": ["rock", "pebble", "stone", "boulder", "roche", "rocher", "caillou", "galet", "pierre"],
+	"neige": ["snow", "ice", "crystal", "frost", "neige", "glace", "cristal", "givre"],
 }
 const AIDES := {
 	"largeur": "How many cells wide (x).", "profondeur": "How many cells deep (z).",
@@ -40,7 +48,9 @@ const AIDES := {
 	"lacs": "Lakes dug in the land; the water fills them.", "sources": "River sources on the heights.",
 	"lave": "Lava pools on the mountains.",
 	"sable": "How wide the shores are.", "roche": "How much of the land is rock (the high ground).",
-	"neige": "How much of the top is snow.", "sol2": "How much of the ground is the second ground (patches).",
+	"neige": "How much of the top is snow.",
+	"feuillage": "How many plants: the foliage models of this project, picked by their name (trees and grass on the "
+		+ "ground, cactus and palms on the shores, pebbles on rock, crystals on snow).", "sol2": "How much of the ground is the second ground (patches).",
 }
 
 var e: Node   # l'écran (editor.gd)
@@ -141,6 +151,7 @@ func batir(pile: VBoxContainer) -> void:
 	_curseur(sec.contenu, "roche", "Rock", 0.0, 1.0, 0.01)
 	_curseur(sec.contenu, "neige", "Snow", 0.0, 1.0, 0.01)
 	_curseur(sec.contenu, "sol2", "2nd ground", 0.0, 1.0, 0.01)
+	_curseur(sec.contenu, "feuillage", "Foliage", 0.0, 1.0, 0.01)
 	_melange = CheckBox.new()
 	_melange.text = "Blend materials"
 	_melange.tooltip_text = ("Off: one material per level — two materials never meet on the same flat ground (they "
@@ -183,7 +194,7 @@ func batir(pile: VBoxContainer) -> void:
 	go.custom_minimum_size = Vector2(0, 40)
 	sec.contenu.add_child(go)
 	sec.contenu.add_child(e._texte("The world stays an ordinary world: paint, dig and plant on it afterwards. Foliage "
-		+ "is not generated yet.", 10, Palette.GRIS))
+		+ "uses the models imported in the Foliage workshop.", 10, Palette.GRIS))
 	_remplir()
 
 
@@ -339,6 +350,9 @@ func _dire_le_bilan(m: Dictionary, entier: bool) -> String:
 	if entier:
 		t += " · %d cave room(s), %d galler(ies), %d entrance(s) · %d cells" % [int(r.get("salles", 0)),
 			int(r.get("galeries", 0)), int(r.get("entrees", 0)), int(r.get("cases", 0))]
+	if e._feuillage.modeles.is_empty() and float(champs["feuillage"]) > 0.0:
+		t += "
+No foliage model in this project: import some in Foliage to plant the world."
 	if str(r.get("croquis", "")) == "illisible":
 		t += "\n⚠ The sketch image cannot be read: an island instead."
 	return t
@@ -354,6 +368,63 @@ func generer() -> void:
 	e._fin_attente()
 	await e._poser_le_monde_genere(m, cible)
 	_bilan.text = _dire_le_bilan(m, true)
+
+
+## LE FEUILLAGE DU MONDE GÉNÉRÉ : sur chaque point semé (`monde["semis"]`), un modèle du projet tiré parmi ceux de son
+## rôle (les petits plus souvent que les grands), posé sur le vrai sol des tuiles et vérifié comme le pinceau de Foliage
+## (« Planted · free » pour un arbre, « overflow » pour une herbe). Rend les plants, sans les poser (l'écran en fait une
+## action). `garder` : les plants qui restent (hors de la boîte), pour l'espacement.
+func plants_du_monde(monde: Dictionary, garder: Array) -> Array:
+	var af: RefCounted = e._feuillage
+	var semis: Array = monde.get("semis", [])
+	if af.modeles.is_empty() or semis.is_empty():
+		return []
+	var par_role := {}
+	for mo in af.modeles:
+		var nom := str(mo["nom"]).to_lower()
+		var roles := ["sol", "sol2"]
+		for r in MOTS_FEUILLAGE:
+			for mot in MOTS_FEUILLAGE[r]:
+				if nom.contains(mot):
+					roles = [r]
+		var taille := maxf(float(mo.get("rayon", 0.5)) * float(mo.get("echelle", 1.0)), 0.15)
+		for r in roles:
+			if not par_role.has(r):
+				par_role[r] = []
+			par_role[r].append([mo, 1.0 / taille])
+	# Le sable et le second sol sans modèle à eux prennent ceux du sol (une herbe sur la dune) ; la roche et la neige non
+	# (un arbre de prairie n'a rien à faire sur un glacier).
+	for r in ["sable", "sol2"]:
+		if not par_role.has(r) and par_role.has("sol"):
+			par_role[r] = par_role["sol"]
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash([int(champs["graine"]), "feuillage"])
+	var modeles_: Dictionary = af._par_id()
+	var ix := FE.index(garder, modeles_)
+	var sol: Dictionary = af.monde()
+	var sortie: Array = []
+	for s in semis:
+		var choix: Array = par_role.get(s[3], [])
+		if choix.is_empty():
+			continue
+		var total := 0.0
+		for c in choix:
+			total += float(c[1])
+		var tire := rng.randf() * total
+		var mo: Dictionary = choix[0][0]
+		for c in choix:
+			tire -= float(c[1])
+			if tire <= 0.0:
+				mo = c[0]
+				break
+		var t := FE.tirer(mo, rng)
+		var mode := "sol_libre" if float(mo.get("rayon", 0.5)) * float(mo.get("echelle", 1.0)) >= 0.5 else "sol_debord"
+		var r := FE.semer_candidats(mo, float(s[2]), [[s[0], s[1], t["lacet"], t["echelle"]]], mode, sol, ix, modeles_)
+		for pl in r["plants"]:
+			pl["id"] = af._prochain_plant
+			af._prochain_plant += 1
+			sortie.append(pl)
+	return sortie
 
 
 func vers_donnees() -> Dictionary:

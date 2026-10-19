@@ -6093,13 +6093,25 @@ func _poser_le_monde_genere(monde: Dictionary, cible: Dictionary) -> void:
 		etat["preset"] = e["preset"]
 		etat["sources"] = (e["sources"] as Array).duplicate()
 		apres_eaux.append(etat)
-	var plants: Array = (_feuillage.plants as Array).duplicate() if tout else []
-	_histoire.create_action("Generate the world: water" + (" and foliage" if tout else ""))
+	# LE FEUILLAGE : les anciens plants partent (tout le monde) ou restent (la boîte : ceux de la boîte partent), les
+	# nouveaux sont plantés sur le sol des tuiles — qu'on laisse d'abord se poser.
+	var plants: Array = []
+	var gardes: Array = []
+	for pl in _feuillage.plants:
+		var q: Vector3 = pl["p"]
+		if tout or (q.x >= o.x and q.x < o.x + w and q.z >= o.y and q.z < o.y + d):
+			plants.append(pl)
+		else:
+			gardes.append(pl)
+	await _laisser_peindre()
+	await _laisser_peindre()
+	var nouveaux: Array = _generation.plants_du_monde(monde, gardes)
+	_histoire.create_action("Generate the world: water and foliage")
 	_histoire.add_do_method(_remettre_les_eaux.bind(apres_eaux))
 	_histoire.add_undo_method(_remettre_les_eaux.bind(avant_eaux))
-	if not plants.is_empty():
-		_histoire.add_do_method(_feuillage._faire.bind([], plants))
-		_histoire.add_undo_method(_feuillage._defaire.bind([], plants))
+	if not plants.is_empty() or not nouveaux.is_empty():
+		_histoire.add_do_method(_feuillage._faire.bind(nouveaux, plants))
+		_histoire.add_undo_method(_feuillage._defaire.bind(nouveaux, plants))
 	_histoire.commit_action()
 	# LES TRANSITIONS que le monde demande (les chemins, ou tout ce qui se touche avec « Blend materials »).
 	var allumees := 0
@@ -6113,9 +6125,9 @@ func _poser_le_monde_genere(monde: Dictionary, cible: Dictionary) -> void:
 	_fin_attente()
 	_cadrer_tout_le_monde()
 	_enregistrer_plus_tard()
-	var texte := ("[b]World generated[/b] — %d cells changed, %d water layer(s), %d transition(s) switched on%s. "
-		+ "[i]Ctrl+Z twice gives the old world back.[/i]") % [total, apres_eaux.size(), allumees,
-		", %d plant(s) removed" % plants.size() if not plants.is_empty() else ""]
+	var texte := ("[b]World generated[/b] — %d cells changed, %d water layer(s), %d transition(s) switched on, %d "
+		+ "plant(s) planted%s. [i]Ctrl+Z twice gives the old world back.[/i]") % [total, apres_eaux.size(), allumees,
+		nouveaux.size(), ", %d removed" % plants.size() if not plants.is_empty() else ""]
 	if not sans_tuiles.is_empty():
 		texte += ("
 [color=#e0603c]%s has no tiles yet[/color]: its cells were not painted. Slice its witness in "

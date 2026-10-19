@@ -5901,9 +5901,24 @@ func _la_generation(ed: Control) -> void:
 			rendu = false
 	_vrai(rendu, "deux Ctrl+Z rendent l'ancien monde, case pour case")
 	_egal(ed._eaux.size(), eaux_avant, "et son eau")
-	# « Replace the whole world » : hors de la boîte, plus rien ; deux Ctrl+Z rendent le dehors aussi.
+	# « Replace the whole world » : hors de la boîte, plus rien ; deux Ctrl+Z rendent le dehors aussi. Et le feuillage :
+	# l'arbre d'essai importé plus haut est planté sur le monde généré.
 	ag.champs["tout_remplacer"] = true
+	ag.champs["feuillage"] = 1.0
+	ag.champs["sol2"] = 1.0
+	ag.champs["forme"] = "continent"
+	ag.champs["sable"] = 0.0
+	var plants_avant: int = ed._feuillage.plants.size()
 	await ag.generer()
+	var plantes: Array = ed._feuillage.plants
+	_vrai(ed._feuillage.modeles.is_empty() or plantes.size() > 0, "Generate plante les modèles du projet (%d plants)"
+		% plantes.size())
+	var hors_boite := 0
+	for pl in plantes:
+		var q: Vector3 = pl["p"]
+		if q.x < -12.5 or q.x > 12.5 or q.z < -10.5 or q.z > 10.5:
+			hors_boite += 1
+	_egal(hors_boite, 0, "tous les plants sont sur le monde généré")
 	var dehors := 0
 	for i in ed._vue.nombre_de_couches():
 		for c in (ed._vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
@@ -5922,6 +5937,7 @@ func _la_generation(ed: Control) -> void:
 		if hors != hors_avant[i]:
 			hors_rendu = false
 	_vrai(hors_rendu, "et deux Ctrl+Z rendent le dehors, case pour case")
+	_egal(ed._feuillage.plants.size(), plants_avant, "et les plants d'avant")
 	# Les champs partent avec le projet, et reviennent.
 	var d: Dictionary = ag.vers_donnees()
 	_egal(d["champs"]["graine"], 3, "les champs du générateur partent avec le projet")

@@ -53,13 +53,14 @@ const DEFAUTS := {
 	"melange": false,
 	"parois_roche": false,
 	"tout_remplacer": true,
+	"feuillage": 0.5,
 }
 ## Les bornes de chaque champ numérique : [mini, maxi].
 const BORNES := {
 	"largeur": [16, 256], "profondeur": [16, 256], "hauteur": [8, 64], "mer": [0, 24],
 	"relief": [0.0, 1.0], "detail": [0.0, 1.0], "falaises": [0.0, 1.0], "lieux": [0, 12], "boucles": [0.0, 1.0],
 	"souterrains": [0.0, 1.0], "puits": [0.0, 1.0], "lacs": [0, 8], "sources": [0, 8], "lave": [0, 4],
-	"sable": [0.0, 1.0], "roche": [0.0, 1.0], "neige": [0.0, 1.0], "sol2": [0.0, 1.0],
+	"sable": [0.0, 1.0], "roche": [0.0, 1.0], "neige": [0.0, 1.0], "sol2": [0.0, 1.0], "feuillage": [0.0, 1.0],
 }
 
 const VIDE := -1
@@ -89,6 +90,7 @@ var air := {}                    # Vector3i → creusé (salles, galeries, entr�
 var bouches := {}                # Vector3i → creusé par une entrée (escalier, puits) : le souterrain s'ouvre là
 var parois := {}                 # Vector3i → rôle d'une case pleine qui borde le souterrain
 var rapport := {}
+var semis: Array = []            # [x, z, y_haut, rôle] : un point à planter (l'atelier y pose un modèle du projet)
 
 
 static func champs(entree: Dictionary = {}) -> Dictionary:
@@ -167,6 +169,8 @@ func _generer(c: Dictionary, colonnes_seules: bool) -> Dictionary:
 		_souterrain()
 		sortie["entrees"] = entrees
 		sortie["bouches"] = bouches
+		_semer()
+		sortie["semis"] = semis
 		sortie["cases"] = _cases()
 	rapport["ms"] = Time.get_ticks_msec() - t0
 	return sortie
@@ -1120,6 +1124,39 @@ func _sans_contact_souterrain() -> int:
 			break
 		a_voir = suivants
 	return total
+
+
+# ── LE FEUILLAGE ───────────────────────────────────────────────────────────────────────────────────
+
+## LES POINTS À PLANTER (Jordan, 19 octobre 2026 : « fais le feuillage d'abord ») : une part des colonnes de chaque
+## rôle, plus dense en sous-bois (le second sol), rare sur la roche et la neige ; jamais sur un chemin, une place, un
+## lac, une source, la mer, ni près d'une entrée du souterrain. Le point est jeté au hasard dans sa colonne ; l'atelier
+## cherche le vrai sol des tuiles sous `y_haut` et vérifie le plant comme le pinceau de Foliage.
+const DENSITES := {"sol": 0.22, "sol2": 0.6, "sable": 0.05, "roche": 0.05, "neige": 0.02}
+
+
+func _semer() -> void:
+	var part := float(p["feuillage"])
+	if part <= 0.0:
+		rapport["semis"] = 0
+		return
+	var pres_d_une_entree := {}
+	for e in entrees:
+		for dz in range(-3, 4):
+			for dx in range(-3, 4):
+				pres_d_une_entree[Vector2i(e.x + dx, e.z + dz)] = true
+	for z in range(z0, z0 + D):
+		for x in range(x0, x0 + W):
+			var i := i_de(x, z)
+			if h[i] == VIDE or h[i] <= mer or fige[i] == 1 or pres_d_une_entree.has(Vector2i(x, z)):
+				continue
+			if air.has(Vector3i(x, h[i], z)):
+				continue   # le haut d'un puits
+			if rng.randf() >= part * float(DENSITES.get(role[i], 0.0)):
+				continue
+			semis.append([float(x) + rng.randf_range(-0.4, 0.4), float(z) + rng.randf_range(-0.4, 0.4), float(h[i]) + 2.0,
+				role[i]])
+	rapport["semis"] = semis.size()
 
 
 # ── LA SORTIE ────────────────────────────────────────────────────────────────────────────────────────

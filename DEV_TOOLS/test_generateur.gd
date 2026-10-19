@@ -27,6 +27,7 @@ func _initialize() -> void:
 	_le_croquis()
 	_les_bornes()
 	_l_apercu()
+	_le_feuillage()
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("OK" if _echecs == 0 else "ÉCHEC"))
 	quit(0 if _echecs == 0 else 1)
@@ -401,3 +402,38 @@ func _l_apercu() -> void:
 	var img := G.apercu(m, 256)
 	_egal(img.get_width(), 200, "l'aperçu agrandi par un entier (100 → 200)")
 	_egal(img.get_height(), 120, "et garde ses proportions")
+
+
+func _le_feuillage() -> void:
+	print("— le feuillage")
+	var champs := {"graine": 12, "largeur": 96, "profondeur": 96, "lieux": 4, "lacs": 2, "feuillage": 0.8, "sol2": 0.5}
+	var m := G.generer(champs)
+	var semis: Array = m["semis"]
+	_vrai(semis.size() > 300, "des points à planter (%d)" % semis.size())
+	_egal(G.generer(champs)["semis"], semis, "la même graine sème aux mêmes points")
+	var h: PackedInt32Array = m["h"]
+	var r: PackedStringArray = m["role"]
+	var w: int = m["largeur"]
+	var o: Vector2i = m["origine"]
+	var mal := 0
+	var par_role := {}
+	for s in semis:
+		var i := (int(round(s[1])) - o.y) * w + (int(round(s[0])) - o.x)
+		if r[i] == "chemin" or h[i] <= int(m["mer"]) or float(s[2]) < float(h[i]) + 1.0:
+			mal += 1
+		par_role[s[3]] = int(par_role.get(s[3], 0)) + 1
+	_egal(mal, 0, "aucun point sur un chemin, une place ou la mer, et chacun au-dessus de son sol")
+	var lacs: Array = []
+	for e in m["eaux"]:
+		if e["nom"] == "Lakes":
+			lacs = e["sources"]
+	var dans_un_lac := 0
+	for s in semis:
+		for l in lacs:
+			if Vector2(s[0], s[1]).distance_to(Vector2(l.x, l.z)) < 2.0:
+				dans_un_lac += 1
+	_egal(dans_un_lac, 0, "aucun point au fond d'un lac")
+	_vrai(int(par_role.get("sol2", 0)) * 2 > int(par_role.get("roche", 0)), "le sous-bois est plus dense que la roche (%s)"
+		% par_role)
+	_egal((G.generer({"graine": 12, "largeur": 48, "profondeur": 48, "feuillage": 0.0})["semis"] as Array).size(), 0,
+		"« Foliage » à 0 : rien à planter")

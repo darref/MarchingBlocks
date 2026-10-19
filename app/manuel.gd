@@ -376,7 +376,9 @@ func _outils() -> String:
 		+ "whole world[/b]; untick it to change only the generator's box). " + _touche("Ctrl+Z") + " twice gives the "
 		+ "old world back; the world is then an ordinary world, to paint, dig and plant. " + _touche("Esc")
 		+ " goes back to World.")
-	l.append(_note("Foliage is not generated yet. The generator's fields are saved with the project."))
+	l.append(_note("[b]Foliage[/b] plants the models imported in the Foliage workshop, picked by their name: trees, "
+		+ "bushes and grass on the grounds, cactus and palms on the shores, pebbles and rocks on rock, crystals on snow. "
+		+ "None imported, none planted. The generator's fields are saved with the project."))
 	return "\n".join(l)
 
 
