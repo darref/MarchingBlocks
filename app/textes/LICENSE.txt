@@ -11,7 +11,7 @@ Modèle commun aux OUTILS de SpannerGames (MarchingBlocks, SoluTiles, et les sui
 
 1. Les parties
 
-Le Concédant : Jordan Ferrad, entrepreneur individuel (EI), exerçant sous le nom commercial SpannerGames, SIRET 131 375 057 00018, adresse 265 rue Oradour-sur-Glane, 73000 Chambéry, France, contact : [ADRESSE E-MAIL DU STUDIO].
+Le Concédant : Jordan Ferrad, entrepreneur individuel (EI), exerçant sous le nom commercial SpannerGames, SIRET 131 375 057 00018, adresse 265 rue Oradour-sur-Glane, 73000 Chambéry, France, contact : darref.spannergames@gmail.com.
 
 L'Utilisateur : la personne physique ou morale qui a acquis une licence du Logiciel, directement ou auprès d'un revendeur autorisé (notamment Paddle, qui agit comme revendeur, ou Steam).
 
@@ -98,7 +98,7 @@ Shared template for SpannerGames TOOLS (MarchingBlocks, SoluTiles, and later one
 
 1. Parties
 
-Licensor: Jordan Ferrad, sole trader (entrepreneur individuel, EI), trading as SpannerGames, SIRET 131 375 057 00018, address 265 rue Oradour-sur-Glane, 73000 Chambéry, France, contact: [STUDIO EMAIL].
+Licensor: Jordan Ferrad, sole trader (entrepreneur individuel, EI), trading as SpannerGames, SIRET 131 375 057 00018, address 265 rue Oradour-sur-Glane, 73000 Chambéry, France, contact: darref.spannergames@gmail.com.
 
 User: the individual or legal entity that acquired a license to the Software, directly or from an authorized reseller (including Paddle, acting as reseller, or Steam).
 
