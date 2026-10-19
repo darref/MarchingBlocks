@@ -4,6 +4,8 @@
 ##   <sortie>/site/        l'exe du SITE (clé exigée, mises à jour vérifiées), sa DLL, LICENSE.txt, les avis tiers
 ##   <sortie>/installeur/  MarchingBlocks-<version>-setup.exe — l'installeur Inno Setup du site (ce qu'on met en vente)
 ##   <sortie>/steam/       l'exe STEAM (sans clé) et sa DLL : le dossier que SteamPipe envoie tel quel
+##   <sortie>/itch/        l'exe ITCH.IO (sans clé, sans DRM) et sa DLL : le dossier que butler pousse tel quel (1.0.0)
+##   <sortie>/greffons/    les TROIS greffons gratuits (Godot, Unity, Unreal), un zip chacun, licence MIT dedans
 ##   <sortie>/demo/        la DÉMO (tout, sans enregistrer ni exporter) : l'appli Steam « Demo », et le zip du site
 ##   <sortie>/exemple/     l'exemple À METTRE EN LIGNE (l'exe ne l'embarque plus) : son zip et example.json
 ##   <sortie>/steampipe/   les scripts SteamPipe (app_build_*.vdf) du logiciel et de la démo — AppID et dépôts À REMPLIR
@@ -96,7 +98,7 @@ JOURNAUX="$JOURNAL/suites" bash "$ICI/lancer_les_suites.sh" "$PROJET" | tee "$JO
 
 # 5. LES TROIS EXPORTS, chiffrés.
 export GODOT_SCRIPT_ENCRYPTION_KEY=$(tr -d '\r\n' < "$CLE")
-for e in site:Site steam:Steam demo:Demo; do
+for e in site:Site steam:Steam itch:Itch demo:Demo; do
 	dossier="${e%%:*}"
 	preset="${e##*:}"
 	rm -rf "$SORTIE/$dossier"
@@ -112,7 +114,7 @@ done
 unset GODOT_SCRIPT_ENCRYPTION_KEY
 
 # 6. CHAQUE SORTIE : chiffrée, avec sa DLL — la même que celle du dépôt —, son contrat et ses avis tiers.
-for dossier in site steam demo; do
+for dossier in site steam itch demo; do
 	exe="$SORTIE/$dossier/MarchingBlocks.exe"
 	en_clair=0
 	for s in "blocs_maitres" "SUFFIXE_DEHORS" "exterieur_possible" "Sculpt one block" "res://app/editor" \
@@ -135,7 +137,7 @@ done
 #    l'extérieur (les modules du processus). ⚠ `--mb-sonde` ne fait rien d'autre : ni contrat, ni projet, ni registre.
 #    ⚠ `Process.Modules` SE MET EN CACHE à la première lecture (avant que l'exe ait chargé sa DLL) : `Refresh()` à chaque
 #    tour — sans lui, « MODULE_ABSENT » sur une DLL bel et bien chargée (vu le 7 octobre 2026).
-for dossier in site steam demo; do
+for dossier in site steam itch demo; do
 	exe_w="$(cygpath -w "$SORTIE/$dossier/MarchingBlocks.exe")"
 	log_w="$(cygpath -w "$JOURNAL/sonde_$dossier.log")"
 	sonde="$(powershell -NoProfile -Command "
@@ -212,4 +214,34 @@ for e in steam:MarchingBlocks demo:"MarchingBlocks Demo"; do
 VDF
 done
 echo "✓ steampipe : app_build_steam.vdf, app_build_demo.vdf (AppID et dépôts à remplir) — steamcmd +run_app_build <vdf>"
-echo "== FINI : site + installeur, Steam, démo — $SORTIE_W"
+# 10. LES GREFFONS GRATUITS (Jordan, 19 octobre 2026 : « à côté des 3 greffons qui sont gratuits ») : un zip par moteur,
+#     tel qu'on le dépose — Godot : le dossier `addons/` à poser dans le projet ; Unity : le paquet (Package Manager,
+#     « Add package from disk ») ; Unreal : le dossier `Plugins/` du projet. Chacun garde sa licence MIT et son README ;
+#     rien de compilé ni de cache (Binaries, Intermediate, Library).
+rm -rf "$SORTIE/greffons"
+mkdir -p "$SORTIE/greffons"
+python - "$PROJET" "$SORTIE/greffons" "$VERSION" <<'PY' || stop "les greffons ne se sont pas emballés"
+import os, sys, zipfile
+projet, sortie, version = sys.argv[1:4]
+paquets = [
+    ("Godot", os.path.join(projet, "addons", "marchingblocks_paint"), "addons/marchingblocks_paint"),
+    ("Unity", os.path.join(projet, "engines", "unity", "com.marchingblocks.paint"), "com.marchingblocks.paint"),
+    ("Unreal", os.path.join(projet, "engines", "unreal", "MarchingBlocksPaint"), "Plugins/MarchingBlocksPaint"),
+]
+exclus = {"Binaries", "Intermediate", "Saved", "Library", "DerivedDataCache", ".vs", "__pycache__"}
+for moteur, source, racine in paquets:
+    if not os.path.isfile(os.path.join(source, "LICENSE")) and not os.path.isfile(os.path.join(source, "LICENSE.md")):
+        sys.exit("pas de licence dans " + source)
+    nom = os.path.join(sortie, "MarchingBlocks-Paint-%s-%s.zip" % (moteur, version))
+    n = 0
+    with zipfile.ZipFile(nom, "w", zipfile.ZIP_DEFLATED) as z:
+        for dossier, sous, fichiers in os.walk(source):
+            sous[:] = sorted(s for s in sous if s not in exclus)
+            for f in sorted(fichiers):
+                chemin = os.path.join(dossier, f)
+                z.write(chemin, racine + "/" + os.path.relpath(chemin, source).replace(os.sep, "/"))
+                n += 1
+    print("✓ greffon %s : %s (%d fichiers, %d octets)" % (moteur, os.path.basename(nom), n, os.path.getsize(nom)))
+PY
+
+echo "== FINI : site + installeur, Steam, itch.io, démo, greffons — $SORTIE_W"

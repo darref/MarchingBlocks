@@ -167,6 +167,8 @@ func _remplir_about() -> void:
 			col.add_child(changer)
 		Edition.STEAM:
 			col.add_child(_mot("Licensed through your Steam account."))
+		Edition.ITCH:
+			col.add_child(_mot("Bought on itch.io — a DRM-free copy. New versions come through your itch.io library."))
 		Edition.DEMO:
 			col.add_child(_mot("Free demo — everything works and saves; exporting is in the full version."))
 	var rangee := HBoxContainer.new()

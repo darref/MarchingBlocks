@@ -236,6 +236,9 @@ func _editions() -> void:
 		[["template"], Edition.SITE, "un exe exporté SANS balise exige une clé (site)"],
 		[["template", "edition_site"], Edition.SITE, "la balise du site"],
 		[["template", "edition_steam"], Edition.STEAM, "la balise de Steam"],
+		[["template", "edition_itch"], Edition.ITCH, "la balise d'itch.io"],
+		[["template", "edition_itch", "edition_demo"], Edition.DEMO, "itch + démo : la démo (la plus restreinte)"],
+		[["template", "edition_itch", "edition_site"], Edition.SITE, "itch + site : le site (clé exigée)"],
 		[["template", "edition_demo"], Edition.DEMO, "la balise de la démo"],
 		[["template", "edition_steam", "edition_demo"], Edition.DEMO, "Steam + démo : la démo (la plus restreinte)"],
 		[["template", "edition_steam", "edition_site"], Edition.SITE, "Steam + site : le site (clé exigée)"],
@@ -391,7 +394,7 @@ func _associations() -> void:
 
 func _vente_seule() -> void:
 	print("— le lancement : quitter —")
-	for edition in [Edition.SITE, Edition.STEAM, Edition.DEMO]:
+	for edition in [Edition.SITE, Edition.STEAM, Edition.DEMO, Edition.ITCH]:
 		_reglages_neufs({})
 		Edition.forcee = edition
 		var v: Node = Vente.new()
@@ -432,6 +435,14 @@ func _vente_seule() -> void:
 	var res3: Variant = await v3.au_lancement()
 	_vrai(res3 == true and v3.dialogue_cle == null, "Steam : aucune clé demandée")
 	v3.queue_free()
+	# itch.io (la 1.0.0) : contrat accepté, aucune clé demandée, aucune vérification de mise à jour (itch les livre).
+	Edition.forcee = Edition.ITCH
+	var v4: Node = Vente.new()
+	root.add_child(v4)
+	var res4: Variant = await v4.au_lancement()
+	_vrai(res4 == true and v4.dialogue_cle == null, "itch.io : aucune clé demandée")
+	_vrai(not Edition.est_demo(), "itch.io : ce n'est pas la démo (l'export est ouvert)")
+	v4.queue_free()
 	Edition.forcee = ""
 
 
@@ -480,7 +491,7 @@ func _appli_site() -> void:
 	_vrai(ed._case_maj.visible, "site : la case des mises à jour est dans Project")
 	ed._vente.ouvrir_about()
 	var about_texte := _textes(ed._vente.dialogue_about)
-	_vrai(about_texte.contains("Licensed to Ana Lima (ana@example.com)") and about_texte.contains("Early Access"),
+	_vrai(about_texte.contains("Licensed to Ana Lima (ana@example.com)") and about_texte.contains("Full version"),
 		"About dit l'édition et à qui la licence est donnée")
 	ed._dire_la_mise_a_jour("0.9.1", "https://x.test/d")
 	_vrai(ed._bouton_maj.visible and ed._bouton_maj.text == "Update 0.9.1 available", "une mise à jour se dit dans la barre de titre")
