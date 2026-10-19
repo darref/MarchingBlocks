@@ -595,6 +595,18 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       (`DEV_TOOLS/sonde_ombrage_lisse.gd`, copie du monde cartoon, `SpannerGames/ATELIER/MarchingBlocks/essais/
       lissage/photos/`) : à 45°, chanfreins et bosses arrondis, aucune ligne d'ombre aux joints. ⚠ PAS VU dans Unity ni
       Unreal (ils doivent importer les normales du fichier, le manuel le dit).
+      **LE FEUILLAGE GÉNÉRÉ (Jordan, 19 octobre 2026 : « fais le feuillage d'abord »), `eb81b5d`** : des points semés
+      par rôle (`generateur._semer`), les modèles du projet rangés par leur nom (mots anglais ET français — vu à l'image,
+      les « cristal » du monde cartoon poussaient dans l'herbe), vérifiés comme le pinceau, dans l'action de l'eau.
+      **LA 1.0.0 EXPORTÉE (19 octobre 2026), À VENDRE SUR ITCH.IO — DÉCIDÉ (Jordan : « exporte la 1.0.0 en mode non
+      démo mais release, que je vais vendre depuis itch à côté de la démo au prix que tu vas calculer, et à côté des 3
+      greffons qui sont gratuits »)** : une ÉDITION ITCH (`Edition.ITCH`, préréglage « Itch », `9a71183`) — sans clé
+      ni DRM, comme Steam : itch livre un fichier, pas nos clés nominatives. `builds/1.0.0/itch/` et
+      `builds/1.0.0/greffons/` (trois zips, licence MIT). Batterie 30 suites vertes, quatre exe chiffrés qui chargent
+      leur DLL. **LE PRIX — PROPOSÉ (Claude) : 39 $** (la stratégie : 39 € tant que l'outil n'a pas fait ses preuves, 60
+      seulement sur des avis et des ventes — il n'y en a encore aucun), −20 % la première semaine. ⚠ AVANT LA PREMIÈRE
+      VENTE : les blancs du contrat (SIRET, adresse, e-mail, médiateur) puis un réexport — et la déclaration de
+      l'activité (micro-entreprise), que le contrat suppose.
       **L'ancien plan (PROPOSÉ par Claude le 18 octobre), dont l'étape 1 est retenue :**
       1. **D'abord un générateur procédural SANS IA.** Une liste de champs (taille, biomes, relief et falaises,
          rivières, mer, étages, densité du feuillage, textures par couche, graine), et des règles écrites par nous qui

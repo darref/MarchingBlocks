@@ -220,7 +220,7 @@ echo "✓ steampipe : app_build_steam.vdf, app_build_demo.vdf (AppID et dépôts
 #     rien de compilé ni de cache (Binaries, Intermediate, Library).
 rm -rf "$SORTIE/greffons"
 mkdir -p "$SORTIE/greffons"
-python - "$PROJET" "$SORTIE/greffons" "$VERSION" <<'PY' || stop "les greffons ne se sont pas emballés"
+PYTHONIOENCODING=utf-8 python - "$PROJET" "$SORTIE/greffons" "$VERSION" <<'PY' || stop "les greffons ne se sont pas emballés"
 import os, sys, zipfile
 projet, sortie, version = sys.argv[1:4]
 paquets = [
