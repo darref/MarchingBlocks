@@ -378,6 +378,19 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
      n'en donne à rien). Unity et Unreal à la liste.
   5. Puis Generate en pose aux marches de ses chemins ; WaterDrop s'en sert pour ses marches de 3 m.
   ⚠ À ne pas confondre avec l'outil « Stairs » de World (`formes_speciales.gd`), qui taille des CASES en escalier.
+  **AVANCEMENT — MESURÉ (20 octobre 2026)** :
+  - **Étape 1 FAITE** : `addons/marchingblocks_core/franchisseurs.gd` (test de pose, orientation, transformation, les deux
+    maillages de départ en prismes fermés, l'enregistrement) ; `test_franchisseurs` 36 vérifications (attendus écrits à
+    la main ; vu rougir sur des faces non orientées).
+  - **Étape 2 FAITE, SAUF LE MODELEUR** : `app/atelier_franchisseurs.gd`, bouton « Crossings » (13ᵉ atelier : la bande
+    des ateliers resserrée, texte de 9, pour tenir dans 1100 × 680 — vu par la fumée) ; à la première entrée, un escalier
+    et une pente ; dimensions (la forme de départ rebâtie, annulable) ; fantôme vert ou rouge orienté de lui-même vers le
+    mur ; clic, clic droit, Ctrl+Z ; clé `franchisseurs` du `.mbproj`. **Batterie : 31 suites, 0 rouge.** Sonde dans la
+    vraie appli sur une copie de la palette de WaterDrop (`ATELIER/MarchingBlocks/sonde_crossings.gd`, photos
+    `ATELIER/MarchingBlocks/essais/crossings/photos/`) : 11 sur 11 — fantôme, pose, refus d'une seconde pose au même
+    endroit, Ctrl+Z / Ctrl+Y, enregistré et relu.
+  - **RESTE** : 2 bis « Edit shape » (le modeleur sur le maillage libre du modèle, chemin qui dort) ; 4 l'export
+    (`crossings` du `world.json`) et le greffon Godot avec collision ; 5 Generate.
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
