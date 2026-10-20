@@ -333,6 +333,23 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     changement dans le C++, on ne fige jamais le GDScript. ⚠ **Après un `git pull`, reconstruire la bibliothèque** si
     `gdextension/src` a changé (sinon le natif d'hier répond, et `test_natif` le dit).
 
+- **MARCHINGBLOCKS N'EST PAS FINI : L'ATELIER DES FRANCHISSEURS — DÉCIDÉ (Jordan, 20 octobre 2026 : « Mb n'est pas fini,
+  il faut un workshop de franchiseurs (escaliers, pentes) éditables, et placables par dessus le terrain là où le test le
+  permet »)**. Il revient sur « marching blocks est fini » (19 octobre). Né d'un manque vu dans WaterDrop : agrandi trois
+  fois, une marche d'une case y fait 3 m, et les chemins du générateur montent d'une case à la fois.
+  **PROPOSÉ (Claude, 20 octobre 2026), à discuter avec Jordan avant la première ligne** :
+  - un atelier « Crossings » à côté de Foliage et Generate : des FRANCHISSEURS paramétrés — escalier (largeur en cases,
+    hauteur à franchir, nombre et profondeur des marches), pente (largeur, hauteur, longueur), la matière d'une couche ;
+    éditables après coup comme un plant (sélection, réglages, Ctrl+Z) ;
+  - posés PAR-DESSUS le terrain, comme le feuillage, jamais dans les tuiles (la règle de pose ne change pas) ; **le test**
+    (lecture de Claude, à confirmer) : un franchisseur ne se pose que si le bas et le haut sont des sols à ciel ouvert,
+    séparés de la hauteur voulue, et que son volume ne traverse rien — vert ou rouge sous le curseur, comme le pinceau du
+    feuillage ;
+  - exportés dans le `.mbworld` (une clé `crossings`, dans `regle()` et `world_conformance.json`), posés par les trois
+    greffons (Godot d'abord), avec leur collision ;
+  - Generate en pose de lui-même aux marches de ses chemins.
+  **OUVERT** : ce qu'est « le test » ; escaliers et pentes calculés par l'appli ou sculptés par l'artiste comme un témoin ;
+  d'autres franchisseurs (échelle, pont, rampe en colimaçon) ; la version qui les porte.
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
