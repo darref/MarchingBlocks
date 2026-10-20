@@ -351,6 +351,24 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   **TRANCHÉ (Jordan, 20 octobre 2026 : « Test de pose, sculpté, commençons avec pente et escaliers »)** : « le test » est
   le TEST DE POSE ; les franchisseurs sont SCULPTÉS (par l'artiste, comme un témoin, pas calculés par l'appli) ; on
   commence par la PENTE et l'ESCALIER. **OUVERT** : la version qui les porte ; échelle, pont, colimaçon plus tard.
+  **L'ARCHITECTURE — PROPOSÉ (Claude, 20 octobre 2026), sur le patron de l'atelier Foliage** (relevé du code le même jour) :
+  1. **LA RÈGLE, PURE** : `addons/marchingblocks_core/franchisseurs.gd` (comme `feuillage.gd` : fonctions statiques, le
+     monde lu par des Callables). Un MODÈLE : {id, nom, genre « escalier » | « pente », maillage (un `MaillageEdite`
+     sculpté, `.mbmesh` dans le projet), largeur, hauteur franchie, longueur — en cases}. Une POSE : {modèle, case du bas,
+     quart de tour}. **LE TEST DE POSE** (`verifier`, rend "" ou une raison) : la case du bas est un sol (pleine dessous,
+     vide dessus) ; le palier du haut, à `longueur` cases devant et `hauteur` plus haut, aussi ; entre les deux, le mur à
+     franchir est plein et le volume au-dessus de la rampe est vide ; pas de chevauchement avec une autre pose.
+  2. **LES DEUX MODÈLES DE DÉPART, SCULPTÉS** : un escalier et une pente bâtis une fois par le code (marches chanfreinées,
+     pente aux arêtes roulées), puis ÉDITABLES dans le modeleur comme un maillage libre (`modeleur.charger(m)` : le chemin
+     du maillage seul existe mais dort — à réessayer). L'artiste les resculpte ; le test de pose ne lit que leurs cases.
+  3. **L'ATELIER** `app/atelier_franchisseurs.gd` (bouton « Crossings », l'icône « escalier » existe) : la liste des
+     modèles, « Edit » (le modeleur), largeur / hauteur / longueur ; au survol, le fantôme vert ou rouge orienté de
+     lui-même vers le mur ; clic : poser, clic droit : retirer, Ctrl+Z ; clé `franchisseurs` dans le `.mbproj`.
+  4. **L'EXPORT** : clé `crossings` du `world.json` (`regle_franchisseurs()`, `world_conformance.json`), un `.glb` par
+     modèle ; le greffon Godot pose un nœud « Crossings », un maillage par pose ET SA COLLISION (aujourd'hui le greffon
+     n'en donne à rien). Unity et Unreal à la liste.
+  5. Puis Generate en pose aux marches de ses chemins ; WaterDrop s'en sert pour ses marches de 3 m.
+  ⚠ À ne pas confondre avec l'outil « Stairs » de World (`formes_speciales.gd`), qui taille des CASES en escalier.
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
