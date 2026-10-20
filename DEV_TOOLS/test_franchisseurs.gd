@@ -138,6 +138,7 @@ func _initialize() -> void:
 		plat.append_array(PackedInt32Array(p2))
 	noeud.placements = plat
 	root.add_child(noeud)
+	noeud.rebuild()   # ⚠ ajouté pendant `_initialize`, son `_ready` n'arrive qu'à l'image suivante
 	var corps := noeud.get_children(true).filter(func(c): return c is StaticBody3D)
 	_vrai(corps.size() == 2, "le nœud du greffon bâtit un corps par franchisseur (%d)" % corps.size())
 	var forme: Shape3D = null
