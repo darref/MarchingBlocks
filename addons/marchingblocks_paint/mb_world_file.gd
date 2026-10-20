@@ -157,9 +157,9 @@ static func build(world_json_path: String, parent: Node) -> Dictionary:
 			choices[Vector3i(int(c[0]), int(c[1]), int(c[2]))] = int(c[3])
 		node.variant_choices = choices
 		nodes.append(node)
-	# The layers are ONE world: each is rebuilt once every layer holds its cells.
-	for node in nodes:
-		node.rebuild()
+	# The layers are ONE world: rebuilt together, in one pass, once every layer holds its cells.
+	if not nodes.is_empty():
+		nodes[0].rebuild_world()
 	var cell_size: float = nodes[0].cell_size if not nodes.is_empty() else 1.0
 	var extras: Array = []
 	# THE WATER: one node per water layer, its baked sheet, and the cells it was baked for (a fingerprint of the tile

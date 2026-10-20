@@ -329,6 +329,15 @@ func _deux_couches(jeu: String, comptes: Dictionary) -> void:
 		{"cells": cases_b.keys(), "cles": comptes, "visible": true}])
 	_egal(_poses_de(a), _attendues(attendu[0]), "deux couches : la première pose ce que pose MarchingBlocks")
 	_egal(_poses_de(b), _attendues(attendu[1]), "… et la seconde aussi")
+	# UNE SEULE PASSE POUR TOUT LE MONDE (20 octobre 2026) : `rebuild_world` pose exactement ce que posent les couches
+	# refaites une à une (la règle rend déjà une liste par couche ; une à une, elle tournait une fois par couche).
+	var une_a := _poses_de(a)
+	var une_b := _poses_de(b)
+	var rapports: Dictionary = a.rebuild_world()
+	_egal(_poses_de(a), une_a, "rebuild_world : la première couche pose ce qu'elle pose refaite seule")
+	_egal(_poses_de(b), une_b, "… et la seconde aussi")
+	_vrai(rapports.has(a) and rapports.has(b) and rapports[b]["tiles"] == une_b.size(),
+		"rebuild_world rend le rapport de chaque couche")
 	var seule: Array = FN.attendu(cases_a, comptes)
 	_vrai(_attendues(seule) != _attendues(attendu[0]), "contrôle : seule, la première poserait autre chose (sa paroi à la frontière)")
 	# UNE CASE N'APPARTIENT QU'À UNE COUCHE : un geste de l'éditeur dans B prend la case à A ; Ctrl+Z la rend.

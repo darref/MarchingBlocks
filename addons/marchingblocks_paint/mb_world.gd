@@ -29,7 +29,7 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 		_place_grids()
 		rebuild()
 
-## Rebuild while painting in the editor. Turn off for huge maps and call rebuild() yourself.
+## Rebuild while painting in the editor. Turn off for huge maps and call rebuild_world() yourself.
 @export var live_update := true
 
 ## The floor the Grid aim paints on, in cells (Page Up / Page Down with the MarchingBlocks toolbar).
@@ -51,12 +51,15 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 
 var _loaded := {}
 var _fingerprint := -1
+var _built_frame := -1
 var _last := {"tiles": 0, "missing": 0, "error": ""}
 
 
 func _ready() -> void:
 	_build_children()
-	rebuild()
+	# The first layer to be ready builds the WHOLE world in one pass; its siblings, built in the same frame, skip.
+	if _built_frame != Engine.get_process_frames():
+		rebuild_world()
 	set_notify_transform(true)
 
 
@@ -109,7 +112,7 @@ func _update_format_space() -> void:
 
 func _process(_delta: float) -> void:
 	if Engine.is_editor_hint() and live_update and _world_fingerprint() != _fingerprint:
-		rebuild()
+		rebuild_world()
 
 
 ## The layers of this node's world, in priority order: the MarchingBlocksWorld siblings (this node
@@ -130,46 +133,93 @@ func last_report() -> Dictionary:
 	return _last
 
 
+## Rebuilds THIS layer's tiles. To rebuild every layer of the world (after a change to the cells, at load), call
+## `rebuild_world()`: the rule reads all the layers anyway, and one pass serves them all.
 func rebuild() -> Dictionary:
-	if not is_inside_tree() and get_node_or_null("Cells") == null:
-		return _last
+	return _rebuild_layers([self]).get(self, _last)
+
+
+## Rebuilds EVERY layer of this world in ONE pass of the rule: {layer node: its report}. The rule always reads all the
+## layers and returns one list per layer; rebuilding them one by one ran the same pass once per layer and threw away
+## all lists but one (17 passes of ~2.9 s for a 17-layer world of 331 467 cells, measured in WaterDrop, 20 October
+## 2026). The lists are the same: each layer gets exactly what its own pass gave it.
+func rebuild_world() -> Dictionary:
+	return _rebuild_layers(layers())
+
+
+func _rebuild_layers(targets: Array) -> Dictionary:
+	var reports := {}
+	var all_layers := layers()
+	var fingerprint := _world_fingerprint()
+	var frame := Engine.get_process_frames()
+	# The layers sharing a rule (the same corners, table, classes and context) are placed in one pass. A world's
+	# tilesets share one by contract (`Rule.placements_layered`); a stray one gets its own pass.
+	var groups := {}
+	for l in targets:
+		if not l.is_inside_tree() and l.get_node_or_null("Cells") == null:
+			reports[l] = l._last
+			continue
+		var r: Dictionary = l._prepare(fingerprint)
+		l._built_frame = frame
+		if not r.is_empty():
+			l._last = r
+			reports[l] = r
+			continue
+		var m: Dictionary = l._loaded["manifest"]
+		var key: int = [m.get("corners"), m.get("table"), m.get("classes"), m.get("context")].hash()
+		if not groups.has(key):
+			groups[key] = []
+		groups[key].append(l)
+	var cells := {}
+	for l in all_layers:
+		cells[l] = l.cells()
+	for key in groups:
+		var group: Array = groups[key]
+		var described: Array = []
+		for l in all_layers:
+			var own: bool = group.has(l)
+			var m: Dictionary = l._loaded["manifest"] if own else {}
+			described.append({"cells": cells[l], "visible": l.visible,
+				"tiles": m.get("tiles", {}), "variants": m.get("variants", {}),
+				"weights": l.variant_weights if own else {}, "choices": l.variant_choices if own else {}})
+		var outs: Array = Rule.placements_layered(described, group[0]._loaded["manifest"])
+		for l in group:
+			reports[l] = l._place(outs[all_layers.find(l)])
+	return reports
+
+
+## Empties the Tiles and Errors grids and loads the tileset: {} when the layer can be placed, else its report.
+func _prepare(fingerprint: int) -> Dictionary:
 	_build_children()
-	var tiles_grid := get_node("Tiles") as GridMap
-	var errors := get_node("Errors") as GridMap
-	tiles_grid.clear()
-	errors.clear()
-	_fingerprint = _world_fingerprint()
+	(get_node("Tiles") as GridMap).clear()
+	(get_node("Errors") as GridMap).clear()
+	_fingerprint = fingerprint
 	if tileset == "":
-		_last = {"tiles": 0, "missing": 0, "error": "no tileset chosen"}
-		return _last
+		return {"tiles": 0, "missing": 0, "error": "no tileset chosen"}
 	if _loaded.is_empty():
 		_loaded = Tileset.load_tileset(tileset)
 	if _loaded.has("error"):
-		_last = {"tiles": 0, "missing": 0, "error": _loaded["error"]}
 		push_warning("MarchingBlocks: " + _loaded["error"])
-		return _last
-	var library: MeshLibrary = _loaded["library"]
-	tiles_grid.mesh_library = library
+		return {"tiles": 0, "missing": 0, "error": _loaded["error"]}
+	(get_node("Tiles") as GridMap).mesh_library = _loaded["library"]
 	_update_format_space()
+	return {}
+
+
+## Lays this layer's placements ([x, y, z, tile name or null, quarter turns]) into Tiles, or Errors.
+func _place(placements: Array) -> Dictionary:
+	var tiles_grid := get_node("Tiles") as GridMap
+	var errors := get_node("Errors") as GridMap
+	var library: MeshLibrary = _loaded["library"]
 	var ids := {}
 	for id in library.get_item_list():
 		ids[library.get_item_name(id)] = id
-	# Step 7: the rule reads EVERY layer of the world; this node keeps the vertices it owns.
-	var all_layers := layers()
-	var mine := all_layers.find(self)
-	var described: Array = []
-	for l in all_layers:
-		var own: bool = l == self
-		described.append({"cells": l.cells(), "visible": l.visible,
-			"tiles": _loaded["manifest"].get("tiles", {}) if own else {},
-			"variants": _loaded["manifest"].get("variants", {}) if own else {},
-			"weights": variant_weights if own else {}, "choices": variant_choices if own else {}})
 	var orientation := []
 	for q in 4:
 		orientation.append(tiles_grid.get_orthogonal_index_from_basis(Basis(Vector3.UP, q * PI / 2.0)))
 	var placed := 0
 	var missing := 0
-	for p in Rule.placements_layered(described, _loaded["manifest"])[mine]:
+	for p in placements:
 		var v := Vector3i(p[0], p[1], p[2])
 		if p[3] == null or not ids.has(p[3]):
 			errors.set_cell_item(v, 0)
@@ -227,8 +277,7 @@ func apply_cells(set_cells: Variant, clear_cells: Variant) -> Dictionary:
 		var g := l.get_node("Cells") as GridMap
 		for c in taken[l]:
 			g.set_cell_item(c, GridMap.INVALID_CELL_ITEM)
-	for l in layers():
-		l.rebuild()
+	rebuild_world()
 	return taken
 
 
