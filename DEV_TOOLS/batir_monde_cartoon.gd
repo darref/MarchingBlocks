@@ -255,52 +255,59 @@ func _relief(nom: String, m: RefCounted, cle: String) -> void:
 
 
 ## Un renflement autour de `c` (rayon `r`, hauteur `a`) le long de la normale ; `paliers` > 0 : posterisé (taillé).
-static func _bosse(m: RefCounted, c: Vector3, r: float, a: float, paliers := 0, pointe := false) -> void:
+static func _bosse(m: RefCounted, c: Vector3, r: float, a: float, paliers := 0, pointe := false, forme := 1.5) -> void:
 	F.retoucher_dedans(m, func(p: Vector3, n: Vector3) -> Vector3:
 		var d := p.distance_to(c) / r
 		if d >= 1.0:
 			return Vector3.ZERO
-		var w := (1.0 - d) if pointe else pow(1.0 - d * d, 1.5)
+		var w := (1.0 - d) if pointe else pow(1.0 - d * d, forme)
 		if paliers > 0:
 			w = ceil(w * paliers) / paliers
 		return n * (a * w))
 
 
 ## LE MORCEAU SCULPTÉ D'UNE VARIANTE — UN relief franc, celui qui fait reconnaître la matière de loin.
-func _morceau_sculpte(nom: String, m: RefCounted, k: int) -> void:
+## ⚠ REMODELÉ SANS PALIERS (Jordan, 20 octobre 2026 : « tu les remodelises ») : les bosses taillées en deux ou trois
+## marches (`paliers`) se voyaient de dessus en CARRÉS EN ESCALIER, pris pour de gros pixels dans WaterDrop (monde agrandi
+## trois fois), et le smooth shading les gardait vives (des angles droits, au-delà des 40°). Les rochers sont maintenant
+## des masses arrondies (`forme` < 1 : un dôme aux flancs raides, qui reste un rocher sans marches), la corniche un bourrelet
+## au profil adouci, la bouche du volcan un cône lisse. Statique : la palette de WaterDrop s'en sert (`remodeler_variantes`).
+static func _morceau_sculpte(nom: String, m: RefCounted, k: int) -> void:
 	var c := Vector3(0.08, 0.05, -0.06) if k == 1 else Vector3(-0.1, -0.04, 0.09)
 	match nom:
 		"Grass", "Flowers", "Autumn", "Forest", "Path", "Beach":
 			if k == 1:
-				_bosse(m, c, 0.32, 0.2)                       # une butte ronde
+				_bosse(m, c, 0.32, 0.2)                                  # une butte ronde
 			else:
-				_bosse(m, c, 0.22, 0.18, 3)                   # un rocher qui affleure, taillé
-				_bosse(m, c + Vector3(0.14, 0, 0.12), 0.12, 0.1, 2)
+				_bosse(m, c, 0.22, 0.17, 0, false, 0.7)                  # un rocher qui affleure, arrondi
+				_bosse(m, c + Vector3(0.14, 0, 0.12), 0.12, 0.09, 0, false, 0.7)
 		"Sand", "Snow", "Mud", "Mushroom":
 			if k == 1:
-				_bosse(m, c, 0.34, 0.24)                      # une dune, une congère, une bulle de boue, un coussin
+				_bosse(m, c, 0.34, 0.24)                                 # une dune, une congère, une bulle de boue, un coussin
 			else:
 				_bosse(m, c, 0.2, 0.16)
 				_bosse(m, -c, 0.16, 0.12)
 		"Rock", "Canyon", "Cobble", "Cavern":
 			if k == 1:
-				_bosse(m, c, 0.3, 0.26, 3)                    # un bloc taillé qui sort de la paroi
+				_bosse(m, c, 0.3, 0.24, 0, false, 0.6)                   # un bloc de roche qui sort, aux arêtes roulées
+				_bosse(m, c + Vector3(-0.12, 0.0, 0.1), 0.14, 0.1, 0, false, 0.6)
 			else:
-				# Une corniche : une bande horizontale qui avance.
+				# Une corniche : un bourrelet horizontal qui avance, au profil adouci (plus de marche franche).
 				F.retoucher_dedans(m, func(p: Vector3, n: Vector3) -> Vector3:
-					return n * (0.2 if absf(p.y - 0.06) < 0.13 else 0.0) * (1.0 - absf(n.y)))
+					var e := 1.0 - smoothstep(0.05, 0.16, absf(p.y - 0.06))
+					return n * (0.18 * e) * (1.0 - absf(n.y)))
 		"Ice", "Crystal":
 			if k == 1:
-				_bosse(m, c, 0.26, 0.42, 0, true)             # une pointe
+				_bosse(m, c, 0.26, 0.42, 0, true)                        # une pointe
 			else:
 				_bosse(m, c, 0.18, 0.3, 0, true)
 				_bosse(m, -c, 0.16, 0.26, 0, true)
 		"Volcano":
 			if k == 1:
-				_bosse(m, c, 0.3, 0.22, 2)                    # une bouche : un cône…
-				_bosse(m, c, 0.12, -0.2)                      # … creusé en son milieu
+				_bosse(m, c, 0.3, 0.22, 0, false, 0.9)                   # une bouche : un cône lisse…
+				_bosse(m, c, 0.12, -0.2)                                 # … creusé en son milieu
 			else:
-				_bosse(m, c, 0.26, 0.2, 3)
+				_bosse(m, c, 0.26, 0.2, 0, false, 0.6)
 
 
 ## Un matériau du témoin : l'image PEINTE (et son émission) copiée dans le projet.
