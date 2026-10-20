@@ -333,6 +333,15 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     changement dans le C++, on ne fige jamais le GDScript. ⚠ **Après un `git pull`, reconstruire la bibliothèque** si
     `gdextension/src` a changé (sinon le natif d'hier répond, et `test_natif` le dit).
 
+- **LES TEXTURES EN TRIPLANAIRE DANS LE GREFFON GODOT — FAIT (20 octobre 2026, cherché dans WaterDrop)** : les UV du
+  `.glb` sont la projection en boîte choisie FACE PAR FACE ; sur une tuile sculptée et courbe (les variantes à bosse),
+  l'axe change d'une face à l'autre et la texture se casse en plaques — vues de dessus, des carrés « pixellisés ». Réglage
+  `triplanar` de chaque couche (allumé par défaut) : les matériaux projetés en boîte mêlent les trois projections en
+  coordonnées du MONDE, à la répétition relue dans les UV du fichier (`Tileset.repeat_of`) × la taille de case × l'échelle
+  de la couche. Vu à l'image : plus un carré. ⚠ **À PORTER** : l'appli elle-même (le Play test et la vue du monde ont
+  le même défaut, non vérifié à l'image), Unity, Unreal. Et l'exemple cartoon : variantes remodelées (sans paliers,
+  subdivisées, sculptées après l'attribution sol / paroi — `sculpter_les_variantes`), à reconstruire pour la prochaine
+  sortie de l'exemple.
 - **MARCHINGBLOCKS N'EST PAS FINI : L'ATELIER DES FRANCHISSEURS — DÉCIDÉ (Jordan, 20 octobre 2026 : « Mb n'est pas fini,
   il faut un workshop de franchiseurs (escaliers, pentes) éditables, et placables par dessus le terrain là où le test le
   permet »)**. Il revient sur « marching blocks est fini » (19 octobre). Né d'un manque vu dans WaterDrop : agrandi trois
