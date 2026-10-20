@@ -49,6 +49,17 @@ const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
 		variant_choices = value
 		rebuild()
 
+## TRIPLANAR TEXTURES — on by default (20 October 2026). The file's UVs are a box projection chosen FACE BY FACE (the
+## face's dominant axis): exact on flat ground, but on a sculpted, curved tile (a bump, a rounded rock) the axis changes
+## from one face to the next and the texture breaks into patches — seen from above, square "pixels" (WaterDrop, seen and
+## measured). On, every box-projected material of the layer blends the three projections in WORLD space, at the same
+## repeat as the file's (cells per repeat, read back from its UVs, × this layer's cell size and scale): seamless from tile
+## to tile and from layer to layer, whatever the quarter turn. Off: the file's UVs, as before.
+@export var triplanar := true:
+	set(value):
+		triplanar = value
+		_update_triplanar()
+
 var _loaded := {}
 var _fingerprint := -1
 var _built_frame := -1
@@ -66,6 +77,36 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSFORM_CHANGED:
 		_update_format_space()
+		_update_triplanar()
+
+
+## The triplanar settings of every box-projected material of this layer (`triplanar`). The materials are this layer's
+## OWN copies (`Tileset.own`): another layer, another world loading the same file keeps its own.
+func _update_triplanar() -> void:
+	if _loaded.is_empty() or _loaded.has("error"):
+		return
+	var library: MeshLibrary = _loaded["library"]
+	Tileset.own(library)
+	var t := global_transform if is_inside_tree() else transform
+	var cell := cell_size * t.basis.get_scale().x
+	var done := {}
+	for id in library.get_item_list():
+		var mesh := library.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if not m is BaseMaterial3D or done.has(m):
+				continue
+			done[m] = true
+			if not m.has_meta("mb_repeat"):
+				m.set_meta("mb_repeat", Tileset.repeat_of(mesh, s))
+			var repeat := float(m.get_meta("mb_repeat"))
+			var on := triplanar and repeat > 0.0
+			(m as BaseMaterial3D).uv1_triplanar = on
+			(m as BaseMaterial3D).uv1_world_triplanar = on
+			(m as BaseMaterial3D).uv1_triplanar_sharpness = 4.0
+			(m as BaseMaterial3D).uv1_scale = Vector3.ONE / (repeat * cell) if on else Vector3.ONE
 
 
 ## Godot's world → FORMAT space (cell c covers [c, c + 1], the tile of vertex v centred on v + piece_offset): the
@@ -281,6 +322,7 @@ func _prepare(fingerprint: int) -> Dictionary:
 		return {"tiles": 0, "missing": 0, "error": _loaded["error"]}
 	(get_node("Tiles") as GridMap).mesh_library = _loaded["library"]
 	_update_format_space()
+	_update_triplanar()
 	return {}
 
 
