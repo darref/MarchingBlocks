@@ -80,6 +80,23 @@ const RP := preload("res://addons/marchingblocks_core/repli_procedural.gd")
 			rendu.mesh_library = lot_de_la_grille()
 			_lot_pose = rendu.mesh_library
 
+## LES TEXTURES EN TRIPLANAIRE (20 octobre 2026) — comme le greffon Godot (`MarchingBlocksWorld.triplanar`). Les UV
+## des tuiles sont une projection en boîte choisie FACE PAR FACE : sur une tuile sculptée et courbe, l'axe change d'une
+## face à l'autre et la texture se casse en plaques — des carrés « pixellisés » vus de dessus (cherché dans WaterDrop).
+## Vrai : la grille `Rendu` porte une COPIE du lot dont les matériaux mêlent les trois projections en coordonnées du
+## MONDE, à la répétition relue dans les UV (`Tileset.repeat_of`) × la taille de case. Le lot lui-même ne change pas :
+## l'export écrit le sien, sans triplanaire. L'appli met vrai ; faux par défaut.
+@export var triplanaire := false:
+	set(valeur):
+		if valeur == triplanaire:
+			return
+		triplanaire = valeur
+		_sans_formes_de = null
+		var rendu := _rendu()
+		if _pret and rendu != null and rendu.mesh_library != null:
+			rendu.mesh_library = lot_de_la_grille()
+			_lot_pose = rendu.mesh_library
+
 @export var taille_de_case := 1.0:
 	set(valeur):
 		taille_de_case = maxf(0.01, valeur)
@@ -228,14 +245,47 @@ var _repli: MeshLibrary
 ## de pièces) : la grille garde le même lot d'un appel à l'autre, rien ne se reconstruit pour rien.
 func lot_de_la_grille() -> MeshLibrary:
 	var source := lot_courant()
-	if collision_des_pieces or source == null:
+	if (collision_des_pieces and not triplanaire) or source == null:
 		return source
 	if _sans_formes_de != source or _sans_formes.get_item_list().size() != source.get_item_list().size():
 		_sans_formes = source.duplicate()  # superficielle : les maillages sont partagés
-		for id in _sans_formes.get_item_list():
-			_sans_formes.set_item_shapes(id, [])
+		if not collision_des_pieces:
+			for id in _sans_formes.get_item_list():
+				_sans_formes.set_item_shapes(id, [])
+		if triplanaire:
+			_en_triplanaire(_sans_formes)
 		_sans_formes_de = source
 	return _sans_formes
+
+
+## Les maillages de `lot` remplacés par des copies dont les matériaux STANDARD (pas les animés) sont en triplanaire, en
+## coordonnées du monde ; un matériau partagé par plusieurs tuiles n'est copié qu'une fois. Marqués `mb_triplanaire`
+## (le relief de la vue les rend à leurs UV le temps du POM : Godot ne mêle pas hauteur et triplanaire).
+func _en_triplanaire(lot_: MeshLibrary) -> void:
+	var Tileset := load("res://addons/marchingblocks_paint/mb_tileset.gd")
+	var copies := {}
+	for id in lot_.get_item_list():
+		var mesh := lot_.get_item_mesh(id)
+		if mesh == null:
+			continue
+		var copie := mesh.duplicate() as Mesh
+		for s in copie.get_surface_count():
+			var m := copie.surface_get_material(s)
+			if not m is StandardMaterial3D:
+				continue
+			if not copies.has(m):
+				var repeat: float = Tileset.repeat_of(copie, s)
+				var c := (m as StandardMaterial3D).duplicate() as StandardMaterial3D
+				if repeat > 0.0:
+					c.uv1_triplanar = true
+					c.uv1_world_triplanar = true
+					c.uv1_triplanar_sharpness = 4.0
+					c.uv1_scale = Vector3.ONE / (repeat * taille_de_case)
+					c.set_meta("mb_triplanaire", true)
+					c.set_meta("mb_echelle_triplanaire", c.uv1_scale)
+				copies[m] = c
+			copie.surface_set_material(s, copies[m])
+		lot_.set_item_mesh(id, copie)
 
 
 var _sans_formes_de: MeshLibrary

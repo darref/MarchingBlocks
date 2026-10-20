@@ -619,6 +619,7 @@ func ajouter_couche() -> Node:
 	# ⚠ PAS DE COLLISION DANS LES GRILLES DE L'APPLI (`MassifPeint.collision_des_pieces`) : on n'y marche pas, et sur
 	# un monde étendu leurs formes faisaient planter le moteur physique de Godot.
 	massif.collision_des_pieces = false
+	massif.triplanaire = true   # les tuiles sculptées sans carrés (20 octobre 2026, comme le greffon Godot)
 	massif.preparer()
 	# ⚠ LA GRILLE DES CASES NE SE MONTRE PAS : elle porte la palette de peinture (des cubes), et c'est
 	# le RENDU — les tuiles tranchées — qu'on veut voir. Les fautes, elles, restent visibles : un cube
@@ -2569,6 +2570,11 @@ func _appliquer_relief(oui: bool) -> int:
 				var actif := oui and hauteur != null and sm.normal_enabled
 				sm.heightmap_enabled = actif
 				sm.heightmap_texture = hauteur if actif else null
+				# ⚠ Godot ne mêle pas hauteur et triplanaire sur un matériau : le POM le rend à ses UV, le temps du relief.
+				if sm.has_meta("mb_triplanaire"):
+					sm.uv1_triplanar = not actif
+					sm.uv1_world_triplanar = not actif
+					sm.uv1_scale = Vector3.ONE if actif else sm.get_meta("mb_echelle_triplanaire", sm.uv1_scale)
 				if actif:
 					allumes += 1
 					sm.heightmap_scale = float(rendu.get("relief_profondeur", RELIEF_PROFONDEUR))
