@@ -338,8 +338,12 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   l'axe change d'une face à l'autre et la texture se casse en plaques — vues de dessus, des carrés « pixellisés ». Réglage
   `triplanar` de chaque couche (allumé par défaut) : les matériaux projetés en boîte mêlent les trois projections en
   coordonnées du MONDE, à la répétition relue dans les UV du fichier (`Tileset.repeat_of`) × la taille de case × l'échelle
-  de la couche. Vu à l'image : plus un carré. ⚠ **À PORTER** : l'appli elle-même (le Play test et la vue du monde ont
-  le même défaut, non vérifié à l'image), Unity, Unreal. Et l'exemple cartoon : variantes remodelées (sans paliers,
+  de la couche. Vu à l'image : plus un carré. **L'APPLI AUSSI — FAIT (20 octobre 2026, le feu vert du tournage du trailer
+  ultime)** : `MassifPeint.triplanaire` (l'appli le met), la grille `Rendu` porte une copie du lot aux matériaux en
+  triplanaire — le lot lui-même, donc l'export, ne change pas ; le relief POM rend un matériau à ses UV le temps du Play
+  test (Godot ne mêle pas hauteur et triplanaire). Batterie 31 suites vertes ; vu à l'image sur une variante sculptée de
+  la palette (`ATELIER/MarchingBlocks/essais/triplanaire/`) : le dôme cassé en plaques devient lisse (une trace reste à sa
+  base). ⚠ **À PORTER** : Unity, Unreal. Et l'exemple cartoon : variantes remodelées (sans paliers,
   subdivisées, sculptées après l'attribution sol / paroi — `sculpter_les_variantes`), à reconstruire pour la prochaine
   sortie de l'exemple.
 - **MARCHINGBLOCKS N'EST PAS FINI : L'ATELIER DES FRANCHISSEURS — DÉCIDÉ (Jordan, 20 octobre 2026 : « Mb n'est pas fini,
