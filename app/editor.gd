@@ -44,6 +44,7 @@ const Variantes := preload("res://app/variantes.gd")
 const AtelierTransitions := preload("res://app/transitions.gd")
 const AtelierAnimation := preload("res://app/animation.gd")
 const AtelierFeuillage := preload("res://app/atelier_feuillage.gd")
+const AtelierFranchisseurs := preload("res://app/atelier_franchisseurs.gd")
 const AtelierGeneration := preload("res://app/atelier_generation.gd")
 const TRC := preload("res://addons/marchingblocks_core/transitions.gd")
 const Panneau := preload("res://app/panneau.gd")
@@ -257,6 +258,9 @@ var _animation: RefCounted = AtelierAnimation.new(self)
 ## L'atelier Foliage (6 octobre 2026) : tout vit dans `atelier_feuillage.gd`, ici les branchements.
 var _feuillage: RefCounted = AtelierFeuillage.new(self)
 var _droite_feuillage: Panneau
+## L'atelier Crossings (20 octobre 2026) : les franchisseurs, tout vit dans `atelier_franchisseurs.gd`.
+var _franchisseurs: RefCounted = AtelierFranchisseurs.new(self)
+var _droite_franchisseurs: Panneau
 ## L'atelier Generate (19 octobre 2026, la 1.0.0) : tout vit dans `atelier_generation.gd` et `generateur.gd`.
 var _generation: RefCounted = AtelierGeneration.new(self)
 var _droite_generer: Panneau
@@ -502,6 +506,8 @@ func _batir() -> void:
 	_vue.eau_cliquee.connect(_eau_cliquee)
 	_vue.feuillage_survole.connect(_feuillage.survoler)
 	_vue.feuillage_coup.connect(_feuillage.coup)
+	_vue.franchisseurs_survole.connect(_franchisseurs.survoler)
+	_vue.franchisseurs_coup.connect(_franchisseurs.coup)
 	_vue.variante_cliquee.connect(_variantes.cliquer)
 	_vue.transition_peinte.connect(_transitions.peindre)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
@@ -548,13 +554,16 @@ func _batir() -> void:
 	_feuillage.brancher(_vue.feuillage)
 	_droite_feuillage = _panneau(corps, false, LARGEUR_DROITE)
 	_feuillage.batir(_droite_feuillage.get_meta("pile"))
+	_franchisseurs.brancher(_vue.franchisseurs)
+	_droite_franchisseurs = _panneau(corps, false, LARGEUR_DROITE)
+	_franchisseurs.batir(_droite_franchisseurs.get_meta("pile"))
 	_droite_generer = _panneau(corps, false, LARGEUR_DROITE)
 	_generation.batir(_droite_generer.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
 			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"], [_droite_animation, "anim"],
 			[_droite_variantes, "variantes"],
-			[_droite_feuillage, "feuillage"], [_droite_generer, "generer"]]:
+			[_droite_feuillage, "feuillage"], [_droite_franchisseurs, "franchisseurs"], [_droite_generer, "generer"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -976,6 +985,8 @@ func _batir_rail(parent: Control) -> PanelContainer:
 			+ "pulse — on any map, emission included."],
 		["feuillage", "Foliage", "arbre", "Plant trees and bushes (.glb models) in the painted world. Esc goes back to "
 			+ "World."],
+		["franchisseurs", "Crossings", "escalier", "Stairs and slopes, sculpted, set over the painted world where a wall "
+			+ "can be climbed (green: it fits). Esc goes back to World."],
 		["jeu_edit", "Play edit", "ajouter", "Walk your world AND edit it: the character moves with Z Q S D, the World "
 			+ "tools paint where you click, seen from the character. Middle drag turns the camera."],
 	]:
@@ -1388,7 +1399,7 @@ func _contexte_du_guide() -> Dictionary:
 		"pinceau": _modeleur != null and _modeleur.pinceau,
 		# L'ÉTAGE EN TÊTE DU GUIDE (Jordan, 13 octobre 2026 : « l'étage en cours […] dans le guide ») : seulement là où la
 		# grille sert ; il entre dans la signature, donc le guide se réécrit quand l'étage change.
-		"etage": _vue.etage if _atelier in ["monde", "fluides", "feuillage", "jeu_edit"] else null}
+		"etage": _vue.etage if _atelier in ["monde", "fluides", "feuillage", "franchisseurs", "jeu_edit"] else null}
 
 
 ## Une fois par image : le guide ne se réécrit que si le contexte ou le modificateur tenu a changé.
@@ -3178,7 +3189,7 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes", "generer"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer"]:
 		await _rhabiller_avec_attente(atelier in JEUX)
 	var debut := Time.get_ticks_msec()
 	if atelier in JEUX and not _atelier in JEUX and _ecran_vivant() \
@@ -3353,7 +3364,7 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "variantes", "generer"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier in JEUX and not _atelier in JEUX:
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -3386,13 +3397,15 @@ func _aller_a(atelier: String) -> void:
 		_variantes.sortir()
 	if atelier != "feuillage":
 		_feuillage.sortir()
+	if atelier != "franchisseurs":
+		_franchisseurs.sortir()
 	if atelier != "generer":
 		_generation.sortir()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "variantes": "monde", "generer": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "franchisseurs": "monde", "variantes": "monde", "generer": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
@@ -3403,6 +3416,8 @@ func _aller_a(atelier: String) -> void:
 		_animation.entrer()
 	if atelier == "feuillage":
 		_feuillage.entrer()
+	if atelier == "franchisseurs":
+		_franchisseurs.entrer()
 	if atelier == "generer":
 		_generation.entrer()
 	if atelier == "jeu_edit":
@@ -3484,6 +3499,7 @@ func _contexte() -> void:
 	_droite_variantes.visible = _atelier == "variantes"
 	_droite_animation.visible = animation
 	_droite_feuillage.visible = _atelier == "feuillage"
+	_droite_franchisseurs.visible = _atelier == "franchisseurs"
 	_droite_generer.visible = _atelier == "generer"
 	_modeleur.geometrie = not (texturing or animation)
 	if not texturing and _modeleur.pinceau:
@@ -7370,6 +7386,7 @@ func _vider_le_projet() -> void:
 	if _vue != null:
 		_vue.poser_eaux([])
 		_feuillage.vider()
+		_franchisseurs.vider()
 		_generation.charger({})
 
 
@@ -7435,6 +7452,7 @@ func _ouvrir(chemin: String) -> bool:
 		_ajouter_eau(e)
 	_transitions.poser_etat(etat.get("transitions", {}))
 	_feuillage.charger(etat.get("feuillage", {}))
+	_franchisseurs.charger(etat.get("franchisseurs", {}))
 	_generation.charger(etat.get("generateur", {}))
 	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
 	# en choisit un. Un fichier disparu depuis n'y revient pas.
@@ -7652,15 +7670,17 @@ func _enregistrer(en_fond := false) -> void:
 	var transitions: Dictionary = (_transitions.etat as Dictionary).duplicate(true)
 	var feuillage: Dictionary = _feuillage.vers_donnees()
 	var generateur: Dictionary = _generation.vers_donnees()
+	var franchisseurs: Dictionary = _franchisseurs.vers_donnees()
 	if en_fond:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
 		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions, feuillage,
-			_retrait, generateur),
+			_retrait, generateur, franchisseurs),
 			true, "Saving the project")
 		return
-	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait, generateur)
+	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait, generateur,
+		franchisseurs)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -7682,14 +7702,15 @@ func _attendre_l_ecriture() -> void:
 ## `_ecriture_finie`, sur le fil principal).
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
 		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT,
-		generateur: Dictionary = {}) -> void:
+		generateur: Dictionary = {}, franchisseurs: Dictionary = {}) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
 	if f == null:
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
-		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau, generateur))
+		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau, generateur,
+			franchisseurs))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -7963,7 +7984,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
-	if _atelier in ["transitions", "variantes", "generer"]:
+	if _atelier in ["transitions", "variantes", "generer", "franchisseurs"]:
 		if k.physical_keycode == KEY_QUOTELEFT:
 			_teleporter()
 			get_viewport().set_input_as_handled()
@@ -8112,14 +8133,14 @@ func _input(event: InputEvent) -> void:
 			_vue.grab_focus()
 			get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "jeu_edit", "variantes"] \
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "franchisseurs", "jeu_edit", "variantes"] \
 			or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
 	# DANS FLUIDS, TRANSITIONS ET FOLIAGE, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
-	if _atelier in ["fluides", "transitions", "feuillage", "variantes"] and k.keycode != KEY_SPACE:
+	if _atelier in ["fluides", "transitions", "feuillage", "franchisseurs", "variantes"] and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

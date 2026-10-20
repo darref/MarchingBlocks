@@ -55,6 +55,7 @@ const TEINTES_ATELIER := {
 	"jeu_edit": Color("#3fc9c0"),   # turquoise : on joue ET on bâtit (PROPOSÉ, 9 octobre 2026)
 	"variantes": Color("#b4c3dc"),  # argent bleuté : des copies d'une même tuile, d'autres sculptures (PROPOSÉ, 13 octobre 2026)
 	"generer": Color("#d9a5ff"),    # lilas : un monde entier d'un coup (PROPOSÉ, 19 octobre 2026)
+	"franchisseurs": Color("#d8b48a"), # pierre chaude : escaliers et pentes (PROPOSÉ, 20 octobre 2026)
 }
 static var _themes_atelier := {}
 

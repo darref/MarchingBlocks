@@ -79,6 +79,28 @@ func _initialize() -> void:
 	var am: ArrayMesh = me.vers_array_mesh()
 	_vrai(am != null and am.get_surface_count() > 0, "il se convertit en maillage Godot")
 
+	print("\n— le projet")
+	var esc_s := FR.modele(1, "Stairs", "escalier")
+	esc_s["maillage"] = FR.maillage_de_depart(esc_s).vers_dictionnaire()
+	var d := FR.vers_donnees([esc_s, pente], [FR.pose(1, 1, Vector3i(4, 1, 3), 0), FR.pose(2, 5, Vector3i(1, 1, 4), 3)])
+	var err: Array = []
+	var relu := FR.depuis_donnees(JSON.parse_string(JSON.stringify(d)), err)
+	_vrai(err.is_empty() and (relu["modeles"] as Array).size() == 2 and (relu["poses"] as Array).size() == 2,
+		"modèles et poses passent par le JSON du projet et reviennent")
+	_vrai(relu["poses"][1]["bas"] == Vector3i(1, 1, 4) and relu["poses"][1]["quart"] == 3 and relu["poses"][1]["modele"] == 5,
+		"… la seconde pose avec sa case, son quart et son modèle")
+	_vrai(ME.depuis_dictionnaire(relu["modeles"][0]["maillage"]).faces.size() == FR.maillage_de_depart(esc).faces.size(),
+		"… et le maillage sculpté du modèle")
+	_vrai(FR.vers_donnees([], []).is_empty(), "sans modèle, rien à écrire (le projet n'a pas la clé)")
+	var vide := FR.depuis_donnees(null, err)
+	_vrai((vide["modeles"] as Array).is_empty(), "un projet d'avant (sans la clé) se lit sans franchisseur")
+	var err2: Array = []
+	_vrai(FR.depuis_donnees({"modeles": [{"id": 1, "genre": "ascenseur"}], "poses": []}, err2).is_empty() and not err2.is_empty(),
+		"un genre inconnu refuse le tout, et le dit")
+	var err3: Array = []
+	_vrai(FR.depuis_donnees({"modeles": [esc_s], "poses": [9, 0, 0, 0, 0]}, err3).is_empty() and not err3.is_empty(),
+		"une pose d'un modèle absent refuse le tout, et le dit")
+
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))
 	quit(1 if _echecs > 0 else 0)

@@ -50,6 +50,8 @@ var clic_arme := ""
 ## L'atelier Foliage (6 octobre 2026) : la souris survole, ou un coup (phase 0 appui, 1 glissé, 2 relâché).
 signal feuillage_survole(position: Vector2)
 signal feuillage_coup(position: Vector2, bouton: int, phase: int)
+signal franchisseurs_survole(position: Vector2)
+signal franchisseurs_coup(position: Vector2, bouton: int, phase: int)
 ## Le RELIEF (POM) vient d'être allumé au Play test : sur combien de matériaux des tuiles posées, et combien ont une
 ## hauteur (18 octobre 2026 : cocher la case sur le monde cartoon n'allumait rien, SANS UN MOT — l'écran le dit).
 signal relief_compte(allumes: int, avec_hauteur: int, materiaux: int)
@@ -253,6 +255,8 @@ var _orbite_d_avant: Array = []
 var _bras := 0.0
 ## Le feuillage posé dans le monde (l'atelier Foliage) : montré dans World, Fluids, Foliage et le Play test.
 var feuillage: FeuillageVue
+## Les franchisseurs posés (l'atelier Crossings, 20 octobre 2026) : montrés comme le feuillage.
+var franchisseurs: Node3D
 
 
 func _ready() -> void:
@@ -360,6 +364,9 @@ func _ready() -> void:
 	feuillage = FeuillageVue.new()
 	feuillage.name = "Feuillage"
 	_vue.add_child(feuillage)
+	franchisseurs = Node3D.new()
+	franchisseurs.name = "Franchisseurs"
+	_vue.add_child(franchisseurs)
 
 	_grille = MeshInstance3D.new()
 	_grille.mesh = _maillage_grille()
@@ -442,6 +449,7 @@ func montrer(quoi: String) -> void:
 	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_eaux.visible = quoi == "monde" or quoi == "jeu"
 	feuillage.visible = quoi == "monde" or quoi == "jeu"
+	franchisseurs.visible = quoi == "monde" or quoi == "jeu"
 	_grille.visible = quoi == "monde" or (quoi == "jeu" and edition_en_jeu)
 	_apercu.visible = false
 	_grille_locale.visible = false
@@ -905,6 +913,8 @@ func _gui_input(event: InputEvent) -> void:
 				_pose_du_coup = {}
 				if outil == "feuillage":
 					feuillage_coup.emit(b.position, b.button_index, 2)
+				elif outil == "franchisseurs":
+					franchisseurs_coup.emit(b.position, b.button_index, 2)
 				elif _coin_boite != null and _est_salle():
 					_finir_salle()
 				elif _coin_boite != null:
@@ -1048,6 +1058,10 @@ func _survoler(position: Vector2) -> void:
 		_apercu.visible = false
 		feuillage_survole.emit(position)
 		return
+	if outil == "franchisseurs":
+		_apercu.visible = false
+		franchisseurs_survole.emit(position)
+		return
 	if not collage.is_empty():
 		_survoler_collage(position)
 		return
@@ -1092,6 +1106,10 @@ func _toucher(position: Vector2) -> void:
 		return
 	if outil == "feuillage":
 		feuillage_coup.emit(position, _coup, 1)
+		_survoler(position)
+		return
+	if outil == "franchisseurs":
+		franchisseurs_coup.emit(position, _coup, 1)
 		_survoler(position)
 		return
 	if _coin_boite != null:
@@ -1153,6 +1171,10 @@ func _commencer_coup(bouton: int, position: Vector2, maj: bool) -> void:
 	if outil == "feuillage":
 		_coup = bouton
 		feuillage_coup.emit(position, bouton, 0)
+		return
+	if outil == "franchisseurs":
+		_coup = bouton
+		franchisseurs_coup.emit(position, bouton, 0)
 		return
 	if outil == "variante":
 		variante_cliquee.emit(tuile_sous(position), bouton)
@@ -2215,7 +2237,7 @@ func _mener_le_jeu() -> void:
 		_meteo_noeud.global_position = _camera.global_position
 	# PLAY EDIT : la caméra suit le personnage, donc la souris immobile vise autre chose — l'aperçu suit. Pas pour les
 	# formes spéciales, l'eau ni le feuillage (leur aperçu coûte plus qu'une image).
-	if edition_en_jeu and _coup < 0 and _derniere_souris.x >= 0.0 and not outil in ["forme", "eau", "feuillage"] \
+	if edition_en_jeu and _coup < 0 and _derniere_souris.x >= 0.0 and not outil in ["forme", "eau", "feuillage", "franchisseurs"] \
 			and not _camera.global_transform.is_equal_approx(_camera_survolee):
 		_camera_survolee = _camera.global_transform
 		_survoler(_derniere_souris)

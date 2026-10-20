@@ -17,6 +17,7 @@ extends RefCounted
 const TR := preload("res://addons/marchingblocks_core/transitions.gd")
 const Anim := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
+const FR := preload("res://addons/marchingblocks_core/franchisseurs.gd")
 const BM := preload("res://addons/marchingblocks_core/blocs_maitres.gd")
 
 const FORMAT := "marchingblocks-project"
@@ -96,7 +97,8 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## ses témoins calculés, et le sol que son eau suppose. UN pour tout le projet : deux couches qui se touchent doivent avoir
 ## les mêmes bords (mesuré : une couche aminci à côté d'une neutre, 1 928 sommets de joint sans partenaire).
 static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {},
-		feuillage: Dictionary = {}, retrait: float = BM.RETRAIT_PAR_DEFAUT, generateur: Dictionary = {}) -> String:
+		feuillage: Dictionary = {}, retrait: float = BM.RETRAIT_PAR_DEFAUT, generateur: Dictionary = {},
+		franchisseurs: Dictionary = {}) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -151,6 +153,9 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 	# LE GÉNÉRATEUR (19 octobre 2026) : ses champs et la couche de chaque rôle, pour refaire le monde depuis sa graine.
 	if not generateur.is_empty():
 		tout["generateur"] = generateur
+	# LES FRANCHISSEURS (20 octobre 2026) : leurs modèles sculptés et leurs poses (`franchisseurs.gd`). Absents tant que vides.
+	if not franchisseurs.is_empty():
+		tout["franchisseurs"] = franchisseurs
 	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
@@ -316,8 +321,13 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 	var generateur = brut.get("generateur", {})
 	if not generateur is Dictionary:
 		generateur = {}
+	# Les franchisseurs (20 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier entier.
+	var franchisseurs := FR.depuis_donnees(brut.get("franchisseurs", null), erreurs)
+	if franchisseurs.is_empty():
+		return {}
 	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions,
-		"feuillage": feuillage, "retrait": BM.cran(float(retrait)), "generateur": generateur}
+		"feuillage": feuillage, "retrait": BM.cran(float(retrait)), "generateur": generateur,
+		"franchisseurs": franchisseurs}
 
 
 static func transitions_vides() -> Dictionary:

@@ -13,6 +13,7 @@ extends RefCounted
 ##   • `genre` — « escalier » ou « pente » (le maillage de départ, `maillage_de_depart`) ;
 ##   • `largeur`, `hauteur`, `longueur` — en CASES, entières : la largeur de passage, la hauteur FRANCHIE (le mur), la
 ##     profondeur au sol devant le mur ;
+##   • `sculpte` — vrai dès que l'artiste a retouché le maillage dans le modeleur : changer les dimensions le perdrait ;
 ##   • `maillage` — le `MaillageEdite` SCULPTÉ (son dictionnaire, `.mbmesh`), dans le repère du modèle : x ∈ [0, largeur]
 ##     (la largeur), y ∈ [0, hauteur] (le haut), z ∈ [−longueur, 0] — on MONTE vers −z, le pied en z = 0, le mur en
 ##     z = −longueur. L'artiste le resculpte à son goût ; le test de pose ne lit que ses CASES (largeur × longueur).
@@ -42,7 +43,8 @@ const MARCHES_PAR_CASE := 3
 
 static func modele(id: int, nom: String, genre: String, largeur := 1, hauteur := 1, longueur := 1) -> Dictionary:
 	var m := {"id": id, "nom": nom, "genre": genre if genre in GENRES else "escalier",
-		"largeur": maxi(1, largeur), "hauteur": maxi(1, hauteur), "longueur": maxi(1, longueur), "maillage": {}}
+		"largeur": maxi(1, largeur), "hauteur": maxi(1, hauteur), "longueur": maxi(1, longueur), "maillage": {},
+		"sculpte": false}
 	return m
 
 
@@ -132,6 +134,57 @@ static func prises_de(modeles: Dictionary, poses: Array) -> Dictionary:
 		for c in cases_de(m, p):
 			d[c] = p["id"]
 	return d
+
+
+# ── LE PROJET ────────────────────────────────────────────────────────────────────────────────────────
+
+## Ce que le `.mbproj` garde (clé `"franchisseurs"`) : {"modeles": [les dictionnaires, le maillage en `.mbmesh`],
+## "poses": liste plate, 5 nombres par pose : modèle, x, y, z de la case du bas, quart}.
+static func vers_donnees(modeles: Array, poses: Array) -> Dictionary:
+	if modeles.is_empty():
+		return {}
+	var plat: Array = []
+	for p in poses:
+		var b: Vector3i = p["bas"]
+		plat.append_array([int(p["modele"]), b.x, b.y, b.z, int(p["quart"])])
+	var ms: Array = []
+	for m in modeles:
+		ms.append((m as Dictionary).duplicate(true))
+	return {"modeles": ms, "poses": plat}
+
+
+## La relecture : {"modeles", "poses"}, ou {} (et l'erreur dite) si une entrée est malformée — comme le feuillage, une
+## entrée fausse refuse le tout plutôt que d'en garder une partie.
+static func depuis_donnees(brut: Variant, erreurs: Array) -> Dictionary:
+	if brut == null:
+		return {"modeles": [], "poses": []}
+	if not brut is Dictionary or not brut.get("modeles") is Array or not brut.get("poses", []) is Array:
+		erreurs.append("crossings: not {modeles, poses}")
+		return {}
+	var modeles: Array = []
+	var ids := {}
+	for m in brut["modeles"]:
+		if not m is Dictionary or not m.has("id") or not str(m.get("genre", "")) in GENRES:
+			erreurs.append("crossings: a model is malformed")
+			return {}
+		var d := modele(int(m["id"]), str(m.get("nom", "Crossing")), str(m["genre"]), int(m.get("largeur", 1)),
+			int(m.get("hauteur", 1)), int(m.get("longueur", 1)))
+		d["maillage"] = m.get("maillage", {}) if m.get("maillage", {}) is Dictionary else {}
+		d["sculpte"] = bool(m.get("sculpte", false))
+		modeles.append(d)
+		ids[d["id"]] = true
+	var plat: Array = brut.get("poses", [])
+	if plat.size() % 5 != 0:
+		erreurs.append("crossings: poses are not groups of 5 numbers")
+		return {}
+	var poses: Array = []
+	for k in range(0, plat.size(), 5):
+		if not ids.has(int(plat[k])):
+			erreurs.append("crossings: a pose names a model that does not exist")
+			return {}
+		poses.append(pose(k / 5 + 1, int(plat[k]), Vector3i(int(plat[k + 1]), int(plat[k + 2]), int(plat[k + 3])),
+			int(plat[k + 4])))
+	return {"modeles": modeles, "poses": poses}
 
 
 # ── LES MAILLAGES DE DÉPART ──────────────────────────────────────────────────────────────────────────
