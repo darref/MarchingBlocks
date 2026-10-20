@@ -196,6 +196,10 @@ func _prepare(fingerprint: int) -> Dictionary:
 	_fingerprint = fingerprint
 	if tileset == "":
 		return {"tiles": 0, "missing": 0, "error": "no tileset chosen"}
+	# An EMPTY layer places nothing: its tileset waits for its first cell (11 of the 17 layers of a generated island
+	# are empty, ~0.1 s of loading each — measured in WaterDrop, 20 October 2026).
+	if (get_node("Cells") as GridMap).get_used_cells().is_empty() and _loaded.is_empty():
+		return {"tiles": 0, "missing": 0, "error": ""}
 	if _loaded.is_empty():
 		_loaded = Tileset.load_tileset(tileset)
 	if _loaded.has("error"):
