@@ -348,8 +348,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   - exportés dans le `.mbworld` (une clé `crossings`, dans `regle()` et `world_conformance.json`), posés par les trois
     greffons (Godot d'abord), avec leur collision ;
   - Generate en pose de lui-même aux marches de ses chemins.
-  **OUVERT** : ce qu'est « le test » ; escaliers et pentes calculés par l'appli ou sculptés par l'artiste comme un témoin ;
-  d'autres franchisseurs (échelle, pont, rampe en colimaçon) ; la version qui les porte.
+  **TRANCHÉ (Jordan, 20 octobre 2026 : « Test de pose, sculpté, commençons avec pente et escaliers »)** : « le test » est
+  le TEST DE POSE ; les franchisseurs sont SCULPTÉS (par l'artiste, comme un témoin, pas calculés par l'appli) ; on
+  commence par la PENTE et l'ESCALIER. **OUVERT** : la version qui les porte ; échelle, pont, colimaçon plus tard.
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
