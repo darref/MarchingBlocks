@@ -57,6 +57,11 @@ func _initialize() -> void:
 	var pente := FR.modele(5, "Slope", "pente", 1, 1, 2)
 	_raison(pente, Vector3i(1, 1, 4), 0, plein, {}, "", "une pente de deux cases au pied du mur : posée")
 
+	var partout := FR.poser_partout(esc, [Vector3i(4, 1, 3), Vector3i(4, 1, 3), Vector3i(5, 1, 3), Vector3i(4, 1, 6)], plein,
+		[], {1: esc})
+	_vrai(partout.size() == 2 and partout[0]["bas"] == Vector3i(4, 1, 3) and partout[1]["bas"] == Vector3i(5, 1, 3),
+		"poser partout : deux poses, la case répétée et celle loin du mur refusées (%d)" % partout.size())
+
 	print("\n— l'orientation")
 	_vrai(FR.orienter(esc, Vector3i(4, 1, 3), plein, {}, 2) == 0, "visée au pied du mur, elle monte vers lui (quart 0)")
 	_vrai(FR.orienter(esc, Vector3i(4, 1, 6), plein) == -1, "loin de tout mur : aucun quart ne convient")

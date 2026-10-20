@@ -124,6 +124,24 @@ static func transformation(m: Dictionary, p: Dictionary) -> Transform3D:
 	return Transform3D(b, centre_monde - b * centre_local)
 
 
+## POSER PARTOUT OÙ ÇA TIENT : chaque case de `candidats` (des cases VIDES, sur un sol), dans l'ordre, reçoit le modèle au
+## premier quart qui passe le test de pose — les poses déjà là et celles qui viennent d'être posées comptent. Rend les
+## nouvelles poses (ids à partir de `premier_id`). Ce que Generate fera aux marches de ses chemins (l'étape 5).
+static func poser_partout(m: Dictionary, candidats: Array, plein: Callable, deja: Array, modeles: Dictionary,
+		premier_id := 1) -> Array:
+	var prises := prises_de(modeles, deja)
+	var nouvelles: Array = []
+	for c in candidats:
+		var q := orienter(m, c, plein, prises)
+		if q < 0:
+			continue
+		var p := pose(premier_id + nouvelles.size(), int(m["id"]), c, q)
+		nouvelles.append(p)
+		for k in cases_de(m, p):
+			prises[k] = p["id"]
+	return nouvelles
+
+
 ## {case: id} de toutes les poses (pour `verifier`).
 static func prises_de(modeles: Dictionary, poses: Array) -> Dictionary:
 	var d := {}
