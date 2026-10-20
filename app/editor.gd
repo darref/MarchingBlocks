@@ -996,7 +996,7 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		b.tooltip_text = a[1] + " — " + a[3]
 		b.toggle_mode = true
 		b.button_group = groupe
-		b.custom_minimum_size = Vector2(0, 40)
+		b.custom_minimum_size = Vector2(0, 36)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
@@ -1013,6 +1013,8 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		# et les onze 702 (vu par la fumée, la bande passait sous la bande du bas). Marges verticales resserrées : ~42 px.
 		# ⚠ DOUZE DEPUIS GENERATE (19 octobre 2026) : 53 px chacun débordaient encore (669 px, vu par la fumée) ; icône de
 		# 16 et marges de 2 et 1.
+		# ⚠ TREIZE DEPUIS CROSSINGS (20 octobre 2026) : à 40 px de hauteur mini, la bande repassait sous la bande du bas (vu
+		# par la fumée) ; 36 px (l'icône de 16 et le texte de 10 tiennent dans 33).
 		for etat in ["normal", "hover", "pressed", "hover_pressed"]:
 			var boite := (b.get_theme_stylebox(etat) as StyleBox).duplicate() as StyleBox
 			boite.content_margin_top = 2
