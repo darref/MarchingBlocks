@@ -68,6 +68,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     **Puis (même jour, Jordan : « réduis le chargement des îles »)** : la règle lit la plus haute case de chaque colonne
     au lieu de remonter la colonne à chaque coin vide (même réponse : 2,98 → 2,50 s sur Cartoon Island), et une couche
     VIDE ne charge plus son jeu de tuiles (11 des 17 couches de l'île verte, ~0,1 s chacune). `test_greffon_peinture` vert.
+    Puis le **CACHE DES TUILES**, au choix d'un jeu (`tile_cache_dir`, vide par défaut : l'éditeur ne s'en sert pas) :
+    clé = les cases, la visibilité et l'ordre des couches, chaque jeu de tuiles et sa date, les variantes ; testé (relues,
+    les mêmes tuiles ; une case de plus, une autre clé — vu rougir avec une clé qui ignorait les cases). Dans WaterDrop,
+    Cartoon Island revue : la construction des couches 9,0 → 5,0 s.
   - **le relief (POM)** (Jordan, 18 octobre 2026 : le relief du Play test part aussi dans les jeux ; §0, « 0.9.4 »). Le
     glTF ne porte pas de carte de hauteur : **le contrat est à écrire d'abord, dans le logiciel** (PROPOSÉ : la hauteur
     de chaque matériau écrite à côté du .glb du monde, et citée par NOM de matériau dans `world.json`, avec une
