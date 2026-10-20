@@ -6371,7 +6371,7 @@ func _exporter_le_monde(dossier: String) -> void:
 	var ids: Array = _couches.map(func(c: Dictionary) -> String: return str(c.get("id", "")))
 	var transitions := {"etat": _transitions.etat, "ids": ids, "representants": _transitions._representants()}
 	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux, transitions,
-		_feuillage.vers_donnees(), _retrait)
+		_feuillage.vers_donnees(), _retrait, _franchisseurs.vers_donnees())
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 		for sous in DirAccess.get_directories_at(str(r["dossier"])):
@@ -6389,6 +6389,9 @@ func _exporter_le_monde(dossier: String) -> void:
 	if not (r.get("transitions", {}) as Dictionary).is_empty():
 		texte += "\n%d transition pair(s) and %d painted choice(s), with each layer's representative material." % [
 			r["transitions"]["paires"], r["transitions"]["choix"]]
+	if not (r.get("franchisseurs", {}) as Dictionary).is_empty():
+		texte += "\n%d crossing model(s) written into the world, %d crossing(s)." % [r["franchisseurs"]["modeles"],
+			r["franchisseurs"]["poses"]]
 	if not (r.get("feuillage", {}) as Dictionary).is_empty():
 		texte += "\n%d foliage model(s) copied into the world, %d plant(s)." % [r["feuillage"]["modeles"],
 			r["feuillage"]["plants"]]

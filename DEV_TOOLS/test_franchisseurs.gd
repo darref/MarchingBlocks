@@ -12,6 +12,9 @@ extends SceneTree
 
 const FR := preload("res://addons/marchingblocks_core/franchisseurs.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
+const FM := preload("res://addons/marchingblocks_core/format_monde.gd")
+const Gr := preload("res://addons/marchingblocks_paint/mb_crossings.gd")
+const GrNoeud := preload("res://addons/marchingblocks_paint/mb_crossings_node.gd")
 
 var _ok := 0
 var _echecs := 0
@@ -100,6 +103,55 @@ func _initialize() -> void:
 	var err3: Array = []
 	_vrai(FR.depuis_donnees({"modeles": [esc_s], "poses": [9, 0, 0, 0, 0]}, err3).is_empty() and not err3.is_empty(),
 		"une pose d'un modèle absent refuse le tout, et le dit")
+
+	print("\n— l'export et le greffon Godot")
+	var pareil := true
+	for mm in [esc, long, haut, large, pente]:
+		for q in 4:
+			var bas := Vector3i(3, 2, -5)
+			var a := FR.transformation(mm, FR.pose(-1, int(mm["id"]), bas, q))
+			var b := Gr.transform_of({"width": mm["largeur"], "height": mm["hauteur"], "depth": mm["longueur"]}, bas, q)
+			if not a.is_equal_approx(b):
+				pareil = false
+	_vrai(pareil, "le greffon pose chaque modèle, à chaque quart, exactement où l'appli le pose")
+	var dossier := "user://test_franchisseurs_%d" % Time.get_ticks_usec()
+	DirAccess.make_dir_recursive_absolute(dossier)
+	var donnees := FR.vers_donnees([esc_s, pente], [FR.pose(1, 1, Vector3i(4, 1, 3), 0), FR.pose(2, 5, Vector3i(1, 1, 4), 0)])
+	var ex: Dictionary = FM._franchisseurs_pour_le_monde(donnees, dossier)
+	_vrai(not ex.has("erreur") and FileAccess.file_exists(dossier.path_join(ex["json"]["models"][0]["mesh"])),
+		"l'export écrit un .glb par modèle (%s)" % [ex.get("json", {}).get("models", [{}])[0].get("mesh", ex.get("erreur", "?"))])
+	var lu: Dictionary = Gr.read({"crossings": JSON.parse_string(JSON.stringify(ex["json"]))})
+	_vrai(not lu.has("error") and (lu["crossings"]["placements"] as Array).size() == 2 and lu["crossings"]["models"][1]["kind"] == "slope",
+		"le greffon relit les modèles et les poses")
+	_vrai(Gr.read({"crossings": {"models": [{"id": 1, "kind": "lift"}], "placements": []}}).has("error"),
+		"le greffon refuse un genre inconnu, et le dit")
+	var noeud := Node3D.new()
+	noeud.set_script(GrNoeud)
+	var ms: Array = []
+	for m in lu["crossings"]["models"]:
+		var d2: Dictionary = (m as Dictionary).duplicate()
+		d2["mesh"] = dossier.path_join(str(d2["mesh"]))
+		ms.append(d2)
+	noeud.models = ms
+	var plat := PackedInt32Array()
+	for p2 in lu["crossings"]["placements"]:
+		plat.append_array(PackedInt32Array(p2))
+	noeud.placements = plat
+	root.add_child(noeud)
+	var corps := noeud.get_children(true).filter(func(c): return c is StaticBody3D)
+	_vrai(corps.size() == 2, "le nœud du greffon bâtit un corps par franchisseur (%d)" % corps.size())
+	var forme: Shape3D = null
+	if not corps.is_empty():
+		for c in (corps[0] as Node).get_children():
+			if c is CollisionShape3D:
+				forme = c.shape
+	_vrai(forme is ConcavePolygonShape3D and (forme as ConcavePolygonShape3D).get_faces().size() > 0,
+		"… chacun avec sa COLLISION (les triangles de son maillage)")
+	_vrai(not corps.is_empty() and (corps[0] as Node3D).transform.is_equal_approx(FR.transformation(esc_s, FR.pose(1, 1, Vector3i(4, 1, 3), 0))),
+		"… posé où l'appli le pose")
+	noeud.queue_free()
+	for f in DirAccess.get_files_at(dossier.path_join("crossings")):
+		DirAccess.remove_absolute(dossier.path_join("crossings").path_join(f))
 
 	print("\n%d vérifications, %d échec(s)" % [_ok + _echecs, _echecs])
 	print("VERDICT : %s" % ("ÉCHEC" if _echecs > 0 else "OK"))

@@ -11,6 +11,7 @@ extends RefCounted
 ##     water/<nom>.glb     la nappe CUITE d'une couche d'eau (charte §5, « le mode Fluids »), une par couche
 ##     transitions/        l'image du matériau REPRÉSENTANT de chaque couche (l'atelier Transitions), s'il y en a
 ##     foliage/<nom>.glb   les modèles du feuillage (l'atelier Foliage), COPIÉS comme les jeux de tuiles
+##     crossings/<nom>.glb les modèles SCULPTÉS des franchisseurs (l'atelier Crossings, 20 octobre 2026), un par modèle
 ##     README.txt
 ##
 ## ⚠ PARITÉ DES GREFFONS (7 octobre 2026) : `transitions` et `foliage` entrent dans `world.json`, FACULTATIVES comme
@@ -161,6 +162,25 @@ static func regle_feuillage() -> PackedStringArray:
 	])
 
 
+## LA RÈGLE DES FRANCHISSEURS (`franchisseurs.gd`, 20 octobre 2026) — écrite dans le README, pour les greffons.
+static func regle_franchisseurs() -> PackedStringArray:
+	return PackedStringArray([
+		"crossings (optional) stairs and slopes set OVER the painted world (not in a layer). Absent: none.",
+		"  models      an array of {id (an integer, unique), name, kind (\"stairs\" or \"slope\"), width, height, depth",
+		"              (integers, in cells: the width of the way up, the height it climbs, the cells of ground it takes in",
+		"              front of the wall), mesh (a .glb path RELATIVE to world.json)}. The mesh is in MODEL space, in cells:",
+		"              x in [0, width], y in [0, height], z in [-depth, 0] — it climbs toward -z, its foot at z = 0.",
+		"  placements  a flat array of integers, 5 per crossing: model id, x, y, z of its FOOT cell (the empty cell on the",
+		"              lower ground, the farthest from the wall, on the left going up), quarter (0 to 3): it climbs toward",
+		"              (0, 0, -1), (1, 0, 0), (0, 0, 1), (-1, 0, 0) for quarters 0, 1, 2, 3. A placement of an unknown",
+		"              model refuses the file.",
+		"  In FORMAT space (cell c covers [c, c + 1]) a crossing sits at T = translate(C_world - B C_local) B, with B the",
+		"  rotation of -quarter * 90 degrees around +Y, C_local = (width/2, height/2, -depth/2), and C_world = foot +",
+		"  (0.5, 0, 0.5) + d (depth - 1)/2 + r (width - 1)/2 + (0, height/2, 0), d the climbing direction, r = (-d.z, 0, d.x).",
+		"  Each engine gives it a COLLISION (its mesh's triangles): a character walks up it.",
+	])
+
+
 ## Écrit le monde. `couches` : [{nom, visible, source, lot (MeshLibrary ou null), cases (Array de
 ## Vector3i)}], dans l'ordre. Rend {"dossier", "couches", "jeux", "sans_tuiles": [noms]} ou {"erreur"}.
 ## `eaux` : [{nom, visible, preset, sources (Array de Vector3i), maillage (ArrayMesh ou null)}], dans l'ordre.
@@ -170,7 +190,7 @@ static func regle_feuillage() -> PackedStringArray:
 ## (`FE.vers_donnees` : modèles et plants à plat) — {} : pas de feuillage.
 ## `retrait_eau` (9 octobre 2026) : le cran du sol que l'eau suppose (`EauMaillage.nappe`) — `water_floor`.
 static func exporter(couches: Array, dossier: String, nom: String, generateur: String, eaux: Array = [],
-		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau := 0.25) -> Dictionary:
+		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau := 0.25, franchisseurs: Dictionary = {}) -> Dictionary:
 	if couches.is_empty():
 		return {"erreur": "this world has no layer"}
 	var cible := dossier.path_join(_propre(nom, "world") + ".mbworld")
@@ -269,6 +289,16 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 		monde["foliage"] = fe["json"]
 		fe_bilan = {"modeles": (fe["json"]["models"] as Array).size(), "plants": (fe["json"]["plants"] as Array).size() / 7,
 			"sans_maillage": fe["sans_maillage"]}
+	# LES FRANCHISSEURS (l'atelier Crossings) : le maillage SCULPTÉ de chaque modèle écrit en `.glb` dans `crossings/`, leurs
+	# dimensions et leurs poses en anglais.
+	var fr_bilan := {}
+	if not franchisseurs.is_empty() and not (franchisseurs.get("modeles", []) as Array).is_empty():
+		var fr := _franchisseurs_pour_le_monde(franchisseurs, cible)
+		if fr.has("erreur"):
+			return {"erreur": fr["erreur"]}
+		monde["crossings"] = fr["json"]
+		fr_bilan = {"modeles": (fr["json"]["models"] as Array).size(),
+			"poses": (fr["json"]["placements"] as Array).size() / 5}
 	var f := FileAccess.open(cible.path_join("world.json"), FileAccess.WRITE)
 	if f == null:
 		return {"erreur": "world.json could not be written (error %d)" % FileAccess.get_open_error()}
@@ -277,12 +307,50 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	var r2 := FileAccess.open(cible.path_join("README.txt"), FileAccess.WRITE)
 	if r2 != null:
 		r2.store_string("\n".join(regle()) + "\n\n" + "\n".join(regle_eau()) + "\n\n" + "\n".join(regle_transitions())
-			+ "\n\n" + "\n".join(regle_feuillage()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
+			+ "\n\n" + "\n".join(regle_feuillage()) + "\n\n" + "\n".join(regle_franchisseurs()) + "\n\nMade with %s. Open it with the free MarchingBlocks Paint "
 			% generateur + "plugin for Godot, Unity or Unreal: Import MarchingBlocks world.\n")
 		r2.close()
 	return {"dossier": cible, "couches": sorties.size(), "jeux": jeux.size(), "sans_tuiles": sans_tuiles,
 		"eaux": sorties_eau.size(), "nappes": noms_eau.size(), "transitions": tr_bilan, "feuillage": fe_bilan,
-		"images_manquantes": images_manquantes}
+		"franchisseurs": fr_bilan, "images_manquantes": images_manquantes}
+
+
+## Les franchisseurs du projet (`FR.vers_donnees`) pour le monde : {"json", } ou {"erreur"}. Un `.glb` par modèle, son
+## maillage sculpté (ou la forme de départ s'il n'en a pas).
+static func _franchisseurs_pour_le_monde(d: Dictionary, cible: String) -> Dictionary:
+	var FR := load("res://addons/marchingblocks_core/franchisseurs.gd")
+	var ME := load("res://addons/marchingblocks_core/maillage_edite.gd")
+	DirAccess.make_dir_recursive_absolute(cible.path_join("crossings"))
+	var models: Array = []
+	var pris := {}
+	for m in d["modeles"]:
+		var me: RefCounted = ME.depuis_dictionnaire(m["maillage"]) if (m.get("maillage", {}) as Dictionary).size() > 0 else null
+		if me == null:
+			me = FR.maillage_de_depart(m)
+		var base := _propre(str(m["nom"]), "crossing")
+		var nom := base
+		var k := 2
+		while pris.has(nom):
+			nom = "%s_%d" % [base, k]
+			k += 1
+		pris[nom] = true
+		var rel := "crossings/%s.glb" % nom
+		var racine := Node3D.new()
+		var mi := MeshInstance3D.new()
+		mi.name = nom
+		mi.mesh = me.vers_array_mesh(true)
+		racine.add_child(mi)
+		var doc := GLTFDocument.new()
+		var etat := GLTFState.new()
+		var err := doc.append_from_scene(racine, etat)
+		if err == OK:
+			err = doc.write_to_filesystem(etat, cible.path_join(rel))
+		racine.free()
+		if err != OK:
+			return {"erreur": "the crossing %s could not be written (error %d)" % [rel, err]}
+		models.append({"id": int(m["id"]), "name": str(m["nom"]), "kind": "slope" if m["genre"] == "pente" else "stairs",
+			"width": int(m["largeur"]), "height": int(m["hauteur"]), "depth": int(m["longueur"]), "mesh": rel})
+	return {"json": {"models": models, "placements": (d.get("poses", []) as Array).duplicate()}}
 
 
 ## LES TRANSITIONS TELLES QUE `world.json` LES PORTE (`regle_transitions`). `etat` : {paires: {"idA|idB": {actif, couvre:
