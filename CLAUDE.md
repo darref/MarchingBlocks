@@ -56,6 +56,15 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   abandonné : un changement du logiciel ne doit pas les CASSER (un format lu par eux reste lisible, les gardes
   de `test_greffon_peinture` et des bancs restent vertes) — il ne les fait simplement plus AVANCER.
 - **LA LISTE DES GREFFONS À FAIRE** (à tenir à jour à chaque fonction ajoutée au logiciel) :
+  - **les couches en UNE passe — FAIT DANS GODOT (20 octobre 2026, Jordan : « fais le correctif du greffon dans
+    MarchingBlocks »), À PORTER dans Unity et Unreal s'ils refont la règle couche par couche (non vérifié)** : chaque couche
+    refaisait `Rule.placements_layered` sur TOUT le monde pour n'en garder que sa liste — Cartoon Island (17 couches,
+    331 467 cases) bâtissait ses tuiles en 56,4 s dans WaterDrop, ~2,85 s par couche. `rebuild_world()` fait une passe et
+    distribue les listes (`_ready`, `apply_cells`, l'import, la mise à jour en direct) ; `test_greffon_peinture` vérifie
+    qu'elle pose exactement ce que posent les couches une à une (462 vérifications vertes, vu rougir sur une variante
+    fausse). **MESURÉ dans WaterDrop : 56,4 s → 9,6 s (Cartoon Island), 18,3 → 8,7 s (l'île verte)** ; le reste n'est plus
+    la règle (sans doute le chargement des 17 jeux de tuiles et la pose dans les grilles : à mesurer). Pas de numéro de
+    version monté, rien de réexporté ni d'envoyé sur itch.io : c'est à Jordan de dire si les greffons repartent.
   - **le relief (POM)** (Jordan, 18 octobre 2026 : le relief du Play test part aussi dans les jeux ; §0, « 0.9.4 »). Le
     glTF ne porte pas de carte de hauteur : **le contrat est à écrire d'abord, dans le logiciel** (PROPOSÉ : la hauteur
     de chaque matériau écrite à côté du .glb du monde, et citée par NOM de matériau dans `world.json`, avec une
