@@ -196,11 +196,14 @@ func _mc_temoins() -> void:
 			_relief(nom, t.tuiles[cle], cle)
 		var v := F.creer_variantes(t, CLES_VARIEES, 2, func(_m: RefCounted, _k: int) -> void:
 			pass)
-		sculpter_les_variantes(t, nom)
 		var dossier: String = _ecran._chemin_temoin_de(c).get_basename() + "_images"
 		var k_sol := _materiau(t, th, "ground", dossier)
 		var k_paroi := _materiau(t, th, "wall", dossier)
 		F.assigner_par_orientation(t, k_sol, k_paroi, 0.55)
+		# ⚠ APRÈS l'attribution sol / paroi : une variante hérite des matières de sa base, et sa bosse garde celle du sol
+		# qu'elle soulève. Attribuée après la sculpture, la pente de la bosse prenait la PAROI — les briques des pavés, en
+		# carrés sur un dôme (vu le 20 octobre 2026).
+		sculpter_les_variantes(t, nom)
 		c["_temoin"] = t
 		var raison: String = _ecran._enregistrer_temoin(c, true)
 		print("%s : %d tuiles, %d triangles, variantes %s %s(%d ms)" % [nom, t.tuiles.size(), F.triangles(t), v.keys(),
