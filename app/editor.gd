@@ -260,6 +260,8 @@ var _feuillage: RefCounted = AtelierFeuillage.new(self)
 var _droite_feuillage: Panneau
 ## L'atelier Crossings (20 octobre 2026) : les franchisseurs, tout vit dans `atelier_franchisseurs.gd`.
 var _franchisseurs: RefCounted = AtelierFranchisseurs.new(self)
+## Le modèle de franchisseur que le modeleur sculpte (« Edit shape »), ou null : ses gestes vont à l'atelier.
+var _franchisseur_edite: Variant = null
 var _droite_franchisseurs: Panneau
 ## L'atelier Generate (19 octobre 2026, la 1.0.0) : tout vit dans `atelier_generation.gd` et `generateur.gd`.
 var _generation: RefCounted = AtelierGeneration.new(self)
@@ -4653,6 +4655,9 @@ func _cadrer_la_selection() -> void:
 ## 30 septembre 2026) : un Ctrl+Z après avoir changé de couche défait le geste dans SON témoin, et
 ## l'enregistre — jamais dans celui de la couche devenue active.
 func _geste_du_modeleur(avant: RefCounted, apres: RefCounted, nom: String) -> void:
+	if _franchisseur_edite != null:
+		_franchisseurs.geste(avant, apres, nom)
+		return
 	var t: RefCounted = _modeleur.temoin
 	_histoire.create_action("Witness: " + nom)
 	_histoire.add_do_method(_remplacer_temoin.bind(t, apres))
@@ -8124,7 +8129,14 @@ func _input(event: InputEvent) -> void:
 		return
 	if _manuel != null and _manuel.visible:
 		return
-	if k != null and k.pressed and _atelier in ["witness", "texture"] and _touche_du_temoin(k):
+	# « EDIT SHAPE » D'UN FRANCHISSEUR : Tab ou Échap rendent le monde ; le reste va au modeleur, comme dans Witness.
+	if k != null and k.pressed and not k.echo and _franchisseur_edite != null and _modeleur.modal == "" \
+			and k.keycode in [KEY_TAB, KEY_ESCAPE]:
+		_franchisseurs.finir_edition()
+		get_viewport().set_input_as_handled()
+		return
+	if k != null and k.pressed and (_atelier in ["witness", "texture"] or _franchisseur_edite != null) \
+			and _touche_du_temoin(k):
 		get_viewport().set_input_as_handled()
 		return
 	# PLAY EDIT : Espace saute (le personnage lit le clavier lui-même) — un bouton de la barre qui garde le clavier le

@@ -10,8 +10,11 @@ extends RefCounted
 ## ⚠ UN FRANCHISSEUR APPARTIENT AU MONDE ENTIER, PAS À UNE COUCHE (comme le feuillage et l'eau) : il est posé PAR-DESSUS
 ## les tuiles, jamais dedans — la règle de pose des tuiles ne change pas.
 ## ⚠ IL NE SUIT PAS LE MONDE (comme le feuillage) : creuser sous un escalier le laisse en l'air ; il est posé au clic.
-## ⚠ PAS ENCORE DANS LE `.mbworld` NI DANS LES GREFFONS (l'étape 4 de la charte), NI DANS LE MODELEUR (l'étape 2 bis : le
-## bouton « Edit shape » viendra) : aujourd'hui, la forme de départ et ses dimensions.
+## ⚠ PAS ENCORE DANS LE `.mbworld` NI DANS LES GREFFONS (l'étape 4 de la charte).
+## « EDIT SHAPE » (l'étape 2 bis) : le MODELEUR du témoin, sur le maillage du modèle SEUL (`temoin = null` : le chemin du
+## maillage libre du modeleur), les copies du témoin cachées. Chaque geste revient ici (`geste`, par `editor.gd`) et
+## devient une action annulable du MODÈLE ; « Done » (ou Tab, Échap) rend le monde. Le modèle est alors « sculpté » :
+## changer ses dimensions rebâtirait la forme de départ (on le dit, Ctrl+Z la rend).
 
 const FR := preload("res://addons/marchingblocks_core/franchisseurs.gd")
 const ME := preload("res://addons/marchingblocks_core/maillage_edite.gd")
@@ -47,6 +50,10 @@ var liste: VBoxContainer
 var etiquette: Label
 var reglage_modele: VBoxContainer
 var nom_modele: LineEdit
+var bouton_forme: Button
+var aide_forme: Label
+## Vrai pendant « Edit shape » : le modeleur porte le maillage du modèle `e._franchisseur_edite`.
+var edition := false
 var curseurs := {}
 var _valeurs := {}
 var _remplit := false
@@ -105,6 +112,11 @@ func batir(pile: VBoxContainer) -> void:
 	nom_modele.text_submitted.connect(func(t: String) -> void: _renommer(t))
 	nom_modele.focus_exited.connect(func() -> void: _renommer(nom_modele.text))
 	reglage_modele.add_child(nom_modele)
+	bouton_forme = e._bouton("Edit shape", "Sculpt this model in the modeler (the witness tools: 1 2 3, G R S E I, Ctrl+R, "
+		+ "sculpt…). Done, Tab or Esc brings the world back.", basculer_forme, "visee_sculpt")
+	reglage_modele.add_child(bouton_forme)
+	aide_forme = e._texte("", 11, Palette.OLIVE)
+	reglage_modele.add_child(aide_forme)
 	reglage_modele.add_child(e._rangee([
 		e._bouton("Remove all", "Removes every crossing of this model from the world (Ctrl+Z brings them back).",
 			_effacer_tout, "poubelle"),
@@ -226,6 +238,10 @@ func _remplir_reglages() -> void:
 		(curseurs[cle] as HSlider).value = int(m[cle])
 		(_valeurs[cle] as Label).text = str(int(m[cle]))
 	nom_modele.text = str(m["nom"])
+	if bouton_forme != null:
+		bouton_forme.text = "Done editing" if edition else "Edit shape"
+		aide_forme.text = ("Sculpting « %s » — the world comes back with Done, Tab or Esc." % m["nom"]) if edition \
+			else ("Sculpted." if bool(m.get("sculpte", false)) else "The start shape: « Edit shape » to sculpt it.")
 	_remplit = false
 
 
@@ -324,6 +340,8 @@ func entrer() -> void:
 
 
 func sortir() -> void:
+	if edition:
+		finir_edition()
 	if e._vue.outil != "franchisseurs":
 		return
 	e._vue.outil = _outil_avant if _outil_avant != "franchisseurs" else "ajouter"
@@ -458,6 +476,90 @@ func _defaire(ajoutes: Array, effaces: Array) -> void:
 			poses.append(p)
 	_tout_redessiner()
 	rafraichir_liste()
+
+
+# ── EDIT SHAPE : LE MODELEUR SUR LE MODÈLE ───────────────────────────────────────────────────────────
+
+func basculer_forme() -> void:
+	if edition:
+		finir_edition()
+	else:
+		editer_forme()
+
+
+func editer_forme() -> void:
+	var m: Variant = modele_actif()
+	if m == null:
+		return
+	var me: RefCounted = ME.depuis_dictionnaire(m["maillage"]) if not (m["maillage"] as Dictionary).is_empty() else null
+	if me == null:
+		me = FR.maillage_de_depart(m)
+	edition = true
+	e._franchisseur_edite = m
+	if _fantome != null:
+		_fantome.visible = false
+	var mo: Node = e._modeleur
+	mo.temoin = null
+	mo.occurrence = -1
+	mo.pose = Transform3D.IDENTITY
+	mo._occurrences.visible = false
+	mo.charger(me)
+	e._vue.montrer("temoin")
+	e._vue.regler_edition(true)
+	e._vue.cadrer(Vector3(float(m["largeur"]) / 2.0, float(m["hauteur"]) / 2.0, -float(m["longueur"]) / 2.0))
+	_remplir_reglages()
+	e._dire("[b]Edit shape — « %s »[/b] — the witness tools on this model alone: 1 2 3 pick vertices, edges or faces; "
+		% m["nom"] + "G R S E I, Ctrl+R, X M F as in Blender; sculpt with the brushes. Ctrl+Z undoes. "
+		+ "[i]Done, Tab or Esc brings the world back.[/i]")
+
+
+## Un geste du modeleur pendant « Edit shape » (`editor._geste_du_modeleur`) : une action du MODÈLE, déjà faite.
+func geste(avant: RefCounted, apres: RefCounted, nom: String) -> void:
+	var m: Variant = e._franchisseur_edite
+	if m == null:
+		return
+	var id := int(m["id"])
+	var d_avant: Dictionary = avant.vers_dictionnaire() if avant != null and avant.has_method("vers_dictionnaire") \
+		else (m["maillage"] as Dictionary).duplicate(true)
+	var d_apres: Dictionary = apres.vers_dictionnaire() if apres != null and apres.has_method("vers_dictionnaire") \
+		else e._modeleur.maillage.vers_dictionnaire()
+	var sculpte_avant := bool(m.get("sculpte", false))
+	e._histoire.create_action("Crossing shape: " + nom)
+	e._histoire.add_do_method(_poser_forme.bind(id, d_apres, true))
+	e._histoire.add_undo_method(_poser_forme.bind(id, d_avant, sculpte_avant))
+	e._histoire.commit_action(false)
+	_poser_forme(id, d_apres, true, false)
+
+
+func _poser_forme(id: int, d: Dictionary, sculpte: bool, dans_le_modeleur := true) -> void:
+	for m in modeles:
+		if int(m["id"]) != id:
+			continue
+		m["maillage"] = d.duplicate(true)
+		m["sculpte"] = sculpte
+		_maillages.erase(id)
+		if dans_le_modeleur and edition and e._franchisseur_edite == m:
+			e._modeleur.remplacer(ME.depuis_dictionnaire(d))
+	_tout_redessiner()
+	e._enregistrer_plus_tard()
+
+
+func finir_edition() -> void:
+	if not edition:
+		return
+	var m: Variant = e._franchisseur_edite
+	if m != null and e._modeleur.maillage != null:
+		m["maillage"] = e._modeleur.maillage.vers_dictionnaire()
+		_maillages.erase(int(m["id"]))
+	edition = false
+	e._franchisseur_edite = null
+	e._modeleur._occurrences.visible = true
+	e._vue.regler_edition(false)
+	e._vue.montrer("monde")
+	_tout_redessiner()
+	rafraichir_liste()
+	e._enregistrer_plus_tard()
+	e._dire("[b]Crossings[/b] — the shape is kept. Aim at the foot of a wall to set it.")
 
 
 # ── LE DESSIN ────────────────────────────────────────────────────────────────────────────────────────
