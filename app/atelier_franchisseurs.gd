@@ -12,7 +12,9 @@ extends RefCounted
 ## ⚠ IL NE SUIT PAS LE MONDE (comme le feuillage) : creuser sous un escalier le laisse en l'air ; il est posé au clic.
 ## ⚠ PAS ENCORE DANS LE `.mbworld` NI DANS LES GREFFONS (l'étape 4 de la charte).
 ## « EDIT SHAPE » (l'étape 2 bis) : le MODELEUR du témoin, sur le maillage du modèle SEUL (`temoin = null` : le chemin du
-## maillage libre du modeleur), les copies du témoin cachées. Chaque geste revient ici (`geste`, par `editor.gd`) et
+## maillage libre du modeleur), les copies du témoin cachées — EN PLACE (Jordan, 20 octobre 2026 : « on fait éditer dans
+## un contexte de tuiles ? » — « oui ») : dans le MONDE, à la pose du franchisseur visé (ou la première du modèle),
+## entouré de ses vraies tuiles ; sans pose, seul dans la vue du témoin. Chaque geste revient ici (`geste`, par `editor.gd`) et
 ## devient une action annulable du MODÈLE ; « Done » (ou Tab, Échap) rend le monde. Le modèle est alors « sculpté » :
 ## changer ses dimensions rebâtirait la forme de départ (on le dit, Ctrl+Z la rend).
 
@@ -55,6 +57,8 @@ var choix_couche: OptionButton
 var aide_forme: Label
 ## Vrai pendant « Edit shape » : le modeleur porte le maillage du modèle `e._franchisseur_edite`.
 var edition := false
+## La pose qu'on sculpte en place (null : le modèle seul, dans la vue du témoin).
+var _pose_editee: Variant = null
 var curseurs := {}
 var _valeurs := {}
 var _remplit := false
@@ -178,7 +182,7 @@ func _regle(cle: String, x: int) -> void:
 	var avant: Dictionary = (m as Dictionary).duplicate(true)
 	m[cle] = x
 	var perdu := bool(m.get("sculpte", false))
-	m["maillage"] = FR.maillage_de_depart(m).vers_dictionnaire()
+	m["maillage"] = FR.maillage_de_depart(m, e._retrait).vers_dictionnaire()
 	m["sculpte"] = false
 	var apres: Dictionary = (m as Dictionary).duplicate(true)
 	e._histoire.create_action("Crossing: %s %d" % [cle, x])
@@ -323,7 +327,7 @@ func modele_actif() -> Variant:
 func nouveau_modele(genre: String) -> void:
 	var m := FR.modele(_prochain_modele, NOMS_DES_GENRES[genre], genre, 1, 1, 2 if genre == "pente" else 1)
 	_prochain_modele += 1
-	m["maillage"] = FR.maillage_de_depart(m).vers_dictionnaire()
+	m["maillage"] = FR.maillage_de_depart(m, e._retrait).vers_dictionnaire()
 	e._histoire.create_action("Crossing: new %s" % m["nom"])
 	e._histoire.add_do_method(_inserer_modele.bind(m))
 	e._histoire.add_undo_method(_retirer_modele.bind(m))
@@ -395,7 +399,7 @@ func entrer() -> void:
 		for g in ["escalier", "pente"]:
 			var m := FR.modele(_prochain_modele, NOMS_DES_GENRES[g], g, 1, 1, 2 if g == "pente" else 1)
 			_prochain_modele += 1
-			m["maillage"] = FR.maillage_de_depart(m).vers_dictionnaire()
+			m["maillage"] = FR.maillage_de_depart(m, e._retrait).vers_dictionnaire()
 			modeles.append(m)
 	if actif < 0 and not modeles.is_empty():
 		actif = 0
@@ -559,20 +563,38 @@ func editer_forme() -> void:
 		return
 	var me: RefCounted = ME.depuis_dictionnaire(m["maillage"]) if not (m["maillage"] as Dictionary).is_empty() else null
 	if me == null:
-		me = FR.maillage_de_depart(m)
+		me = FR.maillage_de_depart(m, e._retrait)
 	edition = true
 	e._franchisseur_edite = m
 	if _fantome != null:
 		_fantome.visible = false
+	_pose_editee = null
+	for p in poses:
+		if int(p["modele"]) == int(m["id"]):
+			_pose_editee = p
+			break
 	var mo: Node = e._modeleur
 	mo.temoin = null
 	mo.occurrence = -1
-	mo.pose = Transform3D.IDENTITY
 	mo._occurrences.visible = false
-	mo.charger(me)
-	e._vue.montrer("temoin")
-	e._vue.regler_edition(true)
-	e._vue.cadrer(Vector3(float(m["largeur"]) / 2.0, float(m["hauteur"]) / 2.0, -float(m["longueur"]) / 2.0))
+	var centre_local := Vector3(float(m["largeur"]) / 2.0, float(m["hauteur"]) / 2.0, -float(m["longueur"]) / 2.0)
+	if _pose_editee != null:
+		# EN PLACE : le modeleur à la pose, dans le monde ; la copie posée là se cache le temps de la sculpture.
+		mo.pose = FR.transformation(m, _pose_editee)
+		mo._edition.transform = mo.pose   # ⚠ le modeleur ne le fait qu'en activant une copie de témoin
+		mo.charger(me)
+		e._vue.edition_dans_le_monde = true
+		e._vue.edition = true
+		e._vue.montrer("monde")
+		e._vue.cadrer(mo.pose * centre_local)
+		_tout_redessiner()
+	else:
+		mo.pose = Transform3D.IDENTITY
+		mo._edition.transform = mo.pose
+		mo.charger(me)
+		e._vue.montrer("temoin")
+		e._vue.regler_edition(true)
+		e._vue.cadrer(centre_local)
 	_remplir_reglages()
 	e._dire("[b]Edit shape — « %s »[/b] — the witness tools on this model alone: 1 2 3 pick vertices, edges or faces; "
 		% m["nom"] + "G R S E I, Ctrl+R, X M F as in Blender; sculpt with the brushes. Ctrl+Z undoes. "
@@ -619,7 +641,11 @@ func finir_edition() -> void:
 		_maillages.erase(int(m["id"]))
 	edition = false
 	e._franchisseur_edite = null
+	_pose_editee = null
 	e._modeleur._occurrences.visible = true
+	e._modeleur.pose = Transform3D.IDENTITY
+	e._modeleur._edition.transform = Transform3D.IDENTITY
+	e._vue.edition_dans_le_monde = false
 	e._vue.regler_edition(false)
 	e._vue.montrer("monde")
 	_tout_redessiner()
@@ -634,7 +660,7 @@ func _maillage_de(m: Dictionary) -> ArrayMesh:
 	var id := int(m["id"])
 	if not _maillages.has(id):
 		var me: RefCounted = ME.depuis_dictionnaire(m["maillage"]) if not (m["maillage"] as Dictionary).is_empty() \
-			else FR.maillage_de_depart(m)
+			else FR.maillage_de_depart(m, e._retrait)
 		_maillages[id] = me.vers_array_mesh() if me != null else ArrayMesh.new()
 	return _maillages[id]
 
@@ -648,7 +674,7 @@ func _tout_redessiner() -> void:
 	var par_id := _par_id()
 	for p in poses:
 		var m = par_id.get(int(p["modele"]))
-		if m == null:
+		if m == null or p == _pose_editee:
 			continue
 		var mi := MeshInstance3D.new()
 		mi.mesh = _maillage_de(m)

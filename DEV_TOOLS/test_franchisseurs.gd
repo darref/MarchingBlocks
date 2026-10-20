@@ -76,9 +76,22 @@ func _initialize() -> void:
 	_proche(t1 * Vector3(0, 1, -3), Vector3(5, 2, 5), "… le haut gauche, trois cases plus loin, au coin (5, 2, 5)")
 
 	print("\n— les maillages de départ")
-	_maillage(FR.maillage_de_depart(esc), 1.0 * 2.0 / 3.0, "l'escalier d'une case (trois marches)")
-	_maillage(FR.maillage_de_depart(pente), 1.0 * 1.0 * 2.0 / 2.0, "la pente de deux cases")
-	_maillage(FR.maillage_de_depart(large), 2.0 * 2.0 / 3.0, "l'escalier de deux cases de large")
+	# L'aire du profil, à la main : les marches (ou le triangle), plus la bande ENFOUIE sous le sol (longueur × e) et celle
+	# ENTRÉE dans le mur (e × (hauteur + e)).
+	var e := FR.ENFONCEMENT
+	_maillage(FR.maillage_de_depart(esc), 1.0 * (2.0 / 3.0 + 1.0 * e + e * (1.0 + e)), "l'escalier d'une case (trois marches)")
+	_maillage(FR.maillage_de_depart(pente), 1.0 * (2.0 * 1.0 / 2.0 + 2.0 * e + e * (1.0 + e)), "la pente de deux cases")
+	_maillage(FR.maillage_de_depart(large), 2.0 * (2.0 / 3.0 + 1.0 * e + e * (1.0 + e)), "l'escalier de deux cases de large")
+	var pente_aminci: RefCounted = FR.maillage_de_depart(pente, 0.25)
+	var bas_mini := 1e9
+	var dos_mini := 1e9
+	var haut_maxi := -1e9
+	for s in pente_aminci.sommets:
+		bas_mini = minf(bas_mini, (s as Vector3).y)
+		dos_mini = minf(dos_mini, (s as Vector3).z)
+		haut_maxi = maxf(haut_maxi, (s as Vector3).y)
+	_vrai(absf(bas_mini - (-0.25 - e)) < 1e-5 and absf(dos_mini - (-2.25 - e)) < 1e-5 and absf(haut_maxi - 0.75) < 1e-5,
+		"au cran aminci, la pente part du sol réel (−0,25), finit au haut réel du mur (0,75) et entre dans la matière")
 	var me: RefCounted = FR.maillage_de_depart(esc)
 	var aller: Dictionary = me.vers_dictionnaire()
 	var retour: RefCounted = ME.depuis_dictionnaire(aller)

@@ -219,6 +219,9 @@ func regler_edition_en_jeu(oui: bool) -> void:
 ## témoin figé, et lui donne la souris (Tab, comme dans Blender).
 var modeleur: Node3D
 var edition := false
+## « EDIT SHAPE » D'UN FRANCHISSEUR, EN PLACE (20 octobre 2026) : le modeleur montré DANS LE MONDE, à la pose du
+## franchisseur, entouré de ses vraies tuiles — on sculpte ses jonctions avec le mur et le sol en les voyant.
+var edition_dans_le_monde := false
 var etage := 0
 
 var _coup := -1          # le bouton qui peint, -1 hors d'un coup
@@ -444,7 +447,7 @@ func montrer(quoi: String) -> void:
 	mode = quoi
 	_temoin.visible = quoi == "temoin" and not edition
 	if modeleur != null:
-		modeleur.visible = quoi == "temoin" and edition
+		modeleur.visible = (quoi == "temoin" and edition) or (quoi == "monde" and edition_dans_le_monde)
 	_plans_de_coupe.visible = quoi == "temoin" and _plans_voulus
 	_couches.visible = quoi == "monde" or quoi == "jeu"
 	_eaux.visible = quoi == "monde" or quoi == "jeu"
@@ -864,7 +867,8 @@ func _gui_input(event: InputEvent) -> void:
 				_souris_du_jeu(event)
 			accept_event()
 			return
-	if mode == "temoin" and edition and modeleur != null and modeleur.souris_entree(event):
+	if ((mode == "temoin" and edition) or (mode == "monde" and edition_dans_le_monde)) and modeleur != null \
+			and modeleur.souris_entree(event):
 		accept_event()
 		return
 	if naviguer and mode == "monde" and _naviguer(event):

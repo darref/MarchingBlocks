@@ -41,6 +41,10 @@ const RAISONS := {
 }
 ## Les marches par case de hauteur, pour l'escalier de départ.
 const MARCHES_PAR_CASE := 3
+## DE COMBIEN LA FORME DE DÉPART ENTRE DANS LA MATIÈRE, en cases — sous le sol du pied et dans le mur, au-delà de leur
+## surface. DÉCIDÉ (Jordan, 20 octobre 2026 : « la goutte ne monte pas car les pentes ne rentrent pas dans la matière ») :
+## posée sur les CASES, la pente flottait au-dessus de la surface réelle (le cran) et laissait une lèvre au pied.
+const ENFONCEMENT := 0.3
 
 
 static func modele(id: int, nom: String, genre: String, largeur := 1, hauteur := 1, longueur := 1) -> Dictionary:
@@ -213,21 +217,29 @@ static func depuis_donnees(brut: Variant, erreurs: Array) -> Dictionary:
 ## LE MAILLAGE DE DÉPART d'un modèle, à resculpter : un PRISME — le profil (les marches, ou le triangle de la pente) dans
 ## le plan (z, y), extrudé sur la largeur. Fermé et étanche (le modèle du `MaillageEdite` : pas d'arête libre), en quads
 ## sauf les deux flancs (un polygone chacun) : ce que le modeleur sait biseauter, couper, sculpter.
-static func maillage_de_depart(m: Dictionary) -> RefCounted:
-	var L := float(m["longueur"])
+## `retrait` : le CRAN du monde (`BlocsMaitres.RETRAITS`) — sa surface rentre d'autant dans chaque case pleine : le sol
+## est `retrait` sous le haut de sa case, le mur `retrait` derrière la limite de sa case. La surface de marche va donc du
+## pied (z = 0, y = −retrait) au haut du mur (z = −longueur − retrait, y = hauteur − retrait), et le maillage descend de
+## `ENFONCEMENT` sous elle et entre d'autant dans le mur : il RENTRE dans la matière, sans lèvre ni jour.
+static func maillage_de_depart(m: Dictionary, retrait := 0.0) -> RefCounted:
+	var L := float(m["longueur"]) + retrait
 	var h := float(m["hauteur"])
-	var profil: Array = []   # Vector2(z, y), du pied (z = 0, y = 0) au haut du mur, puis le dessous
+	var r := retrait
+	var e := ENFONCEMENT
+	var profil: Array = []   # Vector2(z, y) : le dessous enfoui, le pied, la surface de marche, le haut dans le mur
+	profil.append(Vector2(0, -r - e))
+	profil.append(Vector2(0, -r))
 	if m["genre"] == "pente":
-		profil = [Vector2(0, 0), Vector2(-L, h), Vector2(-L, 0)]
+		profil.append(Vector2(-L, h - r))
 	else:
 		var n := maxi(1, int(round(h * MARCHES_PAR_CASE)))
 		var giron := L / n
 		var hauteur_marche := h / n
-		profil.append(Vector2(0, 0))
 		for k in n:
-			profil.append(Vector2(-giron * k, hauteur_marche * (k + 1)))
-			profil.append(Vector2(-giron * (k + 1), hauteur_marche * (k + 1)))
-		profil.append(Vector2(-L, 0))
+			profil.append(Vector2(-giron * k, -r + hauteur_marche * (k + 1)))
+			profil.append(Vector2(-giron * (k + 1), -r + hauteur_marche * (k + 1)))
+	profil.append(Vector2(-L - e, h - r))
+	profil.append(Vector2(-L - e, -r - e))
 	return prisme(profil, float(m["largeur"]))
 
 
