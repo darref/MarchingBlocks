@@ -194,8 +194,9 @@ func _mc_temoins() -> void:
 		var c: Dictionary = _ecran._couches[_couche[nom]]
 		for cle in cles:
 			_relief(nom, t.tuiles[cle], cle)
-		var v := F.creer_variantes(t, CLES_VARIEES, 2, func(m: RefCounted, k: int) -> void:
-			_morceau_sculpte(nom, m, k))
+		var v := F.creer_variantes(t, CLES_VARIEES, 2, func(_m: RefCounted, _k: int) -> void:
+			pass)
+		sculpter_les_variantes(t, nom)
 		var dossier: String = _ecran._chemin_temoin_de(c).get_basename() + "_images"
 		var k_sol := _materiau(t, th, "ground", dossier)
 		var k_paroi := _materiau(t, th, "wall", dossier)
@@ -264,6 +265,36 @@ static func _bosse(m: RefCounted, c: Vector3, r: float, a: float, paliers := 0, 
 		if paliers > 0:
 			w = ceil(w * paliers) / paliers
 		return n * (a * w))
+
+
+## LES VARIANTES SCULPTÉES D'UN TÉMOIN (20 octobre 2026) : chaque variante des `CLES_VARIEES` repart de la tuile de base
+## de sa clé, est SUBDIVISÉE deux fois de plus, ses bords recousus avec ceux des autres tuiles (`Sections.completer` : les
+## nouvelles coupes passent à toutes les tuiles du même bord, sans en changer la forme), puis reçoit son morceau. ⚠ SANS
+## LA SUBDIVISION, le morceau tombait sur trop peu de sommets : quelques grandes facettes plates, la texture étirée par la
+## projection de face, vues de dessus en CARRÉS (pris pour de gros pixels dans WaterDrop, vu le 20 octobre 2026). La
+## palette de WaterDrop s'en sert aussi (`remodeler_variantes.gd`). Rend le nombre de variantes refaites.
+static func sculpter_les_variantes(t: RefCounted, nom: String, niveaux := 2) -> int:
+	var MB_ := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+	var refaites: Array = []
+	for cle in CLES_VARIEES:
+		if not t.tuiles.has(cle):
+			continue
+		for k in range(1, 3):
+			var v: String = MB_.nom_de_variante(cle, k)
+			if not t.tuiles.has(v):
+				continue
+			t.tuiles[v] = (t.tuiles[cle] as RefCounted).copie()
+			for n in niveaux:
+				var m: RefCounted = t.tuiles[v]
+				m.subdiviser(range(m.faces.size()))
+			refaites.append([v, k])
+	if refaites.is_empty():
+		return 0
+	F.Sections.new(t).completer()
+	for e in refaites:
+		_morceau_sculpte(nom, t.tuiles[e[0]], e[1])
+	t._partager()
+	return refaites.size()
 
 
 ## LE MORCEAU SCULPTÉ D'UNE VARIANTE — UN relief franc, celui qui fait reconnaître la matière de loin.
