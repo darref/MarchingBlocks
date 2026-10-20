@@ -403,6 +403,15 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     la parité de pose appli / greffon à chaque quart. **MESURÉ DANS WATERDROP** : 96 pentes posées sur les chemins de
     l'île verte (`poser_franchisseurs.gd`, `FR.poser_partout`) ; la goutte en monte 3 sur 4 (2,9 m, une case du monde
     agrandi trois fois).
+  - **LA MATIÈRE DANS LA VUE — FAIT (20 octobre 2026, demandé pour le trailer ultime : « les franchisseurs beiges unis dans
+    l'appli »)** : l'appli dessinait chaque pose d'un beige plat (`_mat_pose`) ; elle prend maintenant le matériau de sol de
+    sa couche, celui que l'export lui donne (`materiaux_pour_l_export`), en TRIPLANAIRE en coordonnées du monde comme le
+    greffon Godot et les tuiles (`_materiaux_des_poses` dans `app/atelier_franchisseurs.gd`) ; sans couche ni témoin, le
+    beige d'avant. Batterie avant / après dans un worktree à dossier de données à part : 30 suites vertes, `fumee_appli`
+    1 rouge AVANT comme APRÈS (« les deux boutons s'il y a un exemple » : ce dossier n'a pas d'exemple installé — le
+    milieu, pas le code). Vu à l'image sur l'île du trailer ultime (escaliers de pavés sur le volcan, la prairie, le
+    canyon : la texture des pavés, plus de beige). ⚠ Aucune suite ne garde ce dessin (il faut l'écran) : vu à l'image
+    seulement. PAS TENU EN MAIN.
   - **RESTE** : 5 Generate ; Unity et Unreal ; la quatrième pente de la sonde (pas montée, à comprendre).
   - **LES LÈVRES PAR MATIÈRE — DÉCIDÉ (Jordan, 20 octobre 2026 : « tu n'hésiteras pas à faire des lèvres différentes selon
     les matières selon une réflexion cohérente, comme par exemple des bordures de plateaux comme dans les Zelda top down,

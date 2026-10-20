@@ -672,15 +672,39 @@ func _tout_redessiner() -> void:
 		if c != _fantome:
 			c.queue_free()
 	var par_id := _par_id()
+	var materiaux := _materiaux_des_poses()
 	for p in poses:
 		var m = par_id.get(int(p["modele"]))
 		if m == null or p == _pose_editee:
 			continue
 		var mi := MeshInstance3D.new()
 		mi.mesh = _maillage_de(m)
-		mi.material_override = _mat_pose
+		mi.material_override = materiaux.get(int(m["id"]), _mat_pose)
 		mi.transform = FR.transformation(m, p)
 		_racine.add_child(mi)
+
+
+## LA MATIÈRE DES POSES DANS LA VUE — DEMANDÉ (Jordan, 20 octobre 2026, relayé par le trailer ultime : « les franchisseurs
+## beiges unis dans l'appli ») : chaque modèle dessiné avec le matériau de sol de sa couche, celui que l'export lui donne
+## (`materiaux_pour_l_export`), en TRIPLANAIRE en coordonnées du monde comme le greffon Godot (`mb_crossings_node.gd`) et
+## les tuiles de l'appli (`MassifPeint.triplanaire`) : une répétition par `echelle` cases. Sans couche ni témoin, le beige
+## d'avant. {id du modèle: matériau}.
+func _materiaux_des_poses() -> Dictionary:
+	var sortie := {}
+	var d_par_id := materiaux_pour_l_export()
+	for id in d_par_id:
+		var d: Dictionary = d_par_id[id]
+		if str(d.get("texture", "")) == "" and not d.has("couleur"):
+			continue
+		var me: RefCounted = ME.new()
+		me.materiaux = [d]
+		var sm := (me.materiau_godot(0) as StandardMaterial3D).duplicate() as StandardMaterial3D
+		sm.uv1_triplanar = true
+		sm.uv1_world_triplanar = true
+		sm.uv1_triplanar_sharpness = 4.0
+		sm.uv1_scale = Vector3.ONE / maxf(0.01, float(d.get("echelle", 1.0)))
+		sortie[int(id)] = sm
+	return sortie
 
 
 func _par_id() -> Dictionary:
