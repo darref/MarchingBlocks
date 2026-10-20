@@ -166,7 +166,7 @@ func _regle(cle: String, x: int) -> void:
 	var refusees := _poses_qui_ne_tiennent_plus(m)
 	e._dire("[b]%s[/b] — %d × %d × %d cells.%s%s" % [m["nom"], m["largeur"], m["hauteur"], m["longueur"],
 		" [color=#e0603c]Its sculpted shape was rebuilt from the start shape (Ctrl+Z brings it back).[/color]" if perdu else "",
-		(" [color=#e0603c]%d crossing(s) no longer fit where they are.[/color]" % refusees) if refusees > 0 else ""))
+		(" [color=#e0603c]%d crossing(s) no longer fit where they are.[/color]" % refusees) if refusees > 0 else ""])
 	e._enregistrer_plus_tard()
 
 
