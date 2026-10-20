@@ -338,6 +338,25 @@ func _deux_couches(jeu: String, comptes: Dictionary) -> void:
 	_egal(_poses_de(b), une_b, "… et la seconde aussi")
 	_vrai(rapports.has(a) and rapports.has(b) and rapports[b]["tiles"] == une_b.size(),
 		"rebuild_world rend le rapport de chaque couche")
+	# LE CACHE DES TUILES (20 octobre 2026, pour les jeux) : relues, les tuiles sont les mêmes ; une case de plus change la
+	# clé — jamais de tuiles périmées.
+	var dossier := "user://test_cache_tuiles_%d" % Time.get_ticks_usec()
+	World.tile_cache_dir = dossier
+	a.rebuild_world()
+	_egal(DirAccess.get_files_at(dossier).size(), 1, "le cache des tuiles s'écrit")
+	a.rebuild_world()
+	_egal(_poses_de(a), une_a, "relues du cache : la première couche pose la même chose")
+	_egal(_poses_de(b), une_b, "… et la seconde aussi")
+	var en_plus := Vector3i(9, 3, 0)
+	b.apply_cells([en_plus], [])
+	_egal(DirAccess.get_files_at(dossier).size(), 2, "une case de plus : une autre clé, le monde se refait")
+	_egal(_poses_de(b), _attendues(FN.attendu_en_couches([{"cells": a.cells().keys(), "cles": comptes, "visible": true},
+		{"cells": b.cells().keys(), "cles": comptes, "visible": true}])[1]), "… et pose ce que pose MarchingBlocks")
+	World.tile_cache_dir = ""
+	b.apply_cells([], [en_plus])
+	for f in DirAccess.get_files_at(dossier):
+		DirAccess.remove_absolute(dossier.path_join(f))
+	DirAccess.remove_absolute(dossier)
 	var seule: Array = FN.attendu(cases_a, comptes)
 	_vrai(_attendues(seule) != _attendues(attendu[0]), "contrôle : seule, la première poserait autre chose (sa paroi à la frontière)")
 	# UNE CASE N'APPARTIENT QU'À UNE COUCHE : un geste de l'éditeur dans B prend la case à A ; Ctrl+Z la rend.
