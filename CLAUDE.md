@@ -65,6 +65,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     fausse). **MESURÉ dans WaterDrop : 56,4 s → 9,6 s (Cartoon Island), 18,3 → 8,7 s (l'île verte)** ; le reste n'est plus
     la règle (sans doute le chargement des 17 jeux de tuiles et la pose dans les grilles : à mesurer). Pas de numéro de
     version monté, rien de réexporté ni d'envoyé sur itch.io : c'est à Jordan de dire si les greffons repartent.
+    **Puis (même jour, Jordan : « réduis le chargement des îles »)** : la règle lit la plus haute case de chaque colonne
+    au lieu de remonter la colonne à chaque coin vide (même réponse : 2,98 → 2,50 s sur Cartoon Island), et une couche
+    VIDE ne charge plus son jeu de tuiles (11 des 17 couches de l'île verte, ~0,1 s chacune). `test_greffon_peinture` vert.
   - **le relief (POM)** (Jordan, 18 octobre 2026 : le relief du Play test part aussi dans les jeux ; §0, « 0.9.4 »). Le
     glTF ne porte pas de carte de hauteur : **le contrat est à écrire d'abord, dans le logiciel** (PROPOSÉ : la hauteur
     de chaque matériau écrite à côté du .glb du monde, et citée par NOM de matériau dans `world.json`, avec une

@@ -81,8 +81,8 @@ static func placements_layered(layers: Array, rule: Dictionary) -> Array:
 	var suffix: String = str(rule["context"].get("outdoor_suffix", "_outdoor"))
 
 	# The highest full cell of each column: « nothing full above the band » is one comparison with it, instead of a
-	# climb up the column for every empty corner of every vertex (`_outdoor`) — the same answer, ~1 s less on a world of
-	# 331 467 cells (measured in WaterDrop, 20 October 2026).
+	# climb up the column for every empty corner of every vertex (`_outdoor`) — the same answer; the pass went from 2.98
+	# to 2.50 s on a world of 331 467 cells (measured in WaterDrop, 20 October 2026).
 	var columns := {}
 	for c in union:
 		var k := Vector2i((c as Vector3i).x, (c as Vector3i).z)
