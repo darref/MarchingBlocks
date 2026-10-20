@@ -6371,7 +6371,7 @@ func _exporter_le_monde(dossier: String) -> void:
 	var ids: Array = _couches.map(func(c: Dictionary) -> String: return str(c.get("id", "")))
 	var transitions := {"etat": _transitions.etat, "ids": ids, "representants": _transitions._representants()}
 	var r: Dictionary = FormatMonde.exporter(couches, dossier, nom, version, eaux, transitions,
-		_feuillage.vers_donnees(), _retrait, _franchisseurs.vers_donnees())
+		_feuillage.vers_donnees(), _retrait, _franchisseurs.vers_donnees().merged({"materiaux": _franchisseurs.materiaux_pour_l_export()}))
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 		for sous in DirAccess.get_directories_at(str(r["dossier"])):

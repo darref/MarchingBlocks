@@ -13,6 +13,8 @@ extends RefCounted
 ##   • `genre` — « escalier » ou « pente » (le maillage de départ, `maillage_de_depart`) ;
 ##   • `largeur`, `hauteur`, `longueur` — en CASES, entières : la largeur de passage, la hauteur FRANCHIE (le mur), la
 ##     profondeur au sol devant le mur ;
+##   • `couche` — le nom de la couche dont il prend la MATIÈRE (son matériau de sol) à l'export ; vide : celle du sol sous
+##     le pied de sa première pose ;
 ##   • `sculpte` — vrai dès que l'artiste a retouché le maillage dans le modeleur : changer les dimensions le perdrait ;
 ##   • `maillage` — le `MaillageEdite` SCULPTÉ (son dictionnaire, `.mbmesh`), dans le repère du modèle : x ∈ [0, largeur]
 ##     (la largeur), y ∈ [0, hauteur] (le haut), z ∈ [−longueur, 0] — on MONTE vers −z, le pied en z = 0, le mur en
@@ -44,7 +46,7 @@ const MARCHES_PAR_CASE := 3
 static func modele(id: int, nom: String, genre: String, largeur := 1, hauteur := 1, longueur := 1) -> Dictionary:
 	var m := {"id": id, "nom": nom, "genre": genre if genre in GENRES else "escalier",
 		"largeur": maxi(1, largeur), "hauteur": maxi(1, hauteur), "longueur": maxi(1, longueur), "maillage": {},
-		"sculpte": false}
+		"sculpte": false, "couche": ""}
 	return m
 
 
@@ -189,6 +191,7 @@ static func depuis_donnees(brut: Variant, erreurs: Array) -> Dictionary:
 			int(m.get("hauteur", 1)), int(m.get("longueur", 1)))
 		d["maillage"] = m.get("maillage", {}) if m.get("maillage", {}) is Dictionary else {}
 		d["sculpte"] = bool(m.get("sculpte", false))
+		d["couche"] = str(m.get("couche", ""))
 		modeles.append(d)
 		ids[d["id"]] = true
 	var plat: Array = brut.get("poses", [])

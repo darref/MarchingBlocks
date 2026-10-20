@@ -293,7 +293,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 	# dimensions et leurs poses en anglais.
 	var fr_bilan := {}
 	if not franchisseurs.is_empty() and not (franchisseurs.get("modeles", []) as Array).is_empty():
-		var fr := _franchisseurs_pour_le_monde(franchisseurs, cible)
+		var fr := _franchisseurs_pour_le_monde(franchisseurs, cible, franchisseurs.get("materiaux", {}))
 		if fr.has("erreur"):
 			return {"erreur": fr["erreur"]}
 		monde["crossings"] = fr["json"]
@@ -317,7 +317,9 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 
 ## Les franchisseurs du projet (`FR.vers_donnees`) pour le monde : {"json", } ou {"erreur"}. Un `.glb` par modèle, son
 ## maillage sculpté (ou la forme de départ s'il n'en a pas).
-static func _franchisseurs_pour_le_monde(d: Dictionary, cible: String) -> Dictionary:
+## `materiaux` : {id de modèle: le dictionnaire du matériau de sa couche (celui d'un témoin)} — son maillage le porte sur
+## toutes ses faces, projeté en boîte comme les tuiles. Absent : la teinte de la légende.
+static func _franchisseurs_pour_le_monde(d: Dictionary, cible: String, materiaux := {}) -> Dictionary:
 	var FR := load("res://addons/marchingblocks_core/franchisseurs.gd")
 	var ME := load("res://addons/marchingblocks_core/maillage_edite.gd")
 	DirAccess.make_dir_recursive_absolute(cible.path_join("crossings"))
@@ -327,6 +329,11 @@ static func _franchisseurs_pour_le_monde(d: Dictionary, cible: String) -> Dictio
 		var me: RefCounted = ME.depuis_dictionnaire(m["maillage"]) if (m.get("maillage", {}) as Dictionary).size() > 0 else null
 		if me == null:
 			me = FR.maillage_de_depart(m)
+		var mat = materiaux.get(int(m["id"]), materiaux.get(str(int(m["id"])), null))
+		if mat is Dictionary and not (mat as Dictionary).is_empty():
+			me.materiaux = [(mat as Dictionary).duplicate(true)]
+			for i in me.mats.size():
+				me.mats[i] = 0
 		var base := _propre(str(m["nom"]), "crossing")
 		var nom := base
 		var k := 2

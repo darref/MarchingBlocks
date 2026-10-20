@@ -51,6 +51,7 @@ var etiquette: Label
 var reglage_modele: VBoxContainer
 var nom_modele: LineEdit
 var bouton_forme: Button
+var choix_couche: OptionButton
 var aide_forme: Label
 ## Vrai pendant « Edit shape » : le modeleur porte le maillage du modèle `e._franchisseur_edite`.
 var edition := false
@@ -112,6 +113,17 @@ func batir(pile: VBoxContainer) -> void:
 	nom_modele.text_submitted.connect(func(t: String) -> void: _renommer(t))
 	nom_modele.focus_exited.connect(func() -> void: _renommer(nom_modele.text))
 	reglage_modele.add_child(nom_modele)
+	var ligne_couche := HBoxContainer.new()
+	var lc: Label = e._texte("Material", 11, Palette.GRIS)
+	lc.custom_minimum_size = Vector2(84, 0)
+	ligne_couche.add_child(lc)
+	choix_couche = OptionButton.new()
+	choix_couche.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	choix_couche.focus_mode = Control.FOCUS_NONE
+	choix_couche.tooltip_text = "The layer whose ground material it takes (in the exported world). Auto: the ground under its foot."
+	choix_couche.item_selected.connect(_couche_choisie)
+	ligne_couche.add_child(choix_couche)
+	reglage_modele.add_child(ligne_couche)
 	bouton_forme = e._bouton("Edit shape", "Sculpt this model in the modeler (the witness tools: 1 2 3, G R S E I, Ctrl+R, "
 		+ "sculpt…). Done, Tab or Esc brings the world back.", basculer_forme, "visee_sculpt")
 	reglage_modele.add_child(bouton_forme)
@@ -238,11 +250,65 @@ func _remplir_reglages() -> void:
 		(curseurs[cle] as HSlider).value = int(m[cle])
 		(_valeurs[cle] as Label).text = str(int(m[cle]))
 	nom_modele.text = str(m["nom"])
+	if choix_couche != null:
+		choix_couche.clear()
+		choix_couche.add_item("Auto (the ground under it)")
+		var k := 0
+		for i in e._couches.size():
+			choix_couche.add_item(str(e._couches[i]["nom"]))
+			if str(e._couches[i]["nom"]) == str(m.get("couche", "")):
+				k = i + 1
+		choix_couche.select(k)
 	if bouton_forme != null:
 		bouton_forme.text = "Done editing" if edition else "Edit shape"
 		aide_forme.text = ("Sculpting « %s » — the world comes back with Done, Tab or Esc." % m["nom"]) if edition \
 			else ("Sculpted." if bool(m.get("sculpte", false)) else "The start shape: « Edit shape » to sculpt it.")
 	_remplit = false
+
+
+func _couche_choisie(i: int) -> void:
+	if _remplit:
+		return
+	var m: Variant = modele_actif()
+	if m == null:
+		return
+	m["couche"] = "" if i <= 0 else str(e._couches[i - 1]["nom"])
+	e._enregistrer_plus_tard()
+
+
+## LA MATIÈRE DE CHAQUE MODÈLE pour l'export : {id: le matériau de sol de sa couche}. La couche choisie, sinon celle du
+## sol sous le pied de sa première pose ; son matériau « …_ground » (celui que le témoin met au sol), sinon le premier.
+func materiaux_pour_l_export() -> Dictionary:
+	var sortie := {}
+	for m in modeles:
+		var nom := str(m.get("couche", ""))
+		if nom == "":
+			for p in poses:
+				if int(p["modele"]) == int(m["id"]):
+					nom = _couche_sous((p["bas"] as Vector3i) + Vector3i.DOWN)
+					break
+		for i in e._couches.size():
+			if str(e._couches[i]["nom"]) != nom:
+				continue
+			var t: RefCounted = e._temoin_de(e._couches[i])
+			if t == null or t.materiaux.is_empty():
+				break
+			var k := 0
+			for j in t.materiaux.size():
+				if str(t.materiaux[j].get("nom", "")).ends_with("_ground"):
+					k = j
+					break
+			sortie[int(m["id"])] = (t.materiaux[k] as Dictionary).duplicate(true)
+	return sortie
+
+
+## Le nom de la couche qui porte cette case, "" si aucune.
+func _couche_sous(c: Vector3i) -> String:
+	for i in e._couches.size():
+		var g := e._vue.couche(i).get_node("Cases") as GridMap
+		if g.get_cell_item(c) != GridMap.INVALID_CELL_ITEM:
+			return str(e._couches[i]["nom"])
+	return ""
 
 
 func activer(i: int) -> void:

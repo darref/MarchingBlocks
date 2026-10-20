@@ -389,8 +389,22 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     vraie appli sur une copie de la palette de WaterDrop (`ATELIER/MarchingBlocks/sonde_crossings.gd`, photos
     `ATELIER/MarchingBlocks/essais/crossings/photos/`) : 11 sur 11 — fantôme, pose, refus d'une seconde pose au même
     endroit, Ctrl+Z / Ctrl+Y, enregistré et relu.
-  - **RESTE** : 2 bis « Edit shape » (le modeleur sur le maillage libre du modèle, chemin qui dort) ; 4 l'export
-    (`crossings` du `world.json`) et le greffon Godot avec collision ; 5 Generate.
+  - **Étape 2 bis FAITE** : « Edit shape » — le modeleur sur le maillage du modèle seul (`temoin = null`), les gestes
+    deviennent des actions annulables du modèle, « Done » / Tab / Échap rendent le monde ; sonde : geste, Ctrl+Z / Ctrl+Y,
+    forme gardée après réouverture. ⚠ La barre ne montre pas encore les outils du modeleur (modes, pinceaux) : les
+    raccourcis seuls ; la caméra cadre le modèle de loin.
+  - **Étape 4 FAITE** : clé `crossings` du `world.json` (`regle_franchisseurs`, un `.glb` par modèle, la matière d'une
+    couche — choisie, ou celle du sol sous son pied), greffon Godot `mb_crossings.gd` + `mb_crossings_node.gd` (un
+    StaticBody3D par pose, collision des triangles, textures en triplanaire) ; `test_franchisseurs` 44 vérifications, dont
+    la parité de pose appli / greffon à chaque quart. **MESURÉ DANS WATERDROP** : 96 pentes posées sur les chemins de
+    l'île verte (`poser_franchisseurs.gd`, `FR.poser_partout`) ; la goutte en monte 3 sur 4 (2,9 m, une case du monde
+    agrandi trois fois).
+  - **RESTE** : 5 Generate ; Unity et Unreal ; la quatrième pente de la sonde (pas montée, à comprendre).
+  - **LES LÈVRES PAR MATIÈRE — DÉCIDÉ (Jordan, 20 octobre 2026 : « tu n'hésiteras pas à faire des lèvres différentes selon
+    les matières selon une réflexion cohérente, comme par exemple des bordures de plateaux comme dans les Zelda top down,
+    ou autre »)** : à faire dans les témoins (les clés de lèvre, `mb_arete_*`), matière par matière.
+  - ~~**RESTE** : 2 bis « Edit shape » (le modeleur sur le maillage libre du modèle, chemin qui dort) ; 4 l'export
+    (`crossings` du `world.json`) et le greffon Godot avec collision ; 5 Generate.~~
 - **LA FIN DU DÉVELOPPEMENT — DÉCIDÉ (Jordan, 2 octobre 2026)** : le logiciel est COMPLET en fonctions. L'ordre
   qui reste : **les greffons et les optimisations** (quand tout est fini), **puis les tests** (Jordan, en main),
   **puis la commercialisation**. Lancement en **accès anticipé, 0.9.0** (ci-dessous). **LES PROPS SONT ABANDONNÉS
