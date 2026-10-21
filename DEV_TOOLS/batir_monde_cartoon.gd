@@ -258,16 +258,36 @@ func _relief(nom: String, m: RefCounted, cle: String) -> void:
 				return -n * (0.08 * pow(1.0 - absf(bc.get_noise_3dv(p + dec)), 4.0)))
 
 
+## LA MARGE D'UN MORCEAU SCULPTÉ — DÉCIDÉ (Jordan, 21 octobre 2026 : « rien de carré »). Le poids du dedans
+## (`F.poids_dedans`) est une fenêtre CARRÉE (la distance au bord le plus proche de la tuile) : une bosse qui débordait de
+## son cœur (à 0,18 des bords) y était coupée DROIT, un dôme au flanc tranché selon la grille (le cratère du sable pourri
+## de Satyron, vu le 21 octobre 2026). Un morceau tient maintenant dans une SPHÈRE tout entière au-dedans de la fenêtre
+## pleine (`MARGE_MORCEAU` des bords) : sa forme est la sienne, ronde, et les bords de la tuile ne bougent toujours pas.
+## 0,14 : l'anneau des faces du bord (un huitième de case : la grille des tuiles de base, subdivisées une fois), qui ne se
+## subdivise pas (`faces_sous_le_morceau`), plus un peu — un dôme qui y entrait s'y arrêtait sur une ligne droite (vu à
+## l'image le 21 octobre 2026, le haut des dunes du sable de Satyron coupé net).
+const MARGE_MORCEAU := 0.14
+
+
+## Le plus grand rayon d'un morceau centré en `c` qui ne touche jamais la fenêtre du dedans.
+static func rayon_au_dedans(c: Vector3, r: float) -> float:
+	return minf(r, 0.5 - MARGE_MORCEAU - maxf(absf(c.x), maxf(absf(c.y), absf(c.z))))
+
+
 ## Un renflement autour de `c` (rayon `r`, hauteur `a`) le long de la normale ; `paliers` > 0 : posterisé (taillé).
+## Le rayon est ramené au-dedans de la tuile (`rayon_au_dedans`) : jamais un flanc coupé par la fenêtre carrée.
 static func _bosse(m: RefCounted, c: Vector3, r: float, a: float, paliers := 0, pointe := false, forme := 1.5) -> void:
+	var rr := rayon_au_dedans(c, r)
+	if rr <= 0.0:
+		return
 	F.retoucher_dedans(m, func(p: Vector3, n: Vector3) -> Vector3:
-		var d := p.distance_to(c) / r
+		var d := p.distance_to(c) / rr
 		if d >= 1.0:
 			return Vector3.ZERO
 		var w := (1.0 - d) if pointe else pow(1.0 - d * d, forme)
 		if paliers > 0:
 			w = ceil(w * paliers) / paliers
-		return n * (a * w))
+		return n * (a * w), MARGE_MORCEAU)
 
 
 ## LES VARIANTES SCULPTÉES D'UN TÉMOIN (20 octobre 2026) : chaque variante des `CLES_VARIEES` repart de la tuile de base
@@ -276,8 +296,19 @@ static func _bosse(m: RefCounted, c: Vector3, r: float, a: float, paliers := 0, 
 ## LA SUBDIVISION, le morceau tombait sur trop peu de sommets : quelques grandes facettes plates, la texture étirée par la
 ## projection de face, vues de dessus en CARRÉS (pris pour de gros pixels dans WaterDrop, vu le 20 octobre 2026). La
 ## palette de WaterDrop s'en sert aussi (`remodeler_variantes.gd`). Rend le nombre de variantes refaites.
-static func sculpter_les_variantes(t: RefCounted, nom: String, niveaux := 2) -> int:
+## ⚠ SEULES LES FACES SOUS LE MORCEAU SE SUBDIVISENT — DÉCIDÉ (Jordan, 21 octobre 2026 : « rien de carré »). Subdivisée
+## tout entière, la variante prenait pour sommets neufs les centres de ses quads, où une face non plane de la base (les
+## rides du sable, les grumeaux) ne passe pas : tout son plat s'écartait de la base (jusqu'à 0,04 case) et s'éclairait
+## autrement — une PLAQUE de la taille de la tuile, cadrée par la marge où le relief s'éteint (Satyron, The Ruin, vu à
+## l'image le 21 octobre 2026). Et chaque nouvelle sculpture recousait des coupes neuves dans les BORDS de toutes les
+## tuiles de base (561 → 2 097 sommets au second passage, les triangles du cadre ×3,5, les images par seconde de 134 à 82).
+## Un essai du morceau sur une copie de la base dit les sommets qu'il bouge ; leurs faces, plus un anneau, se subdivisent
+## (jamais une face du bord) ; le reste de la variante garde les faces de sa base, à l'identique.
+## `morceau(m, k)` sculpte la variante k (par défaut, celui de l'exemple, `_morceau_sculpte`).
+static func sculpter_les_variantes(t: RefCounted, nom: String, niveaux := 2, morceau := Callable()) -> int:
 	var MB_ := preload("res://addons/marchingblocks_core/marching_blocks.gd")
+	if not morceau.is_valid():
+		morceau = func(m: RefCounted, k: int) -> void: _morceau_sculpte(nom, m, k)
 	var refaites: Array = []
 	for cle in CLES_VARIEES:
 		if not t.tuiles.has(cle):
@@ -286,18 +317,52 @@ static func sculpter_les_variantes(t: RefCounted, nom: String, niveaux := 2) -> 
 			var v: String = MB_.nom_de_variante(cle, k)
 			if not t.tuiles.has(v):
 				continue
-			t.tuiles[v] = (t.tuiles[cle] as RefCounted).copie()
+			var base: RefCounted = t.tuiles[cle]
+			var essai: RefCounted = base.copie()
+			morceau.call(essai, k)
+			var m: RefCounted = base.copie()
+			var region := faces_sous_le_morceau(base, essai)
 			for n in niveaux:
-				var m: RefCounted = t.tuiles[v]
-				m.subdiviser(range(m.faces.size()))
+				region = m.subdiviser(region)
+			morceau.call(m, k)
+			t.tuiles[v] = m
 			refaites.append([v, k])
 	if refaites.is_empty():
 		return 0
 	F.Sections.new(t).completer()
-	for e in refaites:
-		_morceau_sculpte(nom, t.tuiles[e[0]], e[1])
 	t._partager()
 	return refaites.size()
+
+
+## Les faces de `base` que le morceau (essayé sur `essai`, sa copie) touche, plus un anneau autour ; jamais une face qui
+## a un sommet sur le bord de la tuile (la subdiviser y couperait l'arête que les voisines partagent).
+static func faces_sous_le_morceau(base: RefCounted, essai: RefCounted) -> Array:
+	var bouges := {}
+	for i in base.sommets.size():
+		if (base.sommets[i] as Vector3).distance_to(essai.sommets[i]) > 1e-5:
+			bouges[i] = true
+	var touchees := {}
+	for f in base.faces.size():
+		for i in (base.faces[f] as PackedInt32Array):
+			if bouges.has(i):
+				touchees[f] = true
+				break
+	var anneau := {}
+	for f in touchees:
+		for i in (base.faces[f] as PackedInt32Array):
+			anneau[i] = true
+	var region: Array = []
+	for f in base.faces.size():
+		var face: PackedInt32Array = base.faces[f]
+		var pres := touchees.has(f)
+		var au_bord := false
+		for i in face:
+			pres = pres or anneau.has(i)
+			var p: Vector3 = base.sommets[i]
+			au_bord = au_bord or maxf(absf(p.x), maxf(absf(p.y), absf(p.z))) >= 0.5 - 1e-4
+		if pres and not au_bord:
+			region.append(f)
+	return region
 
 
 ## LE MORCEAU SCULPTÉ D'UNE VARIANTE — UN relief franc, celui qui fait reconnaître la matière de loin.
@@ -326,10 +391,12 @@ static func _morceau_sculpte(nom: String, m: RefCounted, k: int) -> void:
 				_bosse(m, c, 0.3, 0.24, 0, false, 0.6)                   # un bloc de roche qui sort, aux arêtes roulées
 				_bosse(m, c + Vector3(-0.12, 0.0, 0.1), 0.14, 0.1, 0, false, 0.6)
 			else:
-				# Une corniche : un bourrelet horizontal qui avance, au profil adouci (plus de marche franche).
+				# Une corniche : un bourrelet horizontal qui avance, au profil adouci (plus de marche franche). Ses deux bouts
+				# s'effacent en rond avant la fenêtre du dedans (coupés par elle, ils finissaient en carré).
 				F.retoucher_dedans(m, func(p: Vector3, n: Vector3) -> Vector3:
 					var e := 1.0 - smoothstep(0.05, 0.16, absf(p.y - 0.06))
-					return n * (0.18 * e) * (1.0 - absf(n.y)))
+					var bout := 1.0 - smoothstep(0.2, 0.5 - MARGE_MORCEAU, Vector2(p.x, p.z).length())
+					return n * (0.18 * e * bout) * (1.0 - absf(n.y)), MARGE_MORCEAU)
 		"Ice", "Crystal":
 			if k == 1:
 				_bosse(m, c, 0.26, 0.42, 0, true)                        # une pointe

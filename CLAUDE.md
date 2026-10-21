@@ -4806,9 +4806,15 @@ activées ; puis « un désert qui empiète sur la roche n'est pas la même chos
   passage est le même sur une variante et sur sa tuile de base (moyennes à 1/255 près hors de la bosse), et l'image reste
   la même sans test de profondeur. Le carré est le RELIEF de la variante : une plaque intérieure à rebord (normales vues à
   l'image) et parfois soulevée (`slab_b4h0_var2` : +0,029 case), qu'un passage semi-transparent laisse voir — elle se
-  voit aussi dans une couche seule, sans transition. **OUVERT** : refaire les variantes sculptées
-  (`batir_monde_cartoon.gd`, `sculpter_les_variantes`, `retoucher_dedans` et sa marge de 0,18) pour que leur plat et leurs
-  normales rejoignent ceux de la tuile de base — à décider avec Jordan (l'exemple et les îles en dépendent).
+  voit aussi dans une couche seule, sans transition. ~~OUVERT : refaire les variantes sculptées~~
+  **FAIT — DÉCIDÉ (Jordan, 21 octobre 2026 : « rien de carré »)**, dans `batir_monde_cartoon.gd` : (1) `MARGE_MORCEAU`
+  (0,14) — la fenêtre du dedans est CARRÉE, un morceau tient maintenant dans un rond tout au-dedans (`rayon_au_dedans`),
+  la corniche s'efface en rond ; (2) `faces_sous_le_morceau` — seules les faces que le morceau bouge (plus un anneau,
+  jamais celles du bord) se subdivisent : le reste de la variante garde sa base À L'IDENTIQUE (la plaque venait des
+  centres de quads non plans, jusqu'à 0,04 case). Et la subdivision totale recousait des coupes dans les bords de toutes
+  les tuiles de base à chaque passage (561 → 2 097 sommets, ×3,5 triangles au cadre) : c'est fini. MESURÉ sur les
+  palettes de WaterDrop et de Satyron (photos `ATELIER/Satyron/photos/putride/variantes/` v3 à v6). ⚠ L'EXEMPLE CARTOON
+  ISLAND livré n'est pas rebâti : ses variantes gardent l'ancienne sculpture jusqu'au prochain bâtissage de l'exemple.
 - **SUITES** : batterie Godot 31 suites, 0 rouge (`test_transitions` 82, `test_greffon_peinture` 467, `test_parite` 312,
   `fumee_appli` 1 141) ; banc .NET vert (96 transitions) ; Unity 6.6 65/65 (avec fenêtre ; les mondes de
   `preparer_parite_unity.gd` et `preparer_eau_unity.gd` d'abord, sinon 18 tests manquent leur monde) ; `core-runner` vert ;
