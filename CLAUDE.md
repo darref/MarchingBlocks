@@ -430,6 +430,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   TUILES, et elle sort juste après eux.** **Props et Houses passent APRÈS la 1.0** (Jordan, même jour), en mises à jour
   toujours offertes aux acheteurs de l'accès anticipé (le contrat couvre déjà « la 1.0 et toute mise à jour
   ultérieure »). Le détail : « UN ATELIER DE GÉNÉRATION DE MONDE », plus bas.
+  ⚠ **PROPS ET HOUSES SUPPRIMÉS, LA 1.1.0 = L'ATELIER PRESHAPE — DÉCIDÉ (Jordan, 21 octobre 2026 : « supprimer les props,
+  et les house, et ça viendra à la 1.1.0 »)** : plus d'ateliers Props ni Houses ; la mise à jour suivante, offerte aux
+  acheteurs, est l'atelier « Preshape » (plus bas). Les props RATTACHÉS du terrain monolithique (§3, §9 bis) ne sont pas
+  ces ateliers : ils restent tels quels.
 - **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
   projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
   continuer de faire tant que le dev n'est pas clos, figé ensuite ».
@@ -722,6 +726,53 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       ⚠ Ce que coûte l'étape 2 : plusieurs Go de plus dans l'exe, une carte graphique correcte chez l'acheteur, du
       contenu « généré en direct » à déclarer sur Steam (avec ses garde-fous), et une partie des développeurs
       indépendants qui rejettent l'IA générative. « Generator, no AI » se vend peut-être mieux. **OUVERT, À JORDAN.**
+    - **UN ATELIER « PRESHAPE » — DÉCIDÉ (Jordan, 21 octobre 2026 : « un atelier preshape qui contiendra des listes d'algo
+      très ergonomiquement pour créer une multitude de grandes formes paramétrables sur une quantité suffisante et
+      intelligente de facteurs, comme par exemple une montagne à forme intéressante, packs d'un clic, avec vision de la
+      forme en temps réel dans le ghost pendant qu'on la paramètre, ou une pyramide, des fortifications, un aqueduc,
+      n'importe quoi de très intéressant ; la liste peut être très longue pour ce workshop car il est bien délimité et
+      séparé du reste »).** PAS ÉCRIT.
+      - **CE QUI EST DÉCIDÉ** : un atelier À PART (son entrée dans le rail, comme Generate, Crossings, Foliage) ; des
+        LISTES d'algorithmes de GRANDES formes ; chacune réglée par une quantité suffisante et intelligente de facteurs ;
+        des PACKS d'un clic (une forme déjà réglée) ; la forme vue EN TEMPS RÉEL dans le FANTÔME pendant qu'on la règle ;
+        une liste qui peut être très longue.
+      - **LE PRINCIPE — PROPOSÉ (Claude, 21 octobre 2026)**, ce qui le rend ergonomique et sûr :
+        - une forme = un algorithme PUR (`app/preshapes/<famille>/<forme>.gd`) qui rend des cases (et leurs couches) à
+          partir de ses facteurs et d'une graine — rien d'autre ; le même cœur pose le fantôme et la forme posée ;
+        - ses facteurs DÉCLARÉS (nom, unité en cases, bornes, défaut, aide d'une ligne) : l'atelier dessine lui-même ses
+          curseurs, aucune interface écrite à la main par forme ; ajouter une forme = un fichier ;
+        - le fantôme se recalcule à chaque mouvement de curseur (calcul borné : au-delà d'un budget de cases, un aperçu
+          allégé puis le vrai au relâchement), se déplace sous la souris, tourne (quart de tour), s'ancre au sol ;
+        - la pose passe par les vrais gestes (`_appliquer`) : un seul Ctrl+Z, l'eau et les franchisseurs se recalculent
+          comme après un coup de pinceau ; elle répare d'elle-même les contacts diagonaux (« Fill ») et suit la règle
+          « une matière ne change que là où la hauteur change » ;
+        - chaque forme dit dans quelles COUCHES vont ses parties (le corps, le dessus, la neige, le sable…) : des rôles,
+          pris par leur nom comme dans Generate ;
+        - les PACKS : un fichier de facteurs nommé (« Snowy peak », « Desert pyramid »…), une vignette calculée ; les
+          packs de l'utilisateur s'enregistrent depuis les curseurs et partent avec le `.mbproj` ;
+        - une graine par forme et un bouton « autre tirage » ; la forme posée garde sa recette (la reposer, la modifier).
+      - **LA LISTE — PROPOSÉ (Claude, 21 octobre 2026), à tailler avec Jordan** (chaque famille, quelques formes ; tout
+        ce qui suit se fait en cases) :
+        - **Reliefs** : montagne (pics, crêtes, contreforts, érosion, plis), volcan (cratère, brèche, coulée), mesa et
+          butte en gradins, falaise et escarpement, colline et dôme, chaîne de montagnes le long d'une courbe, canyon et
+          gorge, cuvette et cirque, doline, dune et champ de dunes, cheminées de fée, orgues de basalte, aiguilles, arche
+          naturelle, pont naturel, cap rocheux, îlot et archipel, plateau, glacier et moraine, terrasses de rizière.
+        - **Eau (formes qui l'appellent, l'eau restant celle de Fluids)** : lac de cratère, bassins en cascade, vallée de
+          rivière avec méandres, delta, lagon et atoll, fjord, oasis, cénote.
+        - **Sous terre** : grotte et salle, réseau de galeries, puits, gouffre, géode, tunnel de lave, crypte, mine.
+        - **Bâti antique** : pyramide (à degrés, lisse, en ruine), ziggourat, temple à colonnade, amphithéâtre, obélisque,
+          menhirs et cromlech, aqueduc (arches, étages, le long d'une courbe), pont à arches, viaduc, phare.
+        - **Fortifications** : rempart et chemin de ronde (le long d'une courbe), tour ronde ou carrée, donjon, porte
+          fortifiée, château (enceinte, tours, donjon), bastion en étoile, douves, motte castrale, palissade.
+        - **Habitat et ville** : maison, rangée de maisons, village, rue en escalier, place, puits, moulin, ferme et champs
+          en terrasses, quartier en grille, pueblo, ville troglodyte.
+        - **Jeu (pour les jeux qui s'en servent : Satyron, River Stones…)** : bordures de chemin à la Zelda (massifs longs
+          et infranchissables), enclave, labyrinthe, arène, donjon de salles reliées, île flottante, tour à étages,
+          sanctuaire, ruines éparses.
+        - **Formes pures** : sphère, cylindre, cône, tore, spirale, escalier hélicoïdal, voûte, dôme, extrusion d'un
+          tracé dessiné.
+      - **LA 1.1.0 — DÉCIDÉ (Jordan, 21 octobre 2026)** : Props et Houses supprimés, Preshape vient à la 1.1.0.
+      - **OUVERT** : qui l'écrit et quand ; la liste à garder.
     - **UN JEU EN VUE DE DESSUS AVEC UN MONDE DE MARCHINGBLOCKS — PAR LE PRINCIPE, pas encore vu à l'image**
       (question de Jordan, 18 octobre 2026). Le monde exporté est de la vraie géométrie : une caméra en perspective qui
       regarde droit vers le bas montre les flancs des falaises de plus en plus vers les bords de l'écran (aucun au
@@ -896,8 +947,14 @@ licence.*` ; `DEV_TOOLS/exporter_marchingblocks.sh`, `preparer_livraison.gd`, `i
   foi, puis anglais), au nom de MarchingBlocks, l'article 8 (données) écrit pour lui (la vérification des mises à jour, la
   clé qui porte nom et e-mail sans rien transmettre). Montré et ACCEPTÉ au premier lancement dans les trois éditions
   (« I accept » / « Quit »), retenu dans `reglages.cfg` avec sa VERSION (`Contrat.VERSION` : à monter quand le fond
-  change, chacun le relira) ; livré à côté de l'exe et montré par l'installeur. ⚠ **SES BLANCS [À COMPLÉTER] (SIRET,
-  adresse, e-mail du studio, médiateur) ATTENDENT LA MICRO-ENTREPRISE** : l'export le rappelle à chaque fois.
+  change, chacun le relira) ; livré à côté de l'exe et montré par l'installeur. ~~SES BLANCS [À COMPLÉTER] (SIRET,
+  adresse, e-mail du studio, médiateur) ATTENDENT LA MICRO-ENTREPRISE~~ — **PLUS AUCUN BLANC (21 octobre 2026)** : SIRET,
+  adresse et e-mail remplis (19 octobre) ; **SANS MÉDIATEUR — DÉCIDÉ (Jordan, 21 octobre 2026 : « le médiateur on fait
+  sans »)**, la clause retirée (et la plateforme européenne de règlement des litiges, fermée en juillet 2025) ; l'article 6
+  « Accès anticipé » devient « Mises à jour » (la 1.0 est vendue) ; `Contrat.VERSION` 1 → 2 (chacun relit et accepte) ;
+  `test_vente` 169 sur 169. ⚠ Le Code de la consommation oblige à proposer un médiateur à un consommateur (amende
+  administrative jusqu'à 3 000 €) : risque accepté par Jordan (`SpannerGames/LEGAL/LISEZMOI.md`). Le canal PAYANT
+  d'itch.io part au prochain export (alignement, étape 2 bis : plus de « COMPL »).
 - **LES AVIS DES LICENCES TIERCES — ÉCRITS.** `app/avis_tiers.gd`, UN texte : Godot (MIT) et ses 102 composants tels que
   le moteur les déclare (`Engine.get_copyright_info`, polices comprises — Open Sans, Noto Sans, Inter, JetBrains Mono,
   DroidSans, Vazirmatn —, FreeType, HarfBuzz, mbedTLS…), godot-cpp (MIT), Monocypher (BSD-2). Dans « About » et dans le
@@ -4706,7 +4763,7 @@ activées ; puis « un désert qui empiète sur la roche n'est pas la même chos
 - **VU À L'IMAGE** (`DEV_TOOLS/capture_transitions.gd`, avec fenêtre, RTX 2060 Vulkan ; le témoin de B habillé d'un damier
   bleu) : un fondu doux, continu d'une tuile à l'autre, qui suit les marches ; Reach le déplace ; peint « B couvre », le
   bleu s'avance sur A et la teinte jaune le montre ; dans World la transition reste, la teinte s'en va. ⚠ **DE FINS
-  POINTILLÉS CLAIRS À CERTAINS JOINTS DE LA BANDE, PAS EXPLIQUÉS** (ni la poussée le long de la normale, ni le sommet lu au
+  POINTILLÉS CLAIRS À CERTAINS JOINTS DE LA BANDE** (EXPLIQUÉS ET CORRIGÉS le 21 octobre 2026 : la poussée le long de la normale, voir « Les 255 couches et les fils clairs » ; écrit alors : ni la poussée le long de la normale, ni le sommet lu au
   point : essayés). ⚠ Une fausse piste notée dans le code : on a cru la carte aveugle au canal G d'une texture RG8 — la
   capture peignait des sommets enfouis.
 - **LE REPRÉSENTANT PAR DÉFAUT EST LE DESSUS — CORRIGÉ (13 octobre 2026)**, vu par Jordan sur `fonction_transitions.gif`
@@ -4717,9 +4774,49 @@ activées ; puis « un désert qui empiète sur la roche n'est pas la même chos
   Désormais (`representant_par_defaut`) : l'AIRE des faces tournées vers le haut × les occurrences de leur tuile ; sans
   dessus, l'ancienne règle. Sur l'exemple : Material 1 (le dessus) pour les trois. Gardé par `test_transitions` (70, un
   faux témoin écrit à la main) ; deux mutations rouges (l'ancienne règle, les occurrences ignorées). ⚠ Les GIF sont à
-  REFILMER. ⚠ **LES POINTILLÉS CLAIRS** le long de la bande (visibles aussi sur le GIF) restent NON EXPLIQUÉS.
+  REFILMER. ⚠ **LES POINTILLÉS CLAIRS** le long de la bande (visibles aussi sur le GIF) : EXPLIQUÉS le 21 octobre 2026 (« Les 255 couches et les fils clairs »).
 - ⚠ **PAS TENU EN MAIN, PAS JUGÉ PAR JORDAN.** Pas mesuré sur l'exemple (la texture fait ~10 Mo, sa construction parcourt
   l'union : ~740 000 cases). Pas exporté : dans la liste des greffons à faire (§0).
+
+### LES 255 COUCHES ET LES FILS CLAIRS — DÉCIDÉ (Jordan, 21 octobre 2026 : « Change »), ÉCRIT LE MÊME JOUR
+
+- **DÉCIDÉ** : lever la limite des 15 couches. Le rang et le choix tenaient chacun dans un quartet d'un octet par case :
+  seules les couches 0 à 14 se fondaient, et toute île de plus de 15 couches (Satyron : 22) gardait des bords en carrés.
+- **FAIT** : DEUX octets par case (R = rang + 1, G = choix + 1 ; Godot `FORMAT_RG8`, Unity `TextureFormat.RG16`, Unreal
+  `PF_R8G8`), `MAXI` / `LAYERS_MAX` / `LayersMax` = 255 (ce qu'un octet dit en plus du vide ; et le minimum garanti des
+  couches d'un Texture2DArray sous Vulkan). La TABLE (2N × N) et les REPRÉSENTANTS (une tranche 256² et une colonne de
+  réglages par couche ; Godot : la texture `rep_params` remplace les trois tableaux `rep_*[15]`, comme Unity et Unreal) sont
+  dimensionnés sur le NOMBRE RÉEL de couches ; le shader ne fond pas un rang hors de la table (`textureSize` /
+  `GetDimensions`). `world.json` ne bouge pas. Coût du pire : table 2 Mo, représentants ~350 Ko par couche (22 couches
+  ~7,7 Mo, 255 ~89 Mo) ; la texture des cases double (~20 Mo sur l'exemple au lieu de ~10).
+- **LA CONFORMITÉ** : `transitions_conformance.json` 96 cas (93) — `limits.layers_max` 255, le texte de la règle refait,
+  `cell_texture` liste `texels` [x, y, z, R, G], deux `blend` de rangs ≥ 15 (16 et 21 ; 253 et 254), la `table` « layers
+  beyond the 15th blend » (22 couches) et « a layer beyond the 255th blends nothing ». **MESURÉ, VU ROUGIR SUR L'ANCIEN
+  CODE** : Godot `test_greffon_peinture` 6 échecs, .NET 4, `core-runner` (MSVC aux drapeaux d'Unreal) 4 — dont la table
+  « layers beyond the 15th » dans les trois ; puis 96/96 partout.
+- **LES FILS CLAIRS, EXPLIQUÉS ET CORRIGÉS (21 octobre 2026)** — les « pointillés clairs à certains joints » notés plus haut
+  (« non expliqués ») : le passage était POUSSÉ de 2 millièmes LE LONG DE SA NORMALE ; sur un pli (le bord d'une falaise,
+  deux tuiles aux normales lissées divergentes) il se rétractait d'un cheveu et la tuile native transparaissait. MESURÉ
+  sur l'essai putride de Satyron : 30 millièmes les épaississent, sans le passage ils disparaissent, et le sommet TIRÉ
+  VERS LA CAMÉRA le long de son rayon de vue (2/10 000 de sa distance, 2 mm en orthographique : il ne bouge pas à
+  l'écran) les efface. Le point de la règle est celui de la vraie surface. Godot et Unreal (WPO `(caméra − P) · 2e-4`) ;
+  Unity n'a jamais poussé (`Offset -1, -1`). Gardé par `test_transitions` (« plus poussé le long de la normale », rouge
+  sur l'ancien cœur avec 12 autres vérifications des 255 couches).
+- **LES « CARRÉS » DES TUILES VARIANTES (Satyron) — MESURÉ : PAS LE PASSAGE.** Sur l'essai putride re-exporté, l'alpha du
+  passage est le même sur une variante et sur sa tuile de base (moyennes à 1/255 près hors de la bosse), et l'image reste
+  la même sans test de profondeur. Le carré est le RELIEF de la variante : une plaque intérieure à rebord (normales vues à
+  l'image) et parfois soulevée (`slab_b4h0_var2` : +0,029 case), qu'un passage semi-transparent laisse voir — elle se
+  voit aussi dans une couche seule, sans transition. **OUVERT** : refaire les variantes sculptées
+  (`batir_monde_cartoon.gd`, `sculpter_les_variantes`, `retoucher_dedans` et sa marge de 0,18) pour que leur plat et leurs
+  normales rejoignent ceux de la tuile de base — à décider avec Jordan (l'exemple et les îles en dépendent).
+- **SUITES** : batterie Godot 31 suites, 0 rouge (`test_transitions` 82, `test_greffon_peinture` 467, `test_parite` 312,
+  `fumee_appli` 1 141) ; banc .NET vert (96 transitions) ; Unity 6.6 65/65 (avec fenêtre ; les mondes de
+  `preparer_parite_unity.gd` et `preparer_eau_unity.gd` d'abord, sinon 18 tests manquent leur monde) ; `core-runner` vert ;
+  le greffon Unreal construit (UE 5.8, `Build.bat` sur un projet jetable `C:\mbu`, 0 avertissement) et `M_MB_Transition`
+  refait par `build_materials.py` (`transition()` seule). **VU À L'IMAGE** (Godot, greffon, couches 15, 17 et 21 de
+  The Ruin) : `D:/SpannerGames/ATELIER/MarchingBlocks/photos/transitions_255/` — avant en escalier, après fondu.
+- **OUVERT** : Unreal pas vu à l'image (matériau écrit et relu, pas rendu) ; l'appli elle-même pas photographiée (même
+  shader que le greffon, à `mb_world_to_format` près).
 
 ### LA BARRE DE PROGRESSION, LA BARRE DE RENDU DU PLAY TEST, UNE PASSE D'OPTIMISATION — DEMANDÉES ET ÉCRITES (Jordan, 1er octobre 2026)
 

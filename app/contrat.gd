@@ -6,7 +6,7 @@ extends RefCounted
 
 const CHEMIN := "res://app/textes/LICENSE.txt"
 ## ⚠ À MONTER quand le texte change sur le fond (pas pour une coquille) : chaque acheteur le relira.
-const VERSION := "1"
+const VERSION := "2"
 const REGLAGES := "user://reglages.cfg"
 
 

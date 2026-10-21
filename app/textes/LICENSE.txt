@@ -50,9 +50,9 @@ Les Créations appartiennent à l'Utilisateur. Il peut les utiliser, les modifie
 
 Les contenus d'exemple livrés avec le Logiciel (projets d'exemple, témoin calculé) peuvent être utilisés dans les Créations ; ils ne peuvent pas être redistribués seuls, en l'état, comme un produit ou une ressource à part entière.
 
-6. Accès anticipé et mises à jour
+6. Mises à jour
 
-Pendant l'accès anticipé, le Logiciel est en cours de développement : il évolue, et des fonctions peuvent changer. Les mises à jour sont fournies selon les conditions de la page de vente ; elles sont régies par ce contrat. Le Concédant s'efforce de garder lisibles les fichiers produits par les versions précédentes.
+Le Logiciel continue d'évoluer : des fonctions peuvent s'ajouter ou changer. Les mises à jour sont fournies selon les conditions de la page de vente ; elles sont régies par ce contrat. Le Concédant s'efforce de garder lisibles les fichiers produits par les versions précédentes.
 
 7. Les Greffons gratuits et le format ouvert
 
@@ -84,7 +84,7 @@ La vente elle-même est régie par les conditions du revendeur (Paddle, Steam), 
 
 13. Droit applicable et litiges
 
-Ce contrat est régi par le droit français. En cas de difficulté, l'Utilisateur contacte d'abord le Concédant à l'adresse indiquée à l'article 1. Un consommateur peut recourir gratuitement à un médiateur de la consommation [À COMPLÉTER : nom et site du médiateur] ou à la plateforme européenne de règlement en ligne des litiges. À défaut d'accord, les tribunaux français sont compétents, sous réserve des règles de compétence protectrices du consommateur.
+Ce contrat est régi par le droit français. En cas de difficulté, l'Utilisateur contacte d'abord le Concédant à l'adresse indiquée à l'article 1. À défaut d'accord, les tribunaux français sont compétents, sous réserve des règles de compétence protectrices du consommateur.
 
 14. Acceptation
 
@@ -137,9 +137,9 @@ Creations belong to the User. The User may use, modify, sell and include them in
 
 Sample content shipped with the Software (sample projects, the computed witness) may be used inside Creations; it may not be redistributed on its own, as is, as a product or asset in itself.
 
-6. Early Access and updates
+6. Updates
 
-During Early Access the Software is under development: it changes, and features may change. Updates are provided as stated on the store page and are governed by this agreement. The Licensor strives to keep files made with earlier versions readable.
+The Software keeps evolving: features may be added or change. Updates are provided as stated on the store page and are governed by this agreement. The Licensor strives to keep files made with earlier versions readable.
 
 7. Free plugins and the open format
 
@@ -171,7 +171,7 @@ The sale itself is governed by the reseller's terms (Paddle, Steam), including p
 
 13. Governing law and disputes
 
-This agreement is governed by French law. In case of difficulty, the User first contacts the Licensor at the address in section 1. A consumer may use a consumer mediator free of charge [TO BE COMPLETED: name and website of the mediator] or the EU online dispute resolution platform. Failing agreement, French courts have jurisdiction, subject to the rules protecting consumers.
+This agreement is governed by French law. In case of difficulty, the User first contacts the Licensor at the address in section 1. Failing agreement, French courts have jurisdiction, subject to the rules protecting consumers.
 
 14. Acceptance
 
