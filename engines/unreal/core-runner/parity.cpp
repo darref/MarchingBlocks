@@ -462,20 +462,22 @@ namespace
 		{
 			const FCellTexture D = Transitions::BuildCellTexture(PRanked(I["cells"]), PRanked(I["choices"]));
 			FJsonValue Got = FJsonValue::MakeObject();
-			FJsonValue Origin = FJsonValue::MakeArray(), Size = FJsonValue::MakeArray(), Bytes = FJsonValue::MakeArray();
+			FJsonValue Origin = FJsonValue::MakeArray(), Size = FJsonValue::MakeArray(), Texels = FJsonValue::MakeArray();
 			Origin.Push(FJsonValue::MakeInt(D.Origin.X)).Push(FJsonValue::MakeInt(D.Origin.Y)).Push(FJsonValue::MakeInt(D.Origin.Z));
 			Size.Push(FJsonValue::MakeInt(D.Size.X)).Push(FJsonValue::MakeInt(D.Size.Y)).Push(FJsonValue::MakeInt(D.Size.Z));
 			for (int Z = 0; Z < D.Size.Z; ++Z)
 				for (int Y = 0; Y < D.Size.Y; ++Y)
 					for (int X = 0; X < D.Size.X; ++X)
 					{
-						const uint8_t B = D.Bytes[static_cast<size_t>(D.IndexOf(D.Origin + FCell(X, Y, Z)))];
-						if (B == 0) continue;
+						const size_t Ix = 2 * static_cast<size_t>(D.IndexOf(D.Origin + FCell(X, Y, Z)));
+						const uint8_t Rb = D.Bytes[Ix], Gb = D.Bytes[Ix + 1];
+						if (Rb == 0 && Gb == 0) continue;
 						FJsonValue T = FJsonValue::MakeArray();
-						T.Push(FJsonValue::MakeInt(X)).Push(FJsonValue::MakeInt(Y)).Push(FJsonValue::MakeInt(Z)).Push(FJsonValue::MakeInt(B));
-						Bytes.Push(T);
+						T.Push(FJsonValue::MakeInt(X)).Push(FJsonValue::MakeInt(Y)).Push(FJsonValue::MakeInt(Z)).Push(FJsonValue::MakeInt(Rb))
+							.Push(FJsonValue::MakeInt(Gb));
+						Texels.Push(T);
 					}
-			Got.Set("origin", Origin).Set("size", Size).Set("bytes", Bytes);
+			Got.Set("origin", Origin).Set("size", Size).Set("texels", Texels);
 			return PSameJson(Got, E, 0.0, "cell_texture");
 		}
 		if (Kind == "read")

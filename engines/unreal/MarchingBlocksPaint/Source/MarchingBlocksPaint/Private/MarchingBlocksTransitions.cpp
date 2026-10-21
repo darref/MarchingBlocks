@@ -1,7 +1,7 @@
 // MarchingBlocks Paint for Unreal — les transitions entre couches (voir MarchingBlocksTransitions.h).
 //
-// ⚠ L'EMPAQUETAGE EST CELUI RECOMMANDÉ PAR LES CAS (cell_texture) : un octet par case sur la boîte de l'union élargie de 6,
-// quartet bas = rang + 1 de sa couche, quartet haut = rang + 1 choisi à ce sommet ; MBCore le construit
+// ⚠ L'EMPAQUETAGE EST CELUI RECOMMANDÉ PAR LES CAS (cell_texture) : DEUX octets par case (PF_R8G8, 21 octobre 2026 : les
+// 255 couches) sur la boîte de l'union élargie de 6, R = rang + 1 de sa couche, G = rang + 1 choisi à ce sommet ; MBCore le construit
 // (Transitions::BuildCellTexture), éprouvé par le banc. La table et les représentants suivent la disposition du shader de
 // l'appli (transitions_rendu.gd) : quand C couvre D, texel (2D, C) = (active, softness, reach, irregularity), (2D + 1, C) =
 // (fills_hollows, grain).
@@ -108,7 +108,7 @@ void AMarchingBlocksTransitions::Apply()
 	for (const FIntVector4& C : Choices) Chosen.push_back({MBPaint::FCell(C.X, C.Y, C.Z), C.W});
 	const MBPaint::FCellTexture Packed = MBPaint::Transitions::BuildCellTexture(Union, Chosen);
 
-	CellsTexture = UVolumeTexture::CreateTransient(Packed.Size.X, Packed.Size.Y, Packed.Size.Z, PF_G8);
+	CellsTexture = UVolumeTexture::CreateTransient(Packed.Size.X, Packed.Size.Y, Packed.Size.Z, PF_R8G8);
 	if (!CellsTexture) { Clear(); Status = TEXT("The cell texture could not be made."); return; }
 	CellsTexture->SRGB = false;
 	CellsTexture->Filter = TF_Nearest;
@@ -120,12 +120,14 @@ void AMarchingBlocksTransitions::Apply()
 		CellsTexture->UpdateResource();
 	}
 
-	const int32 Max = MBPaint::Transitions::LayersMax;
+	// The table and the representatives have the world's real number of layers (at most 255; 15 before 21 October 2026).
+	const int32 Max = FMath::Clamp(FMath::Max(WorldLayers.Num(), Representatives.Num()), 1, MBPaint::Transitions::LayersMax);
 	TArray<FLinearColor> TableTexels;
 	TableTexels.Init(FLinearColor(0.f, 0.f, 0.f, 0.f), 2 * Max * Max);
 	for (const auto& Entry : Table)
 	{
 		const int32 C = Entry.first.first, D = Entry.first.second;
+		if (C >= Max || D >= Max) continue;
 		const MBPaint::FTransitionSettings& S = Entry.second;
 		TableTexels[C * 2 * Max + 2 * D] = FLinearColor(1.f, static_cast<float>(S.Softness), static_cast<float>(S.Reach), static_cast<float>(S.Irregularity));
 		TableTexels[C * 2 * Max + 2 * D + 1] = FLinearColor(static_cast<float>(S.FillsHollows), static_cast<float>(S.Grain), 0.f, 0.f);

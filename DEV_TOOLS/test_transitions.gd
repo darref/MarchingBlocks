@@ -217,18 +217,31 @@ func _la_texture() -> void:
 	_dire(d["origine"] == Vector3i(-4, -2, 0) - Vector3i.ONE * TR.MARGE, "l'origine : le coin bas de l'union moins la marge")
 	_dire(d["taille"] == Vector3i(8, 4, 6) + Vector3i.ONE * 2 * TR.MARGE, "la taille : la boîte de l'union plus deux marges")
 	var o: PackedByteArray = d["octets"]
-	_dire(o[TR.indice(d, Vector3i(3, -2, 5))] == 3 and o[TR.indice(d, Vector3i(-4, 1, 1))] == 2,
-		"chaque case porte rang + 1 (quatre bits bas)")
-	_dire(o[TR.indice(d, Vector3i(0, 0, 0))] == 1 + (2 << 4), "le choix (rang 1) au coin (0,0,0), de rang 0 : 1 + 2·16 = 33")
+	var n3: Vector3i = d["taille"]
+	_dire(o.size() == 2 * n3.x * n3.y * n3.z, "DEUX octets par case (RG8, 21 octobre 2026)")
+	_dire(o[2 * TR.indice(d, Vector3i(3, -2, 5))] == 3 and o[2 * TR.indice(d, Vector3i(-4, 1, 1))] == 2,
+		"chaque case porte rang + 1 (octet R)")
+	var i0 := 2 * TR.indice(d, Vector3i(0, 0, 0))
+	_dire(o[i0] == 1 and o[i0 + 1] == 2, "le choix (rang 1) au coin (0,0,0), de rang 0 : R = 1, G = 2")
 	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == 0 and TR.choix_lu(d, Vector3i(0, 0, 0)) == 1, "… relus : rang 0, choix 1")
-	_dire(o[TR.indice(d, Vector3i(1, 0, 0))] == 0, "une case vide : 0")
+	_dire(o[2 * TR.indice(d, Vector3i(1, 0, 0))] == 0 and o[2 * TR.indice(d, Vector3i(1, 0, 0)) + 1] == 0, "une case vide : 0, 0")
 	TR.poser_choix(d, Vector3i(0, 0, 0), -1)
-	_dire(o.size() == (d["octets"] as PackedByteArray).size() and (d["octets"] as PackedByteArray)[TR.indice(d, Vector3i(0, 0, 0))] == 1,
-		"effacer le choix garde le rang")
+	_dire(o.size() == (d["octets"] as PackedByteArray).size() and (d["octets"] as PackedByteArray)[i0] == 1
+		and (d["octets"] as PackedByteArray)[i0 + 1] == 0, "effacer le choix garde le rang")
 	TR.poser_case(d, Vector3i(0, 0, 0), 14)
-	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == 14, "le plus haut rang (14) tient dans quatre bits")
+	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == 14, "le rang 14 (la dernière couche fondue avant le 21 octobre)")
+	# ⚠ LES 255 COUCHES (Jordan, 21 octobre 2026) : le rang 15 et au-delà se fondent ; le choix aussi.
+	TR.poser_case(d, Vector3i(0, 0, 0), 15)
+	TR.poser_choix(d, Vector3i(0, 0, 0), 21)
+	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == 15 and TR.choix_lu(d, Vector3i(0, 0, 0)) == 21,
+		"le rang 15 et le choix 21 entrent dans la texture (%d, %d)" % [TR.rang_lu(d, Vector3i(0, 0, 0)),
+		TR.choix_lu(d, Vector3i(0, 0, 0))])
+	TR.poser_case(d, Vector3i(0, 0, 0), TR.MAXI - 1)
+	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == 254 and TR.choix_lu(d, Vector3i(0, 0, 0)) == 21,
+		"le plus haut rang (254) tient dans l'octet R, sans toucher G")
+	TR.poser_choix(d, Vector3i(0, 0, 0), -1)
 	TR.poser_case(d, Vector3i(0, 0, 0), TR.MAXI)
-	_dire(TR.rang_lu(d, Vector3i(0, 0, 0)) == -1, "une couche au-delà de MAXI n'entre pas")
+	_dire(TR.MAXI == 255 and TR.rang_lu(d, Vector3i(0, 0, 0)) == -1, "une couche au-delà de MAXI (255) n'entre pas")
 	TR.poser_case(d, Vector3i(0, 0, 0), 0)
 	_dire(TR.indice(d, Vector3i(100, 0, 0)) < 0 and not TR.poser_case(d, Vector3i(100, 0, 0), 1),
 		"hors de la boîte : refusé (il faudra reconstruire)")
@@ -237,8 +250,13 @@ func _la_texture() -> void:
 	_dire(tr.size() == (d["taille"] as Vector3i).z and (tr[0] as Image).get_width() == (d["taille"] as Vector3i).x,
 		"une tranche par z, de la largeur x")
 	var t: Vector3i = Vector3i(3, -2, 5) - (d["origine"] as Vector3i)
-	_dire((tr[t.z] as Image).get_format() == Image.FORMAT_R8 and int(round((tr[t.z] as Image).get_pixel(t.x, t.y).r * 255.0)) == 3,
-		"la case relue dans SA tranche (R8), à SA place")
+	_dire((tr[t.z] as Image).get_format() == Image.FORMAT_RG8 and int(round((tr[t.z] as Image).get_pixel(t.x, t.y).r * 255.0)) == 3,
+		"la case relue dans SA tranche (RG8), à SA place")
+	var t0: Vector3i = Vector3i(0, 0, 0) - (d["origine"] as Vector3i)
+	TR.poser_choix(d, Vector3i(0, 0, 0), 200)
+	var px: Color = (TR.tranches(d)[t0.z] as Image).get_pixel(t0.x, t0.y)
+	_dire(int(round(px.r * 255.0)) == 1 and int(round(px.g * 255.0)) == 201, "le choix 200 relu dans le canal G de sa tranche")
+	TR.poser_choix(d, Vector3i(0, 0, 0), -1)
 	# Une mise à jour : seule la tranche touchée est refaite, et elle porte la nouvelle valeur.
 	TR.poser_case(d, Vector3i(3, -2, 5), -1)
 	var tr2: Array = TR.tranches(d, {t.z: true}, tr)
@@ -252,13 +270,18 @@ func _la_texture() -> void:
 
 func _le_shader() -> void:
 	var s: String = TR.SHADER
-	for morceau in ["rang_en(b + o, 0)", "(v & 15)", "(v >> 4)", "r[k] < proprio", "if (part > meilleur)", "meilleur / (meilleur + w_proprio)",
+	for morceau in ["rang_en(b + o, 0)", "(canal == 0 ? v.r : v.g)", "max(proprio, autre) >= textureSize(table, 0).y",
+			"texelFetch(rep_params, ivec2(k, 0), 0)", "r[k] < proprio", "if (part > meilleur)", "meilleur / (meilleur + w_proprio)",
 			"min(proprio, autre)", "vote_autre += w[k]", "* 4.0 * s_c * (1.0 - s_c)",
 			"smoothstep(0.5 - p1.g * 0.5, 0.5 + p1.g * 0.5, s_c + decalage)",
 			"vote_autre * a_autre + (1.0 - vote_autre) * a_proprio", "ivec2(2 * proprio, autre)", "ivec2(2 * autre, proprio)",
-			"VERTEX += NORMAL * 0.002", "centre = MODEL_MATRIX[3].xyz", "round(centre - vec3(1.0))",
+			"vue.xyz *= 1.0 - 2e-4", "POSITION = PROJECTION_MATRIX * vue", "centre = MODEL_MATRIX[3].xyz", "round(centre - vec3(1.0))",
 			"clamp(p_monde - vec3(b) - vec3(0.5), vec3(0.0), vec3(1.0))"]:
 		_dire(s.contains(morceau), "le shader : « %s »" % morceau)
+	# ⚠ LES FILS CLAIRS (21 octobre 2026) : poussé le long de sa normale, le passage se rétractait d'un cheveu sur chaque pli
+	# et la tuile native transparaissait. Il est tiré le long du rayon de vue ; jamais plus poussé le long de la normale.
+	_dire(not s.contains("VERTEX += NORMAL") and not s.contains("VERTEX +="),
+		"le passage n'est plus poussé le long de sa normale (les fils clairs le long des joints)")
 	var sh := Shader.new()
 	sh.code = s
 	_dire(sh.get_mode() == Shader.MODE_SPATIAL, "le shader se lit (mode spatial)")
@@ -273,6 +296,28 @@ func _le_shader() -> void:
 	_dire(img.get_pixel(2, 0).r > 0.5 and absf(img.get_pixel(2, 0).g - 0.2) < 1e-6,
 		"… et « 0 couvre 1 » (l'id 1) au texel (2·1, 0), sa largeur 0,2")
 	_dire(absf(img.get_pixel(3, 0).r - 0.1) < 1e-6, "… son creux au texel (2·1 + 1, 0)")
+	# ⚠ LES 255 COUCHES (21 octobre 2026) : la table et les représentants ont le NOMBRE RÉEL de couches.
+	var rangs22 := {}
+	for k in 22:
+		rangs22[str(k + 1)] = k
+	var t22 := TR.table({"17|22": {"actif": true, "couvre": {"17": {"largeur": 0.3}, "22": {"largeur": 0.7}}}}, rangs22)
+	_dire(t22.has("16|21") and t22.has("21|16"), "une paire de rangs 16 et 21 a ses deux directions (%s)" % [t22.keys()])
+	rendu.poser_table(t22)
+	var img22: Image = (rendu.materiau.get_shader_parameter("table") as Texture2D).get_image()
+	_dire(img22.get_width() == 44 and img22.get_height() == 22, "la table de 22 couches : 44 × 22 (%d × %d)"
+		% [img22.get_width(), img22.get_height()])
+	_dire(img22.get_pixel(2 * 21, 16).r > 0.5 and absf(img22.get_pixel(2 * 21, 16).g - 0.3) < 1e-6
+		and absf(img22.get_pixel(2 * 16, 21).g - 0.7) < 1e-6, "« 16 couvre 21 » au texel (42, 16), « 21 couvre 16 » au (32, 21)")
+	var reps: Array = []
+	for k in 22:
+		reps.append({"image": null, "couleur": Color(k / 21.0, 0.5, 0.25), "echelle": 1.0 + k, "rugosite": 0.5})
+	rendu.poser_representants(reps)
+	var arr: Texture2DArray = rendu.materiau.get_shader_parameter("representants")
+	var prm: Image = (rendu.materiau.get_shader_parameter("rep_params") as Texture2D).get_image()
+	_dire(arr.get_layers() == 22 and prm.get_width() == 22, "22 représentants : 22 tranches, 22 réglages (%d, %d)"
+		% [arr.get_layers(), prm.get_width()])
+	_dire(absf(prm.get_pixel(21, 0).r - 1.0) < 1e-6 and absf(prm.get_pixel(21, 1).r - 22.0) < 1e-6,
+		"le représentant de rang 21 : sa couleur et son échelle à la colonne 21")
 	_finies += 1
 
 

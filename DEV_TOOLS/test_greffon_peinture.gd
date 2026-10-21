@@ -713,7 +713,7 @@ func _cas_d_outil(c: Dictionary, monde: Dictionary) -> String:
 # ── 4 ter. LA PARITÉ (7 octobre 2026) : les cinq fichiers de cas communs, passés par le greffon ──────
 # ⚠ **UN BANC QUI RENCONTRE UNE SORTE INCONNUE ROUGIT** (PARITE.md §11) : rien n'est sauté en silence. Et le nombre de
 # cas de chaque fichier est vérifié : un fichier tronqué ne passerait pas pour vert.
-const PARITE := {"transitions": 93, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 23}
+const PARITE := {"transitions": 96, "animation": 44, "foliage": 59, "water": 25, "editing": 63, "water_mesh": 23}
 ## ⚠ LIVRÉS, PAS ENCORE REJOUÉS PAR LE GREFFON GODOT : un fichier livré et jamais rejoué ne doit pas passer pour vert.
 ## `water_mesh` en est sorti le 7 octobre 2026 (branche `eau-godot`) : `mb_water_mesh.gd` maille la nappe, ses cas (14,
 ## puis 15 avec « deux rivières au même endroit », branche `cas-eau`) sont rejoués en SAC DE TRIANGLES (`eau_sac.gd`,
@@ -837,11 +837,13 @@ func _cas_de_parite(fichier: String, f: Dictionary, c: Dictionary) -> String:
 			for z in n.z:
 				for y in n.y:
 					for x in n.x:
-						var b: int = (d["bytes"] as PackedByteArray)[(z * n.y + y) * n.x + x]
-						if b != 0:
-							octets.append([x, y, z, b])
+						var ix := (z * n.y + y) * n.x + x
+						var r: int = (d["bytes"] as PackedByteArray)[2 * ix]
+						var g: int = (d["bytes"] as PackedByteArray)[2 * ix + 1]
+						if r != 0 or g != 0:
+							octets.append([x, y, z, r, g])
 			var o: Vector3i = d["origin"]
-			return _proche({"origin": [o.x, o.y, o.z], "size": [n.x, n.y, n.z], "bytes": octets}, e, tol)
+			return _proche({"origin": [o.x, o.y, o.z], "size": [n.x, n.y, n.z], "texels": octets}, e, tol)
 		"transitions/read":
 			var r := Trans.read(i)
 			return _proche({"error": true} if r.has("error") else r["transitions"], e, tol)

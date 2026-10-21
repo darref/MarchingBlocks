@@ -69,16 +69,17 @@ namespace MarchingBlocks.Paint.Tests
                         var ex = (Dictionary<string, object>)e;
                         if (!origin.Equals(Vec(ex["origin"])) || !size.Equals(Vec(ex["size"])))
                             return $"origin {origin} size {size}, expected {Vec(ex["origin"])} {Vec(ex["size"])}";
-                        // Only the non-zero bytes are listed, in the texture's own order.
+                        // Only the texels with a non-zero byte are listed, [x, y, z, R, G], in the texture's own order.
                         var got = new List<object>();
                         for (int z = 0; z < size.z; z++)
                             for (int y = 0; y < size.y; y++)
                                 for (int x = 0; x < size.x; x++)
                                 {
-                                    byte b = bytes[((long)z * size.y + y) * size.x + x];
-                                    if (b != 0) got.Add(new List<object> { (long)x, (long)y, (long)z, (long)b });
+                                    long t = ((long)z * size.y + y) * size.x + x;
+                                    byte r = bytes[2 * t], g = bytes[2 * t + 1];
+                                    if (r != 0 || g != 0) got.Add(new List<object> { (long)x, (long)y, (long)z, (long)r, (long)g });
                                 }
-                        return SameJson("bytes", got, ex["bytes"]);
+                        return SameJson("texels", got, ex["texels"]);
                     }
                     case "read":
                     {

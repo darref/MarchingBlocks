@@ -30,10 +30,13 @@ extends RefCounted
 ##     votes. Les deux surfaces qui se rencontrent disent donc la même chose au même point.
 ## `melange` est cette règle en GDScript (les tests la jugent) ; le shader la dit à la lettre.
 ## ⚠ UNE PAIRE ÉTEINTE NE CHANGE RIEN : sans aucune paire active, le passage n'est même pas posé.
-## ⚠ AU PLUS 15 COUCHES (`MAXI`) : le rang et le choix tiennent chacun dans quatre bits d'un octet (la texture). Au-delà,
-## rien.
+## ⚠ AU PLUS 255 COUCHES (`MAXI`) — DÉCIDÉ (Jordan, 21 octobre 2026 : « Change ») : la texture des cases porte DEUX octets
+## par case (rang + 1 dans R, rang choisi + 1 dans G). Jusque-là, rang et choix tenaient chacun dans un quartet d'un seul
+## octet : seules les couches 0 à 14 se fondaient, et une île de plus de 15 couches (Satyron : 22) gardait forcément des
+## bords en carrés. 255 = ce qu'un octet dit en plus du vide, et le minimum garanti de couches d'un Texture2DArray sous
+## Vulkan (`maxImageArrayLayers` ≥ 256) : la table et les représentants se dimensionnent sur le NOMBRE RÉEL de couches.
 
-const MAXI := 15
+const MAXI := 255
 
 ## Les réglages d'une direction (quand une couche couvre l'autre), et leurs bornes. PROPOSÉS, à juger à l'œil :
 ##   largeur  : la largeur du fondu (0 : une frontière nette, 1 : un dégradé sur toute la bande) ;
@@ -183,12 +186,13 @@ static func table(paires: Dictionary, rang_de: Dictionary) -> Dictionary:
 
 
 # ── LA TEXTURE DES CASES ──────────────────────────────────────────────────────────────────────────────
-## UN octet par case, sur la boîte de l'union élargie de `MARGE` : ses quatre bits bas = rang + 1 de sa couche (0 : vide),
-## ses quatre bits hauts = rang + 1 de la couche choisie pour couvrir au COIN de même indice (0 : la priorité). Le texel
-## (x, y, z) est la case origine + (x, y, z).
-## Un seul canal : deux fois moins de mémoire que deux octets par case (~10 Mo sur l'exemple au lieu de ~20).
-## ⚠ UNE FAUSSE PISTE, À NE PAS REPRENDRE : on a cru que la carte ne lisait pas le canal G d'une texture RG8 — la capture
-## peignait des sommets ENFOUIS sous un bloc, invisibles quoi que fasse le shader. Rien n'a été mesuré contre RG8.
+## DEUX octets par case (RG8, 21 octobre 2026), sur la boîte de l'union élargie de `MARGE` : R = rang + 1 de sa couche
+## (0 : vide), G = rang + 1 de la couche choisie pour couvrir au COIN de même indice (0 : la priorité). Le texel
+## (x, y, z) est la case origine + (x, y, z) ; ses octets sont 2·i (R) et 2·i + 1 (G), i = `indice`.
+## Le prix : deux fois la mémoire de l'ancien octet unique (~20 Mo sur l'exemple au lieu de ~10) — celui de lever la
+## limite des 15 couches.
+## ⚠ (Avant le 21 octobre, une fausse piste : on avait cru que la carte ne lisait pas le canal G d'une texture RG8 — la
+## capture peignait des sommets ENFOUIS sous un bloc. Le canal G se lit : mesuré depuis, à l'image.)
 
 const MARGE := 6
 
@@ -205,32 +209,32 @@ static func construire(union: Dictionary, choix: Dictionary) -> Dictionary:
 	var origine := mini - Vector3i.ONE * MARGE
 	var taille := maxi - mini + Vector3i.ONE * (2 * MARGE + 1)
 	var o := PackedByteArray()
-	o.resize(taille.x * taille.y * taille.z)
+	o.resize(2 * taille.x * taille.y * taille.z)
 	var d := {"origine": origine, "taille": taille, "octets": PackedByteArray()}
 	for c in union:
-		o[indice(d, c)] = _quartet(int(union[c]))
+		o[2 * indice(d, c)] = _octet(int(union[c]))
 	for s in choix:
 		var i := indice(d, s)
 		if i >= 0:
-			o[i] = (o[i] & 0x0F) | (_quartet(int(choix[s])) << 4)
+			o[2 * i + 1] = _octet(int(choix[s]))
 	d["octets"] = o
 	return d
 
 
 ## rang + 1, ou 0 (vide, ou une couche au-delà de `MAXI`).
-static func _quartet(rang: int) -> int:
+static func _octet(rang: int) -> int:
 	return rang + 1 if rang >= 0 and rang < MAXI else 0
 
 
 ## Ce que la texture dit d'une case : son rang (−1 : vide), et le rang choisi pour couvrir à ce coin (−1 : la priorité).
 static func rang_lu(d: Dictionary, c: Vector3i) -> int:
 	var i := indice(d, c)
-	return ((d["octets"] as PackedByteArray)[i] & 0x0F) - 1 if i >= 0 else -1
+	return (d["octets"] as PackedByteArray)[2 * i] - 1 if i >= 0 else -1
 
 
 static func choix_lu(d: Dictionary, c: Vector3i) -> int:
 	var i := indice(d, c)
-	return ((d["octets"] as PackedByteArray)[i] >> 4) - 1 if i >= 0 else -1
+	return (d["octets"] as PackedByteArray)[2 * i + 1] - 1 if i >= 0 else -1
 
 
 static func indice(d: Dictionary, c: Vector3i) -> int:
@@ -259,7 +263,7 @@ static func _poser(d: Dictionary, c: Vector3i, rang: int, canal: int) -> bool:
 		return rang < 0
 	var o: PackedByteArray = d["octets"]
 	d["octets"] = PackedByteArray()
-	o[i] = (o[i] & 0xF0) | _quartet(rang) if canal == 0 else (o[i] & 0x0F) | (_quartet(rang) << 4)
+	o[2 * i + canal] = _octet(rang)
 	d["octets"] = o
 	return true
 
@@ -267,21 +271,27 @@ static func _poser(d: Dictionary, c: Vector3i, rang: int, canal: int) -> bool:
 ## Les tranches de la texture (une Image par z), comme les attend `ImageTexture3D`.
 static func tranches(d: Dictionary, seulement: Dictionary = {}, avant: Array = []) -> Array[Image]:
 	var n: Vector3i = d["taille"]
-	var par := n.x * n.y
+	var par := 2 * n.x * n.y
 	var sortie: Array[Image] = []
 	for z in n.z:
 		if not seulement.is_empty() and not seulement.has(z) and z < avant.size():
 			sortie.append(avant[z])
 			continue
-		sortie.append(Image.create_from_data(n.x, n.y, false, Image.FORMAT_R8,
+		sortie.append(Image.create_from_data(n.x, n.y, false, Image.FORMAT_RG8,
 			(d["octets"] as PackedByteArray).slice(z * par, (z + 1) * par)))
 	return sortie
 
 
 # ── LE SHADER ────────────────────────────────────────────────────────────────────────────────────────
 ## Le passage posé PAR-DESSUS les matériaux des tuiles (`next_pass`) : il ne dessine que l'aspect de l'autre couche, en
-## transparence, là où la règle le demande, et jette tout le reste. ⚠ LE SOMMET EST POUSSÉ DE 2 MILLIÈMES LE LONG DE SA
-## NORMALE : deux passages sur la même géométrie peuvent ne pas calculer la même profondeur au bit près.
+## transparence, là où la règle le demande, et jette tout le reste. ⚠ LE SOMMET EST TIRÉ VERS LA CAMÉRA, LE LONG DE SON
+## RAYON DE VUE (2/10 000 de sa distance ; 2 millièmes de mètre en orthographique) : deux passages sur la même géométrie
+## peuvent ne pas calculer la même profondeur au bit près, et le tirer le long du rayon ne le déplace pas À L'ÉCRAN.
+## ⚠ PAS LE LONG DE SA NORMALE (jusqu'au 21 octobre 2026 : `VERTEX += NORMAL * 0.002`) : sur un pli (le bord d'une
+## falaise, le joint de deux tuiles dont les normales lissées divergent), le passage poussé se rétractait d'un cheveu et
+## la tuile native transparaissait — les « FILS CLAIRS » le long de certains joints (Satyron, The Ruin, vus le 21 octobre
+## 2026 ; 30 millièmes les épaississaient, le tirage le long du rayon les efface). Le point de la règle (`p_monde`) est
+## celui de la VRAIE surface.
 
 const SHADER := """
 shader_type spatial;
@@ -292,9 +302,9 @@ uniform ivec3 origine;
 uniform ivec3 taille;
 uniform sampler2D table : filter_nearest, repeat_disable;
 uniform sampler2DArray representants : source_color, filter_linear_mipmap, repeat_enable;
-uniform vec4 rep_couleur[15];
-uniform float rep_echelle[15];
-uniform float rep_rugosite[15];
+// Les réglages des représentants (21 octobre 2026, au lieu de trois tableaux de 15) : (k, 0) la couleur de la couche k,
+// (k, 1) x l'échelle, y la rugosité — une texture, comme dans Unity et Unreal, dimensionnée sur le nombre de couches.
+uniform sampler2D rep_params : filter_nearest, repeat_disable;
 uniform bool montrer_choix = false;
 
 varying vec3 p_monde;
@@ -302,10 +312,16 @@ varying vec3 n_monde;
 varying flat vec3 centre;
 
 void vertex() {
-	VERTEX += NORMAL * 0.002;
 	p_monde = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	n_monde = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	centre = MODEL_MATRIX[3].xyz;
+	vec4 vue = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
+	if (PROJECTION_MATRIX[3][3] == 0.0) {
+		vue.xyz *= 1.0 - 2e-4;
+	} else {
+		vue.z += 0.002;
+	}
+	POSITION = PROJECTION_MATRIX * vue;
 }
 
 float hache(vec3 p) {
@@ -325,11 +341,11 @@ float bruit3(vec3 x) {
 vec4 aspect(int k, vec3 p, vec3 n) {
 	vec3 w = pow(abs(n), vec3(4.0));
 	w /= (w.x + w.y + w.z);
-	float e = max(rep_echelle[k], 0.01);
+	float e = max(texelFetch(rep_params, ivec2(k, 1), 0).x, 0.01);
 	vec4 c = texture(representants, vec3(p.zy / e, float(k))) * w.x
 		+ texture(representants, vec3(p.xz / e, float(k))) * w.y
 		+ texture(representants, vec3(p.xy / e, float(k))) * w.z;
-	return c * rep_couleur[k];
+	return c * texelFetch(rep_params, ivec2(k, 0), 0);
 }
 
 float visible(vec4 p1, vec4 p2, float s_c, float h, float n) {
@@ -342,8 +358,8 @@ int rang_en(ivec3 c, int canal) {
 	if (t.x < 0 || t.y < 0 || t.z < 0 || t.x >= taille.x || t.y >= taille.y || t.z >= taille.z) {
 		return -1;
 	}
-	int v = int(round(texelFetch(cases, t, 0).r * 255.0));
-	return (canal == 0 ? (v & 15) : (v >> 4)) - 1;
+	vec4 v = texelFetch(cases, t, 0);
+	return int(round((canal == 0 ? v.r : v.g) * 255.0)) - 1;
 }
 
 void fragment() {
@@ -388,7 +404,9 @@ void fragment() {
 			}
 		}
 	}
-	if (autre < 0) {
+	// ⚠ LA TABLE A LE NOMBRE RÉEL DE COUCHES (2·N × N) : un rang hors d'elle ne se fond pas (un texelFetch hors de la
+	// texture n'est pas défini).
+	if (autre < 0 || max(proprio, autre) >= textureSize(table, 0).y) {
 		discard;
 	}
 	vec4 ao1 = texelFetch(table, ivec2(2 * proprio, autre), 0);
@@ -424,7 +442,7 @@ void fragment() {
 		couleur = mix(couleur, vec3(1.0, 0.85, 0.2), 0.35);
 	}
 	ALBEDO = couleur;
-	ROUGHNESS = rep_rugosite[autre];
+	ROUGHNESS = texelFetch(rep_params, ivec2(autre, 1), 0).y;
 	ALPHA = a;
 }
 """

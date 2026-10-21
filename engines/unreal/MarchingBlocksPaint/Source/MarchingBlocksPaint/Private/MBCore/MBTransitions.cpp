@@ -49,7 +49,7 @@ namespace MBPaint
 			return TrnSmoothstep(0.5 - R.Softness * 0.5, 0.5 + R.Softness * 0.5, SC + Shift);
 		}
 
-		int TrnNibble(int Rank) { return Rank >= 0 && Rank < Transitions::LayersMax ? Rank + 1 : 0; }
+		uint8_t TrnByte(int Rank) { return static_cast<uint8_t>(Rank >= 0 && Rank < Transitions::LayersMax ? Rank + 1 : 0); }
 
 		bool TrnLess(const FCell& A, const FCell& B) { return A < B; }
 	}
@@ -272,14 +272,13 @@ namespace MBPaint
 			}
 			D.Origin = Lo - FCell(Margin, Margin, Margin);
 			D.Size = Hi - Lo + FCell(2 * Margin + 1, 2 * Margin + 1, 2 * Margin + 1);
-			D.Bytes.assign(static_cast<size_t>(D.Size.X) * static_cast<size_t>(D.Size.Y) * static_cast<size_t>(D.Size.Z), 0);
-			for (const auto& C : Cells) D.Bytes[static_cast<size_t>(D.IndexOf(C.first))] = static_cast<uint8_t>(TrnNibble(C.second));
+			D.Bytes.assign(2 * static_cast<size_t>(D.Size.X) * static_cast<size_t>(D.Size.Y) * static_cast<size_t>(D.Size.Z), 0);
+			for (const auto& C : Cells) D.Bytes[2 * static_cast<size_t>(D.IndexOf(C.first))] = TrnByte(C.second);
 			for (const auto& C : Choices)
 			{
 				const int64_t I = D.IndexOf(C.first);
 				if (I < 0) continue;
-				uint8_t& B = D.Bytes[static_cast<size_t>(I)];
-				B = static_cast<uint8_t>((B & 0x0F) | (TrnNibble(C.second) << 4));
+				D.Bytes[2 * static_cast<size_t>(I) + 1] = TrnByte(C.second);
 			}
 			return D;
 		}

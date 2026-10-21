@@ -30,7 +30,7 @@ func reconstruire(union: Dictionary, choix: Dictionary) -> void:
 	_tranches = TR.tranches(donnees)
 	_texture_cases = ImageTexture3D.new()
 	var n: Vector3i = donnees["taille"]
-	_texture_cases.create(Image.FORMAT_R8, n.x, n.y, n.z, false, _tranches)
+	_texture_cases.create(Image.FORMAT_RG8, n.x, n.y, n.z, false, _tranches)
 	materiau.set_shader_parameter("cases", _texture_cases)
 	materiau.set_shader_parameter("origine", donnees["origine"])
 	materiau.set_shader_parameter("taille", n)
@@ -63,29 +63,38 @@ func envoyer() -> void:
 	_texture_cases.update(_tranches)
 	_sales = {}
 
-## La table des réglages (32 × 16, flottants) : au texel (2·D, C) actif, largeur, avance, bruit ; à (2·D+1, C) creux,
-## grain — quand C couvre D.
+## La table des réglages (2·N × N flottants, N = le plus grand rang de la table + 1, au plus `TR.MAXI` : 21 octobre 2026 —
+## elle était de 30 × 15 quoi qu'il arrive) : au texel (2·D, C) actif, largeur, avance, bruit ; à (2·D+1, C) creux,
+## grain — quand C couvre D. Le shader ne fond pas un rang hors d'elle.
 func poser_table(t: Dictionary) -> void:
-	var img := Image.create_empty(2 * TR.MAXI, TR.MAXI, false, Image.FORMAT_RGBAF)
+	var n := 1
+	for cle in t:
+		for r in String(cle).split("|"):
+			n = maxi(n, int(r) + 1)
+	n = mini(n, TR.MAXI)
+	var img := Image.create_empty(2 * n, n, false, Image.FORMAT_RGBAF)
 	for cle in t:
 		var cd: PackedStringArray = String(cle).split("|")
 		var c := int(cd[0])
 		var d := int(cd[1])
+		if c >= n or d >= n:
+			continue
 		var rg: Dictionary = t[cle]
 		img.set_pixel(2 * d, c, Color(1.0, rg["largeur"], rg["avance"], rg["bruit"]))
 		img.set_pixel(2 * d + 1, c, Color(rg["creux"], rg["grain"], 0.0, 0.0))
-	# 32 × 16 texels : une texture neuve à chaque fois (`ImageTexture.update` ne garde pas l'image en headless, et rien ne
-	# le justifierait à cette taille).
+	# Au plus 510 × 255 texels (2 Mo) : une texture neuve à chaque fois (`ImageTexture.update` ne garde pas l'image en
+	# headless, et la taille change avec le nombre de couches).
 	_texture_table = ImageTexture.create_from_image(img)
 	materiau.set_shader_parameter("table", _texture_table)
 
-## Les représentants, par rang : [{image: Image ou null, couleur, echelle, rugosite}] (au plus `TR.MAXI`).
+## Les représentants, par rang : [{image: Image ou null, couleur, echelle, rugosite}] — UNE TRANCHE PAR COUCHE RÉELLE (au
+## plus `TR.MAXI`) (21 octobre 2026 : 15 tranches quoi qu'il arrive jusque-là). Une tranche de 256² RGBA8 et ses mipmaps : ~350 Ko ;
+## 22 couches ~7,7 Mo, 255 couches ~89 Mo (le pire).
 func poser_representants(liste: Array) -> void:
 	var images: Array[Image] = []
-	var couleurs := PackedColorArray()
-	var echelles := PackedFloat32Array()
-	var rugosites := PackedFloat32Array()
-	for k in TR.MAXI:
+	var n := clampi(liste.size(), 1, TR.MAXI)
+	var params := Image.create_empty(n, 2, false, Image.FORMAT_RGBAF)
+	for k in n:
 		var d: Dictionary = liste[k] if k < liste.size() else {}
 		var img: Image = null
 		if d.get("image") is Image:
@@ -99,12 +108,9 @@ func poser_representants(liste: Array) -> void:
 			img.fill(Color.WHITE)
 		img.generate_mipmaps()
 		images.append(img)
-		couleurs.append(d.get("couleur", Color.WHITE))
-		echelles.append(float(d.get("echelle", 1.0)))
-		rugosites.append(float(d.get("rugosite", 0.8)))
+		params.set_pixel(k, 0, d.get("couleur", Color.WHITE))
+		params.set_pixel(k, 1, Color(float(d.get("echelle", 1.0)), float(d.get("rugosite", 0.8)), 0.0, 0.0))
 	_representants = Texture2DArray.new()
 	_representants.create_from_images(images)
 	materiau.set_shader_parameter("representants", _representants)
-	materiau.set_shader_parameter("rep_couleur", couleurs)
-	materiau.set_shader_parameter("rep_echelle", echelles)
-	materiau.set_shader_parameter("rep_rugosite", rugosites)
+	materiau.set_shader_parameter("rep_params", ImageTexture.create_from_image(params))

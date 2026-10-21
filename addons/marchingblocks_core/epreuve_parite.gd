@@ -189,6 +189,12 @@ static func _transitions() -> Dictionary:
 	cas.append(_cas_melange("a tie between two other layers: the first corner wins", [0, 2, 1, 0, 0, 2, 1, 0],
 		Vector3(0.5, 0.5, 0.5), aucun, {"0|1": _rg(), "1|0": _rg(), "0|2": _rg(0.8, -0.4), "2|0": _rg(0.8, 0.4)}, {},
 		0.5))
+	# ⚠ LES 255 COUCHES (21 octobre 2026) : deux couches de rang ≥ 15 se fondent, le choix au pinceau compris.
+	cas.append(_cas_melange("ranks beyond the 15th blend (16 and 21, the brush chose 21)", [16, 21, 16, 21, 16, 21, 16, 21],
+		Vector3(0.375, 0.5, 0.5), [21, -1, 21, -1, -1, 21, -1, -1], {"16|21": _rg(0.3, 0.2), "21|16": _rg(0.6, -0.1)},
+		{16: 0.3, 21: 0.8}, 0.5))
+	cas.append(_cas_melange("the highest ranks (253 and 254)", [253, 254, 254, 253, 253, 254, -1, 253],
+		Vector3(0.5, 0.25, 0.75), aucun, {"253|254": _rg(0.5, 0.1), "254|253": _rg(0.4, -0.1)}, {}, 0.25))
 	# En nombre : des huit coins, des points, des choix, des tables et des bruits tirés par le générateur écrit.
 	var g := _Lcg.new(20261007)
 	for i in 48:
@@ -226,8 +232,13 @@ static func _transitions() -> Dictionary:
 		["two pairs, one off", 4, [{"a": 0, "b": 1, "active": true, "a_covers_b": _rg(0.2), "b_covers_a": _rg(0.4)},
 			{"a": 2, "b": 3, "active": false, "a_covers_b": _rg(), "b_covers_a": _rg()},
 			{"a": 1, "b": 3, "active": true, "a_covers_b": _rg(0.6, -0.1), "b_covers_a": _rg(0.8, 0.1)}]],
-		["a layer beyond the 15th blends nothing", 17, [{"a": 2, "b": 15, "active": true, "a_covers_b": _rg(),
-			"b_covers_a": _rg()}, {"a": 13, "b": 14, "active": true, "a_covers_b": _rg(0.5), "b_covers_a": _rg(0.6)}]],
+		# ⚠ LES 255 COUCHES (Jordan, 21 octobre 2026) : jusque-là, « a layer beyond the 15th blends nothing ».
+		["layers beyond the 15th blend (22 layers, Satyron's palette)", 22, [{"a": 2, "b": 15, "active": true,
+			"a_covers_b": _rg(), "b_covers_a": _rg()}, {"a": 13, "b": 14, "active": true, "a_covers_b": _rg(0.5),
+			"b_covers_a": _rg(0.6)}, {"a": 16, "b": 21, "active": true, "a_covers_b": _rg(0.3, 0.1),
+			"b_covers_a": _rg(0.7, -0.2)}]],
+		["a layer beyond the 255th blends nothing", 257, [{"a": 2, "b": 255, "active": true, "a_covers_b": _rg(),
+			"b_covers_a": _rg()}, {"a": 200, "b": 254, "active": true, "a_covers_b": _rg(0.4), "b_covers_a": _rg(0.9)}]],
 	]
 	for e in paires_tables:
 		var p_fr := {}
@@ -244,10 +255,13 @@ static func _transitions() -> Dictionary:
 		cas.append({"name": "table: " + e[0], "kind": "table", "input": {"layers": e[1], "pairs": e[2]},
 			"expected": t_en})
 
-	# ── cell_texture : l'empaquetage RECOMMANDÉ (un octet par case : rang + 1 en bas, choix + 1 en haut)
-	var union := {Vector3i(0, 0, 0): 0, Vector3i(1, 0, 0): 1, Vector3i(-3, 2, 5): 14, Vector3i(2, -1, 0): 15}
-	# ⚠ UN CHOIX AU-DELÀ DE LA 15e AUSSI (greffon Unity, 7 octobre 2026) : sans lui, un quartet haut non borné passait muet.
-	var choix_t := {Vector3i(0, 0, 0): 1, Vector3i(1, 0, 0): 0, Vector3i(40, 40, 40): 1, Vector3i(-3, 2, 5): 16}
+	# ── cell_texture : l'empaquetage RECOMMANDÉ (DEUX octets par case depuis le 21 octobre 2026 : rang + 1 dans R, choix
+	# + 1 dans G). Des rangs et des choix au-delà de la 15e couche (qui se fondent), et au-delà de la 255e (qui n'entrent pas).
+	var union := {Vector3i(0, 0, 0): 0, Vector3i(1, 0, 0): 1, Vector3i(-3, 2, 5): 14, Vector3i(2, -1, 0): 15,
+		Vector3i(0, 1, 0): 21, Vector3i(1, 1, 0): 254, Vector3i(-1, 0, 0): 255}
+	# ⚠ UN CHOIX AU-DELÀ DE LA 15e AUSSI (greffon Unity, 7 octobre 2026) : sans lui, un octet G non borné passait muet.
+	var choix_t := {Vector3i(0, 0, 0): 1, Vector3i(1, 0, 0): 0, Vector3i(40, 40, 40): 1, Vector3i(-3, 2, 5): 16,
+		Vector3i(2, -1, 0): 200, Vector3i(0, 1, 0): 255}
 	var d := TR.construire(union, choix_t)
 	var octets: Array = []
 	var o: PackedByteArray = d["octets"]
@@ -255,19 +269,19 @@ static func _transitions() -> Dictionary:
 	for z in n.z:
 		for y in n.y:
 			for x in n.x:
-				var b := o[(z * n.y + y) * n.x + x]
-				if b != 0:
-					octets.append([x, y, z, b])
+				var i := (z * n.y + y) * n.x + x
+				if o[2 * i] != 0 or o[2 * i + 1] != 0:
+					octets.append([x, y, z, o[2 * i], o[2 * i + 1]])
 	var u_en: Array = []
 	for c in union:
 		u_en.append([c.x, c.y, c.z, union[c]])
 	var c_en: Array = []
 	for c in choix_t:
 		c_en.append([c.x, c.y, c.z, choix_t[c]])
-	cas.append({"name": "cell_texture: ranks, a layer beyond the 15th, a choice outside the box, a choice beyond the 15th",
-		"kind": "cell_texture",
+	cas.append({"name": "cell_texture: ranks and choices beyond the 15th, a choice outside the box, a layer and a choice"
+		+ " beyond the 255th", "kind": "cell_texture",
 		"input": {"cells": u_en, "choices": c_en}, "expected": {"origin": _v(d["origine"]), "size": _v(n),
-		"bytes": octets}})
+		"texels": octets}})
 
 	# ── read : la clé `transitions` de world.json
 	cas.append_array(_lectures_transitions())
@@ -277,10 +291,14 @@ static func _transitions() -> Dictionary:
 			"h {rank: luminance of its representative at p, 0.5 when absent}, n; expected {} (nothing drawn) or {owner,",
 			"other, s, vote, alpha}. settings: read one direction's settings. table: from world.json pairs to the active",
 			"directions. cell_texture: the RECOMMENDED packing (what the app's shader reads; an engine may store the same",
-			"facts otherwise): one byte per cell over the box of the cells grown by %d, low nibble rank + 1 (0 empty or" % TR.MARGE,
-			"rank >= 15), high nibble chosen rank + 1 at that vertex (0 none); a choice outside the box is dropped; only",
-			"non-zero bytes are listed, at texel (x, y, z) = cell - origin. read: world.json in, the normalized transitions",
-			"out, or {\"error\": true} (the reason is free)."],
+			"facts otherwise): TWO bytes per cell (an RG8 texture) over the box of the cells grown by %d, R = rank + 1"
+				% TR.MARGE,
+			"(0 empty or rank >= %d), G = chosen rank + 1 at that vertex (0 none, or rank >= %d); a choice outside the box"
+				% [TR.MAXI, TR.MAXI],
+			"is dropped; only texels with a non-zero byte are listed, as [x, y, z, R, G] at texel (x, y, z) = cell - origin",
+			"(byte 2 i is R, 2 i + 1 is G, i = (z size.y + y) size.x + x). The table and the representatives are sized on",
+			"the world's number of layers (at most %d), not on a constant. read: world.json in, the normalized" % TR.MAXI,
+			"transitions out, or {\"error\": true} (the reason is free)."],
 		"limits": {"layers_max": TR.MAXI, "margin": TR.MARGE},
 		"settings": {"defaults": TR.reglages_en({}), "bounds": _bornes_en()},
 		"cases": cas}

@@ -122,7 +122,7 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
 - **Lire** `transitions` : `pairs` [{`a` < `b` (indices de couches), `active`, `a_covers_b`, `b_covers_a`}],
   `representatives` (un par couche : `image` relative ou null, `color` [r, g, b, a] qui multiplie l'image TELLE QUELLE,
   `scale` ≥ 0,01, `roughness`), `choices` (x y z L à plat). Réglages : `softness`, `reach`, `irregularity`, `grain`,
-  `fills_hollows` (absent → défaut, hors bornes → borné). Seules les couches 0 à 14 se mêlent.
+  `fills_hollows` (absent → défaut, hors bornes → borné). Les couches 0 à 254 se mêlent (0 à 14 seulement avant le 21 octobre 2026 : voir « Les 255 couches » ci-dessous).
 - **L'export** convertit les ids de l'écran en INDICES de `layers` (une paire « 3|7 » dont 7 est avant 3 échange ses
   directions — gardé par `test_parite`), et part avec des représentants **RÉSOLUS** : le défaut « le matériau le plus
   porté par les faces du témoin » demande le témoin, que le greffon n'a pas.
@@ -130,14 +130,23 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   sommet v, les huit cases, la propriétaire (plus petit rang), l'autre (la plus grande part, départagée par l'ordre des
   coins), s, les votes du pinceau, `visible()` dont le décalage est nul aux deux bouts, alpha. **Le sommet v est celui
   de la TUILE**, jamais déduit du point (sur un joint, le point appartient à deux tuiles — vu à l'image dans l'appli).
-- **Le rendu, par moteur** : une texture 3D d'un octet par case (l'empaquetage RECOMMANDÉ, cas `cell_texture`), la
-  table des réglages, les représentants projetés en boîte, posés PAR-DESSUS les matériaux des tuiles. Godot : le même
+- **Le rendu, par moteur** : une texture 3D de DEUX octets par case (RG8 : rang + 1 dans R, choix + 1 dans G ;
+  l'empaquetage RECOMMANDÉ, cas `cell_texture`), la table des réglages (2N × N, N le nombre réel de couches), les
+  représentants projetés en boîte (une tranche et une colonne de réglages par couche), posés PAR-DESSUS les matériaux des tuiles. Godot : le même
   `next_pass` que l'appli (⚠ dans une MultiMesh, la `MODEL_MATRIX` de `fragment()` n'a pas la pose de l'instance : le
   sommet se lit dans `vertex()`). Unity et Unreal : voir §9.
 - ⚠ **Écart connu, non tranché** : le GDScript emploie UN bruit n pour les deux directions ; le shader en tire un par
   direction (grain de chaque direction). Les cas donnent n ; un moteur suit le shader pour l'image.
-- **Les cas** : 65 `blend` (17 écrits pour un point de la règle chacun, 48 générés), `settings`, `table`, `cell_texture`,
-  19 `read` (2 acceptés, 17 refus).
+- **Les cas** : 67 `blend` (19 écrits pour un point de la règle chacun, 48 générés), `settings`, 5 `table`, `cell_texture`,
+  19 `read` (2 acceptés, 17 refus) — 96 en tout.
+- **LES 255 COUCHES — DÉCIDÉ (Jordan, 21 octobre 2026 : « Change »)** : le rang et le choix tenaient chacun dans un
+  quartet d'un octet, et seules les couches 0 à 14 se mêlaient (Satyron en a 22 : des bords en carrés forcés). Depuis :
+  deux octets par case (Godot `FORMAT_RG8`, Unity `TextureFormat.RG16`, Unreal `PF_R8G8`), `limits.layers_max` = 255, la
+  table et les représentants dimensionnés sur le nombre réel de couches, et le shader ne mêle pas un rang hors de la table
+  (`textureSize` / `GetDimensions`). `cell_texture` liste `texels` [x, y, z, R, G] (au lieu de `bytes`). Trois cas de
+  plus : deux `blend` (rangs 16 et 21, rangs 253 et 254), une `table` (au-delà de la 255e) ; « a layer beyond the 15th
+  blends nothing » est devenu « layers beyond the 15th blend ». MESURÉ : ces cas ROUGISSENT sur l'ancien code des trois
+  greffons (Godot, .NET, C++ : 4 à 6 échecs chacun), puis passent.
 
 ## 5. Les demandes du 3 octobre — FAIT (règles et cas) ; UI à écrire
 
@@ -214,7 +223,7 @@ faire cette conversion** — Unity (miroir X) et Unreal (Z en haut, centimètres
   `UnrealEditor-Cmd -ExecutePythonScript` pour l'import du monde) avec des nœuds Custom HLSL, ou les faire à la main par
   Jordan. L'« Overlay Material » (UE 5.1+) pose un matériau PAR-DESSUS tout un maillage — sur les
   `InstancedStaticMeshComponent`, NON MESURÉ ; « Object Position » d'une instance dans un matériau d'ISM : NON MESURÉ
-  (le même piège que la `MODEL_MATRIX` d'une MultiMesh dans Godot). La texture 3D : `UVolumeTexture` (R8), à mesurer.
+  (le même piège que la `MODEL_MATRIX` d'une MultiMesh dans Godot). La texture 3D : `UVolumeTexture` (R8, puis R8G8 depuis le 21 octobre 2026).
 - **Lire les extras glTF** : seulement Godot est mesuré (§1). Lire le JSON de `tiles.glb` soi-même lève le doute.
 - **Recalculer la NAPPE d'eau** : ses cas existent (§12) ; le COÛT est le risque — une grande mer en GDScript se compte
   en secondes (mesuré, §12) : jamais pendant un geste.

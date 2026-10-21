@@ -281,19 +281,23 @@ func _transitions(f: Dictionary) -> void:
 	for c in s.get("table", []):
 		var t := {}
 		for p in c["input"]["pairs"]:
-			if p["active"] and int(p["a"]) < 15 and int(p["b"]) < 15:
+			if p["active"] and int(p["a"]) < int(f["limits"]["layers_max"]) and int(p["b"]) < int(f["limits"]["layers_max"]):
 				t["%d|%d" % [p["a"], p["b"]]] = _reglage_lu(p["a_covers_b"])
 				t["%d|%d" % [p["b"], p["a"]]] = _reglage_lu(p["b_covers_a"])
 		_dire(_proche(t, c["expected"]), "la table relue depuis le texte : %s" % c["name"])
 	var tex: Dictionary = s["cell_texture"][0]["expected"]
-	# À la main : la case (1, 0, 0) de rang 1, choix 0 → 0x12 ; (0, 0, 0) rang 0, choix 1 → 0x21 ; la couche 15 : 0.
+	# À la main (DEUX octets par case, 21 octobre 2026) : la case (1, 0, 0) de rang 1, choix 0 → [2, 1] ; (0, 0, 0) rang 0,
+	# choix 1 → [1, 2] ; (-3, 2, 5) rang 14, choix 16 → [15, 17] ; (2, -1, 0) rang 15, choix 200 → [16, 201] ; (0, 1, 0)
+	# rang 21, choix 255 (au-delà) → [22, 0] ; (1, 1, 0) rang 254 → [255, 0] ; (-1, 0, 0) rang 255 (au-delà) : absente.
 	var octets := {}
-	for b in tex["bytes"]:
+	for b in tex["texels"]:
 		octets[Vector3i(int(b[0]), int(b[1]), int(b[2])) + Vector3i(int(tex["origin"][0]), int(tex["origin"][1]),
-			int(tex["origin"][2]))] = int(b[3])
-	_dire(octets.get(Vector3i(1, 0, 0)) == 0x12 and octets.get(Vector3i(0, 0, 0)) == 0x21 and octets.get(Vector3i(-3, 2, 5))
-		== 15 and not octets.has(Vector3i(2, -1, 0)) and octets.size() == 3,
-		"la texture des cases déroulée à la main (rang + 1 en bas, choix + 1 en haut, la 16e couche absente)")
+			int(tex["origin"][2]))] = [int(b[3]), int(b[4])]
+	_dire(octets.get(Vector3i(1, 0, 0)) == [2, 1] and octets.get(Vector3i(0, 0, 0)) == [1, 2]
+		and octets.get(Vector3i(-3, 2, 5)) == [15, 17] and octets.get(Vector3i(2, -1, 0)) == [16, 201]
+		and octets.get(Vector3i(0, 1, 0)) == [22, 0] and octets.get(Vector3i(1, 1, 0)) == [255, 0]
+		and not octets.has(Vector3i(-1, 0, 0)) and octets.size() == 6 and int(f["limits"]["layers_max"]) == 255,
+		"la texture des cases déroulée à la main (rang + 1 dans R, choix + 1 dans G, 16e à 255e couches présentes, 256e absente) : %s" % [octets])
 	_lectures(s.get("read", []), "transitions", 10)
 	_finies += 1
 

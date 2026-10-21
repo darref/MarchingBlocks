@@ -109,8 +109,8 @@ namespace MarchingBlocks.Paint
 
     public static class MBTransitions
     {
-        /// <summary>Only layers 0 to 14 blend.</summary>
-        public const int LayersMax = 15;
+        /// <summary>Layers 0 to 254 blend: a rank and a choice each fit in a byte of their own (two bytes per cell).</summary>
+        public const int LayersMax = 255;
         /// <summary>The cell texture is the box of the cells grown by this margin.</summary>
         public const int Margin = 6;
 
@@ -188,7 +188,7 @@ namespace MarchingBlocks.Paint
         }
 
         /// <summary>The ACTIVE directions of the pairs: (C, D) → the settings when C covers D. A pair with a layer
-        /// beyond the 15th blends nothing.</summary>
+        /// beyond the 255th blends nothing.</summary>
         public static Dictionary<(int, int), TransitionSettings> Table(IEnumerable<TransitionPair> pairs)
         {
             var t = new Dictionary<(int, int), TransitionSettings>();
@@ -203,9 +203,10 @@ namespace MarchingBlocks.Paint
 
         // ---- the cell texture (the RECOMMENDED packing) ----
 
-        /// <summary>One byte per cell over the box of the cells grown by 6: low nibble rank + 1 (0 empty, or a layer
-        /// ≥ 15), high nibble the rank chosen at that vertex + 1 (0 none); a choice outside the box is dropped. Texel
-        /// (x, y, z) = cell − origin; index (z · size.y + y) · size.x + x. No cell: origin 0, size 1.</summary>
+        /// <summary>TWO bytes per cell (an RG texture) over the box of the cells grown by 6: R = rank + 1 (0 empty, or a
+        /// layer ≥ 255), G = the rank chosen at that vertex + 1 (0 none); a choice outside the box is dropped. Texel
+        /// (x, y, z) = cell − origin; index i = (z · size.y + y) · size.x + x, its bytes 2 i (R) and 2 i + 1 (G). No
+        /// cell: origin 0, size 1.</summary>
         public static byte[] CellTexture(IEnumerable<KeyValuePair<Int3, int>> cells, IEnumerable<KeyValuePair<Int3, int>> choices,
             out Int3 origin, out Int3 size)
         {
@@ -222,20 +223,20 @@ namespace MarchingBlocks.Paint
             {
                 origin = default;
                 size = new Int3(1, 1, 1);
-                return new byte[1];
+                return new byte[2];
             }
             origin = new Int3(lo.x - Margin, lo.y - Margin, lo.z - Margin);
             size = new Int3(hi.x - lo.x + 2 * Margin + 1, hi.y - lo.y + 2 * Margin + 1, hi.z - lo.z + 2 * Margin + 1);
-            var bytes = new byte[(long)size.x * size.y * size.z];
+            var bytes = new byte[2L * size.x * size.y * size.z];
             foreach (var kv in cells)
             {
                 long i = Index(origin, size, kv.Key);
-                bytes[i] = (byte)((bytes[i] & 0xF0) | Nibble(kv.Value));
+                bytes[2 * i] = Byte(kv.Value);
             }
             foreach (var kv in choices)
             {
                 long i = Index(origin, size, kv.Key);
-                if (i >= 0) bytes[i] = (byte)((bytes[i] & 0x0F) | (Nibble(kv.Value) << 4));
+                if (i >= 0) bytes[2 * i + 1] = Byte(kv.Value);
             }
             return bytes;
         }
@@ -248,7 +249,7 @@ namespace MarchingBlocks.Paint
             return ((long)z * size.y + y) * size.x + x;
         }
 
-        static int Nibble(int rank) => rank >= 0 && rank < LayersMax ? rank + 1 : 0;
+        static byte Byte(int rank) => (byte)(rank >= 0 && rank < LayersMax ? rank + 1 : 0);
 
         // ---- reading world.json ----
 

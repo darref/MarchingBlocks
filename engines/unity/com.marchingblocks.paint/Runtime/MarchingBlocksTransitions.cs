@@ -171,7 +171,7 @@ namespace MarchingBlocks.Paint
             if (cellTexture == null || cellTexture.width != size.x || cellTexture.height != size.y || cellTexture.depth != size.z)
             {
                 Free(cellTexture);
-                cellTexture = new Texture3D(size.x, size.y, size.z, TextureFormat.R8, false)
+                cellTexture = new Texture3D(size.x, size.y, size.z, TextureFormat.RG16, false)
                 { name = "MarchingBlocks cells", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
             }
             cellTexture.SetPixelData(bytes, 0);
@@ -193,8 +193,11 @@ namespace MarchingBlocks.Paint
 
         void BuildTableAndRepresentatives()
         {
-            int n = MBTransitions.LayersMax;
+            // Sized on the real number of layers (at most 255; 15 whatever happened before 21 October 2026).
+            int n = Mathf.Clamp(Mathf.Max(Layers().Count, representatives.Count), 1, MBTransitions.LayersMax);
             // When Y covers X: (2X, Y) = active, softness, reach, irregularity; (2X + 1, Y) = fills_hollows, grain.
+            if (tableTexture != null && tableTexture.height != n) { Free(tableTexture); tableTexture = null; }
+            if (repDataTexture != null && repDataTexture.width != n) { Free(repDataTexture); repDataTexture = null; }
             if (tableTexture == null)
                 tableTexture = new Texture2D(2 * n, n, TextureFormat.RGBAFloat, false, true)
                 { name = "MarchingBlocks transition table", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
@@ -203,6 +206,7 @@ namespace MarchingBlocks.Paint
             foreach (var kv in Table())
             {
                 int covering = kv.Key.Item1, covered = kv.Key.Item2;
+                if (covering >= n || covered >= n) continue;
                 var s = kv.Value;
                 flipped[covering * 2 * n + 2 * covered] = new Color(1f, (float)s.Softness, (float)s.Reach, (float)s.Irregularity);
                 flipped[covering * 2 * n + 2 * covered + 1] = new Color((float)s.FillsHollows, (float)s.Grain, 0f, 0f);
@@ -221,7 +225,7 @@ namespace MarchingBlocks.Paint
             { name = "MarchingBlocks representatives", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear, hideFlags = HideFlags.DontSave };
             var white = new Color32[w * h];
             for (int k = 0; k < white.Length; k++) white[k] = new Color32(255, 255, 255, 255);
-            // The representatives' colour and settings: a 15 × 2 texture (row 0 colour, row 1 scale, roughness). A texture,
+            // The representatives' colour and settings: an N × 2 texture (row 0 colour, row 1 scale, roughness). A texture,
             // not a uniform array: an array set on a material is not one of its properties, and Unity drops it whenever it
             // rebuilds the material's properties (seen: the overlay drew nothing after an asset import).
             if (repDataTexture == null)

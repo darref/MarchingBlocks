@@ -262,11 +262,17 @@ int proprio = 999;
 {
     int3 o = int3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
     int3 t = b + o - o3;
-    int v = 0;
     if (t.x >= 0 && t.y >= 0 && t.z >= 0 && t.x < s3.x && t.y < s3.y && t.z < s3.z)
-        v = (int)round(Cells.Load(int4(t, 0)).r * 255.0);
-    r[k] = (v & 15) - 1;
-    ch[k] = (v >> 4) - 1;
+    {
+        float4 c4 = Cells.Load(int4(t, 0));
+        r[k] = (int)round(c4.r * 255.0) - 1;
+        ch[k] = (int)round(c4.g * 255.0) - 1;
+    }
+    else
+    {
+        r[k] = -1;
+        ch[k] = -1;
+    }
     float3 g = lerp(1.0 - f, f, float3(o));
     w[k] = g.x * g.y * g.z;
     if (r[k] >= 0 && r[k] < proprio) proprio = r[k];
@@ -286,7 +292,10 @@ int autre = -1;
         if (part > meilleur) { meilleur = part; autre = r[k2]; }
     }
 }
-if (autre < 0) return float4(0, 0, 0, 0);
+// The table has the world's real number of layers (2N x N, N at most 255): a rank outside it does not blend.
+uint tw, th;
+Table.GetDimensions(tw, th);
+if (autre < 0 || max(proprio, autre) >= (int)th) return float4(0, 0, 0, 0);
 float4 ao1 = Table.Load(int3(2 * proprio, autre, 0));
 float4 oa1 = Table.Load(int3(2 * autre, proprio, 0));
 if (ao1.r < 0.5 || oa1.r < 0.5) return float4(0, 0, 0, 0);
@@ -332,7 +341,8 @@ def transition():
     g = Graph("M_MB_Transition", blend_mode=unreal.BlendMode.BLEND_TRANSLUCENT,
               translucency_lighting_mode=unreal.TranslucencyLightingMode.TLM_SURFACE_PER_PIXEL_LIGHTING)
     rows, _ = g.rows()
-    p = g.world_position(True)
+    # The rule reads the TRUE surface (without the pull below), like the app's shader since 21 October 2026.
+    p = g.world_position(False)
     n = g.node(unreal.MaterialExpressionVertexNormalWS)
     inputs = [("P", p, ""), ("N", n, "")] + rows + [
         ("Vx", g.instance_data(0), ""), ("Vy", g.instance_data(1), ""), ("Vz", g.instance_data(2), ""),
@@ -344,9 +354,13 @@ def transition():
     g.to(g.mask(c, "", ["r", "g", "b"]), "", unreal.MaterialProperty.MP_BASE_COLOR)
     g.to(g.mask(c, "", ["a"]), "", unreal.MaterialProperty.MP_OPACITY)
     g.to(c, "Rough", unreal.MaterialProperty.MP_ROUGHNESS)
-    # Pushed 2 thousandths of a cell along the normal: two passes over the same geometry may not agree on depth to the bit.
-    push = g.custom("return N * 0.2;", [("N", n, "")], F3, description="push along the normal")
-    g.to(push, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+    # PULLED towards the camera along its view ray (2/10 000 of its distance): two passes over the same geometry may not
+    # agree on depth to the bit, and a point moved along its view ray stays at the same place ON SCREEN. ⚠ NOT along the
+    # normal (until 21 October 2026: N * 0.2): on a crease (a cliff edge, two tiles whose smoothed normals part) the pushed
+    # pass shrank by a hair and the tile beneath showed through — thin bright lines along some joints (seen in Godot).
+    pull = g.custom("return (C - P) * 2e-4;", [("C", g.node(unreal.MaterialExpressionCameraPositionWS), ""),
+                                              ("P", g.world_position(False), "")], F3, description="pull towards the camera")
+    g.to(pull, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
     return g.done()
 
 

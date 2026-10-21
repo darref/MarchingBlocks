@@ -92,7 +92,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks")
 	FName WorldName;
 
-	/** Which layers blend, and how each covers the other. Only layers 0 to 14 blend. */
+	/** Which layers blend, and how each covers the other. Layers 0 to 254 blend (two bytes per cell). */
 	UPROPERTY(EditAnywhere, Category = "MarchingBlocks")
 	TArray<FMarchingBlocksTransitionPair> Pairs;
 

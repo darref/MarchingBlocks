@@ -15,8 +15,9 @@ float4x4 _MBWorldToFormat;
 float4 MBTransition(float3 p, float3 n, out float roughness) { roughness = 1.0; return float4(p * 0.0 + n * 0.0, 1.0); }
 #else
 
-Texture3D _MBCells;            // one byte per cell: low nibble rank + 1, high nibble chosen rank + 1
+Texture3D _MBCells;            // two bytes per cell (RG): R rank + 1, G chosen rank + 1
 Texture2D _MBTable;            // when Y covers X: (2X, Y) active, softness, reach, irregularity; (2X + 1, Y) fills_hollows, grain
+                               // — 2N × N, N the number of layers (at most 255)
 Texture2DArray _MBReps;        // one slice per layer (white when the representative has no image)
 SamplerState sampler_MBReps;
 float4 _MBCellsOrigin;
@@ -66,8 +67,8 @@ int MBRankAt(int3 c, int channel)
     int3 size = int3(_MBCellsSize.xyz);
     if (t.x < 0 || t.y < 0 || t.z < 0 || t.x >= size.x || t.y >= size.y || t.z >= size.z)
         return -1;
-    int v = (int)round(_MBCells.Load(int4(t, 0)).r * 255.0);
-    return (channel == 0 ? (v & 15) : (v >> 4)) - 1;
+    float4 v = _MBCells.Load(int4(t, 0));
+    return (int)round((channel == 0 ? v.r : v.g) * 255.0) - 1;
 }
 
 // The look drawn over the surface at p (format space) with normal n: rgb = the OTHER layer's representative, a = its
@@ -102,7 +103,10 @@ float4 MBTransition(float3 p, float3 n, out float roughness)
             if (part > best) { best = part; other = r[k2]; }
         }
     }
-    if (other < 0) return 0;
+    // The table has the real number of layers: a rank outside it does not blend (a Load outside a texture is undefined).
+    uint tw, th;
+    _MBTable.GetDimensions(tw, th);
+    if (other < 0 || max(owner, other) >= (int)th) return 0;
     float4 ao1 = _MBTable.Load(int3(2 * owner, other, 0));
     float4 oa1 = _MBTable.Load(int3(2 * other, owner, 0));
     if (ao1.r < 0.5 || oa1.r < 0.5) return 0;

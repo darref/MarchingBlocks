@@ -80,9 +80,9 @@ namespace MBPaint
 		double Alpha = 0.0;
 	};
 
-	/// The recommended packing: one byte per cell over the box of the cells grown by Margin; low nibble rank + 1 (0 empty
-	/// or rank >= 15), high nibble chosen rank + 1 at that vertex (0 none). Texel (x, y, z) = cell - Origin, stored
-	/// x fastest, then y, then z.
+	/// The recommended packing: TWO bytes per cell (RG) over the box of the cells grown by Margin; R = rank + 1 (0 empty
+	/// or rank >= 255), G = chosen rank + 1 at that vertex (0 none). Texel (x, y, z) = cell - Origin, stored x fastest,
+	/// then y, then z; texel i holds Bytes[2 i] (R) and Bytes[2 i + 1] (G).
 	struct FCellTexture
 	{
 		FCell Origin;
@@ -94,7 +94,7 @@ namespace MBPaint
 
 	namespace Transitions
 	{
-		constexpr int LayersMax = 15;
+		constexpr int LayersMax = 255;
 		constexpr int Margin = 6;
 
 		/// One direction's settings, read under their English names: a missing one takes its default, one out of
