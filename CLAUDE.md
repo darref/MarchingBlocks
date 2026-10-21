@@ -731,7 +731,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
       intelligente de facteurs, comme par exemple une montagne à forme intéressante, packs d'un clic, avec vision de la
       forme en temps réel dans le ghost pendant qu'on la paramètre, ou une pyramide, des fortifications, un aqueduc,
       n'importe quoi de très intéressant ; la liste peut être très longue pour ce workshop car il est bien délimité et
-      séparé du reste »).** PAS ÉCRIT.
+      séparé du reste »).** ~~PAS ÉCRIT.~~ **ÉCRIT LE 21 OCTOBRE 2026 (Jordan : « fais l'atelier preshape », « et ça sera
+      la 1.1.0 »), MESURÉ PAR LES SUITES, VU À L'IMAGE PAR CLAUDE, PAS ENCORE EN MAIN PAR JORDAN** — détail plus bas, « CE QUI EST
+      ÉCRIT ».
       - **CE QUI EST DÉCIDÉ** : un atelier À PART (son entrée dans le rail, comme Generate, Crossings, Foliage) ; des
         LISTES d'algorithmes de GRANDES formes ; chacune réglée par une quantité suffisante et intelligente de facteurs ;
         des PACKS d'un clic (une forme déjà réglée) ; la forme vue EN TEMPS RÉEL dans le FANTÔME pendant qu'on la règle ;
@@ -772,7 +774,60 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
         - **Formes pures** : sphère, cylindre, cône, tore, spirale, escalier hélicoïdal, voûte, dôme, extrusion d'un
           tracé dessiné.
       - **LA 1.1.0 — DÉCIDÉ (Jordan, 21 octobre 2026)** : Props et Houses supprimés, Preshape vient à la 1.1.0.
-      - **OUVERT** : qui l'écrit et quand ; la liste à garder.
+        Le numéro de version n'est PAS monté (il le sera à la sortie).
+      - **CE QUI EST ÉCRIT (21 octobre 2026)** — le principe ci-dessus, tel quel :
+        - `app/preshapes/` : `forme.gd` (le modèle : id, nom, famille, aide, `facteurs()`, `packs()`, `construire`),
+          `bati.gd` (le chantier : colonnes, cases, vides ; `par_hauteur` et `bandes`), `catalogue.gd` (la liste écrite à
+          la main — un exe exporté ne lit pas son dossier —, les rôles et leurs replis, valeurs bornées, quart de tour,
+          enfoncement, réparation des contacts, ancrage, coquille, vignette). **41 FORMES EN 8 FAMILLES, 3 À 5 PACKS
+          CHACUNE** : Reliefs (montagne, chaîne le long d'une courbe, volcan, mesa/butte, collines, canyon/gorge/lit de
+          rivière, cratère/cirque/doline, dunes, aiguilles/cheminées de fée/orgues, arche naturelle, îlots/archipel,
+          terrasses de culture) · Eau (bassins en cascade, atoll et lagon) · Sous terre (grotte, galeries/donjon, puits/
+          gouffre) · Antique (pyramide, ziggourat, temple à colonnade, arène/théâtre, obélisque/menhir, cromlech, aqueduc,
+          pont à arches, phare) · Fortifications (rempart, tour/donjon, château, fort en étoile, motte castrale) · Habitat
+          (maison, village) · Jeu (bordures de chemin à la Zelda, labyrinthe, île flottante) · Formes pures (sphère/dôme,
+          cylindre/cône/prisme, tore/portail, escalier hélicoïdal, voûte/tunnel). Rôles : sol, sol2, sable, roche, neige,
+          chemin, **pierre** (maçonnerie), **toit** — chacun pris dans une couche du projet par son nom, comme Generate.
+        - `app/atelier_preformes.gd` (l'atelier « Preshape », teinte abricot, entre Generate et Geometry dans le rail) :
+          liste filtrée par famille et par recherche ; packs à vignette (+ les packs de l'utilisateur, enregistrés avec le
+          projet, retirés d'un clic droit) ; curseurs DESSINÉS depuis les facteurs ; graine et « Another draw » ; quart de
+          tour (boutons, Maj+molette, clic droit dans la vue) ; hauteur (Alt+molette) ; « Anchor to the ground » ; la
+          couche de chaque rôle ; la liste des formes posées et « Load its recipe ». Le fantôme : la COQUILLE de la forme,
+          teintée par rôle, ce qu'elle creuse en rouge, ses fondations plus pâles ; il ne se rebâtit que quand un réglage
+          change (au plus une fois par image), la souris ne fait que le déplacer.
+        - LA POSE, UNE ACTION : le creusé retiré de toutes les couches, chaque case dans la couche de son rôle et retirée
+          des autres (couches exclusives), la COUTURE avec le monde réparée (contacts par une arête), les transitions qui
+          manquent ALLUMÉES dans la même action (charte : aucune transition désactivée), la recette notée. Un Ctrl+Z rend
+          tout. Le projet garde réglages, packs et recettes (`preformes` dans le `.mbproj` ; un projet d'avant n'en a pas).
+        - ⚠ « UNE MATIÈRE NE CHANGE QUE LÀ OÙ LA HAUTEUR CHANGE » : un relief nomme le dessus de ses colonnes par leur
+          HAUTEUR seule (`par_hauteur`) ; les cases que la réparation ajoute prennent la tranche de leur hauteur (`bandes`)
+          — prendre la roche du corps d'une colonne voisine posait de la roche sur un plat d'herbe (12 paires sur la
+          montagne par défaut, vu par le test ; prolonger la matière de sa propre colonne en faisait 19).
+        - ⚠ L'ANCRAGE NE DESCEND QUE SOUS LES COLONNES DE LA BASE : sous une arche, un pont, une île flottante, la case la
+          plus basse est en l'air exprès.
+        - ⚠ LA RÉPARATION DES CONTACTS PART DE LA COQUILLE (`FS.reparer_les_diagonales`, paramètre `depart` ajouté) et ne
+          tourne pas quand le compteur natif n'en voit aucun : sur toutes les cases, une montagne attendait 0,8 s.
+        - **MESURÉ** : `DEV_TOOLS/test_preshapes.gd`, ~3 570 vérifications vertes — chaque forme à ses défauts, dans chaque
+          pack et à ses maxima : pas vide, sous 400 000 cases, rôles connus, AUCUN contact par une arête, la même graine
+          refait la même forme, jamais deux matières sur un plat (reliefs), un pack ne règle que des facteurs qui existent ;
+          le fantôme ≤ 400 ms (le plus lent : l'arène « Colosseum », ~300 ms, éditeur de débogage), la pose ≤ 1,5 s, les
+          maxima ≤ 4 s ; l'ancrage (rien sous une arche ni sous l'île flottante) ; le contrôle des contacts vu rougir.
+          `fumee_appli` (section Preshape) : l'atelier et sa barre, la recherche, un curseur par facteur, le fantôme, la
+          pose (chaque case dans la couche de son rôle), Ctrl+Z case pour case, Ctrl+Y, une forme qui creuse, clic droit,
+          Alt+molette, l'aller-retour du projet. ⚠ La fumée a vu le rail déborder sur la bande du bas avec un quatorzième
+          atelier : séparation 1, icône 14.
+        - **VU À L'IMAGE (21 octobre 2026)** : `DEV_TOOLS/sonde_preshape.gd` pose dix formes (montagne, volcan, mesa,
+          pyramide, château, aqueduc, arche, village, gorge, labyrinthe), chacune dans un pack, sur une COPIE du monde
+          cartoon (`SpannerGames/ATELIER/MarchingBlocks/essais/preshape/`), et photographie le fantôme puis chaque pose
+          (`photos/`). Château, pyramide, arche, village : justes. ⚠ DEUX DÉFAUTS VUS ET CORRIGÉS : la montagne hérissée de
+          piliers d'une case (l'érosion arrondie case par case → `Bati.lisser` avant l'arrondi) ; chaque marche d'une case
+          rayée de roche (le corps toujours en roche → `Bati.relief` : la roche seulement sur une falaise de deux cases ou
+          plus). Pose mesurée dans l'appli : 0,1 à 1,9 s selon la forme.
+        - **PAS ENCORE** : essayé en main par Jordan ; le fantôme d'une grande forme est un brouillard pâle (la coquille
+          entière, translucide) — à juger ; les transitions allumées sont DOUCES par défaut, pas réglées forme par forme ;
+          la recette se recharge mais une forme posée ne se « modifie » pas en place (on la reprend, on la repose).
+      - **OUVERT** : la liste à garder ou à allonger (la proposition plus haut en a d'autres : glacier, fjord, oasis,
+        delta, géode, crypte, rue en escalier, pueblo, ville troglodyte, extrusion d'un tracé dessiné…).
     - **UN JEU EN VUE DE DESSUS AVEC UN MONDE DE MARCHINGBLOCKS — PAR LE PRINCIPE, pas encore vu à l'image**
       (question de Jordan, 18 octobre 2026). Le monde exporté est de la vraie géométrie : une caméra en perspective qui
       regarde droit vers le bas montre les flancs des falaises de plus en plus vers les bords de l'écran (aucun au

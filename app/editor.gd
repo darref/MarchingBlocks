@@ -46,6 +46,7 @@ const AtelierAnimation := preload("res://app/animation.gd")
 const AtelierFeuillage := preload("res://app/atelier_feuillage.gd")
 const AtelierFranchisseurs := preload("res://app/atelier_franchisseurs.gd")
 const AtelierGeneration := preload("res://app/atelier_generation.gd")
+const AtelierPreformes := preload("res://app/atelier_preformes.gd")
 const TRC := preload("res://addons/marchingblocks_core/transitions.gd")
 const Panneau := preload("res://app/panneau.gd")
 const Vue := preload("res://app/vue.gd")
@@ -266,6 +267,9 @@ var _droite_franchisseurs: Panneau
 ## L'atelier Generate (19 octobre 2026, la 1.0.0) : tout vit dans `atelier_generation.gd` et `generateur.gd`.
 var _generation: RefCounted = AtelierGeneration.new(self)
 var _droite_generer: Panneau
+## L'atelier Preshape (21 octobre 2026, la 1.1.0) : tout vit dans `atelier_preformes.gd` et `app/preshapes/`.
+var _preformes: RefCounted = AtelierPreformes.new(self)
+var _droite_preformes: Panneau
 ## Le coup en cours : {case: [avant, après]}.
 var _coup := {}
 var _coup_nom := ""
@@ -510,6 +514,8 @@ func _batir() -> void:
 	_vue.feuillage_coup.connect(_feuillage.coup)
 	_vue.franchisseurs_survole.connect(_franchisseurs.survoler)
 	_vue.franchisseurs_coup.connect(_franchisseurs.coup)
+	_vue.preformes_survole.connect(_preformes.survoler)
+	_vue.preformes_coup.connect(_preformes.coup)
 	_vue.variante_cliquee.connect(_variantes.cliquer)
 	_vue.transition_peinte.connect(_transitions.peindre)
 	_vue.etage_sur_la_matiere.connect(_etage_sur_la_matiere)
@@ -561,11 +567,15 @@ func _batir() -> void:
 	_franchisseurs.batir(_droite_franchisseurs.get_meta("pile"))
 	_droite_generer = _panneau(corps, false, LARGEUR_DROITE)
 	_generation.batir(_droite_generer.get_meta("pile"))
+	_preformes.brancher(_vue.preformes)
+	_droite_preformes = _panneau(corps, false, LARGEUR_DROITE)
+	_preformes.batir(_droite_preformes.get_meta("pile"))
 	# CHAQUE BARRE DE DROITE DANS LA TEINTE DE SON ATELIER (Jordan, 2 octobre 2026) — le reste garde l'olive.
 	for b in [[_droite, "monde"], [_droite_temoin, "witness"], [_droite_texture, "texture"], [_droite_jeu, "jeu"],
 			[_droite_fluides, "fluides"], [_droite_transitions, "transitions"], [_droite_animation, "anim"],
 			[_droite_variantes, "variantes"],
-			[_droite_feuillage, "feuillage"], [_droite_franchisseurs, "franchisseurs"], [_droite_generer, "generer"]]:
+			[_droite_feuillage, "feuillage"], [_droite_franchisseurs, "franchisseurs"], [_droite_generer, "generer"],
+			[_droite_preformes, "preformes"]]:
 		Palette.habiller_barre(b[0], b[1])
 	if is_inside_tree():
 		Palette.teinter_ce_qui_arrive(get_tree())
@@ -964,7 +974,9 @@ func _batir_rail(parent: Control) -> PanelContainer:
 	rail.offset_right = LARGEUR_RAIL
 	parent.add_child(rail)
 	var colonne := VBoxContainer.new()
-	colonne.add_theme_constant_override("separation", 3)
+	# ⚠ QUATORZE DEPUIS PRESHAPE (21 octobre 2026) : un quatorzième bouton passait sous la bande du bas (vu par la fumée) ;
+	# séparation de 1 au lieu de 3, icône de 14 au lieu de 16.
+	colonne.add_theme_constant_override("separation", 1)
 	rail.add_child(colonne)
 	var groupe := ButtonGroup.new()
 	for a in [
@@ -975,6 +987,9 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		["fluides", "Fluids", "eau", "Place water in the painted world: lakes, rivers, seas. Esc goes back to World."],
 		["generer", "Generate", "generer", "A whole world from a few fields and a seed: size, shape, relief, paths, "
 			+ "caves, water, look — painted with this project's layers. Esc goes back to World."],
+		["preformes", "Preshape", "preformes", "Big shapes from long lists: mountains, volcanoes, canyons, pyramids, "
+			+ "castles, aqueducts, mazes… set by a few factors or a one-click pack, seen as a ghost before you click. "
+			+ "Esc goes back to World."],
 		["witness", "Geometry", "cube", "Witness geometry — sculpt the block's tiles: every copy follows."],
 		["texture", "Texturing", "texture", "Witness texturing — materials, projections and UV unwrapping "
 			+ "of the witness tiles."],
@@ -1007,7 +1022,7 @@ func _batir_rail(parent: Control) -> PanelContainer:
 		b.clip_text = true
 		b.add_theme_font_override("font", Palette.gras())
 		b.add_theme_font_size_override("font_size", 9)
-		b.add_theme_constant_override("icon_max_width", 16)
+		b.add_theme_constant_override("icon_max_width", 14)
 		b.pressed.connect(_changer_d_atelier.bind(a[0]))
 		_boutons_atelier[a[0]] = b
 		Palette.habiller_bouton_d_atelier(b, a[0])   # chaque atelier se reconnaît à sa teinte (Jordan, 2 octobre 2026)
@@ -1403,7 +1418,7 @@ func _contexte_du_guide() -> Dictionary:
 		"pinceau": _modeleur != null and _modeleur.pinceau,
 		# L'ÉTAGE EN TÊTE DU GUIDE (Jordan, 13 octobre 2026 : « l'étage en cours […] dans le guide ») : seulement là où la
 		# grille sert ; il entre dans la signature, donc le guide se réécrit quand l'étage change.
-		"etage": _vue.etage if _atelier in ["monde", "fluides", "feuillage", "franchisseurs", "jeu_edit"] else null}
+		"etage": _vue.etage if _atelier in ["monde", "fluides", "feuillage", "franchisseurs", "preformes", "jeu_edit"] else null}
 
 
 ## Une fois par image : le guide ne se réécrit que si le contexte ou le modificateur tenu a changé.
@@ -3193,7 +3208,8 @@ func _en_fond(travail: Callable) -> Variant:
 ## suit son témoin couche par couche, et la barre avance d'une couche à l'autre. `_aller_a` reste synchrone — on
 ## l'appelle d'endroits qui enchaînent juste après.
 func _changer_d_atelier(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer",
+			"preformes"]:
 		await _rhabiller_avec_attente(atelier in JEUX)
 	var debut := Time.get_ticks_msec()
 	if atelier in JEUX and not _atelier in JEUX and _ecran_vivant() \
@@ -3368,7 +3384,8 @@ func _basculer_edition(oui: bool) -> void:
 # ── LES ATELIERS ─────────────────────────────────────────────────────────────────────────────────────
 
 func _aller_a(atelier: String) -> void:
-	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer"]:
+	if atelier in ["monde", "jeu", "jeu_edit", "fluides", "transitions", "feuillage", "franchisseurs", "variantes", "generer",
+			"preformes"]:
 		_rhabiller_les_mondes()   # on va regarder le monde (ou le fouler) : il suit son témoin
 	if atelier in JEUX and not _atelier in JEUX:
 		_vue.eau_du_jeu = _eau_pour_le_jeu()
@@ -3405,11 +3422,13 @@ func _aller_a(atelier: String) -> void:
 		_franchisseurs.sortir()
 	if atelier != "generer":
 		_generation.sortir()
+	if atelier != "preformes":
+		_preformes.sortir()
 	_atelier = atelier
 	(_boutons_atelier[atelier] as Button).button_pressed = true
 	_contexte()
 	# Project et Witness montrent tous deux le témoin (ou le travail qu'on regarde) ; Fluids, le monde.
-	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "franchisseurs": "monde", "variantes": "monde", "generer": "monde"}.get(atelier, "temoin"))
+	_vue.montrer({"monde": "monde", "jeu": "jeu", "jeu_edit": "jeu", "fluides": "monde", "transitions": "monde", "feuillage": "monde", "franchisseurs": "monde", "variantes": "monde", "generer": "monde", "preformes": "monde"}.get(atelier, "temoin"))
 	if atelier == "fluides":
 		_entrer_dans_les_fluides()
 	if atelier == "transitions":
@@ -3424,6 +3443,8 @@ func _aller_a(atelier: String) -> void:
 		_franchisseurs.entrer()
 	if atelier == "generer":
 		_generation.entrer()
+	if atelier == "preformes":
+		_preformes.entrer()
 	if atelier == "jeu_edit":
 		get_viewport().gui_release_focus()
 		_vue.grab_focus()
@@ -3505,6 +3526,7 @@ func _contexte() -> void:
 	_droite_feuillage.visible = _atelier == "feuillage"
 	_droite_franchisseurs.visible = _atelier == "franchisseurs"
 	_droite_generer.visible = _atelier == "generer"
+	_droite_preformes.visible = _atelier == "preformes"
 	_modeleur.geometrie = not (texturing or animation)
 	if not texturing and _modeleur.pinceau:
 		_modeleur.regler_pinceau(false)
@@ -6531,6 +6553,15 @@ func _molette(sens: int, b: InputEventMouseButton) -> bool:
 		if ctrl:
 			return _cran(_compteur_etage, sens, "Floor")
 		return _feuillage.molette(sens, alt, maj)
+	# PRESHAPE : Alt+molette hausse ou enfonce la forme, Maj+molette la tourne ; la molette seule zoome.
+	if _atelier == "preformes" and not _vue.naviguer and (alt or maj) and not ctrl:
+		if alt:
+			_preformes.hausser(sens)
+			_vue.montrer_valeur("Height %+d" % _preformes.decalage)
+		else:
+			_preformes.tourner(sens)
+			_vue.montrer_valeur("Turn %d°" % (_preformes.quart * 90))
+		return true
 	if _atelier in ["witness", "texture"] and _vue.edition and (alt or maj) and not ctrl:
 		if _modeleur.sculpt and _atelier == "witness":
 			return _cran(_curseurs_sculpt.get("sculpt_rayon" if alt else "sculpt_force"), sens,
@@ -7062,6 +7093,7 @@ func _rafraichir_couches() -> void:
 		return
 	_transitions.dire()   # une couche ajoutée, renommée, déplacée : les paires suivent
 	_generation.rafraichir_couches()
+	_preformes.rafraichir_couches()
 	_dire_le_cran()
 	# ⚠ Un projet garde au moins une couche : le bouton se grise au lieu de refuser après le clic.
 	_bouton_supprimer_couche.disabled = _couches.size() <= 1
@@ -7398,6 +7430,7 @@ func _vider_le_projet() -> void:
 		_feuillage.vider()
 		_franchisseurs.vider()
 		_generation.charger({})
+		_preformes.charger({})
 
 
 ## Rend vrai si le projet est ouvert. ⚠ Chaque couche est habillée de son lot EN CACHE s'il est à jour,
@@ -7464,6 +7497,7 @@ func _ouvrir(chemin: String) -> bool:
 	_feuillage.charger(etat.get("feuillage", {}))
 	_franchisseurs.charger(etat.get("franchisseurs", {}))
 	_generation.charger(etat.get("generateur", {}))
+	_preformes.charger(etat.get("preformes", {}))
 	# LES TRAVAUX IMPORTÉS reviennent dans la liste de l'étape 2 (3 octobre 2026) ; leur maillage se relit quand on
 	# en choisit un. Un fichier disparu depuis n'y revient pas.
 	for t in etat.get("travaux", []):
@@ -7681,16 +7715,17 @@ func _enregistrer(en_fond := false) -> void:
 	var feuillage: Dictionary = _feuillage.vers_donnees()
 	var generateur: Dictionary = _generation.vers_donnees()
 	var franchisseurs: Dictionary = _franchisseurs.vers_donnees()
+	var preformes: Dictionary = _preformes.vers_donnees()
 	if en_fond:
 		_dire_enregistre("en_cours")
 		# ⚠ HAUTE PRIORITÉ (4 octobre 2026) : en basse priorité, elle attendait jusqu'à 3,4 s derrière les cartes PBR de
 		# l'ouverture — et un Ctrl+S, une fermeture l'attendaient avec elle.
 		_tache_ecriture = WorkerThreadPool.add_task(_ecrire_le_projet.bind(_projet, sorties, _active, eaux, travaux, true, transitions, feuillage,
-			_retrait, generateur, franchisseurs),
+			_retrait, generateur, franchisseurs, preformes),
 			true, "Saving the project")
 		return
 	_ecrire_le_projet(_projet, sorties, _active, eaux, travaux, false, transitions, feuillage, _retrait, generateur,
-		franchisseurs)
+		franchisseurs, preformes)
 
 
 ## Les chemins des travaux importés, dans l'ordre (la liste de l'étape 2 survit à la session).
@@ -7712,7 +7747,7 @@ func _attendre_l_ecriture() -> void:
 ## `_ecriture_finie`, sur le fil principal).
 func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array, travaux: Array, en_fond: bool,
 		transitions: Dictionary = {}, feuillage: Dictionary = {}, retrait_eau: float = BM.RETRAIT_PAR_DEFAUT,
-		generateur: Dictionary = {}, franchisseurs: Dictionary = {}) -> void:
+		generateur: Dictionary = {}, franchisseurs: Dictionary = {}, preformes: Dictionary = {}) -> void:
 	var raison := ""
 	var provisoire := chemin + ".tmp"
 	var f := FileAccess.open(provisoire, FileAccess.WRITE)
@@ -7720,7 +7755,7 @@ func _ecrire_le_projet(chemin: String, sorties: Array, active: int, eaux: Array,
 		raison = "%s cannot be written (error %d)." % [chemin, FileAccess.get_open_error()]
 	else:
 		f.store_string(Projet.vers_texte(sorties, active, eaux, travaux, transitions, feuillage, retrait_eau, generateur,
-			franchisseurs))
+			franchisseurs, preformes))
 		f.close()
 		var e: int = DirAccess.rename_absolute(provisoire, chemin)
 		if e != OK:
@@ -7994,7 +8029,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 				return
 		get_viewport().set_input_as_handled()
 		return
-	if _atelier in ["transitions", "variantes", "generer", "franchisseurs"]:
+	if _atelier in ["transitions", "variantes", "generer", "franchisseurs", "preformes"]:
 		if k.physical_keycode == KEY_QUOTELEFT:
 			_teleporter()
 			get_viewport().set_input_as_handled()
@@ -8150,14 +8185,16 @@ func _input(event: InputEvent) -> void:
 			_vue.grab_focus()
 			get_viewport().set_input_as_handled()
 		return
-	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "franchisseurs", "jeu_edit", "variantes"] \
+	if k == null or not k.pressed or not _atelier in ["monde", "fluides", "transitions", "feuillage", "franchisseurs", "preformes", "jeu_edit",
+			"variantes"] \
 			or k.ctrl_pressed or k.alt_pressed:
 		return
 	var focus := get_viewport().gui_get_focus_owner()
 	if focus is LineEdit or focus is TextEdit:
 		return
 	# DANS FLUIDS, TRANSITIONS ET FOLIAGE, SEUL ESPACE (Navigate) : la visée, les flèches de la sélection sont des gestes de World.
-	if _atelier in ["fluides", "transitions", "feuillage", "franchisseurs", "variantes"] and k.keycode != KEY_SPACE:
+	if _atelier in ["fluides", "transitions", "feuillage", "franchisseurs", "preformes", "variantes"] \
+			and k.keycode != KEY_SPACE:
 		return
 	if k.keycode == KEY_TAB and not k.echo:
 		var i: int = _vue.VISEES.find(_vue.visee)

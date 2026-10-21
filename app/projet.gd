@@ -98,7 +98,7 @@ static func couche_d_eau(nom: String, id := "") -> Dictionary:
 ## les mêmes bords (mesuré : une couche aminci à côté d'une neutre, 1 928 sommets de joint sans partenaire).
 static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: Array = [], transitions: Dictionary = {},
 		feuillage: Dictionary = {}, retrait: float = BM.RETRAIT_PAR_DEFAUT, generateur: Dictionary = {},
-		franchisseurs: Dictionary = {}) -> String:
+		franchisseurs: Dictionary = {}, preformes: Dictionary = {}) -> String:
 	var sorties: Array = []
 	var blocs: Array[String] = []
 	for c in couches:
@@ -156,6 +156,10 @@ static func vers_texte(couches: Array, active: int, eaux: Array = [], travaux: A
 	# LES FRANCHISSEURS (20 octobre 2026) : leurs modèles sculptés et leurs poses (`franchisseurs.gd`). Absents tant que vides.
 	if not franchisseurs.is_empty():
 		tout["franchisseurs"] = franchisseurs
+	# L'ATELIER PRESHAPE (21 octobre 2026, la 1.1.0) : ses réglages, les packs de l'utilisateur, la recette de chaque
+	# forme posée. Absent tant que vide.
+	if not preformes.is_empty():
+		tout["preformes"] = preformes
 	var texte := JSON.stringify(tout, "	")
 	for k in blocs.size():
 		texte = texte.replace("\"%s\"" % (MARQUE_CASES % k), blocs[k])
@@ -323,11 +327,16 @@ static func depuis_texte(texte: String, erreurs: Array) -> Dictionary:
 		generateur = {}
 	# Les franchisseurs (20 octobre 2026) : un projet d'avant n'en a pas ; une entrée malformée refuse le fichier entier.
 	var franchisseurs := FR.depuis_donnees(brut.get("franchisseurs", null), erreurs)
+	# Preshape (21 octobre 2026) : un projet d'avant n'en a pas ; l'atelier ignore ce qu'il ne sait pas lire (des
+	# réglages et des recettes, pas le monde).
+	var preformes = brut.get("preformes", {})
+	if not preformes is Dictionary:
+		preformes = {}
 	if franchisseurs.is_empty():
 		return {}
 	return {"couches": couches, "active": active, "eaux": eaux, "travaux": travaux, "transitions": transitions,
 		"feuillage": feuillage, "retrait": BM.cran(float(retrait)), "generateur": generateur,
-		"franchisseurs": franchisseurs}
+		"franchisseurs": franchisseurs, "preformes": preformes}
 
 
 static func transitions_vides() -> Dictionary:

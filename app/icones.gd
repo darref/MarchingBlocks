@@ -78,6 +78,8 @@ const TRACES := {
 	# L'atelier Foliage (6 octobre 2026) : un sapin sur son tronc.
 	"generer": '<path d="M2.5 19.5 8.5 9l4 6 3-4.5 6 9z"/><path d="M17.5 2.5v5M15 5h5"/><path d="M5 4.5v3M3.5 6h3"/>',
 	"arbre": '<path d="M12 2.5 6.5 10h3l-4 6h13l-4-6h3z"/><path d="M12 16v5.5"/>',
+	# L'atelier Preshape (21 octobre 2026) : une montagne et une pyramide à degrés, posées d'un coup.
+	"preformes": '<path d="M1.5 20.5 8.5 7l4 7.5"/><path d="M10.5 20.5v-3h2v-3h2v-3h3v3h2v3h2v3"/><path d="M1.5 20.5h21"/>',
 	# Le tranchage et les opérations
 	"couteau": '<path d="M19.5 3 7.5 15l2.5 2.5L21.5 6a2 2 0 0 0-2-3z"/><path d="M7.5 15l-4 4 2.5 2.5 4-4"/>',
 	"elargir": '<path d="M3 12h18M6.5 8.5 3 12l3.5 3.5M17.5 8.5 21 12l-3.5 3.5"/>',

@@ -426,12 +426,14 @@ static func _classer_dans_le_profil(ca: int, cb: int, uu: int, vv: int, h2: int,
 ## Par tours, comme `_reparer` : chaque tour lit l'état du tour d'avant. ⚠ UNE CASE NE CHANGE QU'UNE FOIS (on ne vide
 ## que des cases d'origine, on ne remplit que des cases vides jamais vidées) : ça termine toujours. Un damier qu'aucune
 ## règle ne peut défaire reste — `restantes` les compte (`MB.contacts_par_arete` sur l'état final).
+##   depart       — les cases d'où partir (l'atelier Preshape, 21 octobre 2026 : la COQUILLE de la forme — un damier a
+##                  toujours ses cases pleines au bord du vide, l'intérieur n'en porte pas) ; vide : toutes les cases.
 ## Rend {"poser", "effacer", "restantes"}.
 static func reparer_les_diagonales(pleines: Dictionary, creuse: bool, modifiables: Dictionary = {},
-		figees: Dictionary = {}) -> Dictionary:
+		figees: Dictionary = {}, depart: Array = []) -> Dictionary:
 	var poser := {}
 	var effacer := {}
-	var front: Array = pleines.keys()
+	var front: Array = depart if not depart.is_empty() else pleines.keys()
 	while not front.is_empty():
 		var a_poser := {}
 		var a_effacer := {}

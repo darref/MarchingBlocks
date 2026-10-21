@@ -533,6 +533,8 @@ func _mener() -> void:
 	_vrai(_feuillage_fini, "le feuillage est allé JUSQU'AU BOUT")
 	await _la_generation(ed)
 	_vrai(_generation_finie, "SENTINELLE : l'atelier Generate est allé JUSQU'AU BOUT")
+	await _l_atelier_preshape(ed)
+	_vrai(_preshape_fini, "SENTINELLE : l'atelier Preshape est allé JUSQU'AU BOUT")
 	await _les_crans(ed)
 	_vrai(_crans_finis, "SENTINELLE : les crans du témoin et de l'eau sont allés JUSQU'AU BOUT")
 	await _la_cage(ed)
@@ -5943,6 +5945,110 @@ func _la_generation(ed: Control) -> void:
 	_egal(d["champs"]["graine"], 3, "les champs du générateur partent avec le projet")
 	ed._aller_a("monde")
 	_generation_finie = true
+
+
+## L'ATELIER PRESHAPE (21 octobre 2026, la 1.1.0) : par l'écran — l'atelier, sa barre, le fantôme qui se bâtit, un
+## pack, la pose (chaque case dans la couche de son rôle, aucune dans deux couches, sa recette notée), Ctrl+Z qui rend
+## le monde case pour case, une forme qui CREUSE, la molette (Alt : la hauteur) et le clic droit (un quart de tour), et
+## les réglages qui partent avec le projet puis reviennent.
+var _preshape_fini := false
+
+
+func _l_atelier_preshape(ed: Control) -> void:
+	const PC := preload("res://app/preshapes/catalogue.gd")
+	var ap: RefCounted = ed._preformes
+	ed._aller_a("preformes")
+	_vrai(ed._atelier == "preformes" and ed._vue.mode == "monde", "Preshape : le monde dans la vue")
+	_vrai(ed._droite_preformes.visible and not ed._droite.visible and not ed._droite_generer.visible,
+		"Preshape : sa barre de droite, et pas celles de World ni de Generate")
+	_egal(ed._vue.outil, "preformes", "Preshape : la vue lui passe la souris")
+	_vrai(ap._liste.item_count == PC.formes().size(), "toutes les formes sont dans la liste (%d)" % ap._liste.item_count)
+	ap._recherche.text = "castle"
+	ap._remplir_la_liste()
+	_vrai(ap._liste.item_count >= 1 and ap._liste.item_count < PC.formes().size(), "la recherche filtre la liste")
+	ap._recherche.text = ""
+	ap._remplir_la_liste()
+	ap.choisir("pyramide")
+	_vrai(ap._facteurs.get_child_count() == PC.forme("pyramide").facteurs().size(),
+		"un curseur par facteur, dessiné depuis la forme")
+	ap._appliquer_pack({"base": 9, "hauteur_degre": 1, "sommet": 1, "escaliers": 1})
+	ap.quart = 0
+	ap.decalage = 0
+	ap.ancrer = false
+	ap._refaire()
+	_vrai(ap._nuage.multimesh.instance_count > 0, "le fantôme se bâtit (%d cubes)" % ap._nuage.multimesh.instance_count)
+	# La pose, loin du monde d'essai.
+	var ancre := Vector3i(300, 0, 300)
+	var dans_la_boite := func(c: Vector3i) -> bool: return absi(c.x - 300) <= 12 and absi(c.z - 300) <= 12
+	var avant := _cases_ou(ed, dans_la_boite)
+	var attendu := PC.construire("pyramide", ap.valeurs(), ap.graine, 0, 0, true)
+	await ap.poser(ancre)
+	var apres := _cases_ou(ed, dans_la_boite)
+	var mal := 0
+	var n := 0
+	for role in attendu["cases"]:
+		var i: int = ap.couche_du_role(role)
+		for c in attendu["cases"][role]:
+			n += 1
+			if apres.get(c + ancre, -1) != i:
+				mal += 1
+	_vrai(n > 0, "la pyramide a des cases (%d)" % n)
+	_egal(mal, 0, "Preshape : chaque case posée est dans la couche de son rôle")
+	_egal(ap.poses.size(), 1, "la forme posée garde sa recette")
+	ed._histoire.undo()
+	_vrai(_cases_ou(ed, dans_la_boite) == avant, "Ctrl+Z rend le monde, case pour case")
+	_egal(ap.poses.size(), 0, "et retire la recette")
+	ed._histoire.redo()
+	_egal(ap.poses.size(), 1, "Ctrl+Y la remet")
+	# Une forme qui creuse : un puits dans le sommet de la pyramide.
+	ap.choisir("puits")
+	ap._appliquer_pack({"rayon": 1, "profondeur": 3, "escalier": false, "margelle": 0, "evasement": 0.0})
+	ap._refaire()
+	var haut_ := Vector3i(300, int((attendu["boite"] as AABB).end.y), 300)
+	var creuse := PC.construire("puits", ap.valeurs(), ap.graine, 0, 0, true)
+	await ap.poser(haut_)
+	var reste := 0
+	var apres2 := _cases_ou(ed, dans_la_boite)
+	for c in creuse["creuser"]:
+		if apres2.has(c + haut_) and not PC.pleines(creuse).has(c):
+			reste += 1
+	_egal(reste, 0, "ce que la forme creuse est vide dans toutes les couches")
+	ed._histoire.undo()
+	# Le clic droit tourne, Alt+molette hausse.
+	var q0: int = ap.quart
+	ap.coup(Vector2.ZERO, MOUSE_BUTTON_RIGHT, 0)
+	_egal(ap.quart, (q0 + 1) % 4, "le clic droit tourne la forme d'un quart")
+	var molette := InputEventMouseButton.new()
+	molette.alt_pressed = true
+	var d0: int = ap.decalage
+	_vrai(ed._molette(1, molette), "Alt+molette est prise par Preshape")
+	_egal(ap.decalage, d0 + 1, "Alt+molette hausse la forme d'une case")
+	# Les réglages partent avec le projet, et reviennent.
+	ap.packs_perso.append({"forme": "puits", "nom": "Mine", "valeurs": {"rayon": 2}})
+	var d: Dictionary = ap.vers_donnees()
+	_egal((d["poses"] as Array).size(), 1, "les recettes partent avec le projet")
+	var texte := JSON.stringify(d)
+	ap.charger({})
+	_egal(ap.poses.size(), 0, "un projet neuf n'a rien posé")
+	ap.charger(JSON.parse_string(texte))
+	_egal(ap.poses.size(), 1, "et les recettes reviennent")
+	_egal(ap.packs_perso.size(), 1, "comme les packs de l'utilisateur")
+	_egal(ap.forme_id, "puits", "et la forme choisie")
+	ed._histoire.undo()
+	ed._aller_a("monde")
+	_vrai(not ed._vue.preformes.visible, "hors de Preshape, plus de fantôme")
+	_egal(ed._vue.outil, "ajouter", "et la souris rendue à World")
+	_preshape_fini = true
+
+
+## {case: indice de couche} des cases où `garder(case)`.
+func _cases_ou(ed: Control, garder: Callable) -> Dictionary:
+	var t := {}
+	for i in ed._vue.nombre_de_couches():
+		for c in (ed._vue.couche(i).get_node("Cases") as GridMap).get_used_cells():
+			if garder.call(c):
+				t[c] = i
+	return t
 
 
 func _le_feuillage(ed: Control) -> void:
