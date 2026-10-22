@@ -435,8 +435,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   acheteurs, est l'atelier « Preshape » (plus bas). Les props RATTACHÉS du terrain monolithique (§3, §9 bis) ne sont pas
   ces ateliers : ils restent tels quels.
   ⚠ **MESURÉ (alignement du 22 octobre 2026)** : l'atelier Preshape, commité par l'alignement de 0 h 29 (`2be7551`),
-  est DÉJÀ dans les exports « 1.0.0 » (0 h 29, puis `eb054da` à 5 h 50) et sur itch, canal payant compris ; la version
-  n'a pas été montée (l'alignement n'en monte jamais). Que ce soit la 1.0.0 ou qu'on monte à 1.1.0 : OUVERT, à Jordan.
+  était DÉJÀ dans les exports « 1.0.0 » (0 h 29, puis `eb054da` à 5 h 50) et sur itch, canal payant compris, avec
+  l'atelier Crossings (20 octobre). **MONTÉE EN 1.1.0 — DÉCIDÉ (Jordan, 22 octobre 2026 : « Monte en 1.1 »)** :
+  `project.godot` et les quatre presets ; les greffons gardent leurs versions (inchangés pour Preshape) mais leurs zips
+  prennent celle de l'appli. Notes de version relues contre `git log` dans `SpannerGamesWeb/contenu/versions.json`.
 - **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
   projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
   continuer de faire tant que le dev n'est pas clos, figé ensuite ».
@@ -777,7 +779,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
         - **Formes pures** : sphère, cylindre, cône, tore, spirale, escalier hélicoïdal, voûte, dôme, extrusion d'un
           tracé dessiné.
       - **LA 1.1.0 — DÉCIDÉ (Jordan, 21 octobre 2026)** : Props et Houses supprimés, Preshape vient à la 1.1.0.
-        Le numéro de version n'est PAS monté (il le sera à la sortie).
+        ~~Le numéro de version n'est PAS monté (il le sera à la sortie).~~ Monté en 1.1.0 le 22 octobre 2026 (Jordan).
       - **CE QUI EST ÉCRIT (21 octobre 2026)** — le principe ci-dessus, tel quel :
         - `app/preshapes/` : `forme.gd` (le modèle : id, nom, famille, aide, `facteurs()`, `packs()`, `construire`),
           `bati.gd` (le chantier : colonnes, cases, vides ; `par_hauteur` et `bandes`), `catalogue.gd` (la liste écrite à
