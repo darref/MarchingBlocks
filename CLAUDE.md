@@ -434,6 +434,9 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   et les house, et ça viendra à la 1.1.0 »)** : plus d'ateliers Props ni Houses ; la mise à jour suivante, offerte aux
   acheteurs, est l'atelier « Preshape » (plus bas). Les props RATTACHÉS du terrain monolithique (§3, §9 bis) ne sont pas
   ces ateliers : ils restent tels quels.
+  ⚠ **MESURÉ (alignement du 22 octobre 2026)** : l'atelier Preshape, commité par l'alignement de 0 h 29 (`2be7551`),
+  est DÉJÀ dans les exports « 1.0.0 » (0 h 29, puis `eb054da` à 5 h 50) et sur itch, canal payant compris ; la version
+  n'a pas été montée (l'alignement n'en monte jamais). Que ce soit la 1.0.0 ou qu'on monte à 1.1.0 : OUVERT, à Jordan.
 - **L'EXEMPLE LIVRÉ — DÉCIDÉ (Jordan, 2 octobre 2026), ÉCRIT LE MÊME JOUR** : « un mode Exemple qui garde le
   projet `C:/Users/jorda/Desktop/test.mbproj` et continue de le mettre à jour avec les modifications que je vais
   continuer de faire tant que le dev n'est pas clos, figé ensuite ».
