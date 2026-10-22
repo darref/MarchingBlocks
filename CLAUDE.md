@@ -350,7 +350,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   il faut un workshop de franchiseurs (escaliers, pentes) éditables, et placables par dessus le terrain là où le test le
   permet »)**. Il revient sur « marching blocks est fini » (19 octobre). Né d'un manque vu dans WaterDrop : agrandi trois
   fois, une marche d'une case y fait 3 m, et les chemins du générateur montent d'une case à la fois.
-  **PROPOSÉ (Claude, 20 octobre 2026), à discuter avec Jordan avant la première ligne** :
+  ✅ **TRANCHÉ ET LIVRÉ — DÉCIDÉ (Jordan, 22 octobre 2026 : « Plus rien n'est à discuter on est à la 1.1.0 »)** : l'atelier
+  Crossings tel qu'écrit ci-dessous est celui de la 1.1.0 ; plus rien de cette section n'est à discuter. Ce qui reste
+  (Crossings dans Unity et Unreal, la barre du modeleur dans « Edit shape ») est la feuille de route 1.1.x du site.
+  ~~**PROPOSÉ (Claude, 20 octobre 2026), à discuter avec Jordan avant la première ligne**~~ (écrit, puis livré) :
   - un atelier « Crossings » à côté de Foliage et Generate : des FRANCHISSEURS paramétrés — escalier (largeur en cases,
     hauteur à franchir, nombre et profondeur des marches), pente (largeur, hauteur, longueur), la matière d'une couche ;
     éditables après coup comme un plant (sélection, réglages, Ctrl+Z) ;
