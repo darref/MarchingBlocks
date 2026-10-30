@@ -12,6 +12,7 @@ extends RefCounted
 
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Anim := preload("res://addons/marchingblocks_paint/mb_animation.gd")
+const Relief := preload("res://addons/marchingblocks_paint/mb_relief.gd")
 
 
 static func load_tileset(manifest_path: String) -> Dictionary:
@@ -53,7 +54,9 @@ static func load_tileset(manifest_path: String) -> Dictionary:
 		return {"error": "%d tile(s) listed in tileset.json are not in %s: %s"
 			% [missing.size(), glb.get_file(), str(missing.slice(0, 5))]}
 	var animated := animate(library, glb)
-	return {"manifest": manifest, "library": library, "animated": animated}
+	# THE RELIEF (POM): the height maps the materials cite are read and kept on them (`mb_relief.gd`); the world draws them.
+	var relief := Relief.mark(library, glb)
+	return {"manifest": manifest, "library": library, "animated": animated, "relief": relief}
 
 
 ## Replaces every animated material of the library by its animated material. Returns how many materials are animated.

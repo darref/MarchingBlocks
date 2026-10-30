@@ -15,6 +15,7 @@ extends Node3D
 
 const Rule := preload("res://addons/marchingblocks_paint/mb_rule.gd")
 const Tileset := preload("res://addons/marchingblocks_paint/mb_tileset.gd")
+const Relief := preload("res://addons/marchingblocks_paint/mb_relief.gd")
 
 ## The tileset: the `tileset.json` inside a `.mbset` folder made by MarchingBlocks.
 @export_file("*.json") var tileset := "":
@@ -89,24 +90,39 @@ func _update_triplanar() -> void:
 	Tileset.own(library)
 	var t := global_transform if is_inside_tree() else transform
 	var cell := cell_size * t.basis.get_scale().x
+	# THE RELIEF (POM, `mb_relief.gd`): a relief material is drawn, triplanar on, by the plugin's triplanar relief
+	# shader (Godot's own parallax does not work in triplanar) put in its place on the surface; triplanar off, by
+	# Godot's relief on the file's UVs. `done`: still material → the material its surfaces must wear.
+	var relief := Relief.enabled()
 	var done := {}
 	for id in library.get_item_list():
 		var mesh := library.get_item_mesh(id)
 		if mesh == null:
 			continue
 		for s in mesh.get_surface_count():
-			var m := mesh.surface_get_material(s)
-			if not m is BaseMaterial3D or done.has(m):
+			var worn := mesh.surface_get_material(s)
+			var m: Material = worn.get_meta("mb_still") if worn != null and worn.has_meta("mb_still") else worn
+			if not m is BaseMaterial3D:
 				continue
-			done[m] = true
-			if not m.has_meta("mb_repeat"):
-				m.set_meta("mb_repeat", Tileset.repeat_of(mesh, s))
-			var repeat := float(m.get_meta("mb_repeat"))
-			var on := triplanar and repeat > 0.0
-			(m as BaseMaterial3D).uv1_triplanar = on
-			(m as BaseMaterial3D).uv1_world_triplanar = on
-			(m as BaseMaterial3D).uv1_triplanar_sharpness = 4.0
-			(m as BaseMaterial3D).uv1_scale = Vector3.ONE / (repeat * cell) if on else Vector3.ONE
+			if not done.has(m):
+				if not m.has_meta("mb_repeat"):
+					m.set_meta("mb_repeat", Tileset.repeat_of(mesh, s))
+				var repeat := float(m.get_meta("mb_repeat"))
+				var on := triplanar and repeat > 0.0
+				(m as BaseMaterial3D).uv1_triplanar = on
+				(m as BaseMaterial3D).uv1_world_triplanar = on
+				(m as BaseMaterial3D).uv1_triplanar_sharpness = 4.0
+				(m as BaseMaterial3D).uv1_scale = Vector3.ONE / (repeat * cell) if on else Vector3.ONE
+				done[m] = m
+				if m.has_meta("mb_relief") and m is StandardMaterial3D:
+					Relief.set_uv_relief(m as StandardMaterial3D, relief and not on)
+					if relief and on:
+						done[m] = Relief.triplanar_material(m as StandardMaterial3D, 1.0 / (repeat * cell))
+			var want: Material = done[m]
+			if want != worn:
+				# The transitions pass laid over the surface stays laid over it.
+				want.next_pass = worn.next_pass
+				mesh.surface_set_material(s, want)
 
 
 ## Godot's world → FORMAT space (cell c covers [c, c + 1], the tile of vertex v centred on v + piece_offset): the

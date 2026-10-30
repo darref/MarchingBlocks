@@ -31,6 +31,16 @@ const SUFFIXE_DEHORS := "_outdoor"
 ## points : les LONGUEURS 1, 2, 3 disent quel axe est lequel, le signe dit le miroir, la plus courte
 ## l'échelle. Il convertit ensuite la grille des cases par cette même application (règle, ligne « Frame »).
 const MARQUEUR := "mb_frame"
+## LE RELIEF (POM) QUI PART VERS LES JEUX (Jordan, 18 octobre 2026 : « le relief du Play test part aussi dans les jeux » ;
+## écrit le 30 octobre 2026, Satyron : « je ne constate pas de POM dans les textures des tuiles »). Le glTF n'a pas de
+## canal de hauteur : la carte part À CÔTÉ du .glb (`relief/<matériau>_height.png`), et le matériau la cite dans ses
+## extras, `mb_relief` = {format, version, height (chemin relatif au .mbset), depth (en unités d'UV : la profondeur du
+## creux le plus bas, pour une répétition de la texture)} — le même chemin que les textures animées (`mb_animation`).
+const FORMAT_RELIEF := "marchingblocks-relief"
+const VERSION_RELIEF := 1
+const DOSSIER_RELIEF := "relief"
+## La profondeur conseillée : celle du Play test (`Vue.RELIEF_PROFONDEUR`, 4 : l'échelle de Godot, ×0,01 en UV).
+const PROFONDEUR_RELIEF := 0.04
 const POINTS_DU_MARQUEUR := [[0, 0, 0], [1, 0, 0], [0, 2, 0], [0, 0, 3]]
 
 ## Mot à mot, les mots des noms de classes. ⚠ Un mot absent d'ici passe tel quel : `id_anglais` vérifie
@@ -192,7 +202,10 @@ static func tuiles_du_lot(lot: MeshLibrary) -> Dictionary:
 ## ⚠ **UN SHADER DE GODOT NE VOYAGE PAS.** Une tuile qui porte un `ShaderMaterial` (ou aucun matériau)
 ## part avec un matériau standard lisant ses couleurs de sommet — la légende du témoin.
 ## Le travail de l'artiste, lui, part avec SES matériaux.
-static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur: String) -> Dictionary:
+## `hauteurs` (30 octobre 2026) : {nom de matériau: Texture2D} — la carte de hauteur de chaque matériau qui en a une
+## (l'écran la retrouve dans le témoin, `editor._hauteurs_de`). Elle ne part que pour un matériau à NORMALE (le POM lit
+## les tangentes) ; {} : pas de relief.
+static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur: String, hauteurs: Dictionary = {}) -> Dictionary:
 	if lot == null or lot.get_item_list().is_empty():
 		return {"erreur": "this layer has no tiles — slice something into it first"}
 	var propre := nom.to_lower().strip_edges()
@@ -212,6 +225,8 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	var vus := {}
 	# Les images des textures animées qui partent avec le jeu : {chemin source: chemin relatif au .mbset}.
 	var emportees := {}
+	# Les cartes de hauteur qui partent : {chemin relatif au .mbset: Texture2D}.
+	var reliefs := {}
 	for cle in du_lot:
 		var tuile := nom_de_tuile(cle)
 		if vus.has(tuile):
@@ -221,7 +236,7 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 		var inst := MeshInstance3D.new()
 		inst.name = tuile
 		inst.mesh = _maillage_exportable(lot.get_item_mesh(du_lot[cle]), lot.get_item_mesh_transform(du_lot[cle]),
-			emportees)
+			emportees, hauteurs, reliefs)
 		racine.add_child(inst)
 		# ⚠ UNE VARIANTE N'EST PAS UNE CLÉ (4 octobre 2026) : `tiles` reste {clé: SA tuile de base} — un greffon qui ne
 		# lit pas les variantes pose la base, et le monde reste juste. Elles vont dans `variants`, dans l'ordre.
@@ -273,6 +288,21 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 			if not FileAccess.file_exists(source) or DirAccess.copy_absolute(source, cible.path_join(emportees[source])) != OK:
 				images_manquantes.append(str(source).get_file())
 
+	# LES CARTES DE HAUTEUR PARTENT AUSSI (30 octobre 2026), sous le chemin que les extras nomment.
+	if not reliefs.is_empty():
+		DirAccess.make_dir_recursive_absolute(cible.path_join(DOSSIER_RELIEF))
+		for rel in reliefs:
+			if rel == "_copies":
+				continue
+			var img :=(reliefs[rel] as Texture2D).get_image() if reliefs[rel] is Texture2D else null
+			if img == null:
+				images_manquantes.append(str(rel).get_file())
+				continue
+			if img.is_compressed():
+				img.decompress()
+			if img.save_png(cible.path_join(rel)) != OK:
+				images_manquantes.append(str(rel).get_file())
+
 	var manquantes: Array = []
 	for c in MB.pieces_a_sculpter():
 		if not du_lot.has(c):
@@ -297,10 +327,23 @@ static func exporter(lot: MeshLibrary, dossier: String, nom: String, generateur:
 	if r != null:
 		r.store_string("\n".join(regle()) + "\n\n"
 			+ "\n".join(load("res://addons/marchingblocks_core/animation_materiau.gd").regle_animation())
+			+ "\n\n" + "\n".join(regle_relief())
 			+ "\n\nOpen format — free plugins for Godot, Unity and Unreal read it. Made with %s.\n" % generateur)
 		r.close()
 	return {"dossier": cible, "tuiles": vus.size(), "cles": tuiles.size(), "manquantes": manquantes,
-		"images": emportees.size(), "images_manquantes": images_manquantes}
+		"images": emportees.size(), "images_manquantes": images_manquantes, "reliefs": reliefs.size() - (1 if reliefs.has("_copies") else 0)}
+
+
+## LE RELIEF, tel que le README du .mbset le dit (en anglais : il part chez l'acheteur).
+static func regle_relief() -> PackedStringArray:
+	return PackedStringArray([
+		"RELIEF (parallax occlusion mapping) - a material of tiles.glb may carry extras.mb_relief:",
+		"  {\"format\": \"%s\", \"version\": %d, \"height\": \"relief/<material>_height.png\", \"depth\": %s}" % [
+			FORMAT_RELIEF, VERSION_RELIEF, str(PROFONDEUR_RELIEF)],
+		"  height  a grayscale height map (white = high), relative to the .mbset folder, laid on the material's UVs;",
+		"  depth   the depth of the lowest point, in UV units (for one repeat of the texture).",
+		"  glTF has no height channel: this is how the relief travels. Such a material always carries a normal map.",
+		"  A plugin draws it with parallax occlusion mapping, can turn it off, and ignores a newer version."])
 
 
 ## Le tétraèdre du repère témoin : quatre sommets, quatre faces, et rien d'autre — un importeur qui
@@ -318,7 +361,8 @@ static func maillage_du_marqueur() -> ArrayMesh:
 	return m
 
 
-static func _maillage_exportable(mesh: Mesh, pose: Transform3D, emportees: Dictionary = {}) -> ArrayMesh:
+static func _maillage_exportable(mesh: Mesh, pose: Transform3D, emportees: Dictionary = {}, hauteurs: Dictionary = {},
+		reliefs: Dictionary = {}) -> ArrayMesh:
 	var sortie := ArrayMesh.new()
 	for s in mesh.get_surface_count():
 		var arrays: Array = mesh.surface_get_arrays(s)
@@ -338,6 +382,7 @@ static func _maillage_exportable(mesh: Mesh, pose: Transform3D, emportees: Dicti
 		# part : `Anim.vers_format`), ses images nommées relativement au .mbset (`emportees`, recopiées par `exporter`).
 		var m: Material = load("res://addons/marchingblocks_core/animation_materiau.gd").statique_pour_l_export(
 			mesh.surface_get_material(s), emportees)
+		m = _avec_relief(m, hauteurs, reliefs)
 		if m is ShaderMaterial or m == null:
 			var standard := StandardMaterial3D.new()
 			standard.vertex_color_use_as_albedo = true
@@ -345,6 +390,35 @@ static func _maillage_exportable(mesh: Mesh, pose: Transform3D, emportees: Dicti
 			m = standard
 		sortie.surface_set_material(sortie.get_surface_count() - 1, m)
 	return sortie
+
+
+## Le matériau qui part, avec son relief s'il en a un : une COPIE dont les extras citent la carte de hauteur (une
+## animation déjà là est gardée). Un même matériau source, une même copie, une même carte.
+static func _avec_relief(m: Material, hauteurs: Dictionary, reliefs: Dictionary) -> Material:
+	if not m is StandardMaterial3D or not (m as StandardMaterial3D).normal_enabled or not hauteurs.has(m.resource_name):
+		return m
+	var deja: Dictionary = reliefs.get("_copies", {})
+	if deja.has(m):
+		return deja[m]
+	var nom := ""
+	for ch in m.resource_name.to_lower():
+		nom += ch if (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9") or ch == "_" or ch == "-" else "_"
+	if nom == "":
+		nom = "material"
+	var rel := "%s/%s_height.png" % [DOSSIER_RELIEF, nom]
+	var i := 2
+	while reliefs.has(rel) and reliefs[rel] != hauteurs[m.resource_name]:
+		rel = "%s/%s_%d_height.png" % [DOSSIER_RELIEF, nom, i]
+		i += 1
+	reliefs[rel] = hauteurs[m.resource_name]
+	var copie: Material = m.duplicate()
+	var avant: Variant = m.get_meta("extras", {})
+	var extras: Dictionary = (avant as Dictionary).duplicate(true) if avant is Dictionary else {}
+	extras["mb_relief"] = {"format": FORMAT_RELIEF, "version": VERSION_RELIEF, "height": rel, "depth": PROFONDEUR_RELIEF}
+	copie.set_meta("extras", extras)
+	deja[m] = copie
+	reliefs["_copies"] = deja
+	return copie
 
 
 # ── LES CAS D'ÉPREUVE ──────────────────────────────────────────────────────────────────────────────

@@ -5074,6 +5074,26 @@ func _hauteur_du_materiau(i: int, nom: String) -> Texture2D:
 	return null
 
 
+## LE RELIEF QUI PART (30 octobre 2026) : {nom de matériau: carte de hauteur} de chaque matériau du lot de la couche
+## `i` qui en a une — ce que le Play test allume (`_hauteur_du_materiau`), donné à l'export (`FormatNeutre.exporter`).
+func _hauteurs_de(i: int, lot: MeshLibrary) -> Dictionary:
+	var out := {}
+	if lot == null:
+		return out
+	for id in lot.get_item_list():
+		var mesh := lot.get_item_mesh(id)
+		if mesh == null:
+			continue
+		for s in mesh.get_surface_count():
+			var m := mesh.surface_get_material(s)
+			if m == null or out.has(m.resource_name):
+				continue
+			var h := _hauteur_du_materiau(i, m.resource_name)
+			if h != null:
+				out[m.resource_name] = h
+	return out
+
+
 func _temoin_de(c: Dictionary) -> RefCounted:
 	var deja = c.get("_temoin", null)
 	if deja != null:
@@ -6352,7 +6372,8 @@ func _exporter_le_jeu(dossier: String) -> void:
 		return
 	await _attendre("Exporting the tileset", _couches[_active]["nom"])
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
-	var r: Dictionary = FormatNeutre.exporter(massif.lot, dossier, _couches[_active]["nom"], version)
+	var r: Dictionary = FormatNeutre.exporter(massif.lot, dossier, _couches[_active]["nom"], version,
+		_hauteurs_de(_active, massif.lot))
 	if r.has("dossier"):
 		Associations.marquer_dossier(str(r["dossier"]))
 	_fin_attente()
@@ -6376,7 +6397,8 @@ func _exporter_le_monde(dossier: String) -> void:
 		var massif: Node = _vue.couche(i)
 		couches.append({"nom": _couches[i]["nom"], "visible": _couches[i]["visible"],
 			"source": _couches[i]["source"], "lot": massif.lot,
-			"cases": (massif.get_node("Cases") as GridMap).get_used_cells(), "poids": massif.poids, "choix": massif.choix})
+			"cases": (massif.get_node("Cases") as GridMap).get_used_cells(), "poids": massif.poids, "choix": massif.choix,
+			"hauteurs": _hauteurs_de(i, massif.lot)})
 	await _attendre("Exporting the world", "%d layer(s)" % couches.size())
 	var version := "MarchingBlocks %s" % ProjectSettings.get_setting("application/config/version", "")
 	var nom: String = _projet.get_file().get_basename() if _projet != "" else "world"

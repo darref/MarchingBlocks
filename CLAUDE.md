@@ -79,6 +79,24 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
     (`heightmap_*` + deep parallax de StandardMaterial3D, comme le Play test), Unity (le Lit d'URP n'a qu'un parallax
     simple : un POM à écrire dans les presets, ou le simple assumé — OUVERT), Unreal (la fonction de matériau
     `ParallaxOcclusionMapping`). Désactivable dans chaque moteur, avec ses cas d'épreuve communs.
+    **LE CONTRAT ET GODOT — FAITS (spannergames-8b, 30 octobre 2026 ; Jordan, depuis Satyron : « je ne constate pas de
+    POM dans les textures des tuiles »)** — choisi plutôt que `world.json` : le relief voyage comme les textures animées,
+    dans le `.mbset` : `extras.mb_relief` = {format `marchingblocks-relief`, version 1, `height` (`relief/<matériau>_
+    height.png`, relatif au .mbset), `depth` (en UV : 0,04, la profondeur 4 du Play test)}, la carte écrite à côté du
+    .glb (`FormatNeutre.exporter(…, hauteurs)`, `_avec_relief`, `regle_relief` dans le README) ; l'écran donne les
+    hauteurs que le Play test allume (`editor._hauteurs_de`), seulement pour un matériau à normale. Côté Godot
+    (`mb_relief.gd`) : ⚠ **le POM de Godot ne marche pas en triplanaire, or les tuiles des jeux sont triplanaires** (depuis
+    le 20 octobre) : un shader du greffon fait le POM sur les TROIS projections de Godot (mêmes axes, même répétition),
+    8 à 32 couches, normale posée sur la normale géométrique (les tuiles courbes restent courbes) ; triplanaire coupé :
+    le relief de StandardMaterial3D sur les UV ; coupé dans le projet : `marchingblocks/relief/enabled`. MESURÉ :
+    `test_relief` 12/12 (rouge à 6 avec `--rougir`) ; suites greffon 467, animation 76, cartes PBR 98, projet 155,
+    fumée 1 167 vertes ; vu à l'image dans Satyron (banc de pavés : les dalles montent, les joints se creusent, sans
+    défaut à 0,04 ; des marches de couches à 0,12). ⚠ **CE QUE LA MESURE A MONTRÉ** : beaucoup de cartes de hauteur
+    DÉDUITES sont presque PLATES — sur les 58 de The Ruin, les sols putrides, le sable pourri, les bétons, la pierre
+    taillée tiennent entre 126 et 129 sur 255 (écart type 0,5), le sable 2 ; la roche, les pavés, le sol du canyon,
+    les murs de pierre et le volcan ont un vrai relief (écart type 15 à 36). Le relief y est donc exact et invisible :
+    la génération des hauteurs (`cartes_pbr.gd`) pour ces matières est à reprendre — OUVERT, à trancher par Jordan.
+    Unity et Unreal : À FAIRE (la parité des greffons).
   - **les fluides** (§5, « le mode Fluids ») : lire la clé `water` de `world.json` (règle `regle_eau()`, et la
     porter dans `regle()` et `world_conformance.json`) ; poser chaque nappe `water/<nom>.glb` avec un matériau
     choisi par l'artiste, et les SIX presets réécrits dans chaque moteur (stylisé, clair, réfléchissant, et depuis

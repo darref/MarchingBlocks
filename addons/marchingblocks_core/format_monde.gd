@@ -182,7 +182,7 @@ static func regle_franchisseurs() -> PackedStringArray:
 
 
 ## Écrit le monde. `couches` : [{nom, visible, source, lot (MeshLibrary ou null), cases (Array de
-## Vector3i)}], dans l'ordre. Rend {"dossier", "couches", "jeux", "sans_tuiles": [noms]} ou {"erreur"}.
+## Vector3i), hauteurs ({nom de matériau: Texture2D}, le relief, 30 octobre 2026 ; facultatif)}], dans l'ordre. Rend {"dossier", "couches", "jeux", "sans_tuiles": [noms]} ou {"erreur"}.
 ## `eaux` : [{nom, visible, preset, sources (Array de Vector3i), maillage (ArrayMesh ou null)}], dans l'ordre.
 ## `transitions` (parité des greffons, 7 octobre 2026) : {"etat": l'état de l'atelier (ids des couches), "ids": l'id de
 ## chaque couche de `couches`, dans l'ordre, "representants": [{image (Image ou null), couleur, echelle, rugosite}] par
@@ -214,7 +214,7 @@ static func exporter(couches: Array, dossier: String, nom: String, generateur: S
 					n = "%s_%d" % [base, i]
 					i += 1
 				noms_pris[n] = true
-				var r: Dictionary = FN.exporter(lot, cible, n, generateur)
+				var r: Dictionary = FN.exporter(lot, cible, n, generateur, c.get("hauteurs", {}))
 				if r.has("erreur"):
 					return {"erreur": "layer « %s »: %s" % [c["nom"], r["erreur"]]}
 				images_manquantes.append_array(r.get("images_manquantes", []))
