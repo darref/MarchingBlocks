@@ -17,7 +17,8 @@ gdextension/
   tests/              les cas d'épreuve PROPRES au noyau (`./build.sh` : g++ aux drapeaux d'Unreal)
   src/godot/          le PONT vers Godot (classes MBNatif et MBMonde), en français : il ne part que dans l'exe
   src/appli/          la partie PRIVÉE de l'appli (cartes PBR, découpe, eau) : jamais dans les greffons
-    licence.*           MBLicence : la vérification Ed25519 des clés de licence (version SITE)
+    licence.*           MBLicence : la vérification Ed25519 des clés de licence — PLUS APPELÉE depuis l'open source
+                        (3 novembre 2026) ; à retirer avec monocypher/ au prochain build des quatre bibliothèques
     monocypher/         Monocypher 4.0.2 (BSD-2 ou CC0), son Ed25519 de la RFC 8032 — en C, tel que publié
 addons/marchingblocks_core/
   natif.gd            l'aiguillage : charge la bibliothèque, ou rend null (le GDScript prend la main)
@@ -133,7 +134,12 @@ qu'elle passe (l'ordre n'entre dans la décision que par le propriétaire du som
 l'attente, fait suivre chaque inscrit (et la photo d'une couche qui dort) ; l'écran ne renumérote que l'union
 (`editor._renumeroter_l_union`). 120 821 cases : Up 555 → 70 ms.
 
-## La clé de licence — `MBLicence` (7 octobre 2026)
+## La clé de licence — `MBLicence` (7 octobre 2026) — ⚠ OBSOLÈTE DEPUIS L'OPEN SOURCE (3 novembre 2026)
+
+Plus rien ne l'appelle : `app/licence.gd`, `DEV_TOOLS/test_vente.gd`, `licence_signer.py` et `vecteurs_ed25519.json` sont
+retirés. Le code reste tant que les bibliothèques du dépôt (qui le contiennent) ne sont pas reconstruites ; on le retire
+alors avec `monocypher/`, et l'avis de Monocypher dans `app/avis_tiers.gd`. Ce qui suit est l'histoire.
+
 
 `src/appli/licence.*` : `verifier(publique, message, signature)`, `publique_de(graine)`, `signer(graine, message)` —
 l'Ed25519 de Monocypher 4.0.2 (`src/appli/monocypher/`, recopié tel quel depuis monocypher.org et comparé au tag 4.0.2

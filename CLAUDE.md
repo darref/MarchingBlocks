@@ -25,6 +25,43 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   `essais/`. `MARQUE/` reste ici : l'appli l'embarque. ⚠ Un chemin `D:/MB_*`, `D:/MarchingBlocks_*` ou
   `D:/MarchingBlocks/build` écrit plus bas date d'avant ce rangement (le tableau de `ETAT.md` dit où il est allé).
 
+## MARCHINGBLOCKS EST OPEN SOURCE — DÉCIDÉ (Jordan, 3 novembre 2026)
+
+> « Le projet va devenir open source : supprime la démo et adapte tout le projet pour que je puisse le proposer en tant
+> que projet open source. » Le dépôt `darref/MarchingBlocks` est PUBLIC ; les dons passent par GitHub Sponsors et une
+> page Buy Me a Coffee.
+
+**CECI RENVERSE TOUT CE QUI, PLUS BAS, PARLE DE VENTE** : le logiciel vendu « 60 € en UN exécutable chiffré » (§0), la
+démo, la clé de licence Ed25519, le contrat à accepter, les éditions site / Steam / itch, le chiffrement du PCK, le prix,
+l'installeur « du site », SteamPipe — ces passages sont de l'HISTOIRE. Fait le 3 novembre 2026 :
+
+- **LA LICENCE : MIT pour tout le dépôt** (`LICENSE` à la racine, le même texte que les greffons, « Jordan Ferrad
+  (SpannerGames) ») — PROPOSÉ par Claude (la cohérence avec les greffons, déjà MIT) ; à changer par Jordan s'il préfère
+  une autre (GPL, MPL…). ⚠ Le contrat EULA (`app/textes/LICENSE.txt`) est retiré.
+- **RETIRÉS** : `app/demo.gd`, `app/licence.gd`, `app/contrat.gd`, `app/vente.gd`, `DEV_TOOLS/licence_signer.py`,
+  `DEV_TOOLS/test_vente.gd`, `DEV_TOOLS/vecteurs_ed25519.json`, les préréglages Site / Steam / Itch / Demo et leurs balises,
+  le dossier de données à part de la démo (`project.godot`).
+- **`app/edition.gd`** : deux éditions, « release » (un exe exporté : associations de fichiers, mises à jour) et « dev ».
+- **`app/a_propos.gd`** (remplace `vente.gd`) : About dit la version, la licence MIT, les avis tiers, le dépôt, GitHub
+  Sponsors et Buy Me a Coffee (`CAFE`, ⚠ À COMPLÉTER avec l'adresse de la page) ; aucun dialogue au lancement.
+- **LES MISES À JOUR LISENT GITHUB** (`mises_a_jour.gd`) : l'API `releases/latest` du dépôt (`tag_name`, `html_url`) ;
+  publier une version = pousser un tag `vX.Y.Z` et créer sa Release. L'ancien format du site reste lu.
+- **L'EXEMPLE SE TÉLÉCHARGE DEPUIS GITHUB** (`exemple.gd`) : `exemple/example.json` sur la branche main (écrit par
+  l'export) nomme le zip joint à la Release. ⚠ Tant que ce fichier n'est pas poussé, le bouton « Example world » dit
+  qu'il n'a pas pu télécharger (et « Open… » accepte le zip).
+- **L'EXPORT** (`exporter_marchingblocks.sh`) : préréglages « Windows » et « Linux », MODÈLES OFFICIELS, SANS
+  CHIFFREMENT (un dépôt public n'a rien à cacher, et un contributeur n'a pas la clé) ; il sort `windows/`, `linux/` et
+  leurs zips, l'installeur Inno Setup (sans page de licence à accepter), les greffons, l'exemple. La sonde dit
+  « natif=1 edition=release version=… ».
+- **`README.md`, `CONTRIBUTING.md`, `.github/FUNDING.yml`** (`github: darref` ; Buy Me a Coffee À COMPLÉTER).
+- ⚠ **RESTE** : `MBLicence` et Monocypher sont encore dans `gdextension/src/appli/` et dans les quatre bibliothèques
+  du dépôt (plus appelés) — à retirer au prochain build des DLL, avec l'avis de Monocypher. ⚠ **DES LOTS ACHETÉS SONT
+  SUIVIS PAR GIT** (`TILESOURCES/lot3d_simple_ground/`, `HEART_WORLD/`, §8) — dans un dépôt public, c'est de la
+  redistribution : OUVERT, à Jordan (les retirer de l'arbre ne les retire pas de l'historique). ⚠ La page itch.io payante,
+  `SpannerGamesWeb` et `D:/SpannerGames/ETAT.md` sont à aligner hors de ce dépôt.
+- ⚠ **PAS LANCÉ** : la session cloud n'a pas pu exécuter Godot — `test_a_propos` (la nouvelle suite), la fumée et
+  l'export n'ont pas tourné. À lancer sur le PC : `bash DEV_TOOLS/lancer_les_suites.sh`.
+
 ---
 
 ## 0. Le produit : le logiciel MarchingBlocks — DÉCIDÉ (Jordan, 27 septembre 2026)
@@ -935,7 +972,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 - **OUVERT** : la licence ; l'icône (remplacée en `362ae23`, pas encore validée ici) ; les textures PBR de test (retirées avec le PBR le 29 septembre 2026)
   venaient de HEART_WORLD.
 
-### LA VENTE — fait le 7 octobre 2026 (branche `vente`, à la demande de Jordan : « rends MarchingBlocks vendable »)
+### LA VENTE — fait le 7 octobre 2026 (branche `vente`) — ⚠ RETIRÉE LE 3 NOVEMBRE 2026 (open source, en tête de la charte) : HISTOIRE
 
 Ce qui reste à faire pour vendre, sorti des décisions du 3 et du 7 octobre (§0 et §10 : clé signée nominative, hors ligne,
 sans limite de machines ; site + Steam ; démo ; installeur Inno Setup). Le code : `app/edition.gd`, `licence.gd`,

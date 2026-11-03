@@ -1,3 +1,8 @@
+> ⚠ **PÉRIMÉ EN PARTIE — MARCHINGBLOCKS EST OPEN SOURCE DEPUIS LE 3 NOVEMBRE 2026** (charte §0, « open source ») :
+> plus de démo, de clé de licence, de contrat à accepter, de version Steam / itch / site, ni de chiffrement. Les
+> séances qui en parlent (la clé, le contrat, « Activate », la démo, SteamPipe) ne s'appliquent plus ; l'export sort
+> désormais `windows/`, `linux/`, l'installeur, les greffons et l'exemple (`DEV_TOOLS/exporter_marchingblocks.sh`).
+
 # MarchingBlocks — la campagne de prise en main
 
 Écrite le 7 octobre 2026, d'après `CLAUDE.md` (lu en entier) et `app/manuel.gd` (les noms à l'écran).

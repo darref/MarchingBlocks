@@ -1,8 +1,8 @@
 extends SceneTree
 ## PRÉPARER LA LIVRAISON — ce qui accompagne l'exe dans un dossier livré, tiré des règles de l'appli (UNE source) :
-##   LICENSE.txt               le contrat (`app/textes/LICENSE.txt`, tel quel)
+##   LICENSE.txt               la licence du projet (MIT, le `LICENSE` de la racine du dépôt, tel quel)
 ##   THIRD_PARTY_NOTICES.txt   les avis des licences tierces (`app/avis_tiers.gd`, le même texte que « About »)
-## et, avec `--installeur` (la version SITE, installée par Inno Setup) :
+## et, avec `--installeur` (la version Windows, installée par Inno Setup) :
 ##   icones/*.ico              les icônes des fichiers et des dossiers (`Associations.ecrire_les_icones`)
 ##   associations.iss          la section [Registry] de l'installeur, écrite d'après `Associations.TYPES` : les MÊMES
 ##                             clés que l'appli pose elle-même quand elle n'est pas installée
@@ -11,7 +11,7 @@ extends SceneTree
 ##   godot --headless --path <projet> --script res://DEV_TOOLS/preparer_livraison.gd -- --sortie=<dossier> [--installeur]
 
 const Associations := preload("res://app/associations.gd")
-const Contrat := preload("res://app/contrat.gd")
+const APropos := preload("res://app/a_propos.gd")
 const Avis := preload("res://app/avis_tiers.gd")
 
 
@@ -28,7 +28,7 @@ func _initialize() -> void:
 		quit(1)
 		return
 	var erreurs := 0
-	erreurs += _ecrire(sortie.path_join("LICENSE.txt"), Contrat.texte().replace("\r\n", "\n").replace("\n", "\r\n"))
+	erreurs += _ecrire(sortie.path_join("LICENSE.txt"), APropos.licence().replace("\r\n", "\n").replace("\n", "\r\n"))
 	erreurs += _ecrire(sortie.path_join("THIRD_PARTY_NOTICES.txt"), Avis.texte().replace("\n", "\r\n"))
 	if installeur:
 		var raison := Associations.ecrire_les_icones(sortie.path_join("icones"))

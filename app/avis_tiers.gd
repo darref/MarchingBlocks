@@ -5,7 +5,8 @@ extends RefCounted
 ##   • Godot Engine (MIT) et TOUS ses composants tiers (polices comprises — Open Sans, Noto Sans, Inter… —,
 ##     FreeType, HarfBuzz, mbedTLS…), tels que le moteur lui-même les déclare (`Engine.get_copyright_info`) ;
 ##   • godot-cpp (MIT), le pont de la bibliothèque native ;
-##   • Monocypher (BSD-2 ou CC0, au choix : on reproduit la BSD-2), l'Ed25519 des clés de licence.
+##   • Monocypher (BSD-2 ou CC0, au choix : on reproduit la BSD-2), l'Ed25519 des anciennes clés de licence — encore
+##     compilé dans la bibliothèque native livrée (à retirer de `gdextension/` au prochain build des DLL).
 ## ⚠ Une bibliothèque ajoutée au cœur natif (`gdextension/`) s'AJOUTE à `PROPRES`, avec son texte.
 ## ⚠ Le texte de l'éditeur Godot (qui écrit le fichier livré) déclare un peu PLUS de composants que le modèle
 ## d'export recompilé (sans D3D12 ni AccessKit) : un sur-ensemble, jamais un oubli.

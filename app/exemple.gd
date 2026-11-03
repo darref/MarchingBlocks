@@ -95,19 +95,22 @@ static func installer_sur_place(projet: String) -> int:
 
 # ── L'EXEMPLE TÉLÉCHARGÉ — DÉCIDÉ (Jordan, 18 octobre 2026 : « passer l'exemple fourni avec le soft en téléchargeable
 # depuis le soft ouvert avec un bouton », hébergé « dans SpannerGames ») ──────────────────────────────────────────────
-# L'exe ne l'embarque plus (234 Mo sur 335). Le bouton « Example world » lit `example.json` sur le site, à côté de
-# `latest.json` (même domaine : une seule URL à remplir, `MisesAJour.URL`), télécharge le zip qu'il nomme, vérifie sa
-# TAILLE et son SHA-256, le garde dans `TELECHARGEE`, puis l'installe comme avant. Une fois téléchargé, il ne se
-# retélécharge plus. Hors ligne, ou le site pas encore en ligne : « Open… » accepte aussi un zip d'exemple téléchargé à
-# la main (la page itch.io de la démo le propose à côté de l'exe).
+# L'exe ne l'embarque plus (234 Mo sur 335). Depuis le passage en OPEN SOURCE (3 novembre 2026), le bouton « Example
+# world » lit `exemple/example.json` dans le DÉPÔT GITHUB (branche main), qui nomme le zip mis en pièce jointe d'une
+# Release (`exporter_marchingblocks.sh` écrit les deux), télécharge le zip, vérifie sa TAILLE et son SHA-256, le garde
+# dans `TELECHARGEE`, puis l'installe comme avant. Une fois téléchargé, il ne se retélécharge plus. Hors ligne : « Open… »
+# accepte aussi un zip d'exemple téléchargé à la main (depuis la page des Releases).
 
 const TELECHARGEE := "user://example/example.zip"
 ## La plus grosse archive acceptée (une réponse détournée ne remplira pas le disque).
 const TAILLE_MAXI := 1024 * 1024 * 1024
 
 
-static func url_description(url_maj := MisesAJour.URL) -> String:
-	return url_maj.get_base_dir() + "/example.json"
+const URL_DESCRIPTION := "https://raw.githubusercontent.com/darref/MarchingBlocks/main/exemple/example.json"
+
+
+static func url_description() -> String:
+	return URL_DESCRIPTION
 
 
 ## L'archive à installer sans réseau : l'embarquée (développement), sinon celle déjà téléchargée ; "" sinon.

@@ -1,15 +1,13 @@
 extends Node
-## LA VÉRIFICATION DES MISES À JOUR — édition SITE seulement (Steam livre les siennes). Stratégie de lancement,
-## « Mises à jour et licence » : au lancement, l'appli lit un petit JSON sur le site ; si une version plus récente
-## existe, la barre de titre le DIT, discrètement ; rien ne se télécharge sans l'acheteur (le lien ouvre « My
-## downloads »). Désactivable dans Project. ⚠ JAMAIS BLOQUANTE : hors ligne, site absent, réponse fausse — on se tait.
+## LA VÉRIFICATION DES MISES À JOUR — dans l'exe livré. Au lancement, l'appli lit la DERNIÈRE VERSION PUBLIÉE sur GitHub
+## (l'API « releases/latest » du dépôt open source) ; si elle est plus récente, la barre de titre le DIT, discrètement ;
+## rien ne se télécharge (le lien ouvre la page de la version). Désactivable dans Project. ⚠ JAMAIS BLOQUANTE : hors
+## ligne, GitHub absent, réponse fausse — on se tait.
 ##
-## Le JSON (à poser sur le site à chaque version) :
-##   {"version": "0.9.1", "date": "2027-02-12", "notes": "https://…/notes/0.9.1", "download": "https://…/my-downloads"}
+## La réponse lue : celle de GitHub (`tag_name`, `html_url` — une version se publie en poussant un tag « vX.Y.Z » et
+## en créant sa Release), ou l'ancien format du site ({"version", "download"}), toujours accepté.
 
-## ⚠ À REMPLIR LE JOUR OÙ LE DOMAINE EXISTE (il attend l'argent, charte §0). Tant qu'elle porte « A-REMPLIR »,
-## rien ne part sur le réseau, et l'export le rappelle.
-const URL := "https://A-REMPLIR.example/marchingblocks/latest.json"
+const URL := "https://api.github.com/repos/darref/MarchingBlocks/releases/latest"
 const SECONDES_MAXI := 6.0
 const REGLAGES := "user://reglages.cfg"
 
@@ -69,15 +67,17 @@ static func lire_la_reponse(texte: String, locale: String) -> Dictionary:
 	if j.parse(texte) != OK:
 		return {}
 	var d: Variant = j.data
-	if not d is Dictionary or not (d as Dictionary).has("version"):
+	if not d is Dictionary:
 		return {}
-	var version := str(d["version"])
+	var version := str((d as Dictionary).get("version", (d as Dictionary).get("tag_name", "")))
+	if version == "":
+		return {}
 	if not plus_recente(version, locale):
 		return {}
-	var lien := str(d.get("download", d.get("notes", "")))
+	var lien := str(d.get("download", d.get("html_url", d.get("notes", ""))))
 	if not lien.begins_with("https://"):
 		lien = ""
-	return {"version": version, "lien": lien}
+	return {"version": version.strip_edges().trim_prefix("v"), "lien": lien}
 
 
 ## Lance la vérification (une requête, sur le réseau, sans attendre) si elle est voulue et l'URL remplie.
