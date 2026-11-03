@@ -56,10 +56,9 @@ const Manuel := preload("res://app/manuel.gd")
 const Associations := preload("res://app/associations.gd")
 const Exemple := preload("res://app/exemple.gd")
 const Dossiers := preload("res://app/dossiers.gd")
-## LA VENTE (charte §0, « la vente ») : l'édition de l'exe (site, Steam, démo), la démo, et ce que l'acheteur en voit.
-const Edition := preload("res://app/edition.gd")
-const Demo := preload("res://app/demo.gd")
-const Vente := preload("res://app/vente.gd")
+## LE LOGICIEL LIBRE (Jordan, 3 novembre 2026 : GPL-3.0, des dons, plus de vente ni de démo) : « About », les dons, les
+## mises à jour publiées sur GitHub.
+const APropos := preload("res://app/a_propos.gd")
 const MisesAJour := preload("res://app/mises_a_jour.gd")
 const Modeleur := preload("res://app/modeleur.gd")
 const LegendeFormes := preload("res://app/legende_formes.gd")
@@ -353,7 +352,7 @@ var _preset_eau: OptionButton
 var _droite_jeu: Panneau
 var _controles_rendu := {}
 var _choix_meteo: OptionButton
-var _vente: Node
+var _a_propos: Node
 var _bouton_maj: Button
 var _case_maj: CheckButton
 
@@ -379,8 +378,8 @@ func _notification(quoi: int) -> void:
 
 
 func _ready() -> void:
-	# LA SONDE DE L'EXPORT (`exporter_marchingblocks.sh`) : l'exe dit s'il a chargé sa DLL, et laquelle de ses éditions il
-	# est, puis s'arrête — RIEN d'autre (ni contrat, ni projet, ni registre). Elle ne débloque rien.
+	# LA SONDE DE L'EXPORT (`exporter_marchingblocks.sh`) : l'exe dit s'il a chargé sa DLL, sa version et s'il porte sa
+	# licence, puis s'arrête — RIEN d'autre (ni projet, ni registre).
 	if OS.get_cmdline_user_args().has("--mb-sonde"):
 		await _sonder()
 		return
@@ -397,28 +396,18 @@ func _ready() -> void:
 	_lire_les_durees()
 	await get_tree().process_frame
 	_regler_fenetre()
-	# LA VENTE, AVANT TOUT PROJET (charte §0, « la vente ») : le contrat à accepter, la clé (site). Quitter là ne touche
-	# à rien. Hors de l'exe livré (l'éditeur, les suites), rien.
-	if not await _vente.au_lancement():
-		get_tree().quit()
-		return
+	# Les mises à jour (exe livré seulement), sans attendre.
+	_a_propos.au_lancement()
 	await _ouvrir_au_lancement()
-	if Edition.est_demo():
-		_dire(Demo.MESSAGE)
 	_inscrire_les_fichiers()
 
 
 func _sonder() -> void:
-	const Licence := preload("res://app/licence.gd")
 	const Natif := preload("res://addons/marchingblocks_core/natif.gd")
-	print("MB-SONDE natif=%d licence=%d edition=%s version=%s" % [int(Natif.disponible()),
-		int(Licence.verificateur() != null), Edition.nom(), ProjectSettings.get_setting("application/config/version", "")])
-	# `--mb-cle=<clé>` : la clé est-elle bonne POUR CET EXE (sa clé publique livrée) ? L'export y passe une clé signée à
-	# l'instant par la clé privée de Jordan — la chaîne entière, de l'outil de signature à l'exe chiffré.
-	for a in OS.get_cmdline_user_args():
-		if a.begins_with("--mb-cle="):
-			var r: Dictionary = Licence.lire(a.trim_prefix("--mb-cle="))
-			print("MB-SONDE-CLE %s" % (("ok nom=" + str(r["nom"])) if r["ok"] else ("refusee " + str(r["raison"]))))
+	# `gpl` : la licence (`res://LICENSE`) est-elle dans le PCK ? Elle s'affiche dans « About ».
+	print("MB-SONDE natif=%d gpl=%d version=%s" % [int(Natif.disponible()),
+		int(APropos.texte_de_la_licence().contains("GNU GENERAL PUBLIC LICENSE")),
+		ProjectSettings.get_setting("application/config/version", "")])
 	# Le temps que l'export voie la DLL dans les modules du processus.
 	await get_tree().create_timer(3.0).timeout
 	get_tree().quit()
@@ -617,9 +606,9 @@ func _batir() -> void:
 
 	_manuel = Manuel.new()
 	add_child(_manuel)
-	_vente = Vente.new()
-	add_child(_vente)
-	_vente.mise_a_jour.connect(_dire_la_mise_a_jour)
+	_a_propos = APropos.new()
+	add_child(_a_propos)
+	_a_propos.mise_a_jour.connect(_dire_la_mise_a_jour)
 
 	_dialogue = FileDialog.new()
 	_dialogue.access = FileDialog.ACCESS_FILESYSTEM
@@ -739,14 +728,26 @@ func _barre_titre() -> Control:
 	manuel.focus_mode = Control.FOCUS_NONE
 	manuel.pressed.connect(func() -> void: _manuel.ouvrir())
 	ligne.add_child(manuel)
-	# « About » : la version, l'édition, la licence en vigueur, le contrat et les avis des licences tierces.
+	# « About » : la version, la licence (GPL-3.0), le code source, les dons et les avis des licences tierces.
 	var about := Button.new()
 	about.text = "About"
-	about.tooltip_text = "Version, license, third-party notices"
+	about.tooltip_text = "Version, license, source code, third-party notices"
 	about.focus_mode = Control.FOCUS_NONE
-	about.pressed.connect(func() -> void: _vente.ouvrir_about())
+	about.pressed.connect(func() -> void: _a_propos.ouvrir_about())
 	ligne.add_child(about)
-	# UNE MISE À JOUR (site) : un mot discret, caché tant que le site n'a rien annoncé ; il ouvre « My downloads ».
+	# LES DONS (Jordan, 3 novembre 2026 : le logiciel libre « réclame des dons ») : toujours là, discret, en ambre ; il
+	# ouvre « About », où sont les plateformes (`dons.gd`).
+	var soutenir := Button.new()
+	soutenir.text = "Support"
+	soutenir.icon = Icones.icone("coeur")
+	soutenir.tooltip_text = "MarchingBlocks is free and open source: support it with a donation"
+	soutenir.flat = true
+	soutenir.focus_mode = Control.FOCUS_NONE
+	soutenir.add_theme_color_override("font_color", Palette.AMBRE)
+	soutenir.add_theme_color_override("icon_normal_color", Palette.AMBRE)
+	soutenir.pressed.connect(func() -> void: _a_propos.ouvrir_about())
+	ligne.add_child(soutenir)
+	# UNE MISE À JOUR : un mot discret, caché tant que GitHub n'a rien annoncé ; il ouvre la page de la version.
 	_bouton_maj = Button.new()
 	_bouton_maj.flat = true
 	_bouton_maj.visible = false
@@ -754,12 +755,6 @@ func _barre_titre() -> Control:
 	_bouton_maj.add_theme_font_size_override("font_size", 12)
 	_bouton_maj.add_theme_color_override("font_color", Palette.AMBRE)
 	ligne.add_child(_bouton_maj)
-	if Edition.est_demo():
-		var demo := Label.new()
-		demo.text = "FREE DEMO — no export"
-		demo.add_theme_font_size_override("font_size", 12)
-		demo.add_theme_color_override("font_color", Palette.AMBRE)
-		ligne.add_child(demo)
 
 	# L'éditeur, tout à droite. ⚠ LE LOGO DÉTOURÉ, pas `spannergames.png` : son fond violet opaque
 	# ferait un carré sur la barre.
@@ -1118,14 +1113,13 @@ func _batir_gauche(pile: VBoxContainer, reference: VBoxContainer) -> void:
 	_case_associations.focus_mode = Control.FOCUS_NONE
 	_case_associations.toggled.connect(_regler_les_associations)
 	projet.contenu.add_child(_case_associations)
-	# LES MISES À JOUR (site seulement : Steam livre les siennes) — vérifiées au lancement, sans rien télécharger.
+	# LES MISES À JOUR — vérifiées au lancement (l'exe livré), sans rien télécharger.
 	_case_maj = CheckButton.new()
 	_case_maj.text = "Check for updates at launch"
 	_case_maj.add_theme_font_size_override("font_size", 11)
-	_case_maj.tooltip_text = ("Reads a small file on the SpannerGames website at launch and says, up in the title "
+	_case_maj.tooltip_text = ("Asks GitHub for the latest MarchingBlocks release at launch and says, up in the title "
 		+ "bar, when a newer version is out.\nNothing is downloaded by itself. Offline, nothing happens.")
 	_case_maj.focus_mode = Control.FOCUS_NONE
-	_case_maj.visible = Edition.nom() == Edition.SITE
 	_case_maj.set_pressed_no_signal(MisesAJour.voulue())
 	_case_maj.toggled.connect(func(oui: bool) -> void: MisesAJour.regler(oui))
 	projet.contenu.add_child(_case_maj)
@@ -1165,7 +1159,7 @@ Each piece between them becomes one tile — keep your relief inside its cell.")
 	for b in [["My world", "Your own world: the last project you opened that is not the example.",
 				_ouvrir_mon_monde],
 			["Example world", "An example world for MarchingBlocks — an island, its biomes, its caves — in its own folder. Your changes "
-				+ "to it are kept there. Downloaded once from the SpannerGames site the first time you open it.",
+				+ "to it are kept there. Downloaded once from GitHub the first time you open it.",
 				_ouvrir_l_exemple]]:
 		var choix := CheckBox.new()
 		choix.text = b[0]
@@ -5518,10 +5512,6 @@ func _dire_la_cible() -> void:
 
 
 func _demander(quoi: String) -> void:
-	# LA DÉMO (`demo.gd`) : aucune sortie.
-	if Edition.est_demo() and Demo.refuse(quoi):
-		_dire(Demo.MESSAGE)
-		return
 	_action_fichier = quoi
 	var ecrire: bool = quoi in ["exporter", "enregistrer"]
 	_dialogue.file_mode = FileDialog.FILE_MODE_SAVE_FILE if ecrire else FileDialog.FILE_MODE_OPEN_FILE
@@ -5569,9 +5559,6 @@ func _demander(quoi: String) -> void:
 
 
 func _fichier_choisi(fichier: String) -> void:
-	if Edition.est_demo() and Demo.refuse(_action_fichier):   # la seconde porte : rien n'arrive ici sans `_demander`
-		_dire(Demo.MESSAGE)
-		return
 	match _action_fichier:
 		"exporter":
 			_exporter(fichier)
@@ -7332,7 +7319,8 @@ func _ouvrir_l_archive_d_exemple(archive: String) -> void:
 		_dire_le_projet()
 
 
-## L'EXEMPLE TÉLÉCHARGÉ (`Exemple`, Jordan, 18 octobre 2026) : `example.json` sur le site, puis le zip qu'il nomme, dans
+## L'EXEMPLE TÉLÉCHARGÉ (`Exemple`, Jordan, 18 octobre 2026) : `example.json` de la dernière version publiée sur GitHub
+## (logiciel libre, 3 novembre 2026), puis le zip qu'il nomme, dans
 ## un `.part` qui ne devient l'archive que si sa taille et son SHA-256 sont les annoncés. Rend le chemin de l'archive, ou
 ## "" en disant pourquoi. ⚠ JAMAIS BLOQUANT : l'écran vit pendant le téléchargement (la barre d'attente le suit).
 func _telecharger_l_exemple() -> String:
@@ -7341,13 +7329,14 @@ func _telecharger_l_exemple() -> String:
 		_dire("[color=#e0603c]The example world is not online yet[/color] — download its .zip from the page where you "
 			+ "got MarchingBlocks, then open it with [b]Open…[/b].")
 		return ""
-	await _attendre("Downloading the example world", "Asking the SpannerGames site what to download…", 0)
+	await _attendre("Downloading the example world", "Asking GitHub what to download…", 0)
 	var r: Array = await _http(url, "", 0, 15.0)
 	var description := Exemple.lire_la_description((r[2] as PackedByteArray).get_string_from_utf8()) 		if r[0] == HTTPRequest.RESULT_SUCCESS and r[1] == 200 else {}
 	if description.is_empty():
 		_fin_attente()
-		_dire("[color=#e0603c]The example world could not be downloaded[/color] — the SpannerGames site did not answer "
-			+ "(offline?). Try again later, or open a downloaded example .zip with [b]Open…[/b].")
+		_dire("[color=#e0603c]The example world could not be downloaded[/color] — GitHub did not answer (offline?). "
+			+ "Try again later, or download the example .zip from %s/releases and open it with [b]Open…[/b]."
+			% MisesAJour.DEPOT)
 		return ""
 	var partiel := ProjectSettings.globalize_path(Exemple.TELECHARGEE + ".part")
 	var final := ProjectSettings.globalize_path(Exemple.TELECHARGEE)
@@ -7825,8 +7814,7 @@ static func _attend(minuterie: Timer) -> bool:
 func _inscrire_les_fichiers() -> void:
 	var reglages := ConfigFile.new()
 	reglages.load(REGLAGES)
-	# ⚠ LA DÉMO NE S'INSCRIT PAS : elle n'ouvre aucun projet d'ailleurs, un double-clic n'y mènerait à rien.
-	var livre: bool = OS.get_name() == "Windows" and OS.has_feature("template") and not Edition.est_demo()
+	var livre: bool = OS.get_name() == "Windows" and OS.has_feature("template")
 	if _case_associations != null:
 		_case_associations.disabled = not livre
 		_case_associations.set_pressed_no_signal(livre and not bool(reglages.get_value("associations", "refus", false)))
@@ -8276,11 +8264,11 @@ func _touche_du_temoin(k: InputEventKey) -> bool:
 	return pris
 
 
-## Le site annonce une version plus récente (`MisesAJour`, version SITE) : un mot dans la barre de titre, rien de plus.
+## GitHub annonce une version plus récente (`MisesAJour`) : un mot dans la barre de titre, rien de plus.
 func _dire_la_mise_a_jour(version: String, lien: String) -> void:
 	_bouton_maj.text = "Update %s available" % version
-	_bouton_maj.tooltip_text = ("A newer version of MarchingBlocks is out. Click to open your downloads page." if lien != ""
-		else "A newer version of MarchingBlocks is out: get it from your downloads page.")
+	_bouton_maj.tooltip_text = ("A newer version of MarchingBlocks is out. Click to open its download page." if lien != ""
+		else "A newer version of MarchingBlocks is out: get it from %s/releases." % MisesAJour.DEPOT)
 	for c in _bouton_maj.pressed.get_connections():
 		_bouton_maj.pressed.disconnect(c["callable"])
 	if lien != "":

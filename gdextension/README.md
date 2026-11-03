@@ -16,9 +16,7 @@ gdextension/
     world.h / .cpp      LE MONDE : couches, cases, décision de chaque sommet, et le DIFF de chaque changement
   tests/              les cas d'épreuve PROPRES au noyau (`./build.sh` : g++ aux drapeaux d'Unreal)
   src/godot/          le PONT vers Godot (classes MBNatif et MBMonde), en français : il ne part que dans l'exe
-  src/appli/          la partie PRIVÉE de l'appli (cartes PBR, découpe, eau) : jamais dans les greffons
-    licence.*           MBLicence : la vérification Ed25519 des clés de licence (version SITE)
-    monocypher/         Monocypher 4.0.2 (BSD-2 ou CC0), son Ed25519 de la RFC 8032 — en C, tel que publié
+  src/appli/          la partie de l'appli seule (cartes PBR, découpe, eau) : elle ne part pas dans les greffons
 addons/marchingblocks_core/
   natif.gd            l'aiguillage : charge la bibliothèque, ou rend null (le GDScript prend la main)
   natif/marchingblocks_natif.gdextension
@@ -70,7 +68,8 @@ fermer l'éditeur, reconstruire, rouvrir. Sous Windows, une DLL chargée ne peut
 | `EauMaillage._poser_les_plats`                  | `eau_poser_les_plats`                |
 
 Étape 2 (6 octobre 2026) : les cartes PBR, la découpe et les plats de l'eau vivent dans `src/appli/`, la partie
-PRIVÉE de l'appli — le trancheur est ce qui se vend, il ne partira pas dans la bibliothèque des greffons. Les
+de l'appli seule — le trancheur ne part pas dans la bibliothèque des greffons (logiciel libre depuis le 3 novembre
+2026 : plus rien n'y est caché, la séparation garde seulement les greffons légers). Les
 `Image.resize` des cartes restent au GDScript (déjà natifs dans Godot).
 
 ⚠ **Le natif ne décide rien** : la table des 256 configurations lui est donnée par `MB.natif()` depuis
@@ -133,15 +132,10 @@ qu'elle passe (l'ordre n'entre dans la décision que par le propriétaire du som
 l'attente, fait suivre chaque inscrit (et la photo d'une couche qui dort) ; l'écran ne renumérote que l'union
 (`editor._renumeroter_l_union`). 120 821 cases : Up 555 → 70 ms.
 
-## La clé de licence — `MBLicence` (7 octobre 2026)
+## ~~La clé de licence — `MBLicence` (7 octobre 2026)~~ — RETIRÉE (3 novembre 2026)
 
-`src/appli/licence.*` : `verifier(publique, message, signature)`, `publique_de(graine)`, `signer(graine, message)` —
-l'Ed25519 de Monocypher 4.0.2 (`src/appli/monocypher/`, recopié tel quel depuis monocypher.org et comparé au tag 4.0.2
-de GitHub ; BSD-2 ou CC0 au choix, audité par Cure53 en 2020). Godot n'a pas Ed25519. Le format des clés, le produit et
-les révocations vivent dans `app/licence.gd` ; `DEV_TOOLS/test_vente.gd` juge le natif contre la RFC 8032 et contre
-OpenSSL (`vecteurs_ed25519.json`, signés par Python `cryptography`). ⚠ Le natif ÉTEINT (`MB_NATIF=0`) ne coupe pas la
-licence : il choisit la route des calculs. ⚠ Les `.so` Linux du dépôt n'ont PAS `MBLicence` tant qu'ils ne sont pas
-reconstruits (`scons platform=linux …`).
+MarchingBlocks est un logiciel libre (GPL-3.0, Jordan, 3 novembre 2026) : plus de clé de licence. `MBLicence` et
+Monocypher sont sortis de la bibliothèque, les DLL Windows reconstruites sans eux ; l'historique git les garde.
 
 ## Éteindre le natif
 

@@ -1,26 +1,27 @@
-; L'INSTALLEUR DE MARCHINGBLOCKS — version SITE (DÉCIDÉ par Jordan, 7 octobre 2026 : « un installeur Inno Setup »).
-; Il livre l'exe et sa DLL, le contrat et les avis tiers, les raccourcis, les associations de fichiers, et une
-; désinstallation propre qui les retire. Steam, lui, livre le dossier tel quel (pas d'installeur).
+; L'INSTALLEUR DE MARCHINGBLOCKS (DÉCIDÉ par Jordan, 7 octobre 2026 : « un installeur Inno Setup »).
+; Il livre l'exe et sa DLL, la licence (GPL-3.0, logiciel libre depuis le 3 novembre 2026) et les avis tiers, les
+; raccourcis, les associations de fichiers, et une désinstallation propre qui les retire. Il part sur GitHub Releases
+; à côté du zip du même dossier (pour qui ne veut pas d'installeur).
 ;
 ; ⚠ NE SE LANCE PAS SEUL : `DEV_TOOLS/exporter_marchingblocks.sh` le compile avec
-;   ISCC.exe /DVersion=0.9.0 /DSource=<dossier site préparé> /DSortie=<dossier de sortie> marchingblocks.iss
+;   ISCC.exe /DVersion=0.9.0 /DSource=<dossier windows préparé> /DSortie=<dossier de sortie> marchingblocks.iss
 ; et c'est `preparer_livraison.gd` qui écrit dans <Source> les icônes et `associations.iss` (les clés du registre,
 ; tirées de `app/associations.gd` : une règle, un endroit).
 ;
 ; PROPOSÉ (Claude, 7 octobre 2026) — UNE INSTALLATION PAR UTILISATEUR (PrivilegesRequired=lowest) :
 ;   • aucune demande d'administrateur (« Voulez-vous autoriser… ») — comme VS Code, Discord ;
 ;   • le programme va dans %LOCALAPPDATA%\Programs\MarchingBlocks, ses clés dans HKEY_CURRENT_USER — LES MÊMES que
-;     celles que l'appli pose elle-même quand elle n'est pas installée (Steam) : la case « File icons » de Project
+;     celles que l'appli pose elle-même quand elle n'est pas installée (le zip) : la case « File icons » de Project
 ;     les retire et les remet de la même façon ;
 ;   • l'appli, installée, ne s'inscrit pas par-dessus (`Associations.installe_par_l_installeur` : unins000.exe).
 ; ⚠ NON SIGNÉ : Windows SmartScreen avertira (« éditeur inconnu ») tant qu'il n'y a pas de certificat de signature
-; de code (OUVERT, charte §0 « la vente »).
+; de code (OUVERT).
 
 #ifndef Version
   #error Version manquante (/DVersion=0.9.0)
 #endif
 #ifndef Source
-  #error Source manquante (/DSource=dossier du site préparé)
+  #error Source manquante (/DSource=dossier windows préparé)
 #endif
 #ifndef Sortie
   #define Sortie "."
@@ -33,7 +34,10 @@ AppName=MarchingBlocks
 AppVersion={#Version}
 AppVerName=MarchingBlocks {#Version}
 AppPublisher=SpannerGames
-AppCopyright=© 2026 SpannerGames
+AppCopyright=© 2026 SpannerGames — GNU GPL v3.0
+AppPublisherURL=https://github.com/darref/MarchingBlocks
+AppSupportURL=https://github.com/darref/MarchingBlocks/issues
+AppUpdatesURL=https://github.com/darref/MarchingBlocks/releases
 VersionInfoVersion={#Version}
 VersionInfoCompany=SpannerGames
 VersionInfoDescription=MarchingBlocks setup
@@ -43,7 +47,8 @@ DisableProgramGroupPage=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-LicenseFile={#Source}\LICENSE.txt
+; La GPL se MONTRE, elle ne s'accepte pas (elle ne restreint pas l'usage) : une page d'information, sans « J'accepte ».
+InfoBeforeFile={#Source}\LICENSE.txt
 SetupIconFile=..\..\MARQUE\icone.ico
 UninstallDisplayIcon={app}\MarchingBlocks.exe
 UninstallDisplayName=MarchingBlocks
@@ -83,9 +88,9 @@ Filename: "{app}\MarchingBlocks.exe"; Description: "{cm:LaunchProgram,MarchingBl
 
 [UninstallDelete]
 ; Les clés du registre partent avec la désinstallation ([Registry], « uninsdelete… ») ; les icônes de {app} aussi.
-; Les réglages, la clé de licence et les projets de l'utilisateur RESTENT (Documents\MarchingBlocks, données de l'appli).
+; Les réglages et les projets de l'utilisateur RESTENT (Documents\MarchingBlocks, données de l'appli).
 ; ⚠ PAS LES ICÔNES DES DONNÉES DE L'APPLI ({userappdata}\Godot\app_userdata\MarchingBlocks\icones) : un exe NON
-; installé (Steam, un essai) les a peut-être écrites et les désigne encore — essayé le 7 octobre 2026 sur le PC de
+; installé (le zip, un essai) les a peut-être écrites et les désigne encore — essayé le 7 octobre 2026 sur le PC de
 ; Jordan, la désinstallation les avait emportées sous son exe de développement.
 Type: dirifempty; Name: "{app}\icones"
 Type: dirifempty; Name: "{app}"

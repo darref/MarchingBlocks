@@ -3,9 +3,9 @@
 Écrite le 7 octobre 2026, d'après `CLAUDE.md` (lu en entier) et `app/manuel.gd` (les noms à l'écran).
 
 **Pourquoi** : presque tout le logiciel a été éprouvé par des tests et des captures, mais **presque rien n'a été tenu
-à la souris par un humain**. La charte le répète à chaque section (« PAS TENU EN MAIN »). Or Steam rembourse sans
-discuter tout achat utilisé moins de **2 heures** : ce qu'un acheteur rencontre dans ses deux premières heures (les
-séances 1 à 7) doit marcher du premier coup.
+à la souris par un humain**. La charte le répète à chaque section (« PAS TENU EN MAIN »). Or un nouvel utilisateur
+décide en **2 heures** s'il garde l'outil (et s'il donne) : ce qu'il rencontre dans ses deux premières heures (les
+séances 1 à 7) doit marcher du premier coup. (Écrit pour la vente ; vrai aussi pour le logiciel libre, 3 novembre 2026.)
 
 **Comment s'en servir** :
 - une séance = 30 à 60 min, dans l'ordre (chaque séance prépare la suivante) ;
@@ -15,7 +15,7 @@ séances 1 à 7) doit marcher du premier coup.
   mesure contradictoire) : ils sont en tête de chaque séance, on les fait même si on manque de temps ;
 - les touches sont données en AZERTY (Z Q S D) ; l'appli lit les touches par leur PLACE, donc W A S D en QWERTY ;
 - le temps : notez l'heure de début et de fin de chaque séance (en haut de la séance). Les séances 1 à 7 sont les deux
-  premières heures d'un acheteur.
+  premières heures d'un nouvel utilisateur.
 
 ---
 
@@ -36,15 +36,12 @@ peut rouvrir et réécrire ton vrai projet (c'est arrivé le 2 octobre 2026, à 
     s'ouvre plus dans une plus ancienne).
   - Attendu : `test.mbproj` et ses fichiers copiés.
   - Noté :
-- [ ] **Sauvegarder les deux clés secrètes hors du PC** (la charte le demande depuis le 7 octobre)
-  - Geste : copier `C:\Users\jorda\.marchingblocks\licence_ed25519_privee.hex` et `cle_pck.hex` sur une clé USB ou un
-    coffre en ligne.
-  - Attendu : deux copies hors du PC. Perdue, la clé privée empêche de vendre une seule licence de plus aux exe déjà livrés.
-  - Noté :
+- ~~Sauvegarder les deux clés secrètes hors du PC~~ — plus de clé de licence ni de PCK chiffré depuis le passage en
+  logiciel libre (3 novembre 2026).
 
 **Le plus propre (recommandé)** : créer une **session Windows neuve** (Paramètres → Comptes → Famille et autres
-utilisateurs → Ajouter un utilisateur sans compte Microsoft, nom « Essai ») et y faire les séances 1 à 3 et 14 : c'est
-exactement la machine d'un acheteur (aucun réglage, aucune icône de fichier, `Documents` vide). À défaut, renommer
+utilisateurs → Ajouter un utilisateur sans compte Microsoft, nom « Essai ») et y faire les séances 1 à 3 : c'est
+exactement la machine d'un nouvel utilisateur (aucun réglage, aucune icône de fichier, `Documents` vide). À défaut, renommer
 `%APPDATA%\Godot\app_userdata\MarchingBlocks` en `…MarchingBlocks_mis_de_cote` pour simuler un premier lancement, et
 le remettre à la fin.
 
@@ -58,37 +55,16 @@ le remettre à la fin.
     ```
     (≈ 15 min : toute la batterie de tests passe d'abord). Un autre dossier de sortie se donne en argument :
     `bash DEV_TOOLS/exporter_marchingblocks.sh D:/SpannerGames/ATELIER/MarchingBlocks/builds/essai`.
-  - Attendu : la commande finit sans « stop » et rappelle (sans refuser) les blancs du contrat et l'adresse du site à
-    remplir. Dans `D:\SpannerGames\ATELIER\MarchingBlocks\builds\<version>\` (hors du dépôt depuis le 17 octobre
-    2026 ; l'export 0.9.3 y est déjà, dans `builds\0.9.3\`) :
-    - `site\MarchingBlocks.exe` (+ `libmb_natif.windows.template_release.x86_64.dll`, `LICENSE.txt`, `THIRD_PARTY_NOTICES.txt`)
-    - `installeur\MarchingBlocks-0.9.0-setup.exe` — **c'est lui qu'on teste en premier**
-    - `steam\MarchingBlocks.exe`, `demo\MarchingBlocks.exe`, `steampipe\`, `journal_export\` (les journaux).
-  - Si la commande refuse : elle dit pourquoi (clé absente, une suite rouge, exe lisible en clair, DLL absente…). Le
+  - Attendu : la commande finit sans « stop ». Dans `D:\SpannerGames\ATELIER\MarchingBlocks\builds\<version>\`
+    (hors du dépôt depuis le 17 octobre 2026) :
+    - `windows\MarchingBlocks.exe` (+ `libmb_natif.windows.template_release.x86_64.dll`, `LICENSE.txt`, `THIRD_PARTY_NOTICES.txt`)
+    - `installeur\MarchingBlocks-<version>-setup.exe` — **c'est lui qu'on teste en premier**
+    - `greffons\`, `exemple\`, `release\` (ce qui se téléverse sur GitHub), `journal_export\` (les journaux).
+  - Si la commande refuse : elle dit pourquoi (une suite rouge, DLL absente, licence absente de l'exe…). Le
     détail est dans `builds\<version>\journal_export\`.
   - Noté :
 
-### 0.3 Les clés de licence de test
-
-Il faut `pip install cryptography` une fois.
-
-- [ ] **Signer une clé de test (avec accents)**
-  - Geste : dans un terminal, depuis `D:\MarchingBlocks` :
-    ```
-    python DEV_TOOLS/licence_signer.py signer --nom "Jördan Tèst" --email jordan.ferrad@gmail.com --id TEST-001
-    ```
-  - Attendu : une ligne `MBK1.…….……` (≈ 200 caractères). Colle-la dans un fichier `D:\SpannerGames\ATELIER\MarchingBlocks\sauvegarde\cles_de_test.txt`.
-    ⚠ Elle est notée dans `C:\Users\jorda\.marchingblocks\licences_emises.csv` : l'id `TEST-` dit que ce n'est pas une vente.
-  - Noté :
-- [ ] **Vérifier la clé hors de l'appli**
-  - Geste : `python DEV_TOOLS/licence_signer.py verifier "MBK1.…"` (la clé entre guillemets).
-  - Attendu : le nom, l'e-mail, l'id, et qu'elle est bonne.
-  - Noté :
-- [ ] **Préparer les mauvaises clés** (dans le même fichier texte)
-  - Geste : (a) la même clé avec UN caractère de la fin changé ; (b) la même coupée en deux lignes avec des espaces,
-    comme un e-mail mal copié ; (c) la moitié de la clé seulement ; (d) un texte quelconque (« bonjour »).
-  - Attendu : quatre lignes prêtes à coller en séance 2.
-  - Noté :
+~~### 0.3 Les clés de licence de test~~ — retirées (logiciel libre, 3 novembre 2026 : plus de clé).
 
 ### 0.4 Comment remonter un problème
 
@@ -100,8 +76,7 @@ attendais**, **ce que tu as vu**, **l'heure** (pour retrouver la ligne dans le j
   recopie-la mot pour mot, couleurs comprises si elle est rouge ou orange.
 - **Le journal de l'appli** (ce que les développeurs appellent la console) : l'exe exporté n'ouvre pas de fenêtre de
   console ; tout est écrit dans
-  - version complète (site ou Steam) : `%APPDATA%\Godot\app_userdata\MarchingBlocks\logs\godot.log`
-  - démo : `%APPDATA%\MarchingBlocks Demo\logs\godot.log`
+  `%APPDATA%\Godot\app_userdata\MarchingBlocks\logs\godot.log`
 
   Après un problème, copie ce fichier tel quel (il est réécrit au lancement suivant ; les précédents sont gardés à
   côté, datés). Toute ligne `ERROR`, `SCRIPT ERROR` ou `SHADER ERROR` est un défaut, même si rien ne s'est vu.
@@ -111,11 +86,11 @@ attendais**, **ce que tu as vu**, **l'heure** (pour retrouver la ligne dans le j
 
 ---
 
-## SÉANCE 1 — L'installeur du site (30 min)
+## SÉANCE 1 — L'installeur (30 min)
 
 Début : ____ Fin : ____
 
-Ce que l'acheteur du site fait en tout premier. L'installeur n'a **jamais tourné qu'en silencieux** (sans fenêtre) :
+Ce que l'utilisateur fait en tout premier. L'installeur n'a **jamais tourné qu'en silencieux** (sans fenêtre) :
 aucune de ses pages n'a été vue par un humain.
 
 - [ ] ⚠ **L'avertissement de Windows (SmartScreen)**
@@ -129,11 +104,9 @@ aucune de ses pages n'a été vue par un humain.
   - Attendu : PAS de fenêtre « Voulez-vous autoriser cette application à apporter des modifications… » (installation
     par utilisateur).
   - Noté :
-- [ ] ⚠ **La page du contrat dans l'installeur** (le contrat est montré deux fois : ici, puis dans l'appli)
-  - Geste : lire la page du contrat ; essayer « Suivant » sans accepter, puis accepter.
-  - Attendu : le texte de `LICENSE.txt` (français d'abord, puis anglais), lisible ; impossible de continuer sans
-    accepter. Repère les blancs « [À COMPLÉTER] » (SIRET, adresse…) : ils sont attendus aujourd'hui, interdits le jour
-    de la vente. Note si le double contrat (installeur + appli) te paraît lourd.
+- [ ] **La page de la licence dans l'installeur**
+  - Geste : lire la page de la licence, « Suivant ».
+  - Attendu : la GPL v3 (`LICENSE.txt`), lisible, en page d'INFORMATION : rien à accepter, « Suivant » continue.
   - Noté :
 - [ ] **La langue de l'installeur**
   - Geste : regarder la première page.
@@ -150,7 +123,7 @@ aucune de ses pages n'a été vue par un humain.
 - [ ] **Fin de l'installation et « Lancer MarchingBlocks »**
   - Geste : terminer, laisser cochée la case de lancement.
   - Attendu : l'appli s'ouvre (splash : le témoin dans ses plans de coupe dorés, signature SpannerGames en bas à droite),
-    puis le contrat (séance 2). Ne va pas plus loin, ferme par « Quit » si tu veux faire la séance 2 à part.
+    puis l'appli (séance 2).
   - Noté :
 - [ ] **Ce qui a été posé sur le disque**
   - Geste : ouvrir `%LOCALAPPDATA%\Programs\MarchingBlocks`.
@@ -164,95 +137,45 @@ aucune de ses pages n'a été vue par un humain.
   - Noté :
 - [ ] **Les propriétés de l'exe**
   - Geste : clic droit sur `MarchingBlocks.exe` → Propriétés → Détails.
-  - Attendu : version 0.9.0.0, société et copyright SpannerGames, sans « Inc. ».
+  - Attendu : version <version>, société SpannerGames, copyright « © 2026 SpannerGames — GNU GPL v3.0 ».
   - Noté :
 
 ---
 
-## SÉANCE 2 — Premier lancement : le contrat, la clé, About (45 min)
+## SÉANCE 2 — Premier lancement : About, les dons (20 min)
 
 Début : ____ Fin : ____
 
-Rien de tout cela n'a été cliqué à la souris : seulement mené par les tests et vu sur deux captures.
+Depuis le 3 novembre 2026 (logiciel libre), rien n'est à accepter ni à activer : l'appli s'ouvre directement.
 
-- [ ] ⚠ **Le contrat apparaît seul, par-dessus l'appli**
+- [ ] ⚠ **L'appli s'ouvre, sans rien demander**
   - Geste : lancer MarchingBlocks depuis le menu Démarrer (premier lancement).
-  - Attendu : « MarchingBlocks — License agreement », la phrase « Please read the license agreement… The French version
-    prevails… », le texte en paragraphes (pas en lignes coupées), boutons « I accept » et « Quit ». Aucun projet
-    n'est ouvert derrière.
-  - Noté :
-- [ ] ⚠ **« Quit » au contrat**
-  - Geste : cliquer « Quit ».
-  - Attendu : l'appli se ferme ; au lancement suivant, le contrat revient (rien n'a été accepté).
-  - Noté :
-- [ ] **Lire le contrat en entier**
-  - Geste : relancer, faire défiler le contrat jusqu'au bout.
-  - Attendu : le défilement marche, la molette fait défiler le texte, rien ne déborde de la fenêtre.
-  - Noté :
-- [ ] ⚠ **« I accept » puis la fenêtre d'activation**
-  - Geste : « I accept ».
-  - Attendu : « Activate MarchingBlocks », la phrase « Paste the license key from your purchase e-mail. It works
-    offline, on every computer you use yourself. », un champ vide qui affiche « MBK1.… », le lien « No key yet? Buy
-    MarchingBlocks, or try the free demo », boutons « Activate » et « Quit ». **Le curseur clignote déjà dans le champ**
-    (défaut corrigé le 7 octobre : on collait dans le vide).
-  - Noté :
-- [ ] ⚠ **Coller directement (Ctrl+V) sans cliquer dans le champ**
-  - Geste : `Ctrl+V` de la mauvaise clé (d) « bonjour », puis « Activate ».
-  - Attendu : le texte arrive dans le champ ; refus avec la raison « This is not a MarchingBlocks license key (it starts
-    with MBK1.). » ; la fenêtre reste.
-  - Noté :
-- [ ] **Le champ vide**
-  - Geste : vider le champ, « Activate ».
-  - Attendu : « Paste your license key. »
-  - Noté :
-- [ ] **La clé trafiquée (un caractère changé)**
-  - Geste : coller la clé (a), « Activate ».
-  - Attendu : « This key is not valid — copy it again, in full, from your purchase e-mail. » (ou « This key is not
-    valid. »). Jamais acceptée.
-  - Noté :
-- [ ] **La clé coupée en deux**
-  - Geste : coller la clé (c) (la moitié), « Activate ».
-  - Attendu : « This key is incomplete — copy it again, in full, from your purchase e-mail. »
-  - Noté :
-- [ ] ⚠ **La clé collée depuis un e-mail (retours à la ligne, espaces)**
-  - Geste : coller la clé (b), « Activate ».
-  - Attendu : ACCEPTÉE (l'appli enlève espaces et retours à la ligne).
-  - Noté :
-- [ ] **Le lien « No key yet? Buy MarchingBlocks, or try the free demo »**
-  - Geste : cliquer le lien (avant d'activer, au lancement suivant si besoin).
-  - Attendu aujourd'hui : l'adresse du site n'existe pas encore (« A-REMPLIR » dans `app/vente.gd`). Note ce qui se
-    passe (rien, ou un navigateur sur une adresse factice) : le jour de la vente, il doit ouvrir la vraie page.
-  - Noté :
-- [ ] ⚠ **La bonne clé**
-  - Geste : coller la vraie clé de test, « Activate ».
-  - Attendu : la fenêtre se ferme, l'appli s'ouvre sur un projet neuf (`Documents\MarchingBlocks\untitled\untitled.mbproj`).
-  - Noté :
-- [ ] ⚠ **La clé est retenue**
-  - Geste : fermer l'appli (croix de la fenêtre), relancer.
-  - Attendu : ni contrat ni clé redemandés ; l'appli rouvre ton monde.
+  - Attendu : aucune fenêtre par-dessus (ni contrat, ni clé) ; un projet neuf (`Documents\MarchingBlocks\untitled\untitled.mbproj`).
   - Noté :
 - [ ] ⚠ **« About »**
   - Geste : cliquer « About » dans la barre de titre.
-  - Attendu : « About MarchingBlocks », « MarchingBlocks v0.9.0 — Early Access », « Sculpt one block. Paint a world.
-    © 2026 SpannerGames. All rights reserved. », « Licensed to Jördan Tèst (jordan.ferrad@gmail.com) » — **les accents
-    justes**, et les boutons « Enter another license key », « License agreement », « Third-party notices », « Close ».
+  - Attendu : « About MarchingBlocks », « MarchingBlocks v<version> », « Sculpt one block. Paint a world. © 2026
+    SpannerGames. Free and open-source software under the GNU General Public License v3.0… », le lien « Source code on
+    GitHub », la phrase des dons, « Donate on Ko-fi », « Donate on GitHub Sponsors », les boutons « License (GPL-3.0) »,
+    « Third-party notices », « Close ».
   - Noté :
-- [ ] **« License agreement » et « Third-party notices » depuis About**
+- [ ] ⚠ **Les liens ouvrent le navigateur**
+  - Geste : cliquer chacun des trois liens.
+  - Attendu : `github.com/darref/MarchingBlocks`, `ko-fi.com/darref`, `github.com/sponsors/darref`.
+  - Noté :
+- [ ] **Le bouton « Support » de la barre**
+  - Geste : cliquer « Support » (cœur ambre, à côté de « About »).
+  - Attendu : About s'ouvre, avec les dons.
+  - Noté :
+- [ ] **« License (GPL-3.0) » et « Third-party notices » depuis About**
   - Geste : cliquer l'un puis l'autre.
-  - Attendu : le contrat ; puis la liste Godot (MIT) et ses composants, godot-cpp, Monocypher — lisible, qui défile.
-  - Noté :
-- [ ] **« Enter another license key », puis « Cancel »**
-  - Geste : About → « Enter another license key » → « Cancel ».
-  - Attendu : le bouton s'appelle « Cancel » ici (pas « Quit ») ; l'appli reste ouverte et garde la clé d'avant.
-  - Noté :
-- [ ] **Changer de clé pour de vrai**
-  - Geste : signer une 2e clé (`--nom "Second Test" --id TEST-002`), About → « Enter another license key », la coller.
-  - Attendu : About dit maintenant « Licensed to Second Test (…) ».
+  - Attendu : la GPL v3 en anglais ; puis la liste Godot (MIT) et ses composants, godot-cpp — lisible, qui défile.
   - Noté :
 - [ ] **La vérification des mises à jour ne gêne pas**
   - Geste : couper le réseau (mode avion), lancer l'appli ; puis relancer avec le réseau.
-  - Attendu : aucun délai, aucun message dans les deux cas (l'adresse n'est pas encore remplie, rien ne part). La case
-    « Check for updates at launch » est dans l'atelier Project.
+  - Attendu : aucun délai, aucun message hors ligne ; avec le réseau, « Update … available » seulement si une version
+    plus récente est publiée sur GitHub (sinon rien). La case « Check for updates at launch » est dans l'atelier
+    Project.
   - Noté :
 - [ ] **Le titre de la fenêtre et la barre de titre**
   - Geste : regarder la barre de titre.
@@ -881,58 +804,11 @@ Début : ____ Fin : ____
 
 ---
 
-## SÉANCE 14 — La démo (30 min)
+## ~~SÉANCE 14 — La démo~~ · ~~SÉANCE 15 — L'exe Steam~~ — RETIRÉES (3 novembre 2026)
 
-Début : ____ Fin : ____
-
-Lancer `builds\<version>\demo\MarchingBlocks.exe` (de préférence dans la session Windows « Essai »).
-
-- [ ] ⚠ **Le contrat, pas de clé**
-  - Geste : premier lancement.
-  - Attendu : le contrat (« I accept » / « Quit »), puis l'appli SANS demander de clé ; la barre de titre dit
-    « FREE DEMO — no saving, no export ».
-  - Noté :
-- [ ] ⚠ **Les refus sont dits**
-  - Geste : « Open », « Save as », « Export the witness… », « Export the tileset… », « Export the world… »,
-    « Export UV layout… ».
-  - Attendu : chaque refus est DIT (« Free demo — everything works, but saving, opening your own projects and exporting
-    are in the full version… »), aucun dialogue de fichier ne s'ouvre.
-  - Noté :
-- [ ] ⚠ **Tout le reste marche**
-  - Geste : peindre, l'exemple, l'eau, le Play test, le modeleur.
-  - Attendu : comme dans la version complète.
-  - Noté :
-- [ ] **La fermeture vide tout**
-  - Geste : fermer, regarder `%APPDATA%\MarchingBlocks Demo\` et `Documents`.
-  - Attendu : le bac `demo_scratch` est vide ; rien dans `Documents` ; tes fichiers `.mbproj` gardent leurs icônes de la
-    version complète (la démo ne s'inscrit pas).
-  - Noté :
-- [ ] **About dans la démo**
-  - Geste : « About ».
-  - Attendu : « Free demo — saving, opening your own projects and exporting are in the full version. »
-  - Noté :
-
----
-
-## SÉANCE 15 — L'exe Steam (20 min)
-
-Début : ____ Fin : ____
-
-Lancer `builds\<version>\steam\MarchingBlocks.exe` (sans passer par Steam : aucun DRM aujourd'hui).
-
-- [ ] ⚠ **Contrat, pas de clé**
-  - Geste : premier lancement (réglages mis de côté).
-  - Attendu : le contrat, puis l'appli directement ; About dit « Licensed through your Steam account. » et
-    « MarchingBlocks v0.9.0 — Early Access · Steam » (ou approchant).
-  - Noté :
-- [ ] **Les associations de fichiers sans installeur**
-  - Geste : premier lancement, puis double-clic sur un `.mbproj`.
-  - Attendu : l'exe Steam s'inscrit lui-même ; le double-clic l'ouvre.
-  - Noté :
-- [ ] **Pas de case des mises à jour qui fasse quoi que ce soit**
-  - Geste : atelier Project.
-  - Attendu : Steam livre les mises à jour ; rien ne doit annoncer « Update … available ».
-  - Noté :
+MarchingBlocks est un logiciel libre (GPL-3.0, Jordan : « il n'y a plus besoin de démo ») : plus de démo ni d'exe
+Steam, UN exe. Ce qu'elles vérifiaient encore (l'exe qui s'inscrit lui-même sans installeur) est en séance 19, avec le
+zip.
 
 ---
 
@@ -1087,16 +963,17 @@ Début : ____ Fin : ____
 - [ ] ⚠ **Ce que la désinstallation retire, et ce qu'elle laisse**
   - Geste : après désinstallation, regarder `%LOCALAPPDATA%\Programs\MarchingBlocks`, le menu Démarrer, le Bureau, un
     `.mbproj` dans l'Explorateur, `%APPDATA%\Godot\app_userdata\MarchingBlocks`, `Documents\MarchingBlocks`.
-  - Attendu : plus d'exe, de raccourcis ni d'icônes de fichiers ; les réglages, la clé de licence et tes projets
+  - Attendu : plus d'exe, de raccourcis ni d'icônes de fichiers ; les réglages et tes projets
     RESTENT. ⚠ Défaut déjà payé : la désinstallation avait emporté les icônes de l'appli de développement.
   - Noté :
-- [ ] **Réinstaller : la clé est retenue**
+- [ ] **Réinstaller**
   - Geste : réinstaller (case Bureau cochée cette fois), lancer.
-  - Attendu : raccourci sur le Bureau ; le contrat redemandé seulement si sa version a changé ; la clé n'est pas redemandée.
+  - Attendu : raccourci sur le Bureau ; l'appli rouvre ton monde, sans rien demander.
   - Noté :
-- [ ] **Site et Steam sur le même PC**
-  - Geste : lancer l'exe Steam, puis désinstaller la version du site, puis double-cliquer un `.mbproj`.
-  - Attendu connu : la désinstallation retire aussi les icônes que l'exe Steam avait posées ; Project → « File icons &
+- [ ] **L'installeur et le zip sur le même PC**
+  - Geste : lancer l'exe du zip (`release\MarchingBlocks-<version>-windows.zip`, dézippé), puis désinstaller la version
+    installée, puis double-cliquer un `.mbproj`.
+  - Attendu connu : la désinstallation retire aussi les icônes que l'exe du zip avait posées ; Project → « File icons &
     double-click » les remet. Note si c'est gênant.
   - Noté :
 - [ ] **Remettre tes réglages**

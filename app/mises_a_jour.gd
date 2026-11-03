@@ -1,15 +1,18 @@
 extends Node
-## LA VÉRIFICATION DES MISES À JOUR — édition SITE seulement (Steam livre les siennes). Stratégie de lancement,
-## « Mises à jour et licence » : au lancement, l'appli lit un petit JSON sur le site ; si une version plus récente
-## existe, la barre de titre le DIT, discrètement ; rien ne se télécharge sans l'acheteur (le lien ouvre « My
-## downloads »). Désactivable dans Project. ⚠ JAMAIS BLOQUANTE : hors ligne, site absent, réponse fausse — on se tait.
+## LA VÉRIFICATION DES MISES À JOUR — dans tout exe livré (plus d'éditions depuis le passage en logiciel libre, Jordan,
+## 3 novembre 2026). Au lancement, l'appli demande à GitHub la dernière version publiée (`releases/latest`) ; si elle
+## est plus récente, la barre de titre le DIT, discrètement ; rien ne se télécharge tout seul (le lien ouvre la page de
+## la version). Désactivable dans Project. ⚠ JAMAIS BLOQUANTE : hors ligne, GitHub absent, réponse fausse — on se tait.
 ##
-## Le JSON (à poser sur le site à chaque version) :
-##   {"version": "0.9.1", "date": "2027-02-12", "notes": "https://…/notes/0.9.1", "download": "https://…/my-downloads"}
+## Deux formes de réponse sont lues (`lire_la_reponse`) :
+##   GitHub : {"tag_name": "v1.2.0", "html_url": "https://github.com/…/releases/tag/v1.2.0", …}
+##   la nôtre : {"version": "0.9.1", "notes": "https://…", "download": "https://…"} (un JSON posé sur un site)
+## ⚠ `releases/latest` ne rend ni brouillon ni préversion : une version se publie sur GitHub avec l'étiquette `v<version>`
+## (`exporter_marchingblocks.sh` le rappelle).
 
-## ⚠ À REMPLIR LE JOUR OÙ LE DOMAINE EXISTE (il attend l'argent, charte §0). Tant qu'elle porte « A-REMPLIR »,
-## rien ne part sur le réseau, et l'export le rappelle.
-const URL := "https://A-REMPLIR.example/marchingblocks/latest.json"
+## LE DÉPÔT PUBLIC — l'adresse du code source, écrite ICI pour l'appli (« About », l'exemple, les mises à jour).
+const DEPOT := "https://github.com/darref/MarchingBlocks"
+const URL := "https://api.github.com/repos/darref/MarchingBlocks/releases/latest"
 const SECONDES_MAXI := 6.0
 const REGLAGES := "user://reglages.cfg"
 
@@ -20,7 +23,7 @@ var _requete: HTTPRequest
 
 
 static func url_remplie(url := URL) -> bool:
-	return url.begins_with("https://") and not url.contains("A-REMPLIR")
+	return url.begins_with("https://")
 
 
 ## La vérification est-elle voulue ? Oui par défaut ; la case de Project la coupe.
@@ -69,12 +72,13 @@ static func lire_la_reponse(texte: String, locale: String) -> Dictionary:
 	if j.parse(texte) != OK:
 		return {}
 	var d: Variant = j.data
-	if not d is Dictionary or not (d as Dictionary).has("version"):
+	if not d is Dictionary or not ((d as Dictionary).has("version") or (d as Dictionary).has("tag_name")):
 		return {}
-	var version := str(d["version"])
+	var version := str(d.get("version", d.get("tag_name", "")))
 	if not plus_recente(version, locale):
 		return {}
-	var lien := str(d.get("download", d.get("notes", "")))
+	version = version.trim_prefix("v")
+	var lien := str(d.get("html_url", d.get("download", d.get("notes", ""))))
 	if not lien.begins_with("https://"):
 		lien = ""
 	return {"version": version, "lien": lien}

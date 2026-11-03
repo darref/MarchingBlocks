@@ -6,8 +6,8 @@ extends RefCounted
 ## porterait sa couleur resterait grise sur un bouton enfoncé, et il en faudrait une par état.
 ## ⚠ **RENDUES AU DOUBLE DE LEUR TAILLE D'AFFICHAGE**, puis bornées par `icon_max_width` : un SVG
 ## rendu à 18 px et affiché sur un écran à 150 % serait flou.
-## ⚠ **AUCUNE N'EST EMPRUNTÉE** : le logiciel est vendu, et une icône copiée d'un jeu sous licence
-## porterait une obligation qu'on ne veut pas avoir à relire. Toutes sont des tracés simples, écrits ici.
+## ⚠ **AUCUNE N'EST EMPRUNTÉE** : une icône copiée d'un jeu sous licence porterait une obligation qu'on ne
+## veut pas avoir à relire (le logiciel est sous GPL-3.0 depuis le 3 novembre 2026). Toutes sont des tracés simples, écrits ici.
 
 const TAILLE_RENDU := 40.0
 
@@ -24,6 +24,8 @@ const TRACES := {
 	"moins": '<path d="M5 12h14"/>',
 	# Le bandeau
 	"livre": '<path d="M3 4.5h6a3 3 0 0 1 3 3v13a2.2 2.2 0 0 0-2.2-2.2H3z"/><path d="M21 4.5h-6a3 3 0 0 0-3 3v13a2.2 2.2 0 0 1 2.2-2.2H21z"/>',
+	# Les dons (logiciel libre, 3 novembre 2026).
+	"coeur": '<path d="M12 20.5S3.5 15.4 3.5 9.4A4.4 4.4 0 0 1 12 7.2a4.4 4.4 0 0 1 8.5 2.2c0 6-8.5 11.1-8.5 11.1z"/>',
 	"ampoule": '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-3.9 10.6c.8.7 1.1 1.5 1.1 2.4h5.6c0-.9.3-1.7 1.1-2.4A6 6 0 0 0 12 3z"/>',
 	# Le projet
 	"nouveau": '<path d="M14 3H6.5A2.5 2.5 0 0 0 4 5.5v13A2.5 2.5 0 0 0 6.5 21h11a2.5 2.5 0 0 0 2.5-2.5V9z"/><path d="M14 3v6h6M12 12v6M9 15h6"/>',

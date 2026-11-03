@@ -25,11 +25,49 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   `essais/`. `MARQUE/` reste ici : l'appli l'embarque. ⚠ Un chemin `D:/MB_*`, `D:/MarchingBlocks_*` ou
   `D:/MarchingBlocks/build` écrit plus bas date d'avant ce rangement (le tableau de `ETAT.md` dit où il est allé).
 
+## LOGICIEL LIBRE ET DONS — DÉCIDÉ (Jordan, 3 novembre 2026 : « MarchingBlocks devient OpenSource et réclame des dons sur de multiples plateformes dont déjà Ko-fi et GitHub Sponsors. Il n'y a plus besoin de démo »)
+
+⚠ **CETTE SECTION PASSE AVANT TOUT CE QUI SUIT SUR LA VENTE** : le prix, les éditions (site, Steam, itch, démo), la clé
+de licence, le contrat à accepter, le PCK chiffré et le modèle d'export recompilé, « ce qui se vend ne part pas dans les
+greffons » — écrits plus bas (§0, « LA VENTE », « le chiffrement ») — sont RETIRÉS. Ils restent lisibles comme
+historique ; le code est parti (l'historique git le garde, jusqu'au commit `7dcb1b5`).
+
+- **LA LICENCE : GPL-3.0 — DÉCIDÉ (Jordan, 3 novembre 2026, sur proposition de Claude)** pour l'appli et tout le dépôt
+  (`LICENSE`, texte de la FSF tel quel), sauf ce qui porte sa propre licence : les trois greffons restent **MIT** (un jeu
+  fait avec eux ne doit rien à la GPL), godot-cpp et ses dépendances gardent les leurs. **Le nom et le logo** restent à
+  SpannerGames (marque, hors licence : une version modifiée redistribuée prend son propre nom). Les mondes et jeux de
+  tuiles faits avec l'outil appartiennent à leur auteur (`README.md`, « License »).
+- **LE DÉPÔT `github.com/darref/MarchingBlocks` EST PUBLIC** (il l'était déjà le 3 novembre 2026, sans licence : « tous
+  droits réservés » par défaut ; `LICENSE` le rend libre). `README.md` (anglais) le présente ; `.github/FUNDING.yml`
+  allume le bouton « Sponsor ».
+- **LES DONS — DÉCIDÉ (Jordan, 3 novembre 2026)** : **Ko-fi `ko-fi.com/darref`** et **GitHub Sponsors
+  `github.com/sponsors/darref`** (Jordan : « seulement ces deux » pour l'instant). La liste vit dans `app/dons.gd` (« About »
+  et le bouton « Support » de la barre de titre) ; elle est recopiée dans `.github/FUNDING.yml` et `README.md`, et
+  `test_a_propos` vérifie que les trois disent la même chose. Une plateforme de plus (Liberapay, Patreon, Open Collective…)
+  s'ajoute aux trois endroits.
+- **PLUS DE DÉMO, PLUS D'ÉDITIONS, PLUS DE CLÉ, PLUS DE CONTRAT À ACCEPTER, PLUS DE CHIFFREMENT** (Jordan : « il n'y a
+  plus besoin de démo »). UN préréglage d'export, « Windows », non chiffré, avec le modèle d'export OFFICIEL de Godot 4.7 ;
+  l'appli s'ouvre directement ; « About » montre la version, la GPL, le code source, les dons et les avis tiers.
+  `MBLicence` et Monocypher sont sortis de la GDExtension (DLL Windows reconstruites ; les `.so` Linux ne les avaient
+  jamais eus). Les clés `C:/Users/jorda/.marchingblocks/` (licence, PCK) ne servent plus à rien.
+- **LA DIFFUSION : GITHUB RELEASES — PROPOSÉ (Claude, 3 novembre 2026)** : itch.io a retiré les projets qui contiennent
+  de l'IA générative, dont les pages de MarchingBlocks (Jordan, 3 novembre 2026 : « la page n'existe plus ») ; Steam et le
+  domaine n'ont jamais été payés. `exporter_marchingblocks.sh` sort `release/` : le zip Windows, l'installeur, les trois
+  greffons, l'exemple et son `example.json`, À TÉLÉVERSER dans la version `v<version>` du dépôt (ni brouillon ni
+  préversion). L'appli lit `api.github.com/repos/darref/MarchingBlocks/releases/latest` pour ses mises à jour, et
+  `…/releases/latest/download/example.json` pour l'exemple (`app/mises_a_jour.gd`, `DEPOT` : une adresse, un endroit).
+- **OUVERT** : la provenance de quelques textures du dépôt (`TILESOURCES/lot3d_simple_ground/TILES3D_stone+well+3d+model_
+  basecolor.jpg`, `HEART_WORLD/`, `ART/`) n'est écrite nulle part ; publiées sous la GPL, elles doivent être à Jordan ou
+  libres. À confirmer par Jordan (sinon les retirer du dépôt).
+- **OUVERT** : publier la première version libre sur GitHub (Jordan, ou Claude avec son accord : l'outil `gh` n'est pas
+  installé) ; monter ou non la version (1.1.0 → 1.1.1 ?) pour marquer le passage — à Jordan.
+
 ---
 
 ## 0. Le produit : le logiciel MarchingBlocks — DÉCIDÉ (Jordan, 27 septembre 2026)
 
-> **Le projet devient un LOGICIEL, MarchingBlocks, vendu 60 € en UN exécutable chiffré.** Il fait
+> ~~**Le projet devient un LOGICIEL, MarchingBlocks, vendu 60 € en UN exécutable chiffré.**~~ (la vente et le
+> chiffrement sont RETIRÉS le 3 novembre 2026 : logiciel libre, voir « LOGICIEL LIBRE ET DONS » en tête) Il fait
 > tout ce que fait le greffon, reprend l'écran de SoluTiles (`D:/AbsoluTiles`, « le même genre de
 > projet, mais 3D au lieu de 2D »), et exportera vers TROIS greffons de peinture — Godot, Unity,
 > Unreal — **écrits APRÈS lui**.
@@ -917,7 +955,7 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
   l'ancien écran de greffon et devait servir aux deux en était SORTI (`etages.gd`, gardé par `test_etages`).
 - ⚠ **LE PINCEAU EST À NOUS** : sans l'éditeur Godot, plus de pinceau natif de GridMap. Un clic est un
   rayon coupé contre le plan de l'étage courant (`vue.gd`), un coup entier s'annule d'un Ctrl+Z.
-- ⚠ **LE CHIFFREMENT DEMANDE DES MODÈLES D'EXPORT RECOMPILÉS.** L'onglet « Chiffrement » des presets
+- ~~⚠ **LE CHIFFREMENT DEMANDE DES MODÈLES D'EXPORT RECOMPILÉS.**~~ (RETIRÉ le 3 novembre 2026 : logiciel libre, modèle officiel) L'onglet « Chiffrement » des presets
   chiffre le PCK, mais les modèles officiels ne savent pas le lire : il faut les compiler avec la même
   clé (`SCRIPT_AES256_ENCRYPTION_KEY`). Sources dans `D:/godot-src` (4.7-stable exact), script
   `construire_modele.sh`, sans D3D12 ni AccessKit. **La clé vit HORS du dépôt**
@@ -953,7 +991,10 @@ Un PROPOSÉ ne devient DÉCIDÉ qu'une fois validé — à l'image de préféren
 - **OUVERT** : la licence ; l'icône (remplacée en `362ae23`, pas encore validée ici) ; les textures PBR de test (retirées avec le PBR le 29 septembre 2026)
   venaient de HEART_WORLD.
 
-### LA VENTE — fait le 7 octobre 2026 (branche `vente`, à la demande de Jordan : « rends MarchingBlocks vendable »)
+### ~~LA VENTE — fait le 7 octobre 2026 (branche `vente`, à la demande de Jordan : « rends MarchingBlocks vendable »)~~
+
+⚠ **RETIRÉE LE 3 NOVEMBRE 2026** (logiciel libre, « LOGICIEL LIBRE ET DONS » en tête) : ce qui suit est l'historique.
+Ce qui en reste : `mises_a_jour.gd` (sur GitHub), `avis_tiers.gd`, l'installeur, `preparer_livraison.gd`.
 
 Ce qui reste à faire pour vendre, sorti des décisions du 3 et du 7 octobre (§0 et §10 : clé signée nominative, hors ligne,
 sans limite de machines ; site + Steam ; démo ; installeur Inno Setup). Le code : `app/edition.gd`, `licence.gd`,

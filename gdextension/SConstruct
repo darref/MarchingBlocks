@@ -11,8 +11,8 @@
 env = SConscript("godot-cpp/SConstruct", {"api_version": "4.7"})
 
 env.Append(CPPPATH=["src/"])
-# src/appli/monocypher/ : Monocypher 4.0.2 (BSD-2 ou CC0), l'Ed25519 des clés de licence — en C, partie privée.
-sources = Glob("src/noyau/*.cpp") + Glob("src/godot/*.cpp") + Glob("src/appli/*.cpp") + Glob("src/appli/monocypher/*.c")
+# (Monocypher et MBLicence, les clés de licence, sont partis avec la vente : logiciel libre, Jordan, 3 novembre 2026.)
+sources = Glob("src/noyau/*.cpp") + Glob("src/godot/*.cpp") + Glob("src/appli/*.cpp")
 
 bin_dir = "../addons/marchingblocks_core/natif/bin/"
 library = env.SharedLibrary(
