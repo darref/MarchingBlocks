@@ -59,8 +59,12 @@ historique ; le code est parti (l'historique git le garde, jusqu'au commit `7dcb
 - **OUVERT** : la provenance de quelques textures du dépôt (`TILESOURCES/lot3d_simple_ground/TILES3D_stone+well+3d+model_
   basecolor.jpg`, `HEART_WORLD/`, `ART/`) n'est écrite nulle part ; publiées sous la GPL, elles doivent être à Jordan ou
   libres. À confirmer par Jordan (sinon les retirer du dépôt).
-- **OUVERT** : publier la première version libre sur GitHub (Jordan, ou Claude avec son accord : l'outil `gh` n'est pas
-  installé) ; monter ou non la version (1.1.0 → 1.1.1 ?) pour marquer le passage — à Jordan.
+- ~~OUVERT : publier la première version libre sur GitHub~~ **PUBLIÉE (Jordan, 4 novembre 2026 : « Installe GH et fais
+  le »)** : `github.com/darref/MarchingBlocks/releases/tag/v1.1.0` (« MarchingBlocks 1.1.0 — free and open source »,
+  commit `1f872fc`, gardée en 1.1.0), six fichiers (zip Windows, trois greffons, l'exemple, `example.json` ; pas
+  d'installeur : Inno Setup n'est plus sur le PC). `gh` installé et connecté (`darref`) : `gh release create v<version>
+  --target <sha complet> … builds/<version>/release/*`. **MESURÉ** : `releases/latest` rend `v1.1.0` (ni brouillon ni
+  préversion), `…/latest/download/example.json` mène à l'exemple, son SHA-256 téléchargé est celui annoncé.
 
 ---
 
