@@ -750,7 +750,7 @@ static var _ensembles := {}
 ## Les fichiers de l'ensemble d'un albedo : {carte: chemin absolu} (+ "normale_dx"), vide s'il n'en a pas.
 ## L'IMAGE CHOISIE EST COPIÉE DANS LE PROJET (Jordan, 3 octobre 2026 : « il faut copier l'image qu'on choisit ? ») —
 ## oui : peindre sur une image de bibliothèque écrivait ses calques et ses cartes À CÔTÉ D'ELLE, hors du projet
-## (`D:/Spirit3D/…`), et un projet déplacé perdait ses textures. L'albedo ET son ensemble (les cartes trouvées à côté,
+## (`D:/Spirit/…`), et un projet déplacé perdait ses textures. L'albedo ET son ensemble (les cartes trouvées à côté,
 ## `fichiers_de_l_ensemble`) vont dans `dossier/<nom de l'albedo>/`, NOMS INCHANGÉS — l'ensemble s'y retrouve par les
 ## mêmes noms. Une copie identique déjà là (même MD5) est reprise ; une autre image du même nom va dans `<nom>_2/`…
 ## Une image déjà dans `dossier` n'est pas recopiée. Rend le chemin de la copie (ou "" et la raison dans `erreurs`).

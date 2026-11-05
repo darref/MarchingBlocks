@@ -3824,7 +3824,7 @@ toutes les fonctions de modélisation et raccourcis de Blender, ainsi que matér
         Godot rend un tableau de tangentes même quand on n'en donne pas ; la garde juge leur SENS). Vu à l'image sur la
         copie du projet de Jordan (gazon et falaise en relief). ⚠ Pas jugé par Jordan.
       - ⚠ **VU EN PASSANT, PAS CORRIGÉ** : peindre sur une image de bibliothèque écrit ses calques et ses cartes À CÔTÉ
-        D'ELLE (`D:/Spirit3D/…/cliff_rocks_01_color_1k.layers/`, `.pbr_uv/`) — hors du projet.
+        D'ELLE (`D:/Spirit/…/cliff_rocks_01_color_1k.layers/`, `.pbr_uv/`) — hors du projet.
     - **L'ÉMISSION — DEMANDÉE PAR JORDAN (6 octobre 2026 : « ajouter l'emission et l'inclure dans le PBR, je ne sais pas
       pourquoi il n'y est pas déjà »), relayée par la session vidéos pour un devlog sci-fi, ÉCRITE LE MÊME JOUR.**
       - **une carte de l'ENSEMBLE**, trouvée par son nom comme les autres (`Cartes.MOTS_CARTES["emission"]` : `emission`,

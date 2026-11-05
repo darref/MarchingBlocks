@@ -680,7 +680,7 @@ Début : ____ Fin : ____
   - Noté :
 - [ ] ⚠ **Les ensembles PBR (une image avec ses cartes à côté)**
   - Geste : un matériau, « Image… » → une image `…_color_1k.png` qui a ses `…_normal_gl_1k.png`,
-    `…_roughness_1k.png`… à côté (ex. `D:/Spirit3D/HEART_WORLD/`).
+    `…_roughness_1k.png`… à côté (ex. `D:/Spirit/HEART_WORLD/`).
   - Attendu : l'image est copiée dans le projet avec ses cartes ; le relief se voit à la lumière (pas seulement
     l'albedo) ; l'original n'est jamais touché par la peinture.
   - Noté :
@@ -744,7 +744,7 @@ Début : ____ Fin : ____
   - Attendu : le temps s'arrête en peignant ; le trait va sur l'image choisie seulement.
   - Noté :
 - [ ] **Foliage : importer un modèle**
-  - Geste : atelier Foliage, « Import .glb… » (ex. un arbre de `D:/Spirit3D/HEART_WORLD/biomes/maps/`) ; le socle,
+  - Geste : atelier Foliage, « Import .glb… » (ex. un arbre de `D:/Spirit/HEART_WORLD/biomes/maps/`) ; le socle,
     « Ground offset », « Sit its base on the ground ».
   - Attendu : le modèle debout sur le socle, le plan translucide qui prolonge le sol.
   - Noté :

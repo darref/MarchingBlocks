@@ -33,7 +33,7 @@ const Anim_ := preload("res://addons/marchingblocks_core/animation_materiau.gd")
 
 const DOSSIER_DEFAUT := "C:/Users/jorda/Documents/MarchingBlocks/station"
 const TEX := "D:/SpannerGames/BIBLIOTHEQUE/textures/station/"
-const SPIRIT := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
+const SPIRIT := "D:/Spirit/HEART_WORLD/biomes/maps/"
 
 ## Les couches, dans l'ORDRE DE PRIORITÉ. sol / mur / plafond : [matière sous TEX, force d'émission] ; « anim » : par
 ## matière, la piste animée (canal émission) — ["images", ips] (la séquence `<matière>_frames/`), ["defilement", u, v],

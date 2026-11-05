@@ -468,7 +468,7 @@ func _sans_damier_hp() -> void:
 
 ## LE FEUILLAGE : des arbres de Spirit3D (Tripo) sur les prairies, au pinceau de la règle (mode « free »). Sauté sans
 ## les fichiers (hors du PC).
-const SPIRIT_HP := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
+const SPIRIT_HP := "D:/Spirit/HEART_WORLD/biomes/maps/"
 const ARBRES_HP := [["biome_plains/obstacles/plains_tree_01/plains_tree_01.glb", 4.5],
 	["biome_plains/obstacles/plains_tree_04/plains_tree_04.glb", 5.5],
 	["biome_woodland/obstacles/woodland_tree_02/woodland_tree_02.glb", 6.0]]

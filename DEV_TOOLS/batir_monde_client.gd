@@ -33,7 +33,7 @@ const Peinture_ := preload("res://addons/marchingblocks_core/peinture.gd")
 const TR_ := preload("res://addons/marchingblocks_core/transitions.gd")
 
 const DOSSIER_DEFAUT := "C:/Users/jorda/Documents/MarchingBlocks/monde_client"
-const SPIRIT := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
+const SPIRIT := "D:/Spirit/HEART_WORLD/biomes/maps/"
 const TAILLE_TEXTURE := 1024
 
 ## Les douze thèmes, dans l'ORDRE DE PRIORITÉ des couches (le haut gagne une case disputée — il n'y en a pas : chaque

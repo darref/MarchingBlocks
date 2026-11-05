@@ -40,7 +40,7 @@ extends "res://DEV_TOOLS/filmer_animation.gd"
 ##   x et z figés au millionième, y de 24,6 à 29,4 — la prise 5) ; avec la correction, il repart.
 
 const FE_T := preload("res://addons/marchingblocks_core/feuillage.gd")
-const SPIRIT_T := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
+const SPIRIT_T := "D:/Spirit/HEART_WORLD/biomes/maps/"
 const CARTE_T := "C:/Users/jorda/AppData/Local/Temp/claude/D--SpannerGames/d195078d-feff-463c-9e41-f90d432ceefa/scratchpad/tf/carte_ile.png"
 ## Les arbres : [fichier sous maps/, échelle, taille au hasard, vent] — modèles Tripo (IA) de Spirit Heart World, LUS.
 const ARBRES_T := {

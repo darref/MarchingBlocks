@@ -1,7 +1,7 @@
 extends "res://DEV_TOOLS/filmer_haut.gd"
 ##
 ## DEVLOG — L'ATELIER FOLIAGE. Demandé par Jordan (6 octobre 2026) : « fait un dev log pour chaque nouveauté, pour le
-## foliage utilises les arbres glb qui sont dans D:\Spirit3D\HEART_WORLD\biomes\maps ».
+## foliage utilises les arbres glb qui sont dans D:\Spirit\HEART_WORLD\biomes\maps ».
 ##
 ## ⚠ CE QUE LE LOGICIEL IMPOSE (relevé le 6 octobre 2026, `atelier_feuillage.gd`, `feuillage.gd`, `feuillage_vue.gd`) :
 ##   - un modèle s'importe en `.glb` et se COPIE dans le projet (`<projet>_foliage/`) : les arbres de Spirit3D ne sont que
@@ -28,7 +28,7 @@ extends "res://DEV_TOOLS/filmer_haut.gd"
 
 const FE := preload("res://addons/marchingblocks_core/feuillage.gd")
 const FeuillageVue_ := preload("res://app/feuillage_vue.gd")
-const SPIRIT := "D:/Spirit3D/HEART_WORLD/biomes/maps/"
+const SPIRIT := "D:/Spirit/HEART_WORLD/biomes/maps/"
 const CARTE_F := "C:/Users/jorda/AppData/Local/Temp/claude/D--SpannerGames/d195078d-feff-463c-9e41-f90d432ceefa/scratchpad/carte_feuillage.png"
 
 ## LE MONDE — une règle, un endroit. x vers l'est, z vers le sud. Les bornes sont celles de filmer_haut (X0..X1, Z0..Z1).
